@@ -188,8 +188,10 @@ pub fn list_decisions(
     sql.push_str(" ORDER BY updated_at DESC LIMIT ?");
     param_values.push(Box::new(limit as i64));
 
-    let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-        param_values.iter().map(|p| p.as_ref()).collect();
+    let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect();
 
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(params_ref.as_slice(), |row| Ok(row_to_decision(row)))?;
@@ -242,8 +244,10 @@ pub fn update_decision(
     );
     param_values.push(Box::new(id));
 
-    let params_ref: Vec<&dyn rusqlite::types::ToSql> =
-        param_values.iter().map(|p| p.as_ref()).collect();
+    let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(std::convert::AsRef::as_ref)
+        .collect();
 
     conn.execute(&sql, params_ref.as_slice())?;
 
@@ -300,7 +304,7 @@ pub fn check_alignment(
     pattern: Option<&str>,
 ) -> Result<AlignmentResult> {
     let search = technology.to_lowercase();
-    let pattern_search = pattern.map(|p| p.to_lowercase());
+    let pattern_search = pattern.map(str::to_lowercase);
 
     // Find all active decisions that relate to this technology
     let mut stmt = conn.prepare(
@@ -310,7 +314,7 @@ pub fn check_alignment(
          AND (LOWER(subject) LIKE ?1 OR LOWER(context_tags) LIKE ?1 OR LOWER(alternatives_rejected) LIKE ?1)",
     )?;
 
-    let like_pattern = format!("%{}%", search);
+    let like_pattern = format!("%{search}%");
     let rows = stmt.query_map(params![like_pattern], |row| Ok(row_to_decision(row)))?;
 
     let mut relevant_decisions = Vec::new();
@@ -343,7 +347,7 @@ pub fn check_alignment(
 
     // Also check pattern alignment if provided
     if let Some(pat) = &pattern_search {
-        let pat_like = format!("%{}%", pat);
+        let pat_like = format!("%{pat}%");
         let mut stmt2 = conn.prepare(
             "SELECT id, decision_type, subject, decision, rationale, alternatives_rejected, context_tags, confidence, status, superseded_by, created_at, updated_at
              FROM developer_decisions
@@ -423,7 +427,7 @@ pub fn seed_decisions_from_profile(conn: &Connection) -> Result<usize> {
             conn,
             &DecisionType::TechChoice,
             tech,
-            &format!("Using {} as part of primary tech stack", tech),
+            &format!("Using {tech} as part of primary tech stack"),
             Some("Inferred from project setup"),
             &[],
             &[tech.to_lowercase()],

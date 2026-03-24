@@ -70,7 +70,7 @@ impl Database {
                 |row| row.get::<_, Option<String>>(0),
             )
             .optional()
-            .map(|opt| opt.flatten())?)
+            .map(std::option::Option::flatten)?)
     }
 
     /// Cache an AI summary for an item.
@@ -124,7 +124,7 @@ impl Database {
                 .split_whitespace()
                 .filter(|w| w.len() > 4)
                 .take(5)
-                .map(|s| s.to_lowercase())
+                .map(str::to_lowercase)
                 .collect();
 
             Ok(DigestSourceItem {
@@ -355,10 +355,7 @@ impl Database {
         }
         let conn = self.conn.lock();
         let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let sql = format!(
-            "SELECT id, created_at FROM source_items WHERE id IN ({})",
-            placeholders
-        );
+        let sql = format!("SELECT id, created_at FROM source_items WHERE id IN ({placeholders})");
         let mut stmt = conn.prepare(&sql)?;
         let params = rusqlite::params_from_iter(ids.iter());
         let mut result = std::collections::HashMap::with_capacity(ids.len());

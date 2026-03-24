@@ -252,7 +252,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
 
         let new_items = db
             .get_items_since_timestamp_tiered(since, 500)
-            .map_err(|e| format!("Failed to load new items: {}", e))?;
+            .map_err(|e| format!("Failed to load new items: {e}"))?;
 
         if new_items.is_empty() {
             // No new items since last analysis — try re-scoring recent cache (7 days)
@@ -270,7 +270,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
             // Respects free-tier 30-day history gate via get_items_tiered
             let all_items = db
                 .get_items_tiered(168, 1000)
-                .map_err(|e| format!("Failed to load cached items: {}", e))?;
+                .map_err(|e| format!("Failed to load cached items: {e}"))?;
 
             if all_items.is_empty() {
                 // Cache is stale — fetch fresh content
@@ -301,10 +301,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
 
         // Score only new items
         let scoring_ctx = scoring::build_scoring_context(db).await.map_err(|e| {
-            format!(
-                "Failed to build scoring context for differential analysis: {}",
-                e
-            )
+            format!("Failed to build scoring context for differential analysis: {e}")
         })?;
         let trend_topics = crate::detect_trend_topics(
             new_items
@@ -412,7 +409,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
     // Respects free-tier 30-day history gate via get_items_tiered
     let cached_items = db
         .get_items_tiered(168, 1000)
-        .map_err(|e| format!("Failed to load cached items: {}", e))?;
+        .map_err(|e| format!("Failed to load cached items: {e}"))?;
 
     let total_cached = cached_items.len();
     info!(target: "4da::analysis", cached_items = total_cached, "Loaded items from cache");
@@ -462,7 +459,7 @@ pub(crate) async fn get_analysis_status() -> Result<AnalysisState> {
                     "Analysis timed out, auto-resetting state"
                 );
                 guard.running = false;
-                guard.error = Some(format!("Analysis timed out after {}s", elapsed));
+                guard.error = Some(format!("Analysis timed out after {elapsed}s"));
                 guard.started_at = None;
             }
         }
@@ -500,7 +497,7 @@ pub(crate) async fn get_scoring_stats() -> Result<crate::db::ScoringStatsAggrega
     let db = get_database()?;
     Ok(db
         .get_scoring_stats()
-        .map_err(|e| format!("Failed to get scoring stats: {}", e))?)
+        .map_err(|e| format!("Failed to get scoring stats: {e}"))?)
 }
 // Settings and Context Engine commands are in settings_commands.rs
 // ACE commands, PASIFA helpers, and auto-seeding are in ace_commands.rs

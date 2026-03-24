@@ -507,15 +507,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     match crate::accuracy::record_weekly_accuracy(&conn) {
                         Ok(()) => info!(target: "4da::monitor", "Weekly accuracy recorded"),
                         Err(e) => {
-                            warn!(target: "4da::monitor", error = %e, "Failed to record weekly accuracy")
+                            warn!(target: "4da::monitor", error = %e, "Failed to record weekly accuracy");
                         }
                     }
                     match crate::temporal_graph::record_weekly_timeline(&conn) {
                         Ok(()) => {
-                            info!(target: "4da::monitor", "Weekly timeline snapshot recorded")
+                            info!(target: "4da::monitor", "Weekly timeline snapshot recorded");
                         }
                         Err(e) => {
-                            warn!(target: "4da::monitor", error = %e, "Failed to record weekly timeline snapshot")
+                            warn!(target: "4da::monitor", error = %e, "Failed to record weekly timeline snapshot");
                         }
                     }
                 }

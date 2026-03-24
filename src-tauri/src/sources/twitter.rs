@@ -157,7 +157,7 @@ impl TwitterSource {
 
     /// Look up a user ID from a username
     async fn lookup_user_id(&self, username: &str) -> Result<String> {
-        let url = format!("https://api.x.com/2/users/by/username/{}", username);
+        let url = format!("https://api.x.com/2/users/by/username/{username}");
 
         let resp = self
             .client
@@ -166,13 +166,12 @@ impl TwitterSource {
             .send()
             .await
             .map_err(|e| {
-                FourDaError::Internal(format!("Network error looking up @{}: {}", username, e))
+                FourDaError::Internal(format!("Network error looking up @{username}: {e}"))
             })?;
 
         if resp.status() == 429 {
             return Err(FourDaError::Internal(format!(
-                "Rate limited looking up @{}",
-                username
+                "Rate limited looking up @{username}"
             )));
         }
 
@@ -187,18 +186,17 @@ impl TwitterSource {
         let body: XUserLookupResponse = resp
             .json()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Parse error for @{}: {}", username, e)))?;
+            .map_err(|e| FourDaError::Internal(format!("Parse error for @{username}: {e}")))?;
 
         body.data
             .map(|d| d.id)
-            .ok_or_else(|| FourDaError::Internal(format!("User @{} not found", username)))
+            .ok_or_else(|| FourDaError::Internal(format!("User @{username} not found")))
     }
 
     /// Fetch recent tweets for a user by their ID
     async fn fetch_user_tweets(&self, user_id: &str, username: &str) -> Result<Vec<SourceItem>> {
         let url = format!(
-            "https://api.x.com/2/users/{}/tweets?max_results=10&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name",
-            user_id
+            "https://api.x.com/2/users/{user_id}/tweets?max_results=10&tweet.fields=created_at,public_metrics,author_id&expansions=author_id&user.fields=username,name"
         );
 
         debug!(username, user_id, "Fetching tweets from X API v2");
@@ -211,15 +209,13 @@ impl TwitterSource {
             .await
             .map_err(|e| {
                 FourDaError::Internal(format!(
-                    "Network error fetching tweets for @{}: {}",
-                    username, e
+                    "Network error fetching tweets for @{username}: {e}"
                 ))
             })?;
 
         if resp.status() == 429 {
             return Err(FourDaError::Internal(format!(
-                "Rate limited fetching tweets for @{}",
-                username
+                "Rate limited fetching tweets for @{username}"
             )));
         }
 
@@ -234,7 +230,7 @@ impl TwitterSource {
         let body: XApiResponse = resp
             .json()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Parse error for @{}: {}", username, e)))?;
+            .map_err(|e| FourDaError::Internal(format!("Parse error for @{username}: {e}")))?;
 
         let tweets = body.data.unwrap_or_default();
         let users = body.includes.and_then(|i| i.users).unwrap_or_default();
@@ -247,8 +243,7 @@ impl TwitterSource {
                     .author_id
                     .as_ref()
                     .and_then(|aid| users.iter().find(|u| &u.id == aid))
-                    .map(|u| format!("@{}", u.username))
-                    .unwrap_or_else(|| format!("@{}", username));
+                    .map_or_else(|| format!("@{username}"), |u| format!("@{}", u.username));
 
                 let tweet_url = format!("https://x.com/{}/status/{}", username, tweet.id);
 
@@ -260,8 +255,7 @@ impl TwitterSource {
                             .text
                             .char_indices()
                             .nth(117)
-                            .map(|(i, _)| i)
-                            .unwrap_or(tweet.text.len())]
+                            .map_or(tweet.text.len(), |(i, _)| i)]
                     )
                 } else {
                     tweet.text.clone()
@@ -271,10 +265,10 @@ impl TwitterSource {
                 let metadata = serde_json::json!({
                     "author": author,
                     "created_at": tweet.created_at,
-                    "likes": metrics.map(|m| m.like_count).unwrap_or(0),
-                    "retweets": metrics.map(|m| m.retweet_count).unwrap_or(0),
-                    "replies": metrics.map(|m| m.reply_count).unwrap_or(0),
-                    "impressions": metrics.map(|m| m.impression_count).unwrap_or(0),
+                    "likes": metrics.map_or(0, |m| m.like_count),
+                    "retweets": metrics.map_or(0, |m| m.retweet_count),
+                    "replies": metrics.map_or(0, |m| m.reply_count),
+                    "impressions": metrics.map_or(0, |m| m.impression_count),
                 });
 
                 SourceItem::new("twitter", &tweet.id, &title)
@@ -303,7 +297,7 @@ impl TwitterSource {
             .bearer_auth(&self.api_key)
             .send()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Network error searching tweets: {}", e)))?;
+            .map_err(|e| FourDaError::Internal(format!("Network error searching tweets: {e}")))?;
 
         if resp.status() == 429 {
             return Err(FourDaError::Internal(
@@ -321,7 +315,7 @@ impl TwitterSource {
         let body: XApiResponse = resp
             .json()
             .await
-            .map_err(|e| FourDaError::Internal(format!("Parse error on search: {}", e)))?;
+            .map_err(|e| FourDaError::Internal(format!("Parse error on search: {e}")))?;
 
         let tweets = body.data.unwrap_or_default();
         let users = body.includes.and_then(|i| i.users).unwrap_or_default();
@@ -333,15 +327,13 @@ impl TwitterSource {
                     .author_id
                     .as_ref()
                     .and_then(|aid| users.iter().find(|u| &u.id == aid))
-                    .map(|u| format!("@{}", u.username))
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .map_or_else(|| "unknown".to_string(), |u| format!("@{}", u.username));
 
                 let author_username = tweet
                     .author_id
                     .as_ref()
                     .and_then(|aid| users.iter().find(|u| &u.id == aid))
-                    .map(|u| u.username.clone())
-                    .unwrap_or_else(|| "unknown".to_string());
+                    .map_or_else(|| "unknown".to_string(), |u| u.username.clone());
 
                 let tweet_url = format!("https://x.com/{}/status/{}", author_username, tweet.id);
 
@@ -352,8 +344,7 @@ impl TwitterSource {
                             .text
                             .char_indices()
                             .nth(117)
-                            .map(|(i, _)| i)
-                            .unwrap_or(tweet.text.len())]
+                            .map_or(tweet.text.len(), |(i, _)| i)]
                     )
                 } else {
                     tweet.text.clone()
@@ -363,9 +354,9 @@ impl TwitterSource {
                 let metadata = serde_json::json!({
                     "author": author,
                     "created_at": tweet.created_at,
-                    "likes": metrics.map(|m| m.like_count).unwrap_or(0),
-                    "retweets": metrics.map(|m| m.retweet_count).unwrap_or(0),
-                    "replies": metrics.map(|m| m.reply_count).unwrap_or(0),
+                    "likes": metrics.map_or(0, |m| m.like_count),
+                    "retweets": metrics.map_or(0, |m| m.retweet_count),
+                    "replies": metrics.map_or(0, |m| m.reply_count),
                 });
 
                 SourceItem::new("twitter", &tweet.id, &title)

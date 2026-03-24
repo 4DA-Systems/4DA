@@ -172,8 +172,8 @@ pub(crate) fn compute_necessity(inputs: &NecessityInputs) -> NecessityResult {
 
     // Multi-project amplification
     if inputs.affected_project_count > 1 {
-        let amplification =
-            (1.0 + (inputs.affected_project_count as f32 - 1.0) * 0.1).min(MAX_PROJECT_AMPLIFICATION);
+        let amplification = (1.0 + (inputs.affected_project_count as f32 - 1.0) * 0.1)
+            .min(MAX_PROJECT_AMPLIFICATION);
         let prev = score;
         score *= amplification;
         debug!(
@@ -684,8 +684,8 @@ mod tests {
             matched_deps: vec!["openssl".to_string()],
             signal_type: Some("security_alert".to_string()),
             cve_severity: Some("CRITICAL".to_string()),
-            window_boost: 0.15,      // also decision relevant
-            skill_gap_boost: 0.15,   // also blind spot
+            window_boost: 0.15,    // also decision relevant
+            skill_gap_boost: 0.15, // also blind spot
             ..default_inputs()
         };
         let result = compute_necessity(&inputs);

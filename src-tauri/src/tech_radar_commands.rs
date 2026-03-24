@@ -27,7 +27,7 @@ pub async fn get_radar_entry_detail(name: String) -> Result<serde_json::Value> {
         .find(|e| e.name.eq_ignore_ascii_case(&name));
 
     // Query recent source items that mention this technology
-    let pattern = format!("%{}%", name);
+    let pattern = format!("%{name}%");
     let related_items: Vec<serde_json::Value> = {
         let mut stmt = conn.prepare(
             "SELECT title, source_type, url, created_at
@@ -142,21 +142,18 @@ pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::
         )
         .ok();
 
-    match data {
-        Some(json_str) => {
-            let parsed: serde_json::Value = serde_json::from_str(&json_str)?;
-            debug!(
-                target: "4da::tech_radar",
-                date = %snapshot_date,
-                "Loaded radar snapshot"
-            );
-            Ok(parsed)
-        }
-        None => {
-            // No snapshot found at this date — return current radar instead
-            let radar = crate::tech_radar::compute_radar(&conn)?;
-            Ok(serde_json::to_value(radar)?)
-        }
+    if let Some(json_str) = data {
+        let parsed: serde_json::Value = serde_json::from_str(&json_str)?;
+        debug!(
+            target: "4da::tech_radar",
+            date = %snapshot_date,
+            "Loaded radar snapshot"
+        );
+        Ok(parsed)
+    } else {
+        // No snapshot found at this date — return current radar instead
+        let radar = crate::tech_radar::compute_radar(&conn)?;
+        Ok(serde_json::to_value(radar)?)
     }
 }
 

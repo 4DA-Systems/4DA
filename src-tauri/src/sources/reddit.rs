@@ -81,10 +81,7 @@ impl RedditSource {
         subreddit: &str,
         limit: usize,
     ) -> SourceResult<Vec<SourceItem>> {
-        let url = format!(
-            "https://www.reddit.com/r/{}/hot.json?limit={}",
-            subreddit, limit
-        );
+        let url = format!("https://www.reddit.com/r/{subreddit}/hot.json?limit={limit}");
 
         let response = self
             .client
@@ -189,13 +186,13 @@ impl RedditSource {
                 .metadata
                 .as_ref()
                 .and_then(|m| m.get("score"))
-                .and_then(|s| s.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0);
             let score_b = b
                 .metadata
                 .as_ref()
                 .and_then(|m| m.get("score"))
-                .and_then(|s| s.as_i64())
+                .and_then(serde_json::Value::as_i64)
                 .unwrap_or(0);
             score_b.cmp(&score_a)
         });
@@ -304,7 +301,7 @@ impl Source for RedditSource {
             .metadata
             .as_ref()
             .and_then(|m| m.get("is_self"))
-            .and_then(|v| v.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
 
         if is_self {

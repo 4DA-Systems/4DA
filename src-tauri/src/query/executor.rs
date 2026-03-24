@@ -99,7 +99,7 @@ impl QueryExecutor {
         let embedding_blob: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
 
         // KNN search requires k = ? in WHERE clause for sqlite-vec
-        let sql = r#"
+        let sql = r"
             SELECT
                 c.id,
                 v.distance,
@@ -109,7 +109,7 @@ impl QueryExecutor {
             JOIN context_chunks c ON c.id = v.rowid
             WHERE v.embedding MATCH ?1 AND k = ?2
             ORDER BY v.distance
-        "#;
+        ";
 
         let mut results = Vec::new();
         if let Ok(mut stmt) = conn.prepare(sql) {
@@ -159,8 +159,8 @@ impl QueryExecutor {
         let search_terms: Vec<&str> = query
             .keywords
             .iter()
-            .map(|s| s.as_str())
-            .chain(query.entities.iter().map(|s| s.as_str()))
+            .map(std::string::String::as_str)
+            .chain(query.entities.iter().map(std::string::String::as_str))
             .collect();
 
         if search_terms.is_empty() {
@@ -206,7 +206,7 @@ impl QueryExecutor {
 
         // Build the query with optional filters
         let mut sql = String::from(
-            r#"
+            r"
             SELECT DISTINCT
                 d.id,
                 d.file_path,
@@ -217,7 +217,7 @@ impl QueryExecutor {
             FROM indexed_documents d
             JOIN document_chunks c ON c.document_id = d.id
             WHERE c.content LIKE ?1
-            "#,
+            ",
         );
 
         // Add file type filter (parameterized for defense-in-depth)
@@ -252,7 +252,7 @@ impl QueryExecutor {
         sql.push_str(" ORDER BY d.indexed_at DESC LIMIT 50");
 
         let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
+            params.iter().map(std::convert::AsRef::as_ref).collect();
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
             Ok((
@@ -299,13 +299,13 @@ impl QueryExecutor {
         // Also search context_chunks (from ACE) via keyword
         // Skip items already found by vector search
         // Note: context_chunks uses 'text' column, not 'content'
-        let context_sql = r#"
+        let context_sql = r"
             SELECT id, source_file, text, created_at
             FROM context_chunks
             WHERE text LIKE ?1
             ORDER BY created_at DESC
             LIMIT 20
-        "#;
+        ";
 
         if let Ok(mut stmt) = conn.prepare(context_sql) {
             if let Ok(rows) = stmt.query_map([&search_pattern], |row| {

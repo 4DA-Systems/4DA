@@ -103,7 +103,7 @@ pub fn parse_simple(query: &str) -> ParsedQuery {
             let word = w.to_lowercase();
             word.len() > 2 && !stopwords.contains(&word.as_str())
         })
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect();
 
     // Detect time range

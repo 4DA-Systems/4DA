@@ -305,10 +305,7 @@ fn wait_with_timeout(
                 Ok(n) => {
                     buf.extend_from_slice(&chunk[..n]);
                     if buf.len() > MAX_PLUGIN_OUTPUT_BYTES {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "Plugin stdout exceeded size limit",
-                        ));
+                        return Err(std::io::Error::other("Plugin stdout exceeded size limit"));
                     }
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => continue,

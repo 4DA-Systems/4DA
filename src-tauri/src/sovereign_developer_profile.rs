@@ -447,7 +447,7 @@ fn assemble_playbook_progress(conn: &Connection) -> PlaybookProgressSummary {
                 if let Ok(content) = std::fs::read_to_string(&path) {
                     let lesson_count = crate::playbook_commands::parse_lessons(&content).len();
                     summary.total_lessons += lesson_count as u32;
-                    let completed = per_module.get(*mid).map(|v| v.len()).unwrap_or(0);
+                    let completed = per_module.get(*mid).map_or(0, std::vec::Vec::len);
                     if completed >= lesson_count && lesson_count > 0 {
                         summary.completed_modules.push(mid.to_string());
                     }
@@ -553,12 +553,11 @@ fn load_radar_summary_from_snapshot(conn: &Connection) -> TechRadarSummary {
         )
         .ok();
 
-    let data = match data {
-        Some(d) => d,
-        None => {
-            debug!(target: "4da::sdp", "No radar snapshot found — returning empty summary");
-            return TechRadarSummary::default();
-        }
+    let data = if let Some(d) = data {
+        d
+    } else {
+        debug!(target: "4da::sdp", "No radar snapshot found — returning empty summary");
+        return TechRadarSummary::default();
     };
 
     // Snapshot format is HashMap<tech_name, ring_name> (e.g. {"rust": "adopt"})

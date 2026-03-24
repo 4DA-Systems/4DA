@@ -49,7 +49,7 @@ pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value> {
     // Validate all URLs
     for url in &feeds {
         if !url.starts_with("http://") && !url.starts_with("https://") {
-            return Err(format!("Invalid URL: {} must start with http:// or https://", url).into());
+            return Err(format!("Invalid URL: {url} must start with http:// or https://").into());
         }
         // Block internal/private network addresses (SSRF prevention)
         crate::url_validation::validate_not_internal(url)?;

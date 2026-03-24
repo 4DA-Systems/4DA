@@ -404,7 +404,7 @@ impl ACE {
                 } else {
                     info!(target: "ace::detect",
                         profiles = detections.len(),
-                        top = %detections.first().map(|d| d.profile_name.as_str()).unwrap_or("none"),
+                        top = %detections.first().map_or("none", |d| d.profile_name.as_str()),
                         "Auto-detected stack profiles after context scan"
                     );
                 }
@@ -597,7 +597,7 @@ impl ACE {
                  ORDER BY timestamp DESC LIMIT 50",
         )?;
 
-        let hours_param = format!("-{} hours", hours);
+        let hours_param = format!("-{hours} hours");
         let rows = stmt.query_map([&hours_param], |row| {
             Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
         })?;

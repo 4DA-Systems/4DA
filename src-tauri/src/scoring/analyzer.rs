@@ -35,7 +35,7 @@ pub(crate) async fn score_items_full(
         app,
         "cache",
         0.1,
-        &format!("Analyzing {} cached items (no API calls)...", total_cached),
+        &format!("Analyzing {total_cached} cached items (no API calls)..."),
         0,
         total_cached,
     );
@@ -149,7 +149,7 @@ pub(crate) async fn score_items_full(
         app,
         "complete",
         1.0,
-        &format!("Analyzed {} cached items!", total_cached),
+        &format!("Analyzed {total_cached} cached items!"),
         results.len(),
         results.len(),
     );

@@ -220,7 +220,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
     emit_progress(app, "context", 0.02, "Checking context...", 0, 0);
     let cached_context_count = db
         .context_count()
-        .map_err(|e| format!("Failed to count context chunks: {}", e))?;
+        .map_err(|e| format!("Failed to count context chunks: {e}"))?;
 
     if cached_context_count > 0 {
         info!(target: "4da::analysis", context_chunks = cached_context_count, "Context indexed");
@@ -237,7 +237,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
     );
     let all_items = source_fetching::fetch_all_sources_deep(db, app, 100)
         .await
-        .map_err(|e| format!("Deep fetch failed: {}", e))?;
+        .map_err(|e| format!("Deep fetch failed: {e}"))?;
     info!(target: "4da::analysis", items = all_items.len(), "Deep fetched items from all sources");
 
     emit_progress(
@@ -252,7 +252,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
     // Step 3-4: Load all scoring context (user interests, exclusions, ACE context)
     let scoring_ctx = scoring::build_scoring_context(db)
         .await
-        .map_err(|e| format!("Failed to build scoring context for deep scan: {}", e))?;
+        .map_err(|e| format!("Failed to build scoring context for deep scan: {e}"))?;
     let interest_count = scoring_ctx.interest_count;
     let trend_topics = crate::detect_trend_topics(
         all_items
@@ -283,7 +283,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
         app,
         NarrationEvent {
             narration_type: "insight".into(),
-            message: format!("Scoring {} items against your profile...", total_items),
+            message: format!("Scoring {total_items} items against your profile..."),
             source: None,
             relevance: None,
         },
@@ -303,7 +303,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
                 app,
                 "relevance",
                 progress,
-                &format!("Scoring {} of {} items...", idx, total_items),
+                &format!("Scoring {idx} of {total_items} items..."),
                 idx,
                 total_items,
             );
@@ -343,7 +343,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
                     app,
                     NarrationEvent {
                         narration_type: "match".into(),
-                        message: format!("High match: \"{}\"", title_preview),
+                        message: format!("High match: \"{title_preview}\""),
                         source: Some(item.source_type.clone()),
                         relevance: Some(scored.top_score),
                     },
@@ -467,7 +467,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     );
     let cached_context_count = db
         .context_count()
-        .map_err(|e| format!("Failed to count context chunks: {}", e))?;
+        .map_err(|e| format!("Failed to count context chunks: {e}"))?;
 
     if cached_context_count > 0 {
         info!(target: "4da::analysis", context_chunks = cached_context_count, "Context indexed (using KNN search)");
@@ -479,7 +479,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     emit_progress(app, "fetch", 0.1, "Fetching from all sources...", 0, 0);
     let all_items = source_fetching::fetch_all_sources(db, app, 50)
         .await
-        .map_err(|e| format!("Multi-source fetch failed: {}", e))?;
+        .map_err(|e| format!("Multi-source fetch failed: {e}"))?;
     info!(target: "4da::analysis", items = all_items.len(), "Fetched items from all sources");
 
     // Step 3-4: Load all scoring context (user interests, exclusions, ACE context)
@@ -493,7 +493,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     );
     let scoring_ctx = scoring::build_scoring_context(db)
         .await
-        .map_err(|e| format!("Failed to build scoring context: {}", e))?;
+        .map_err(|e| format!("Failed to build scoring context: {e}"))?;
     let trend_topics = crate::detect_trend_topics(
         all_items
             .iter()
@@ -576,7 +576,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
                     app,
                     NarrationEvent {
                         narration_type: "match".into(),
-                        message: format!("High match: \"{}\"", title_preview),
+                        message: format!("High match: \"{title_preview}\""),
                         source: Some(item.source_type.clone()),
                         relevance: Some(scored.top_score),
                     },

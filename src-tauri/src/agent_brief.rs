@@ -107,7 +107,7 @@ pub fn generate_brief(
     let brief = AgentSessionBrief {
         generated_at,
         version: "1.0.0".to_string(),
-        agent_type: agent_type.map(|s| s.to_string()),
+        agent_type: agent_type.map(std::string::ToString::to_string),
         active_decisions,
         ecosystem_changes,
         active_concerns,
@@ -140,16 +140,14 @@ fn time_filtered_sql(select: &str, since: Option<&str>, limit: u32) -> (String, 
     if since.is_some() {
         (
             format!(
-                "{} FROM source_items WHERE created_at > ?1 ORDER BY created_at DESC LIMIT {}",
-                select, limit
+                "{select} FROM source_items WHERE created_at > ?1 ORDER BY created_at DESC LIMIT {limit}"
             ),
             true,
         )
     } else {
         (
             format!(
-                "{} FROM source_items WHERE created_at > datetime('now', '-24 hours') ORDER BY created_at DESC LIMIT {}",
-                select, limit
+                "{select} FROM source_items WHERE created_at > datetime('now', '-24 hours') ORDER BY created_at DESC LIMIT {limit}"
             ),
             false,
         )
@@ -220,7 +218,7 @@ fn query_active_decisions(conn: &Connection) -> Result<Vec<DecisionSummary>> {
 
 /// Classify text into an ecosystem change type and relevance score.
 fn classify_change(title: &str, content: &str) -> Option<(String, f32)> {
-    let text = format!("{} {}", title, content).to_lowercase();
+    let text = format!("{title} {content}").to_lowercase();
     if text.contains("cve")
         || text.contains("vulnerability")
         || text.contains("security flaw")
@@ -252,7 +250,7 @@ fn classify_change(title: &str, content: &str) -> Option<(String, f32)> {
 
 /// Classify text into a signal type and priority.
 fn classify_signal(title: &str, content: &str) -> Option<(String, String)> {
-    let text = format!("{} {}", title, content).to_lowercase();
+    let text = format!("{title} {content}").to_lowercase();
     if text.contains("cve") || text.contains("vulnerability") || text.contains("exploit") {
         Some(("security_alert".to_string(), "high".to_string()))
     } else if text.contains("breaking change") || text.contains("deprecated") {

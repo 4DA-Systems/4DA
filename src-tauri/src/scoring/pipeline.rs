@@ -47,7 +47,7 @@ pub(crate) fn score_item(
         return SourceRelevance {
             id: input.id,
             title: input.title.to_string(),
-            url: input.url.map(|s| s.to_string()),
+            url: input.url.map(std::string::ToString::to_string),
             top_score: 0.0,
             matches: vec![],
             relevant: false,
@@ -70,7 +70,7 @@ pub(crate) fn score_item(
             streets_engine: None,
             decision_window_match: None,
             decision_boost_applied: 0.0,
-            created_at: input.created_at.map(|dt| dt.to_rfc3339()),
+            created_at: input.created_at.map(chrono::DateTime::to_rfc3339),
         };
     }
 
@@ -86,7 +86,7 @@ pub(crate) fn score_item(
                 let similarity = 1.0 / (1.0 + result.distance);
                 let matched_text = if result.text.len() > 100 {
                     let truncated: String = result.text.chars().take(100).collect();
-                    format!("{}...", truncated)
+                    format!("{truncated}...")
                 } else {
                     result.text
                 };
@@ -102,7 +102,7 @@ pub(crate) fn score_item(
     };
 
     // Raw scores from embedding similarity (compressed in ~0.40-0.56 range)
-    let raw_context = matches.first().map(|m| m.similarity).unwrap_or(0.0);
+    let raw_context = matches.first().map_or(0.0, |m| m.similarity);
     let raw_interest = compute_interest_score(input.embedding, &ctx.interests);
 
     // Calibrate: stretch compressed similarity scores to use full [0.05-0.95] range
@@ -196,7 +196,9 @@ pub(crate) fn score_item(
                     .iter()
                     .filter_map(|t| ctx.topic_half_lives.get(t.as_str()).copied())
                     .collect();
-                if !matching_half_lives.is_empty() {
+                if matching_half_lives.is_empty() {
+                    base_freshness
+                } else {
                     let avg_half_life =
                         matching_half_lives.iter().sum::<f32>() / matching_half_lives.len() as f32;
                     let age_hours =
@@ -206,8 +208,6 @@ pub(crate) fn score_item(
                     // to avoid wild swings from limited autophagy data.
                     let calibrated = (-0.693 * age_hours / avg_half_life.max(1.0)).exp();
                     (base_freshness * 0.5 + calibrated * 0.5).clamp(0.3, 1.0)
-                } else {
-                    base_freshness
                 }
             } else {
                 base_freshness
@@ -221,17 +221,16 @@ pub(crate) fn score_item(
     let base_score = (base_score * freshness).clamp(0.0, 1.0);
 
     // Source quality boost from learned preferences (capped +/-10%)
-    let source_quality_boost = ctx
-        .source_quality
-        .get(input.source_type)
-        .copied()
-        .map(|score| {
-            (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
-                scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
-                scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
-            )
-        })
-        .unwrap_or(0.0);
+    let source_quality_boost =
+        ctx.source_quality
+            .get(input.source_type)
+            .copied()
+            .map_or(0.0, |score| {
+                (score * scoring_config::SOURCE_QUALITY_MULT).clamp(
+                    scoring_config::SOURCE_QUALITY_CAP_RANGE.0,
+                    scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
+                )
+            });
     let base_score = (base_score + source_quality_boost).clamp(0.0, 1.0);
 
     // Taste embedding boost: cosine similarity between item and user's holistic preference vector
@@ -321,7 +320,9 @@ pub(crate) fn score_item(
 
     // Intent boost: amplify items matching recent work topics (what you're coding RIGHT NOW)
     // If you committed code about "scoring" in the last 2h, articles about scoring get boosted
-    let intent_boost: f32 = if !ctx.work_topics.is_empty() {
+    let intent_boost: f32 = if ctx.work_topics.is_empty() {
+        0.0
+    } else {
         let matching_work_topics = topics
             .iter()
             .filter(|t| ctx.work_topics.iter().any(|wt| topic_overlaps(t, wt)))
@@ -331,13 +332,13 @@ pub(crate) fn score_item(
             1 => scoring_config::INTENT_BOOST_SINGLE_MATCH,
             _ => scoring_config::INTENT_BOOST_MULTI_MATCH,
         }
-    } else {
-        0.0
     };
     let base_score = (base_score + intent_boost).clamp(0.0, 1.0);
 
     // Feedback learning boost (Phase 9): apply feedback-derived topic multiplier
-    let feedback_boost = if !ctx.feedback_boosts.is_empty() {
+    let feedback_boost = if ctx.feedback_boosts.is_empty() {
+        0.0
+    } else {
         let mut boost_sum: f64 = 0.0;
         let mut match_count = 0;
         for topic in &topics {
@@ -356,14 +357,14 @@ pub(crate) fn score_item(
         } else {
             0.0
         }
-    } else {
-        0.0
     };
     let base_score = (base_score + feedback_boost).clamp(0.0, 1.0);
 
     // Decision window boost: items matching open decision windows get a scoring boost.
     // Security patches get up to +0.20, migrations +0.15, adoption/knowledge +0.10.
-    let (window_boost, matched_window_id) = if !ctx.open_windows.is_empty() {
+    let (window_boost, matched_window_id) = if ctx.open_windows.is_empty() {
+        (0.0, None)
+    } else {
         crate::decision_advantage::compute_decision_window_boost(
             &ctx.open_windows,
             input.title,
@@ -374,8 +375,6 @@ pub(crate) fn score_item(
                 .map(|d| d.package_name.clone())
                 .collect::<Vec<_>>(),
         )
-    } else {
-        (0.0, None)
     };
     let base_score = (base_score + window_boost).clamp(0.0, 1.0);
 
@@ -383,7 +382,9 @@ pub(crate) fn score_item(
     // Closes the intelligence loop: ACE discovers deps → profile detects gaps → scoring prioritizes.
     let mut matched_skill_gaps: Vec<String> = Vec::new();
     let skill_gap_boost: f32 = if let Some(ref profile) = ctx.sovereign_profile {
-        if !profile.intelligence.skill_gaps.is_empty() {
+        if profile.intelligence.skill_gaps.is_empty() {
+            0.0
+        } else {
             for t in &topics {
                 if let Some(g) = profile
                     .intelligence
@@ -401,8 +402,6 @@ pub(crate) fn score_item(
                 1 => 0.15, // Single gap match (raised from 0.08)
                 _ => 0.20, // Multi gap match (raised from 0.12)
             }
-        } else {
-            0.0
         }
     } else {
         0.0
@@ -416,12 +415,12 @@ pub(crate) fn score_item(
             .iter()
             .filter_map(|t| ctx.calibration_deltas.get(t.as_str()).copied())
             .collect();
-        if !matching.is_empty() {
+        if matching.is_empty() {
+            0.0
+        } else {
             let avg_delta = matching.iter().sum::<f32>() / matching.len() as f32;
             // Clamp correction to +/-10% to prevent runaway calibration
             avg_delta.clamp(-0.10, 0.10)
-        } else {
-            0.0
         }
     } else {
         0.0
@@ -684,7 +683,7 @@ pub(crate) fn score_item(
     SourceRelevance {
         id: input.id,
         title: crate::decode_html_entities(input.title),
-        url: input.url.map(|s| s.to_string()),
+        url: input.url.map(std::string::ToString::to_string),
         top_score: combined_score,
         matches,
         relevant,
@@ -712,7 +711,7 @@ pub(crate) fn score_item(
                 .map(|w| w.title.clone())
         }),
         decision_boost_applied: window_boost,
-        created_at: input.created_at.map(|dt| dt.to_rfc3339()),
+        created_at: input.created_at.map(chrono::DateTime::to_rfc3339),
     }
 }
 

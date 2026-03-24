@@ -364,7 +364,7 @@ pub async fn check_dependency_upgrades() -> Result<serde_json::Value> {
 async fn fetch_npm_latest(client: &reqwest::Client, package: &str) -> Option<String> {
     // Handle scoped packages: @scope/pkg -> @scope%2Fpkg
     let encoded = package.replace('/', "%2F");
-    let url = format!("https://registry.npmjs.org/{}/latest", encoded);
+    let url = format!("https://registry.npmjs.org/{encoded}/latest");
 
     let resp = client
         .get(&url)
@@ -380,12 +380,12 @@ async fn fetch_npm_latest(client: &reqwest::Client, package: &str) -> Option<Str
     let json: serde_json::Value = resp.json().await.ok()?;
     json.get("version")
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
 }
 
 /// Query crates.io for latest stable version of a crate.
 async fn fetch_crates_io_latest(client: &reqwest::Client, crate_name: &str) -> Option<String> {
-    let url = format!("https://crates.io/api/v1/crates/{}", crate_name);
+    let url = format!("https://crates.io/api/v1/crates/{crate_name}");
 
     let resp = client
         .get(&url)
@@ -403,7 +403,7 @@ async fn fetch_crates_io_latest(client: &reqwest::Client, crate_name: &str) -> O
     json.get("crate")
         .and_then(|c| c.get("max_stable_version"))
         .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
 }
 
 // ============================================================================

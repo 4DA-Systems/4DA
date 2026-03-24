@@ -124,7 +124,7 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
                     source_item_id: *id,
                     title: title.clone(),
                     timestamp: timestamp.clone(),
-                    description: format!("{} via {}", signal_type, source_type),
+                    description: format!("{signal_type} via {source_type}"),
                 }
             })
             .collect();
@@ -147,14 +147,11 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
         };
 
         let action = if has_security {
-            format!(
-                "Review security implications for {} in your projects",
-                topic
-            )
+            format!("Review security implications for {topic} in your projects")
         } else if has_breaking {
-            format!("Check if {} breaking changes affect your code", topic)
+            format!("Check if {topic} breaking changes affect your code")
         } else {
-            format!("Multiple signals about {} - review the trend", topic)
+            format!("Multiple signals about {topic} - review the trend")
         };
 
         let chain_id = format!(
@@ -431,7 +428,7 @@ fn build_forecast(
             if h < 2.0 {
                 "within hours".to_string()
             } else if h < 24.0 {
-                format!("within ~{:.0}h", h)
+                format!("within ~{h:.0}h")
             } else {
                 format!("within ~{:.0} days", h / 24.0)
             }
@@ -439,24 +436,20 @@ fn build_forecast(
         .unwrap_or_else(|| "timing uncertain".to_string());
 
     match phase {
-        ChainPhase::Nascent => format!("Early signal for {} — monitoring", chain_name),
-        ChainPhase::Active => format!(
-            "{} is developing — next signal expected {}",
-            chain_name, timing
-        ),
+        ChainPhase::Nascent => format!("Early signal for {chain_name} — monitoring"),
+        ChainPhase::Active => format!("{chain_name} is developing — next signal expected {timing}"),
         ChainPhase::Escalating => {
             let rate = if acceleration < -5.0 {
                 "rapidly"
             } else {
                 "steadily"
             };
-            format!("{} is {} accelerating — act {}", chain_name, rate, timing)
+            format!("{chain_name} is {rate} accelerating — act {timing}")
         }
-        ChainPhase::Peak => format!(
-            "{} at peak intensity — high activity expected {}",
-            chain_name, timing
-        ),
-        ChainPhase::Resolving => format!("{} is cooling down — signals slowing", chain_name),
+        ChainPhase::Peak => {
+            format!("{chain_name} at peak intensity — high activity expected {timing}")
+        }
+        ChainPhase::Resolving => format!("{chain_name} is cooling down — signals slowing"),
     }
 }
 

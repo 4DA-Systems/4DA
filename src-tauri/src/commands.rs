@@ -158,16 +158,15 @@ pub(crate) async fn mcp_score_autopsy(
     let item = results
         .iter()
         .find(|r| r.id == item_id)
-        .ok_or_else(|| format!("Item {} not found in analysis results", item_id))?;
+        .ok_or_else(|| format!("Item {item_id} not found in analysis results"))?;
 
     // Get item metadata from DB
     let db = get_database()?;
     let db_item = db.get_source_item_by_id(item_id as i64).ok().flatten();
 
-    let age_hours = db_item
-        .as_ref()
-        .map(|i| (chrono::Utc::now() - i.created_at).num_minutes() as f64 / 60.0)
-        .unwrap_or(0.0);
+    let age_hours = db_item.as_ref().map_or(0.0, |i| {
+        (chrono::Utc::now() - i.created_at).num_minutes() as f64 / 60.0
+    });
 
     let created_at = db_item
         .as_ref()
@@ -390,7 +389,7 @@ pub(crate) async fn mcp_score_autopsy(
             "tech_stack": matching_tech,
             "active_topics": matching_active,
             "learned_affinities": matching_affinities,
-            "exclusions_hit": item.excluded_by.as_ref().map(|e| vec![e.clone()]).unwrap_or_else(Vec::<String>::new)
+            "exclusions_hit": item.excluded_by.as_ref().map_or_else(Vec::<String>::new, |e| vec![e.clone()])
         },
         "similar_items": similar_items,
         "recommendations": recommendations,
@@ -410,16 +409,14 @@ fn build_autopsy_narrative(
     // Score assessment
     let score_pct = (item.top_score * 100.0) as u32;
     if item.top_score >= 0.6 {
-        parts.push(format!("This item scored {}% - a strong match.", score_pct));
+        parts.push(format!("This item scored {score_pct}% - a strong match."));
     } else if item.top_score >= 0.35 {
         parts.push(format!(
-            "This item scored {}% - above the relevance threshold.",
-            score_pct
+            "This item scored {score_pct}% - above the relevance threshold."
         ));
     } else {
         parts.push(format!(
-            "This item scored {}% - below the relevance threshold of 35%.",
-            score_pct
+            "This item scored {score_pct}% - below the relevance threshold of 35%."
         ));
     }
 
@@ -458,8 +455,7 @@ fn build_autopsy_narrative(
         parts.push("It was discovered very recently and received a freshness boost.".to_string());
     } else if age_hours > 36.0 {
         parts.push(format!(
-            "It's {:.0} hours old, so its score was slightly reduced for staleness.",
-            age_hours
+            "It's {age_hours:.0} hours old, so its score was slightly reduced for staleness."
         ));
     }
 
@@ -551,11 +547,11 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
                 let score_pct = (item.top_score * 100.0) as u32;
                 md.push_str(&format!("### {} ({}%)\n", item.title, score_pct));
                 if let Some(ref url) = item.url {
-                    md.push_str(&format!("- **URL:** {}\n", url));
+                    md.push_str(&format!("- **URL:** {url}\n"));
                 }
                 md.push_str(&format!("- **Source:** {}\n", item.source_type));
                 if let Some(ref explanation) = item.explanation {
-                    md.push_str(&format!("- **Why:** {}\n", explanation));
+                    md.push_str(&format!("- **Why:** {explanation}\n"));
                 }
                 md.push('\n');
             }
@@ -578,7 +574,7 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
                     score_pct, item.title, item.source_type
                 ));
                 if let Some(ref url) = item.url {
-                    text.push_str(&format!("  {}\n", url));
+                    text.push_str(&format!("  {url}\n"));
                 }
             }
             Ok(text)
@@ -593,7 +589,7 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
             for item in &relevant {
                 let score_pct = (item.top_score * 100.0) as u32;
                 html.push_str("<div style='margin:1rem 0;padding:1rem;background:#141414;border-radius:8px;border:1px solid #2A2A2A'>");
-                html.push_str(&format!("<strong>{}%</strong> ", score_pct));
+                html.push_str(&format!("<strong>{score_pct}%</strong> "));
                 if let Some(ref url) = item.url {
                     html.push_str(&format!(
                         "<a href='{}' style='color:#D4AF37'>{}</a>",
@@ -618,7 +614,7 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
             let now = chrono::Utc::now();
             let date_str = now.format("%B %d, %Y").to_string();
 
-            let mut md = format!("# 4DA Intelligence Digest — {}\n\n", date_str);
+            let mut md = format!("# 4DA Intelligence Digest — {date_str}\n\n");
 
             // Developer identity header
             if let Some(ref dna) = dna {
@@ -632,10 +628,10 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
 
             // Stats bar
             let high_signal = relevant.iter().filter(|r| r.top_score >= 0.5).count();
-            let rejection_pct = if !results.is_empty() {
-                ((1.0 - relevant.len() as f64 / results.len() as f64) * 100.0) as u32
-            } else {
+            let rejection_pct = if results.is_empty() {
                 0
+            } else {
+                ((1.0 - relevant.len() as f64 / results.len() as f64) * 100.0) as u32
             };
             md.push_str(&format!(
                 "**{}** items scored | **{}** relevant | **{}** high-signal | **{}%** filtered as noise\n\n",
@@ -656,7 +652,7 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
                         md.push_str(&format!("- **{}** — {}%", item.title, score_pct));
                     }
                     if let Some(ref explanation) = item.explanation {
-                        md.push_str(&format!(" — {}", explanation));
+                        md.push_str(&format!(" — {explanation}"));
                     }
                     md.push('\n');
                 }
@@ -723,11 +719,9 @@ pub(crate) async fn export_results(format: String) -> Result<String> {
 
             Ok(md)
         }
-        _ => Err(format!(
-            "Unknown format: {}. Use 'markdown', 'text', 'html', or 'digest'",
-            format
-        )
-        .into()),
+        _ => Err(
+            format!("Unknown format: {format}. Use 'markdown', 'text', 'html', or 'digest'").into(),
+        ),
     }
 }
 

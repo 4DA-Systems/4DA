@@ -298,7 +298,7 @@ pub fn generate_briefing_text() -> String {
             .as_deref()
             .map(|s| format!("[{}] ", strip_control_chars(&s.to_uppercase())))
             .unwrap_or_default();
-        output.push_str(&format!("  {}{}\n", signal_tag, safe_title));
+        output.push_str(&format!("  {signal_tag}{safe_title}\n"));
         output.push_str(&format!(
             "    Source: {} | Score: {:.0}%\n\n",
             safe_source,

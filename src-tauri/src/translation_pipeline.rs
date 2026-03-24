@@ -39,10 +39,9 @@ pub async fn translate_batch(
         let json_block = format!("{{\n{}\n}}", pairs.join(",\n"));
 
         let system = format!(
-            "You are a professional translator. Translate the JSON values from English to {}. \
+            "You are a professional translator. Translate the JSON values from English to {target_name}. \
              Keep JSON keys exactly as-is. Preserve {{{{interpolation}}}} variables like {{{{count}}}}, {{{{name}}}}. \
-             Return ONLY valid JSON, no markdown fences or explanation.",
-            target_name
+             Return ONLY valid JSON, no markdown fences or explanation."
         );
 
         let response = client
@@ -125,11 +124,11 @@ pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String
 
     if trans_dir.exists() {
         for ns in &["ui", "coach", "streets", "errors"] {
-            let path = trans_dir.join(format!("{}.json", ns));
+            let path = trans_dir.join(format!("{ns}.json"));
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                     for (k, v) in map {
-                        existing.insert(format!("{}:{}", ns, k), v);
+                        existing.insert(format!("{ns}:{k}"), v);
                     }
                 }
             }
@@ -157,11 +156,11 @@ pub fn load_english_strings() -> Result<HashMap<String, String>> {
     let mut english_strings: HashMap<String, String> = HashMap::new();
 
     for ns in &["ui", "coach", "streets", "errors"] {
-        let path = locales_dir.join(format!("{}.json", ns));
+        let path = locales_dir.join(format!("{ns}.json"));
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                 for (k, v) in map {
-                    english_strings.insert(format!("{}:{}", ns, k), v);
+                    english_strings.insert(format!("{ns}:{k}"), v);
                 }
             }
         }
@@ -198,7 +197,7 @@ pub fn save_translations(
 
     let mut count = 0;
     for (ns, map) in &by_ns {
-        let path = trans_dir.join(format!("{}.json", ns));
+        let path = trans_dir.join(format!("{ns}.json"));
 
         // Merge with existing translations
         let mut existing: HashMap<String, String> = if path.exists() {

@@ -53,7 +53,7 @@ pub async fn get_channel_content(channel_id: i64) -> Result<Option<ChannelRender
                 }
             }
         }
-        Err(e) => Err(format!("Failed to get channel content: {}", e).into()),
+        Err(e) => Err(format!("Failed to get channel content: {e}").into()),
     }
 }
 
@@ -175,8 +175,7 @@ pub async fn create_custom_channel(
             .context("Failed to count channels")?;
         if custom_count >= FREE_TIER_MAX_CHANNELS {
             return Err(format!(
-                "Free tier limited to {} custom channels. Upgrade to Signal for unlimited channels.",
-                FREE_TIER_MAX_CHANNELS
+                "Free tier limited to {FREE_TIER_MAX_CHANNELS} custom channels. Upgrade to Signal for unlimited channels."
             )
             .into());
         }

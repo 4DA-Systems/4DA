@@ -670,7 +670,7 @@ impl WatcherStatePersistence {
                 Ok(Some(state))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load watcher state: {}", e).into()),
+            Err(e) => Err(format!("Failed to load watcher state: {e}").into()),
         }
     }
 
@@ -779,7 +779,7 @@ impl RateLimiter {
                 let window = Duration::from_secs(self.window_seconds);
                 let elapsed = Instant::now().duration_since(*oldest);
                 if elapsed < window {
-                    window - elapsed
+                    window.checked_sub(elapsed).unwrap()
                 } else {
                     Duration::ZERO
                 }
@@ -849,8 +849,7 @@ impl InteractionRateLimiter {
             let limiters = self.source_limiters.lock();
             limiters
                 .get(source)
-                .map(|l| l.remaining())
-                .unwrap_or(self.default_source_limit)
+                .map_or(self.default_source_limit, RateLimiter::remaining)
         };
 
         RateLimitStatus {

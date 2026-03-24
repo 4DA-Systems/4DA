@@ -581,7 +581,7 @@ impl Database {
             |row| row.get(0),
         )
         .optional()
-        .map(|v| v.flatten())
+        .map(std::option::Option::flatten)
     }
 
     // ========================================================================
@@ -738,7 +738,7 @@ impl Database {
                     ]
                     .contains(w)
                 })
-                .map(|s| s.to_string())
+                .map(std::string::ToString::to_string)
                 .collect();
 
             for word in words.into_iter().take(5) {

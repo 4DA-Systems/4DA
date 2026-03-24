@@ -95,7 +95,7 @@ pub fn get_template_content(template_id: String) -> Result<CoachTemplate> {
     let template = templates
         .into_iter()
         .find(|t| t.id == template_id)
-        .ok_or_else(|| format!("Template not found: {}", template_id))?;
+        .ok_or_else(|| format!("Template not found: {template_id}"))?;
 
     debug!(
         target: "4da::coach",

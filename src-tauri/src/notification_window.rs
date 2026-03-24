@@ -126,20 +126,18 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
     cancel_dismiss_timer();
 
     // Ensure the window exists.
-    let window = match app.get_webview_window(WINDOW_LABEL) {
-        Some(w) => w,
-        None => {
-            if let Err(e) = init_notification_window(app) {
-                warn!(target: "4da::notify", error = %e, "Failed to create notification window");
-                return;
-            }
-            match app.get_webview_window(WINDOW_LABEL) {
-                Some(w) => w,
-                None => {
-                    warn!(target: "4da::notify", "Notification window missing after init");
-                    return;
-                }
-            }
+    let window = if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
+        w
+    } else {
+        if let Err(e) = init_notification_window(app) {
+            warn!(target: "4da::notify", error = %e, "Failed to create notification window");
+            return;
+        }
+        if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
+            w
+        } else {
+            warn!(target: "4da::notify", "Notification window missing after init");
+            return;
         }
     };
 

@@ -58,7 +58,7 @@ pub async fn test_llm_connection() -> Result<serde_json::Value> {
         }
         Err(e) => {
             warn!(target: "4da::llm", error = %e, "LLM test failed");
-            Err(format!("Connection failed: {}", e).into())
+            Err(format!("Connection failed: {e}").into())
         }
     }
 }
@@ -88,11 +88,11 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
         .connect_timeout(std::time::Duration::from_secs(5))
         .timeout(std::time::Duration::from_secs(120)) // generous for cold model load
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
     // Phase 1: Check Ollama is running
     info!(target: "4da::ollama", base_url, "Phase 1: checking Ollama is reachable");
-    let version_url = format!("{}/api/version", base_url);
+    let version_url = format!("{base_url}/api/version");
     let version = match client.get(&version_url).send().await {
         Ok(resp) if resp.status().is_success() => {
             let data: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -101,8 +101,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
         Ok(resp) => {
             let status = resp.status();
             return Err(format!(
-                "Ollama returned HTTP {} — is something else running on {}?",
-                status, base_url
+                "Ollama returned HTTP {status} — is something else running on {base_url}?"
             )
             .into());
         }
@@ -110,25 +109,23 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
             let msg = e.to_string();
             if msg.contains("connect") || msg.contains("refused") {
                 return Err(format!(
-                    "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
-                    base_url
+                    "Cannot connect to Ollama at {base_url}. Make sure Ollama is running (ollama serve)."
                 )
                 .into());
             } else if msg.contains("timed out") || msg.contains("timeout") {
                 return Err(format!(
-                    "Connection to {} timed out. Check that the URL is correct and Ollama is running.",
-                    base_url
+                    "Connection to {base_url} timed out. Check that the URL is correct and Ollama is running."
                 )
                 .into());
             }
-            return Err(format!("Failed to reach Ollama at {}: {}", base_url, e).into());
+            return Err(format!("Failed to reach Ollama at {base_url}: {e}").into());
         }
     };
     info!(target: "4da::ollama", version = %version, "Ollama is running");
 
     // Phase 2: Check the requested model is available
     info!(target: "4da::ollama", model, "Phase 2: checking model is available");
-    let tags_url = format!("{}/api/tags", base_url);
+    let tags_url = format!("{base_url}/api/tags");
     let available_models: Vec<String> = match client.get(&tags_url).send().await {
         Ok(resp) if resp.status().is_success() => {
             let data: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -148,7 +145,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
     let model_found = available_models.iter().any(|m| {
         m == model
             || m.split(':').next() == model.split(':').next()
-            || m == &format!("{}:latest", model)
+            || m == &format!("{model}:latest")
             || model == &format!("{}:latest", m.split(':').next().unwrap_or(""))
     });
 
@@ -160,19 +157,18 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
             .collect::<Vec<_>>()
             .join(", ");
         return Err(format!(
-            "Model '{}' not found in Ollama. Available models: {}. Run: ollama pull {}",
-            model, model_list, model
+            "Model '{model}' not found in Ollama. Available models: {model_list}. Run: ollama pull {model}"
         )
         .into());
     }
 
     if available_models.is_empty() {
-        return Err(format!("No models installed in Ollama. Run: ollama pull {}", model).into());
+        return Err(format!("No models installed in Ollama. Run: ollama pull {model}").into());
     }
 
     // Phase 3: Tiny inference test (not the full relevance judge prompt!)
     info!(target: "4da::ollama", model, "Phase 3: testing inference");
-    let chat_url = format!("{}/api/chat", base_url);
+    let chat_url = format!("{base_url}/api/chat");
     let body = serde_json::json!({
         "model": model,
         "messages": [{"role": "user", "content": "Say OK"}],
@@ -195,8 +191,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
 
             if content.is_empty() {
                 return Err(format!(
-                    "Ollama returned empty response for model '{}'. The model may be corrupted. Try: ollama rm {} && ollama pull {}",
-                    model, model, model
+                    "Ollama returned empty response for model '{model}'. The model may be corrupted. Try: ollama rm {model} && ollama pull {model}"
                 )
                 .into());
             }
@@ -227,30 +222,28 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
             let status = resp.status();
             let text = resp.text().await.unwrap_or_default();
             if status.as_u16() == 404 || text.contains("not found") {
-                Err(format!("Model '{}' not found. Run: ollama pull {}", model, model).into())
+                Err(format!("Model '{model}' not found. Run: ollama pull {model}").into())
             } else if text.contains("out of memory")
                 || text.contains("OOM")
                 || text.contains("CUDA")
             {
                 Err(format!(
-                    "Not enough GPU memory for '{}'. Try a smaller model (e.g., llama3.2:1b or phi3:mini).",
-                    model
+                    "Not enough GPU memory for '{model}'. Try a smaller model (e.g., llama3.2:1b or phi3:mini)."
                 )
                 .into())
             } else {
-                Err(format!("Ollama inference error ({}): {}", status, text).into())
+                Err(format!("Ollama inference error ({status}): {text}").into())
             }
         }
         Err(e) => {
             let msg = e.to_string();
             if msg.contains("timed out") || msg.contains("timeout") {
                 Err(format!(
-                    "Ollama took too long to respond. The model '{}' may still be loading — try again in a few seconds.",
-                    model
+                    "Ollama took too long to respond. The model '{model}' may still be loading — try again in a few seconds."
                 )
                 .into())
             } else {
-                Err(format!("Ollama inference request failed: {}", e).into())
+                Err(format!("Ollama inference request failed: {e}").into())
             }
         }
     }
@@ -263,7 +256,7 @@ pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json:
     let client = crate::http_client::PROBE_CLIENT.clone();
 
     // Check if Ollama is running
-    let version_url = format!("{}/api/version", url);
+    let version_url = format!("{url}/api/version");
     let version = match client.get(&version_url).send().await {
         Ok(resp) if resp.status().is_success() => {
             let data: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -284,7 +277,7 @@ pub async fn check_ollama_status(base_url: Option<String>) -> Result<serde_json:
     };
 
     // Get available models
-    let tags_url = format!("{}/api/tags", url);
+    let tags_url = format!("{url}/api/tags");
     let models: Vec<serde_json::Value> = match client.get(&tags_url).send().await {
         Ok(resp) if resp.status().is_success() => {
             let data: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -322,26 +315,26 @@ pub async fn pull_ollama_model(
     base_url: Option<String>,
 ) -> Result<serde_json::Value> {
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
-    let pull_url = format!("{}/api/pull", url);
+    let pull_url = format!("{url}/api/pull");
 
     info!(target: "4da::ollama", model = %model, "Starting model pull");
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(600)) // 10 min timeout for large models
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
 
     let response = client
         .post(&pull_url)
         .json(&serde_json::json!({ "name": model, "stream": true }))
         .send()
         .await
-        .map_err(|e| format!("Failed to start pull: {}", e))?;
+        .map_err(|e| format!("Failed to start pull: {e}"))?;
 
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("Ollama pull failed ({}): {}", status, body).into());
+        return Err(format!("Ollama pull failed ({status}): {body}").into());
     }
 
     // Read streaming response line by line
@@ -350,7 +343,7 @@ pub async fn pull_ollama_model(
     let mut buffer = Vec::new();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Stream error: {}", e))?;
+        let chunk = chunk.map_err(|e| format!("Stream error: {e}"))?;
         buffer.extend_from_slice(&chunk);
 
         // Process complete lines from buffer
@@ -417,7 +410,7 @@ pub async fn list_provider_models(
                 .as_array()
                 .map(|arr| {
                     arr.iter()
-                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                        .filter_map(|m| m["name"].as_str().map(std::string::ToString::to_string))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -444,7 +437,7 @@ pub async fn list_provider_models(
                 .as_array()
                 .map(|arr| {
                     arr.iter()
-                        .filter_map(|m| m["id"].as_str().map(|s| s.to_string()))
+                        .filter_map(|m| m["id"].as_str().map(std::string::ToString::to_string))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -493,9 +486,9 @@ pub async fn detect_local_servers() -> Result<serde_json::Value> {
             Ok(resp) if resp.status().is_success() => {
                 let data: serde_json::Value = resp.json().await.unwrap_or_default();
                 let model_count = if name == "Ollama" {
-                    data["models"].as_array().map(|a| a.len()).unwrap_or(0)
+                    data["models"].as_array().map_or(0, std::vec::Vec::len)
                 } else {
-                    data["data"].as_array().map(|a| a.len()).unwrap_or(0)
+                    data["data"].as_array().map_or(0, std::vec::Vec::len)
                 };
                 detected.push(serde_json::json!({
                     "name": name,

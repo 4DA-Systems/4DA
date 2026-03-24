@@ -120,7 +120,7 @@ pub(crate) async fn fetch_all_sources(
             app,
             NarrationEvent {
                 narration_type: "discovery".into(),
-                message: format!("Scanning {}...", source_name),
+                message: format!("Scanning {source_name}..."),
                 source: Some(source_type.to_string()),
                 relevance: None,
             },
@@ -130,7 +130,7 @@ pub(crate) async fn fetch_all_sources(
             app,
             "fetch",
             0.2,
-            &format!("Fetching from {}...", source_name),
+            &format!("Fetching from {source_name}..."),
             all_items.len(),
             max_items_per_source * 3,
         );
@@ -186,7 +186,7 @@ pub(crate) async fn fetch_all_sources(
                     app,
                     NarrationEvent {
                         narration_type: "discovery".into(),
-                        message: format!("{}: {} items found", source_name, item_count),
+                        message: format!("{source_name}: {item_count} items found"),
                         source: Some(source_type.to_string()),
                         relevance: None,
                     },
@@ -275,7 +275,7 @@ pub(crate) async fn fetch_all_sources(
                     false,
                     0,
                     elapsed_ms,
-                    Some(&format!("{}", retry_err)),
+                    Some(&format!("{retry_err}")),
                 )
                 .ok();
                 let _ = app.emit(
@@ -291,7 +291,7 @@ pub(crate) async fn fetch_all_sources(
                 // Record to local error telemetry for developer diagnostics
                 crate::telemetry::record_error_async(
                     "source_fetch",
-                    &format!("{}", retry_err),
+                    &format!("{retry_err}"),
                     Some(source_type),
                 );
             }
@@ -335,10 +335,7 @@ pub(crate) async fn fetch_all_sources(
         // Try to embed, with fallback to zero vectors (keyword-only scoring)
         let embeddings = match embed_texts(&texts).await {
             Ok(emb) => {
-                let is_zero_fallback = emb
-                    .first()
-                    .map(|v| v.iter().all(|&x| x == 0.0))
-                    .unwrap_or(false);
+                let is_zero_fallback = emb.first().is_some_and(|v| v.iter().all(|&x| x == 0.0));
                 if is_zero_fallback {
                     let _ = app.emit(
                         "embedding-mode",
@@ -362,7 +359,7 @@ pub(crate) async fn fetch_all_sources(
                     serde_json::json!({ "mode": "keyword-only", "reason": e.to_string() }),
                 );
                 // Record embedding failure to local error telemetry
-                crate::telemetry::record_error_async("embedding", &format!("{}", e), None);
+                crate::telemetry::record_error_async("embedding", &format!("{e}"), None);
                 // Create zero vectors as fallback - items will score via keyword matching only
                 vec![vec![0.0f32; 384]; texts.len()]
             }
@@ -581,7 +578,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("Hacker News: {} items found", count),
+                    message: format!("Hacker News: {count} items found"),
                     source: Some("hackernews".into()),
                     relevance: None,
                 },
@@ -603,7 +600,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("arXiv: {} items found", count),
+                    message: format!("arXiv: {count} items found"),
                     source: Some("arxiv".into()),
                     relevance: None,
                 },
@@ -625,7 +622,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("Reddit: {} items found", count),
+                    message: format!("Reddit: {count} items found"),
                     source: Some("reddit".into()),
                     relevance: None,
                 },
@@ -647,7 +644,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("GitHub: {} items found", count),
+                    message: format!("GitHub: {count} items found"),
                     source: Some("github".into()),
                     relevance: None,
                 },
@@ -669,7 +666,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("RSS: {} items found", count),
+                    message: format!("RSS: {count} items found"),
                     source: Some("rss".into()),
                     relevance: None,
                 },
@@ -697,7 +694,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("Twitter: {} items found", count),
+                    message: format!("Twitter: {count} items found"),
                     source: Some("twitter".into()),
                     relevance: None,
                 },
@@ -725,7 +722,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("YouTube: {} items found", count),
+                    message: format!("YouTube: {count} items found"),
                     source: Some("youtube".into()),
                     relevance: None,
                 },
@@ -753,7 +750,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("Lobsters: {} items found", count),
+                    message: format!("Lobsters: {count} items found"),
                     source: Some("lobsters".into()),
                     relevance: None,
                 },
@@ -775,7 +772,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 app,
                 NarrationEvent {
                     narration_type: "discovery".into(),
-                    message: format!("Dev.to: {} items found", count),
+                    message: format!("Dev.to: {count} items found"),
                     source: Some("devto".into()),
                     relevance: None,
                 },
@@ -793,8 +790,7 @@ pub(crate) async fn fetch_all_sources_deep(
         NarrationEvent {
             narration_type: "discovery".into(),
             message: format!(
-                "All sources scanned \u{2014} {} total items collected",
-                total_pre_embed
+                "All sources scanned \u{2014} {total_pre_embed} total items collected"
             ),
             source: None,
             relevance: None,

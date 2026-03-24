@@ -143,15 +143,16 @@ fn safe_query_all(
         return Ok((JsonValue::Array(vec![]), 0));
     }
 
-    let sql = format!(
-        "SELECT * FROM {} ORDER BY {} LIMIT 50000",
-        table_name, order_by
-    );
+    let sql = format!("SELECT * FROM {table_name} ORDER BY {order_by} LIMIT 50000");
     let mut stmt = conn
         .prepare(&sql)
         .context("Failed to prepare export query")?;
 
-    let column_names: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
+    let column_names: Vec<String> = stmt
+        .column_names()
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
 
     let rows: Vec<JsonValue> = stmt
         .query_map([], |row| {
@@ -161,9 +162,9 @@ fn safe_query_all(
                 let json_val = match val {
                     rusqlite::types::Value::Null => JsonValue::Null,
                     rusqlite::types::Value::Integer(n) => JsonValue::Number(n.into()),
-                    rusqlite::types::Value::Real(f) => serde_json::Number::from_f64(f)
-                        .map(JsonValue::Number)
-                        .unwrap_or(JsonValue::Null),
+                    rusqlite::types::Value::Real(f) => {
+                        serde_json::Number::from_f64(f).map_or(JsonValue::Null, JsonValue::Number)
+                    }
                     rusqlite::types::Value::Text(s) => {
                         // Try parsing as JSON for nested structures
                         if (s.starts_with('{') || s.starts_with('['))
@@ -184,7 +185,7 @@ fn safe_query_all(
             Ok(JsonValue::Object(obj))
         })
         .context("Failed to query export data")?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     let count = rows.len() as u32;
@@ -466,7 +467,7 @@ fn nested_to_csv(value: &JsonValue) -> String {
             for (section_name, section_data) in map {
                 if let Some(arr) = section_data.as_array() {
                     if !arr.is_empty() {
-                        csv.push_str(&format!("# Section: {}\n", section_name));
+                        csv.push_str(&format!("# Section: {section_name}\n"));
                         csv.push_str(&json_array_to_csv(section_data));
                         csv.push('\n');
                     }
@@ -500,7 +501,10 @@ pub async fn export_all_data(format: String) -> Result<ExportManifest> {
     let export_id = uuid::Uuid::new_v4().to_string();
     let mut all_data = serde_json::Map::new();
     let mut total_records = 0u32;
-    let sections: Vec<String> = ALL_SECTIONS.iter().map(|s| s.to_string()).collect();
+    let sections: Vec<String> = ALL_SECTIONS
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
 
     for section in ALL_SECTIONS {
         match export_section_data(&conn, section) {
@@ -543,11 +547,11 @@ pub async fn export_all_data(format: String) -> Result<ExportManifest> {
     let file_content = if format == "csv" {
         // For CSV, convert each section
         let mut csv = String::from("# 4DA Data Export\n");
-        csv.push_str(&format!("# Export ID: {}\n", export_id));
+        csv.push_str(&format!("# Export ID: {export_id}\n"));
         csv.push_str(&format!("# Created: {}\n", chrono::Utc::now().to_rfc3339()));
-        csv.push_str(&format!("# Total Records: {}\n\n", total_records));
+        csv.push_str(&format!("# Total Records: {total_records}\n\n"));
         for (section_name, section_data) in &all_data {
-            csv.push_str(&format!("## {}\n", section_name));
+            csv.push_str(&format!("## {section_name}\n"));
             csv.push_str(&nested_to_csv(section_data));
             csv.push('\n');
         }

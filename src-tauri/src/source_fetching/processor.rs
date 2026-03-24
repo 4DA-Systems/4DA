@@ -154,7 +154,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "hackernews", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "hackernews", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 1, 9);
@@ -184,7 +184,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "arxiv", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "arxiv", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 2, 9);
@@ -214,7 +214,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "reddit", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "reddit", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 3, 9);
@@ -244,7 +244,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "github", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "github", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 4, 9);
@@ -274,7 +274,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "rss", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "rss", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 5, 9);
@@ -304,7 +304,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "twitter", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "twitter", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 6, 9);
@@ -334,7 +334,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "youtube", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "youtube", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 7, 9);
@@ -364,7 +364,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "lobsters", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "lobsters", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 8, 9);
@@ -394,7 +394,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             }
         }
         Err(e) => {
-            warn!(target: "4da::cache", source = "devto", error = %e, "Fetch failed after retries")
+            warn!(target: "4da::cache", source = "devto", error = %e, "Fetch failed after retries");
         }
     }
     void_signal_fetch_progress(app, 9, 9);

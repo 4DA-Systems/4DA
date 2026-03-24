@@ -173,8 +173,8 @@ pub(crate) struct VideoEntry {
 
 /// Extract content between XML tags: <tag>content</tag>
 pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-    let open_tag = format!("<{}", tag);
-    let close_tag = format!("</{}>", tag);
+    let open_tag = format!("<{tag}");
+    let close_tag = format!("</{tag}>");
 
     let start_pos = xml.find(&open_tag)?;
     let content_start = xml[start_pos..].find('>')? + start_pos + 1;
@@ -192,12 +192,12 @@ pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
 
 /// Extract an attribute value from a self-closing tag: <tag attr="value" />
 pub(crate) fn extract_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {
-    let tag_start = format!("<{}", tag);
+    let tag_start = format!("<{tag}");
     let start_pos = xml.find(&tag_start)?;
     let tag_end = xml[start_pos..].find('>')? + start_pos;
     let tag_content = &xml[start_pos..tag_end];
 
-    let attr_prefix = format!("{}=\"", attr);
+    let attr_prefix = format!("{attr}=\"");
     let attr_start = tag_content.find(&attr_prefix)?;
     let value_start = attr_start + attr_prefix.len();
     let value_end = tag_content[value_start..].find('"')? + value_start;
@@ -331,8 +331,7 @@ impl Source for YouTubeSource {
                                     .description
                                     .char_indices()
                                     .nth(1997)
-                                    .map(|(i, _)| i)
-                                    .unwrap_or(entry.description.len())]
+                                    .map_or(entry.description.len(), |(i, _)| i)]
                             )
                         } else {
                             entry.description

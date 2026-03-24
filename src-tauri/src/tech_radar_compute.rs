@@ -190,7 +190,7 @@ pub(crate) fn compute_radar(conn: &Connection) -> Result<TechRadar> {
     }
 
     // Classify quadrants
-    for (name, eb) in entries.iter_mut() {
+    for (name, eb) in &mut entries {
         eb.quadrant = classify_quadrant(name);
     }
 
@@ -280,7 +280,7 @@ fn overlay_decisions(conn: &Connection, entries: &mut HashMap<String, EntryBuild
             if let Some(eb) = entries.get_mut(&subj) {
                 eb.decision_boost = 1.0;
                 eb.decision_ref = Some(id);
-                eb.signals.push(format!("Active decision: {}", subject));
+                eb.signals.push(format!("Active decision: {subject}"));
             }
             for alt in &alts {
                 let alt_lower = alt.to_lowercase();
@@ -290,7 +290,7 @@ fn overlay_decisions(conn: &Connection, entries: &mut HashMap<String, EntryBuild
                 eb.ring = RadarRing::Hold;
                 eb.quadrant = classify_quadrant(&alt_lower);
                 eb.decision_ref = Some(id);
-                eb.signals.push(format!("Rejected in favor of {}", subject));
+                eb.signals.push(format!("Rejected in favor of {subject}"));
             }
         }
         if status == "superseded" {
@@ -324,11 +324,11 @@ fn overlay_affinities(conn: &Connection, entries: &mut HashMap<String, EntryBuil
             if score > 0.7 && matches!(eb.ring, RadarRing::Trial | RadarRing::Assess) {
                 eb.ring = RadarRing::Adopt;
                 eb.signals
-                    .push(format!("High engagement (affinity {:.2})", score));
+                    .push(format!("High engagement (affinity {score:.2})"));
             } else if score < 0.4 && matches!(eb.ring, RadarRing::Adopt | RadarRing::Trial) {
                 eb.ring = RadarRing::Hold;
                 eb.signals
-                    .push(format!("Declining engagement (affinity {:.2})", score));
+                    .push(format!("Declining engagement (affinity {score:.2})"));
             }
         }
     }
@@ -360,8 +360,7 @@ fn overlay_signal_trends(conn: &Connection, entries: &mut HashMap<String, EntryB
         };
         if count > 5 {
             eb.movement = RadarMovement::Up;
-            eb.signals
-                .push(format!("{} mentions in last 30 days", count));
+            eb.signals.push(format!("{count} mentions in last 30 days"));
         }
     }
 }

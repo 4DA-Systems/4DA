@@ -24,7 +24,7 @@ pub(crate) fn analyze_accuracy_feedback(
     ace_conn: &Connection,
     lookback_days: i64,
 ) -> Vec<super::CalibrationDelta> {
-    let window = format!("-{} days", lookback_days);
+    let window = format!("-{lookback_days} days");
 
     // Query all interactions within the lookback window that have topics
     let mut stmt = match ace_conn.prepare(
@@ -130,8 +130,8 @@ pub(crate) fn analyze_topic_calibration(
 ) -> Vec<super::CalibrationDelta> {
     let window_start_days = max_age_days;
     let window_end_days = max_age_days.saturating_sub(7);
-    let window_start = format!("-{} days", window_start_days);
-    let window_end = format!("-{} days", window_end_days);
+    let window_start = format!("-{window_start_days} days");
+    let window_end = format!("-{window_end_days} days");
 
     // Query items in pruning window with their engagement status
     let mut stmt = match conn.prepare(
@@ -230,7 +230,7 @@ fn extract_title_topics(title: &str) -> Vec<String> {
         .filter(|w| w.len() > 3)
         .filter(|w| !STOP_WORDS.contains(w))
         .take(5)
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 

@@ -24,7 +24,7 @@ pub async fn act_on_decision_window(window_id: i64, outcome: Option<String>) -> 
         "acted",
         outcome.as_deref(),
     )?;
-    Ok(format!("Window {} marked as acted", window_id))
+    Ok(format!("Window {window_id} marked as acted"))
 }
 
 /// Close/dismiss a decision window without acting on it.
@@ -37,7 +37,7 @@ pub async fn close_decision_window(window_id: i64, outcome: Option<String>) -> R
         "closed",
         outcome.as_deref(),
     )?;
-    Ok(format!("Window {} closed", window_id))
+    Ok(format!("Window {window_id} closed"))
 }
 
 /// Calculate compound advantage score for a given period (daily, weekly, monthly).
@@ -63,7 +63,7 @@ pub async fn get_advantage_history(period: Option<String>, limit: Option<i64>) -
 
     let scores: Vec<f32> = stmt
         .query_map(rusqlite::params![p, n], |row| row.get(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     // Reverse so oldest is first (for sparkline left-to-right)

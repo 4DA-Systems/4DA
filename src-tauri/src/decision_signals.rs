@@ -142,15 +142,9 @@ fn find_signals_for_decision(
             .any(|w| content_lower.contains(w) || title_lower.contains(w));
 
         let reason = if is_challenging {
-            format!(
-                "Mentions {} in context of potential concerns",
-                subject_lower
-            )
+            format!("Mentions {subject_lower} in context of potential concerns")
         } else {
-            format!(
-                "References {} ({} keyword matches)",
-                subject_lower, match_count
-            )
+            format!("References {subject_lower} ({match_count} keyword matches)")
         };
 
         let signal = RelatedSignal {

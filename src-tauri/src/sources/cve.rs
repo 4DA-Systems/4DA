@@ -94,7 +94,7 @@ fn parse_github_advisory(item: &serde_json::Value) -> Option<CveAdvisory> {
     let cvss_score = item
         .get("cvss")
         .and_then(|v| v.get("score"))
-        .and_then(|v| v.as_f64())
+        .and_then(serde_json::Value::as_f64)
         .map(|v| v as f32);
     let published = item
         .get("published_at")

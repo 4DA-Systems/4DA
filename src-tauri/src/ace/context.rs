@@ -165,14 +165,16 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
         };
 
         // Extract content based on file type
-        let (topics, extracted_text, source_type) = if change.change_type != FileChangeType::Deleted
+        let (topics, extracted_text, source_type) = if change.change_type == FileChangeType::Deleted
         {
+            (Vec::new(), None, "deleted".to_string())
+        } else {
             // Check if this is a document file that needs extraction
             let ext = change
                 .path
                 .extension()
                 .and_then(|e| e.to_str())
-                .map(|s| s.to_lowercase())
+                .map(str::to_lowercase)
                 .unwrap_or_default();
 
             if matches!(
@@ -222,8 +224,6 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                     super::watcher::extract_topics_from_file(&change.path).unwrap_or_default();
                 (topics, None, "text".to_string())
             }
-        } else {
-            (Vec::new(), None, "deleted".to_string())
         };
 
         let topics_json = serde_json::to_string(&topics).unwrap_or_default();

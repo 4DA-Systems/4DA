@@ -125,7 +125,7 @@ pub async fn get_indexed_stats() -> Result<serde_json::Value> {
 #[tauri::command]
 pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::Value> {
     let conn = open_db_connection()?;
-    let search_pattern = format!("%{}%", query);
+    let search_pattern = format!("%{query}%");
 
     let mut stmt = conn.prepare(
         "SELECT d.id, d.file_path, d.file_name, d.file_type, c.content, c.chunk_index

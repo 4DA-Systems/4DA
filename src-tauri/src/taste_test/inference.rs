@@ -226,8 +226,7 @@ impl InferenceState {
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(i, _)| i)
-            .unwrap_or(0);
+            .map_or(0, |(i, _)| i);
 
         // Use blending to get interests, tech, exclusions
         let blended = super::blending::blend_profile(&self.posterior, 0.10);
@@ -250,8 +249,7 @@ impl InferenceState {
             .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(i, _)| i)
-            .unwrap_or(0);
+            .map_or(0, |(i, _)| i);
 
         let blended = super::blending::blend_profile(&self.posterior, 0.10);
 

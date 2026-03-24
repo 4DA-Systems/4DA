@@ -139,8 +139,8 @@ impl ArxivSource {
     }
 
     fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-        let open_tag = format!("<{}", tag);
-        let close_tag = format!("</{}>", tag);
+        let open_tag = format!("<{tag}");
+        let close_tag = format!("</{tag}>");
 
         let start_pos = xml.find(&open_tag)?;
         let content_start = xml[start_pos..].find('>')? + start_pos + 1;
@@ -186,13 +186,12 @@ impl ArxivSource {
 
         let cat_query = categories
             .iter()
-            .map(|c| format!("cat:{}", c))
+            .map(|c| format!("cat:{c}"))
             .collect::<Vec<_>>()
             .join("+OR+");
 
         let url = format!(
-            "https://export.arxiv.org/api/query?search_query={}&start=0&max_results={}&sortBy=submittedDate&sortOrder=descending",
-            cat_query, max_items
+            "https://export.arxiv.org/api/query?search_query={cat_query}&start=0&max_results={max_items}&sortBy=submittedDate&sortOrder=descending"
         );
 
         let response = self
@@ -286,7 +285,10 @@ impl Source for ArxivSource {
             "Deep fetching arXiv"
         );
 
-        let categories: Vec<String> = deep_categories.iter().map(|s| s.to_string()).collect();
+        let categories: Vec<String> = deep_categories
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
         // Multiplier of 10 gives ~1000 papers across 16 categories for deep scan
         self.fetch_for_categories(&categories, items_per_category * 10)
             .await

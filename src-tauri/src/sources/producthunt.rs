@@ -104,8 +104,8 @@ impl ProductHuntSource {
 
 /// Extract content from XML tag
 pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-    let start_tag = format!("<{}>", tag);
-    let end_tag = format!("</{}>", tag);
+    let start_tag = format!("<{tag}>");
+    let end_tag = format!("</{tag}>");
 
     let start = xml.find(&start_tag)? + start_tag.len();
     let end = xml[start..].find(&end_tag)?;

@@ -39,7 +39,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
             count = texts.len(),
             batch_size = EMBED_BATCH_SIZE,
             "Batching embedding request into {} chunks",
-            (texts.len() + EMBED_BATCH_SIZE - 1) / EMBED_BATCH_SIZE
+            texts.len().div_ceil(EMBED_BATCH_SIZE)
         );
         let mut all_embeddings = Vec::with_capacity(texts.len());
         for chunk in texts.chunks(EMBED_BATCH_SIZE) {
@@ -140,25 +140,24 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         // This enables scoring for users who have Ollama installed but haven't configured a provider
         _ => {
             let texts = texts.to_vec();
-            match retry_with_backoff("embed_ollama_zeroconfig", 1, || {
+            if let Ok(result) = retry_with_backoff("embed_ollama_zeroconfig", 1, || {
                 let t = texts.clone();
                 async move { embed_texts_ollama(&t, &None).await }
             })
             .await
             {
-                Ok(result) => Ok(result),
-                Err(_) => {
-                    // Ollama not available — return zero vectors as graceful fallback
-                    // Scoring will work on non-embedding axes (keyword, dependency, source affinity)
-                    tracing::debug!(
-                        target: "4da::embeddings",
-                        "No embedding provider configured and Ollama not reachable. Using zero vectors."
-                    );
-                    Ok(texts
-                        .iter()
-                        .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
-                        .collect())
-                }
+                Ok(result)
+            } else {
+                // Ollama not available — return zero vectors as graceful fallback
+                // Scoring will work on non-embedding axes (keyword, dependency, source affinity)
+                tracing::debug!(
+                    target: "4da::embeddings",
+                    "No embedding provider configured and Ollama not reachable. Using zero vectors."
+                );
+                Ok(texts
+                    .iter()
+                    .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
+                    .collect())
             }
         }
     }
@@ -178,7 +177,7 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
 
     let response = EMBEDDING_CLIENT
         .post("https://api.openai.com/v1/embeddings")
-        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Authorization", format!("Bearer {api_key}"))
         .json(&body)
         .send()
         .await
@@ -258,7 +257,7 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
 
     // Try batch API first (/api/embed) - supported since Ollama v0.1.26
     let batch_result = EMBEDDING_CLIENT
-        .post(format!("{}/api/embed", base))
+        .post(format!("{base}/api/embed"))
         .json(&batch_body)
         .send()
         .await;
@@ -313,8 +312,7 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
             let msg = e.to_string();
             if msg.contains("connect") || msg.contains("refused") {
                 return Err(format!(
-                    "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
-                    base
+                    "Cannot connect to Ollama at {base}. Make sure Ollama is running (ollama serve)."
                 )
                 .into());
             }
@@ -338,7 +336,7 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
         });
 
         let response = EMBEDDING_CLIENT
-            .post(format!("{}/api/embeddings", base))
+            .post(format!("{base}/api/embeddings"))
             .json(&single_body)
             .send()
             .await
@@ -346,15 +344,13 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
                 let msg = e.to_string();
                 if msg.contains("connect") || msg.contains("refused") {
                     format!(
-                        "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
-                        base
+                        "Cannot connect to Ollama at {base}. Make sure Ollama is running (ollama serve)."
                     )
                 } else if msg.contains("timed out") || msg.contains("timeout") {
                     "Ollama embedding timed out. The model may still be loading — try again.".to_string()
                 } else {
                     format!(
-                        "Ollama embedding request failed: {}. Make sure Ollama is running with 'nomic-embed-text' (run: ollama pull nomic-embed-text)",
-                        e
+                        "Ollama embedding request failed: {e}. Make sure Ollama is running with 'nomic-embed-text' (run: ollama pull nomic-embed-text)"
                     )
                 }
             })?;
@@ -367,7 +363,7 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
                     "Embedding model 'nomic-embed-text' not found. Run: ollama pull nomic-embed-text".into()
                 );
             }
-            return Err(format!("Ollama embedding error ({}): {}", status, body).into());
+            return Err(format!("Ollama embedding error ({status}): {body}").into());
         }
 
         let json: serde_json::Value = response

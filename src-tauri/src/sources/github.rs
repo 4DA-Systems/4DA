@@ -93,12 +93,12 @@ impl GitHubSource {
         let lang_query = self
             .languages
             .iter()
-            .map(|lang| format!("language:{}", lang))
+            .map(|lang| format!("language:{lang}"))
             .collect::<Vec<_>>()
             .join("+OR+");
 
         // Full query: languages + stars filter + recent activity
-        format!("{}+stars:>100+pushed:>{}", lang_query, week_ago_str)
+        format!("{lang_query}+stars:>100+pushed:>{week_ago_str}")
     }
 }
 
@@ -192,7 +192,7 @@ impl Source for GitHubSource {
                 repo.stargazers_count,
                 repo.language
                     .as_ref()
-                    .map(|l| format!(" • {}", l))
+                    .map(|l| format!(" • {l}"))
                     .unwrap_or_default()
             );
 
@@ -233,7 +233,7 @@ impl Source for GitHubSource {
         info!(repo = %full_name, "Fetching README");
 
         // Fetch README via GitHub API
-        let readme_url = format!("https://api.github.com/repos/{}/readme", full_name);
+        let readme_url = format!("https://api.github.com/repos/{full_name}/readme");
 
         let response = self
             .client
@@ -263,7 +263,7 @@ impl Source for GitHubSource {
         use base64::Engine;
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(&readme_response.content)
-            .map_err(|e| SourceError::Parse(format!("Base64 decode failed: {}", e)))?;
+            .map_err(|e| SourceError::Parse(format!("Base64 decode failed: {e}")))?;
 
         let readme_text = String::from_utf8_lossy(&decoded).to_string();
 

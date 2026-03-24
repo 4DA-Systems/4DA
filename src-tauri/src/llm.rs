@@ -186,7 +186,7 @@ impl LLMClient {
                 // Record the cloud failure to error telemetry (fallback may still succeed)
                 crate::telemetry::record_error_async(
                     "llm",
-                    &format!("{}", err),
+                    &format!("{err}"),
                     Some(&self.provider.provider),
                 );
                 self.complete_ollama_fallback(system, messages).await?
@@ -195,7 +195,7 @@ impl LLMClient {
                 // Record hard LLM failure to error telemetry
                 crate::telemetry::record_error_async(
                     "llm",
-                    &format!("{}", err),
+                    &format!("{err}"),
                     Some(&self.provider.provider),
                 );
                 return Err(err);
@@ -262,7 +262,7 @@ impl LLMClient {
     ) -> Result<LLMResponse> {
         let fallback_base_url = "http://localhost:11434";
         let fallback_model = "llama3.2";
-        let url = format!("{}/api/chat", fallback_base_url);
+        let url = format!("{fallback_base_url}/api/chat");
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
@@ -404,7 +404,7 @@ impl LLMClient {
             if base.ends_with("/chat/completions") {
                 base.to_string()
             } else {
-                format!("{}/chat/completions", base)
+                format!("{base}/chat/completions")
             }
         } else {
             self.provider
@@ -477,7 +477,7 @@ impl LLMClient {
             .base_url
             .as_deref()
             .unwrap_or("http://localhost:11434");
-        let url = format!("{}/api/chat", base_url);
+        let url = format!("{base_url}/api/chat");
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
@@ -508,8 +508,7 @@ impl LLMClient {
                 let msg = e.to_string();
                 if msg.contains("connect") || msg.contains("refused") {
                     format!(
-                        "Cannot connect to Ollama at {}. Make sure Ollama is running (ollama serve).",
-                        base_url
+                        "Cannot connect to Ollama at {base_url}. Make sure Ollama is running (ollama serve)."
                     )
                 } else if msg.contains("timed out") || msg.contains("timeout") {
                     format!(
@@ -517,7 +516,7 @@ impl LLMClient {
                         self.provider.model
                     )
                 } else {
-                    format!("Ollama request failed: {}", e)
+                    format!("Ollama request failed: {e}")
                 }
             })?;
 
@@ -683,8 +682,7 @@ impl LLMClient {
 
         if tokens_limit > 0 && tokens_used >= tokens_limit {
             parts.push(format!(
-                "Daily LLM token limit exceeded (used: {}, limit: {})",
-                tokens_used, tokens_limit
+                "Daily LLM token limit exceeded (used: {tokens_used}, limit: {tokens_limit})"
             ));
         }
         if cost_limit > 0 && cost_used >= cost_limit {
@@ -729,7 +727,7 @@ pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>> {
         .build()
         .context("Failed to create HTTP client")?;
 
-    let url = format!("{}/api/tags", base_url);
+    let url = format!("{base_url}/api/tags");
     let response = client
         .get(&url)
         .send()

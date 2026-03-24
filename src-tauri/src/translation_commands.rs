@@ -47,7 +47,7 @@ pub fn get_translation_status(lang: String) -> Result<translation_pipeline::Tran
 pub async fn trigger_translation(lang: String) -> Result<String> {
     let untranslated = translation_pipeline::get_untranslated_keys(&lang)?;
     if untranslated.is_empty() {
-        return Ok(format!("{} is fully translated", lang));
+        return Ok(format!("{lang} is fully translated"));
     }
 
     let translated = translation_pipeline::translate_batch(&untranslated, &lang).await?;
@@ -56,7 +56,7 @@ pub async fn trigger_translation(lang: String) -> Result<String> {
     // Clear i18n cache so new translations take effect
     crate::i18n::clear_cache();
 
-    Ok(format!("Translated {} strings to {}", count, lang))
+    Ok(format!("Translated {count} strings to {lang}"))
 }
 
 // ============================================================================
@@ -77,11 +77,11 @@ pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationE
     let mut auto_translated: HashMap<String, String> = HashMap::new();
     if trans_dir.exists() {
         for ns in &["ui", "coach", "streets", "errors"] {
-            let path = trans_dir.join(format!("{}.json", ns));
+            let path = trans_dir.join(format!("{ns}.json"));
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                     for (k, v) in map {
-                        auto_translated.insert(format!("{}:{}", ns, k), v);
+                        auto_translated.insert(format!("{ns}:{k}"), v);
                     }
                 }
             }
@@ -130,7 +130,7 @@ pub fn save_translation_override(
         .join(&lang);
     std::fs::create_dir_all(&overrides_dir).context("Cannot create overrides dir")?;
 
-    let path = overrides_dir.join(format!("{}.json", namespace));
+    let path = overrides_dir.join(format!("{namespace}.json"));
 
     let mut existing: HashMap<String, String> = if path.exists() {
         let content = std::fs::read_to_string(&path).unwrap_or_default();
@@ -165,7 +165,7 @@ pub fn delete_translation_override(lang: String, namespace: String, key: String)
     let overrides_dir = crate::i18n::translations_dir()
         .join("overrides")
         .join(&lang);
-    let path = overrides_dir.join(format!("{}.json", namespace));
+    let path = overrides_dir.join(format!("{namespace}.json"));
 
     if !path.exists() {
         return Ok(());
@@ -213,11 +213,11 @@ pub(crate) fn load_overrides(lang: &str) -> Result<HashMap<String, String>> {
     }
 
     for ns in &["ui", "coach", "streets", "errors"] {
-        let path = overrides_dir.join(format!("{}.json", ns));
+        let path = overrides_dir.join(format!("{ns}.json"));
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
                 for (k, v) in map {
-                    overrides.insert(format!("{}:{}", ns, k), v);
+                    overrides.insert(format!("{ns}:{k}"), v);
                 }
             }
         }

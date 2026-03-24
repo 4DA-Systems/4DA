@@ -129,10 +129,10 @@ impl RssSource {
                 .or_else(|| Self::extract_tag(item_xml, "dc:date"));
 
             // Generate ID from link or title
-            let id = if !link.is_empty() {
-                Self::generate_id(&link)
-            } else {
+            let id = if link.is_empty() {
                 Self::generate_id(&title)
+            } else {
+                Self::generate_id(&link)
             };
 
             if !title.is_empty() && !link.is_empty() {
@@ -190,8 +190,7 @@ impl RssSource {
                 .or_else(|| Self::extract_tag(entry_xml, "updated"));
 
             let id = Self::extract_tag(entry_xml, "id")
-                .map(|i| Self::generate_id(&i))
-                .unwrap_or_else(|| Self::generate_id(&link));
+                .map_or_else(|| Self::generate_id(&link), |i| Self::generate_id(&i));
 
             if !title.is_empty() && !link.is_empty() {
                 entries.push(FeedEntry {
@@ -210,8 +209,8 @@ impl RssSource {
 
     /// Extract content from XML tag
     pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-        let open_tag = format!("<{}", tag);
-        let close_tag = format!("</{}>", tag);
+        let open_tag = format!("<{tag}");
+        let close_tag = format!("</{tag}>");
 
         let start_pos = xml.find(&open_tag)?;
         let content_start = xml[start_pos..].find('>')? + start_pos + 1;
@@ -238,7 +237,7 @@ impl RssSource {
         // Prefer alternate link
         for link_match in xml.match_indices("<link") {
             let start = link_match.0;
-            let end = xml[start..].find("/>").or_else(|| xml[start..].find(">"))?;
+            let end = xml[start..].find("/>").or_else(|| xml[start..].find('>'))?;
             let link_tag = &xml[start..start + end];
 
             // Skip non-alternate links if we find a rel attribute

@@ -154,7 +154,7 @@ pub(crate) fn store_decision_outcomes(
         };
 
         let data = serde_json::to_string(outcome)
-            .with_context(|| format!("Failed to serialize outcome for {}", subject))?;
+            .with_context(|| format!("Failed to serialize outcome for {subject}"))?;
 
         // Supersede previous entries: delete old, insert new
         conn.execute(
@@ -162,7 +162,7 @@ pub(crate) fn store_decision_outcomes(
              WHERE digest_type = 'decision_outcome' AND subject = ?1",
             params![subject],
         )
-        .with_context(|| format!("Failed to supersede decision outcome for {}", subject))?;
+        .with_context(|| format!("Failed to supersede decision outcome for {subject}"))?;
 
         conn.execute(
             "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
@@ -174,7 +174,7 @@ pub(crate) fn store_decision_outcomes(
                 outcome.sample_size
             ],
         )
-        .with_context(|| format!("Failed to insert decision outcome for {}", subject))?;
+        .with_context(|| format!("Failed to insert decision outcome for {subject}"))?;
     }
 
     debug!(

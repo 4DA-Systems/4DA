@@ -77,7 +77,7 @@ impl HackerNewsSource {
             .map(|id| {
                 let client = self.client.clone();
                 async move {
-                    let url = format!("https://hacker-news.firebaseio.com/v0/item/{}.json", id);
+                    let url = format!("https://hacker-news.firebaseio.com/v0/item/{id}.json");
                     match client.get(&url).send().await {
                         Ok(response) => match response.json::<HNStory>().await {
                             Ok(story) => {
@@ -294,7 +294,7 @@ impl Source for HackerNewsSource {
             ));
         }
         if !status.is_success() {
-            return Err(SourceError::Network(format!("HTTP {}", status)));
+            return Err(SourceError::Network(format!("HTTP {status}")));
         }
 
         let html = response

@@ -161,9 +161,8 @@ async fn api_boot(
     let signals_count = guard
         .results
         .as_ref()
-        .map(|r| r.iter().filter(|s| s.relevant).count())
-        .unwrap_or(0);
-    let total_scanned = guard.results.as_ref().map(|r| r.len()).unwrap_or(0);
+        .map_or(0, |r| r.iter().filter(|s| s.relevant).count());
+    let total_scanned = guard.results.as_ref().map_or(0, std::vec::Vec::len);
     drop(guard);
 
     let threshold = crate::get_relevance_threshold();
@@ -171,8 +170,7 @@ async fn api_boot(
     let tech_count = crate::get_ace_engine()
         .ok()
         .and_then(|ace| ace.get_detected_tech().ok())
-        .map(|t| t.len())
-        .unwrap_or(0);
+        .map_or(0, |t| t.len());
 
     let source_count = {
         let reg = crate::get_source_registry();
@@ -214,10 +212,9 @@ async fn api_status(
     let signals_count = guard
         .results
         .as_ref()
-        .map(|r| r.iter().filter(|s| s.relevant).count())
-        .unwrap_or(0);
+        .map_or(0, |r| r.iter().filter(|s| s.relevant).count());
 
-    let total_scanned = guard.results.as_ref().map(|r| r.len()).unwrap_or(0);
+    let total_scanned = guard.results.as_ref().map_or(0, std::vec::Vec::len);
 
     let last_analysis = guard.last_completed_at.as_ref().map(|ts| {
         // Parse ISO timestamp and compute relative time
@@ -685,12 +682,10 @@ async fn api_search(
                     r.title.to_lowercase().contains(&q)
                         || r.url
                             .as_ref()
-                            .map(|u| u.to_lowercase().contains(&q))
-                            .unwrap_or(false)
+                            .is_some_and(|u| u.to_lowercase().contains(&q))
                         || r.explanation
                             .as_ref()
-                            .map(|e| e.to_lowercase().contains(&q))
-                            .unwrap_or(false)
+                            .is_some_and(|e| e.to_lowercase().contains(&q))
                         || r.source_type.to_lowercase().contains(&q)
                 })
                 .take(30)
@@ -768,9 +763,8 @@ async fn api_stream(
         let signals_count = guard
             .results
             .as_ref()
-            .map(|r| r.iter().filter(|s| s.relevant).count())
-            .unwrap_or(0);
-        let total_scanned = guard.results.as_ref().map(|r| r.len()).unwrap_or(0);
+            .map_or(0, |r| r.iter().filter(|s| s.relevant).count());
+        let total_scanned = guard.results.as_ref().map_or(0, std::vec::Vec::len);
         drop(guard);
 
         let data = serde_json::json!({
@@ -855,15 +849,13 @@ async fn api_simulate(
                     let mentions_tech = title_lower.contains(&tech_lower)
                         || r.explanation
                             .as_ref()
-                            .map(|e| e.to_lowercase().contains(&tech_lower))
-                            .unwrap_or(false);
+                            .is_some_and(|e| e.to_lowercase().contains(&tech_lower));
 
                     // Proportional delta based on mention strength
                     let mention_count = title_lower.matches(&tech_lower).count()
                         + r.explanation
                             .as_ref()
-                            .map(|e| e.to_lowercase().matches(&tech_lower).count())
-                            .unwrap_or(0);
+                            .map_or(0, |e| e.to_lowercase().matches(&tech_lower).count());
 
                     let base_delta = if action == "add" { 0.08 } else { -0.08 };
                     let score_delta = if mention_count > 0 {
@@ -890,13 +882,12 @@ async fn api_simulate(
 
     let affected_count = impacts
         .iter()
-        .filter(|i| i["delta"].as_f64().map(|d| d != 0.0).unwrap_or(false))
+        .filter(|i| i["delta"].as_f64().is_some_and(|d| d != 0.0))
         .count();
 
     let message = if affected_count == 0 {
         Some(format!(
-            "No current signals mention '{}'. Adding it would affect future analyses when content about {} appears in your sources.",
-            tech, tech
+            "No current signals mention '{tech}'. Adding it would affect future analyses when content about {tech} appears in your sources."
         ))
     } else {
         None

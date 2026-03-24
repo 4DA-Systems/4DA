@@ -236,8 +236,7 @@ impl ACE {
     pub fn is_embedding_operational(&self) -> bool {
         self.embedding_service
             .as_ref()
-            .map(|s| s.lock().is_operational())
-            .unwrap_or(false)
+            .is_some_and(|s| s.lock().is_operational())
     }
 }
 

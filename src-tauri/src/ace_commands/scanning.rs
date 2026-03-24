@@ -98,12 +98,12 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
 
     // Phase 1a: Store discovered dependencies in user_dependencies table
     if let Ok(db) = crate::get_database() {
-        super::dependencies::store_direct_dependencies(&db);
+        super::dependencies::store_direct_dependencies(db);
     }
 
     // Phase 1a-lockfiles: Parse lockfiles for transitive dependency discovery
     if let Ok(db) = crate::get_database() {
-        super::dependencies::store_lockfile_dependencies(&db, &scan_paths);
+        super::dependencies::store_lockfile_dependencies(db, &scan_paths);
     }
 
     // Phase 1b: Learning trajectory detection
@@ -250,7 +250,7 @@ pub async fn ace_auto_discover() -> Result<serde_json::Value> {
     {
         let mut settings = get_settings_manager().lock();
         if let Err(e) = settings.add_context_dirs(dirs_to_add.clone()) {
-            return Err(format!("Failed to save discovered directories: {}", e).into());
+            return Err(format!("Failed to save discovered directories: {e}").into());
         }
         if let Err(e) = settings.mark_auto_discovery_completed() {
             tracing::warn!("Failed to mark state: {e}");

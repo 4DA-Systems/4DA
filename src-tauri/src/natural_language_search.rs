@@ -190,7 +190,7 @@ pub(crate) fn extract_keywords(query: &str) -> Vec<String> {
         .to_lowercase()
         .split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
         .filter(|w| w.len() > 2 && !stop_set.contains(w))
-        .map(|w| w.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 
@@ -386,7 +386,7 @@ fn execute_text_search(
         .keywords
         .iter()
         .map(|k| {
-            let like_val = format!("%{}%", k);
+            let like_val = format!("%{k}%");
             params.push(Box::new(like_val.clone()));
             params.push(Box::new(like_val));
             "(LOWER(s.title) LIKE LOWER(?) OR LOWER(s.content) LIKE LOWER(?))".to_string()
@@ -395,7 +395,9 @@ fn execute_text_search(
 
     let where_clause = conditions.join(" AND ");
 
-    let type_filter = if !parsed.file_types.is_empty() {
+    let type_filter = if parsed.file_types.is_empty() {
+        String::new()
+    } else {
         let placeholders: Vec<&str> = parsed
             .file_types
             .iter()
@@ -405,8 +407,6 @@ fn execute_text_search(
             })
             .collect();
         format!(" AND s.source_type IN ({})", placeholders.join(","))
-    } else {
-        String::new()
     };
 
     let time_filter = if let Some(ref tr) = parsed.time_range {
@@ -431,7 +431,7 @@ fn execute_text_search(
     let mut stmt = conn.prepare(&sql).context("Query error")?;
     let rows = stmt
         .query_map(
-            rusqlite::params_from_iter(params.iter().map(|p| p.as_ref())),
+            rusqlite::params_from_iter(params.iter().map(std::convert::AsRef::as_ref)),
             |row| {
                 let id: i64 = row.get(0)?;
                 let source_type: String = row.get(1)?;

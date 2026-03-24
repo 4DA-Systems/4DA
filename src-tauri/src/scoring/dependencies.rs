@@ -201,7 +201,7 @@ fn compare_version_in_content(
                 {
                     let digit_str: String = after_name[i..]
                         .chars()
-                        .take_while(|c| c.is_ascii_digit())
+                        .take_while(char::is_ascii_digit)
                         .collect();
                     if let Ok(mentioned_major) = digit_str.parse::<u32>() {
                         if mentioned_major > 0 && mentioned_major < 100 {

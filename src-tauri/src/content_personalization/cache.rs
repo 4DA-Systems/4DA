@@ -27,7 +27,7 @@ pub fn prune_cache(conn: &Connection) -> usize {
     match conn.execute(
         "DELETE FROM content_personalization_cache
          WHERE generated_at < datetime('now', ?1)",
-        [format!("-{} days", MAX_CACHE_AGE_DAYS)],
+        [format!("-{MAX_CACHE_AGE_DAYS} days")],
     ) {
         Ok(count) => {
             total_deleted += count;
@@ -80,7 +80,7 @@ pub fn prune_cache(conn: &Connection) -> usize {
     match conn.execute(
         "DELETE FROM content_read_state
          WHERE read_at < datetime('now', ?1)",
-        [format!("-{} days", MAX_READ_STATE_AGE_DAYS)],
+        [format!("-{MAX_READ_STATE_AGE_DAYS} days")],
     ) {
         Ok(count) => {
             if count > 0 {

@@ -74,7 +74,7 @@ pub fn compute_stack_boost(title: &str, content: &str, stack: &ComposedStack) ->
 
     let title_lower = title.to_lowercase();
     let content_lower = content.to_lowercase();
-    let combined = format!("{} {}", title_lower, content_lower);
+    let combined = format!("{title_lower} {content_lower}");
 
     let mut best_boost: f32 = 0.0;
 
@@ -152,7 +152,7 @@ pub fn has_pain_point_match(title: &str, content: &str, stack: &ComposedStack) -
 
     let title_lower = title.to_lowercase();
     let content_lower = content.to_lowercase();
-    let combined = format!("{} {}", title_lower, content_lower);
+    let combined = format!("{title_lower} {content_lower}");
 
     stack.pain_points.iter().any(|pp| {
         let match_count = pp
@@ -189,7 +189,7 @@ pub fn compute_competing_penalty(title: &str, content: &str, stack: &ComposedSta
     }
 
     // Check if any of the user's own tech also appears (title + content)
-    let combined = format!("{} {}", title_lower, content_lower);
+    let combined = format!("{title_lower} {content_lower}");
     let has_own_tech = stack
         .all_tech
         .iter()
