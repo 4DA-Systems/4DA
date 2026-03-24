@@ -17,7 +17,7 @@ interface AttentionCardsProps {
 
 const PRIORITY_STYLES: Record<string, { border: string; dot: string }> = {
   critical: { border: 'border-red-500/30', dot: 'bg-red-400' },
-  high: { border: 'border-amber-500/30', dot: 'bg-amber-400' },
+  alert: { border: 'border-amber-500/30', dot: 'bg-amber-400' },
 };
 
 /**
@@ -75,8 +75,8 @@ const AttentionCard = memo(function AttentionCard({
   onRecordClick,
 }: AttentionCardProps) {
   const { t } = useTranslation();
-  const priority = item.signal_priority || 'high';
-  const style = PRIORITY_STYLES[priority] || PRIORITY_STYLES.high;
+  const priority = item.signal_priority || 'alert';
+  const style = (PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.alert)!;
   const source = item.source_type || 'hackernews';
 
   // GAME score fingerprint — unique visual identity per item
@@ -116,7 +116,7 @@ const AttentionCard = memo(function AttentionCard({
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(source)}`}>
           {getSourceLabel(source)}
         </span>
-        <div ref={fpRef} className="w-6 h-6 rounded flex-shrink-0 ml-auto" aria-hidden="true" />
+        <div ref={fpRef} className="w-6 h-6 rounded flex-shrink-0 ms-auto" aria-hidden="true" />
         <span className="text-xs font-mono text-text-muted">
           {formatScore(item.top_score)}
         </span>
@@ -125,7 +125,7 @@ const AttentionCard = memo(function AttentionCard({
       {/* Title */}
       <button
         onClick={handleOpen}
-        className="text-sm text-white text-left leading-snug line-clamp-2 hover:text-orange-400 transition-colors"
+        className="text-sm text-white text-start leading-snug line-clamp-2 hover:text-orange-400 transition-colors"
       >
         {isSignal && item.signal_action ? item.signal_action : item.title}
       </button>
@@ -155,7 +155,7 @@ const AttentionCard = memo(function AttentionCard({
         <button
           onClick={() => onDismiss(item)}
           aria-label={t('action.dismiss', 'Dismiss') + ': ' + item.title}
-          className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all ml-auto"
+          className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all ms-auto"
         >
           {t('action.dismiss', 'Dismiss')}
         </button>

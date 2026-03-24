@@ -202,12 +202,20 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
 // ============================================================================
 
 // Background job intervals (in seconds)
+//
+// Tuning rationale (2026-03-25):
+// - Health check (5 min): lightweight probe, catches issues early — keep tight
+// - Anomaly detection (1 hr): rare events, hourly is sufficient detection window
+// - CVE scan (1 hr): advisory databases update hourly at best, 30 min was wasteful
+// - DB maintenance (4 hr): WAL checkpoint + PRAGMA optimize — no need for hourly
+// - Behavior decay (24 hr): daily granularity matches engagement patterns
+// - Accuracy recording (7 days): weekly snapshot, sufficient for trend analysis
 const HEALTH_CHECK_INTERVAL: u64 = 300; // 5 minutes
 const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
 const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
 const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
-const CVE_SCAN_INTERVAL: u64 = 1800; // 30 minutes
-const DB_MAINTENANCE_INTERVAL: u64 = 3600; // 1 hour — WAL checkpoint + PRAGMA optimize
+const CVE_SCAN_INTERVAL: u64 = 3600; // 1 hour (was 30 min — advisory DBs update hourly)
+const DB_MAINTENANCE_INTERVAL: u64 = 14400; // 4 hours (was 1 hr — WAL checkpoint fine at lower freq)
 
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
@@ -477,6 +485,57 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                     warn!(target: "4da::monitor", error = %e, "Accuracy feedback bridge failed");
                                 }
                                 _ => {}
+                            }
+                        }
+
+                        // ── Threshold auto-tuning ──────────────────────────────
+                        // After autophagy + accuracy bridging, use calibration deltas
+                        // to nudge the global relevance threshold.
+                        //
+                        // Guards: requires 50+ feedback signals and 2+ autophagy cycles
+                        // to avoid premature adjustments. Clamps to [0.15, 0.65].
+                        // Step size capped at ±0.03 per cycle to prevent oscillation.
+                        {
+                            let cycle_count: i64 = daily_conn
+                                .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
+                                .unwrap_or(0);
+                            let feedback_count: i64 = daily_conn
+                                .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
+                                .unwrap_or(0);
+
+                            if cycle_count >= 2 && feedback_count >= 50 {
+                                let deltas = crate::autophagy::load_calibration_deltas(&daily_conn);
+                                if !deltas.is_empty() {
+                                    // Weighted mean of deltas: positive = under-scoring (lower threshold),
+                                    // negative = over-scoring (raise threshold)
+                                    let total_weight: f32 = deltas.len() as f32;
+                                    let weighted_sum: f32 = deltas.values().sum();
+                                    let mean_delta = weighted_sum / total_weight;
+
+                                    // Scale: each 0.1 mean delta shifts threshold by 0.01
+                                    let adjustment = (mean_delta * 0.1).clamp(-0.03, 0.03);
+
+                                    if adjustment.abs() > 0.001 {
+                                        let current = crate::get_relevance_threshold();
+                                        let new_threshold = (current + adjustment).clamp(0.15, 0.65);
+
+                                        if (new_threshold - current).abs() > 0.001 {
+                                            crate::set_relevance_threshold(new_threshold);
+                                            if let Ok(ace) = crate::state::get_ace_engine() {
+                                                ace.store_threshold(new_threshold);
+                                            }
+                                            info!(
+                                                target: "4da::monitor",
+                                                old = format!("{:.3}", current),
+                                                new = format!("{:.3}", new_threshold),
+                                                mean_delta = format!("{:.4}", mean_delta),
+                                                deltas = deltas.len(),
+                                                feedback_count,
+                                                "Relevance threshold auto-tuned"
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

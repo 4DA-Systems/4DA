@@ -34,16 +34,16 @@ describe('toast-slice', () => {
       useAppStore.getState().addToast('success', 'Operation completed');
       const toasts = useAppStore.getState().toasts;
       expect(toasts).toHaveLength(1);
-      expect(toasts[0].type).toBe('success');
-      expect(toasts[0].message).toBe('Operation completed');
+      expect(toasts[0]!.type).toBe('success');
+      expect(toasts[0]!.message).toBe('Operation completed');
     });
 
     it('adds an error toast', () => {
       useAppStore.getState().addToast('error', 'Something went wrong');
       const toasts = useAppStore.getState().toasts;
       expect(toasts).toHaveLength(1);
-      expect(toasts[0].type).toBe('error');
-      expect(toasts[0].message).toBe('Something went wrong');
+      expect(toasts[0]!.type).toBe('error');
+      expect(toasts[0]!.message).toBe('Something went wrong');
     });
 
     it('adds multiple toasts', () => {
@@ -62,8 +62,8 @@ describe('toast-slice', () => {
       const toasts = useAppStore.getState().toasts;
       expect(toasts).toHaveLength(3);
       // The first toast should have been removed
-      expect(toasts[0].message).toBe('Second');
-      expect(toasts[2].message).toBe('Fourth');
+      expect(toasts[0]!.message).toBe('Second');
+      expect(toasts[2]!.message).toBe('Fourth');
     });
 
     it('adds toast with action', () => {
@@ -72,8 +72,8 @@ describe('toast-slice', () => {
 
       const toasts = useAppStore.getState().toasts;
       expect(toasts).toHaveLength(1);
-      expect(toasts[0].action).toBeDefined();
-      expect(toasts[0].action!.label).toBe('Undo');
+      expect(toasts[0]!.action).toBeDefined();
+      expect(toasts[0]!.action!.label).toBe('Undo');
     });
 
     it('auto-removes toast after duration', () => {
@@ -105,7 +105,7 @@ describe('toast-slice', () => {
   describe('removeToast', () => {
     it('removes a toast by id', () => {
       useAppStore.getState().addToast('success', 'To remove');
-      const toastId = useAppStore.getState().toasts[0].id;
+      const toastId = useAppStore.getState().toasts[0]!.id;
 
       useAppStore.getState().removeToast(toastId);
       expect(useAppStore.getState().toasts).toHaveLength(0);
@@ -116,13 +116,13 @@ describe('toast-slice', () => {
       useAppStore.getState().addToast('error', 'Remove');
 
       const toasts = useAppStore.getState().toasts;
-      const removeId = toasts[1].id;
+      const removeId = toasts[1]!.id;
 
       useAppStore.getState().removeToast(removeId);
 
       const remaining = useAppStore.getState().toasts;
       expect(remaining).toHaveLength(1);
-      expect(remaining[0].message).toBe('Keep');
+      expect(remaining[0]!.message).toBe('Keep');
     });
 
     it('does nothing when removing a non-existent id', () => {

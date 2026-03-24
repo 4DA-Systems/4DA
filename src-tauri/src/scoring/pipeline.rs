@@ -612,6 +612,7 @@ pub(crate) fn score_item(
                 combined_score,
                 &ctx.declared_tech,
                 &ctx.ace_ctx.detected_tech,
+                &crate::signals::CorroborationContext::default(),
             ) {
                 Some(mut c) => {
                     // Dependency-aware priority escalation:
@@ -629,9 +630,9 @@ pub(crate) fn score_item(
                             && matched_deps
                                 .iter()
                                 .any(|d| d.version_delta == VersionDelta::NewerMajor)
-                            && c.priority < signals::SignalPriority::High
+                            && c.priority < signals::SignalPriority::Alert
                         {
-                            c.priority = signals::SignalPriority::High;
+                            c.priority = signals::SignalPriority::Alert;
                         }
                         // Add dep:package_name triggers
                         for dep in matched_deps.iter().take(2) {
@@ -641,15 +642,15 @@ pub(crate) fn score_item(
 
                     // Score-aware priority cap — low scores cannot produce HIGH priority
                     if combined_score < scoring_config::LOW_SCORE_CAP
-                        && c.priority > signals::SignalPriority::Low
+                        && c.priority > signals::SignalPriority::Watch
                     {
-                        c.priority = signals::SignalPriority::Low;
+                        c.priority = signals::SignalPriority::Watch;
                     } else if (combined_score < scoring_config::MEDIUM_SCORE_CAP
-                        && c.priority > signals::SignalPriority::Medium)
+                        && c.priority > signals::SignalPriority::Advisory)
                         || (combined_score > scoring_config::HIGH_SCORE_FLOOR
-                            && c.priority < signals::SignalPriority::Medium)
+                            && c.priority < signals::SignalPriority::Advisory)
                     {
-                        c.priority = signals::SignalPriority::Medium;
+                        c.priority = signals::SignalPriority::Advisory;
                     }
                     (
                         Some(c.signal_type.slug().to_string()),

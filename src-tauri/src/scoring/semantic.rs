@@ -1,6 +1,6 @@
 use once_cell::sync::OnceCell;
 use std::collections::HashMap;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use super::ace_context::ACEContext;
 use super::utils::topic_overlaps;
@@ -83,7 +83,7 @@ pub(crate) fn compute_semantic_ace_boost(
 /// Returns topic -> embedding map
 pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String, Vec<f32>> {
     // Lazy static cache for topic embeddings
-    use std::sync::Mutex;
+    use parking_lot::Mutex;
     static TOPIC_EMBEDDING_CACHE: OnceCell<Mutex<HashMap<String, Vec<f32>>>> = OnceCell::new();
     static DB_LOADED: OnceCell<Mutex<bool>> = OnceCell::new();
 
@@ -93,14 +93,8 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
     // Phase 1 (sync): Load DB cache + collect topics needing embedding
     // All MutexGuard usage is scoped here so they drop before any .await
     let topics_to_embed: Vec<String> = {
-        let Ok(mut cache_guard) = cache.lock() else {
-            warn!(target: "4da::embeddings", "Topic cache lock poisoned, returning empty");
-            return HashMap::new();
-        };
-        let Ok(mut db_loaded_guard) = db_loaded.lock() else {
-            warn!(target: "4da::embeddings", "DB loaded lock poisoned, returning empty");
-            return HashMap::new();
-        };
+        let mut cache_guard = cache.lock();
+        let mut db_loaded_guard = db_loaded.lock();
 
         // First time: load persisted embeddings from database
         if !*db_loaded_guard {
@@ -147,10 +141,7 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
 
         if let Ok(embeddings) = embed_texts(&batch).await {
             // Phase 3 (sync): Store results back into cache
-            let Ok(mut cache_guard) = cache.lock() else {
-                warn!(target: "4da::embeddings", "Topic cache lock poisoned after embed, returning empty");
-                return HashMap::new();
-            };
+            let mut cache_guard = cache.lock();
 
             let ace_conn = get_ace_engine().ok().map(|ace| ace.get_conn().clone());
             for (topic, embedding) in batch.into_iter().zip(embeddings.into_iter()) {
@@ -171,10 +162,7 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
     }
 
     // Phase 4 (sync): Build result from cache
-    let Ok(cache_guard) = cache.lock() else {
-        warn!(target: "4da::embeddings", "Topic cache lock poisoned building result, returning empty");
-        return HashMap::new();
-    };
+    let cache_guard = cache.lock();
 
     let mut result = HashMap::new();
     for topic in &ace_ctx.active_topics {

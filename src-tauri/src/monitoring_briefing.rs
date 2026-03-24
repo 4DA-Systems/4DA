@@ -4,6 +4,7 @@
 //! Handles morning briefing scheduling, date tracking, and notification content.
 
 use chrono::Timelike;
+use serde::Serialize;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_notification::NotificationExt;
 use tracing::{info, warn};
@@ -15,21 +16,51 @@ use crate::monitoring_notifications::truncate_safe;
 // Morning Briefing Types
 // ============================================================================
 
-/// Item for morning briefing notification
-#[derive(Debug, Clone)]
+/// Item for morning briefing notification.
+/// Enriched with url, item_id, matched_deps for the center-screen briefing window.
+#[derive(Debug, Clone, Serialize)]
 pub struct BriefingItem {
     pub title: String,
     pub source_type: String,
     pub score: f32,
     pub signal_type: Option<String>,
+    /// URL for opening in system browser
+    #[serde(default)]
+    pub url: Option<String>,
+    /// Database ID for deep-linking to item in main window
+    #[serde(default)]
+    pub item_id: Option<i64>,
+    /// Signal priority tier (watch, advisory, alert, critical)
+    #[serde(default)]
+    pub signal_priority: Option<String>,
+    /// Short description or action text
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Matched dependency names (why this matters to the user)
+    #[serde(default)]
+    pub matched_deps: Vec<String>,
 }
 
-/// Morning briefing notification content
-#[derive(Debug, Clone)]
+/// A topic the user hasn't seen intelligence about recently
+#[derive(Debug, Clone, Serialize)]
+pub struct KnowledgeGap {
+    pub topic: String,
+    pub days_since_last: i64,
+}
+
+/// Morning briefing notification content.
+/// Enriched for center-screen briefing window with knowledge gaps and ongoing topics.
+#[derive(Debug, Clone, Serialize)]
 pub struct BriefingNotification {
     pub title: String,
     pub items: Vec<BriefingItem>,
     pub total_relevant: usize,
+    /// Topics that appeared in recent briefings (ongoing, not novel)
+    #[serde(default)]
+    pub ongoing_topics: Vec<String>,
+    /// Declared tech topics with no recent signals
+    #[serde(default)]
+    pub knowledge_gaps: Vec<KnowledgeGap>,
 }
 
 // ============================================================================
@@ -109,19 +140,24 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             results
                 .iter()
                 .filter(|r| r.relevant && !r.excluded)
-                .take(5)
+                .take(8) // 8 items for center-screen briefing (was 5 for toast)
                 .map(|r| BriefingItem {
                     title: r.title.clone(),
                     source_type: r.source_type.clone(),
                     score: r.top_score,
                     signal_type: r.signal_type.clone(),
+                    url: r.url.clone(),
+                    item_id: Some(r.id as i64),
+                    signal_priority: r.signal_priority.clone(),
+                    description: r.signal_action.clone(),
+                    matched_deps: r.signal_triggers.clone().unwrap_or_default(),
                 })
                 .collect()
         } else {
             // Fall back to DB query for recent items
             if let Ok(db) = crate::get_database() {
                 let period_start = chrono::Utc::now() - chrono::Duration::hours(24);
-                db.get_relevant_items_since(period_start, 0.1, 5)
+                db.get_relevant_items_since(period_start, 0.1, 8)
                     .ok()
                     .map(|db_items| {
                         db_items
@@ -131,6 +167,11 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                                 source_type: i.source_type,
                                 score: i.relevance_score.unwrap_or(0.0) as f32,
                                 signal_type: None,
+                                url: i.url,
+                                item_id: Some(i.id),
+                                signal_priority: None,
+                                description: None,
+                                matched_deps: vec![],
                             })
                             .collect()
                     })
@@ -161,19 +202,30 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         }
     }
 
+    // 6. Detect knowledge gaps: declared tech with no recent signals
+    let knowledge_gaps = detect_knowledge_gaps();
+
     Some(BriefingNotification {
-        title: format!("4DA Morning Briefing — {}", now.format("%d %b %Y")),
+        title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
         total_relevant,
+        ongoing_topics: vec![], // Populated by novelty detection in future
+        knowledge_gaps,
     })
 }
 
-/// Send a morning briefing notification via the OS notification system.
+/// Send a morning briefing via the center-screen briefing window.
+///
+/// Falls back to OS native notification if the briefing window is unavailable.
 pub fn send_morning_briefing_notification<R: Runtime>(
     app: &AppHandle<R>,
     briefing: &BriefingNotification,
 ) {
-    // Build a compact body from the top items (sanitized to prevent control char injection)
+    // Primary: center-screen intelligence briefing window
+    crate::briefing_window::show_briefing(app, briefing);
+
+    // Also send a subtle OS notification as a backup (e.g. if user has multiple monitors
+    // and the briefing window is on the wrong one, or if window init failed).
     let body = if briefing.items.is_empty() {
         "No new signals since last check.".to_string()
     } else {
@@ -196,13 +248,13 @@ pub fn send_morning_briefing_notification<R: Runtime>(
         lines.join("\n")
     };
 
-    // Truncate for OS notification limits (~200 chars)
     let body = if body.len() > 200 {
         format!("{}...", truncate_safe(&body, 197))
     } else {
         body
     };
 
+    // OS notification as companion (non-blocking)
     if let Err(e) = app
         .notification()
         .builder()
@@ -210,14 +262,75 @@ pub fn send_morning_briefing_notification<R: Runtime>(
         .body(&body)
         .show()
     {
-        warn!(target: "4da::notify", error = %e, "Failed to send morning briefing notification");
-    } else {
-        info!(
-            target: "4da::notify",
-            items = briefing.total_relevant,
-            "Sent morning briefing notification"
-        );
+        warn!(target: "4da::briefing", error = %e, "OS notification fallback failed (briefing window is primary)");
     }
+
+    info!(
+        target: "4da::briefing",
+        items = briefing.total_relevant,
+        gaps = briefing.knowledge_gaps.len(),
+        "Intelligence briefing delivered"
+    );
+}
+
+// ============================================================================
+// Knowledge Gap Detection
+// ============================================================================
+
+/// Detect knowledge gaps: declared tech topics with no recent source items.
+/// Returns topics the user cares about but hasn't seen intelligence on in 5+ days.
+fn detect_knowledge_gaps() -> Vec<KnowledgeGap> {
+    let declared_tech: Vec<String> = {
+        match crate::get_context_engine() {
+            Ok(engine) => {
+                if let Ok(identity) = engine.get_static_identity() {
+                    identity.tech_stack.clone()
+                } else {
+                    return vec![];
+                }
+            }
+            Err(_) => return vec![],
+        }
+    };
+
+    if declared_tech.is_empty() {
+        return vec![];
+    }
+
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    let mut gaps = Vec::new();
+
+    for tech in &declared_tech {
+        let tech_lower = tech.to_lowercase();
+        // Find the most recent item mentioning this tech
+        let last_seen: Option<i64> = conn
+            .query_row(
+                "SELECT CAST(julianday('now') - julianday(MAX(created_at)) AS INTEGER)
+                 FROM source_items
+                 WHERE LOWER(title) LIKE ?1",
+                rusqlite::params![format!("%{}%", tech_lower)],
+                |row| row.get(0),
+            )
+            .ok();
+
+        if let Some(days) = last_seen {
+            if days >= 5 {
+                gaps.push(KnowledgeGap {
+                    topic: tech.clone(),
+                    days_since_last: days,
+                });
+            }
+        }
+    }
+
+    // Sort by stalest first
+    gaps.sort_by(|a, b| b.days_since_last.cmp(&a.days_since_last));
+    gaps.truncate(5); // Max 5 gaps in briefing
+    gaps
 }
 
 // ============================================================================
@@ -348,36 +461,61 @@ mod tests {
             source_type: "hackernews".to_string(),
             score: 0.85,
             signal_type: Some("new_release".to_string()),
+            url: Some("https://example.com/rust-2026".to_string()),
+            item_id: Some(42),
+            signal_priority: Some("alert".to_string()),
+            description: Some("Review Rust 2026 changes".to_string()),
+            matched_deps: vec!["rust".to_string()],
         };
         assert_eq!(item.title, "Rust 2026 Edition announced");
         assert_eq!(item.source_type, "hackernews");
         assert!(item.score > 0.8);
         assert_eq!(item.signal_type, Some("new_release".to_string()));
+        assert!(item.url.is_some());
+        assert_eq!(item.item_id, Some(42));
+        assert_eq!(item.matched_deps.len(), 1);
     }
 
     #[test]
     fn test_briefing_notification_construction() {
         let briefing = BriefingNotification {
-            title: "4DA Morning Briefing — 19 Mar 2026".to_string(),
+            title: "4DA Intelligence Briefing — 19 Mar 2026".to_string(),
             items: vec![
                 BriefingItem {
                     title: "Critical CVE in tokio".to_string(),
                     source_type: "github".to_string(),
                     score: 0.95,
                     signal_type: Some("security_alert".to_string()),
+                    url: Some("https://example.com/cve".to_string()),
+                    item_id: Some(1),
+                    signal_priority: Some("critical".to_string()),
+                    description: Some("Patch tokio immediately".to_string()),
+                    matched_deps: vec!["tokio".to_string()],
                 },
                 BriefingItem {
                     title: "Tauri 3.0 beta released".to_string(),
                     source_type: "hackernews".to_string(),
                     score: 0.80,
                     signal_type: Some("new_release".to_string()),
+                    url: None,
+                    item_id: Some(2),
+                    signal_priority: Some("advisory".to_string()),
+                    description: None,
+                    matched_deps: vec![],
                 },
             ],
             total_relevant: 2,
+            ongoing_topics: vec![],
+            knowledge_gaps: vec![KnowledgeGap {
+                topic: "sqlite".to_string(),
+                days_since_last: 7,
+            }],
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
-        assert!(briefing.title.contains("Morning Briefing"));
+        assert!(briefing.title.contains("Intelligence Briefing"));
+        assert_eq!(briefing.knowledge_gaps.len(), 1);
+        assert_eq!(briefing.knowledge_gaps[0].days_since_last, 7);
     }
 
     #[test]

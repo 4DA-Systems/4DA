@@ -204,5 +204,5 @@ enum_glob_use = "allow"
 
 [profile.release]
 strip = true
-lto = true
+lto = "thin"
 codegen-units = 1

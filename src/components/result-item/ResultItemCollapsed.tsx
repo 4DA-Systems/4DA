@@ -62,8 +62,9 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         {item.signal_type && (
           <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${
             item.signal_priority === 'critical' ? 'bg-red-400' :
-            item.signal_priority === 'high' ? 'bg-amber-400' :
-            'bg-cyan-400'
+            item.signal_priority === 'alert' ? 'bg-orange-400' :
+            item.signal_priority === 'advisory' ? 'bg-amber-400' :
+            'bg-blue-400'
           }`} title={item.signal_type} role="img" aria-label={`${item.signal_priority || 'normal'} priority: ${item.signal_type}`} />
         )}
 
@@ -85,7 +86,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
             <button
               onClick={onToggleExpand}
               aria-label={`Expand details: ${item.title}`}
-              className={`text-sm truncate block text-left w-full ${
+              className={`text-sm truncate block text-start w-full ${
                 item.relevant ? 'text-text-primary' : 'text-text-secondary'
               }`}
             >
@@ -134,20 +135,20 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
 
       {/* Secondary row: explanation (only when expanded) */}
       {isExpanded && (
-        <div className="mt-1.5 text-xs text-text-secondary pl-[3.75rem]">
+        <div className="mt-1.5 text-xs text-text-secondary ps-[3.75rem]">
           {item.explanation || fallbackReason}
         </div>
       )}
 
       {/* Similar items (collapsed by default, only when expanded) */}
       {isExpanded && (item.similar_count ?? 0) > 0 && (
-        <details className="mt-1 pl-[3.75rem] group">
+        <details className="mt-1 ps-[3.75rem] group">
           <summary className="text-[10px] text-text-muted cursor-pointer hover:text-text-secondary select-none list-none flex items-center gap-1">
             <span className="text-[10px] text-text-muted group-open:rotate-90 transition-transform">&#9654;</span>
             {t('results.relatedArticles', { count: item.similar_count })}
           </summary>
           {item.similar_titles && item.similar_titles.length > 0 && (
-            <ul className="mt-1 ml-3 space-y-0.5">
+            <ul className="mt-1 ms-3 space-y-0.5">
               {item.similar_titles.map((title, i) => (
                 <li key={i} className="text-[10px] text-text-muted truncate">
                   {title}

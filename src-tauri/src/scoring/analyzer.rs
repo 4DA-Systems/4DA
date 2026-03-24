@@ -312,7 +312,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
             .count();
         let high = new_results
             .iter()
-            .filter(|r| r.signal_priority.as_deref() == Some("high"))
+            .filter(|r| r.signal_priority.as_deref() == Some("alert"))
             .count();
         let top_signal = new_results
             .iter()

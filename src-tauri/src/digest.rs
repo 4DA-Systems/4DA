@@ -82,7 +82,7 @@ pub struct DigestItem {
     /// Signal classification type (e.g., "security_alert", "tool_discovery")
     #[serde(default)]
     pub signal_type: Option<String>,
-    /// Signal priority level (e.g., "critical", "high", "medium", "low")
+    /// Signal priority level (e.g., "critical", "alert", "advisory", "watch")
     #[serde(default)]
     pub signal_priority: Option<String>,
     /// Suggested action text
@@ -436,7 +436,7 @@ impl Digest {
                     Some("competitive_intel") => "intel",
                     _ => "trend",
                 };
-                let priority_class = item.signal_priority.as_deref().unwrap_or("low");
+                let priority_class = item.signal_priority.as_deref().unwrap_or("watch");
                 let label = match item.signal_type.as_deref() {
                     Some("security_alert") => "Security",
                     Some("breaking_change") => "Breaking",
@@ -697,7 +697,7 @@ mod tests {
                 discovered_at: Utc::now(),
                 summary: None,
                 signal_type: Some("tool_discovery".to_string()),
-                signal_priority: Some("high".to_string()),
+                signal_priority: Some("alert".to_string()),
                 signal_action: Some("Evaluate new Rust testing framework".to_string()),
             },
             DigestItem {
@@ -850,7 +850,7 @@ mod tests {
                 discovered_at: Utc::now(),
                 summary: None,
                 signal_type: Some("tool_discovery".to_string()),
-                signal_priority: Some("high".to_string()),
+                signal_priority: Some("alert".to_string()),
                 signal_action: Some("Evaluate new Rust tool".to_string()),
             },
             DigestItem {

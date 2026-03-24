@@ -75,8 +75,8 @@ describe('useBriefingDerived', () => {
         useBriefingDerived(results, [], makeBriefingState(), null),
       );
       expect(result.current.lowQualitySources).toHaveLength(1);
-      expect(result.current.lowQualitySources[0].source).toBe('spam_source');
-      expect(result.current.lowQualitySources[0].ratio).toBe(0);
+      expect(result.current.lowQualitySources[0]!.source).toBe('spam_source');
+      expect(result.current.lowQualitySources[0]!.ratio).toBe(0);
     });
 
     it('does not flag sources with good relevance ratio', () => {
@@ -135,7 +135,7 @@ describe('useBriefingDerived', () => {
         useBriefingDerived([], [], briefing, null),
       );
       expect(result.current.sections).toHaveLength(2);
-      expect(result.current.sections[0].title).toBe('Action Required');
+      expect(result.current.sections[0]!.title).toBe('Action Required');
     });
   });
 
@@ -176,7 +176,7 @@ describe('useBriefingDerived', () => {
 
   describe('signalItems', () => {
     it('returns empty when no critical/high signals', () => {
-      const results = [makeResult({ signal_priority: 'low' })];
+      const results = [makeResult({ signal_priority: 'watch' })];
       const { result } = renderHook(() =>
         useBriefingDerived(results, [], makeBriefingState(), null),
       );
@@ -186,8 +186,8 @@ describe('useBriefingDerived', () => {
     it('returns critical and high priority items', () => {
       const results = [
         makeResult({ id: 1, signal_priority: 'critical' }),
-        makeResult({ id: 2, signal_priority: 'high' }),
-        makeResult({ id: 3, signal_priority: 'low' }),
+        makeResult({ id: 2, signal_priority: 'alert' }),
+        makeResult({ id: 3, signal_priority: 'watch' }),
       ];
       const { result } = renderHook(() =>
         useBriefingDerived(results, [], makeBriefingState(), null),
@@ -217,7 +217,7 @@ describe('useBriefingDerived', () => {
         useBriefingDerived(results, [], makeBriefingState(), null),
       );
       expect(result.current.topItems).toHaveLength(1);
-      expect(result.current.topItems[0].id).toBe(1);
+      expect(result.current.topItems[0]!.id).toBe(1);
     });
 
     it('excludes signal items from top picks to avoid duplicates', () => {
@@ -229,7 +229,7 @@ describe('useBriefingDerived', () => {
         useBriefingDerived(results, [], makeBriefingState(), null),
       );
       expect(result.current.topItems).toHaveLength(1);
-      expect(result.current.topItems[0].id).toBe(2);
+      expect(result.current.topItems[0]!.id).toBe(2);
     });
 
     it('limits to 8 top items', () => {

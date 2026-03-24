@@ -105,7 +105,7 @@ describe('SecurityDashboard', () => {
       expect(screen.getAllByText('security.resolve').length).toBeGreaterThan(0);
     });
     // Resolve first alert
-    fireEvent.click(screen.getAllByText('security.resolve')[0]);
+    fireEvent.click(screen.getAllByText('security.resolve')[0]!);
     await waitFor(() => {
       expect(screen.getByText('security.resolved')).toBeInTheDocument();
     });
@@ -117,7 +117,7 @@ describe('SecurityDashboard', () => {
       expect(screen.getAllByText('security.resolve').length).toBe(2);
     });
     const resolveButtons = screen.getAllByText('security.resolve');
-    fireEvent.click(resolveButtons[0]);
+    fireEvent.click(resolveButtons[0]!);
     await waitFor(() => {
       const remaining = screen.getAllByText('security.resolve');
       expect(remaining.length).toBe(1);

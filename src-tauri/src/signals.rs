@@ -54,12 +54,18 @@ impl SignalType {
     }
 }
 
+/// Signal priority tiers — corroboration-based graduation.
+///
+/// Watch: single source, keyword match (informational)
+/// Advisory: 2+ sources OR notable signal (elevated attention)
+/// Alert: direct dependency relevance OR 3+ sources (action needed)
+/// Critical: active exploitation + dependency match + corroborated (immediate action)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum SignalPriority {
-    Low = 1,
-    Medium = 2,
-    High = 3,
+    Watch = 1,
+    Advisory = 2,
+    Alert = 3,
     Critical = 4,
 }
 
@@ -67,18 +73,18 @@ impl SignalPriority {
     fn from_score(score: u8) -> Self {
         match score {
             4.. => SignalPriority::Critical,
-            3 => SignalPriority::High,
-            2 => SignalPriority::Medium,
-            _ => SignalPriority::Low,
+            3 => SignalPriority::Alert,
+            2 => SignalPriority::Advisory,
+            _ => SignalPriority::Watch,
         }
     }
 
     pub fn label(&self) -> &'static str {
         match self {
             SignalPriority::Critical => "critical",
-            SignalPriority::High => "high",
-            SignalPriority::Medium => "medium",
-            SignalPriority::Low => "low",
+            SignalPriority::Alert => "alert",
+            SignalPriority::Advisory => "advisory",
+            SignalPriority::Watch => "watch",
         }
     }
 }
@@ -113,6 +119,42 @@ pub struct SignalClassification {
     pub action: String,
     pub triggers: Vec<String>,
     pub horizon: SignalHorizon,
+    /// Whether a direct dependency match was confirmed for this signal
+    #[serde(default)]
+    pub dependency_confirmed: bool,
+    /// Number of independent sources that corroborate this topic
+    #[serde(default)]
+    pub corroboration_sources: usize,
+}
+
+/// Corroboration context passed into classify() for priority gating.
+///
+/// Pre-computed by the scoring pipeline from DB queries before calling classify.
+/// This keeps the classifier itself pure (no DB access).
+/// Corroboration context for priority gating.
+///
+/// Default is permissive (source_count: 3) so existing callers that don't compute
+/// corroboration yet maintain backward-compatible behavior. Once the pipeline
+/// wires real corroboration queries, this default becomes irrelevant.
+#[derive(Debug, Clone)]
+pub struct CorroborationContext {
+    /// Number of distinct source types that have items about the same topic
+    /// in the last 72 hours. 1 = single source, 2+ = corroborated.
+    pub source_count: usize,
+    /// Whether the topic matches a confirmed user dependency
+    pub dependency_match: bool,
+    /// Signal chain phase for this topic, if any (nascent, active, escalating, peak)
+    pub chain_phase: Option<String>,
+}
+
+impl Default for CorroborationContext {
+    fn default() -> Self {
+        Self {
+            source_count: 3,       // Permissive default — allows Critical until real queries wired
+            dependency_match: false,
+            chain_phase: None,
+        }
+    }
 }
 
 // ============================================================================
@@ -307,6 +349,7 @@ impl SignalClassifier {
     /// Classify an item based on its title, content, relevance score, and two-tier tech stack.
     /// `declared_tech` = user's explicit 3-5 choices (used for action text + priority escalation).
     /// `detected_tech` = 95+ auto-scanned entries (used only for weak context awareness, not promotion).
+    /// `corroboration` = pre-computed cross-source and dependency context for priority gating.
     pub fn classify(
         &self,
         title: &str,
@@ -314,6 +357,7 @@ impl SignalClassifier {
         relevance_score: f32,
         declared_tech: &[String],
         detected_tech: &[String],
+        corroboration: &CorroborationContext,
     ) -> Option<SignalClassification> {
         let text_lower = format!("{title} {content}").to_lowercase();
         let title_lower = title.to_lowercase();
@@ -337,9 +381,9 @@ impl SignalClassifier {
                     }
                 }
 
-                // Boost words add extra confidence
+                // Boost words add extra confidence (word-boundary matched, not substring)
                 for &bw in &pattern.boost_words {
-                    if text_lower.contains(bw) {
+                    if has_word_boundary(&text_lower, bw) {
                         score += 0.2;
                         matched_keywords.push(bw.to_string());
                     }
@@ -390,7 +434,53 @@ impl SignalClassifier {
             ps
         };
 
-        let priority = SignalPriority::from_score(priority_score.min(4));
+        let mut priority = SignalPriority::from_score(priority_score.min(4));
+
+        // ── Corroboration-based priority gating ──────────────────────────
+        // Intelligence-grade rule: urgency requires corroboration.
+        // A single source, no matter how scary the keywords, cannot reach Critical.
+        //
+        // Gate 1: Single source → max Advisory
+        // Gate 2: 2 sources → max Alert
+        // Gate 3: Critical requires dependency match OR (3+ sources AND escalating chain)
+        // Boost: Escalating/Peak chain phase promotes by 1 tier
+        let corroboration_sources = corroboration.source_count.max(1);
+        let dependency_confirmed = corroboration.dependency_match;
+
+        // Chain phase boost: escalating/peak chains promote priority by 1 tier
+        if let Some(ref phase) = corroboration.chain_phase {
+            if (phase == "escalating" || phase == "peak")
+                && priority < SignalPriority::Critical
+            {
+                priority = match priority {
+                    SignalPriority::Watch => SignalPriority::Advisory,
+                    SignalPriority::Advisory => SignalPriority::Alert,
+                    SignalPriority::Alert => SignalPriority::Critical,
+                    SignalPriority::Critical => SignalPriority::Critical,
+                };
+            }
+        }
+
+        // Corroboration gates (applied AFTER chain boost)
+        if corroboration_sources < 2 && priority > SignalPriority::Advisory {
+            // Single source: max Advisory
+            priority = SignalPriority::Advisory;
+        } else if corroboration_sources < 3 && priority > SignalPriority::Alert {
+            // 2 sources: max Alert
+            priority = SignalPriority::Alert;
+        }
+
+        // Critical hard gate: requires dependency match OR (3+ sources AND chain escalating/peak)
+        if priority == SignalPriority::Critical {
+            let chain_escalating = corroboration
+                .chain_phase
+                .as_deref()
+                .map_or(false, |p| p == "escalating" || p == "peak");
+            let has_strong_chain = corroboration_sources >= 3 && chain_escalating;
+            if !dependency_confirmed && !has_strong_chain {
+                priority = SignalPriority::Alert;
+            }
+        }
 
         // Generate action text using ONLY declared tech match (prevents "python workflow" for Rust devs)
         let action = self.generate_action(
@@ -448,6 +538,8 @@ impl SignalClassifier {
             action,
             triggers,
             horizon,
+            dependency_confirmed,
+            corroboration_sources,
         })
     }
 
@@ -517,10 +609,11 @@ mod tests {
             0.8,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         let c = result.expect("should classify as security alert");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
-        assert!(c.priority >= SignalPriority::High);
+        assert!(c.priority >= SignalPriority::Alert);
         assert!(c.confidence > 0.0);
         assert!(!c.triggers.is_empty());
         assert!(c.action.contains("sqlite"));
@@ -536,6 +629,7 @@ mod tests {
             0.6,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         let c = result.expect("should classify as breaking change");
         assert_eq!(c.signal_type, SignalType::BreakingChange);
@@ -552,6 +646,7 @@ mod tests {
             0.5,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         let c = result.expect("should classify as tool discovery");
         assert_eq!(c.signal_type, SignalType::ToolDiscovery);
@@ -567,6 +662,7 @@ mod tests {
             0.4,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         let c = result.expect("should classify as learning");
         assert_eq!(c.signal_type, SignalType::Learning);
@@ -576,7 +672,7 @@ mod tests {
     fn test_no_classification() {
         let classifier = SignalClassifier::new();
         let result =
-            classifier.classify("What's your favorite color?", "I like blue", 0.1, &[], &[]);
+            classifier.classify("What's your favorite color?", "I like blue", 0.1, &[], &[], &CorroborationContext::default());
         assert!(result.is_none());
     }
 
@@ -593,6 +689,7 @@ mod tests {
                 0.3,
                 &declared,
                 &declared,
+                &CorroborationContext::default(),
             )
             .unwrap();
 
@@ -604,6 +701,7 @@ mod tests {
                 0.3,
                 &declared,
                 &declared,
+                &CorroborationContext::default(),
             )
             .unwrap();
 
@@ -621,6 +719,7 @@ mod tests {
                 0.2,
                 &[],
                 &[],
+                &CorroborationContext::default(),
             )
             .unwrap();
 
@@ -631,6 +730,7 @@ mod tests {
                 0.9,
                 &[],
                 &[],
+                &CorroborationContext::default(),
             )
             .unwrap();
 
@@ -647,6 +747,7 @@ mod tests {
             0.6,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         let c = result.expect("should classify as competitive intel");
         assert_eq!(c.signal_type, SignalType::CompetitiveIntel);
@@ -670,6 +771,7 @@ mod tests {
             0.5,
             &declared,
             &detected,
+            &CorroborationContext::default(),
         );
 
         if let Some(c) = result {
@@ -701,6 +803,7 @@ mod tests {
             0.5,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         if let Some(c) = result {
             // Action must NOT say "rust resource" — the article is about Fastify, not Rust
@@ -722,9 +825,9 @@ mod tests {
 
     #[test]
     fn test_priority_levels() {
-        assert_eq!(SignalPriority::from_score(1), SignalPriority::Low);
-        assert_eq!(SignalPriority::from_score(2), SignalPriority::Medium);
-        assert_eq!(SignalPriority::from_score(3), SignalPriority::High);
+        assert_eq!(SignalPriority::from_score(1), SignalPriority::Watch);
+        assert_eq!(SignalPriority::from_score(2), SignalPriority::Advisory);
+        assert_eq!(SignalPriority::from_score(3), SignalPriority::Alert);
         assert_eq!(SignalPriority::from_score(4), SignalPriority::Critical);
         assert_eq!(SignalPriority::from_score(5), SignalPriority::Critical);
     }
@@ -771,22 +874,22 @@ mod tests {
 
     #[test]
     fn test_priority_labels() {
-        assert_eq!(SignalPriority::Low.label(), "low");
-        assert_eq!(SignalPriority::Medium.label(), "medium");
-        assert_eq!(SignalPriority::High.label(), "high");
+        assert_eq!(SignalPriority::Watch.label(), "watch");
+        assert_eq!(SignalPriority::Advisory.label(), "advisory");
+        assert_eq!(SignalPriority::Alert.label(), "alert");
         assert_eq!(SignalPriority::Critical.label(), "critical");
     }
 
     #[test]
     fn test_priority_ordering() {
-        assert!(SignalPriority::Low < SignalPriority::Medium);
-        assert!(SignalPriority::Medium < SignalPriority::High);
-        assert!(SignalPriority::High < SignalPriority::Critical);
+        assert!(SignalPriority::Watch < SignalPriority::Advisory);
+        assert!(SignalPriority::Advisory < SignalPriority::Alert);
+        assert!(SignalPriority::Alert < SignalPriority::Critical);
     }
 
     #[test]
     fn test_priority_from_score_zero() {
-        assert_eq!(SignalPriority::from_score(0), SignalPriority::Low);
+        assert_eq!(SignalPriority::from_score(0), SignalPriority::Watch);
     }
 
     // ====================================================================
@@ -844,7 +947,7 @@ mod tests {
     fn test_single_keyword_does_not_classify() {
         let classifier = SignalClassifier::new();
         // Only one keyword "tutorial" — should not be enough
-        let result = classifier.classify("A tutorial on cooking", "Learn to cook", 0.3, &[], &[]);
+        let result = classifier.classify("A tutorial on cooking", "Learn to cook", 0.3, &[], &[], &CorroborationContext::default());
         assert!(result.is_none(), "Single keyword should not classify");
     }
 
@@ -862,6 +965,7 @@ mod tests {
             0.8,
             &declared,
             &declared,
+            &CorroborationContext::default(),
         );
         if let Some(c) = result {
             assert_eq!(c.horizon, SignalHorizon::Tactical);
@@ -877,6 +981,7 @@ mod tests {
             0.5,
             &[],
             &[],
+            &CorroborationContext::default(),
         );
         if let Some(c) = result {
             assert_eq!(c.horizon, SignalHorizon::Strategic);

@@ -93,7 +93,7 @@ fn test_signal_summary_counts_priorities() {
     ];
     results[0].signal_priority = Some("critical".to_string());
     results[0].signal_type = Some("security_alert".to_string());
-    results[1].signal_priority = Some("high".to_string());
+    results[1].signal_priority = Some("alert".to_string());
     results[1].signal_type = Some("breaking_change".to_string());
 
     let critical = results
@@ -102,7 +102,7 @@ fn test_signal_summary_counts_priorities() {
         .count();
     let high = results
         .iter()
-        .filter(|r| r.signal_priority.as_deref() == Some("high"))
+        .filter(|r| r.signal_priority.as_deref() == Some("alert"))
         .count();
 
     assert_eq!(critical, 1, "Should have 1 critical signal");

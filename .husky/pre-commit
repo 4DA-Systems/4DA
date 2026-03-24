@@ -108,6 +108,7 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | \
     grep -v '\.example' | \
     grep -v '\.test\.' | \
     grep -v '\.spec\.' | \
+    grep -v 'privacy_tests' | \
     grep -v 'PRE-LAUNCH-PLAN\.md$' | \
     grep -v 'PRODUCT-CATALOG\.md$' | \
     grep -v 'SHOPIFY-.*GUIDE\.md$' | \
