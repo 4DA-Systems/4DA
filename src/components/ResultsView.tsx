@@ -135,15 +135,15 @@ export function ResultsView({
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('results.searchPlaceholder')}
                   aria-label="Search results by keyword"
-                  className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg pl-8 pr-3 py-1.5 w-48 border border-transparent focus:border-border focus:outline-none transition-all"
+                  className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg ps-8 pe-3 py-1.5 w-48 border border-transparent focus:border-border focus:outline-none transition-all"
                 />
-                <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <svg className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
+                    className="absolute end-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
                     aria-label="Clear search"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -339,7 +339,7 @@ export function ResultsView({
                     {state.nearMisses.map((item) => (
                       <div
                         key={item.id}
-                        className="flex items-center gap-3 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-left"
+                        className="flex items-center gap-3 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-start"
                       >
                         <span className="text-xs font-mono text-text-muted shrink-0">
                           {Math.round(item.top_score * 100)}%
@@ -347,7 +347,7 @@ export function ResultsView({
                         <span className="text-sm text-text-secondary truncate">
                           {item.title}
                         </span>
-                        <span className="text-[10px] text-text-muted shrink-0 ml-auto">
+                        <span className="text-[10px] text-text-muted shrink-0 ms-auto">
                           {item.source_type}
                         </span>
                       </div>
@@ -363,16 +363,17 @@ export function ResultsView({
             <div
               role="listbox"
               aria-label={t('results.title')}
-              aria-activedescendant={focusedIndex >= 0 && filteredResults[focusedIndex] ? `result-item-${filteredResults[focusedIndex].id}` : undefined}
+              aria-activedescendant={focusedIndex >= 0 && filteredResults[focusedIndex] ? `result-item-${filteredResults[focusedIndex]!.id}` : undefined}
+              tabIndex={-1}
               style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}
             >
               {virtualizer.getVirtualItems().map((virtualRow) => {
-                const item = filteredResults[virtualRow.index];
+                const item = filteredResults[virtualRow.index]!;
                 const idx = virtualRow.index;
                 // Score group headers (only when sorting by score)
                 let groupHeader: string | null = null;
                 if (sortBy === 'score' && idx > 0) {
-                  const prev = filteredResults[idx - 1];
+                  const prev = filteredResults[idx - 1]!;
                   if (prev.top_score >= 0.72 && item.top_score < 0.72) {
                     groupHeader = t('results.relevantGroup');
                   } else if (prev.top_score >= 0.50 && item.top_score < 0.50) {

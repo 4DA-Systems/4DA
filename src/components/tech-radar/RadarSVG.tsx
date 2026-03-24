@@ -51,11 +51,11 @@ function hashString(str: string): number {
 }
 
 function getEntryPosition(entry: RadarEntry): { x: number; y: number } {
-  const ring = RING_RADII[entry.ring];
+  const ring = RING_RADII[entry.ring]!;
   const prevRing = entry.ring === 'adopt' ? 0
-    : entry.ring === 'trial' ? RING_RADII.adopt
-    : entry.ring === 'assess' ? RING_RADII.trial : RING_RADII.assess;
-  const quad = QUADRANT_CONFIG[entry.quadrant];
+    : entry.ring === 'trial' ? RING_RADII.adopt!
+    : entry.ring === 'assess' ? RING_RADII.trial! : RING_RADII.assess!;
+  const quad = QUADRANT_CONFIG[entry.quadrant]!;
   const h = hashString(entry.name);
   const radius = prevRing + (ring - prevRing) * (((h % 1000) / 1000) * 0.7 + 0.15);
   const angle = quad.startAngle + (quad.endAngle - quad.startAngle) * ((((h >> 10) % 1000) / 1000) * 0.7 + 0.15);
@@ -154,17 +154,17 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
 
         {/* Concentric rings */}
         {RING_KEYS.map((ring) => (
-          <circle key={ring} cx={CX} cy={CY} r={RING_RADII[ring]}
+          <circle key={ring} cx={CX} cy={CY} r={RING_RADII[ring]!}
             fill="none" stroke="#2A2A2A" strokeWidth="1" />
         ))}
 
         {/* Ring labels */}
         {RING_KEYS.map((ring, i) => {
-          const prevR = i === 0 ? 0 : RING_RADII[RING_KEYS[i - 1]];
+          const prevR = i === 0 ? 0 : RING_RADII[RING_KEYS[i - 1]!]!;
           return (
-            <text key={ring} x={CX + (prevR + RING_RADII[ring]) / 2} y={CY - 6}
+            <text key={ring} x={CX + (prevR + RING_RADII[ring]!) / 2} y={CY - 6}
               textAnchor="middle" fill="#8A8A8A" fontSize="9" fontWeight="500">
-              {t(RING_LABEL_KEYS[i])}
+              {t(RING_LABEL_KEYS[i]!)}
             </text>
           );
         })}
@@ -176,7 +176,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
             fontSize="11" fontWeight="600"
             onClick={(e) => { e.stopPropagation(); handleQuadrantClick(quad); }}
             style={{ cursor: 'pointer', transition: 'fill 0.2s' }}>
-            {QUADRANT_CONFIG[quad].label}
+            {QUADRANT_CONFIG[quad]!.label}
           </text>
         ))}
 
@@ -223,7 +223,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
 
       {isZoomed && (
         <button onClick={handleBackClick}
-          className="absolute top-2 left-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-white hover:border-text-muted transition-colors">
+          className="absolute top-2 start-2 px-2 py-1 text-[10px] rounded bg-bg-tertiary text-text-secondary border border-border hover:text-white hover:border-text-muted transition-colors">
           {t('techRadar.backToFull')}
         </button>
       )}

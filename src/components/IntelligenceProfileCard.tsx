@@ -134,7 +134,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
             <span className="text-text-muted">&rarr;</span>
             <span className="text-white">Today: {Math.round(growth.current_accuracy * 100)}%</span>
             {growth.improvement_pct > 0 && (
-              <span className="text-green-400 ml-auto">+{Math.round(growth.improvement_pct)}%</span>
+              <span className="text-green-400 ms-auto">+{Math.round(growth.improvement_pct)}%</span>
             )}
           </div>
           <div className="w-full h-1.5 bg-bg-primary rounded-full overflow-hidden">
@@ -191,7 +191,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
             <span className="text-[10px] text-text-muted uppercase tracking-wider">{t('briefing.profile.learningVelocity')}</span>
             <p className="text-lg font-semibold text-white mt-1">
               {learnedAffinities.length}
-              <span className="text-xs font-normal text-text-muted ml-1">{t('briefing.profile.topicsLearned', { count: learnedAffinities.length })}</span>
+              <span className="text-xs font-normal text-text-muted ms-1">{t('briefing.profile.topicsLearned', { count: learnedAffinities.length })}</span>
             </p>
           </div>
           {/* System Activity */}
@@ -254,7 +254,7 @@ function KnowledgeGapsCard() {
         {gaps.slice(0, 8).map(gap => (
           <span key={gap.dependency} className="px-2 py-0.5 text-[10px] bg-amber-500/10 text-amber-300 rounded-full border border-amber-500/15">
             {gap.dependency}
-            {gap.days_since_content != null && <span className="text-amber-500/60 ml-1">({gap.days_since_content}d)</span>}
+            {gap.days_since_content != null && <span className="text-amber-500/60 ms-1">({gap.days_since_content}d)</span>}
           </span>
         ))}
         {gaps.length > 8 && (

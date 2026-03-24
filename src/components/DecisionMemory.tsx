@@ -286,12 +286,12 @@ export const DecisionMemory = memo(function DecisionMemory() {
             <span className="text-[10px] font-medium text-text-muted uppercase tracking-wider">
               {t(`decisions.type.${type}`)}
             </span>
-            <span className="text-[10px] text-text-muted ml-2">{items.length}</span>
+            <span className="text-[10px] text-text-muted ms-2">{items.length}</span>
           </div>
           <div className="p-3 space-y-2">
             {items.map((d) => {
               const isExpanded = expandedId === d.id;
-              const status = STATUS_STYLES[d.status] || STATUS_STYLES.active;
+              const status = (STATUS_STYLES[d.status] ?? STATUS_STYLES.active)!;
 
               return (
                 <div
@@ -300,7 +300,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
                 >
                   <button
                     onClick={() => setExpandedId(isExpanded ? null : d.id)}
-                    className="w-full px-4 py-3 flex items-center gap-3 text-left"
+                    className="w-full px-4 py-3 flex items-center gap-3 text-start"
                     aria-expanded={isExpanded}
                     aria-label={t('decisions.toggleDetail', `${isExpanded ? 'Collapse' : 'Expand'} decision: ${d.subject}`)}
                   >

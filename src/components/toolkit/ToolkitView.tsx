@@ -52,7 +52,7 @@ export function ToolkitView() {
             role="tab"
             aria-selected={activeTool === tool.id}
             onClick={() => openTool(tool.id)}
-            className="flex flex-col gap-2 p-5 bg-bg-secondary border border-border rounded-xl text-left hover:border-white/20 hover:bg-bg-tertiary transition-all group"
+            className="flex flex-col gap-2 p-5 bg-bg-secondary border border-border rounded-xl text-start hover:border-white/20 hover:bg-bg-tertiary transition-all group"
           >
             <h3 className="text-sm font-medium text-white group-hover:text-orange-400 transition-colors">
               {tool.name}

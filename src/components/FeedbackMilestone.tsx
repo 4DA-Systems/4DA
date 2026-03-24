@@ -30,7 +30,7 @@ export const FeedbackMilestone = memo(function FeedbackMilestone({ count }: Feed
   return (
     <div
       role="status"
-      className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5
+      className="fixed bottom-6 end-6 z-50 flex items-center gap-3 px-5 py-3.5
         bg-bg-secondary border border-success/30 rounded-xl shadow-lg shadow-success/5
         animate-[slideUp_0.3s_ease-out]"
     >

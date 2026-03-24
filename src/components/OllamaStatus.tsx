@@ -181,7 +181,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
         </button>
       )}
       {showHint && (
-        <div className="absolute top-full mt-2 left-0 w-64 bg-bg-secondary border border-border rounded-lg p-3 shadow-lg z-50">
+        <div className="absolute top-full mt-2 start-0 w-64 bg-bg-secondary border border-border rounded-lg p-3 shadow-lg z-50">
           <p className="text-[11px] text-text-secondary mb-2">
             {t('ollama.hintFreeLocal')}
           </p>

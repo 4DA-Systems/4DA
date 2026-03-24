@@ -159,7 +159,7 @@ export function SetupAIProvider({
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onProviderChange('ollama')}
-                className={`p-3 rounded-lg text-left transition-all ${
+                className={`p-3 rounded-lg text-start transition-all ${
                   provider === 'ollama'
                     ? 'bg-green-500/15 border-2 border-green-500/50'
                     : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
@@ -177,7 +177,7 @@ export function SetupAIProvider({
                     // Signal the parent that base_url should be set
                     onApiKeyChange('');
                   }}
-                  className="p-3 rounded-lg text-left bg-bg-tertiary border-2 border-transparent hover:border-border transition-all"
+                  className="p-3 rounded-lg text-start bg-bg-tertiary border-2 border-transparent hover:border-border transition-all"
                 >
                   <div className="text-sm font-medium text-white flex items-center gap-1.5">
                     {server.name}

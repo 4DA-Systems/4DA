@@ -110,7 +110,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
   if (sovereignProfile) {
     for (const fact of sovereignProfile.facts) {
       if (!factsByCategory[fact.category]) factsByCategory[fact.category] = [];
-      factsByCategory[fact.category].push(fact);
+      factsByCategory[fact.category]!.push(fact);
     }
   }
 
@@ -143,7 +143,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       {/* Category Sections */}
       <div className="space-y-1">
         {ALL_CATEGORIES.map((cat) => {
-          const meta = CATEGORY_META[cat];
+          const meta = CATEGORY_META[cat]!;
           const facts = factsByCategory[cat];
           const hasFacts = facts && facts.length > 0;
           const isExpanded = expanded.has(cat);
@@ -152,7 +152,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             <div key={cat} className="border border-border rounded-lg overflow-hidden">
               <button
                 onClick={() => toggleCategory(cat)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-bg-tertiary transition-colors text-left"
+                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-bg-tertiary transition-colors text-start"
               >
                 <span
                   className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
@@ -223,7 +223,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
               className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary focus:border-accent-gold focus:outline-none"
             >
               {ALL_CATEGORIES.map((cat) => (
-                <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
+                <option key={cat} value={cat}>{CATEGORY_META[cat]!.label}</option>
               ))}
             </select>
           </div>

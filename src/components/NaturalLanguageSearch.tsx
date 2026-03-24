@@ -175,7 +175,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       />
       <div className="relative z-10">
       <button
-        className="flex items-center justify-between cursor-pointer w-full text-left"
+        className="flex items-center justify-between cursor-pointer w-full text-start"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
         aria-label={expanded ? t('search.collapsePanel') : t('search.expandPanel')}
@@ -310,7 +310,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                     {result.parsed.file_types.join(', ')}
                   </span>
                 )}
-                <button onClick={clearResults} aria-label="Clear search results" className="ml-auto text-text-muted hover:text-white transition-colors">{'\u2715'}</button>
+                <button onClick={clearResults} aria-label="Clear search results" className="ms-auto text-text-muted hover:text-white transition-colors">{'\u2715'}</button>
               </div>
 
               {/* Stack context */}

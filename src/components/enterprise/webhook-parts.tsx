@@ -240,19 +240,19 @@ function DeliveryTable({ deliveries }: { deliveries: WebhookDelivery[] }) {
       <table className="w-full text-xs" role="table">
         <thead>
           <tr className="border-b border-border bg-bg-tertiary/50">
-            <th scope="col" className="text-left px-4 py-2 text-text-muted font-medium">
+            <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
               {t('enterprise.webhooks.colTime', 'Time')}
             </th>
-            <th scope="col" className="text-left px-4 py-2 text-text-muted font-medium">
+            <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
               {t('enterprise.webhooks.colEvent', 'Event')}
             </th>
-            <th scope="col" className="text-left px-4 py-2 text-text-muted font-medium">
+            <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
               {t('enterprise.webhooks.colStatus', 'Status')}
             </th>
-            <th scope="col" className="text-left px-4 py-2 text-text-muted font-medium">
+            <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
               {t('enterprise.webhooks.colHttpCode', 'HTTP')}
             </th>
-            <th scope="col" className="text-left px-4 py-2 text-text-muted font-medium">
+            <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
               {t('enterprise.webhooks.colAttempts', 'Attempts')}
             </th>
           </tr>

@@ -191,9 +191,9 @@ export function PersonalizationSection() {
               <div className="space-y-1">
                 {undeclaredSuggestions.slice(0, 5).map((suggestion) => (
                   <div key={suggestion.topic} className="flex items-center justify-between py-1.5 px-2.5 rounded-md bg-bg-tertiary border border-border">
-                    <div className="min-w-0 flex-1 mr-2">
+                    <div className="min-w-0 flex-1 me-2">
                       <span className="text-sm text-white">{suggestion.topic}</span>
-                      <span className="text-[10px] text-text-muted ml-2 truncate">{suggestion.source}</span>
+                      <span className="text-[10px] text-text-muted ms-2 truncate">{suggestion.source}</span>
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button

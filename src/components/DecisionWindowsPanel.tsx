@@ -50,7 +50,7 @@ const WindowCard = memo(function WindowCard({
   index?: number;
 }) {
   const { t } = useTranslation();
-  const config = WINDOW_TYPE_CONFIG[window.window_type] ?? WINDOW_TYPE_CONFIG.knowledge;
+  const config = (WINDOW_TYPE_CONFIG[window.window_type] ?? WINDOW_TYPE_CONFIG.knowledge)!;
   const timeLeft = getTimeRemaining(window.expires_at);
 
   return (
@@ -129,7 +129,11 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
   );
 
   if (loading && openWindows.length === 0) return null;
-  if (openWindows.length === 0) return null;
+  if (openWindows.length === 0) return (
+    <div className="bg-bg-secondary rounded-lg border border-border p-4">
+      <p className="text-sm text-text-muted">{t('decisions.noWindows')}</p>
+    </div>
+  );
 
   return (
     <div>

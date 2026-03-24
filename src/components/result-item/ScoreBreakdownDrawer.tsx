@@ -112,7 +112,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
               </span>
             );
           })}
-          <span className="text-[10px] text-text-muted ml-1">
+          <span className="text-[10px] text-text-muted ms-1">
             {signalCount}/5
           </span>
         </div>
@@ -161,7 +161,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
                 <p className="text-xs text-text-secondary truncate">{compareTitle}</p>
                 <p className="text-sm font-mono text-white mt-1">
                   {Math.round(compareScore * 100)}% vs {Math.round(finalScore * 100)}%
-                  <span className={`ml-2 text-xs ${compareScore > finalScore ? 'text-green-400' : compareScore < finalScore ? 'text-amber-400' : 'text-text-muted'}`}>
+                  <span className={`ms-2 text-xs ${compareScore > finalScore ? 'text-green-400' : compareScore < finalScore ? 'text-amber-400' : 'text-text-muted'}`}>
                     ({compareScore > finalScore ? '+' : ''}{Math.round((compareScore - finalScore) * 100)})
                   </span>
                 </p>

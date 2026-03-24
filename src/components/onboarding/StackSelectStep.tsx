@@ -97,7 +97,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
             <button
               key={profile.id}
               onClick={() => toggleProfile(profile.id)}
-              className={`relative p-3 rounded-lg text-left transition-all ${
+              className={`relative p-3 rounded-lg text-start transition-all ${
                 isSelected
                   ? 'bg-bg-tertiary border-2 border-white'
                   : 'bg-bg-secondary border-2 border-transparent hover:border-border'
@@ -105,7 +105,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
             >
               {/* Detection badge */}
               {detection && (
-                <span className="absolute top-1.5 right-1.5 px-1.5 py-0.5 text-[10px] font-mono bg-green-500/20 text-green-400 rounded">
+                <span className="absolute top-1.5 end-1.5 px-1.5 py-0.5 text-[10px] font-mono bg-green-500/20 text-green-400 rounded">
                   {Math.round(detection.confidence * 100)}%
                 </span>
               )}

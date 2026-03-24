@@ -133,7 +133,7 @@ export function MonitoringSection({
                 )}
               </span>
               {monitoring.is_checking && (
-                <span className="text-xs text-orange-400 ml-2">({t('settings.monitoring.checking')})</span>
+                <span className="text-xs text-orange-400 ms-2">({t('settings.monitoring.checking')})</span>
               )}
             </div>
             <button

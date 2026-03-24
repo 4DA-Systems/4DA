@@ -107,14 +107,14 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
       {/* AI Verdict */}
       {autopsy.ai_analysis && (
         <div
-          className={`ai-verdict p-3 rounded mb-4 border-l-4 ${
+          className={`ai-verdict p-3 rounded mb-4 border-s-4 ${
             autopsy.ai_analysis.score_assessment === 'accurate'
-              ? 'border-l-success bg-success/10'
+              ? 'border-s-success bg-success/10'
               : autopsy.ai_analysis.score_assessment === 'too_high'
-              ? 'border-l-[#F59E0B] bg-[#F59E0B]/10'
+              ? 'border-s-[#F59E0B] bg-[#F59E0B]/10'
               : autopsy.ai_analysis.score_assessment === 'too_low'
-              ? 'border-l-[#3B82F6] bg-[#3B82F6]/10'
-              : 'border-l-text-muted bg-text-muted/10'
+              ? 'border-s-[#3B82F6] bg-[#3B82F6]/10'
+              : 'border-s-text-muted bg-text-muted/10'
           }`}
         >
           <div className="verdict-header flex items-center gap-2 mb-2">
@@ -216,7 +216,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
             {autopsy.recommendations.map((rec, idx) => (
               <li
                 key={idx}
-                className="p-2 bg-bg-primary border-l-[3px] border-l-accent-gold mb-2 text-xs text-text-secondary"
+                className="p-2 bg-bg-primary border-s-[3px] border-s-accent-gold mb-2 text-xs text-text-secondary"
               >
                 {rec}
               </li>

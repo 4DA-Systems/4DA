@@ -43,7 +43,7 @@ function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | nul
   if (withDeps.length > 0) {
     return withDeps.sort((a, b) =>
       (b.score_breakdown?.dep_match_score ?? 0) - (a.score_breakdown?.dep_match_score ?? 0)
-    )[0];
+    )[0] ?? null;
   }
 
   // Final fallback: highest scoring item
@@ -156,9 +156,9 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           </div>
 
           {/* Rejection rate badge */}
-          <div className="ml-auto px-2.5 py-1 rounded-full bg-accent-gold/10 border border-accent-gold/20">
+          <div className="ms-auto px-2.5 py-1 rounded-full bg-accent-gold/10 border border-accent-gold/20">
             <span className="text-xs font-mono font-medium text-accent-gold">{rejectionRate}%</span>
-            <span className="text-[10px] text-text-muted ml-1">
+            <span className="text-[10px] text-text-muted ms-1">
               {t('missed.filtered', { defaultValue: 'filtered' })}
             </span>
           </div>
@@ -202,7 +202,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                   ) : null}
                 </p>
               </div>
-              <div className="text-right flex-shrink-0">
+              <div className="text-end flex-shrink-0">
                 <div
                   className="text-lg font-bold font-mono"
                   style={{ color: signalColor }}
