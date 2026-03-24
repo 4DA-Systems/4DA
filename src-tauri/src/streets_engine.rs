@@ -35,7 +35,7 @@ pub(crate) fn map_to_streets_engine(
             _ => None,
         };
         if engine.is_some() {
-            return engine.map(|s| s.to_string());
+            return engine.map(std::string::ToString::to_string);
         }
     }
 
@@ -51,7 +51,7 @@ pub(crate) fn map_to_streets_engine(
             _ => None,
         };
         if engine.is_some() {
-            return engine.map(|s| s.to_string());
+            return engine.map(std::string::ToString::to_string);
         }
     }
 

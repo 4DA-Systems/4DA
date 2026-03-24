@@ -148,30 +148,24 @@ pub fn detect_shifts(
                 // Significant drift detected
                 let recent_avg: f32 = recent
                     .iter()
-                    .filter_map(|e| e.data.get("avg_score").and_then(|v| v.as_f64()))
+                    .filter_map(|e| e.data.get("avg_score").and_then(serde_json::Value::as_f64))
                     .map(|v| v as f32)
                     .sum::<f32>()
                     / recent.len().max(1) as f32;
 
                 let older_avg: f32 = older
                     .iter()
-                    .filter_map(|e| e.data.get("avg_score").and_then(|v| v.as_f64()))
+                    .filter_map(|e| e.data.get("avg_score").and_then(serde_json::Value::as_f64))
                     .map(|v| v as f32)
                     .sum::<f32>()
                     / older.len().max(1) as f32;
 
                 let direction = if recent_avg > older_avg + 0.05 {
-                    format!(
-                        "Discussion about {} is gaining relevance with new angles",
-                        topic
-                    )
+                    format!("Discussion about {topic} is gaining relevance with new angles")
                 } else if recent_avg < older_avg - 0.05 {
-                    format!(
-                        "Discussion about {} is shifting to less relevant areas",
-                        topic
-                    )
+                    format!("Discussion about {topic} is shifting to less relevant areas")
                 } else {
-                    format!("The narrative around {} has changed significantly", topic)
+                    format!("The narrative around {topic} has changed significantly")
                 };
 
                 shifts.push(SemanticShift {
@@ -179,7 +173,7 @@ pub fn detect_shifts(
                     drift_magnitude: drift,
                     direction,
                     representative_items: vec![],
-                    period: format!("last {} days", lookback_days),
+                    period: format!("last {lookback_days} days"),
                     detected_at: chrono::Utc::now().to_rfc3339(),
                 });
             }

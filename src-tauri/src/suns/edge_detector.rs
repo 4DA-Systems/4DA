@@ -9,7 +9,7 @@ pub fn execute() -> SunResult {
         Err(e) => {
             return SunResult {
                 success: false,
-                message: format!("DB unavailable: {}", e),
+                message: format!("DB unavailable: {e}"),
                 data: None,
             }
         }
@@ -93,9 +93,13 @@ pub fn execute() -> SunResult {
     // Sort by trend magnitude
     trends.sort_by(|a, b| {
         b.get("trend_pct")
-            .and_then(|v| v.as_f64())
+            .and_then(serde_json::Value::as_f64)
             .unwrap_or(0.0)
-            .partial_cmp(&a.get("trend_pct").and_then(|v| v.as_f64()).unwrap_or(0.0))
+            .partial_cmp(
+                &a.get("trend_pct")
+                    .and_then(serde_json::Value::as_f64)
+                    .unwrap_or(0.0),
+            )
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 

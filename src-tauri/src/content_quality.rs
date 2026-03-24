@@ -26,7 +26,7 @@ pub struct ContentQuality {
 pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) -> ContentQuality {
     let title_quality = assess_title_quality(title);
     let content_depth = assess_content_depth(content);
-    let source_authority = url.map(assess_source_authority).unwrap_or(1.0);
+    let source_authority = url.map_or(1.0, assess_source_authority);
 
     // Combine: title quality matters most, content depth secondary
     let raw = title_quality * 0.5 + content_depth * 0.3 + source_authority * 0.2;
@@ -97,7 +97,7 @@ fn assess_title_quality(title: &str) -> f32 {
     let listicle_start = lower
         .trim_start()
         .chars()
-        .take_while(|c| c.is_ascii_digit())
+        .take_while(char::is_ascii_digit)
         .count();
     if listicle_start > 0 {
         // Check if the number is followed by common listicle words

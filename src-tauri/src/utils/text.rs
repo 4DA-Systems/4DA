@@ -31,7 +31,7 @@ pub(crate) fn build_embedding_text(title: &str, content: &str) -> String {
         clean_title
     } else {
         // Title repeated for emphasis — embedding models weight earlier text more heavily
-        format!("{}\n\n{}\n\n{}", clean_title, clean_title, clean_content)
+        format!("{clean_title}\n\n{clean_title}\n\n{clean_content}")
     }
 }
 

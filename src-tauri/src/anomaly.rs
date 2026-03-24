@@ -186,7 +186,7 @@ pub fn detect_stale_data(conn: &Connection) -> Result<Vec<Anomaly>> {
                         id: None,
                         anomaly_type: AnomalyType::StaleData,
                         topic: None,
-                        description: format!("No context updates for {} hours", hours),
+                        description: format!("No context updates for {hours} hours"),
                         confidence: (hours as f32 / (stale_threshold_hours * 2) as f32).min(1.0),
                         severity,
                         evidence: vec![
@@ -243,7 +243,7 @@ pub fn detect_context_drift(conn: &Connection) -> Result<Vec<Anomaly>> {
                 id: None,
                 anomaly_type: AnomalyType::ContextDrift,
                 topic: None,
-                description: format!("High context volatility detected (sigma = {:.2})", std_dev),
+                description: format!("High context volatility detected (sigma = {std_dev:.2})"),
                 confidence: (std_dev as f32 / drift_threshold).min(1.0),
                 severity,
                 evidence: vec![
@@ -294,7 +294,7 @@ pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>> {
                 affinity * 100.0,
                 anti_confidence * 100.0
             ),
-            confidence: ((affinity + anti_confidence) / 2.0) as f32,
+            confidence: f64::midpoint(affinity, anti_confidence) as f32,
             severity: AnomalySeverity::Medium,
             evidence: vec![
                 format!("Affinity score: {:.0}%", affinity * 100.0),
@@ -500,7 +500,7 @@ pub fn get_unresolved(conn: &Connection) -> Result<Vec<Anomaly>> {
     })?;
 
     rows.collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|e| e.into())
+        .map_err(std::convert::Into::into)
 }
 
 /// Mark an anomaly as resolved
@@ -508,7 +508,7 @@ pub fn resolve_anomaly(conn: &Connection, id: i64) -> Result<()> {
     let changed = conn.execute("UPDATE anomalies SET resolved = 1 WHERE id = ?1", [id])?;
 
     if changed == 0 {
-        return Err(format!("Anomaly with id {} not found", id).into());
+        return Err(format!("Anomaly with id {id} not found").into());
     }
 
     info!(target: "4da::anomaly", anomaly_id = id, "Anomaly resolved");

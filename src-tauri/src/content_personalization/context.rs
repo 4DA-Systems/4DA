@@ -316,8 +316,8 @@ fn assemble_regional(conn: &Connection) -> RegionalData {
         })
         .unwrap_or_else(|_: rusqlite::Error| "US".to_string());
 
-    match crate::streets_localization::load_regional_data_for_context(&country_code) {
-        Some(rd) => RegionalData {
+    if let Some(rd) = crate::streets_localization::load_regional_data_for_context(&country_code) {
+        RegionalData {
             country: rd.country,
             currency: rd.currency,
             currency_symbol: rd.currency_symbol,
@@ -327,11 +327,10 @@ fn assemble_regional(conn: &Connection) -> RegionalData {
             business_entity_type: rd.business_entity_type,
             tax_note: rd.tax_note,
             payment_processors: rd.payment_processors,
-        },
-        None => {
-            debug!(target: "4da::personalize", country = %country_code, "No regional data found");
-            RegionalData::default()
         }
+    } else {
+        debug!(target: "4da::personalize", country = %country_code, "No regional data found");
+        RegionalData::default()
     }
 }
 
@@ -405,7 +404,7 @@ fn assemble_progress(conn: &Connection) -> ProgressData {
                     let lesson_count = crate::playbook_commands::parse_lessons(&content).len();
                     data.total_lesson_count += lesson_count as u32;
 
-                    let completed = data.per_module.get(*mid).map(|v| v.len()).unwrap_or(0);
+                    let completed = data.per_module.get(*mid).map_or(0, std::vec::Vec::len);
                     if completed >= lesson_count && lesson_count > 0 {
                         data.completed_modules.push(mid.to_string());
                     }
@@ -430,8 +429,8 @@ fn assemble_settings() -> SettingsData {
 }
 
 fn assemble_dna() -> DnaData {
-    match crate::developer_dna::generate_dna() {
-        Ok(dna) => DnaData {
+    if let Ok(dna) = crate::developer_dna::generate_dna() {
+        DnaData {
             is_full: true,
             primary_stack: dna.primary_stack,
             interests: dna.interests,
@@ -448,12 +447,11 @@ fn assemble_dna() -> DnaData {
                 .take(5)
                 .map(|t| t.topic.clone())
                 .collect(),
-        },
-        Err(_) => {
-            // Free-tier fallback: use stack data from domain profile
-            debug!(target: "4da::personalize", "DNA generation failed, using free-tier stack data");
-            DnaData::default()
         }
+    } else {
+        // Free-tier fallback: use stack data from domain profile
+        debug!(target: "4da::personalize", "DNA generation failed, using free-tier stack data");
+        DnaData::default()
     }
 }
 

@@ -78,7 +78,7 @@ fn extract_keywords(query: &str) -> Vec<String> {
         .to_lowercase()
         .split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
         .filter(|w| w.len() > 2 && !stop_set.contains(w))
-        .map(|w| w.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 

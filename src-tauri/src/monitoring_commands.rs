@@ -260,11 +260,9 @@ pub async fn trigger_notification_preview(
 pub async fn set_notification_style(style: String) -> Result<serde_json::Value> {
     let valid = ["custom", "native"];
     if !valid.contains(&style.as_str()) {
-        return Err(format!(
-            "Invalid notification style '{}'. Must be 'custom' or 'native'.",
-            style
-        )
-        .into());
+        return Err(
+            format!("Invalid notification style '{style}'. Must be 'custom' or 'native'.").into(),
+        );
     }
 
     {
@@ -318,10 +316,8 @@ pub async fn set_launch_at_startup(
         if let Err(e) = autostart.enable() {
             warn!(target: "4da::settings", error = %e, "Failed to enable autostart");
         }
-    } else {
-        if let Err(e) = autostart.disable() {
-            warn!(target: "4da::settings", error = %e, "Failed to disable autostart");
-        }
+    } else if let Err(e) = autostart.disable() {
+        warn!(target: "4da::settings", error = %e, "Failed to disable autostart");
     }
 
     // Persist in settings

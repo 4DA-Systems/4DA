@@ -110,7 +110,7 @@ pub fn t(key: &str, lang: &str, vars: &[(&str, &str)]) -> String {
                     if let Some(text) = value.as_str() {
                         let mut result = text.to_string();
                         for (name, val) in vars {
-                            result = result.replace(&format!("{{{{{}}}}}", name), val);
+                            result = result.replace(&format!("{{{{{name}}}}}"), val);
                         }
                         return result;
                     }

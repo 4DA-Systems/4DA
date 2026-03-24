@@ -39,10 +39,9 @@ impl DocumentExtractor for AudioExtractor {
     fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         Err(format!(
             "Audio transcription not available.\n\
-             File: {:?}\n\n\
+             File: {path:?}\n\n\
              To enable, install LLVM and enable whisper-rs in Cargo.toml.\n\
-             See src/extractors/audio.rs header for detailed instructions.",
-            path
+             See src/extractors/audio.rs header for detailed instructions."
         )
         .into())
     }

@@ -215,7 +215,10 @@ pub(crate) fn load_topic_decay_profiles(conn: &Connection) -> HashMap<String, f3
 
     for row in rows.flatten() {
         if let Ok(data) = serde_json::from_str::<serde_json::Value>(&row.1) {
-            if let Some(hl) = data.get("half_life_hours").and_then(|v| v.as_f64()) {
+            if let Some(hl) = data
+                .get("half_life_hours")
+                .and_then(serde_json::Value::as_f64)
+            {
                 result.insert(row.0, hl as f32);
             }
         }

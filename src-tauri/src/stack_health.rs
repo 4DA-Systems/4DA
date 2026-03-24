@@ -116,9 +116,9 @@ pub fn compute_stack_health(conn: &rusqlite::Connection) -> StackHealth {
         // Generate suggested queries for non-healthy tech
         if status != "healthy" {
             let query = match status {
-                "critical" => format!("security updates for {}", name),
-                "attention" => format!("latest {} news", name),
-                _ => format!("{} updates this week", name),
+                "critical" => format!("security updates for {name}"),
+                "attention" => format!("latest {name} news"),
+                _ => format!("{name} updates this week"),
             };
             suggested_queries.push(query);
         }
@@ -214,7 +214,7 @@ fn load_detected_techs(conn: &rusqlite::Connection) -> Vec<(String, String)> {
 /// Count source_items from the last N days whose title or content mentions the tech.
 fn count_signals_for_tech(conn: &rusqlite::Connection, tech_name: &str, days: u32) -> u32 {
     let pattern = format!("%{}%", tech_name.to_lowercase());
-    let interval = format!("-{} days", days);
+    let interval = format!("-{days} days");
 
     let result = conn.query_row(
         "SELECT COUNT(*) FROM source_items
@@ -290,15 +290,14 @@ fn compute_missed_intelligence(
         .collect();
 
     let where_clause = conditions.join(" OR ");
-    let interval = format!("-{} days", days);
+    let interval = format!("-{days} days");
 
     let query = format!(
         "SELECT id, title FROM source_items
          WHERE created_at >= datetime('now', ?1)
-           AND ({})
+           AND ({where_clause})
          ORDER BY created_at DESC
-         LIMIT 200",
-        where_clause
+         LIMIT 200"
     );
 
     let result = conn.prepare(&query);

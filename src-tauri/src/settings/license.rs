@@ -34,7 +34,7 @@ pub fn check_activation_rate_limit() -> Result<()> {
         .lock()
         .map_err(|_| "Rate limiter lock poisoned")?;
     let now = std::time::Instant::now();
-    let one_minute_ago = now - std::time::Duration::from_secs(60);
+    let one_minute_ago = now.checked_sub(std::time::Duration::from_secs(60)).unwrap();
 
     // Remove attempts older than 1 minute
     attempts.retain(|t| *t > one_minute_ago);
@@ -154,16 +154,17 @@ pub fn validate_license_on_startup() {
     let license = &settings.license;
 
     // If tier is paid but no license key is set, reset to free
-    if is_paid_tier(license.tier.as_str()) && !is_trial_active(license) {
-        if license.license_key.is_empty() {
-            warn!(
-                "License tier is '{}' but no license key found — resetting to free",
-                license.tier
-            );
-            guard.get_mut().license.tier = "free".to_string();
-            if let Err(e) = guard.save() {
-                warn!("Failed to reset license tier: {}", e);
-            }
+    if is_paid_tier(license.tier.as_str())
+        && !is_trial_active(license)
+        && license.license_key.is_empty()
+    {
+        warn!(
+            "License tier is '{}' but no license key found — resetting to free",
+            license.tier
+        );
+        guard.get_mut().license.tier = "free".to_string();
+        if let Err(e) = guard.save() {
+            warn!("Failed to reset license tier: {}", e);
         }
     }
 
@@ -204,11 +205,7 @@ pub fn require_signal_feature(feature: &str) -> Result<()> {
     if is_signal_feature_available(feature, license) {
         Ok(())
     } else {
-        Err(format!(
-            "{} requires 4DA Signal — upgrade or start a free trial",
-            feature
-        )
-        .into())
+        Err(format!("{feature} requires 4DA Signal — upgrade or start a free trial").into())
     }
 }
 
@@ -431,8 +428,7 @@ async fn validate_license_key_keygen_inner(
     });
 
     let url = format!(
-        "https://api.keygen.sh/v1/accounts/{}/licenses/actions/validate-key",
-        KEYGEN_ACCOUNT_ID
+        "https://api.keygen.sh/v1/accounts/{KEYGEN_ACCOUNT_ID}/licenses/actions/validate-key"
     );
 
     let response = crate::http_client::HTTP_CLIENT
@@ -455,7 +451,7 @@ async fn validate_license_key_keygen_inner(
                         online: false,
                         tier: current_tier.to_string(),
                         cached: false,
-                        detail: format!("Network error reading response: {}", e),
+                        detail: format!("Network error reading response: {e}"),
                         code: "NETWORK_ERROR".to_string(),
                     }
                 }
@@ -467,7 +463,7 @@ async fn validate_license_key_keygen_inner(
                 online: false,
                 tier: current_tier.to_string(),
                 cached: false,
-                detail: format!("Network error: {}", e),
+                detail: format!("Network error: {e}"),
                 code: "NETWORK_ERROR".to_string(),
             }
         }
@@ -484,7 +480,7 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
                 online: true,
                 tier: "free".to_string(),
                 cached: false,
-                detail: format!("Invalid response from Keygen (HTTP {})", status),
+                detail: format!("Invalid response from Keygen (HTTP {status})"),
                 code: "PARSE_ERROR".to_string(),
             };
         }
@@ -493,7 +489,7 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
     // Keygen returns { "meta": { "valid": true/false, "code": "..." }, "data": { ... } }
     let valid = json
         .pointer("/meta/valid")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .unwrap_or(false);
 
     let validation_code = json
@@ -524,7 +520,7 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
             online: true,
             tier,
             cached: false,
-            detail: format!("Valid ({})", validation_code),
+            detail: format!("Valid ({validation_code})"),
             code: validation_code,
         }
     } else {
@@ -548,7 +544,7 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
             online: true,
             tier: "free".to_string(),
             cached: false,
-            detail: format!("Invalid key ({})", validation_code),
+            detail: format!("Invalid key ({validation_code})"),
             code: validation_code,
         }
     }

@@ -23,7 +23,7 @@ fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
             .detected_tech
             .iter()
             .take(8)
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .collect();
         parts.push(format!("Tech stack: {}", top.join(", ")));
     }
@@ -55,8 +55,8 @@ fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
     if !ctx.domain_profile.primary_stack.is_empty() {
         let anti = crate::competing_tech::get_anti_dependencies(&ctx.domain_profile.primary_stack);
         if !anti.is_empty() {
-            let mut anti_vec: Vec<&str> = anti.iter().map(|s| s.as_str()).collect();
-            anti_vec.sort();
+            let mut anti_vec: Vec<&str> = anti.iter().map(std::string::String::as_str).collect();
+            anti_vec.sort_unstable();
             anti_vec.truncate(10);
             parts.push(format!(
                 "Does NOT use (chose alternatives): {}",
@@ -97,7 +97,7 @@ fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
                         .iter()
                         .map(|c| {
                             let truncated: String = c.chars().take(80).collect();
-                            format!("- {}", truncated)
+                            format!("- {truncated}")
                         })
                         .collect();
                     parts.push(format!("Recent commits:\n{}", commit_lines.join("\n")));
@@ -116,7 +116,7 @@ fn build_rerank_context_summary(ctx: &scoring::ScoringContext) -> String {
                         .iter()
                         .map(|t| {
                             let truncated: String = t.chars().take(60).collect();
-                            format!("- {}", truncated)
+                            format!("- {truncated}")
                         })
                         .collect();
                     parts.push(format!("Recently saved:\n{}", titles.join("\n")));
@@ -172,7 +172,7 @@ pub(crate) async fn apply_llm_reranking(
             (
                 r.id.to_string(),
                 r.title.clone(),
-                format!("{} {}", source_label, content_snippet),
+                format!("{source_label} {content_snippet}"),
             )
         })
         .collect();
@@ -191,11 +191,17 @@ pub(crate) async fn apply_llm_reranking(
     const LLM_BATCH_SIZE: usize = 8;
     let batches: Vec<Vec<(String, String, String)>> = candidates
         .chunks(LLM_BATCH_SIZE)
-        .map(|c| c.to_vec())
+        .map(
+            <[(
+                std::string::String,
+                std::string::String,
+                std::string::String,
+            )]>::to_vec,
+        )
         .collect();
 
     let total_batches = batches.len();
-    let total_candidates = batches.iter().map(|b| b.len()).sum::<usize>();
+    let total_candidates = batches.iter().map(std::vec::Vec::len).sum::<usize>();
     let mut all_judgments = Vec::new();
     let mut total_input: u64 = 0;
     let mut total_output: u64 = 0;
@@ -249,13 +255,7 @@ pub(crate) async fn apply_llm_reranking(
                 };
             }
 
-            if !judgment.relevant {
-                // LLM says not relevant — hard reject
-                result.relevant = false;
-                result.top_score *= 0.15;
-                result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
-                rejected += 1;
-            } else {
+            if judgment.relevant {
                 // LLM confirms — LLM score dominates (70/30 blend)
                 result.top_score =
                     (result.top_score * 0.3 + judgment.confidence * 0.7).clamp(0.0, 1.0);
@@ -263,6 +263,12 @@ pub(crate) async fn apply_llm_reranking(
                     result.explanation = Some(judgment.reasoning.clone());
                 }
                 confirmed += 1;
+            } else {
+                // LLM says not relevant — hard reject
+                result.relevant = false;
+                result.top_score *= 0.15;
+                result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
+                rejected += 1;
             }
         }
     }

@@ -168,7 +168,10 @@ impl Database {
 
         let rows = stmt.query_map([], |row| {
             let projects_str: String = row.get(3)?;
-            let projects: Vec<String> = projects_str.split(',').map(|s| s.to_string()).collect();
+            let projects: Vec<String> = projects_str
+                .split(',')
+                .map(std::string::ToString::to_string)
+                .collect();
             Ok(CrossProjectPackage {
                 package_name: row.get(0)?,
                 ecosystem: row.get(1)?,

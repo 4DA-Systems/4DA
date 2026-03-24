@@ -76,7 +76,7 @@ pub(crate) fn get_db_path() -> PathBuf {
         base.push("4da.db");
         base
     };
-    if dev_path.parent().map_or(false, |p| p.exists()) {
+    if dev_path.parent().is_some_and(std::path::Path::exists) {
         return dev_path;
     }
 

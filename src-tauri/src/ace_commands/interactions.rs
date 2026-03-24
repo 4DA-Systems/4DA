@@ -32,7 +32,10 @@ pub async fn ace_record_interaction(
     let action = match action_type.as_str() {
         "click" => {
             let dwell_time = action_data
-                .and_then(|d| d.get("dwell_time_seconds").and_then(|v| v.as_u64()))
+                .and_then(|d| {
+                    d.get("dwell_time_seconds")
+                        .and_then(serde_json::Value::as_u64)
+                })
                 .unwrap_or(0);
             ace::BehaviorAction::Click {
                 dwell_time_seconds: dwell_time,
@@ -44,12 +47,12 @@ pub async fn ace_record_interaction(
         "mark_irrelevant" => ace::BehaviorAction::MarkIrrelevant,
         "scroll" => {
             let visible_seconds = action_data
-                .and_then(|d| d.get("visible_seconds").and_then(|v| v.as_f64()))
+                .and_then(|d| d.get("visible_seconds").and_then(serde_json::Value::as_f64))
                 .unwrap_or(0.0) as f32;
             ace::BehaviorAction::Scroll { visible_seconds }
         }
         "ignore" => ace::BehaviorAction::Ignore,
-        _ => return Err(format!("Unknown action type: {}", action_type).into()),
+        _ => return Err(format!("Unknown action type: {action_type}").into()),
     };
 
     ace.record_interaction(

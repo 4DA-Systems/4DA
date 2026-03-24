@@ -162,7 +162,7 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
         keep
     });
 
-    let total_grouped: usize = rep_to_titles.values().map(|v| v.len()).sum();
+    let total_grouped: usize = rep_to_titles.values().map(std::vec::Vec::len).sum();
     if total_grouped > 0 {
         info!(target: "4da::scoring", grouped = total_grouped, representatives = rep_to_titles.len(), "Topic-level deduplication");
     }

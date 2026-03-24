@@ -228,14 +228,12 @@ impl SunRegistry {
                 let last_run_ts = self
                     .last_runs
                     .get(&sun.id)
-                    .map(|a| a.load(Ordering::Relaxed))
-                    .unwrap_or(0);
+                    .map_or(0, |a| a.load(Ordering::Relaxed));
                 let enabled = self.enabled.get(&sun.id).copied().unwrap_or(true);
                 let run_count = self
                     .run_counts
                     .get(&sun.id)
-                    .map(|a| a.load(Ordering::Relaxed))
-                    .unwrap_or(0);
+                    .map_or(0, |a| a.load(Ordering::Relaxed));
 
                 let last_run = if last_run_ts > 0 {
                     // Convert unix timestamp to ISO string
@@ -309,8 +307,7 @@ impl SunRegistry {
             let last_run = self
                 .last_runs
                 .get(&sun.id)
-                .map(|a| a.load(Ordering::Relaxed))
-                .unwrap_or(0);
+                .map_or(0, |a| a.load(Ordering::Relaxed));
 
             if now - last_run < sun.interval_secs {
                 continue;
@@ -398,7 +395,7 @@ fn store_sun_run(sun_id: &str, module_id: &str, result: &SunResult, duration_ms:
                 module_id,
                 result.success as i32,
                 result.message,
-                result.data.as_ref().map(|d| d.to_string()),
+                result.data.as_ref().map(std::string::ToString::to_string),
                 duration_ms,
             ],
         );

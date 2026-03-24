@@ -109,10 +109,8 @@ pub fn validate_freshness(
 
     // ── 2. Volume check ─────────────────────────────────────────────────
     if expected_min_items > 0 && items_fetched > 0 && items_fetched < expected_min_items / 3 {
-        let reason = format!(
-            "Low volume: {} items, expected at least {}",
-            items_fetched, expected_min_items
-        );
+        let reason =
+            format!("Low volume: {items_fetched} items, expected at least {expected_min_items}");
         warnings.push(reason.clone());
         worst_state = escalate(worst_state, SourceHealthState::Degraded(reason));
     }
@@ -122,7 +120,7 @@ pub fn validate_freshness(
     if let Some(age_secs) = newest_age {
         if age_secs > max_acceptable_age_secs {
             let hours = age_secs / 3600;
-            let reason = format!("Newest item is {}h old", hours);
+            let reason = format!("Newest item is {hours}h old");
             warnings.push(reason.clone());
             worst_state = escalate(worst_state, SourceHealthState::Stale(reason));
         }
@@ -132,7 +130,7 @@ pub fn validate_freshness(
     let duplicate_ratio = compute_duplicate_ratio(items, previous_ids);
     if items_fetched > 0 && duplicate_ratio > 0.9 {
         let pct = (duplicate_ratio * 100.0).round() as u32;
-        let reason = format!("{}% duplicate content — source may be frozen", pct);
+        let reason = format!("{pct}% duplicate content — source may be frozen");
         warnings.push(reason.clone());
         worst_state = escalate(worst_state, SourceHealthState::Zombie(reason));
     }
@@ -201,7 +199,10 @@ fn compute_duplicate_ratio(items: &[SourceItem], previous_ids: &[String]) -> f64
         return 0.0;
     }
 
-    let prev_set: HashSet<&str> = previous_ids.iter().map(|s| s.as_str()).collect();
+    let prev_set: HashSet<&str> = previous_ids
+        .iter()
+        .map(std::string::String::as_str)
+        .collect();
 
     let dup_count = items
         .iter()

@@ -29,7 +29,7 @@ pub(crate) fn generate_relevance_explanation(
                     let tl = tech.to_lowercase();
                     *t == tl || t.contains(tl.as_str())
                 })
-                .map(|s| s.as_str())
+                .map(std::string::String::as_str)
         })
         .collect();
     if !declared_hits.is_empty() {
@@ -48,7 +48,7 @@ pub(crate) fn generate_relevance_explanation(
                 .detected_tech
                 .iter()
                 .find(|tech| *tech == t || t.contains(tech.as_str()))
-                .map(|s| s.as_str())
+                .map(std::string::String::as_str)
         })
         .filter(|t| !used_topics.contains(t))
         .collect();
@@ -72,7 +72,7 @@ pub(crate) fn generate_relevance_explanation(
                 .active_topics
                 .iter()
                 .find(|at| *at == t || t.contains(at.as_str()))
-                .map(|s| s.as_str())
+                .map(std::string::String::as_str)
         })
         .filter(|t| !used_topics.contains(t))
         .collect();
@@ -110,7 +110,7 @@ pub(crate) fn generate_relevance_explanation(
             if let Some(m) = matches.first().filter(|_| context_score > 0.2) {
                 let phrase = extract_short_phrase(&m.matched_text);
                 if !phrase.is_empty() {
-                    parts.push(format!("Matches your project context: \"{}\"", phrase));
+                    parts.push(format!("Matches your project context: \"{phrase}\""));
                 }
             }
         }
@@ -121,7 +121,7 @@ pub(crate) fn generate_relevance_explanation(
         for topic in item_topics {
             if let Some((score, _)) = ace_ctx.topic_affinities.get(topic.as_str()) {
                 if *score > 0.3 {
-                    parts.push(format!("You engage with {} content", topic));
+                    parts.push(format!("You engage with {topic} content"));
                     break;
                 }
             }
@@ -133,7 +133,7 @@ pub(crate) fn generate_relevance_explanation(
         if let Some(m) = matches.first() {
             let phrase = extract_short_phrase(&m.matched_text);
             if !phrase.is_empty() {
-                parts.push(format!("Similar to your code: \"{}\"", phrase));
+                parts.push(format!("Similar to your code: \"{phrase}\""));
             }
         }
     }
@@ -142,7 +142,7 @@ pub(crate) fn generate_relevance_explanation(
     if !matched_skill_gaps.is_empty() {
         let names: Vec<&str> = matched_skill_gaps
             .iter()
-            .map(|s| s.as_str())
+            .map(std::string::String::as_str)
             .take(3)
             .collect();
         parts.push(format!("Closes skill gap: {}", names.join(", ")));
@@ -158,8 +158,7 @@ pub(crate) fn extract_short_phrase(matched_text: &str) -> String {
     let phrase = clean
         .find(['.', '\n'])
         .filter(|&pos| pos > 10)
-        .map(|pos| &clean[..pos])
-        .unwrap_or(&clean[..clean.len().min(80)])
+        .map_or(&clean[..clean.len().min(80)], |pos| &clean[..pos])
         .trim();
     if phrase.len() < 10 {
         String::new()

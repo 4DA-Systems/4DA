@@ -241,7 +241,7 @@ fn classify_risk(command: &str) -> RiskLevel {
 
     // Check safe patterns first (read-only commands)
     for pattern in SAFE_COMMANDS {
-        if lower.starts_with(pattern) || lower.contains(&format!("| {}", pattern)) {
+        if lower.starts_with(pattern) || lower.contains(&format!("| {pattern}")) {
             return RiskLevel::Safe;
         }
     }
@@ -350,7 +350,7 @@ fn parse_code_blocks(content: &str, module_id: &str, lesson_idx: usize) -> Vec<P
                     // This is an actual command
                     let command_text = trimmed.to_string();
                     let risk = classify_risk(&command_text);
-                    let id = format!("{}-L{}-B{}-C{}", module_id, lesson_idx, block_idx, cmd_idx);
+                    let id = format!("{module_id}-L{lesson_idx}-B{block_idx}-C{cmd_idx}");
 
                     // Build a short description from the command
                     let description = if command_text.len() > 60 {
@@ -458,8 +458,7 @@ fn validate_command_program(program: &str) -> Result<()> {
     // Hard block: shell interpreters can never execute
     if BLOCKED_INTERPRETERS.iter().any(|b| *b == normalized) {
         return Err(FourDaError::Config(format!(
-            "Shell interpreter '{}' cannot be used. Commands run directly without a shell.",
-            program
+            "Shell interpreter '{program}' cannot be used. Commands run directly without a shell."
         )));
     }
 
@@ -470,8 +469,7 @@ fn validate_command_program(program: &str) -> Result<()> {
         Ok(())
     } else {
         Err(FourDaError::Config(format!(
-            "'{}' cannot be run in-app. Copy this command to your terminal instead.",
-            program
+            "'{program}' cannot be run in-app. Copy this command to your terminal instead."
         )))
     }
 }
@@ -524,14 +522,16 @@ fn is_powershell_cmdlet(program: &str) -> bool {
 fn get_session_env() -> HashMap<String, String> {
     SESSION_ENV
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone()
         .unwrap_or_default()
 }
 
 /// Store an environment variable in the session.
 fn set_session_env(key: String, value: String) {
-    let mut guard = SESSION_ENV.lock().unwrap_or_else(|e| e.into_inner());
+    let mut guard = SESSION_ENV
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let map = guard.get_or_insert_with(HashMap::new);
     map.insert(key, value);
 }
@@ -581,7 +581,7 @@ fn handle_export(command: &str) -> Result<CommandExecutionResult> {
         Ok(CommandExecutionResult {
             command_id: String::new(),
             success: true,
-            stdout: format!("Set {}={}", key, value),
+            stdout: format!("Set {key}={value}"),
             stderr: String::new(),
             exit_code: 0,
             duration_ms: start.elapsed().as_millis() as u64,
@@ -643,7 +643,7 @@ fn execute_pipeline(segments: &[&str]) -> Result<CommandExecutionResult> {
 
         let mut child = cmd
             .spawn()
-            .map_err(|e| FourDaError::Internal(format!("Failed to spawn '{}': {}", program, e)))?;
+            .map_err(|e| FourDaError::Internal(format!("Failed to spawn '{program}': {e}")))?;
 
         toolkit::register_spawned_pid(child.id());
 
@@ -682,7 +682,7 @@ fn execute_pipeline(segments: &[&str]) -> Result<CommandExecutionResult> {
         }
 
         let status = child.wait().map_err(|e| {
-            FourDaError::Internal(format!("Failed waiting on pipeline stage {}: {}", i, e))
+            FourDaError::Internal(format!("Failed waiting on pipeline stage {i}: {e}"))
         })?;
 
         toolkit::unregister_spawned_pid(child.id());
@@ -779,8 +779,8 @@ fn execute_single(command: &str) -> Result<CommandExecutionResult> {
             .spawn()
     };
 
-    let mut child = child
-        .map_err(|e| FourDaError::Internal(format!("Failed to execute '{}': {}", program, e)))?;
+    let mut child =
+        child.map_err(|e| FourDaError::Internal(format!("Failed to execute '{program}': {e}")))?;
 
     let spawned_pid = child.id();
     toolkit::register_spawned_pid(spawned_pid);
@@ -799,8 +799,7 @@ fn execute_single(command: &str) -> Result<CommandExecutionResult> {
             Err(e) => {
                 toolkit::unregister_spawned_pid(spawned_pid);
                 return Err(FourDaError::Internal(format!(
-                    "Failed waiting on command: {}",
-                    e
+                    "Failed waiting on command: {e}"
                 )));
             }
         }
@@ -811,55 +810,52 @@ fn execute_single(command: &str) -> Result<CommandExecutionResult> {
     let duration_ms = start.elapsed().as_millis() as u64;
     let executed_at = chrono_now_iso();
 
-    match status {
-        Some(exit_status) => {
-            let mut stdout = String::new();
-            let mut stderr = String::new();
-            if let Some(mut out) = child.stdout.take() {
-                use std::io::Read;
-                if let Err(e) = out.read_to_string(&mut stdout) {
-                    tracing::warn!("Process cleanup failed: {e}");
-                }
-            }
-            if let Some(mut err) = child.stderr.take() {
-                use std::io::Read;
-                if let Err(e) = err.read_to_string(&mut stderr) {
-                    tracing::warn!("Process cleanup failed: {e}");
-                }
-            }
-
-            truncate_output(&mut stdout, MAX_STDOUT);
-            truncate_output(&mut stderr, MAX_STDERR);
-
-            let exit_code = exit_status.code().unwrap_or(-1);
-            Ok(CommandExecutionResult {
-                command_id: String::new(),
-                success: exit_code == 0,
-                stdout,
-                stderr,
-                exit_code,
-                duration_ms,
-                executed_at,
-            })
-        }
-        None => {
-            if let Err(e) = child.kill() {
+    if let Some(exit_status) = status {
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+        if let Some(mut out) = child.stdout.take() {
+            use std::io::Read;
+            if let Err(e) = out.read_to_string(&mut stdout) {
                 tracing::warn!("Process cleanup failed: {e}");
             }
-            if let Err(e) = child.wait() {
+        }
+        if let Some(mut err) = child.stderr.take() {
+            use std::io::Read;
+            if let Err(e) = err.read_to_string(&mut stderr) {
                 tracing::warn!("Process cleanup failed: {e}");
             }
-            warn!(target: "4da::streets_cmd", timeout_secs = TIMEOUT_SECS, "Command timed out");
-            Ok(CommandExecutionResult {
-                command_id: String::new(),
-                success: false,
-                stdout: String::new(),
-                stderr: format!("Command timed out after {}s and was killed", TIMEOUT_SECS),
-                exit_code: -1,
-                duration_ms,
-                executed_at,
-            })
         }
+
+        truncate_output(&mut stdout, MAX_STDOUT);
+        truncate_output(&mut stderr, MAX_STDERR);
+
+        let exit_code = exit_status.code().unwrap_or(-1);
+        Ok(CommandExecutionResult {
+            command_id: String::new(),
+            success: exit_code == 0,
+            stdout,
+            stderr,
+            exit_code,
+            duration_ms,
+            executed_at,
+        })
+    } else {
+        if let Err(e) = child.kill() {
+            tracing::warn!("Process cleanup failed: {e}");
+        }
+        if let Err(e) = child.wait() {
+            tracing::warn!("Process cleanup failed: {e}");
+        }
+        warn!(target: "4da::streets_cmd", timeout_secs = TIMEOUT_SECS, "Command timed out");
+        Ok(CommandExecutionResult {
+            command_id: String::new(),
+            success: false,
+            stdout: String::new(),
+            stderr: format!("Command timed out after {TIMEOUT_SECS}s and was killed"),
+            exit_code: -1,
+            duration_ms,
+            executed_at,
+        })
     }
 }
 
@@ -978,7 +974,7 @@ pub async fn parse_lesson_commands(
 ) -> Result<Vec<ParsedCommand>> {
     let content_dir = playbook_commands::get_content_dir();
     let filename = playbook_commands::module_id_to_filename(&module_id)
-        .ok_or_else(|| FourDaError::Config(format!("Unknown module: {}", module_id)))?;
+        .ok_or_else(|| FourDaError::Config(format!("Unknown module: {module_id}")))?;
     let path = content_dir.join(filename);
 
     if !path.exists() {
@@ -1017,8 +1013,7 @@ pub async fn execute_streets_command(
     for pattern in BLOCKED_PATTERNS {
         if cmd_lower.contains(pattern) {
             return Err(FourDaError::Config(format!(
-                "Blocked destructive command pattern: {}",
-                pattern
+                "Blocked destructive command pattern: {pattern}"
             )));
         }
     }
@@ -1030,7 +1025,7 @@ pub async fn execute_streets_command(
 
     let mut result = tokio::task::spawn_blocking(move || execute_command_blocking(&cmd_clone))
         .await
-        .map_err(|e| FourDaError::Internal(format!("Task join error: {}", e)))??;
+        .map_err(|e| FourDaError::Internal(format!("Task join error: {e}")))??;
 
     result.command_id = id_clone;
 
@@ -1061,7 +1056,7 @@ pub async fn execute_streets_command(
         crate::sovereign_profile::store_facts_from_execution(
             &command,
             &result.stdout,
-            &format!("{}:L{}", module_id_str, lesson_idx_val),
+            &format!("{module_id_str}:L{lesson_idx_val}"),
         );
     }
 

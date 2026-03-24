@@ -123,11 +123,11 @@ pub(crate) fn analyze_convergence(
     shared.sort_by(|a, b| b.project_count.cmp(&a.project_count));
 
     // Convergence score: ratio of shared tech instances to total
-    let total_instances: usize = tech_projects.values().map(|v| v.len()).sum();
+    let total_instances: usize = tech_projects.values().map(std::vec::Vec::len).sum();
     let shared_instances: usize = tech_projects
         .values()
         .filter(|v| v.len() > 1)
-        .map(|v| v.len())
+        .map(std::vec::Vec::len)
         .sum();
     let convergence_score = if total_instances > 0 {
         shared_instances as f32 / total_instances as f32
@@ -228,26 +228,24 @@ pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
         ))
     })?;
 
-    for row in rows {
-        if let Ok((path, langs_json, frameworks_json)) = row {
-            let mut techs = Vec::new();
-            if let Some(ref json) = langs_json {
-                if let Ok(langs) = serde_json::from_str::<Vec<String>>(json) {
-                    for lang in langs {
-                        techs.push((lang, "language".to_string()));
-                    }
+    for (path, langs_json, frameworks_json) in rows.flatten() {
+        let mut techs = Vec::new();
+        if let Some(ref json) = langs_json {
+            if let Ok(langs) = serde_json::from_str::<Vec<String>>(json) {
+                for lang in langs {
+                    techs.push((lang, "language".to_string()));
                 }
             }
-            if let Some(ref json) = frameworks_json {
-                if let Ok(fws) = serde_json::from_str::<Vec<String>>(json) {
-                    for fw in fws {
-                        techs.push((fw, "framework".to_string()));
-                    }
+        }
+        if let Some(ref json) = frameworks_json {
+            if let Ok(fws) = serde_json::from_str::<Vec<String>>(json) {
+                for fw in fws {
+                    techs.push((fw, "framework".to_string()));
                 }
             }
-            if !techs.is_empty() {
-                projects.insert(path, techs);
-            }
+        }
+        if !techs.is_empty() {
+            projects.insert(path, techs);
         }
     }
 
@@ -273,19 +271,16 @@ pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value
         ))
     })?;
 
-    for row in rows {
-        if let Ok((path, deps_json, langs_json)) = row {
-            let dep_count = deps_json
-                .as_deref()
-                .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
-                .map(|v| v.len())
-                .unwrap_or(0);
-            let ecosystems = langs_json
-                .as_deref()
-                .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
-                .unwrap_or_default();
-            project_data.push((path, dep_count, 0, 0.8, 0, ecosystems));
-        }
+    for (path, deps_json, langs_json) in rows.flatten() {
+        let dep_count = deps_json
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
+            .map_or(0, |v| v.len());
+        let ecosystems = langs_json
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
+            .unwrap_or_default();
+        project_data.push((path, dep_count, 0, 0.8, 0, ecosystems));
     }
 
     let comparison = compare_project_health(project_data);

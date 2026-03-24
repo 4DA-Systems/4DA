@@ -426,7 +426,7 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
 
 fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<Vec<MissedItem>> {
     // Title-only matching (content LIKE is too noisy for short dep names)
-    let pattern = format!("%{}%", package_name);
+    let pattern = format!("%{package_name}%");
 
     let mut stmt = conn.prepare(
         "SELECT si.id, si.title, si.url, si.source_type, si.created_at
@@ -499,7 +499,7 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
 }
 
 fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -> Result<u32> {
-    let pattern = format!("%{}%", package_name);
+    let pattern = format!("%{package_name}%");
 
     let result: Option<String> = conn
         .query_row(
@@ -513,31 +513,27 @@ fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -
         .ok()
         .flatten();
 
-    match result {
-        Some(date_str) => {
-            if let Ok(date) = chrono::NaiveDateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S")
-            {
-                let now = chrono::Utc::now().naive_utc();
-                let days = (now - date).num_days().max(0) as u32;
-                Ok(days)
-            } else {
-                Ok(999) // Can't parse date, treat as very old
-            }
+    if let Some(date_str) = result {
+        if let Ok(date) = chrono::NaiveDateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S") {
+            let now = chrono::Utc::now().naive_utc();
+            let days = (now - date).num_days().max(0) as u32;
+            Ok(days)
+        } else {
+            Ok(999) // Can't parse date, treat as very old
         }
-        None => {
-            // Fallback: check if this tech was recently detected by ACE
-            if let Ok(ace) = crate::get_ace_engine() {
-                if let Ok(techs) = ace.get_detected_tech() {
-                    for tech in &techs {
-                        if tech.name.to_lowercase() == package_name.to_lowercase() {
-                            // Tech is actively detected in the user's projects — not stale
-                            return Ok(0);
-                        }
+    } else {
+        // Fallback: check if this tech was recently detected by ACE
+        if let Ok(ace) = crate::get_ace_engine() {
+            if let Ok(techs) = ace.get_detected_tech() {
+                for tech in &techs {
+                    if tech.name.to_lowercase() == package_name.to_lowercase() {
+                        // Tech is actively detected in the user's projects — not stale
+                        return Ok(0);
                     }
                 }
             }
-            Ok(999) // No engagement ever
         }
+        Ok(999) // No engagement ever
     }
 }
 

@@ -131,14 +131,14 @@ impl ExtractorRegistry {
         self.extractors
             .iter()
             .find(|e| e.can_handle(path))
-            .map(|b| b.as_ref())
+            .map(std::convert::AsRef::as_ref)
     }
 
     /// Extract content from a file using the appropriate extractor
     pub fn extract(&self, path: &Path) -> Result<ExtractedDocument> {
         let extractor = self
             .find_extractor(path)
-            .ok_or_else(|| format!("No extractor found for file: {:?}", path))?;
+            .ok_or_else(|| format!("No extractor found for file: {path:?}"))?;
 
         extractor.extract(path)
     }
@@ -147,7 +147,11 @@ impl ExtractorRegistry {
     pub fn supported_extensions(&self) -> Vec<String> {
         self.extractors
             .iter()
-            .flat_map(|e| e.supported_extensions().iter().map(|s| s.to_string()))
+            .flat_map(|e| {
+                e.supported_extensions()
+                    .iter()
+                    .map(std::string::ToString::to_string)
+            })
             .collect()
     }
 }

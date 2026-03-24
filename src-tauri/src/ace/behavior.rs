@@ -391,7 +391,7 @@ impl ACE {
         })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| e.into())
+            .map_err(std::convert::Into::into)
     }
 
     /// Get anti-topics
@@ -418,7 +418,7 @@ impl ACE {
         })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| e.into())
+            .map_err(std::convert::Into::into)
     }
 
     /// Get behavior modifier for an item
@@ -514,7 +514,7 @@ impl ACE {
         })?;
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| e.into())
+            .map_err(std::convert::Into::into)
     }
 
     /// Confirm an anti-topic

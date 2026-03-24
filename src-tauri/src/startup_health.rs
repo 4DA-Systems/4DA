@@ -195,8 +195,7 @@ pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthI
             component: "embedding",
             severity: HealthSeverity::Warning,
             message: format!(
-                "LLM provider '{}' is configured but API key is empty. LLM features will not work.",
-                provider
+                "LLM provider '{provider}' is configured but API key is empty. LLM features will not work."
             ),
         });
     }

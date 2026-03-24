@@ -197,7 +197,7 @@ async fn test_anthropic_key(
                 );
                 (
                     true,
-                    Some(format!("API returned status {} — key may be valid", status)),
+                    Some(format!("API returned status {status} — key may be valid")),
                     vec!["claude-haiku-4-5-20251001".to_string()],
                 )
             }
@@ -206,7 +206,7 @@ async fn test_anthropic_key(
             if e.is_timeout() {
                 (false, Some("Connection timed out".to_string()), vec![])
             } else {
-                (false, Some(format!("Connection failed: {}", e)), vec![])
+                (false, Some(format!("Connection failed: {e}")), vec![])
             }
         }
     }
@@ -249,7 +249,7 @@ async fn test_openai_key(
             } else {
                 (
                     true,
-                    Some(format!("API returned status {}", status)),
+                    Some(format!("API returned status {status}")),
                     vec!["gpt-4o-mini".to_string()],
                 )
             }
@@ -258,7 +258,7 @@ async fn test_openai_key(
             if e.is_timeout() {
                 (false, Some("Connection timed out".to_string()), vec![])
             } else {
-                (false, Some(format!("Connection failed: {}", e)), vec![])
+                (false, Some(format!("Connection failed: {e}")), vec![])
             }
         }
     }
@@ -283,7 +283,7 @@ async fn test_openai_compatible_key(
     let url = if base.ends_with("/chat/completions") {
         base.to_string()
     } else {
-        format!("{}/chat/completions", base)
+        format!("{base}/chat/completions")
     };
 
     let body = serde_json::json!({
@@ -316,10 +316,7 @@ async fn test_openai_compatible_key(
                 );
                 (
                     true,
-                    Some(format!(
-                        "API returned status {} — key appears valid",
-                        status
-                    )),
+                    Some(format!("API returned status {status} — key appears valid")),
                     vec![],
                 )
             }
@@ -328,7 +325,7 @@ async fn test_openai_compatible_key(
             if e.is_timeout() {
                 (false, Some("Connection timed out".to_string()), vec![])
             } else {
-                (false, Some(format!("Endpoint unreachable: {}", e)), vec![])
+                (false, Some(format!("Endpoint unreachable: {e}")), vec![])
             }
         }
     }

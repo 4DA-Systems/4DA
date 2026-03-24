@@ -141,8 +141,10 @@ pub async fn get_street_health() -> Result<crate::suns::StreetHealthScore> {
                 .partial_cmp(&b.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
-        .map(|m| format!("Focus on {}", m.module_name))
-        .unwrap_or_else(|| "Start the STREETS playbook".to_string());
+        .map_or_else(
+            || "Start the STREETS playbook".to_string(),
+            |m| format!("Focus on {}", m.module_name),
+        );
 
     Ok(crate::suns::StreetHealthScore {
         overall,

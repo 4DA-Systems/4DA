@@ -156,12 +156,12 @@ pub enum SourceError {
 impl std::fmt::Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SourceError::Network(msg) => write!(f, "Network error: {}", msg),
-            SourceError::Parse(msg) => write!(f, "Parse error: {}", msg),
-            SourceError::RateLimited(msg) => write!(f, "Rate limited: {}", msg),
-            SourceError::Forbidden(msg) => write!(f, "Forbidden: {}", msg),
+            SourceError::Network(msg) => write!(f, "Network error: {msg}"),
+            SourceError::Parse(msg) => write!(f, "Parse error: {msg}"),
+            SourceError::RateLimited(msg) => write!(f, "Rate limited: {msg}"),
+            SourceError::Forbidden(msg) => write!(f, "Forbidden: {msg}"),
             SourceError::Disabled => write!(f, "Source disabled"),
-            SourceError::Other(msg) => write!(f, "Error: {}", msg),
+            SourceError::Other(msg) => write!(f, "Error: {msg}"),
         }
     }
 }
@@ -252,7 +252,7 @@ impl SourceRegistry {
         self.sources
             .iter()
             .filter(|s| s.config().enabled)
-            .map(|s| s.as_ref())
+            .map(std::convert::AsRef::as_ref)
             .collect()
     }
 
@@ -261,7 +261,7 @@ impl SourceRegistry {
         self.sources
             .iter()
             .find(|s| s.source_type() == source_type)
-            .map(|s| s.as_ref())
+            .map(std::convert::AsRef::as_ref)
     }
 
     /// Get source count

@@ -44,7 +44,7 @@ pub fn insert_test_item(
     title: &str,
     content: &str,
 ) -> i64 {
-    let emb = seed_embedding(&format!("{}:{}", source_type, source_id));
+    let emb = seed_embedding(&format!("{source_type}:{source_id}"));
     db.upsert_source_item(source_type, source_id, None, title, content, &emb)
         .expect("insert_test_item failed")
 }
@@ -58,7 +58,7 @@ pub fn insert_test_item_with_url(
     title: &str,
     content: &str,
 ) -> i64 {
-    let emb = seed_embedding(&format!("{}:{}", source_type, source_id));
+    let emb = seed_embedding(&format!("{source_type}:{source_id}"));
     db.upsert_source_item(source_type, source_id, Some(url), title, content, &emb)
         .expect("insert_test_item_with_url failed")
 }

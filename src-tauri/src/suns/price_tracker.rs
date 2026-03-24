@@ -12,12 +12,12 @@ pub fn execute() -> SunResult {
     match data_dir {
         Some(dir) if dir.exists() => {
             let file_count = std::fs::read_dir(&dir)
-                .map(|entries| entries.filter(|e| e.is_ok()).count())
+                .map(|entries| entries.filter(std::result::Result::is_ok).count())
                 .unwrap_or(0);
 
             SunResult {
                 success: true,
-                message: format!("{} regional data files available", file_count),
+                message: format!("{file_count} regional data files available"),
                 data: Some(serde_json::json!({ "file_count": file_count })),
             }
         }

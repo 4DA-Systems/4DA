@@ -102,7 +102,7 @@ pub(crate) fn generate_report(
     decisions_recorded: u32,
     feedback_signals: u32,
 ) -> IntelligenceReport {
-    let prev_accuracy = previous.map(|p| p.accuracy_pct).unwrap_or(0.0);
+    let prev_accuracy = previous.map_or(0.0, |p| p.accuracy_pct);
 
     IntelligenceReport {
         period: period.to_string(),
@@ -251,7 +251,7 @@ pub fn get_intelligence_report(period: Option<String>) -> crate::error::Result<s
                 created_at: row.get(7)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     if records.is_empty() {

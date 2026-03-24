@@ -377,8 +377,7 @@ fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats> {
         guard
             .results
             .as_ref()
-            .map(|r| r.iter().filter(|s| s.relevant).count() as u32)
-            .unwrap_or(0)
+            .map_or(0, |r| r.iter().filter(|s| s.relevant).count() as u32)
     };
     let total_relevant = feedback_relevant.max(scoring_relevant);
 
@@ -387,7 +386,7 @@ fn compute_stats(conn: &rusqlite::Connection) -> Result<DnaStats> {
     let analysis_total = {
         let state = crate::get_analysis_state();
         let guard = state.lock();
-        guard.results.as_ref().map(|r| r.len() as u32).unwrap_or(0)
+        guard.results.as_ref().map_or(0, |r| r.len() as u32)
     };
     let effective_total = if analysis_total > 0 {
         analysis_total
@@ -551,14 +550,12 @@ pub fn export_as_card_svg(dna: &DeveloperDna) -> String {
   <text x="32" y="36" fill="#D4AF37" font-family="'JetBrains Mono', 'SF Mono', monospace" font-size="11" font-weight="500" letter-spacing="0.15em">DEVELOPER DNA</text>
   <text x="768" y="36" fill="#444" font-family="'Inter', -apple-system, sans-serif" font-size="11" text-anchor="end">{date}</text>
   <line x1="32" y1="56" x2="768" y2="56" stroke="#222" stroke-width="1"/>"##,
-        date = date,
     );
 
     // --- Identity section ---
     let identity_section = format!(
         r##"  <!-- Identity -->
   <text x="32" y="92" fill="#FFF" font-family="'Inter', -apple-system, sans-serif" font-size="22" font-weight="600">{identity}</text>"##,
-        identity = identity,
     );
 
     // --- Tech stack pills ---
@@ -612,20 +609,13 @@ pub fn export_as_card_svg(dna: &DeveloperDna) -> String {
   </defs>
   <rect width="800" height="420" rx="12" fill="url(#cardBg)" stroke="#1A1A1A"/>
 {header}
-{identity}
+{identity_section}
 {pills}
-{stats}
-{topics}
-{sources}
+{stats_section}
+{topics_section}
+{sources_section}
 {footer}
 </svg>"##,
-        header = header,
-        identity = identity_section,
-        pills = pills,
-        stats = stats_section,
-        topics = topics_section,
-        sources = sources_section,
-        footer = footer,
     )
 }
 
@@ -636,9 +626,8 @@ fn build_card_pills(stack: &[String], start_x: f64, y: f64) -> String {
     }
 
     let mut svg = format!(
-        r#"  <g transform="translate({},{})">
-"#,
-        start_x, y
+        r#"  <g transform="translate({start_x},{y})">
+"#
     );
 
     let mut x: f64 = 0.0;
@@ -776,17 +765,12 @@ pub fn export_as_svg(dna: &DeveloperDna) -> String {
   <text x="20" y="26" fill="#F97316" font-family="monospace" font-size="10" font-weight="500" letter-spacing="0.08em">4DA DEVELOPER DNA</text>
   <text x="475" y="26" fill="#666" font-family="sans-serif" font-size="10" text-anchor="end">{date}</text>
   <text x="20" y="52" fill="#FFF" font-family="sans-serif" font-size="16" font-weight="600">{identity}</text>
-{pills}
-{stats}
-{topics}
+{pills_svg}
+{stats_svg}
+{topics_svg}
   <text x="20" y="185" fill="#666" font-family="sans-serif" font-size="10">4da.dev</text>
   <text x="475" y="185" fill="#666" font-family="sans-serif" font-size="10" text-anchor="end">All signal. No feed.</text>
 </svg>"##,
-        date = date,
-        identity = identity,
-        pills = pills_svg,
-        stats = stats_svg,
-        topics = topics_svg,
     )
 }
 
@@ -809,8 +793,7 @@ fn build_pills_svg(stack: &[String]) -> String {
         let pill_height = 20.0;
 
         svg.push_str(&format!(
-            r##"    <rect x="{x}" y="0" width="{w}" height="{h}" rx="4" fill="#1F1F1F" stroke="#2A2A2A"/>"##,
-            x = x, w = pill_width, h = pill_height,
+            r##"    <rect x="{x}" y="0" width="{pill_width}" height="{pill_height}" rx="4" fill="#1F1F1F" stroke="#2A2A2A"/>"##,
         ));
         svg.push('\n');
         svg.push_str(&format!(
@@ -844,8 +827,7 @@ fn build_topics_bar_svg(topics: &[EngagedTopic]) -> String {
 
     // Background bar
     svg.push_str(&format!(
-        r##"    <rect x="0" y="0" width="{}" height="10" rx="3" fill="#1F1F1F"/>"##,
-        bar_width
+        r##"    <rect x="0" y="0" width="{bar_width}" height="10" rx="3" fill="#1F1F1F"/>"##
     ));
     svg.push('\n');
 
@@ -860,7 +842,7 @@ fn build_topics_bar_svg(topics: &[EngagedTopic]) -> String {
 
         let rx = if i == 0 { "3" } else { "0" };
         svg.push_str(&format!(
-            r##"    <rect x="{x}" y="0" width="{w}" height="10" rx="{rx}" fill="{color}" opacity="0.8"/>"##,
+            r#"    <rect x="{x}" y="0" width="{w}" height="10" rx="{rx}" fill="{color}" opacity="0.8"/>"#,
             x = bar_x,
             w = seg_width,
             rx = rx,

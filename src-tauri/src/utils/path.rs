@@ -16,7 +16,7 @@ pub(crate) fn sanitize_path(path: &str) -> String {
     let stripped = if let Some(home) = dirs::home_dir() {
         let home_str = home.to_string_lossy().replace('\\', "/");
         if let Some(rest) = normalized.strip_prefix(&home_str) {
-            format!("...{}", rest)
+            format!("...{rest}")
         } else {
             normalized.clone()
         }

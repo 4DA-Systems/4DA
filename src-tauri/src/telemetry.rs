@@ -128,7 +128,7 @@ pub fn record_event(
 
 /// Aggregate usage data for the given number of days.
 pub fn get_usage_report(conn: &Connection, days: u32) -> Result<UsageReport> {
-    let cutoff = format!("-{} days", days);
+    let cutoff = format!("-{days} days");
 
     let total_events: u64 = conn
         .query_row(
@@ -166,7 +166,7 @@ pub fn get_usage_report(conn: &Connection, days: u32) -> Result<UsageReport> {
                 })
             })
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .collect::<Vec<_>>();
         rows
     };
@@ -397,7 +397,7 @@ pub fn get_recent_errors(conn: &Connection, limit: u32) -> Result<Vec<ErrorRecor
             })
         })
         .map_err(FourDaError::Db)?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect::<Vec<_>>();
 
     Ok(rows)
@@ -436,7 +436,7 @@ pub fn get_error_summary(conn: &Connection) -> Result<ErrorSummary> {
                 })
             })
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .collect::<Vec<_>>();
         rows
     };
@@ -464,7 +464,7 @@ pub fn get_error_summary(conn: &Connection) -> Result<ErrorSummary> {
                 })
             })
             .map_err(FourDaError::Db)?
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .collect::<Vec<_>>();
         rows
     };
@@ -479,7 +479,7 @@ pub fn get_error_summary(conn: &Connection) -> Result<ErrorSummary> {
 
 /// Delete errors older than the specified number of days.
 pub fn clear_old_errors(conn: &Connection, days: u32) -> Result<u64> {
-    let cutoff = format!("-{} days", days);
+    let cutoff = format!("-{days} days");
     let deleted = conn
         .execute(
             "DELETE FROM error_telemetry WHERE last_seen < datetime('now', ?1)",
@@ -498,7 +498,7 @@ pub fn record_error_async(category: &str, message: &str, context: Option<&str>) 
     // Capture owned copies for the non-async path
     let cat = category.to_string();
     let msg = message.to_string();
-    let ctx = context.map(|s| s.to_string());
+    let ctx = context.map(std::string::ToString::to_string);
 
     // Best-effort: silently absorb failures so error tracking never disrupts the app
     match crate::open_db_connection() {

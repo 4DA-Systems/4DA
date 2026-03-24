@@ -325,7 +325,7 @@ pub struct SourceQualityReport {
 /// Returns sources that have been fetched, with their relevance ratios.
 /// Sources below 5% relevance are flagged for potential replacement.
 pub fn compute_source_quality(conn: &Connection, lookback_days: i64) -> Vec<SourceQualityReport> {
-    let query = r#"
+    let query = r"
         SELECT
             source_type,
             COUNT(*) as total,
@@ -338,7 +338,7 @@ pub fn compute_source_quality(conn: &Connection, lookback_days: i64) -> Vec<Sour
         GROUP BY source_type
         HAVING total >= 5
         ORDER BY relevant * 1.0 / total ASC
-    "#;
+    ";
 
     let lookback = format!("-{lookback_days}");
     let mut stmt = match conn.prepare(query) {
@@ -464,10 +464,8 @@ fn compute_fallback_level(components: &[ComponentHealth]) -> u8 {
     let unhealthy = failed_count + degraded_count;
     if unhealthy >= 2 {
         2
-    } else if unhealthy >= 1 {
-        1
     } else {
-        0
+        u8::from(unhealthy >= 1)
     }
 }
 

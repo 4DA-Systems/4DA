@@ -57,8 +57,7 @@ pub(crate) fn generate_standing_query_suggestions(
                 suggestions.push(StandingQuerySuggestion {
                     topic: topic.clone(),
                     reason: format!(
-                        "You engaged with {} articles about this topic",
-                        positive_signals
+                        "You engaged with {positive_signals} articles about this topic"
                     ),
                     engagement_count: positive_signals,
                     query_type: "topic".to_string(),
@@ -112,9 +111,9 @@ pub(crate) fn generate_standing_query_suggestions(
                     }
 
                     let reason = if project_count > 1 {
-                        format!("Used in {} projects ({})", project_count, ecosystem)
+                        format!("Used in {project_count} projects ({ecosystem})")
                     } else {
-                        format!("Active dependency ({})", ecosystem)
+                        format!("Active dependency ({ecosystem})")
                     };
 
                     suggestions.push(StandingQuerySuggestion {

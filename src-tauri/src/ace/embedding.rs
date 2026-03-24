@@ -224,7 +224,7 @@ impl EmbeddingService {
         if self.config.provider == EmbeddingProvider::Mock {
             return texts.iter().map(|t| self.embed_mock(t)).collect();
         }
-        let owned: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
+        let owned: Vec<String> = texts.iter().map(std::string::ToString::to_string).collect();
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(crate::embed_texts(&owned))
         });
@@ -287,7 +287,7 @@ impl EmbeddingService {
                 Ok(Some(embedding))
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Cache lookup failed: {}", e).into()),
+            Err(e) => Err(format!("Cache lookup failed: {e}").into()),
         }
     }
 

@@ -115,12 +115,11 @@ fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize)
 
 #[tauri::command]
 pub async fn get_context_files() -> Result<Vec<ContextFile>> {
-    let context_dir = match get_context_dir() {
-        Some(dir) => dir,
-        None => {
-            debug!(target: "4da::context", "No context directory configured");
-            return Ok(vec![]);
-        }
+    let context_dir = if let Some(dir) = get_context_dir() {
+        dir
+    } else {
+        debug!(target: "4da::context", "No context directory configured");
+        return Ok(vec![]);
     };
     debug!(target: "4da::context", path = ?context_dir, "Reading context files (recursive, depth 3)");
 
@@ -148,8 +147,7 @@ pub async fn clear_context() -> Result<String> {
 
     info!(target: "4da::context", chunks_removed = cleared, "Context cleared successfully");
     Ok(format!(
-        "Context cleared successfully ({} chunks removed)",
-        cleared
+        "Context cleared successfully ({cleared} chunks removed)"
     ))
 }
 
@@ -269,13 +267,13 @@ pub async fn sync_awe_wisdom() -> Result<String> {
                 if let Some(text) = trimmed.split(']').nth(1) {
                     let text = text.trim();
                     if !text.is_empty() {
-                        let source = format!("awe://wisdom/{}", current_section);
+                        let source = format!("awe://wisdom/{current_section}");
                         let chunk_text = match current_section {
                             "principle" => {
-                                format!("Validated principle from decision history: {}", text)
+                                format!("Validated principle from decision history: {text}")
                             }
                             "anti-pattern" => {
-                                format!("Known anti-pattern from decision history: {}", text)
+                                format!("Known anti-pattern from decision history: {text}")
                             }
                             _ => text.to_string(),
                         };
@@ -317,7 +315,10 @@ pub async fn sync_awe_wisdom() -> Result<String> {
         ) {
             let stdout = String::from_utf8_lossy(&output.stdout);
             if let Ok(result) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                if let Some(found) = result.get("decisions_detected").and_then(|v| v.as_u64()) {
+                if let Some(found) = result
+                    .get("decisions_detected")
+                    .and_then(serde_json::Value::as_u64)
+                {
                     decisions_detected += found;
                 }
             }
@@ -332,8 +333,7 @@ pub async fn sync_awe_wisdom() -> Result<String> {
     );
 
     Ok(format!(
-        "AWE: {} wisdom chunks indexed, {} decisions detected",
-        wisdom_chunks, decisions_detected
+        "AWE: {wisdom_chunks} wisdom chunks indexed, {decisions_detected} decisions detected"
     ))
 }
 
@@ -467,9 +467,9 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
             "domain_concerns": [],
             "infrastructure_summary": format!(
                 "{} RAM, GPU: {}, {}",
-                profile.infrastructure.ram.get("total").map(|s| s.as_str()).unwrap_or("unknown"),
+                profile.infrastructure.ram.get("total").map_or("unknown", std::string::String::as_str),
                 profile.infrastructure.gpu_tier,
-                profile.infrastructure.os.get("name").map(|s| s.as_str()).unwrap_or("unknown OS"),
+                profile.infrastructure.os.get("name").map_or("unknown OS", std::string::String::as_str),
             ),
             "identity_summary": profile.identity_summary,
         });
@@ -501,7 +501,7 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
                             {
                                 let confidence = articulated
                                     .get("confidence")
-                                    .and_then(|c| c.as_f64())
+                                    .and_then(serde_json::Value::as_f64)
                                     .unwrap_or(0.5);
                                 let watch_for: Vec<String> = articulated
                                     .get("watch_for")
@@ -705,7 +705,7 @@ fn convert_windows_to_wsl_path(path: &str) -> String {
             .next()
             .unwrap_or('c');
         let rest = &path[2..].replace('\\', "/");
-        format!("/mnt/{}{}", drive, rest)
+        format!("/mnt/{drive}{rest}")
     } else {
         path.to_string()
     }
@@ -721,7 +721,7 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
         #[cfg(target_os = "linux")]
         let converted = convert_windows_to_wsl_path(dir);
         #[cfg(not(target_os = "linux"))]
-        let converted = dir.to_string();
+        let converted = dir.clone();
 
         if converted != *dir {
             debug!(target: "4da::context", from = dir, to = %converted, "Converted Windows path");

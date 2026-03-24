@@ -355,7 +355,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
                             let cat: String = row.get(0)?;
                             let key: String = row.get(1)?;
                             let val: String = row.get(2)?;
-                            Ok(format!("{}/{}: {}", cat, key, val))
+                            Ok(format!("{cat}/{key}: {val}"))
                         })
                         .map(|rows| {
                             for row in rows.flatten() {

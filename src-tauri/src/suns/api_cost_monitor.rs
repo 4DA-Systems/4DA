@@ -19,15 +19,14 @@ pub fn execute() -> SunResult {
     // Alert if approaching limit
     if cost_percentage > 80.0 {
         let alert_msg = format!(
-            "API cost at {:.0}% of daily limit ({}c / {}c)",
-            cost_percentage, cost_today, daily_limit
+            "API cost at {cost_percentage:.0}% of daily limit ({cost_today}c / {daily_limit}c)"
         );
         super::store_sun_alert("api_cost_monitor", "cost_warning", &alert_msg);
     }
 
     SunResult {
         success: true,
-        message: format!("Tokens today: {}, Cost: {}c", tokens_today, cost_today),
+        message: format!("Tokens today: {tokens_today}, Cost: {cost_today}c"),
         data: Some(serde_json::json!({
             "tokens_today": tokens_today,
             "cost_today_cents": cost_today,

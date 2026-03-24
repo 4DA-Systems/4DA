@@ -130,8 +130,7 @@ pub(crate) async fn generate_briefing_internal(
         .map(|(i, item)| {
             let explanation = explanations
                 .get(&item.id)
-                .map(|s| s.as_str())
-                .unwrap_or("No context match");
+                .map_or("No context match", std::string::String::as_str);
             format!(
                 "{}. [{}] {} (score: {:.0}%)\n   URL: {}\n   Why matched: {}",
                 i + 1,
@@ -224,13 +223,10 @@ Rules:
         Some(ref anomalies) if !anomalies.is_empty() => {
             let list = anomalies
                 .iter()
-                .map(|a| format!("  - {}", a))
+                .map(|a| format!("  - {a}"))
                 .collect::<Vec<_>>()
                 .join("\n");
-            format!(
-                "\n- Unresolved system anomalies (mention if relevant):\n{}",
-                list
-            )
+            format!("\n- Unresolved system anomalies (mention if relevant):\n{list}")
         }
         _ => String::new(),
     };
@@ -342,7 +338,7 @@ pub async fn generate_ai_briefing(app: tauri::AppHandle) -> Result<serde_json::V
     if let Ok(ref val) = result {
         if val
             .get("success")
-            .and_then(|v| v.as_bool())
+            .and_then(serde_json::Value::as_bool)
             .unwrap_or(false)
         {
             if let Ok(db) = crate::get_database() {

@@ -147,7 +147,7 @@ fn title_words(
         .to_lowercase()
         .split(|c: char| !c.is_alphanumeric() && c != '.' && c != '+')
         .filter(|w| w.len() >= 2 && !stop_words.contains(w))
-        .map(|w| w.to_string())
+        .map(std::string::ToString::to_string)
         .collect()
 }
 

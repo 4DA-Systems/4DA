@@ -242,7 +242,7 @@ pub(crate) fn compute_taste_embedding(
     if norm < f32::EPSILON {
         return None;
     }
-    for c in centroid.iter_mut() {
+    for c in &mut centroid {
         *c /= norm;
     }
 

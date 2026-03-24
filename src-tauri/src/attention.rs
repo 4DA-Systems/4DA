@@ -87,7 +87,7 @@ fn compute_topic_engagement(
              ORDER BY f.created_at DESC",
     )?;
 
-    let since = format!("-{} days", period_days);
+    let since = format!("-{period_days} days");
     let rows: Vec<(String, bool)> = stmt
         .query_map(rusqlite::params![since], |row| {
             let title: String = row.get(0)?;
@@ -185,8 +185,7 @@ fn identify_blind_spots(
         let engagement_level = engagement
             .iter()
             .find(|e| e.topic.to_lowercase() == topic_lower)
-            .map(|e| e.percent_of_total / 100.0)
-            .unwrap_or(0.0);
+            .map_or(0.0, |e| e.percent_of_total / 100.0);
 
         if engagement_level < 0.05 {
             let risk = if ct.source.contains("language") || ct.source.contains("framework") {
@@ -214,7 +213,7 @@ fn identify_blind_spots(
 }
 
 fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<TrendPoint>> {
-    let since = format!("-{} days", period_days);
+    let since = format!("-{period_days} days");
     let mut stmt = conn.prepare(
         "SELECT date(f.created_at) as d, si.title
              FROM feedback f

@@ -30,8 +30,8 @@ pub(crate) fn analyze_calibration(
         (max_age_days, max_age_days.saturating_sub(7))
     };
 
-    let window_start = format!("-{} days", window_start_days);
-    let window_end = format!("-{} days", window_end_days);
+    let window_start = format!("-{window_start_days} days");
+    let window_end = format!("-{window_end_days} days");
 
     debug!(
         target: "4da::autophagy",
@@ -191,7 +191,7 @@ pub(crate) fn load_calibration_deltas(conn: &Connection) -> HashMap<String, f32>
 
     for row in rows.flatten() {
         if let Ok(data) = serde_json::from_str::<serde_json::Value>(&row.1) {
-            if let Some(delta) = data.get("delta").and_then(|v| v.as_f64()) {
+            if let Some(delta) = data.get("delta").and_then(serde_json::Value::as_f64) {
                 result.insert(row.0, delta as f32);
             }
         }

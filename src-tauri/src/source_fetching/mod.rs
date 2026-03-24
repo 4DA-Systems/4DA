@@ -168,26 +168,38 @@ impl AdapterFailureTracker {
 
     /// Record a successful fetch, resetting the failure count for this adapter.
     pub fn record_success(&self, adapter_name: &str) {
-        let mut map = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self
+            .failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         map.insert(adapter_name.to_string(), 0);
     }
 
     /// Record a failed fetch, incrementing the failure count for this adapter.
     pub fn record_failure(&self, adapter_name: &str) {
-        let mut map = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self
+            .failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let count = map.entry(adapter_name.to_string()).or_insert(0);
         *count += 1;
     }
 
     /// Get the current consecutive failure count for an adapter.
     pub fn failure_count(&self, adapter_name: &str) -> u32 {
-        let map = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        let map = self
+            .failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         map.get(adapter_name).copied().unwrap_or(0)
     }
 
     /// Get all adapters that have persistent failures (2+ consecutive).
     pub fn persistent_failures(&self) -> Vec<(String, u32)> {
-        let map = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+        let map = self
+            .failures
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         map.iter()
             .filter(|(_, &count)| count >= 2)
             .map(|(name, &count)| (name.clone(), count))

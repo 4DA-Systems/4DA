@@ -57,9 +57,21 @@ pub fn get_stack_profiles() -> Vec<StackProfileSummary> {
         .map(|p| StackProfileSummary {
             id: p.id.to_string(),
             name: p.name.to_string(),
-            core_tech: p.core_tech.iter().map(|s| s.to_string()).collect(),
-            companions: p.companions.iter().map(|s| s.to_string()).collect(),
-            competing: p.competing.iter().map(|s| s.to_string()).collect(),
+            core_tech: p
+                .core_tech
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+            companions: p
+                .companions
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+            competing: p
+                .competing
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
             pain_point_count: p.pain_points.len(),
             ecosystem_shift_count: p.ecosystem_shifts.len(),
         })
@@ -79,7 +91,7 @@ pub fn set_selected_stacks(profile_ids: Vec<String>) -> Result<()> {
     // Validate all IDs exist
     for id in &profile_ids {
         if stacks::get_profile(id).is_none() {
-            return Err(format!("Unknown stack profile: {}", id).into());
+            return Err(format!("Unknown stack profile: {id}").into());
         }
     }
     let conn = crate::open_db_connection()?;
@@ -117,8 +129,16 @@ pub fn get_composed_stack() -> Result<ComposedStackSummary> {
             .iter()
             .map(|(&s, &v)| (s.to_string(), v))
             .collect(),
-        all_tech: composed.all_tech.iter().map(|s| s.to_string()).collect(),
-        competing: composed.competing.iter().map(|s| s.to_string()).collect(),
+        all_tech: composed
+            .all_tech
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
+        competing: composed
+            .competing
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
     })
 }
 

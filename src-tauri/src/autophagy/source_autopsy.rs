@@ -14,7 +14,7 @@ use crate::error::{Result, ResultExt};
 /// For each source_type, counts total items surfaced vs items that received positive
 /// feedback. This reveals source quality and helps the scoring pipeline weight sources.
 pub(crate) fn analyze_sources(conn: &Connection, max_age_days: i64) -> Vec<super::SourceAutopsy> {
-    let age_param = format!("-{} days", max_age_days);
+    let age_param = format!("-{max_age_days} days");
 
     // Count items per source_type within the retention window
     let mut item_stmt = match conn.prepare(
@@ -131,7 +131,7 @@ pub(crate) fn store_source_autopsies(
                 autopsy.items_surfaced,
             ],
         )
-        .with_context(|| format!("Failed to insert source autopsy for {}", subject))?;
+        .with_context(|| format!("Failed to insert source autopsy for {subject}"))?;
 
         let new_id = tx.last_insert_rowid();
 
@@ -142,7 +142,7 @@ pub(crate) fn store_source_autopsies(
              WHERE digest_type = 'source_autopsy' AND subject = ?2 AND superseded_by IS NULL AND id != ?1",
             params![new_id, subject],
         )
-        .with_context(|| format!("Failed to supersede source autopsy for {}", subject))?;
+        .with_context(|| format!("Failed to supersede source autopsy for {subject}"))?;
     }
 
     tx.commit().context("Failed to commit source autopsies")?;

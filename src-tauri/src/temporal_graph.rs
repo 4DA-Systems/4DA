@@ -191,7 +191,7 @@ pub(crate) fn build_adoption_curves(snapshots: &[TimelineSnapshot]) -> Vec<TechA
                 .map(|(p, _, _)| p.clone())
                 .unwrap_or_default();
             let weeks_active = history.len() as u32;
-            let current_confidence = history.last().map(|(_, c, _)| *c).unwrap_or(0.0);
+            let current_confidence = history.last().map_or(0.0, |(_, c, _)| *c);
             let engagement_history: Vec<f32> = history.iter().map(|(_, _, e)| *e).collect();
             let stage = adoption_stage(weeks_active, current_confidence).to_string();
 
@@ -361,7 +361,7 @@ pub fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
                 created_at: row.get(6)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     let curves = build_adoption_curves(&snapshots);

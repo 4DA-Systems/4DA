@@ -206,8 +206,8 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>>
 pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<PlaybookContent> {
     let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
-    let filename = module_id_to_filename(&module_id)
-        .ok_or_else(|| format!("Unknown module: {}", module_id))?;
+    let filename =
+        module_id_to_filename(&module_id).ok_or_else(|| format!("Unknown module: {module_id}"))?;
     let path = content_dir.join(filename);
 
     if !path.exists() {
@@ -226,7 +226,7 @@ pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<P
     let (_, title, desc, is_free) = MODULE_DEFS
         .iter()
         .find(|(id, _, _, _)| *id == module_id.as_str())
-        .ok_or_else(|| format!("Unknown module: {}", module_id))?;
+        .ok_or_else(|| format!("Unknown module: {module_id}"))?;
 
     Ok(PlaybookContent {
         module_id,

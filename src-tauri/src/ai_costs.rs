@@ -229,7 +229,7 @@ pub fn get_ai_usage_summary(period: Option<String>) -> crate::error::Result<serd
         "SELECT id, provider, model, task_type, tokens_in, tokens_out, estimated_cost_usd, created_at \
          FROM ai_usage WHERE created_at LIKE ?1 ORDER BY created_at DESC",
     )?;
-    let pattern = format!("{}%", p);
+    let pattern = format!("{p}%");
     let records: Vec<AiUsageRecord> = stmt
         .query_map(rusqlite::params![pattern], |row| {
             Ok(AiUsageRecord {
@@ -243,7 +243,7 @@ pub fn get_ai_usage_summary(period: Option<String>) -> crate::error::Result<serd
                 created_at: row.get(7)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     let summary = summarize_usage(&records, &p);
@@ -288,7 +288,7 @@ pub fn get_ai_cost_recommendation() -> crate::error::Result<serde_json::Value> {
                 created_at: row.get(7)?,
             })
         })?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     match generate_recommendation(&records) {

@@ -49,16 +49,25 @@ fn make_domain(
     deps: &[&str],
     interest_topics: &[&str],
 ) -> crate::domain_profile::DomainProfile {
-    let ps: HashSet<String> = primary.iter().map(|s| s.to_string()).collect();
-    let adj: HashSet<String> = adjacent.iter().map(|s| s.to_string()).collect();
+    let ps: HashSet<String> = primary
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
+    let adj: HashSet<String> = adjacent
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     let mut all = ps.clone();
     all.extend(adj.clone());
     crate::domain_profile::DomainProfile {
         primary_stack: ps,
         adjacent_tech: adj,
         all_tech: all,
-        dependency_names: deps.iter().map(|s| s.to_string()).collect(),
-        interest_topics: interest_topics.iter().map(|s| s.to_string()).collect(),
+        dependency_names: deps.iter().map(std::string::ToString::to_string).collect(),
+        interest_topics: interest_topics
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect(),
         domain_concerns: HashSet::new(),
     }
 }
@@ -80,7 +89,7 @@ pub fn persona_to_context(persona: &SimulatedPersona) -> ScoringContext {
         }
     }
 
-    let primary: Vec<&str> = persona.tech_stack.to_vec();
+    let primary: Vec<&str> = persona.tech_stack.clone();
     let adjacent: Vec<&str> = persona
         .expected_topics
         .iter()
@@ -99,7 +108,11 @@ pub fn persona_to_context(persona: &SimulatedPersona) -> ScoringContext {
         .map(|s| s.to_lowercase())
         .collect();
 
-    let exclusions: Vec<String> = persona.anti_topics.iter().map(|s| s.to_string()).collect();
+    let exclusions: Vec<String> = persona
+        .anti_topics
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
 
     ScoringContext::builder()
         .interest_count(persona.interests.len())

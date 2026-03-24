@@ -54,7 +54,7 @@ impl OfficeExtractor {
                         }
                         row_cells.push(cell_text.trim().to_string());
                     }
-                    if !row_cells.iter().all(|c| c.is_empty()) {
+                    if !row_cells.iter().all(std::string::String::is_empty) {
                         text_parts.push(row_cells.join(" | "));
                     }
                 }
@@ -91,12 +91,12 @@ impl OfficeExtractor {
         let mut metadata = HashMap::new();
         let mut pages: Vec<PageContent> = Vec::new();
 
-        let sheet_names = workbook.sheet_names().to_vec();
+        let sheet_names = workbook.sheet_names().clone();
         metadata.insert("sheet_count".to_string(), sheet_names.len().to_string());
 
         for (idx, sheet_name) in sheet_names.iter().enumerate() {
             let mut sheet_text: Vec<String> = Vec::new();
-            sheet_text.push(format!("=== Sheet: {} ===", sheet_name));
+            sheet_text.push(format!("=== Sheet: {sheet_name} ==="));
 
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
                 for row in range.rows() {
@@ -163,13 +163,13 @@ impl DocumentExtractor for OfficeExtractor {
         let ext = path
             .extension()
             .and_then(|e| e.to_str())
-            .map(|s| s.to_lowercase())
+            .map(str::to_lowercase)
             .ok_or_else(|| "File has no extension".to_string())?;
 
         match ext.as_str() {
             "docx" => self.extract_docx(path),
             "xlsx" => self.extract_xlsx(path),
-            _ => Err(format!("Unsupported Office format: {}", ext).into()),
+            _ => Err(format!("Unsupported Office format: {ext}").into()),
         }
     }
 }
@@ -201,15 +201,15 @@ fn cell_to_string(cell: &calamine::Data) -> String {
         Data::Float(f) => {
             // Format floats nicely (avoid unnecessary decimals)
             if f.fract() == 0.0 {
-                format!("{:.0}", f)
+                format!("{f:.0}")
             } else {
-                format!("{:.2}", f)
+                format!("{f:.2}")
             }
         }
         Data::Int(i) => i.to_string(),
         Data::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
-        Data::Error(e) => format!("#ERR:{:?}", e),
-        Data::DateTime(dt) => format!("{}", dt),
+        Data::Error(e) => format!("#ERR:{e:?}"),
+        Data::DateTime(dt) => format!("{dt}"),
         Data::DateTimeIso(s) => s.clone(),
         Data::DurationIso(s) => s.clone(),
     }
