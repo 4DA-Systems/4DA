@@ -52,7 +52,7 @@ interface SmartEmptyStateProps {
 export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
   const { t } = useTranslation();
   const key = useMemo(() => resolveStack(detectedStack), [detectedStack]);
-  const signals = stackSignals[key] || stackSignals.default;
+  const signals = (stackSignals[key] ?? stackSignals.default)!;
   const label = stackLabel(key);
 
   return (

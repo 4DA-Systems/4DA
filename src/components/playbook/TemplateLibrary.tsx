@@ -74,7 +74,7 @@ function TemplateCard({
     <button
       onClick={() => onOpen(template)}
       aria-label={`Open template: ${template.title}`}
-      className="w-full text-left bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-accent-gold/30 group"
+      className="w-full text-start bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-accent-gold/30 group"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <h4 className="text-sm font-semibold text-white group-hover:text-accent-gold transition-colors leading-snug">

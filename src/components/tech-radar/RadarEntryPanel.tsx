@@ -91,7 +91,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
 
   return (
     <div
-      className="fixed right-0 top-0 h-full w-80 z-50 border-l border-border bg-bg-secondary shadow-xl overflow-y-auto animate-slide-in"
+      className="fixed end-0 top-0 h-full w-80 z-50 border-s border-border bg-bg-secondary shadow-xl overflow-y-auto animate-slide-in"
       style={{ fontFamily: 'Inter, sans-serif' }}
     >
       {/* Header */}
@@ -125,7 +125,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
         <span style={{ color: mv.color }} className="text-sm">{mv.icon}</span>
         <span className="text-xs text-text-secondary">{t(mv.labelKey)}</span>
-        <span className="ml-auto text-xs font-mono text-text-muted">
+        <span className="ms-auto text-xs font-mono text-text-muted">
           {t('techRadar.score', { score: entry.score.toFixed(2) })}
         </span>
       </div>
@@ -147,7 +147,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
                   }}
                 />
               </div>
-              <span className="text-[10px] text-text-muted w-8 text-right font-mono">
+              <span className="text-[10px] text-text-muted w-8 text-end font-mono">
                 {(weight * 100).toFixed(0)}%
               </span>
             </div>

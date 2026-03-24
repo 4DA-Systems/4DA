@@ -31,7 +31,7 @@ export function FeedEchoBlock({ block }: Props) {
           Feed Signals Since Last Read
         </h4>
         {newCount > 0 && (
-          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-medium bg-accent-gold/15 text-accent-gold rounded-full">
+          <span className="ms-auto px-1.5 py-0.5 text-[10px] font-medium bg-accent-gold/15 text-accent-gold rounded-full">
             {t('playbook.feedEchoNewItems', { count: newCount })}
           </span>
         )}

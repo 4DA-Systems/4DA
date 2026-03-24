@@ -177,7 +177,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
         <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-cyan-400">📡</span>
         </div>
-        <div className="flex-1 text-left">
+        <div className="flex-1 text-start">
           <div className="flex items-center gap-2">
             <h3 className="text-white font-medium">{t('sources.title')}</h3>
             <span className="px-1.5 py-0.5 text-[10px] bg-cyan-500/20 text-cyan-400 rounded">
@@ -225,7 +225,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     <button
                       onClick={() => removeRssFeed(feed)}
                       aria-label={t('sources.rss.removeFeed', 'Remove feed')}
-                      className="text-text-muted hover:text-red-400 ml-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
+                      className="text-text-muted hover:text-red-400 ms-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
                     >
                       x
                     </button>
@@ -241,7 +241,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
           <div>
             <label className="text-xs text-text-secondary block mb-2">
               {t('sources.youtube.label')}
-              <span className="text-text-muted ml-1">{t('sources.youtube.noKeyNeeded')}</span>
+              <span className="text-text-muted ms-1">{t('sources.youtube.noKeyNeeded')}</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -288,7 +288,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
           <div>
             <label className="text-xs text-text-secondary block mb-2">
               {t('sources.github.label')}
-              <span className="text-text-muted ml-1">{t('sources.github.trendingFilter')}</span>
+              <span className="text-text-muted ms-1">{t('sources.github.trendingFilter')}</span>
             </label>
             <div className="flex gap-2 mb-2">
               <input
@@ -330,9 +330,9 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
             <label className="text-xs text-text-secondary block mb-2">
               {t('sources.twitter.label')}
               {hasXApiKey ? (
-                <span className="text-green-400 ml-1">{t('sources.twitter.keySet')}</span>
+                <span className="text-green-400 ms-1">{t('sources.twitter.keySet')}</span>
               ) : (
-                <span className="text-yellow-400 ml-1">{t('sources.twitter.needsKey')}</span>
+                <span className="text-yellow-400 ms-1">{t('sources.twitter.needsKey')}</span>
               )}
             </label>
             <div className="flex gap-2 mb-2">

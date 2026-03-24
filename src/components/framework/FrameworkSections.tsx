@@ -135,19 +135,19 @@ export function PasifaSection() {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-text-muted border-b border-border/50">
-              <th className="text-left py-2 font-medium">Confirming Axes</th>
-              <th className="text-right py-2 font-medium">Multiplier</th>
-              <th className="text-right py-2 font-medium">Ceiling</th>
-              <th className="text-right py-2 font-medium">Outcome</th>
+              <th className="text-start py-2 font-medium">Confirming Axes</th>
+              <th className="text-end py-2 font-medium">Multiplier</th>
+              <th className="text-end py-2 font-medium">Ceiling</th>
+              <th className="text-end py-2 font-medium">Outcome</th>
             </tr>
           </thead>
           <tbody>
             {GATE_TABLE.map(({ axes, mult, ceiling }) => (
               <tr key={axes} className="border-b border-border/20">
                 <td className="py-1.5 text-text-secondary">{axes}</td>
-                <td className="py-1.5 text-right font-mono text-text-secondary">{mult.toFixed(2)}</td>
-                <td className="py-1.5 text-right font-mono text-text-secondary">{ceiling.toFixed(2)}</td>
-                <td className="py-1.5 text-right">
+                <td className="py-1.5 text-end font-mono text-text-secondary">{mult.toFixed(2)}</td>
+                <td className="py-1.5 text-end font-mono text-text-secondary">{ceiling.toFixed(2)}</td>
+                <td className="py-1.5 text-end">
                   {axes < 2 ? <span className="text-red-400">Rejected</span>
                     : axes < 4 ? <span className="text-amber-400">Confirmed</span>
                     : <span className="text-green-400">Strong</span>}
@@ -173,7 +173,7 @@ export function PasifaSection() {
             <span className="text-xs font-mono text-text-muted w-4 flex-shrink-0">{phase}</span>
             <div>
               <span className="text-sm text-white">{name}</span>
-              <span className="text-xs text-text-muted ml-2">{desc}</span>
+              <span className="text-xs text-text-muted ms-2">{desc}</span>
             </div>
           </div>
         ))}
@@ -231,7 +231,7 @@ export function AuthoritySection() {
             <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded flex-shrink-0">{id}</span>
             <div>
               <span className="text-sm text-white">{name}</span>
-              <span className="text-xs text-text-muted ml-1">— {desc}</span>
+              <span className="text-xs text-text-muted ms-1">— {desc}</span>
             </div>
           </div>
         ))}
@@ -262,17 +262,17 @@ export function AosSection() {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-text-muted border-b border-border/50">
-              <th className="text-left py-2 font-medium">Component</th>
-              <th className="text-right py-2 font-medium">Weight</th>
-              <th className="text-left py-2 pl-4 font-medium">Measures</th>
+              <th className="text-start py-2 font-medium">Component</th>
+              <th className="text-end py-2 font-medium">Weight</th>
+              <th className="text-start py-2 ps-4 font-medium">Measures</th>
             </tr>
           </thead>
           <tbody>
             {SOVEREIGNTY_COMPONENTS.map(({ name, weight, measures }) => (
               <tr key={name} className="border-b border-border/20">
                 <td className="py-1.5 text-text-secondary">{name}</td>
-                <td className="py-1.5 text-right font-mono text-text-secondary">{weight}</td>
-                <td className="py-1.5 pl-4 text-text-muted">{measures}</td>
+                <td className="py-1.5 text-end font-mono text-text-secondary">{weight}</td>
+                <td className="py-1.5 ps-4 text-text-muted">{measures}</td>
               </tr>
             ))}
           </tbody>

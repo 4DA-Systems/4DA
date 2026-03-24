@@ -29,10 +29,10 @@ const popularEndpoints: { name: string; url: string }[] = [
 
 /** Get models for a provider from registry, falling back to hardcoded defaults. */
 function getProviderModels(provider: string, registry: ModelRegistryData | null | undefined): string[] {
-  if (registry && registry.providers[provider]?.length > 0) {
-    return registry.providers[provider].map(m => m.id);
+  if (registry && registry.providers[provider]?.length) {
+    return registry.providers[provider]!.map(m => m.id);
   }
-  return fallbackModels[provider] || [];
+  return fallbackModels[provider] ?? [];
 }
 
 /** Format registry freshness as human-readable string. */
@@ -186,8 +186,8 @@ export function AIProviderSection({
                   : newProvider === 'openai-compatible'
                     ? ''
                     : newProvider === 'ollama' && ollamaModels.length > 0
-                      ? ollamaModels[0]
-                      : registryModels[0] || '';
+                      ? ollamaModels[0] ?? ''
+                      : registryModels[0] ?? '';
                 setSettingsForm((f) => ({
                   ...f,
                   provider: newProvider,

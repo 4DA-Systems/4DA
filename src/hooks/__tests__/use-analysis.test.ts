@@ -68,9 +68,9 @@ describe('useAnalysis — core pipeline', () => {
       .slice(0, NEAR_MISS_LIMIT);
 
     expect(nearMisses).toHaveLength(3);
-    expect(nearMisses[0].top_score).toBe(0.45);
-    expect(nearMisses[1].top_score).toBe(0.30);
-    expect(nearMisses[2].top_score).toBe(0.25);
+    expect(nearMisses[0]!.top_score).toBe(0.45);
+    expect(nearMisses[1]!.top_score).toBe(0.30);
+    expect(nearMisses[2]!.top_score).toBe(0.25);
   });
 
   it('near misses null when 3+ relevant results', () => {
@@ -97,9 +97,9 @@ describe('useAnalysis — core pipeline', () => {
       { top_score: 0.30, relevant: false },
     ];
     const sorted = [...items].sort((a, b) => b.top_score - a.top_score);
-    expect(sorted[0].top_score).toBe(0.45);
-    expect(sorted[1].top_score).toBe(0.30);
-    expect(sorted[2].top_score).toBe(0.25);
+    expect(sorted[0]!.top_score).toBe(0.45);
+    expect(sorted[1]!.top_score).toBe(0.30);
+    expect(sorted[2]!.top_score).toBe(0.25);
   });
 
   it('near misses capped at NEAR_MISS_LIMIT of 5', () => {
@@ -120,7 +120,7 @@ describe('useAnalysis — core pipeline', () => {
 
     expect(nearMisses).toHaveLength(5);
     // Should be the 5 highest-scoring items
-    expect(nearMisses[0].top_score).toBe(0.65);
+    expect(nearMisses[0]!.top_score).toBe(0.65);
   });
 
   it('progress updates store via setAppStateFull', () => {

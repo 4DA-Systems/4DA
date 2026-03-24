@@ -48,7 +48,7 @@ export function DeveloperDnaSection() {
         }}
         aria-expanded={expanded}
         aria-label={t('profile.toggleDna')}
-        className="flex items-center gap-2 w-full text-left group"
+        className="flex items-center gap-2 w-full text-start group"
       >
         <span className={`text-text-muted text-xs transition-transform ${expanded ? 'rotate-90' : ''}`}>&#9654;</span>
         <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider group-hover:text-text-secondary transition-colors">
@@ -84,7 +84,7 @@ export function DeveloperDnaSection() {
                     <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                       <div className="h-full bg-white/20 rounded-full" style={{ width: `${Math.min(100, topic.percent_of_total)}%` }} />
                     </div>
-                    <span className="text-[10px] text-text-muted w-8 text-right">{topic.percent_of_total.toFixed(0)}%</span>
+                    <span className="text-[10px] text-text-muted w-8 text-end">{topic.percent_of_total.toFixed(0)}%</span>
                   </div>
                 ))}
               </div>
@@ -122,9 +122,9 @@ export function DeveloperDnaSection() {
 
           {/* Stats */}
           <div className="flex gap-6 pt-2 border-t border-border/50">
-            <div><span className="text-xs text-white">{dna.stats.project_count}</span><span className="text-[10px] text-text-muted ml-1">{t('profile.projects')}</span></div>
-            <div><span className="text-xs text-white">{dna.stats.dependency_count}</span><span className="text-[10px] text-text-muted ml-1">{t('profile.deps')}</span></div>
-            <div><span className="text-xs text-white">{dna.stats.rejection_rate.toFixed(1)}%</span><span className="text-[10px] text-text-muted ml-1">{t('profile.filtered')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.project_count}</span><span className="text-[10px] text-text-muted ms-1">{t('profile.projects')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.dependency_count}</span><span className="text-[10px] text-text-muted ms-1">{t('profile.deps')}</span></div>
+            <div><span className="text-xs text-white">{dna.stats.rejection_rate.toFixed(1)}%</span><span className="text-[10px] text-text-muted ms-1">{t('profile.filtered')}</span></div>
           </div>
         </div>
       )}

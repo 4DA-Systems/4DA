@@ -116,7 +116,7 @@ export function WebhookDocsPanel() {
             <div key={evt.event} className="bg-bg-primary rounded-lg border border-border/50 overflow-hidden">
               <button
                 onClick={() => setExpandedEvent(expandedEvent === evt.event ? null : evt.event)}
-                className="w-full px-3 py-2 flex items-center justify-between hover:bg-bg-tertiary/30 transition-colors text-left"
+                className="w-full px-3 py-2 flex items-center justify-between hover:bg-bg-tertiary/30 transition-colors text-start"
                 aria-expanded={expandedEvent === evt.event}
               >
                 <code className="text-xs text-accent-gold font-mono">{evt.event}</code>

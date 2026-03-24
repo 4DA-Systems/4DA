@@ -23,7 +23,7 @@ export const ConfidenceIndicator = ({ confidence }: ConfidenceIndicatorProps) =>
   const { text, className } = formatConfidence(confidence);
 
   return (
-    <span className={`confidence-indicator ${className} text-xs text-text-muted ml-1 opacity-70`}>
+    <span className={`confidence-indicator ${className} text-xs text-text-muted ms-1 opacity-70`}>
       {text}
     </span>
   );
