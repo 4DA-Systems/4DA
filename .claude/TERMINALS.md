@@ -17,3 +17,12 @@
 - **Files**: list of files being modified
 -->
 
+### T1 — Proactive intelligence hardening + launch pipeline
+- **Status**: working
+- **Since**: 2026-03-25T13:00:00Z
+- **Files**:
+  - Wave 1: .github/workflows/release.yml, paddle-webhook/*, docs/LAUNCH-PIPELINE.md, docs/SHOW-HN-DRAFT.md, docs/PROACTIVE-INTELLIGENCE-PLAN.md, .claude/commands/swans.md
+  - Wave 2: src/components/first-run/FirstRunTransition.tsx, src-tauri/src/scoring/pipeline.rs
+  - Wave 3: mcp-4da-server/src/tools/what-should-i-know.ts
+  - Wave 4: src-tauri/src/signal_chains.rs, src-tauri/src/decision_advantage/windows.rs
+
