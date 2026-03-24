@@ -623,6 +623,7 @@ fn classify_signals(
     input: &ScoringInput,
     ctx: &ScoringContext,
     matched_deps: &[dependencies::DepMatch],
+    db: &Database,
 ) -> (
     Option<String>,
     Option<String>,
@@ -646,13 +647,15 @@ fn classify_signals(
         return (None, None, None, None, None);
     };
 
+    let topics = crate::extract_topics(input.title, input.content);
+    let corroboration = super::pipeline::build_corroboration(db, &topics, matched_deps);
     match clf.classify(
         input.title,
         input.content,
         combined_score,
         &ctx.declared_tech,
         &ctx.ace_ctx.detected_tech,
-        &crate::signals::CorroborationContext::default(),
+        &corroboration,
     ) {
         Some(mut c) => {
             // Dependency-aware priority escalation
@@ -920,6 +923,7 @@ pub(crate) fn score_item(
         input,
         ctx,
         &raw.matched_deps,
+        db,
     );
 
     // ── Necessity scoring ─────────────────────────────────────────────

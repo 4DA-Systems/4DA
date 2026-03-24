@@ -172,6 +172,67 @@ html, body {
 }
 
 /* ========================================================================
+   Escalating Chains Section
+   ======================================================================== */
+
+.chains-section {
+  margin-bottom: 8px;
+}
+
+.chains-header {
+  color: #EF4444;
+  border-bottom-color: rgba(239, 68, 68, 0.2);
+}
+
+.chain-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.04);
+}
+
+.chain-row:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.chain-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #FFFFFF;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chain-phase {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #EF4444;
+  padding: 1px 6px;
+  background: rgba(239, 68, 68, 0.15);
+  border-radius: 3px;
+}
+
+.chain-links,
+.chain-confidence {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #8A8A8A;
+}
+
+.chain-action {
+  font-size: 11px;
+  color: #A0A0A0;
+  padding: 2px 8px 6px 24px;
+}
+
+/* ========================================================================
    Item Row
    ======================================================================== */
 

@@ -12,6 +12,8 @@ var card = document.getElementById('card');
 var gameLayer = document.getElementById('game-layer');
 var briefingTitle = document.getElementById('briefing-title');
 var itemsList = document.getElementById('items-list');
+var chainsSection = document.getElementById('chains-section');
+var chainsList = document.getElementById('chains-list');
 var gapsSection = document.getElementById('gaps-section');
 var gapsList = document.getElementById('gaps-list');
 var ongoingSection = document.getElementById('ongoing-section');
@@ -140,10 +142,40 @@ function buildGapsHtml(gaps) {
   return html;
 }
 
+/** Build escalating chain HTML. */
+function buildChainsHtml(chains) {
+  var html = '';
+  for (var i = 0; i < chains.length; i++) {
+    var chain = chains[i];
+    var name = escapeHtml(truncate(chain.name, 60));
+    var phase = escapeHtml(chain.phase || 'active');
+    var links = chain.link_count || 0;
+    var action = escapeHtml(truncate(chain.action, 120));
+    var conf = chain.confidence != null ? Math.round(chain.confidence * 100) + '%' : '';
+    html += '<div class="chain-row priority-' + phase + '">'
+      + '<span class="priority-dot ' + (phase === 'peak' ? 'critical' : 'alert') + '"></span>'
+      + '<span class="chain-name">' + name + '</span>'
+      + '<span class="chain-phase">' + phase.toUpperCase() + '</span>'
+      + '<span class="chain-links">' + links + ' signals</span>'
+      + (conf ? '<span class="chain-confidence">' + conf + '</span>' : '')
+      + '</div>'
+      + (action ? '<div class="chain-action">' + action + '</div>' : '');
+  }
+  return html;
+}
+
 /** Render the full briefing from the data payload. */
 function renderBriefing(data) {
   // Header title
   briefingTitle.textContent = data.title || '4DA Intelligence Briefing';
+
+  // Escalating chains (top-level, before items)
+  if (data.escalating_chains && data.escalating_chains.length > 0) {
+    chainsSection.style.display = '';
+    chainsList.innerHTML = buildChainsHtml(data.escalating_chains);
+  } else {
+    chainsSection.style.display = 'none';
+  }
 
   // Items
   if (!data.items || data.items.length === 0) {
