@@ -6,9 +6,9 @@
 use crate::error::{FourDaError, Result};
 use crate::playbook_commands;
 use crate::toolkit;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use parking_lot::Mutex;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 

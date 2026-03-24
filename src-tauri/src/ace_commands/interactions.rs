@@ -52,6 +52,8 @@ pub async fn ace_record_interaction(
             ace::BehaviorAction::Scroll { visible_seconds }
         }
         "ignore" => ace::BehaviorAction::Ignore,
+        "briefing_click" => ace::BehaviorAction::BriefingClick,
+        "briefing_dismiss" => ace::BehaviorAction::BriefingDismiss,
         _ => return Err(format!("Unknown action type: {action_type}").into()),
     };
 

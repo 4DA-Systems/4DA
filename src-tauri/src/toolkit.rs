@@ -5,10 +5,10 @@
 //! All commands are Tauri-invocable from the frontend Toolkit view.
 
 use crate::error::{FourDaError, Result};
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::process::Command;
-use parking_lot::Mutex;
 use tracing::debug;
 
 // ============================================================================

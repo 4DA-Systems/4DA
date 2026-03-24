@@ -10,6 +10,89 @@ use crate::{
 
 use super::*;
 
+/// Build a real CorroborationContext from the database for a given item.
+///
+/// Queries:
+/// 1. How many distinct source types have items about similar topics in the last 72 hours
+/// 2. Whether any matched dependency confirms the signal
+/// 3. Whether any open signal chain covers this topic and its current phase
+pub(super) fn build_corroboration(
+    db: &Database,
+    topics: &[String],
+    matched_deps: &[dependencies::DepMatch],
+) -> signals::CorroborationContext {
+    if topics.is_empty() {
+        return signals::CorroborationContext::default();
+    }
+
+    // 1. Count distinct source types with items about the same topics in last 72 hours
+    let source_count = {
+        let conn = db.conn.lock();
+        let topic_like_clauses: Vec<String> = topics
+            .iter()
+            .take(5) // Limit to top 5 topics for query performance
+            .map(|t| {
+                format!(
+                    "LOWER(title) LIKE '%{}%'",
+                    t.to_lowercase().replace('\'', "''")
+                )
+            })
+            .collect();
+
+        if topic_like_clauses.is_empty() {
+            1_usize
+        } else {
+            let where_clause = topic_like_clauses.join(" OR ");
+            let query = format!(
+                "SELECT COUNT(DISTINCT source_type) FROM source_items \
+                 WHERE created_at >= datetime('now', '-3 days') AND ({})",
+                where_clause
+            );
+            conn.query_row(&query, [], |row| row.get::<_, i64>(0))
+                .unwrap_or(1) as usize
+        }
+    };
+
+    // 2. Dependency match — already computed by the pipeline
+    let dependency_match = !matched_deps.is_empty() && matched_deps.iter().any(|d| !d.is_dev);
+
+    // 3. Signal chain phase — detect if topics appear across multiple days
+    //    (lightweight chain detection without the full detect_chains() machinery)
+    let chain_phase = {
+        let conn = db.conn.lock();
+        let mut phase: Option<String> = None;
+        for topic in topics.iter().take(3) {
+            let topic_lower = topic.to_lowercase();
+            // Count distinct days this topic has appeared in source items (last 7 days)
+            let day_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(DISTINCT DATE(created_at)) FROM source_items \
+                     WHERE created_at >= datetime('now', '-7 days') AND LOWER(title) LIKE ?1",
+                    rusqlite::params![format!("%{}%", topic_lower)],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
+            if day_count >= 4 {
+                phase = Some("peak".to_string());
+                break;
+            } else if day_count >= 3 {
+                phase = Some("escalating".to_string());
+                break;
+            } else if day_count >= 2 && phase.is_none() {
+                phase = Some("active".to_string());
+            }
+        }
+        phase
+    };
+
+    signals::CorroborationContext {
+        source_count,
+        dependency_match,
+        chain_phase,
+    }
+}
+
 /// Input data for scoring a single item
 pub(crate) struct ScoringInput<'a> {
     pub id: u64,
@@ -606,13 +689,14 @@ pub(crate) fn score_item(
         && !show_and_tell_blocked
     {
         if let Some(clf) = classifier {
+            let corroboration = build_corroboration(db, &topics, &matched_deps);
             match clf.classify(
                 input.title,
                 input.content,
                 combined_score,
                 &ctx.declared_tech,
                 &ctx.ace_ctx.detected_tech,
-                &crate::signals::CorroborationContext::default(),
+                &corroboration,
             ) {
                 Some(mut c) => {
                     // Dependency-aware priority escalation:
