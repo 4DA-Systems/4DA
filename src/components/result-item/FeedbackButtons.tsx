@@ -86,7 +86,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         {feedback === 'save' ? `\u2713 ${t('feedback.saved')}` : t('action.save')}
         {sessionSaveCount != null && sessionSaveCount > 0 && (
           <span
-            className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 text-[10px] leading-4 text-center bg-success text-white rounded-full font-mono"
+            className="absolute -top-1.5 -end-1.5 min-w-[16px] h-4 px-1 text-[10px] leading-4 text-center bg-success text-white rounded-full font-mono"
             aria-label={t('feedback.sessionSaves', { count: sessionSaveCount, defaultValue: '{{count}} saved this session' })}
           >
             {sessionSaveCount}

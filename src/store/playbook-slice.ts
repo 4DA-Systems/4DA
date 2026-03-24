@@ -110,7 +110,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
       // Trigger LLM hydration for any lessons that need it
       for (let i = 0; i < lessons.length; i++) {
-        if (lessons[i].depth.llm_pending) {
+        if (lessons[i]!.depth.llm_pending) {
           cmd('hydrate_lesson_with_llm', { moduleId, lessonIdx: i }).catch((e) => {
             console.warn('LLM hydration failed (non-fatal):', e);
           });

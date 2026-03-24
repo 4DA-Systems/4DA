@@ -83,7 +83,7 @@ export function PolicyEditor() {
             >
               <div className="flex-1">
                 <span className="text-xs text-white">{label}</span>
-                <span className="text-[10px] text-text-muted ml-2">
+                <span className="text-[10px] text-text-muted ms-2">
                   ({t('enterprise.policies.default', 'default')}: {defaultDays === 0 ? 'unlimited' : `${defaultDays}d`})
                 </span>
               </div>

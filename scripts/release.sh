@@ -33,7 +33,7 @@ step_elapsed() {
 }
 
 # ── State tracking ───────────────────────────────────────────────────────────
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 HARD_FAILS=0
 WARNINGS=0
 RUST_TEST_COUNT=0
@@ -203,9 +203,33 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 5: Sovereignty score
+# STEP 5: E2E tests (Playwright)
 # ─────────────────────────────────────────────────────────────────────────────
-step 5 "Sovereignty score check"
+step 5 "E2E tests (Playwright)"
+step_start
+
+# NOTE: The Playwright config auto-starts the Vite dev server (pnpm run dev)
+# via its webServer option. If the dev server is already running on :4444 it
+# will be reused. In CI (CI=true), reuseExistingServer is disabled.
+E2E_EXIT=0
+E2E_OUTPUT=$(pnpm run test:e2e 2>&1) || E2E_EXIT=$?
+
+if [ "$E2E_EXIT" -eq 0 ]; then
+  E2E_PASSED=$(echo "$E2E_OUTPUT" | grep -oP '\d+ passed' | head -1 || true)
+  pass "E2E tests: ${E2E_PASSED:-passed}"
+  record_pass "E2E tests: ${E2E_PASSED:-passed}"
+else
+  fail "E2E tests failed (exit code $E2E_EXIT)"
+  echo "$E2E_OUTPUT" | grep -iE "fail|error|✘" | tail -15 || true
+  record_fail "E2E tests"
+fi
+
+step_elapsed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 6: Sovereignty score
+# ─────────────────────────────────────────────────────────────────────────────
+step 6 "Sovereignty score check"
 step_start
 
 if [ -f "$OPS_STATE" ]; then
@@ -230,9 +254,9 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 6: Cadence check
+# STEP 7: Cadence check
 # ─────────────────────────────────────────────────────────────────────────────
-step 6 "Cadence freshness check"
+step 7 "Cadence freshness check"
 step_start
 
 if [ -f "$OPS_STATE" ]; then
@@ -281,9 +305,9 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 7: Version consistency
+# STEP 8: Version consistency
 # ─────────────────────────────────────────────────────────────────────────────
-step 7 "Version consistency"
+step 8 "Version consistency"
 step_start
 
 CARGO_VER=$(grep '^version' src-tauri/Cargo.toml | head -1 | cut -d'"' -f2)
@@ -317,9 +341,9 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 8: Build artifacts
+# STEP 9: Build artifacts
 # ─────────────────────────────────────────────────────────────────────────────
-step 8 "Build artifacts (tauri build)"
+step 9 "Build artifacts (tauri build)"
 step_start
 
 BUILD_EXIT=0
@@ -353,9 +377,9 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 9: Record test counts
+# STEP 10: Record test counts
 # ─────────────────────────────────────────────────────────────────────────────
-step 9 "Record test counts"
+step 10 "Record test counts"
 step_start
 
 TOTAL_TESTS=$((RUST_TEST_COUNT + FRONTEND_TEST_COUNT))

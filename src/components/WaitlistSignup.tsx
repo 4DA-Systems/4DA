@@ -155,7 +155,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
           {onClose && (
             <button
               onClick={onClose}
-              className="absolute top-4 right-4 p-1 text-text-muted hover:text-white transition-colors rounded-lg hover:bg-white/5"
+              className="absolute top-4 end-4 p-1 text-text-muted hover:text-white transition-colors rounded-lg hover:bg-white/5"
               aria-label="Close"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -168,7 +168,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
             <div className="w-10 h-10 rounded-lg bg-accent-gold/10 flex items-center justify-center text-accent-gold shrink-0 mt-0.5">
               {config.icon}
             </div>
-            <div className="pr-6">
+            <div className="pe-6">
               <div className="flex items-center gap-2.5">
                 <h2 className="text-lg font-semibold text-white">4DA {config.name}</h2>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-gold/10 text-accent-gold font-semibold uppercase tracking-wider">
@@ -200,7 +200,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
                 <button
                   type="button"
                   onClick={() => setExpandedFeature(expandedFeature === i ? null : i)}
-                  className="w-full flex items-start gap-2.5 py-1.5 text-left group"
+                  className="w-full flex items-start gap-2.5 py-1.5 text-start group"
                 >
                   <span className="text-success text-xs mt-0.5 shrink-0 font-mono">+</span>
                   <span className="text-[13px] text-[#C0C0C0] group-hover:text-white transition-colors">
@@ -208,7 +208,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
                   </span>
                 </button>
                 {expandedFeature === i && feature.detail && (
-                  <p className="ml-5 pb-2 text-xs text-text-muted leading-relaxed">
+                  <p className="ms-5 pb-2 text-xs text-text-muted leading-relaxed">
                     {feature.detail}
                   </p>
                 )}

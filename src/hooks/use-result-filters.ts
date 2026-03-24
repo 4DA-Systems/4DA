@@ -10,7 +10,7 @@ async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Prom
     while (index < tasks.length) {
       const i = index++;
       try {
-        results[i] = { status: 'fulfilled', value: await tasks[i]() };
+        results[i] = { status: 'fulfilled', value: await tasks[i]!() };
       } catch (reason) {
         results[i] = { status: 'rejected', reason };
       }
@@ -29,7 +29,7 @@ function normalizeUrl(url: string | null | undefined): string | null {
     let u = url.toLowerCase().trim();
     u = u.replace(/^https?:\/\//, '').replace(/^www\./, '');
     // Remove query params and fragment
-    u = u.split('?')[0].split('#')[0];
+    u = u.split('?')[0]!.split('#')[0]!;
     // Remove trailing slash
     u = u.replace(/\/+$/, '');
     return u;
@@ -104,7 +104,7 @@ export const useResultFilters = () => {
     for (const group of urlGroups.values()) {
       // Sort by score desc, pick best
       group.sort((a, b) => b.top_score - a.top_score);
-      const best = { ...group[0] };
+      const best = { ...group[0]! };
       if (group.length > 1) {
         best.seen_on = [...new Set(group.map(g => g.source_type || 'hackernews'))];
       }

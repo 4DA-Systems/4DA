@@ -28,9 +28,9 @@ export const ChannelCard = memo(function ChannelCard({ channel, active, onClick 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left p-3 rounded-lg border transition-all ${
+      className={`w-full text-start p-3 rounded-lg border transition-all ${
         active
-          ? 'bg-bg-secondary border-cyan-500/50 border-l-2 border-l-cyan-500'
+          ? 'bg-bg-secondary border-cyan-500/50 border-s-2 border-s-cyan-500'
           : 'bg-bg-secondary border-border hover:border-[#3A3A3A]'
       }`}
       aria-current={active ? 'true' : undefined}

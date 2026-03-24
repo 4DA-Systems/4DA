@@ -173,7 +173,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               <button key={tabId} id={`tab-${tabId}`} role="tab" aria-selected={activeTab === tabId} aria-controls={`tabpanel-${tabId}`} onClick={() => handleTabChange(tabId)}
                 className={`px-4 py-3 text-sm transition-all relative ${activeTab === tabId ? 'text-orange-400 font-medium' : 'text-text-muted hover:text-text-secondary'}`}>
                 {t(`settings.tabs.${tabId}`)}
-                {activeTab === tabId && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />}
+                {activeTab === tabId && <span className="absolute bottom-0 start-0 end-0 h-0.5 bg-orange-500" />}
               </button>
             ))}
           </div>

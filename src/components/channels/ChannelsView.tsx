@@ -42,7 +42,7 @@ export function ChannelsView() {
   // Auto-select first channel if none active
   useEffect(() => {
     if (channels.length > 0 && !activeChannelId) {
-      selectChannel(channels[0].id);
+      selectChannel(channels[0]!.id);
     }
   }, [channels, activeChannelId, selectChannel]);
 

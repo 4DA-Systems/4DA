@@ -47,8 +47,8 @@ describe('useToasts', () => {
     });
 
     expect(result.current.toasts).toHaveLength(1);
-    expect(result.current.toasts[0].message).toBe('Test message');
-    expect(result.current.toasts[0].type).toBe('success');
+    expect(result.current.toasts[0]!.message).toBe('Test message');
+    expect(result.current.toasts[0]!.type).toBe('success');
   });
 
   it('removes toast via removeToast', () => {
@@ -58,7 +58,7 @@ describe('useToasts', () => {
       result.current.addToast('info', 'Removable toast');
     });
 
-    const id = result.current.toasts[0].id;
+    const id = result.current.toasts[0]!.id;
 
     act(() => {
       result.current.removeToast(id);

@@ -41,9 +41,9 @@ function ComparisonTable({ rows, competitorName, featureLabel, fourdaLabel }: { 
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border">
-            <th className="text-left py-2.5 px-4 font-medium text-text-muted">{featureLabel}</th>
-            <th className="text-left py-2.5 px-4 font-medium text-orange-400 w-2/5">{fourdaLabel}</th>
-            <th className="text-left py-2.5 px-4 font-medium text-text-secondary w-2/5">{competitorName}</th>
+            <th className="text-start py-2.5 px-4 font-medium text-text-muted">{featureLabel}</th>
+            <th className="text-start py-2.5 px-4 font-medium text-orange-400 w-2/5">{fourdaLabel}</th>
+            <th className="text-start py-2.5 px-4 font-medium text-text-secondary w-2/5">{competitorName}</th>
           </tr>
         </thead>
         <tbody>
@@ -82,7 +82,7 @@ function OverviewSection() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2.5 px-3 font-medium text-text-muted">{t('comparison.feature')}</th>
+              <th className="text-start py-2.5 px-3 font-medium text-text-muted">{t('comparison.feature')}</th>
               <th className="text-center py-2.5 px-2 font-medium text-orange-400">4DA</th>
               <th className="text-center py-2.5 px-2 font-medium text-text-muted">{t('comparison.feedly')}</th>
               <th className="text-center py-2.5 px-2 font-medium text-text-muted">{t('comparison.perplexity')}</th>
@@ -339,12 +339,12 @@ export const ComparisonPage = memo(function ComparisonPage({ onClose }: Comparis
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <nav className="w-48 border-r border-border p-4 space-y-1 flex-shrink-0" aria-label="Competitors">
+        <nav className="w-48 border-e border-border p-4 space-y-1 flex-shrink-0" aria-label="Competitors">
           {COMPETITORS.map(({ id, name, desc }) => (
             <button
               key={id}
               onClick={() => setActiveCompetitor(id)}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-all ${
+              className={`w-full text-start px-3 py-2 rounded-lg transition-all ${
                 activeCompetitor === id
                   ? 'bg-orange-500/15 text-orange-400 font-medium'
                   : 'text-text-muted hover:text-text-secondary hover:bg-bg-tertiary/50'

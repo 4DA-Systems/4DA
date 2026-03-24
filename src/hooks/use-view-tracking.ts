@@ -82,7 +82,7 @@ export function useViewTracking({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry!.isIntersecting) {
           if (!visibleSince.current) {
             visibleSince.current = Date.now();
           }

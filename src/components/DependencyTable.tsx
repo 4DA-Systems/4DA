@@ -116,11 +116,11 @@ const DependencyTable = memo(function DependencyTable({ projectName, loading, de
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                <th className="text-left px-4 py-2.5 font-medium">Name</th>
-                <th className="text-left px-4 py-2.5 font-medium">Version</th>
-                <th className="text-left px-4 py-2.5 font-medium">Ecosystem</th>
-                <th className="text-left px-4 py-2.5 font-medium">Type</th>
-                <th className="text-left px-4 py-2.5 font-medium">Alerts</th>
+                <th className="text-start px-4 py-2.5 font-medium">Name</th>
+                <th className="text-start px-4 py-2.5 font-medium">Version</th>
+                <th className="text-start px-4 py-2.5 font-medium">Ecosystem</th>
+                <th className="text-start px-4 py-2.5 font-medium">Type</th>
+                <th className="text-start px-4 py-2.5 font-medium">Alerts</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">

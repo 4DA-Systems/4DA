@@ -70,7 +70,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
 
       {/* What I'll watch for */}
       {summary.key_packages.length > 0 && (
-        <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-orange-500/10 text-left">
+        <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-orange-500/10 text-start">
           <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-2">
             {t('firstRun.watchingFor', "I'll watch for")}
           </p>

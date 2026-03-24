@@ -65,7 +65,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
                       style={{ width: `${Math.round(pw.weight * 100)}%` }}
                     />
                   </div>
-                  <span className="text-xs text-text-muted w-10 text-right">
+                  <span className="text-xs text-text-muted w-10 text-end">
                     {Math.round(pw.weight * 100)}%
                   </span>
                 </div>

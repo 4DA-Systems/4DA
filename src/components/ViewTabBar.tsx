@@ -96,14 +96,14 @@ export const ViewTabBar = memo(function ViewTabBar() {
             {showBadge && (
               badgeCount > 0 ? (
                 <span
-                  className={`absolute -top-1 -right-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold text-black ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
+                  className={`absolute -top-1 -end-1 min-w-[18px] h-[18px] flex items-center justify-center rounded-full text-[10px] font-bold text-black ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
                   aria-label={`${badgeCount} notifications`}
                 >
                   {badgeCount > 9 ? '9+' : badgeCount}
                 </span>
               ) : (
                 <span
-                  className={`absolute top-1 right-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
+                  className={`absolute top-1 end-1 w-1.5 h-1.5 rounded-full ${BADGE_COLORS[tab.id] || 'bg-white/60'}`}
                   aria-label="New activity"
                 />
               )

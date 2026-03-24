@@ -102,7 +102,7 @@ export function LearningIndicator({
           </svg>
         </div>
 
-        <span className="text-xs text-text-secondary flex-1 text-left">
+        <span className="text-xs text-text-secondary flex-1 text-start">
           {t('learnedBehavior.learningCount', { count: totalPreferences })}
         </span>
 

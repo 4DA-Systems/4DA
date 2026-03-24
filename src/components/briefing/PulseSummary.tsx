@@ -123,7 +123,7 @@ export const PulseSummary = memo(function PulseSummary({
           {summary}
         </p>
         {briefing.lastGenerated && (
-          <div className="flex-shrink-0 ml-auto">
+          <div className="flex-shrink-0 ms-auto">
             <RelativeTimestamp date={briefing.lastGenerated} />
           </div>
         )}

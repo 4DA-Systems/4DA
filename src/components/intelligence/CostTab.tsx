@@ -27,9 +27,9 @@ function StatCard({ label, value, suffix, color }: { label: string; value: strin
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3">
       <div className={`text-xl font-semibold ${color ?? 'text-white'}`}>
-        {suffix === '$' && <span className="text-sm mr-0.5">$</span>}
+        {suffix === '$' && <span className="text-sm me-0.5">$</span>}
         {value}
-        {suffix && suffix !== '$' && <span className="text-sm ml-0.5">{suffix}</span>}
+        {suffix && suffix !== '$' && <span className="text-sm ms-0.5">{suffix}</span>}
       </div>
       <div className="text-xs text-text-muted mt-0.5">{label}</div>
     </div>
@@ -134,10 +134,10 @@ export const CostTab = memo(function CostTab() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">{t('costs.thProvider')}</th>
-                  <th className="text-left px-4 py-2.5 font-medium">{t('costs.thModel')}</th>
-                  <th className="text-right px-4 py-2.5 font-medium">{t('costs.thRequests')}</th>
-                  <th className="text-right px-4 py-2.5 font-medium">{t('costs.thCost')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('costs.thProvider')}</th>
+                  <th className="text-start px-4 py-2.5 font-medium">{t('costs.thModel')}</th>
+                  <th className="text-end px-4 py-2.5 font-medium">{t('costs.thRequests')}</th>
+                  <th className="text-end px-4 py-2.5 font-medium">{t('costs.thCost')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -145,8 +145,8 @@ export const CostTab = memo(function CostTab() {
                   <tr key={`${entry.provider}-${entry.model}-${i}`} className="hover:bg-[#1A1A1A] transition-colors">
                     <td className="px-4 py-2.5 text-text-primary">{entry.provider}</td>
                     <td className="px-4 py-2.5 font-mono text-text-secondary text-xs">{entry.model}</td>
-                    <td className="px-4 py-2.5 text-text-secondary text-right">{entry.request_count}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-2.5 text-text-secondary text-end">{entry.request_count}</td>
+                    <td className="px-4 py-2.5 text-end">
                       <span className="text-text-primary font-mono">${entry.cost_usd.toFixed(4)}</span>
                     </td>
                   </tr>

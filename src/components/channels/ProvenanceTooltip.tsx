@@ -46,7 +46,7 @@ export function ProvenanceTooltip({ provenance, children }: Props) {
       </button>
       {open && (
         <div
-          className="absolute z-50 bottom-full left-0 mb-2 w-72 bg-bg-primary border border-border rounded-lg shadow-xl p-3 text-sm"
+          className="absolute z-50 bottom-full start-0 mb-2 w-72 bg-bg-primary border border-border rounded-lg shadow-xl p-3 text-sm"
           role="tooltip"
         >
           <p className="text-text-muted text-xs mb-2 font-medium uppercase tracking-wide">

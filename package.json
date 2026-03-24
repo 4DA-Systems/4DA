@@ -37,6 +37,8 @@
     "generate:types": "cd src-tauri && cargo test export_bindings --lib 2>/dev/null; if [ -d bindings ]; then mkdir -p ../src/generated && cp bindings/*.ts ../src/generated/; fi",
     "guardian": "node scripts/build-guardian.cjs",
     "quality": "node scripts/compound-quality-check.cjs",
+    "size": "size-limit",
+    "size:check": "size-limit --check",
     "prepare": "husky"
   },
   "dependencies": {
@@ -56,6 +58,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@playwright/test": "^1.58.2",
+    "@size-limit/esbuild": "^12.0.1",
     "@tailwindcss/vite": "^4.1.18",
     "@tauri-apps/cli": "^2",
     "@testing-library/jest-dom": "^6.9.1",
@@ -80,6 +83,7 @@
     "knip": "^6.0.4",
     "playwright": "^1.58.2",
     "sharp": "^0.34.5",
+    "size-limit": "^12.0.1",
     "tailwindcss": "^4.1.18",
     "to-ico": "^1.1.5",
     "typescript": "~5.8.3",

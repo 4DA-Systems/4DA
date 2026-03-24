@@ -81,7 +81,7 @@ export function ToolkitShell({ toolName, onBack, children }: ToolkitShellProps) 
           {t('toolkit.shell.back')}
         </button>
         <h2 className="text-sm font-medium text-white">{toolName}</h2>
-        <span className="text-[10px] text-text-muted ml-auto">{t('toolkit.shell.escToClose')}</span>
+        <span className="text-[10px] text-text-muted ms-auto">{t('toolkit.shell.escToClose')}</span>
       </div>
 
       {/* Tool content with error boundary */}

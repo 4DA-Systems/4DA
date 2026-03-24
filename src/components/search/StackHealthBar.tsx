@@ -66,7 +66,7 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
         ))}
 
         {/* Stack score badge */}
-        <span className="ml-auto inline-flex items-center px-2.5 py-1 text-xs rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-medium">
+        <span className="ms-auto inline-flex items-center px-2.5 py-1 text-xs rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-medium">
           {health.stack_score}/100
         </span>
       </div>
@@ -82,7 +82,7 @@ export function StackHealthBar({ health, onSuggestedQuery }: StackHealthBarProps
             <span className="text-[10px] text-yellow-400/60 group-open:rotate-90 transition-transform">{'\u25B6'}</span>
           </summary>
           {health.missed_signals.example_titles.length > 0 && (
-            <div className="mt-1.5 ml-6 space-y-1">
+            <div className="mt-1.5 ms-6 space-y-1">
               {health.missed_signals.example_titles.map((title, i) => (
                 <div key={i} className="flex items-center gap-2 text-[11px]">
                   <span className="text-yellow-400/40">{'\u2022'}</span>
