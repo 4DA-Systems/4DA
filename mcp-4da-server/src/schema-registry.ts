@@ -244,6 +244,14 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     category: "agent",
     tags: ["agent", "feedback", "statistics", "analytics", "pasifa"],
   },
+
+  // Synthesis Tools
+  what_should_i_know: {
+    summary: "Pre-task intelligence briefing — advisories, decisions, signals, delegation assessment",
+    schemaFile: "what-should-i-know.json",
+    category: "agent",
+    tags: ["agent", "briefing", "synthesis", "pre-task", "delegation", "advisories"],
+  },
 };
 
 /**

@@ -1,0 +1,19 @@
+{
+  "name": "what_should_i_know",
+  "description": "Pre-task intelligence briefing. Given a task description and optional file paths, returns filtered advisories (security alerts, breaking changes), active decision windows, signal chains, relevant past decisions/memories, and a delegation assessment. Call this before starting any non-trivial task to get caught up on what matters.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "task": {
+        "type": "string",
+        "description": "Description of what you are about to work on"
+      },
+      "files": {
+        "type": "array",
+        "items": { "type": "string" },
+        "description": "File paths involved in the task (optional). Improves relevance filtering."
+      }
+    },
+    "required": ["task"]
+  }
+}
