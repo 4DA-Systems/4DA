@@ -18,11 +18,11 @@ NODE_OPTIONS="--max-old-space-size=4096" pnpm run test -- --run 2>/dev/null || {
     exit 1
 }
 
-# Rust compilation check (skip if cargo is not available or src-tauri missing)
+# Rust compilation + lint check (skip if cargo is not available or src-tauri missing)
 if [ -f "src-tauri/Cargo.toml" ] && command -v cargo > /dev/null 2>&1; then
-    echo "Checking Rust compilation..."
-    (cd src-tauri && cargo check 2>&1) || {
-        echo "Rust compilation failed. Fix Rust errors before pushing."
+    echo "Checking Rust compilation + Clippy..."
+    (cd src-tauri && cargo clippy --lib -- -D warnings 2>&1) || {
+        echo "Rust Clippy check failed. Fix Rust errors/warnings before pushing."
         exit 1
     }
 fi
@@ -36,12 +36,40 @@ if [ -d "site" ] && [ -f "site/package.json" ]; then
     }
 fi
 
+# Translation completeness check
+echo "Validating translations..."
+node scripts/validate-translations.cjs --quiet 2>/dev/null || {
+    echo "Translation validation failed. Run 'pnpm run validate:translations' for details."
+    # Warn only, don't block
+}
+
 # Compound quality check — ensures every change leaves the codebase strictly better
 echo "Running compound quality check..."
 node scripts/compound-quality-check.cjs || {
     echo "Compound quality check failed. Fix issues before pushing."
     exit 1
 }
+
+# Dependency vulnerability check
+echo "Checking npm dependencies for vulnerabilities..."
+pnpm audit --audit-level=critical 2>/dev/null || {
+    echo ""
+    echo "CRITICAL npm vulnerabilities found. Review with 'pnpm audit' before pushing."
+    echo "If these are known/accepted, document in .ai/DECISIONS.md and use 'git push --no-verify'"
+    echo ""
+    # Don't block push for this — just warn loudly
+    # exit 1
+}
+
+# Rust dependency audit (if cargo-audit is installed)
+if command -v cargo-audit > /dev/null 2>&1; then
+    echo "Checking Rust dependencies for vulnerabilities..."
+    (cd src-tauri && cargo audit --deny warnings 2>/dev/null) || {
+        echo ""
+        echo "Rust dependency vulnerabilities found. Review with 'cargo audit'."
+        echo ""
+    }
+fi
 
 # Secret scan — defense-in-depth (catches secrets added via --no-verify)
 # Uses the same comprehensive patterns as pre-commit
