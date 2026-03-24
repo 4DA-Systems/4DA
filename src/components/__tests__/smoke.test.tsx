@@ -468,7 +468,7 @@ const SMOKE_COMPONENTS: Array<{
           makeItem({
             id: 2,
             signal_type: 'tech_trend',
-            signal_priority: 'medium',
+            signal_priority: 'advisory',
             signal_action: 'Monitor this trend',
             signal_triggers: ['trending'],
           }),

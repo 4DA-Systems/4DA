@@ -146,7 +146,7 @@ pub fn complete_scheduled_check<R: Runtime>(
                 if summary.critical_count > 0 {
                     send_signal_notification(app, "critical", summary);
                 } else if summary.high_count > 0 {
-                    send_signal_notification(app, "high", summary);
+                    send_signal_notification(app, "alert", summary);
                 } else if new_relevant_count > 0 {
                     send_notification(app, new_relevant_count, total_count);
                 }
@@ -160,7 +160,7 @@ pub fn complete_scheduled_check<R: Runtime>(
                 if summary.critical_count > 0 {
                     send_signal_notification(app, "critical", summary);
                 } else if summary.high_count > 0 {
-                    send_signal_notification(app, "high", summary);
+                    send_signal_notification(app, "alert", summary);
                 } else if new_relevant_count > 0 {
                     // Regular relevant items get batched instead of notified
                     batch_generic_items(state, new_relevant_count, &signal_summary);
@@ -241,7 +241,7 @@ pub fn send_notification<R: Runtime>(
             app,
             NotificationData {
                 variant: "digest".to_string(),
-                priority: "low".to_string(),
+                priority: "watch".to_string(),
                 signal_type: None,
                 title,
                 action: Some("Click to review in briefing".to_string()),
@@ -282,7 +282,7 @@ pub fn send_signal_notification<R: Runtime>(
 ) {
     let count = match priority {
         "critical" => summary.critical_count,
-        "high" => summary.high_count,
+        "alert" => summary.high_count,
         _ => 1,
     };
 
@@ -337,8 +337,8 @@ pub fn send_signal_notification<R: Runtime>(
             count,
             if count > 1 { "s" } else { "" }
         ),
-        "high" => format!(
-            "4DA - {} High Priority Signal{}",
+        "alert" => format!(
+            "4DA - {} Alert Signal{}",
             count,
             if count > 1 { "s" } else { "" }
         ),
@@ -367,8 +367,8 @@ pub fn send_chain_prediction_notification<R: Runtime>(
 ) {
     let priority = match phase {
         "escalating" | "peak" => "critical",
-        "active" => "high",
-        _ => "medium",
+        "active" => "alert",
+        _ => "advisory",
     };
 
     // Truncate forecast for display

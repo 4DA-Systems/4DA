@@ -95,7 +95,7 @@ describe('store edge cases', () => {
     it('toast with empty message still gets added', () => {
       useAppStore.getState().addToast('info', '');
       expect(useAppStore.getState().toasts).toHaveLength(1);
-      expect(useAppStore.getState().toasts[0].message).toBe('');
+      expect(useAppStore.getState().toasts[0]!.message).toBe('');
     });
 
     it('toast IDs are unique across multiple additions', () => {
@@ -110,7 +110,7 @@ describe('store edge cases', () => {
 
     it('removing an already-removed toast is safe', () => {
       useAppStore.getState().addToast('info', 'Test');
-      const id = useAppStore.getState().toasts[0].id;
+      const id = useAppStore.getState().toasts[0]!.id;
       useAppStore.getState().removeToast(id);
       // Removing again should not throw
       useAppStore.getState().removeToast(id);

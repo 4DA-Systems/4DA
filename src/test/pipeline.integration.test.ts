@@ -59,7 +59,7 @@ function makeSourceRelevance(id: number, overrides?: Partial<SourceRelevance>): 
     confidence: 0.85,
     score_breakdown: makeScoreBreakdown(),
     signal_type: 'technical_content',
-    signal_priority: 'high',
+    signal_priority: 'alert',
     signal_action: 'read',
     signal_triggers: ['rust', 'performance'],
     similar_count: 0,
@@ -149,7 +149,7 @@ describe('Pipeline Data Flow', () => {
     it('items are sortable by score', () => {
       const state = makeAppState(20);
       const sorted = [...state.relevanceResults].sort((a, b) => b.top_score - a.top_score);
-      expect(sorted[0].top_score).toBeGreaterThanOrEqual(sorted[sorted.length - 1].top_score);
+      expect(sorted[0]!.top_score).toBeGreaterThanOrEqual(sorted[sorted.length - 1]!.top_score);
     });
 
     it('items with signal data are filterable', () => {
@@ -198,7 +198,7 @@ describe('Pipeline Data Flow', () => {
         makeSourceRelevance(1, { url: null }),
         makeSourceRelevance(2, { url: undefined as unknown as null }),
       ];
-      expect(items[0].url).toBeNull();
+      expect(items[0]!.url).toBeNull();
     });
 
     it('handles items with very long titles', () => {
@@ -239,7 +239,7 @@ describe('Pipeline Data Flow', () => {
       const parsed: SourceRelevance[] = JSON.parse(rawResponse);
 
       expect(parsed).toHaveLength(5);
-      expect(parsed[0].score_breakdown?.context_score).toBe(0.65);
+      expect(parsed[0]!.score_breakdown?.context_score).toBe(0.65);
     });
 
     it('survives JSON round-trip with all fields', () => {

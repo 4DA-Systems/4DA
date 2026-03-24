@@ -30,8 +30,8 @@ const MARGIN_BOTTOM: i32 = 64;
 // Auto-dismiss cancellation (module-level state)
 // ============================================================================
 
-static DISMISS_CANCEL: std::sync::LazyLock<std::sync::Mutex<Option<Arc<AtomicBool>>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+static DISMISS_CANCEL: std::sync::LazyLock<parking_lot::Mutex<Option<Arc<AtomicBool>>>> =
+    std::sync::LazyLock::new(|| parking_lot::Mutex::new(None));
 
 /// Whether the notification window's JS listener is registered and ready.
 static WINDOW_READY: AtomicBool = AtomicBool::new(false);
@@ -50,7 +50,7 @@ static WINDOW_READY: AtomicBool = AtomicBool::new(false);
 pub struct NotificationData {
     /// Visual variant: "signal", "chain", "multi", "digest", "briefing".
     pub variant: String,
-    /// Priority level: "critical", "high", "medium", "low".
+    /// Priority level: "critical", "alert", "advisory", "watch".
     pub priority: String,
     /// Signal classification (e.g. "security_alert", "breaking_change").
     pub signal_type: Option<String>,
@@ -207,9 +207,8 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
 
     let cancelled = Arc::new(AtomicBool::new(false));
     {
-        if let Ok(mut guard) = DISMISS_CANCEL.lock() {
-            *guard = Some(Arc::clone(&cancelled));
-        }
+        let mut guard = DISMISS_CANCEL.lock();
+        *guard = Some(Arc::clone(&cancelled));
     }
 
     let app_handle = app.clone();
@@ -261,10 +260,9 @@ pub async fn notification_clicked(app: AppHandle, item_id: Option<i64>) {
 /// Cancel any in-flight dismiss timer so a fresh notification gets a full
 /// display duration.
 fn cancel_dismiss_timer() {
-    if let Ok(mut guard) = DISMISS_CANCEL.lock() {
-        if let Some(flag) = guard.take() {
-            flag.store(true, Ordering::Relaxed);
-        }
+    let mut guard = DISMISS_CANCEL.lock();
+    if let Some(flag) = guard.take() {
+        flag.store(true, Ordering::Relaxed);
     }
 }
 
@@ -272,9 +270,9 @@ fn cancel_dismiss_timer() {
 fn dismiss_duration_ms(priority: &str) -> u64 {
     match priority {
         "critical" => 8000,
-        "high" => 6000,
-        "medium" => 5000,
-        _ => 4000,
+        "alert" => 6000,
+        "advisory" => 5000,
+        _ => 4000, // "watch" and fallback
     }
 }
 
@@ -317,7 +315,7 @@ mod tests {
     #[test]
     fn notification_data_minimal_fields() {
         // Only required fields — optional fields default correctly
-        let json = r#"{"variant":"digest","priority":"low","title":"5 items","time_ago":"2m ago"}"#;
+        let json = r#"{"variant":"digest","priority":"watch","title":"5 items","time_ago":"2m ago"}"#;
         let data: NotificationData = serde_json::from_str(json).unwrap();
         assert_eq!(data.variant, "digest");
         assert!(data.signal_type.is_none());
@@ -328,9 +326,9 @@ mod tests {
     #[test]
     fn dismiss_duration_by_priority() {
         assert_eq!(dismiss_duration_ms("critical"), 8000);
-        assert_eq!(dismiss_duration_ms("high"), 6000);
-        assert_eq!(dismiss_duration_ms("medium"), 5000);
-        assert_eq!(dismiss_duration_ms("low"), 4000);
+        assert_eq!(dismiss_duration_ms("alert"), 6000);
+        assert_eq!(dismiss_duration_ms("advisory"), 5000);
+        assert_eq!(dismiss_duration_ms("watch"), 4000);
         assert_eq!(dismiss_duration_ms("unknown"), 4000);
         assert_eq!(dismiss_duration_ms(""), 4000);
     }
@@ -340,7 +338,7 @@ mod tests {
         // Set up a flag
         let flag = Arc::new(AtomicBool::new(false));
         {
-            let mut guard = DISMISS_CANCEL.lock().unwrap();
+            let mut guard = DISMISS_CANCEL.lock();
             *guard = Some(Arc::clone(&flag));
         }
 
@@ -349,7 +347,7 @@ mod tests {
         assert!(flag.load(Ordering::Relaxed));
 
         // Guard should now be None
-        let guard = DISMISS_CANCEL.lock().unwrap();
+        let guard = DISMISS_CANCEL.lock();
         assert!(guard.is_none());
     }
 
@@ -357,14 +355,14 @@ mod tests {
     fn cancel_dismiss_timer_no_op_when_empty() {
         // Ensure guard is empty
         {
-            let mut guard = DISMISS_CANCEL.lock().unwrap();
+            let mut guard = DISMISS_CANCEL.lock();
             *guard = None;
         }
 
         // Should not panic
         cancel_dismiss_timer();
 
-        let guard = DISMISS_CANCEL.lock().unwrap();
+        let guard = DISMISS_CANCEL.lock();
         assert!(guard.is_none());
     }
 

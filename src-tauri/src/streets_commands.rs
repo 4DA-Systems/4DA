@@ -8,7 +8,7 @@ use crate::playbook_commands;
 use crate::toolkit;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use std::time::Instant;
 use tracing::{debug, info, warn};
 
@@ -520,18 +520,12 @@ fn is_powershell_cmdlet(program: &str) -> bool {
 
 /// Get the accumulated session environment variables.
 fn get_session_env() -> HashMap<String, String> {
-    SESSION_ENV
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone()
-        .unwrap_or_default()
+    SESSION_ENV.lock().clone().unwrap_or_default()
 }
 
 /// Store an environment variable in the session.
 fn set_session_env(key: String, value: String) {
-    let mut guard = SESSION_ENV
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut guard = SESSION_ENV.lock();
     let map = guard.get_or_insert_with(HashMap::new);
     map.insert(key, value);
 }

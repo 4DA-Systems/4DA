@@ -22,7 +22,7 @@ import { makeItem } from '../../test/factories';
 function makeSignalItem(overrides = {}) {
   return makeItem({
     signal_type: 'security_alert',
-    signal_priority: 'high',
+    signal_priority: 'alert',
     signal_action: 'Update dependency immediately',
     signal_triggers: ['CVE-2025-001'],
     ...overrides,
@@ -68,7 +68,7 @@ describe('SignalsPanel', () => {
       <SignalsPanel
         results={[
           makeSignalItem({ id: 1 }),
-          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'medium', signal_action: 'Monitor' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Monitor' }),
         ]}
       />,
     );
@@ -90,7 +90,7 @@ describe('SignalsPanel', () => {
     render(
       <SignalsPanel
         results={[
-          makeSignalItem({ id: 1, signal_priority: 'high', signal_action: 'Update soon' }),
+          makeSignalItem({ id: 1, signal_priority: 'alert', signal_action: 'Update soon' }),
         ]}
       />,
     );
@@ -101,9 +101,9 @@ describe('SignalsPanel', () => {
     const { container } = render(
       <SignalsPanel
         results={[
-          makeSignalItem({ id: 1, signal_priority: 'low', signal_action: 'Low priority item' }),
+          makeSignalItem({ id: 1, signal_priority: 'watch', signal_action: 'Low priority item' }),
           makeSignalItem({ id: 2, signal_priority: 'critical', signal_action: 'Critical item' }),
-          makeSignalItem({ id: 3, signal_priority: 'high', signal_action: 'High priority item' }),
+          makeSignalItem({ id: 3, signal_priority: 'alert', signal_action: 'High priority item' }),
         ]}
       />,
     );
@@ -157,7 +157,7 @@ describe('SignalsPanel', () => {
       <SignalsPanel
         results={[
           makeSignalItem({ id: 1, signal_type: 'security_alert' }),
-          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'medium', signal_action: 'Watch trend' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Watch trend' }),
         ]}
       />,
     );
@@ -172,7 +172,7 @@ describe('SignalsPanel', () => {
       <SignalsPanel
         results={[
           makeSignalItem({ id: 1, signal_type: 'security_alert', signal_action: 'Patch vuln' }),
-          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'medium', signal_action: 'Watch trend' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Watch trend' }),
         ]}
       />,
     );
@@ -194,7 +194,7 @@ describe('SignalsPanel', () => {
       <SignalsPanel
         results={[
           makeSignalItem({ id: 1, signal_type: 'security_alert', signal_action: 'Patch vuln' }),
-          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'medium', signal_action: 'Watch trend' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Watch trend' }),
         ]}
       />,
     );
@@ -219,7 +219,7 @@ describe('SignalsPanel', () => {
       <SignalsPanel
         results={[
           makeSignalItem({ id: 1, signal_type: 'security_alert', signal_action: 'Patch vuln' }),
-          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'medium', signal_action: 'Trend' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Trend' }),
         ]}
       />,
     );
@@ -241,7 +241,7 @@ describe('SignalsPanel', () => {
       <SignalsPanel
         results={[
           makeSignalItem({ id: 1, signal_type: 'security_alert', signal_action: 'Patch vuln' }),
-          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'medium', signal_action: 'Trend signal' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Trend signal' }),
         ]}
       />,
     );

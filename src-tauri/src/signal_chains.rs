@@ -141,11 +141,11 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
         let priority = if has_security {
             "critical"
         } else if has_breaking {
-            "high"
+            "alert"
         } else if links.len() >= 3 {
-            "medium"
+            "advisory"
         } else {
-            "low"
+            "watch"
         };
 
         let action = if has_security {
@@ -248,9 +248,9 @@ fn classify_chain_signal(title: &str) -> String {
 fn priority_rank(priority: &str) -> u8 {
     match priority {
         "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        _ => 3,
+        "alert" => 1,
+        "advisory" => 2,
+        _ => 3, // "watch" and fallback
     }
 }
 

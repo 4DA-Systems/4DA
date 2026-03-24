@@ -25,14 +25,12 @@ const VALIDATION_CACHE_HOURS: u64 = 24;
 const MAX_ACTIVATION_ATTEMPTS_PER_MINUTE: u32 = 5;
 
 /// Track activation attempts for rate limiting
-static ACTIVATION_ATTEMPTS: std::sync::LazyLock<std::sync::Mutex<Vec<std::time::Instant>>> =
-    std::sync::LazyLock::new(|| std::sync::Mutex::new(Vec::new()));
+static ACTIVATION_ATTEMPTS: std::sync::LazyLock<parking_lot::Mutex<Vec<std::time::Instant>>> =
+    std::sync::LazyLock::new(|| parking_lot::Mutex::new(Vec::new()));
 
 /// Check and enforce rate limiting on license activation
 pub fn check_activation_rate_limit() -> Result<()> {
-    let mut attempts = ACTIVATION_ATTEMPTS
-        .lock()
-        .map_err(|_| "Rate limiter lock poisoned")?;
+    let mut attempts = ACTIVATION_ATTEMPTS.lock();
     let now = std::time::Instant::now();
     let one_minute_ago = now.checked_sub(std::time::Duration::from_secs(60)).unwrap_or(now);
 

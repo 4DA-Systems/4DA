@@ -156,7 +156,7 @@ describe('system-health-slice', () => {
 
       expect(invoke).toHaveBeenCalledWith('ace_find_similar_topics', { query: 'machine learning', topK: 5 });
       expect(useAppStore.getState().similarTopicResults).toHaveLength(2);
-      expect(useAppStore.getState().similarTopicResults[0].topic).toBe('deep learning');
+      expect(useAppStore.getState().similarTopicResults[0]!.topic).toBe('deep learning');
     });
 
     it('does nothing with empty query', async () => {

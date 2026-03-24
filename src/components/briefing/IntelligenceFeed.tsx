@@ -134,7 +134,7 @@ const FeedItem = memo(function FeedItem({
       dimmed ? 'opacity-40' : ''
     }`}>
       {/* Score */}
-      <span className={`flex-shrink-0 text-xs font-mono font-medium w-10 text-right ${getScoreColor(item.top_score)}`}>
+      <span className={`flex-shrink-0 text-xs font-mono font-medium w-10 text-end ${getScoreColor(item.top_score)}`}>
         {formatScore(item.top_score)}
       </span>
 
@@ -146,7 +146,7 @@ const FeedItem = memo(function FeedItem({
       {/* Title */}
       <button
         onClick={handleClick}
-        className="flex-1 min-w-0 text-sm text-left text-text-primary truncate hover:text-orange-400 transition-colors"
+        className="flex-1 min-w-0 text-sm text-start text-text-primary truncate hover:text-orange-400 transition-colors"
       >
         {item.title}
       </button>
@@ -163,8 +163,9 @@ const FeedItem = memo(function FeedItem({
         <span
           className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${
             item.signal_priority === 'critical' ? 'bg-red-400' :
-            item.signal_priority === 'high' ? 'bg-amber-400' :
-            'bg-cyan-400'
+            item.signal_priority === 'alert' ? 'bg-orange-400' :
+            item.signal_priority === 'advisory' ? 'bg-amber-400' :
+            'bg-blue-400'
           }`}
           role="img"
           aria-label={item.signal_type || 'Normal'}

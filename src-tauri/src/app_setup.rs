@@ -139,7 +139,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     };
 
     // Store tray handle for later updates
-    app.manage(std::sync::Mutex::new(tray));
+    app.manage(parking_lot::Mutex::new(tray));
 
     // Load monitoring settings from persistence
     let monitoring_state = get_monitoring_state().clone();
@@ -149,6 +149,45 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         monitoring_state.set_enabled(config.enabled);
         monitoring_state.set_interval(config.interval_minutes * 60);
         info!(target: "4da::monitor", enabled = config.enabled, interval_mins = config.interval_minutes, "Loaded monitoring settings");
+    }
+
+    // Auto-enable launch-at-startup on first run.
+    // If launch_at_startup has never been set (None), activate the autostart plugin
+    // so 4DA runs silently on boot. Users can disable in Settings > Monitoring.
+    {
+        let should_enable = {
+            let settings = get_settings_manager().lock();
+            settings.get().monitoring.launch_at_startup.is_none()
+        };
+        if should_enable {
+            let startup_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = startup_handle.autolaunch();
+                match autostart.enable() {
+                    Ok(()) => {
+                        info!(target: "4da::startup", "Auto-start enabled (first run default)");
+                        // Persist so we don't re-trigger on next launch
+                        let mut settings = get_settings_manager().lock();
+                        let m = settings.get().monitoring.clone();
+                        let _ = settings.set_monitoring_config(crate::settings::MonitoringConfig {
+                            launch_at_startup: Some(true),
+                            ..m
+                        });
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Failed to enable auto-start on first run");
+                        // Still persist as false so we don't retry every launch
+                        let mut settings = get_settings_manager().lock();
+                        let m = settings.get().monitoring.clone();
+                        let _ = settings.set_monitoring_config(crate::settings::MonitoringConfig {
+                            launch_at_startup: Some(false),
+                            ..m
+                        });
+                    }
+                }
+            });
+        }
     }
 
     // Validate license integrity (reset tier if no key present)
@@ -241,10 +280,21 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");
     }
 
+    // Pre-warm the briefing window (hidden, center-screen, ready for morning briefing)
+    if let Err(e) = crate::briefing_window::init_briefing_window(app.handle()) {
+        warn!(target: "4da::briefing", error = %e, "Briefing window pre-warm failed (will retry on first briefing)");
+    }
+
     // Listen for notification-ready from the notification frontend
     app.listen("notification-ready", move |_| {
         crate::notification_window::mark_ready();
         info!(target: "4da::notify", "Notification window JS listener registered");
+    });
+
+    // Listen for briefing-ready from the briefing frontend
+    app.listen("briefing-ready", move |_| {
+        crate::briefing_window::mark_ready();
+        info!(target: "4da::briefing", "Briefing window JS listener registered");
     });
 
     // Listen for notification-hidden from the notification frontend
@@ -263,6 +313,24 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             .and_then(|v| v.get("item_id")?.as_i64());
         tauri::async_runtime::spawn(async move {
             crate::notification_window::notification_clicked(handle, item_id).await;
+        });
+    });
+
+    // Listen for briefing-hidden from the briefing frontend
+    let app_handle_briefing_hide = app_handle.clone();
+    app.listen("briefing-hidden", move |_| {
+        crate::briefing_window::hide_briefing(&app_handle_briefing_hide);
+    });
+
+    // Listen for briefing-item-clicked from the briefing frontend
+    let app_handle_briefing_click = app_handle.clone();
+    app.listen("briefing-item-clicked", move |event| {
+        let handle = app_handle_briefing_click.clone();
+        let item_id = serde_json::from_str::<serde_json::Value>(event.payload())
+            .ok()
+            .and_then(|v| v.get("item_id")?.as_i64());
+        tauri::async_runtime::spawn(async move {
+            crate::briefing_window::briefing_item_clicked(handle, item_id).await;
         });
     });
 
@@ -513,7 +581,7 @@ fn build_signal_summary(results: &[crate::SourceRelevance]) -> Option<monitoring
         .count();
     let high_count = results
         .iter()
-        .filter(|r| r.signal_priority.as_deref() == Some("high"))
+        .filter(|r| r.signal_priority.as_deref() == Some("alert"))
         .count();
     let top_signal = results
         .iter()
@@ -521,14 +589,14 @@ fn build_signal_summary(results: &[crate::SourceRelevance]) -> Option<monitoring
         .max_by(|a, b| {
             let pa = match a.signal_priority.as_deref() {
                 Some("critical") => 4u8,
-                Some("high") => 3,
-                Some("medium") => 2,
+                Some("alert") => 3,
+                Some("advisory") => 2,
                 _ => 1,
             };
             let pb = match b.signal_priority.as_deref() {
                 Some("critical") => 4u8,
-                Some("high") => 3,
-                Some("medium") => 2,
+                Some("alert") => 3,
+                Some("advisory") => 2,
                 _ => 1,
             };
             pa.cmp(&pb).then_with(|| {

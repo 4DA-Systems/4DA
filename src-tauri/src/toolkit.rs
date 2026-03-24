@@ -8,7 +8,7 @@ use crate::error::{FourDaError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::process::Command;
-use std::sync::Mutex;
+use parking_lot::Mutex;
 use tracing::debug;
 
 // ============================================================================
@@ -21,25 +21,20 @@ static SPAWNED_PIDS: once_cell::sync::Lazy<Mutex<HashSet<u32>>> =
 /// Register a PID that the application has spawned.
 /// Other modules should call this when creating child processes.
 pub fn register_spawned_pid(pid: u32) {
-    if let Ok(mut pids) = SPAWNED_PIDS.lock() {
-        pids.insert(pid);
-        debug!(target: "4da::toolkit", pid, "Registered spawned PID");
-    }
+    let mut pids = SPAWNED_PIDS.lock();
+    pids.insert(pid);
+    debug!(target: "4da::toolkit", pid, "Registered spawned PID");
 }
 
 /// Remove a PID from the spawned tracker (e.g., after process exits naturally).
 pub fn unregister_spawned_pid(pid: u32) {
-    if let Ok(mut pids) = SPAWNED_PIDS.lock() {
-        pids.remove(&pid);
-    }
+    let mut pids = SPAWNED_PIDS.lock();
+    pids.remove(&pid);
 }
 
 /// Check if a PID was spawned by the application.
 fn is_spawned_pid(pid: u32) -> bool {
-    SPAWNED_PIDS
-        .lock()
-        .map(|pids| pids.contains(&pid))
-        .unwrap_or(false)
+    SPAWNED_PIDS.lock().contains(&pid)
 }
 
 // ============================================================================

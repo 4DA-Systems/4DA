@@ -67,8 +67,9 @@ export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
       {item.signal_type && (
         <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${
           item.signal_priority === 'critical' ? 'bg-red-500/20 text-red-400' :
-          item.signal_priority === 'high' ? 'bg-amber-500/20 text-amber-400' :
-          'bg-cyan-500/20 text-cyan-400'
+          item.signal_priority === 'alert' ? 'bg-orange-500/20 text-orange-400' :
+          item.signal_priority === 'advisory' ? 'bg-amber-500/20 text-amber-400' :
+          'bg-blue-500/20 text-blue-400'
         }`}>
           {t(`results.signal.${item.signal_type}`, { defaultValue: item.signal_type })}
         </span>

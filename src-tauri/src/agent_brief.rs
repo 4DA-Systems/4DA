@@ -344,13 +344,13 @@ fn build_active_concerns(
                 || text_lower.contains("vulnerability")
                 || text_lower.contains("security")
             {
-                ("security", "high")
+                ("security", "alert")
             } else if text_lower.contains("breaking") || text_lower.contains("deprecated") {
-                ("breaking_change", "high")
+                ("breaking_change", "alert")
             } else if text_lower.contains("reconsider") || text_lower.contains("alternative") {
-                ("decision_reconsider", "medium")
+                ("decision_reconsider", "advisory")
             } else {
-                ("blind_spot", "low")
+                ("blind_spot", "watch")
             };
 
             concerns.push(ActiveConcern {
@@ -561,7 +561,7 @@ mod tests {
         );
         let concern = &brief.active_concerns[0];
         assert_eq!(concern.concern_type, "security");
-        assert_eq!(concern.priority, "high");
+        assert_eq!(concern.priority, "alert");
         assert!(concern.related_decision_id.is_some());
 
         // Should find the signal

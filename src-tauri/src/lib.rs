@@ -2,6 +2,10 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 #![cfg_attr(test, allow(clippy::unwrap_used))]
+// format_push_string: write!() is no clearer than push_str(&format!()) in digest/export code
+#![allow(clippy::format_push_string)]
+// cast_possible_wrap: usize→i64 casts are safe on our 64-bit targets (Windows/macOS/Linux)
+#![allow(clippy::cast_possible_wrap)]
 
 use tauri::Manager;
 
@@ -134,6 +138,7 @@ mod local_audit;
 pub mod model_registry;
 mod monitoring;
 mod monitoring_briefing;
+mod briefing_window;
 mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
@@ -441,6 +446,9 @@ pub fn run() {
             monitoring_commands::trigger_notification_preview,
             // Notification window
             notification_window::notification_clicked,
+            // Briefing window
+            briefing_window::briefing_item_clicked,
+            briefing_window::briefing_open_url,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,

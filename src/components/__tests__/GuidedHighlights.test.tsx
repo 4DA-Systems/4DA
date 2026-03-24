@@ -37,7 +37,7 @@ describe('GuidedHighlights', () => {
   it('dismisses a dot on click and shows tooltip text', () => {
     render(<GuidedHighlights />);
     const dots = screen.getAllByRole('button', { name: /highlight/i });
-    fireEvent.click(dots[0]);
+    fireEvent.click(dots[0]!);
     expect(screen.getByText('guided.feed')).toBeInTheDocument();
   });
 
