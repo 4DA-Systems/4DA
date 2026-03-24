@@ -9,7 +9,7 @@ const ACTION_CATEGORIES = [
 
 const CATEGORY_COLORS: Record<string, string> = {
   member: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
-  signal: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30',
+  signal: 'bg-accent-gold/15 text-accent-gold border-accent-gold/30',
   decision: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
   settings: 'bg-gray-500/15 text-gray-400 border-gray-500/30',
   admin: 'bg-red-500/15 text-red-400 border-red-500/30',
@@ -135,8 +135,8 @@ export function AuditLogViewer() {
     ? Math.max(...auditSummary.events_by_day.map(([, n]) => n), 1)
     : 1;
 
-  const selectCls = 'px-2 py-1.5 bg-bg-secondary border border-border rounded text-xs text-text-secondary focus:border-[#22C55E]/50 focus:outline-none';
-  const dateCls = 'px-2 py-1.5 bg-bg-secondary border border-border rounded text-xs text-text-secondary focus:border-[#22C55E]/50 focus:outline-none';
+  const selectCls = 'px-2 py-1.5 bg-bg-secondary border border-border rounded text-xs text-text-secondary focus:border-success/50 focus:outline-none';
+  const dateCls = 'px-2 py-1.5 bg-bg-secondary border border-border rounded text-xs text-text-secondary focus:border-success/50 focus:outline-none';
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border" role="region" aria-label={t('enterprise.audit.title', 'Audit Log')}>
@@ -144,7 +144,7 @@ export function AuditLogViewer() {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-white">{t('enterprise.audit.title', 'Audit Log')}</h3>
-          <span className="text-[10px] px-1.5 py-0.5 bg-[#22C55E]/15 text-[#22C55E] rounded font-medium">
+          <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
             {t('enterprise.audit.badge', 'Enterprise')}
           </span>
         </div>
@@ -187,7 +187,7 @@ export function AuditLogViewer() {
           <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)} aria-label={t('enterprise.audit.fromDate', 'From date')} className={dateCls} />
           <span className="text-[10px] text-text-muted">&ndash;</span>
           <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)} aria-label={t('enterprise.audit.toDate', 'To date')} className={dateCls} />
-          <button onClick={handleExport} className="px-3 py-1.5 text-xs font-medium text-[#22C55E] border border-[#22C55E]/30 rounded hover:bg-[#22C55E]/10 transition-colors">
+          <button onClick={handleExport} className="px-3 py-1.5 text-xs font-medium text-success border border-success/30 rounded hover:bg-success/10 transition-colors">
             {t('enterprise.audit.exportCsv', 'Export CSV')}
           </button>
         </div>
@@ -272,7 +272,7 @@ export function AuditLogViewer() {
       {/* Loading */}
       {auditLoading && (
         <div className="flex items-center justify-center gap-2 py-4">
-          <div className="w-4 h-4 border-2 border-[#22C55E] border-t-transparent rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-success border-t-transparent rounded-full animate-spin" />
           <span className="text-xs text-text-muted">{t('enterprise.audit.loading', 'Loading audit log...')}</span>
         </div>
       )}
@@ -280,7 +280,7 @@ export function AuditLogViewer() {
       {/* Load more */}
       {!auditLoading && auditEntries.length > 0 && auditEntries.length >= offset + PAGE_SIZE && (
         <div className="flex justify-center mt-3">
-          <button onClick={handleLoadMore} className="px-4 py-1.5 text-xs text-text-secondary border border-border rounded hover:text-white hover:border-[#22C55E]/30 transition-colors">
+          <button onClick={handleLoadMore} className="px-4 py-1.5 text-xs text-text-secondary border border-border rounded hover:text-white hover:border-success/30 transition-colors">
             {t('enterprise.audit.loadMore', 'Load more')}
           </button>
         </div>
@@ -303,7 +303,7 @@ export function AuditLogViewer() {
                       <div key={day} className="flex items-center gap-2">
                         <span className="text-[10px] text-text-muted w-16 shrink-0">{day.slice(5)}</span>
                         <div className="flex-1 h-2.5 bg-bg-secondary rounded-full overflow-hidden">
-                          <div className="h-full bg-[#22C55E]/50 rounded-full transition-all" style={{ width: `${(count / summaryMaxDay) * 100}%` }} />
+                          <div className="h-full bg-success/50 rounded-full transition-all" style={{ width: `${(count / summaryMaxDay) * 100}%` }} />
                         </div>
                         <span className="text-[10px] text-text-muted w-6 text-right">{count}</span>
                       </div>

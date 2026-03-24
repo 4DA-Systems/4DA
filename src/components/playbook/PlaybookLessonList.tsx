@@ -90,8 +90,8 @@ const PlaybookLessonList = memo(function PlaybookLessonList({
                 aria-pressed={isCompleted}
                 className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
                   isCompleted
-                    ? 'bg-[#22C55E] border-[#22C55E]'
-                    : 'border-[#8A8A8A] hover:border-[#D4AF37]'
+                    ? 'bg-success border-success'
+                    : 'border-text-muted hover:border-accent-gold'
                 }`}
               >
                 {isCompleted && (

@@ -34,7 +34,7 @@ export function TeamOnboardingWizard() {
     return (
       <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+          <div className="w-2 h-2 rounded-full bg-success" />
           <span className="text-xs text-white font-medium">
             {t('enterprise.wizard.teamActive', 'Team is active')}
           </span>
@@ -96,14 +96,14 @@ export function TeamOnboardingWizard() {
         {STEPS.map((s, i) => (
           <div key={s.key} className="flex items-center flex-1">
             <div className={`h-1 flex-1 rounded-full ${
-              i <= currentStepIdx ? 'bg-[#22C55E]' : 'bg-border'
+              i <= currentStepIdx ? 'bg-success' : 'bg-border'
             }`} />
           </div>
         ))}
       </div>
       <div className="flex justify-between text-[9px] text-text-muted">
         {STEPS.map(s => (
-          <span key={s.key} className={s.key === step ? 'text-[#22C55E]' : ''}>
+          <span key={s.key} className={s.key === step ? 'text-success' : ''}>
             {s.label}
           </span>
         ))}
@@ -111,7 +111,7 @@ export function TeamOnboardingWizard() {
 
       {/* Error */}
       {error && (
-        <div className="px-3 py-2 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded text-xs text-[#EF4444]">
+        <div className="px-3 py-2 bg-error/10 border border-error/30 rounded text-xs text-error">
           {error}
         </div>
       )}
@@ -127,7 +127,7 @@ export function TeamOnboardingWizard() {
               type="text"
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
               placeholder="wss://relay.4da.ai"
             />
             <p className="text-[9px] text-text-muted mt-1">
@@ -137,7 +137,7 @@ export function TeamOnboardingWizard() {
           <button
             onClick={() => setStep('create')}
             disabled={!relayUrl.trim()}
-            className="px-4 py-2 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors disabled:opacity-50"
+            className="px-4 py-2 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
           >
             {t('action.next', 'Next')}
           </button>
@@ -155,7 +155,7 @@ export function TeamOnboardingWizard() {
               type="text"
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+              className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
               placeholder="e.g. Alice"
               onKeyDown={e => e.key === 'Enter' && handleCreateTeam()}
             />
@@ -170,7 +170,7 @@ export function TeamOnboardingWizard() {
             <button
               onClick={handleCreateTeam}
               disabled={!displayName.trim() || creating}
-              className="px-4 py-2 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
             >
               {creating ? t('action.creating', 'Creating...') : t('enterprise.wizard.createTeam', 'Create Team')}
             </button>
@@ -181,8 +181,8 @@ export function TeamOnboardingWizard() {
       {/* Step 3: Invite Members */}
       {step === 'invite' && (
         <div className="space-y-3">
-          <div className="px-3 py-2.5 bg-[#22C55E]/10 border border-[#22C55E]/30 rounded">
-            <p className="text-xs text-[#22C55E]">
+          <div className="px-3 py-2.5 bg-success/10 border border-success/30 rounded">
+            <p className="text-xs text-success">
               {t('enterprise.wizard.teamCreated', 'Team created successfully!')}
             </p>
           </div>
@@ -199,7 +199,7 @@ export function TeamOnboardingWizard() {
             </select>
             <button
               onClick={handleGenerateInvite}
-              className="px-3 py-1.5 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors"
+              className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
             >
               {t('enterprise.wizard.generateInvite', 'Generate Invite Code')}
             </button>
@@ -209,7 +209,7 @@ export function TeamOnboardingWizard() {
             <div className="bg-bg-primary rounded-lg p-3 border border-border/50">
               <p className="text-[10px] text-text-muted mb-1">{t('enterprise.wizard.inviteCode', 'Invite Code')}</p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs text-[#D4AF37] font-mono bg-bg-tertiary px-2 py-1.5 rounded select-all">
+                <code className="flex-1 text-xs text-accent-gold font-mono bg-bg-tertiary px-2 py-1.5 rounded select-all">
                   {inviteCode}
                 </code>
                 <button
@@ -228,7 +228,7 @@ export function TeamOnboardingWizard() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setStep('configure')}
-              className="px-4 py-2 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors"
+              className="px-4 py-2 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
             >
               {inviteCode ? t('action.next', 'Next') : t('enterprise.wizard.skipInvites', 'Skip for now')}
             </button>
@@ -250,14 +250,14 @@ export function TeamOnboardingWizard() {
               { icon: '\u2714', text: 'Configure retention policies for compliance' },
             ].map((item, i) => (
               <div key={i} className="flex items-start gap-2">
-                <span className="text-[#22C55E] mt-0.5">{item.icon}</span>
+                <span className="text-success mt-0.5">{item.icon}</span>
                 <span>{item.text}</span>
               </div>
             ))}
           </div>
           <button
             onClick={() => setStep('done')}
-            className="px-4 py-2 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors"
+            className="px-4 py-2 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
           >
             {t('enterprise.wizard.finish', 'Finish Setup')}
           </button>

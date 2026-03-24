@@ -119,8 +119,8 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
       {/* Header bar */}
       <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[#D4AF37]" />
-          <span className="text-xs font-medium text-[#D4AF37]">
+          <div className="w-2 h-2 rounded-full bg-accent-gold" />
+          <span className="text-xs font-medium text-accent-gold">
             {t('missed.title', { defaultValue: 'What you would have missed' })}
           </span>
         </div>
@@ -141,7 +141,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
             </div>
             <div className="w-px h-8 bg-border/50" />
             <div>
-              <div className="text-2xl font-bold font-mono text-[#22C55E]">{relevant.length}</div>
+              <div className="text-2xl font-bold font-mono text-success">{relevant.length}</div>
               <div className="text-[10px] text-text-muted">
                 {t('missed.signalSurfaced', { defaultValue: 'signal surfaced' })}
               </div>
@@ -156,8 +156,8 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           </div>
 
           {/* Rejection rate badge */}
-          <div className="ml-auto px-2.5 py-1 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20">
-            <span className="text-xs font-mono font-medium text-[#D4AF37]">{rejectionRate}%</span>
+          <div className="ml-auto px-2.5 py-1 rounded-full bg-accent-gold/10 border border-accent-gold/20">
+            <span className="text-xs font-mono font-medium text-accent-gold">{rejectionRate}%</span>
             <span className="text-[10px] text-text-muted ml-1">
               {t('missed.filtered', { defaultValue: 'filtered' })}
             </span>

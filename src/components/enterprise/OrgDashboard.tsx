@@ -65,7 +65,7 @@ export function OrgDashboard() {
           <h3 className="text-sm font-medium text-white">
             {organization.name}
           </h3>
-          <span className="text-[10px] px-1.5 py-0.5 bg-[#22C55E]/15 text-[#22C55E] rounded font-medium">
+          <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
             {t('enterprise.org.enterprise', 'Enterprise')}
           </span>
         </div>
@@ -82,9 +82,9 @@ export function OrgDashboard() {
       {orgAnalytics && (
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: t('enterprise.org.teams', 'Teams'), value: orgAnalytics.total_seats, color: 'text-[#22C55E]' },
+            { label: t('enterprise.org.teams', 'Teams'), value: orgAnalytics.total_seats, color: 'text-success' },
             { label: t('enterprise.org.activeSeats', 'Active Seats'), value: orgAnalytics.active_seats, color: 'text-white' },
-            { label: t('enterprise.org.signalsMonth', 'Signals/Mo'), value: orgAnalytics.signals_detected, color: 'text-[#D4AF37]' },
+            { label: t('enterprise.org.signalsMonth', 'Signals/Mo'), value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
             { label: t('enterprise.org.decisionsMonth', 'Decisions/Mo'), value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
           ].map(stat => (
             <div key={stat.label} className="bg-bg-primary rounded-lg p-3 border border-border/50">
@@ -110,7 +110,7 @@ export function OrgDashboard() {
                 className="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border/50"
               >
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#22C55E]" />
+                  <div className="w-2 h-2 rounded-full bg-success" />
                   <span className="text-xs text-white font-mono">
                     {team.team_id.slice(0, 8)}...
                   </span>
@@ -146,9 +146,9 @@ export function OrgDashboard() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs text-white font-medium">{sig.signal_type}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                    sig.org_severity === 'critical' ? 'bg-[#EF4444]/15 text-[#EF4444]' :
+                    sig.org_severity === 'critical' ? 'bg-error/15 text-error' :
                     sig.org_severity === 'high' ? 'bg-[#F97316]/15 text-[#F97316]' :
-                    'bg-[#D4AF37]/15 text-[#D4AF37]'
+                    'bg-accent-gold/15 text-accent-gold'
                   }`}>
                     {sig.org_severity}
                   </span>
@@ -177,7 +177,7 @@ export function OrgDashboard() {
               >
                 <span className="text-text-muted font-mono w-20 truncate">{activity.team_id.slice(0, 8)}</span>
                 <span className="text-text-secondary">{activity.active_members} members</span>
-                <span className="text-[#D4AF37]">{activity.signals_this_period} signals</span>
+                <span className="text-accent-gold">{activity.signals_this_period} signals</span>
                 <span className="text-[#818CF8]">{activity.decisions_this_period} decisions</span>
               </div>
             ))}

@@ -137,6 +137,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
   if (!open) return null;
 
   return (
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events
     <div
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       role="dialog"
@@ -174,7 +175,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={t('channels.titlePlaceholder')}
-              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30"
+              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-text-muted focus:outline-none focus:border-white/30"
             />
             {slug && (
               <p className="mt-1 text-xs text-text-muted font-mono">/{slug}</p>
@@ -191,7 +192,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30 resize-none"
+              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-text-muted focus:outline-none focus:border-white/30 resize-none"
             />
           </div>
 
@@ -207,7 +208,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
               onChange={(e) => setTopicInput(e.target.value)}
               onKeyDown={handleTopicKeyDown}
               placeholder={t('channels.topicsPlaceholder')}
-              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30"
+              className="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-text-muted focus:outline-none focus:border-white/30"
             />
             {topics.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
@@ -235,7 +236,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
             <div className="text-xs text-text-secondary space-y-1">
               {sourcePreview.count > 0 ? (
                 <>
-                  <p className="text-[#22C55E]">
+                  <p className="text-success">
                     {t('channels.previewFound', { count: sourcePreview.count })}
                   </p>
                   {sourcePreview.topTitles.length > 0 && (
@@ -254,7 +255,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
             </div>
           )}
 
-          {error && <p className="text-xs text-[#EF4444]">{error}</p>}
+          {error && <p className="text-xs text-error">{error}</p>}
         </div>
 
         {/* Footer */}

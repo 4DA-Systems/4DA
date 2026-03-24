@@ -64,7 +64,7 @@ export function PolicyEditor() {
             {t('enterprise.policies.description', 'Control how long different data types are retained. A 7-day grace period applies before deletion.')}
           </p>
         </div>
-        <span className="text-[10px] px-1.5 py-0.5 bg-[#22C55E]/15 text-[#22C55E] rounded font-medium">
+        <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
           {t('enterprise.org.enterprise', 'Enterprise')}
         </span>
       </div>
@@ -90,7 +90,7 @@ export function PolicyEditor() {
 
               <div className="flex items-center gap-2">
                 {status && (
-                  <span className={`text-[10px] ${status.ok ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                  <span className={`text-[10px] ${status.ok ? 'text-success' : 'text-error'}`}>
                     {status.ok ? t('action.saved', 'Saved') : t('action.error', 'Error')}
                   </span>
                 )}
@@ -99,7 +99,7 @@ export function PolicyEditor() {
                   value={currentDays}
                   onChange={e => handlePolicyChange(key, parseInt(e.target.value, 10))}
                   disabled={isSaving || orgLoading}
-                  className="px-2 py-1 text-xs bg-bg-tertiary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50 disabled:opacity-50"
+                  className="px-2 py-1 text-xs bg-bg-tertiary border border-border rounded text-white focus:outline-none focus:border-success/50 disabled:opacity-50"
                   aria-label={`Retention period for ${label}`}
                 >
                   {RETENTION_OPTIONS.map(opt => (
@@ -130,19 +130,19 @@ export function PolicyEditor() {
         </h4>
         <div className="space-y-1.5 text-[10px] text-text-muted">
           <div className="flex items-start gap-2">
-            <span className="text-[#22C55E] mt-0.5">&#8226;</span>
+            <span className="text-success mt-0.5">&#8226;</span>
             <span>{t('enterprise.policies.noRawContent', 'No raw content is ever shared. Only metadata, scores, and embeddings.')}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-[#22C55E] mt-0.5">&#8226;</span>
+            <span className="text-success mt-0.5">&#8226;</span>
             <span>{t('enterprise.policies.e2e', 'All team relay data is end-to-end encrypted (XChaCha20Poly1305).')}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-[#22C55E] mt-0.5">&#8226;</span>
+            <span className="text-success mt-0.5">&#8226;</span>
             <span>{t('enterprise.policies.localFirst', 'Primary data storage remains local to each machine.')}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-[#22C55E] mt-0.5">&#8226;</span>
+            <span className="text-success mt-0.5">&#8226;</span>
             <span>{t('enterprise.policies.relayDumb', 'The relay server cannot read encrypted payloads. "Dumb relay, smart clients."')}</span>
           </div>
         </div>

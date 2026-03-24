@@ -110,7 +110,7 @@ export default function ScoringSandbox() {
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('toolkit.scoringSandbox.titlePlaceholder')}
-            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30 transition-colors"
+            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-text-muted focus:outline-none focus:border-white/30 transition-colors"
           />
         </div>
 
@@ -122,7 +122,7 @@ export default function ScoringSandbox() {
             onKeyDown={handleKeyDown}
             placeholder={t('toolkit.scoringSandbox.contentPlaceholder')}
             rows={3}
-            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-[#8A8A8A] focus:outline-none focus:border-white/30 transition-colors resize-y min-h-[60px]"
+            className="w-full px-3 py-2 text-sm bg-bg-primary border border-border rounded-lg text-white placeholder-text-muted focus:outline-none focus:border-white/30 transition-colors resize-y min-h-[60px]"
           />
         </div>
 
@@ -145,11 +145,11 @@ export default function ScoringSandbox() {
           <button
             onClick={score}
             disabled={loading || !title.trim()}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white text-[#0A0A0A] rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white text-bg-primary rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <>
-                <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 border-2 border-bg-primary/30 border-t-bg-primary rounded-full animate-spin" />
                 {t('toolkit.scoringSandbox.scoring')}
               </>
             ) : (
@@ -177,14 +177,14 @@ export default function ScoringSandbox() {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg">
+        <div className="flex items-center gap-3 px-4 py-3 bg-error/10 border border-error/30 rounded-lg">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span className="text-sm text-[#EF4444] flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="text-[#EF4444]/60 hover:text-[#EF4444] text-xs">
+          <span className="text-sm text-error flex-1">{error}</span>
+          <button onClick={() => setError(null)} className="text-error/60 hover:text-error text-xs">
             {t('action.dismiss')}
           </button>
         </div>
@@ -199,7 +199,7 @@ export default function ScoringSandbox() {
               <div className="text-5xl font-bold font-mono" style={{ color }}>
                 {scorePct}
               </div>
-              <div className="text-xs text-[#8A8A8A] mt-0.5">/ 100</div>
+              <div className="text-xs text-text-muted mt-0.5">/ 100</div>
             </div>
             <div>
               <span
@@ -251,7 +251,7 @@ export default function ScoringSandbox() {
 
           {/* Explanation */}
           {result.explanation && (
-            <p className="text-xs text-[#8A8A8A] italic leading-relaxed">
+            <p className="text-xs text-text-muted italic leading-relaxed">
               {result.explanation}
             </p>
           )}
@@ -267,7 +267,7 @@ export default function ScoringSandbox() {
             <path d="M2 12h20" />
           </svg>
           <p className="text-sm text-text-secondary mb-1">{t('toolkit.scoringSandbox.empty')}</p>
-          <p className="text-xs text-[#8A8A8A]">
+          <p className="text-xs text-text-muted">
             {t('toolkit.scoringSandbox.emptyHint')}
           </p>
         </div>

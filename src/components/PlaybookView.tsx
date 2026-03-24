@@ -206,8 +206,8 @@ export const PlaybookView = memo(function PlaybookView() {
 
         {!showTemplates && !activeModuleId && !playbookLoading && !playbookError && (
           <div className="flex flex-col items-center justify-center h-96 text-center">
-            <div className="w-16 h-16 bg-[#D4AF37]/10 rounded-2xl flex items-center justify-center mb-4">
-              <span className="text-2xl text-[#D4AF37] font-bold">S</span>
+            <div className="w-16 h-16 bg-accent-gold/10 rounded-2xl flex items-center justify-center mb-4">
+              <span className="text-2xl text-accent-gold font-bold">S</span>
             </div>
             <h3 className="text-lg font-semibold text-white mb-2">{t('streets:streets.title')}</h3>
             <p className="text-sm text-text-secondary max-w-md mb-4">
@@ -217,7 +217,7 @@ export const PlaybookView = memo(function PlaybookView() {
             <button
               onClick={() => handleModuleClick('S')}
               aria-label={t('streets:streets.startWith')}
-              className="px-4 py-2 bg-[#D4AF37] text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
+              className="px-4 py-2 bg-accent-gold text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
             >
               {t('streets:streets.startWith')}
             </button>
@@ -253,7 +253,7 @@ export const PlaybookView = memo(function PlaybookView() {
             {/* Module Header */}
             <div className="bg-bg-secondary border border-border rounded-xl p-6">
               <div className="flex items-center gap-3 mb-2">
-                <span className="px-2 py-1 bg-[#D4AF37]/20 text-[#D4AF37] text-xs font-bold rounded">
+                <span className="px-2 py-1 bg-accent-gold/20 text-accent-gold text-xs font-bold rounded">
                   {playbookContent.module_id}
                 </span>
               </div>
@@ -263,20 +263,20 @@ export const PlaybookView = memo(function PlaybookView() {
 
             {/* Personalization banner */}
             {Object.keys(personalizedLessons).some((k) => k.startsWith(playbookContent.module_id + ':')) && (
-              <div className="border border-[#D4AF37]/15 rounded-xl bg-[#D4AF37]/5 overflow-hidden">
+              <div className="border border-accent-gold/15 rounded-xl bg-accent-gold/5 overflow-hidden">
                 <button
                   onClick={() => setPersonalizeBannerOpen((p) => !p)}
                   className="w-full flex items-center gap-2 px-4 py-2.5 text-left"
                   aria-expanded={personalizeBannerOpen}
                 >
-                  <span className="text-[10px] text-[#D4AF37] uppercase tracking-wider font-semibold">
+                  <span className="text-[10px] text-accent-gold uppercase tracking-wider font-semibold">
                     {t('playbook.personalizedBanner')}
                   </span>
-                  <span className={`ml-auto text-[10px] text-[#D4AF37]/60 transition-transform duration-200 ${personalizeBannerOpen ? 'rotate-90' : ''}`} aria-hidden="true">{'\u25B8'}</span>
+                  <span className={`ml-auto text-[10px] text-accent-gold/60 transition-transform duration-200 ${personalizeBannerOpen ? 'rotate-90' : ''}`} aria-hidden="true">{'\u25B8'}</span>
                 </button>
                 {personalizeBannerOpen && (
                   <div className="px-4 pb-3">
-                    <p className="text-[11px] text-[#A0A0A0] leading-relaxed">
+                    <p className="text-[11px] text-text-secondary leading-relaxed">
                       {t('playbook.personalizedBannerDesc')}
                     </p>
                   </div>

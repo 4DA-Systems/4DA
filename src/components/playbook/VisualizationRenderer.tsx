@@ -28,7 +28,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
         const pct = maxValue > 0 ? (bar.value / maxValue) * 100 : 0;
         return (
           <div key={bar.label} className="flex items-center gap-3">
-            <span className="text-[10px] text-[#8A8A8A] w-12 text-right flex-shrink-0">{bar.label}</span>
+            <span className="text-[10px] text-text-muted w-12 text-right flex-shrink-0">{bar.label}</span>
             <div className="flex-1 h-4 bg-bg-tertiary rounded-full overflow-hidden relative">
               <div
                 className="h-full rounded-full transition-all duration-500"
@@ -38,7 +38,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
                 }}
               />
             </div>
-            <span className={`text-xs flex-shrink-0 w-16 text-right ${bar.highlight ? 'text-[#D4AF37] font-medium' : 'text-text-secondary'}`}>
+            <span className={`text-xs flex-shrink-0 w-16 text-right ${bar.highlight ? 'text-accent-gold font-medium' : 'text-text-secondary'}`}>
               {bar.value.toFixed(0)} {unit}
             </span>
           </div>
@@ -46,7 +46,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
       })}
       {/* Max reference line label */}
       <div className="flex justify-end">
-        <span className="text-[10px] text-[#8A8A8A]">max: {maxValue} {unit}</span>
+        <span className="text-[10px] text-text-muted">max: {maxValue} {unit}</span>
       </div>
     </div>
   );
@@ -57,7 +57,7 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
     <div className="space-y-1.5">
       {items.map((item) => (
         <div key={item.rank} className="flex items-center gap-2">
-          <span className="text-[10px] text-[#8A8A8A] w-5 text-center flex-shrink-0">#{item.rank}</span>
+          <span className="text-[10px] text-text-muted w-5 text-center flex-shrink-0">#{item.rank}</span>
           <span className={`text-xs flex-1 ${item.matches_stack ? 'text-white' : 'text-text-secondary'}`}>
             {item.name}
           </span>
@@ -68,7 +68,7 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A8A8A" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             )}
           </span>
-          <span className="text-[10px] text-[#8A8A8A] w-10 text-right flex-shrink-0">
+          <span className="text-[10px] text-text-muted w-10 text-right flex-shrink-0">
             {Math.round(item.score * 100)}%
           </span>
         </div>
@@ -90,17 +90,17 @@ function TShapeDiagram({ primary, depthLabel, adjacent, breadthLabel }: {
           </span>
         ))}
       </div>
-      <span className="text-[10px] text-[#8A8A8A]">{breadthLabel}</span>
+      <span className="text-[10px] text-text-muted">{breadthLabel}</span>
 
       {/* T-connector */}
-      <div className="w-px h-3 bg-[#D4AF37]" />
+      <div className="w-px h-3 bg-accent-gold" />
 
       {/* Depth column */}
       <div className="flex flex-col items-center gap-1">
-        <span className="px-3 py-1 bg-[#D4AF37]/20 border border-[#D4AF37]/40 text-xs text-[#D4AF37] font-medium rounded">
+        <span className="px-3 py-1 bg-accent-gold/20 border border-accent-gold/40 text-xs text-accent-gold font-medium rounded">
           {primary}
         </span>
-        <span className="text-[10px] text-[#8A8A8A]">{depthLabel}</span>
+        <span className="text-[10px] text-text-muted">{depthLabel}</span>
       </div>
     </div>
   );
@@ -118,9 +118,9 @@ function RateTable({ headers, rows }: { headers: string[]; rows: { cells: string
       </thead>
       <tbody>
         {rows.map((row, ri) => (
-          <tr key={ri} className={`border-b border-border last:border-0 ${row.highlight ? 'bg-[#D4AF37]/5' : ''}`}>
+          <tr key={ri} className={`border-b border-border last:border-0 ${row.highlight ? 'bg-accent-gold/5' : ''}`}>
             {row.cells.map((cell, ci) => (
-              <td key={ci} className={`px-3 py-1.5 ${row.highlight ? 'text-[#D4AF37]' : 'text-text-secondary'}`}>{cell}</td>
+              <td key={ci} className={`px-3 py-1.5 ${row.highlight ? 'text-accent-gold' : 'text-text-secondary'}`}>{cell}</td>
             ))}
           </tr>
         ))}
@@ -136,23 +136,23 @@ function DiffRibbonViz({ added, removed, changed }: {
     <div className="space-y-1">
       {added.map((item, i) => (
         <div key={`a-${i}`} className="flex items-center gap-2 text-xs">
-          <span className="text-[#22C55E] font-mono">+</span>
-          <span className="text-[#22C55E]">{item}</span>
+          <span className="text-success font-mono">+</span>
+          <span className="text-success">{item}</span>
         </div>
       ))}
       {removed.map((item, i) => (
         <div key={`r-${i}`} className="flex items-center gap-2 text-xs">
-          <span className="text-[#EF4444] font-mono">-</span>
-          <span className="text-[#EF4444]">{item}</span>
+          <span className="text-error font-mono">-</span>
+          <span className="text-error">{item}</span>
         </div>
       ))}
       {changed.map((ch, i) => (
         <div key={`c-${i}`} className="flex items-center gap-2 text-xs">
-          <span className="text-[#D4AF37] font-mono">~</span>
+          <span className="text-accent-gold font-mono">~</span>
           <span className="text-text-secondary">{ch.field}:</span>
-          <span className="text-[#EF4444] line-through">{ch.old_value}</span>
+          <span className="text-error line-through">{ch.old_value}</span>
           <span className="text-text-secondary">→</span>
-          <span className="text-[#22C55E]">{ch.new_value}</span>
+          <span className="text-success">{ch.new_value}</span>
         </div>
       ))}
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import DependencyTable, {
   StatCard,
@@ -45,6 +46,7 @@ interface AceScanSummary {
 // ============================================================================
 
 const DependencyDashboard = memo(function DependencyDashboard() {
+  const { t } = useTranslation();
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [projectDeps, setProjectDeps] = useState<DepEntry[]>([]);
@@ -118,9 +120,9 @@ const DependencyDashboard = memo(function DependencyDashboard() {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-medium text-white">Dependency Intelligence</h3>
+          <h3 className="text-sm font-medium text-white">{t('deps.title')}</h3>
           <p className="text-xs text-text-muted mt-1">
-            Track dependencies across all your projects.
+            {t('deps.trackDesc')}
           </p>
         </div>
         <div className="p-5">
@@ -129,22 +131,21 @@ const DependencyDashboard = memo(function DependencyDashboard() {
               <div className="flex items-center justify-center gap-2 mb-2">
                 <div className="w-2 h-2 rounded-full bg-accent-gold/60 animate-pulse" />
                 <p className="text-sm text-text-secondary">
-                  4DA detected: {scanSummary.primary_stack || scanSummary.languages.join(', ')}
+                  {t('deps.detected', { stack: scanSummary.primary_stack || scanSummary.languages.join(', ') })}
                 </p>
               </div>
               <p className="text-xs text-text-muted mb-4">
-                {scanSummary.total_dependencies} dependencies across {scanSummary.projects_scanned} project{scanSummary.projects_scanned !== 1 ? 's' : ''}
+                {t('deps.depCountAcrossProjects', { deps: scanSummary.total_dependencies, count: scanSummary.projects_scanned })}
               </p>
               <p className="text-xs text-text-muted/60 leading-relaxed">
-                Run a dependency scan to unlock vulnerability tracking and cross-project analysis.
+                {t('deps.runScanDesc')}
               </p>
             </div>
           ) : (
             <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
-              <p className="text-sm text-text-muted mb-2">No dependency data available</p>
+              <p className="text-sm text-text-muted mb-2">{t('deps.noData')}</p>
               <p className="text-xs text-text-muted/60 leading-relaxed">
-                Run a context scan to detect your projects and dependencies.
-                4DA will index them automatically from your manifests.
+                {t('deps.noDataDesc')}
               </p>
             </div>
           )}
@@ -158,10 +159,9 @@ const DependencyDashboard = memo(function DependencyDashboard() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-white">Dependency Intelligence</h3>
+          <h3 className="text-sm font-medium text-white">{t('deps.title')}</h3>
           <p className="text-xs text-text-muted mt-1">
-            {overview.total_projects} project{overview.total_projects !== 1 ? 's' : ''},{' '}
-            {overview.total_dependencies} dependencies tracked
+            {t('deps.summary', { projects: overview.total_projects, deps: overview.total_dependencies })}
           </p>
         </div>
         {overview.projects.length > 1 && (
@@ -182,13 +182,13 @@ const DependencyDashboard = memo(function DependencyDashboard() {
       <div className="p-5 space-y-5">
         {/* Summary Stats */}
         <div className="grid grid-cols-4 gap-3">
-          <StatCard label="Total" value={overview.total_dependencies} />
-          <StatCard label="Direct" value={overview.direct_dependencies} color="text-[#22C55E]" />
-          <StatCard label="Dev" value={overview.dev_dependencies} color="text-[#D4AF37]" />
+          <StatCard label={t('deps.total')} value={overview.total_dependencies} />
+          <StatCard label={t('deps.direct')} value={overview.direct_dependencies} color="text-success" />
+          <StatCard label={t('deps.dev')} value={overview.dev_dependencies} color="text-accent-gold" />
           <StatCard
-            label="Alerts"
+            label={t('deps.alerts')}
             value={overview.alerts.total}
-            color={overview.alerts.total > 0 ? 'text-[#EF4444]' : 'text-[#22C55E]'}
+            color={overview.alerts.total > 0 ? 'text-error' : 'text-success'}
           />
         </div>
 
