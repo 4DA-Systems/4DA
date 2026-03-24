@@ -497,7 +497,9 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         // Step size capped at ±0.03 per cycle to prevent oscillation.
                         {
                             let cycle_count: i64 = daily_conn
-                                .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| r.get(0))
+                                .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |r| {
+                                    r.get(0)
+                                })
                                 .unwrap_or(0);
                             let feedback_count: i64 = daily_conn
                                 .query_row("SELECT COUNT(*) FROM feedback", [], |r| r.get(0))
@@ -517,7 +519,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
                                     if adjustment.abs() > 0.001 {
                                         let current = crate::get_relevance_threshold();
-                                        let new_threshold = (current + adjustment).clamp(0.15, 0.65);
+                                        let new_threshold =
+                                            (current + adjustment).clamp(0.15, 0.65);
 
                                         if (new_threshold - current).abs() > 0.001 {
                                             crate::set_relevance_threshold(new_threshold);

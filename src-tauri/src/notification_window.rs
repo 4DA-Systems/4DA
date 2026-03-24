@@ -315,7 +315,8 @@ mod tests {
     #[test]
     fn notification_data_minimal_fields() {
         // Only required fields — optional fields default correctly
-        let json = r#"{"variant":"digest","priority":"watch","title":"5 items","time_ago":"2m ago"}"#;
+        let json =
+            r#"{"variant":"digest","priority":"watch","title":"5 items","time_ago":"2m ago"}"#;
         let data: NotificationData = serde_json::from_str(json).unwrap();
         assert_eq!(data.variant, "digest");
         assert!(data.signal_type.is_none());

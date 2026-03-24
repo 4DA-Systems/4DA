@@ -196,10 +196,22 @@ fn cancel_dismiss_timer() {
 
 /// Called from the briefing frontend when the user clicks a briefing item.
 ///
-/// Hides the briefing, brings the main window to focus, and emits a
-/// navigation event with the item_id for deep-linking.
+/// Records the interaction in ACE for engagement tracking, hides the briefing,
+/// brings the main window to focus, and emits a navigation event.
 #[tauri::command]
 pub async fn briefing_item_clicked(app: AppHandle, item_id: Option<i64>) {
+    // Record briefing click in ACE behavior system for engagement tracking
+    if let Some(id) = item_id {
+        if let Ok(ace) = crate::get_ace_engine() {
+            let _ = ace.record_interaction(
+                id,
+                crate::ace::behavior::BehaviorAction::BriefingClick,
+                vec![], // Topics will be extracted from the item by ACE
+                "briefing".to_string(),
+            );
+        }
+    }
+
     hide_briefing(&app);
 
     if let Some(main_window) = app.get_webview_window("main") {

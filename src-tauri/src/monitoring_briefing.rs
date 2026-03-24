@@ -48,8 +48,19 @@ pub struct KnowledgeGap {
     pub days_since_last: i64,
 }
 
+/// Summary of an escalating signal chain for inclusion in the briefing
+#[derive(Debug, Clone, Serialize)]
+pub struct ChainSummary {
+    pub name: String,
+    pub phase: String,
+    pub link_count: usize,
+    pub action: String,
+    pub confidence: f64,
+}
+
 /// Morning briefing notification content.
-/// Enriched for center-screen briefing window with knowledge gaps and ongoing topics.
+/// Enriched for center-screen briefing window with knowledge gaps, ongoing topics,
+/// and escalating signal chains.
 #[derive(Debug, Clone, Serialize)]
 pub struct BriefingNotification {
     pub title: String,
@@ -61,6 +72,9 @@ pub struct BriefingNotification {
     /// Declared tech topics with no recent signals
     #[serde(default)]
     pub knowledge_gaps: Vec<KnowledgeGap>,
+    /// Signal chains in escalating or peak phase — top-level briefing section
+    #[serde(default)]
+    pub escalating_chains: Vec<ChainSummary>,
 }
 
 // ============================================================================
@@ -205,12 +219,16 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // 6. Detect knowledge gaps: declared tech with no recent signals
     let knowledge_gaps = detect_knowledge_gaps();
 
+    // 7. Detect escalating signal chains for top-level briefing section
+    let escalating_chains = detect_escalating_chains();
+
     Some(BriefingNotification {
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
         total_relevant,
         ongoing_topics: vec![], // Populated by novelty detection in future
         knowledge_gaps,
+        escalating_chains,
     })
 }
 
@@ -331,6 +349,48 @@ fn detect_knowledge_gaps() -> Vec<KnowledgeGap> {
     gaps.sort_by(|a, b| b.days_since_last.cmp(&a.days_since_last));
     gaps.truncate(5); // Max 5 gaps in briefing
     gaps
+}
+
+// ============================================================================
+// Escalating Chain Detection
+// ============================================================================
+
+/// Detect signal chains in escalating or peak phase for the briefing.
+/// These are topics appearing across multiple days with increasing frequency.
+fn detect_escalating_chains() -> Vec<ChainSummary> {
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    match crate::signal_chains::detect_chains(&conn) {
+        Ok(chains) => {
+            chains
+                .into_iter()
+                .filter_map(|chain| {
+                    let prediction = crate::signal_chains::predict_chain_lifecycle(&chain);
+                    let phase_str = match prediction.phase {
+                        crate::signal_chains::ChainPhase::Escalating => "escalating",
+                        crate::signal_chains::ChainPhase::Peak => "peak",
+                        _ => return None, // Only include escalating/peak chains
+                    };
+
+                    Some(ChainSummary {
+                        name: chain.chain_name,
+                        phase: phase_str.to_string(),
+                        link_count: chain.links.len(),
+                        action: chain.suggested_action,
+                        confidence: chain.confidence,
+                    })
+                })
+                .take(3) // Max 3 chains in briefing
+                .collect()
+        }
+        Err(e) => {
+            tracing::warn!(target: "4da::briefing", error = %e, "Chain detection failed for briefing");
+            vec![]
+        }
+    }
 }
 
 // ============================================================================
@@ -510,12 +570,21 @@ mod tests {
                 topic: "sqlite".to_string(),
                 days_since_last: 7,
             }],
+            escalating_chains: vec![ChainSummary {
+                name: "tokio security chain".to_string(),
+                phase: "escalating".to_string(),
+                link_count: 3,
+                action: "Review tokio security patches".to_string(),
+                confidence: 0.85,
+            }],
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
         assert!(briefing.title.contains("Intelligence Briefing"));
         assert_eq!(briefing.knowledge_gaps.len(), 1);
         assert_eq!(briefing.knowledge_gaps[0].days_since_last, 7);
+        assert_eq!(briefing.escalating_chains.len(), 1);
+        assert_eq!(briefing.escalating_chains[0].phase, "escalating");
     }
 
     #[test]

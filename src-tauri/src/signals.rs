@@ -150,7 +150,7 @@ pub struct CorroborationContext {
 impl Default for CorroborationContext {
     fn default() -> Self {
         Self {
-            source_count: 3,       // Permissive default — allows Critical until real queries wired
+            source_count: 3, // Permissive default — allows Critical until real queries wired
             dependency_match: false,
             chain_phase: None,
         }
@@ -449,9 +449,7 @@ impl SignalClassifier {
 
         // Chain phase boost: escalating/peak chains promote priority by 1 tier
         if let Some(ref phase) = corroboration.chain_phase {
-            if (phase == "escalating" || phase == "peak")
-                && priority < SignalPriority::Critical
-            {
+            if (phase == "escalating" || phase == "peak") && priority < SignalPriority::Critical {
                 priority = match priority {
                     SignalPriority::Watch => SignalPriority::Advisory,
                     SignalPriority::Advisory => SignalPriority::Alert,
@@ -671,8 +669,14 @@ mod tests {
     #[test]
     fn test_no_classification() {
         let classifier = SignalClassifier::new();
-        let result =
-            classifier.classify("What's your favorite color?", "I like blue", 0.1, &[], &[], &CorroborationContext::default());
+        let result = classifier.classify(
+            "What's your favorite color?",
+            "I like blue",
+            0.1,
+            &[],
+            &[],
+            &CorroborationContext::default(),
+        );
         assert!(result.is_none());
     }
 
@@ -947,7 +951,14 @@ mod tests {
     fn test_single_keyword_does_not_classify() {
         let classifier = SignalClassifier::new();
         // Only one keyword "tutorial" — should not be enough
-        let result = classifier.classify("A tutorial on cooking", "Learn to cook", 0.3, &[], &[], &CorroborationContext::default());
+        let result = classifier.classify(
+            "A tutorial on cooking",
+            "Learn to cook",
+            0.3,
+            &[],
+            &[],
+            &CorroborationContext::default(),
+        );
         assert!(result.is_none(), "Single keyword should not classify");
     }
 

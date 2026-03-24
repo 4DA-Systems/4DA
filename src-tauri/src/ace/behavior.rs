@@ -16,13 +16,21 @@ use super::ACE;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum BehaviorAction {
-    Click { dwell_time_seconds: u64 },
+    Click {
+        dwell_time_seconds: u64,
+    },
     Save,
     Share,
     Dismiss,
     MarkIrrelevant,
-    Scroll { visible_seconds: f32 },
+    Scroll {
+        visible_seconds: f32,
+    },
     Ignore,
+    /// User clicked an item in the intelligence briefing (curated content = stronger signal)
+    BriefingClick,
+    /// User dismissed the briefing without clicking any item
+    BriefingDismiss,
 }
 
 impl BehaviorAction {
@@ -42,6 +50,8 @@ impl BehaviorAction {
                 0.15 * (1.0 + *visible_seconds).ln()
             }
             BehaviorAction::Ignore => -0.1,
+            BehaviorAction::BriefingClick => 0.7, // Curated content click = stronger than general click
+            BehaviorAction::BriefingDismiss => -0.2, // Mild negative — briefing wasn't useful today
         }
     }
 }
@@ -234,6 +244,8 @@ impl ACE {
             BehaviorAction::MarkIrrelevant => "mark_irrelevant",
             BehaviorAction::Scroll { .. } => "scroll",
             BehaviorAction::Ignore => "ignore",
+            BehaviorAction::BriefingClick => "briefing_click",
+            BehaviorAction::BriefingDismiss => "briefing_dismiss",
         };
 
         let action_data = serde_json::to_string(&signal.action).unwrap_or_default();
