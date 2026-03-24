@@ -42,7 +42,7 @@ describe('AccuracyTab', () => {
     vi.mocked(cmd).mockRejectedValue(new Error('no data'));
     render(<AccuracyTab />);
     await waitFor(() => {
-      expect(screen.getByText('No intelligence data yet')).toBeInTheDocument();
+      expect(screen.getByText('accuracy.noData')).toBeInTheDocument();
     });
   });
 
@@ -78,12 +78,12 @@ describe('AccuracyTab', () => {
     render(<AccuracyTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Accuracy')).toBeInTheDocument();
+      expect(screen.getByText('accuracy.accuracy')).toBeInTheDocument();
     });
-    expect(screen.getByText('Topics Tracked')).toBeInTheDocument();
+    expect(screen.getByText('accuracy.topicsTracked')).toBeInTheDocument();
     expect(screen.getByText('12')).toBeInTheDocument();
-    expect(screen.getByText('Time Saved')).toBeInTheDocument();
-    expect(screen.getByText('Monthly Intelligence')).toBeInTheDocument();
+    expect(screen.getByText('accuracy.timeSaved')).toBeInTheDocument();
+    expect(screen.getByText('accuracy.monthlyIntelligence')).toBeInTheDocument();
   });
 
   it('renders knowledge decay table when entries exist', async () => {
@@ -101,7 +101,7 @@ describe('AccuracyTab', () => {
     render(<AccuracyTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Knowledge Decay')).toBeInTheDocument();
+      expect(screen.getByText('accuracy.knowledgeDecay')).toBeInTheDocument();
     });
     expect(screen.getByText('Python')).toBeInTheDocument();
     expect(screen.getByText('high')).toBeInTheDocument();

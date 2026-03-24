@@ -60,26 +60,26 @@ describe('IntelligenceReportCard', () => {
   it('renders the report title', async () => {
     render(<IntelligenceReportCard />);
     await waitFor(() => {
-      expect(screen.getByText('Your Intelligence This Month')).toBeInTheDocument();
+      expect(screen.getByText('report.title')).toBeInTheDocument();
     });
   });
 
   it('renders all key metric labels', async () => {
     render(<IntelligenceReportCard />);
     await waitFor(() => {
-      expect(screen.getByText('Relevance Accuracy')).toBeInTheDocument();
+      expect(screen.getByText('report.relevanceAccuracy')).toBeInTheDocument();
     });
-    expect(screen.getByText('Topics Tracked')).toBeInTheDocument();
-    expect(screen.getByText('Noise Rejected')).toBeInTheDocument();
-    expect(screen.getByText('Time Saved')).toBeInTheDocument();
+    expect(screen.getByText('report.topicsTracked')).toBeInTheDocument();
+    expect(screen.getByText('report.noiseRejected')).toBeInTheDocument();
+    expect(screen.getByText('report.timeSaved')).toBeInTheDocument();
   });
 
   it('renders secondary metrics', async () => {
     render(<IntelligenceReportCard />);
     await waitFor(() => {
-      expect(screen.getByText('Security Alerts')).toBeInTheDocument();
+      expect(screen.getByText('report.securityAlerts')).toBeInTheDocument();
     });
-    expect(screen.getByText('Decisions')).toBeInTheDocument();
+    expect(screen.getByText('report.decisions')).toBeInTheDocument();
   });
 
   it('renders the accuracy progress bar', async () => {
@@ -92,7 +92,7 @@ describe('IntelligenceReportCard', () => {
   it('renders trend indicators', async () => {
     render(<IntelligenceReportCard />);
     await waitFor(() => {
-      expect(screen.getByText('Relevance Accuracy')).toBeInTheDocument();
+      expect(screen.getByText('report.relevanceAccuracy')).toBeInTheDocument();
     });
     // The component renders delta values with +/- signs for trend indicators
     const deltas = screen.getAllByText(/[+-]\d/);

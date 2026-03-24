@@ -41,9 +41,9 @@ describe('CostTab', () => {
     vi.mocked(cmd).mockRejectedValue(new Error('no data'));
     render(<CostTab />);
     await waitFor(() => {
-      expect(screen.getByText('No AI usage recorded yet')).toBeInTheDocument();
+      expect(screen.getByText('costs.noData')).toBeInTheDocument();
     });
-    expect(screen.getByText(/AI cost tracking begins automatically/)).toBeInTheDocument();
+    expect(screen.getByText('costs.noDataDesc')).toBeInTheDocument();
   });
 
   it('shows empty state when cost is zero and no providers', async () => {
@@ -60,7 +60,7 @@ describe('CostTab', () => {
 
     render(<CostTab />);
     await waitFor(() => {
-      expect(screen.getByText('No AI usage recorded yet')).toBeInTheDocument();
+      expect(screen.getByText('costs.noData')).toBeInTheDocument();
     });
   });
 
@@ -90,15 +90,15 @@ describe('CostTab', () => {
     render(<CostTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Total Cost')).toBeInTheDocument();
+      expect(screen.getByText('costs.totalCost')).toBeInTheDocument();
     });
-    expect(screen.getByText('Tokens In')).toBeInTheDocument();
-    expect(screen.getByText('Tokens Out')).toBeInTheDocument();
+    expect(screen.getByText('costs.tokensIn')).toBeInTheDocument();
+    expect(screen.getByText('costs.tokensOut')).toBeInTheDocument();
     expect(screen.getByText('500.0K')).toBeInTheDocument();
-    expect(screen.getByText('By Provider')).toBeInTheDocument();
+    expect(screen.getByText('costs.byProvider')).toBeInTheDocument();
     expect(screen.getByText('OpenAI')).toBeInTheDocument();
     expect(screen.getByText('gpt-4o')).toBeInTheDocument();
-    expect(screen.getByText('By Task')).toBeInTheDocument();
+    expect(screen.getByText('costs.byTask')).toBeInTheDocument();
     expect(screen.getByText('embedding')).toBeInTheDocument();
   });
 
@@ -131,7 +131,7 @@ describe('CostTab', () => {
     render(<CostTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Optimization')).toBeInTheDocument();
+      expect(screen.getByText('costs.optimization')).toBeInTheDocument();
     });
     expect(screen.getByText(/Local model handles embedding well/)).toBeInTheDocument();
     expect(screen.getByText('$4.50/mo')).toBeInTheDocument();
