@@ -779,7 +779,7 @@ impl RateLimiter {
                 let window = Duration::from_secs(self.window_seconds);
                 let elapsed = Instant::now().duration_since(*oldest);
                 if elapsed < window {
-                    window.checked_sub(elapsed).unwrap()
+                    window.saturating_sub(elapsed)
                 } else {
                     Duration::ZERO
                 }
