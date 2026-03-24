@@ -121,6 +121,7 @@ fn get_platform_data_dir() -> PathBuf {
 
 /// Register the sqlite-vec extension globally (idempotent).
 /// Single source of truth — all code needing sqlite-vec calls this.
+#[allow(unsafe_code)]
 pub fn register_sqlite_vec_extension() {
     #[allow(clippy::missing_transmute_annotations)]
     unsafe {

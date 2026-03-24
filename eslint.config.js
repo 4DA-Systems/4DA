@@ -3,9 +3,13 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
+import i18next from 'eslint-plugin-i18next';
 
 export default [
   js.configs.recommended,
+  // jsx-a11y recommended (flat config) — provides plugin + baseline rules
+  jsxA11y.flatConfigs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
@@ -16,6 +20,9 @@ export default [
         ecmaFeatures: {
           jsx: true,
         },
+        // Type-checked linting — enables no-floating-promises, no-misused-promises
+        project: './tsconfig.json',
+        tsconfigRootDir: import.meta.dirname,
       },
       globals: {
         window: 'readonly',
@@ -66,6 +73,7 @@ export default [
       '@typescript-eslint': tsPlugin,
       'react': reactPlugin,
       'react-hooks': reactHooksPlugin,
+      'i18next': i18next,
     },
     rules: {
       // TypeScript rules
@@ -77,11 +85,40 @@ export default [
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
 
+      // TypeScript strict rules (type-checked)
+      '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/strict-boolean-expressions': 'warn',
+      '@typescript-eslint/consistent-type-imports': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+
       // React rules
       'react/react-in-jsx-scope': 'off', // Not needed in React 18+
       'react/prop-types': 'off', // Using TypeScript for prop types
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
+
+      // jsx-a11y overrides — desktop app patterns get warnings, not errors
+      'jsx-a11y/alt-text': 'error',
+      'jsx-a11y/aria-props': 'error',
+      'jsx-a11y/aria-role': 'error',
+      'jsx-a11y/click-events-have-key-events': 'warn',
+      'jsx-a11y/no-static-element-interactions': 'warn',
+      'jsx-a11y/label-has-associated-control': 'warn',
+      'jsx-a11y/anchor-is-valid': 'warn',
+
+      // i18next — flag hardcoded strings in JSX
+      'i18next/no-literal-string': ['warn', {
+        markupOnly: true,
+        ignoreAttribute: [
+          'className', 'style', 'type', 'name', 'id',
+          'data-testid', 'key', 'role', 'htmlFor', 'placeholder',
+        ],
+        ignoreCallee: [
+          'console.log', 'console.warn', 'console.error',
+          'reportError', 'reportWarning',
+        ],
+      }],
 
       // Prevent raw invoke() — use cmd() from lib/commands.ts
       'no-restricted-imports': ['error', {
@@ -114,6 +151,12 @@ export default [
     files: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}', 'src/test/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': 'off', // Tests mock invoke() directly
+      // Relax i18next in tests — test strings are not user-facing
+      'i18next/no-literal-string': 'off',
+      // Relax type-checked rules in tests — test patterns often use loose promises
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/strict-boolean-expressions': 'off',
     },
     languageOptions: {
       globals: {
