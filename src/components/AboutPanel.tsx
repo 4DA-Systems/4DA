@@ -30,7 +30,7 @@ export function AboutPanel() {
       </div>
 
       {/* Platonic Architecture — the mathematical identity */}
-      <div className="bg-bg-tertiary/30 border border-[#D4AF37]/20 rounded-xl p-4">
+      <div className="bg-bg-tertiary/30 border border-accent-gold/20 rounded-xl p-4">
         <Suspense fallback={null}>
           <GeometryShowcase />
         </Suspense>

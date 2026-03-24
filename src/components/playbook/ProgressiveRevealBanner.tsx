@@ -10,14 +10,14 @@ export function ProgressiveRevealBanner({ block }: Props) {
   if (newly_completed.length === 0) return null;
 
   return (
-    <div className="border border-[#D4AF37]/30 rounded-xl bg-[#D4AF37]/5 p-4 mb-4">
+    <div className="border border-accent-gold/30 rounded-xl bg-accent-gold/5 p-4 mb-4">
       <div className="flex items-center gap-2 mb-2">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D4AF37" strokeWidth="2">
           <path d="M12 2L2 7l10 5 10-5-10-5z" />
           <path d="M2 17l10 5 10-5" />
           <path d="M2 12l10 5 10-5" />
         </svg>
-        <h4 className="text-xs font-semibold text-[#D4AF37] uppercase tracking-wider">
+        <h4 className="text-xs font-semibold text-accent-gold uppercase tracking-wider">
           New Data Unlocked
         </h4>
       </div>
@@ -27,7 +27,7 @@ export function ProgressiveRevealBanner({ block }: Props) {
       <ul className="space-y-1">
         {unlocked_content.map((item, i) => (
           <li key={i} className="flex items-center gap-2 text-xs text-text-secondary">
-            <span className="text-[#22C55E]">+</span>
+            <span className="text-success">+</span>
             {item}
           </li>
         ))}

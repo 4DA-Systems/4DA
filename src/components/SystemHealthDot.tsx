@@ -34,7 +34,7 @@ export function SystemHealthDot({ onClick }: { onClick?: () => void }) {
 
   if (status === null || status === 'healthy') return null;
 
-  const dotColor = status === 'error' ? 'bg-[#EF4444]' : 'bg-[#D4AF37]';
+  const dotColor = status === 'error' ? 'bg-error' : 'bg-accent-gold';
   const title = status === 'error'
     ? `${issueCount} system error${issueCount > 1 ? 's' : ''} — click for diagnostics`
     : `${issueCount} system warning${issueCount > 1 ? 's' : ''} — click for diagnostics`;

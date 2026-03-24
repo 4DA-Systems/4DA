@@ -70,7 +70,7 @@ export function GuidedHighlights() {
           className="absolute pointer-events-auto cursor-pointer group"
           style={{ top: h.top, left: h.left }}
         >
-          <span className="block w-3 h-3 rounded-full bg-[#D4AF37] animate-pulse shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
+          <span className="block w-3 h-3 rounded-full bg-accent-gold animate-pulse shadow-[0_0_8px_rgba(212,175,55,0.5)]" />
         </button>
       ))}
       {activeTooltip && (() => {

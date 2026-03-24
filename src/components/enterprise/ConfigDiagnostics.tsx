@@ -10,9 +10,9 @@ interface DiagnosticCheck {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
-  pass: { bg: 'bg-[#22C55E]/10', text: 'text-[#22C55E]', icon: '\u2714' },
+  pass: { bg: 'bg-success/10', text: 'text-success', icon: '\u2714' },
   warn: { bg: 'bg-[#F97316]/10', text: 'text-[#F97316]', icon: '\u26A0' },
-  fail: { bg: 'bg-[#EF4444]/10', text: 'text-[#EF4444]', icon: '\u2716' },
+  fail: { bg: 'bg-error/10', text: 'text-error', icon: '\u2716' },
   running: { bg: 'bg-[#3B82F6]/10', text: 'text-[#3B82F6]', icon: '\u23F3' },
 };
 
@@ -150,7 +150,7 @@ export function ConfigDiagnostics() {
         <button
           onClick={runDiagnostics}
           disabled={running}
-          className="px-3 py-1.5 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors disabled:opacity-50"
+          className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
         >
           {running ? t('enterprise.diagnostics.running', 'Running...') : t('enterprise.diagnostics.run', 'Run Diagnostics')}
         </button>
@@ -160,13 +160,13 @@ export function ConfigDiagnostics() {
       {checks.length > 0 && !running && (
         <div className="flex items-center gap-3">
           {passCount > 0 && (
-            <span className="text-[10px] text-[#22C55E]">{passCount} passed</span>
+            <span className="text-[10px] text-success">{passCount} passed</span>
           )}
           {warnCount > 0 && (
             <span className="text-[10px] text-[#F97316]">{warnCount} warnings</span>
           )}
           {failCount > 0 && (
-            <span className="text-[10px] text-[#EF4444]">{failCount} failed</span>
+            <span className="text-[10px] text-error">{failCount} failed</span>
           )}
         </div>
       )}
@@ -208,19 +208,19 @@ export function ConfigDiagnostics() {
         </h4>
         <div className="space-y-1.5 text-[10px] text-text-muted">
           <div className="flex items-start gap-2">
-            <span className="text-[#D4AF37] mt-0.5">&#8226;</span>
+            <span className="text-accent-gold mt-0.5">&#8226;</span>
             <span><strong className="text-text-secondary">No LLM:</strong> Add an API key in Settings &gt; General &gt; AI Provider</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-[#D4AF37] mt-0.5">&#8226;</span>
+            <span className="text-accent-gold mt-0.5">&#8226;</span>
             <span><strong className="text-text-secondary">No embeddings:</strong> Install Ollama and run <code className="text-[#818CF8]">ollama pull nomic-embed-text</code></span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-[#D4AF37] mt-0.5">&#8226;</span>
+            <span className="text-accent-gold mt-0.5">&#8226;</span>
             <span><strong className="text-text-secondary">Relay disconnected:</strong> Check your network and verify the relay URL in Team settings</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-[#D4AF37] mt-0.5">&#8226;</span>
+            <span className="text-accent-gold mt-0.5">&#8226;</span>
             <span><strong className="text-text-secondary">Source errors:</strong> Check API rate limits. Circuit breakers auto-recover after 30 minutes.</span>
           </div>
         </div>

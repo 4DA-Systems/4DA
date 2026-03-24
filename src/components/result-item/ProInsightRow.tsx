@@ -64,7 +64,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
           href="https://4da.ai/signal"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto"
+          className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ml-auto"
         >
           <ProStar />
           {t('results.seeWhy')} {formatScore(item.top_score)}
@@ -91,7 +91,7 @@ function InlineTrialStart({ score }: { score: number }) {
     <button
       onClick={handleStart}
       disabled={starting}
-      className="inline-flex items-center gap-0.5 text-[10px] text-[#D4AF37]/50 hover:text-[#D4AF37] transition-colors ml-auto disabled:opacity-50"
+      className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ml-auto disabled:opacity-50"
     >
       <ProStar />
       {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: formatScore(score) })}

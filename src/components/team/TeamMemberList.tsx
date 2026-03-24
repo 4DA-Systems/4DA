@@ -31,7 +31,7 @@ export function TeamMemberList() {
               {/* Avatar */}
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold ${
                 member.role === 'admin'
-                  ? 'bg-[#22C55E]/15 text-[#22C55E]'
+                  ? 'bg-success/15 text-success'
                   : 'bg-[#3B82F6]/15 text-[#3B82F6]'
               }`}>
                 {member.display_name.charAt(0).toUpperCase()}
@@ -54,7 +54,7 @@ export function TeamMemberList() {
               {/* Role badge */}
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                 member.role === 'admin'
-                  ? 'bg-[#22C55E]/10 text-[#22C55E]'
+                  ? 'bg-success/10 text-success'
                   : 'bg-[#3B82F6]/10 text-[#3B82F6]'
               }`}>
                 {member.role}
@@ -63,7 +63,7 @@ export function TeamMemberList() {
               {/* Presence */}
               <div className="flex items-center gap-1">
                 <div className={`w-1.5 h-1.5 rounded-full ${
-                  isOnline ? 'bg-[#22C55E]' : 'bg-text-muted'
+                  isOnline ? 'bg-success' : 'bg-text-muted'
                 }`} />
                 {member.last_seen && !isOnline && (
                   <span className="text-[9px] text-text-muted" title={member.last_seen}>

@@ -34,8 +34,8 @@ export function GhostPreview({ preview }: GhostPreviewProps) {
   if (visibleLines.length === 0) return null;
 
   return (
-    <div className="rounded-lg bg-[#D4AF37]/[0.03] p-3 border border-[#D4AF37]/10 cursor-pointer" role="button" tabIndex={0} aria-label={t('search.proIntelligence')} onClick={() => trackEvent('ghost_preview_clicked')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); trackEvent('ghost_preview_clicked'); } }}>
-      <div className="text-[10px] text-[#D4AF37]/70 uppercase tracking-wider font-medium mb-2">
+    <div className="rounded-lg bg-accent-gold/[0.03] p-3 border border-accent-gold/10 cursor-pointer" role="button" tabIndex={0} aria-label={t('search.proIntelligence')} onClick={() => trackEvent('ghost_preview_clicked')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); trackEvent('ghost_preview_clicked'); } }}>
+      <div className="text-[10px] text-accent-gold/70 uppercase tracking-wider font-medium mb-2">
         {t('search.proIntelligence')}
       </div>
       <div className="flex flex-wrap gap-x-4 gap-y-1">

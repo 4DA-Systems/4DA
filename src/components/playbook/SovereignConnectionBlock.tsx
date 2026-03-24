@@ -16,9 +16,9 @@ export function SovereignConnectionBlock({ block }: Props) {
   const icon = CONNECTION_ICONS[block.connection_type] ?? '◆';
 
   return (
-    <div className="border border-[#D4AF37]/10 rounded-xl bg-bg-primary p-4 my-4">
+    <div className="border border-accent-gold/10 rounded-xl bg-bg-primary p-4 my-4">
       <div className="flex items-start gap-3">
-        <span className="text-lg text-[#D4AF37] leading-none mt-0.5">{icon}</span>
+        <span className="text-lg text-accent-gold leading-none mt-0.5">{icon}</span>
         <div className="flex-1 min-w-0">
           <h4 className="text-sm font-medium text-white mb-1">{block.headline}</h4>
           <p className="text-xs text-text-secondary leading-relaxed">{block.insight}</p>
@@ -28,7 +28,7 @@ export function SovereignConnectionBlock({ block }: Props) {
       {/* Collapsible data sources panel (Sovereign Receipt) */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="mt-3 text-[10px] text-[#8A8A8A] hover:text-text-secondary transition-colors"
+        className="mt-3 text-[10px] text-text-muted hover:text-text-secondary transition-colors"
       >
         {expanded ? '▾' : '▸'} Data Sources ({block.data_sources.length})
       </button>

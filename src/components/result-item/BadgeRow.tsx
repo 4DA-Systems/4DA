@@ -28,7 +28,7 @@ export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
     <>
       {matchedAffinityTopic && (
         <span
-          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-[#D4AF37]/10 text-[#D4AF37]"
+          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-accent-gold/10 text-accent-gold"
           title={t('results.affinityBoost', { topic: matchedAffinityTopic })}
         >
           {t('results.learnedBadge')}

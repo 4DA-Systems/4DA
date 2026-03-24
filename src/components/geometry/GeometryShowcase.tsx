@@ -86,7 +86,7 @@ export function GeometryShowcase() {
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-medium text-[#D4AF37] tracking-wide uppercase">
+      <h4 className="text-sm font-medium text-accent-gold tracking-wide uppercase">
         {t('about.geometryTitle', { defaultValue: 'Platonic Architecture' })}
       </h4>
       <p className="text-xs text-text-secondary leading-relaxed">
@@ -102,7 +102,7 @@ export function GeometryShowcase() {
               key={geo.tag}
               onClick={() => setExpanded(isExpanded ? null : geo.tag)}
               className={`bg-bg-tertiary/40 border rounded-xl p-3 text-left transition-all hover:bg-bg-tertiary/60 ${
-                isExpanded ? 'border-[#D4AF37]/40' : 'border-border/50'
+                isExpanded ? 'border-accent-gold/40' : 'border-border/50'
               }`}
             >
               <div className="flex items-start gap-3">
@@ -116,7 +116,7 @@ export function GeometryShowcase() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs font-medium text-white">{geo.name}</span>
-                    <span className="text-[9px] text-[#D4AF37] font-medium">{geo.role}</span>
+                    <span className="text-[9px] text-accent-gold font-medium">{geo.role}</span>
                   </div>
                   <span className="text-[10px] text-text-muted block">
                     {geo.dimension} · {geo.vertices}v · {geo.edges}e
