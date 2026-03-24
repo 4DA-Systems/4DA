@@ -233,11 +233,22 @@ pub async fn trigger_notification_preview(
             time_ago: "12m ago".to_string(),
             item_id: None,
         },
-        _ => {
-            // Low/default
-            monitoring::send_notification(&app, 3, 30);
-            return Ok(serde_json::json!({ "success": true, "priority": "low" }));
-        }
+        _ => crate::notification_window::NotificationData {
+            variant: "digest".to_string(),
+            priority: "low".to_string(),
+            signal_type: None,
+            title: "3 new items match your interests".to_string(),
+            action: Some("Click to review in briefing".to_string()),
+            source: None,
+            matched_deps: vec![],
+            count: Some(3),
+            chain_sources: None,
+            chain_phase: None,
+            chain_links_filled: None,
+            chain_links_total: None,
+            time_ago: "just now".to_string(),
+            item_id: None,
+        },
     };
 
     crate::notification_window::show_notification(&app, data);
