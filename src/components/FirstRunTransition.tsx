@@ -78,20 +78,20 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
       } catch { /* default 240s */ }
 
       // Fetch scan summary BEFORE starting analysis
+      let hasScanData = false;
       try {
         const summary = await cmd('ace_get_scan_summary') as unknown as ScanSummary;
         if (summary.has_data) {
           setScanSummary(summary);
-          setPhase('intelligence');
-          // Show intelligence preview for 3.5s, then start analysis
-          setTimeout(() => startAnalysis(), 3500);
-          return;
+          hasScanData = true;
         }
       } catch {
-        // Scan summary unavailable — skip intelligence phase
+        // Scan summary unavailable — proceed with discovery state
       }
-      // No scan data — start analysis directly
-      setTimeout(() => startAnalysis(), 300);
+
+      setPhase('intelligence');
+      const holdMs = hasScanData ? 3500 : 2000;
+      setTimeout(() => startAnalysis(), holdMs);
     };
     init();
   }, [startAnalysis]);

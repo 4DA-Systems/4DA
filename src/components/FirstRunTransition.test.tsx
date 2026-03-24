@@ -103,15 +103,15 @@ describe('FirstRunTransition', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 1. Renders in preparing phase by default
+  // 1. Always transitions to intelligence phase on mount
   // -------------------------------------------------------------------------
-  it('renders with preparing aria-label initially', async () => {
+  it('renders with intelligence aria-label after init', async () => {
     await act(async () => {
       render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
     const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-label', 'Preparing analysis');
+    expect(status).toHaveAttribute('aria-label', 'Showing project intelligence');
     expect(status).toHaveAttribute('aria-busy', 'true');
   });
 
@@ -346,9 +346,9 @@ describe('FirstRunTransition', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 11. Starts analysis on mount (after 300ms when no scan data)
+  // 11. Starts analysis on mount (after 2s intelligence hold when no scan data)
   // -------------------------------------------------------------------------
-  it('starts analysis after mount delay when no scan data', async () => {
+  it('starts analysis after intelligence hold when no scan data', async () => {
     await act(async () => {
       render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
@@ -356,9 +356,15 @@ describe('FirstRunTransition', () => {
     // Analysis should not be called immediately
     expect(mockStartAnalysis).not.toHaveBeenCalled();
 
-    // After 300ms delay
+    // Not yet after 1s
     await act(async () => {
-      vi.advanceTimersByTime(300);
+      vi.advanceTimersByTime(1000);
+    });
+    expect(mockStartAnalysis).not.toHaveBeenCalled();
+
+    // After 2s intelligence hold
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
     });
 
     expect(mockStartAnalysis).toHaveBeenCalledTimes(1);

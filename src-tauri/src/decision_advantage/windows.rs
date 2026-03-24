@@ -307,16 +307,20 @@ fn detect_security_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>)
 fn detect_migration_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>) {
     let deps = get_user_dependencies(conn);
     for (_id, title, content, _) in query_items_with_keywords(conn, MIGRATION_KEYWORDS) {
-        if let Some(dep) = find_matching_dep(&title, &content, &deps) {
-            windows.push(make_window(
-                "migration",
-                Some(dep.clone()),
-                &format!("Migration: {dep} \u{2014} {}", truncate(&title, 80)),
-                0.70,
-                0.75,
-                Some("+30 days"),
-            ));
-        }
+        let dep = find_matching_dep(&title, &content, &deps);
+        let (urgency, relevance) = if dep.is_some() {
+            (0.70, 0.75)
+        } else {
+            (0.35, 0.40)
+        };
+        windows.push(make_window(
+            "migration",
+            dep,
+            &format!("Migration: {}", truncate(&title, 100)),
+            urgency,
+            relevance,
+            Some("+30 days"),
+        ));
     }
 }
 
@@ -324,12 +328,16 @@ fn detect_adoption_windows(conn: &Connection, windows: &mut Vec<DecisionWindow>)
     let deps = get_user_dependencies(conn);
     for (_id, title, content, _) in query_items_with_keywords(conn, ADOPTION_KEYWORDS) {
         let dep = find_matching_dep(&title, &content, &deps);
-        let relevance = if dep.is_some() { 0.70 } else { 0.50 };
+        let (urgency, relevance) = if dep.is_some() {
+            (0.50, 0.70)
+        } else {
+            (0.25, 0.40)
+        };
         windows.push(make_window(
             "adoption",
             dep,
             &format!("Adoption: {}", truncate(&title, 100)),
-            0.50,
+            urgency,
             relevance,
             Some("+14 days"),
         ));

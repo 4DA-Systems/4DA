@@ -3,6 +3,7 @@
 //! Connects individual signals into causal chains over time.
 //! "CVE Monday + your dep uses it Tuesday + patch released today = act now."
 
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::info;
@@ -21,6 +22,7 @@ pub struct SignalChain {
     pub overall_priority: String,
     pub resolution: ChainResolution,
     pub suggested_action: String,
+    pub confidence: f64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -160,6 +162,17 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
             dates.iter().min().unwrap_or(&String::new())
         );
 
+        let dep_match = has_dependency_match(conn, topic);
+        let corroboration = (links.len() as f64 / 5.0).min(1.0);
+        let severity = if has_security {
+            1.0
+        } else if has_breaking {
+            0.7
+        } else {
+            0.3
+        };
+        let confidence = dep_match * 0.4 + corroboration * 0.3 + severity * 0.3;
+
         chains.push(SignalChain {
             id: chain_id,
             chain_name: format!("{} signal chain ({} events)", topic, links.len()),
@@ -167,10 +180,13 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
             overall_priority: priority.to_string(),
             resolution: ChainResolution::Open,
             suggested_action: action,
+            confidence,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
         });
     }
+
+    chains.retain(|c| c.confidence >= 0.3);
 
     // Sort by priority
     chains.sort_by(|a, b| {
@@ -182,6 +198,19 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
     chains.truncate(10);
     info!(target: "4da::signal_chains", chains = chains.len(), "Signal chain detection complete");
     Ok(chains)
+}
+
+fn has_dependency_match(conn: &rusqlite::Connection, topic: &str) -> f64 {
+    let lower = topic.to_lowercase();
+    let result = conn.query_row(
+        "SELECT COUNT(*) FROM user_dependencies WHERE LOWER(package_name) LIKE ?1",
+        params![format!("%{}%", lower)],
+        |row| row.get::<_, i64>(0),
+    );
+    match result {
+        Ok(count) if count > 0 => 1.0,
+        _ => 0.0,
+    }
 }
 
 fn classify_chain_signal(title: &str) -> String {

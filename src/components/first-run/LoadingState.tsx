@@ -185,8 +185,23 @@ export function LoadingState({
   }, [phase]);
 
   // Intelligence preview phase
-  if (phase === 'intelligence' && scanSummary) {
-    return <IntelligencePreview summary={scanSummary} />;
+  if (phase === 'intelligence') {
+    if (scanSummary) {
+      return <IntelligencePreview summary={scanSummary} />;
+    }
+    return (
+      <div className="text-center px-8 max-w-md animate-fade-in">
+        <div className="mb-6">
+          <VoidEngine size={80} />
+        </div>
+        <h2 className="text-xl font-medium text-white mb-2">
+          {t('firstRun.discoveringStack', 'Discovering your stack...')}
+        </h2>
+        <p className="text-xs text-text-muted animate-pulse">
+          {t('firstRun.startingAnalysis', 'Starting content analysis...')}
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -283,7 +298,7 @@ export function LoadingState({
         </p>
       )}
 
-      {/* Skip ahead button — appears after 5 seconds */}
+      {/* Skip ahead button — appears after 5 seconds in fetching/analyzing only */}
       {showSkip && onSkipAhead && (
         <button
           onClick={onSkipAhead}
