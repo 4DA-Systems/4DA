@@ -20,7 +20,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
   const { t } = useTranslation();
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-[#D4AF37]/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
+    <div className="fixed bottom-4 right-4 z-50 bg-bg-secondary border border-accent-gold/40 rounded-xl px-5 py-4 shadow-lg max-w-sm">
       <div className="flex items-start gap-3">
         <div className="flex-1">
           <p className="text-sm font-medium text-white">{t('update.available', { version: update.version })}</p>
@@ -36,7 +36,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
             onClick={onInstall}
             disabled={installing}
             aria-label={installing ? t('update.installing') : t('update.install')}
-            className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+            className="px-4 py-1.5 text-xs font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
           >
             {installing ? t('update.installing') : t('update.install')}
           </button>
@@ -45,7 +45,7 @@ export function UpdateBanner({ update, installing, onInstall, onDismiss }: Updat
             href={`https://github.com/runyourempire/4DA/releases/latest`}
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-1.5 text-xs font-medium text-black bg-[#D4AF37] rounded-lg hover:bg-[#C4A030] transition-colors inline-block"
+            className="px-4 py-1.5 text-xs font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors inline-block"
           >
             {t('update.download', 'Download Update')}
           </a>

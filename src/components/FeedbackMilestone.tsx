@@ -1,10 +1,11 @@
 import { memo, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
-const MILESTONES: Record<number, string> = {
-  10: 'Your 4DA learned from 10 signals this session',
-  50: '50 signals — your model is now personalized',
-  100: '100 signals — top 5% of active users',
-  500: '500 signals — deeply calibrated',
+const MILESTONE_KEYS: Record<number, string> = {
+  10: 'feedback.milestone10',
+  50: 'feedback.milestone50',
+  100: 'feedback.milestone100',
+  500: 'feedback.milestone500',
 };
 
 interface FeedbackMilestoneProps {
@@ -12,15 +13,17 @@ interface FeedbackMilestoneProps {
 }
 
 export const FeedbackMilestone = memo(function FeedbackMilestone({ count }: FeedbackMilestoneProps) {
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
-  const message = MILESTONES[count];
+  const milestoneKey = MILESTONE_KEYS[count];
+  const message = milestoneKey ? t(milestoneKey) : undefined;
 
   useEffect(() => {
-    if (!message) return;
+    if (!milestoneKey) return;
     setVisible(true);
     const timer = setTimeout(() => setVisible(false), 5000);
     return () => clearTimeout(timer);
-  }, [message]);
+  }, [milestoneKey]);
 
   if (!message || !visible) return null;
 
@@ -38,7 +41,7 @@ export const FeedbackMilestone = memo(function FeedbackMilestone({ count }: Feed
       </div>
       <div>
         <p className="text-sm font-medium text-white">{message}</p>
-        <p className="text-[11px] text-[#A0A0A0] mt-0.5">Your feed keeps getting sharper</p>
+        <p className="text-[11px] text-[#A0A0A0] mt-0.5">{t('feedback.gettingSharper')}</p>
       </div>
     </div>
   );
