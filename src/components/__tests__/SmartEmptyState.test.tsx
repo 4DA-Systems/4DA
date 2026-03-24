@@ -16,7 +16,7 @@ describe('SmartEmptyState', () => {
   it('renders example signals for React stack', () => {
     render(<SmartEmptyState detectedStack={['react', 'typescript']} />);
     expect(screen.getAllByText(/React/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Example/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('empty.example').length).toBeGreaterThan(0);
   });
 
   it('renders example signals for Rust stack', () => {
@@ -26,16 +26,16 @@ describe('SmartEmptyState', () => {
 
   it('renders default signals when stack is empty', () => {
     render(<SmartEmptyState detectedStack={[]} />);
-    expect(screen.getByText(/developers/i)).toBeInTheDocument();
+    expect(screen.getByText('empty.whileAnalysisRuns')).toBeInTheDocument();
   });
 
   it('shows header with detected stack name', () => {
     render(<SmartEmptyState detectedStack={['react']} />);
-    expect(screen.getByText(/first analysis runs/i)).toBeInTheDocument();
+    expect(screen.getByText('empty.whileAnalysisRunsStack')).toBeInTheDocument();
   });
 
   it('shows footer with arrival estimate', () => {
     render(<SmartEmptyState detectedStack={['react']} />);
-    expect(screen.getByText(/Real signals arriving/i)).toBeInTheDocument();
+    expect(screen.getByText('empty.realSignalsArriving')).toBeInTheDocument();
   });
 });
