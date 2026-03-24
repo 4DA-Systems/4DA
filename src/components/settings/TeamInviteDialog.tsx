@@ -115,7 +115,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                     aria-pressed={role === 'member'}
                     className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
                       role === 'member'
-                        ? 'border-[#22C55E]/50 bg-[#22C55E]/10 text-[#22C55E]'
+                        ? 'border-success/50 bg-success/10 text-success'
                         : 'border-border bg-bg-tertiary text-text-secondary hover:border-border/80'
                     }`}
                   >
@@ -126,7 +126,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                     aria-pressed={role === 'admin'}
                     className={`flex-1 px-3 py-2 text-xs rounded-lg border transition-all ${
                       role === 'admin'
-                        ? 'border-[#22C55E]/50 bg-[#22C55E]/10 text-[#22C55E]'
+                        ? 'border-success/50 bg-success/10 text-success'
                         : 'border-border bg-bg-tertiary text-text-secondary hover:border-border/80'
                     }`}
                   >
@@ -142,7 +142,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
 
               {/* Error */}
               {error && (
-                <div className="text-xs p-2.5 rounded-lg bg-[#EF4444]/10 text-[#EF4444] border border-[#EF4444]/30">
+                <div className="text-xs p-2.5 rounded-lg bg-error/10 text-error border border-error/30">
                   {error}
                 </div>
               )}
@@ -151,7 +151,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
               <button
                 onClick={handleCreate}
                 disabled={loading}
-                className="w-full px-4 py-2.5 text-sm font-medium text-white bg-[#22C55E] rounded-lg hover:bg-[#1DA34D] transition-colors disabled:opacity-50"
+                className="w-full px-4 py-2.5 text-sm font-medium text-white bg-success rounded-lg hover:bg-[#1DA34D] transition-colors disabled:opacity-50"
               >
                 {loading
                   ? t('settings.team.generating', 'Generating...')
@@ -166,8 +166,8 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
             <>
               {/* Invite Code Display */}
               <div className="text-center space-y-3">
-                <div className="w-12 h-12 mx-auto rounded-full bg-[#22C55E]/15 flex items-center justify-center">
-                  <span className="text-[#22C55E] text-lg">&#10003;</span>
+                <div className="w-12 h-12 mx-auto rounded-full bg-success/15 flex items-center justify-center">
+                  <span className="text-success text-lg">&#10003;</span>
                 </div>
                 <p className="text-xs text-text-secondary">
                   {t('settings.team.inviteReady', 'Share this code with your team member:')}
@@ -178,14 +178,14 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                     data-invite-code
                     readOnly
                     value={inviteCode}
-                    className="w-full px-4 py-3 bg-bg-primary border border-[#22C55E]/30 rounded-lg text-center text-lg font-mono text-white tracking-[0.3em] select-all focus:outline-none"
+                    className="w-full px-4 py-3 bg-bg-primary border border-success/30 rounded-lg text-center text-lg font-mono text-white tracking-[0.3em] select-all focus:outline-none"
                     onClick={e => (e.target as HTMLInputElement).select()}
                   />
                 </div>
 
                 <button
                   onClick={handleCopy}
-                  className="w-full px-4 py-2 text-xs font-medium text-[#22C55E] border border-[#22C55E]/30 rounded-lg hover:bg-[#22C55E]/10 transition-colors"
+                  className="w-full px-4 py-2 text-xs font-medium text-success border border-success/30 rounded-lg hover:bg-success/10 transition-colors"
                 >
                   {copied
                     ? t('settings.team.copied', 'Copied!')

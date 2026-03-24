@@ -25,9 +25,9 @@ import IntelligenceConsole from '../IntelligenceConsole';
 describe('IntelligenceConsole', () => {
   it('renders the header and subtitle', () => {
     render(<IntelligenceConsole />);
-    expect(screen.getByText('Intelligence Console')).toBeInTheDocument();
+    expect(screen.getByText('console.title')).toBeInTheDocument();
     expect(
-      screen.getByText('Accuracy tracking, project convergence, and AI cost analysis.'),
+      screen.getByText('console.subtitle'),
     ).toBeInTheDocument();
   });
 
@@ -35,27 +35,27 @@ describe('IntelligenceConsole', () => {
     render(<IntelligenceConsole />);
     const tabs = screen.getAllByRole('tab');
     expect(tabs).toHaveLength(3);
-    expect(screen.getByText('Accuracy')).toBeInTheDocument();
-    expect(screen.getByText('Projects')).toBeInTheDocument();
-    expect(screen.getByText('AI Costs')).toBeInTheDocument();
+    expect(screen.getByText('console.tab_accuracy')).toBeInTheDocument();
+    expect(screen.getByText('console.tab_convergence')).toBeInTheDocument();
+    expect(screen.getByText('console.tab_costs')).toBeInTheDocument();
   });
 
   it('defaults to the Accuracy tab being selected', () => {
     render(<IntelligenceConsole />);
     const accuracyTab = screen.getByRole('tab', { selected: true });
-    expect(accuracyTab).toHaveTextContent('Accuracy');
+    expect(accuracyTab).toHaveTextContent('console.tab_accuracy');
   });
 
   it('switches to Projects tab on click', () => {
     render(<IntelligenceConsole />);
-    const projectsTab = screen.getByText('Projects').closest('button')!;
+    const projectsTab = screen.getByText('console.tab_convergence').closest('button')!;
     fireEvent.click(projectsTab);
     expect(projectsTab).toHaveAttribute('aria-selected', 'true');
   });
 
   it('switches to AI Costs tab on click', () => {
     render(<IntelligenceConsole />);
-    const costsTab = screen.getByText('AI Costs').closest('button')!;
+    const costsTab = screen.getByText('console.tab_costs').closest('button')!;
     fireEvent.click(costsTab);
     expect(costsTab).toHaveAttribute('aria-selected', 'true');
   });

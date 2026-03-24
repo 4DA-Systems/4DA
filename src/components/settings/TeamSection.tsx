@@ -34,13 +34,13 @@ function getConnectionState(
 }
 
 const CONNECTION_COLORS: Record<ConnectionState, string> = {
-  connected: 'bg-[#22C55E]',
+  connected: 'bg-success',
   syncing: 'bg-orange-400',
-  error: 'bg-[#EF4444]',
+  error: 'bg-error',
 };
 
 const ROLE_BADGE: Record<string, { bg: string; text: string }> = {
-  admin: { bg: 'bg-[#22C55E]/15', text: 'text-[#22C55E]' },
+  admin: { bg: 'bg-success/15', text: 'text-success' },
   member: { bg: 'bg-blue-500/15', text: 'text-blue-400' },
 };
 
@@ -143,8 +143,8 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
 
       {/* Error state */}
       {teamError && !teamLoading && (
-        <div className="mb-3 p-2.5 rounded-lg bg-[#EF4444]/10 border border-[#EF4444]/30" role="alert">
-          <p className="text-xs text-[#EF4444]">{teamError}</p>
+        <div className="mb-3 p-2.5 rounded-lg bg-error/10 border border-error/30" role="alert">
+          <p className="text-xs text-error">{teamError}</p>
         </div>
       )}
 
@@ -158,14 +158,14 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
               <button
                 onClick={() => setFormMode('create')}
                 aria-label={t('settings.team.createTeam', 'Create Team')}
-                className="flex-1 px-4 py-2 text-xs font-medium text-black bg-[#22C55E] rounded-lg hover:bg-[#1EB354] transition-colors"
+                className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors"
               >
                 {t('settings.team.createTeam', 'Create Team')}
               </button>
               <button
                 onClick={() => setFormMode('join')}
                 aria-label={t('settings.team.joinTeam', 'Join Team')}
-                className="flex-1 px-4 py-2 text-xs font-medium text-text-secondary border border-border rounded-lg hover:border-[#22C55E]/50 hover:text-white transition-colors"
+                className="flex-1 px-4 py-2 text-xs font-medium text-text-secondary border border-border rounded-lg hover:border-success/50 hover:text-white transition-colors"
               >
                 {t('settings.team.joinTeam', 'Join Team')}
               </button>
@@ -184,7 +184,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                   value={relayUrl}
                   onChange={e => setRelayUrl(e.target.value)}
                   placeholder="https://relay.4da.ai"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#22C55E]/50 font-mono"
+                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
                 />
               </label>
               <label className="block">
@@ -196,14 +196,14 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value)}
                   placeholder="Your name"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#22C55E]/50"
+                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50"
                 />
               </label>
               <div className="flex gap-2">
                 <button
                   onClick={handleCreate}
                   disabled={teamLoading || !displayName.trim() || !relayUrl.trim()}
-                  className="flex-1 px-4 py-2 text-xs font-medium text-black bg-[#22C55E] rounded-lg hover:bg-[#1EB354] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
                 >
                   {teamLoading ? '...' : t('settings.team.createTeam', 'Create Team')}
                 </button>
@@ -229,7 +229,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                   value={relayUrl}
                   onChange={e => setRelayUrl(e.target.value)}
                   placeholder="https://relay.4da.ai"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#22C55E]/50 font-mono"
+                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
                 />
               </label>
               <label className="block">
@@ -242,7 +242,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                   onChange={e => setInviteCode(e.target.value.toUpperCase().slice(0, 6))}
                   placeholder="ABC123"
                   maxLength={6}
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#22C55E]/50 font-mono tracking-widest"
+                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono tracking-widest"
                 />
               </label>
               <label className="block">
@@ -254,14 +254,14 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                   value={displayName}
                   onChange={e => setDisplayName(e.target.value)}
                   placeholder="Your name"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-[#22C55E]/50"
+                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50"
                 />
               </label>
               <div className="flex gap-2">
                 <button
                   onClick={handleJoin}
                   disabled={teamLoading || !displayName.trim() || !relayUrl.trim() || !inviteCode.trim()}
-                  className="flex-1 px-4 py-2 text-xs font-medium text-black bg-[#22C55E] rounded-lg hover:bg-[#1EB354] transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
                 >
                   {teamLoading ? '...' : t('settings.team.joinTeam', 'Join Team')}
                 </button>
@@ -359,7 +359,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                     aria-checked={sharingPrefs[pref.key]}
                     aria-label={pref.label}
                     onClick={() => setSharingPrefs(prev => ({ ...prev, [pref.key]: !prev[pref.key] }))}
-                    className={`relative w-8 h-4 rounded-full transition-colors ${sharingPrefs[pref.key] ? 'bg-[#22C55E]' : 'bg-border'}`}
+                    className={`relative w-8 h-4 rounded-full transition-colors ${sharingPrefs[pref.key] ? 'bg-success' : 'bg-border'}`}
                   >
                     <span
                       className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${sharingPrefs[pref.key] ? 'translate-x-4' : 'translate-x-0'}`}
@@ -379,7 +379,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
               <button
                 onClick={() => setShowTeamInviteDialog(true)}
                 aria-label={t('settings.team.inviteMember', 'Invite Member')}
-                className="flex-1 px-3 py-2 text-xs font-medium text-[#22C55E] border border-[#22C55E]/30 rounded-lg hover:bg-[#22C55E]/10 transition-colors"
+                className="flex-1 px-3 py-2 text-xs font-medium text-success border border-success/30 rounded-lg hover:bg-success/10 transition-colors"
               >
                 {t('settings.team.inviteMember', 'Invite Member')}
               </button>
@@ -387,7 +387,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                 <button
                   onClick={() => setConfirmLeave(true)}
                   aria-label={t('settings.team.leaveTeam', 'Leave Team')}
-                  className="px-3 py-2 text-xs text-text-muted border border-border rounded-lg hover:border-[#EF4444]/30 hover:text-[#EF4444] transition-colors"
+                  className="px-3 py-2 text-xs text-text-muted border border-border rounded-lg hover:border-error/30 hover:text-error transition-colors"
                 >
                   {t('settings.team.leaveTeam', 'Leave Team')}
                 </button>
@@ -395,7 +395,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
                 <button
                   onClick={handleLeave}
                   aria-label={t('settings.team.confirmLeave', 'Confirm leave')}
-                  className="px-3 py-2 text-xs font-medium text-[#EF4444] border border-[#EF4444]/30 rounded-lg bg-[#EF4444]/10 hover:bg-[#EF4444]/20 transition-colors"
+                  className="px-3 py-2 text-xs font-medium text-error border border-error/30 rounded-lg bg-error/10 hover:bg-error/20 transition-colors"
                 >
                   {t('settings.team.confirmLeave', 'Confirm')}
                 </button>

@@ -1,4 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useItemSummary } from '../hooks/use-item-summary';
 import { useViewTracking } from '../hooks/use-view-tracking';
@@ -7,27 +9,27 @@ import { ResultItemCollapsed } from './result-item/ResultItemCollapsed';
 import { ResultItemExpanded } from './result-item/ResultItemExpanded';
 import { ScoreBreakdownDrawer } from './result-item/ScoreBreakdownDrawer';
 
-function generateFallbackReason(item: SourceRelevance): string {
+function generateFallbackReason(item: SourceRelevance, t: TFunction): string {
   const parts: string[] = [];
   const b = item.score_breakdown;
   if (b) {
     if (b.signal_count != null && b.signal_count >= 2) {
-      parts.push(`${b.signal_count} signal${b.signal_count > 1 ? 's' : ''} confirmed`);
+      parts.push(t('result.signalsConfirmed', { count: b.signal_count }));
     }
-    if (b.context_score > 0.3) parts.push('Strong project context match');
-    if (b.interest_score > 0.3) parts.push('Matches declared interests');
-    if (b.ace_boost > 0.1) parts.push('Active in your recent work');
-    if (b.affinity_mult > 1.2) parts.push('Learned preference match');
-    if (b.freshness_mult != null && b.freshness_mult > 1.1) parts.push('Recently published');
+    if (b.context_score > 0.3) parts.push(t('result.fallbackContext'));
+    if (b.interest_score > 0.3) parts.push(t('result.fallbackInterests'));
+    if (b.ace_boost > 0.1) parts.push(t('result.fallbackRecentWork'));
+    if (b.affinity_mult > 1.2) parts.push(t('result.fallbackPreference'));
+    if (b.freshness_mult != null && b.freshness_mult > 1.1) parts.push(t('result.fallbackFresh'));
   }
   if (item.signal_type) {
     const labels: Record<string, string> = {
-      security_alert: 'Security alert',
-      breaking_change: 'Breaking change',
-      tool_discovery: 'Tool discovery',
-      tech_trend: 'Emerging trend',
-      learning: 'Learning resource',
-      competitive_intel: 'Competitive intel',
+      security_alert: t('result.signalSecurity'),
+      breaking_change: t('result.signalBreaking'),
+      tool_discovery: t('result.signalTool'),
+      tech_trend: t('result.signalTrend'),
+      learning: t('result.signalLearning'),
+      competitive_intel: t('result.signalCompetitive'),
     };
     parts.unshift(labels[item.signal_type] || item.signal_type);
   }
@@ -60,6 +62,7 @@ export const ResultItem = memo(function ResultItem({
   onRecordInteraction,
   comparePool,
 }: ResultItemProps) {
+  const { t } = useTranslation();
   const [showBreakdown, setShowBreakdown] = useState(false);
   const toggleBreakdown = useCallback(() => setShowBreakdown(prev => !prev), []);
 
@@ -122,7 +125,7 @@ export const ResultItem = memo(function ResultItem({
         onToggleBreakdown={toggleBreakdown}
         showBreakdown={showBreakdown}
         feedback={feedback}
-        fallbackReason={generateFallbackReason(item)}
+        fallbackReason={generateFallbackReason(item, t)}
       />
 
       {showBreakdown && item.score_breakdown && (

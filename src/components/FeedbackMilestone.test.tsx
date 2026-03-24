@@ -18,22 +18,22 @@ describe('FeedbackMilestone', () => {
 
   it('shows milestone message at count 10', () => {
     render(<FeedbackMilestone count={10} />);
-    expect(screen.getByText('Your 4DA learned from 10 signals this session')).toBeInTheDocument();
+    expect(screen.getByText('feedback.milestone10')).toBeInTheDocument();
   });
 
   it('shows milestone message at count 50', () => {
     render(<FeedbackMilestone count={50} />);
-    expect(screen.getByText('50 signals — your model is now personalized')).toBeInTheDocument();
+    expect(screen.getByText('feedback.milestone50')).toBeInTheDocument();
   });
 
   it('shows milestone message at count 100', () => {
     render(<FeedbackMilestone count={100} />);
-    expect(screen.getByText('100 signals — top 5% of active users')).toBeInTheDocument();
+    expect(screen.getByText('feedback.milestone100')).toBeInTheDocument();
   });
 
   it('shows milestone message at count 500', () => {
     render(<FeedbackMilestone count={500} />);
-    expect(screen.getByText('500 signals — deeply calibrated')).toBeInTheDocument();
+    expect(screen.getByText('feedback.milestone500')).toBeInTheDocument();
   });
 
   it('has role="status" for screen reader announcement', () => {
@@ -43,17 +43,17 @@ describe('FeedbackMilestone', () => {
 
   it('auto-hides after 5 seconds', () => {
     render(<FeedbackMilestone count={10} />);
-    expect(screen.getByText('Your 4DA learned from 10 signals this session')).toBeInTheDocument();
+    expect(screen.getByText('feedback.milestone10')).toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(5000);
     });
 
-    expect(screen.queryByText('Your 4DA learned from 10 signals this session')).not.toBeInTheDocument();
+    expect(screen.queryByText('feedback.milestone10')).not.toBeInTheDocument();
   });
 
   it('shows secondary text alongside milestone', () => {
     render(<FeedbackMilestone count={10} />);
-    expect(screen.getByText('Your feed keeps getting sharper')).toBeInTheDocument();
+    expect(screen.getByText('feedback.gettingSharper')).toBeInTheDocument();
   });
 });

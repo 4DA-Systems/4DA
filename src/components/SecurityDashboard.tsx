@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FirstCveCard } from './FirstCveCard';
 import { cmd } from '../lib/commands';
 
@@ -54,11 +55,12 @@ const SEVERITY_DOT: Record<Severity, string> = {
 // ============================================================================
 
 function SeverityCount({ severity, count }: { severity: Severity; count: number }) {
+  const { t } = useTranslation();
   const labels: Record<Severity, string> = {
-    critical: 'Critical',
-    high: 'High',
-    medium: 'Medium',
-    low: 'Low',
+    critical: t('security.severityCritical'),
+    high: t('security.severityHigh'),
+    medium: t('security.severityMedium'),
+    low: t('security.severityLow'),
   };
   return (
     <div className="bg-bg-tertiary rounded-lg border border-border px-4 py-3 flex items-center gap-3">
@@ -115,6 +117,7 @@ function mapDepAlertsToSecurityAlerts(depAlerts: DepAlert[]): SecurityAlert[] {
 // ============================================================================
 
 const SecurityDashboard = memo(function SecurityDashboard() {
+  const { t } = useTranslation();
   const [activeAlerts, setActiveAlerts] = useState<SecurityAlert[]>([]);
   const [resolvedAlerts, setResolvedAlerts] = useState<SecurityAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,11 +179,11 @@ const SecurityDashboard = memo(function SecurityDashboard() {
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       {/* Header */}
       <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-sm font-medium text-white">Security Alerts</h3>
+        <h3 className="text-sm font-medium text-white">{t('security.title')}</h3>
         <p className="text-xs text-text-muted mt-1">
           {configured
-            ? 'Real-time vulnerability monitoring from the Developer Immune System.'
-            : 'No dependency scanning configured yet.'}
+            ? t('security.subtitle')
+            : t('security.notConfigured')}
         </p>
       </div>
 
@@ -212,8 +215,8 @@ const SecurityDashboard = memo(function SecurityDashboard() {
             </div>
             <p className="text-sm text-[#22C55E]">
               {configured
-                ? 'No vulnerabilities detected. Your dependencies are secure.'
-                : 'Security monitoring will appear here when dependency scanning is active.'}
+                ? t('security.noVulnerabilities')
+                : t('security.monitoringInactive')}
             </p>
           </div>
         ) : (
@@ -237,13 +240,13 @@ const SecurityDashboard = memo(function SecurityDashboard() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0 ml-3">
                     <span className="text-xs text-text-muted">
-                      {alert.affectedProjects} project{alert.affectedProjects !== 1 ? 's' : ''}
+                      {t('security.projectCount', { count: alert.affectedProjects })}
                     </span>
                     <button
                       onClick={() => handleResolve(alert.id)}
                       className="px-3 py-1 text-xs bg-bg-tertiary border border-border rounded-lg text-text-secondary hover:text-white hover:border-text-muted/50 transition-colors"
                     >
-                      Resolve
+                      {t('security.resolve')}
                     </button>
                   </div>
                 </div>
@@ -257,7 +260,7 @@ const SecurityDashboard = memo(function SecurityDashboard() {
         {resolvedAlerts.length > 0 && (
           <div>
             <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-              Resolved
+              {t('security.resolved')}
             </h4>
             <div className="space-y-1.5">
               {resolvedAlerts.map(alert => (
