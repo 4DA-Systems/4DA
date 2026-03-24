@@ -81,20 +81,19 @@ describe('DependencyDashboard', () => {
   it('renders the dashboard header', async () => {
     render(<DependencyDashboard />);
     await waitFor(() => {
-      expect(screen.getByText('Dependency Intelligence')).toBeInTheDocument();
+      expect(screen.getByText('deps.title')).toBeInTheDocument();
     });
   });
 
   it('renders summary stat cards', async () => {
     render(<DependencyDashboard />);
     await waitFor(() => {
-      expect(screen.getByText('Total')).toBeInTheDocument();
+      expect(screen.getByText('deps.total')).toBeInTheDocument();
     });
-    expect(screen.getByText('Direct')).toBeInTheDocument();
-    expect(screen.getByText('Dev')).toBeInTheDocument();
-    // "Alerts" appears in both the stat card and "Active Alerts" heading
-    const alertElements = screen.getAllByText(/Alerts/);
-    expect(alertElements.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('deps.direct')).toBeInTheDocument();
+    expect(screen.getByText('deps.dev')).toBeInTheDocument();
+    // "deps.alerts" appears in the stat card, "vulns.activeAlerts" in the alerts heading
+    expect(screen.getByText('deps.alerts')).toBeInTheDocument();
   });
 
   it('renders the dependency table with column headers', async () => {
@@ -117,7 +116,7 @@ describe('DependencyDashboard', () => {
   it('renders active alerts section with severity badges', async () => {
     render(<DependencyDashboard />);
     await waitFor(() => {
-      expect(screen.getByText('Active Alerts')).toBeInTheDocument();
+      expect(screen.getByText('vulns.activeAlerts')).toBeInTheDocument();
     });
     await waitFor(() => {
       expect(screen.getByText('critical')).toBeInTheDocument();

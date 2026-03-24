@@ -41,9 +41,9 @@ describe('ConvergenceTab', () => {
     vi.mocked(cmd).mockRejectedValue(new Error('no data'));
     render(<ConvergenceTab />);
     await waitFor(() => {
-      expect(screen.getByText('No project data available')).toBeInTheDocument();
+      expect(screen.getByText('convergence.noData')).toBeInTheDocument();
     });
-    expect(screen.getByText(/Run ACE discovery/)).toBeInTheDocument();
+    expect(screen.getByText('convergence.noDataDesc')).toBeInTheDocument();
   });
 
   it('renders convergence stats and shared technologies', async () => {
@@ -73,15 +73,15 @@ describe('ConvergenceTab', () => {
     render(<ConvergenceTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Projects')).toBeInTheDocument();
+      expect(screen.getByText('convergence.projects')).toBeInTheDocument();
     });
     expect(screen.getByText('3')).toBeInTheDocument();
-    expect(screen.getByText('Shared Tech')).toBeInTheDocument();
-    expect(screen.getByText('Convergence')).toBeInTheDocument();
-    expect(screen.getByText('Shared Technologies')).toBeInTheDocument();
+    expect(screen.getByText('convergence.sharedTech')).toBeInTheDocument();
+    expect(screen.getByText('convergence.convergence')).toBeInTheDocument();
+    expect(screen.getByText('convergence.sharedTechnologies')).toBeInTheDocument();
     expect(screen.getByText('TypeScript')).toBeInTheDocument();
     expect(screen.getByText('React')).toBeInTheDocument();
-    expect(screen.getByText('Unique to Single Projects')).toBeInTheDocument();
+    expect(screen.getByText('convergence.uniqueToSingleProjects')).toBeInTheDocument();
     expect(screen.getByText('Rust')).toBeInTheDocument();
   });
 
@@ -98,7 +98,7 @@ describe('ConvergenceTab', () => {
     render(<ConvergenceTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Cross-Project Dependencies')).toBeInTheDocument();
+      expect(screen.getByText('convergence.crossProjectDeps')).toBeInTheDocument();
     });
     expect(screen.getByText('serde')).toBeInTheDocument();
     expect(screen.getByText('rust')).toBeInTheDocument();
