@@ -1,0 +1,15 @@
+{
+  "name": "4da-paddle-webhook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Paddle → Keygen webhook bridge for 4DA license management",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vercel": "^39.0.0"
+  }
+}
