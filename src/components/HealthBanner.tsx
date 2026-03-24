@@ -49,9 +49,9 @@ export function HealthBanner() {
   if (dismissed || issues.length === 0) return null;
 
   const hasErrors = issues.some(i => i.severity === 'error');
-  const borderColor = hasErrors ? 'border-[#EF4444]/40' : 'border-[#D4AF37]/40';
-  const bgColor = hasErrors ? 'bg-[#EF4444]/5' : 'bg-[#D4AF37]/5';
-  const iconColor = hasErrors ? 'text-[#EF4444]' : 'text-[#D4AF37]';
+  const borderColor = hasErrors ? 'border-error/40' : 'border-accent-gold/40';
+  const bgColor = hasErrors ? 'bg-error/5' : 'bg-accent-gold/5';
+  const iconColor = hasErrors ? 'text-error' : 'text-accent-gold';
 
   return (
     <div className={`mx-4 mt-2 mb-1 ${bgColor} ${borderColor} border rounded-lg overflow-hidden`}>
@@ -68,7 +68,7 @@ export function HealthBanner() {
               <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></>
             )}
           </svg>
-          <span className={`text-xs font-medium ${hasErrors ? 'text-[#EF4444]' : 'text-[#D4AF37]'}`}>
+          <span className={`text-xs font-medium ${hasErrors ? 'text-error' : 'text-accent-gold'}`}>
             {issues.length === 1
               ? issues[0].message
               : t('health.issueCount', { count: issues.length, defaultValue: '{{count}} system issues detected' })
@@ -95,7 +95,7 @@ export function HealthBanner() {
           {issues.map((issue, i) => (
             <div key={i} className="flex items-start gap-2 pt-1.5">
               <div className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
-                issue.severity === 'error' ? 'bg-[#EF4444]' : 'bg-[#D4AF37]'
+                issue.severity === 'error' ? 'bg-error' : 'bg-accent-gold'
               }`} />
               <div className="min-w-0">
                 <span className="text-xs text-text-secondary">{issue.message}</span>

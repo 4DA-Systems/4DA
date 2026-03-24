@@ -31,8 +31,8 @@ function CategoryFilter({
         aria-label="Filter: All categories"
         className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
           active === 'all'
-            ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
-            : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/20'
+            ? 'bg-accent-gold/15 text-accent-gold border-accent-gold/30'
+            : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-accent-gold/20'
         }`}
       >
         All
@@ -44,8 +44,8 @@ function CategoryFilter({
           aria-label={`Filter: ${cat}`}
           className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
             active === cat
-              ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
-              : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/20'
+              ? 'bg-accent-gold/15 text-accent-gold border-accent-gold/30'
+              : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-accent-gold/20'
           }`}
         >
           {cat}
@@ -57,7 +57,7 @@ function CategoryFilter({
 
 function CategoryBadge({ category }: { category: string }) {
   return (
-    <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20">
+    <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-accent-gold/10 text-accent-gold border border-accent-gold/20">
       {category}
     </span>
   );
@@ -74,10 +74,10 @@ function TemplateCard({
     <button
       onClick={() => onOpen(template)}
       aria-label={`Open template: ${template.title}`}
-      className="w-full text-left bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-[#D4AF37]/30 group"
+      className="w-full text-left bg-bg-secondary border border-border rounded-xl p-4 transition-colors hover:border-accent-gold/30 group"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <h4 className="text-sm font-semibold text-white group-hover:text-[#D4AF37] transition-colors leading-snug">
+        <h4 className="text-sm font-semibold text-white group-hover:text-accent-gold transition-colors leading-snug">
           {template.title}
         </h4>
         <CategoryBadge category={template.category} />
@@ -126,15 +126,15 @@ function TemplateViewer({
               aria-label={copied ? t('action.copied') : t('action.copy')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 copied
-                  ? 'bg-[#22C55E]/15 text-[#22C55E] border-[#22C55E]/30'
-                  : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-[#D4AF37]/30'
+                  ? 'bg-success/15 text-success border-success/30'
+                  : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-accent-gold/30'
               }`}
             >
               {copied ? t('action.copied') : t('action.copy')}
             </button>
             <button
               onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-[#8A8A8A] hover:text-white hover:bg-bg-tertiary transition-colors"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-text-muted hover:text-white hover:bg-bg-tertiary transition-colors"
               aria-label={t('action.close')}
             >
               <svg
@@ -196,7 +196,7 @@ export function TemplateLibrary() {
       {/* Header */}
       <div>
         <h3 className="text-sm font-semibold text-white">Templates</h3>
-        <p className="text-xs text-[#8A8A8A] mt-0.5">
+        <p className="text-xs text-text-muted mt-0.5">
           Actionable templates for launching and growing your revenue engines
         </p>
       </div>
@@ -223,7 +223,7 @@ export function TemplateLibrary() {
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <div className="w-12 h-12 bg-[#D4AF37]/10 rounded-xl flex items-center justify-center mb-3">
+          <div className="w-12 h-12 bg-accent-gold/10 rounded-xl flex items-center justify-center mb-3">
             <svg
               width="20"
               height="20"

@@ -35,7 +35,7 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
       return (
         <div
           role="alert"
-          className="bg-[#141414] border border-red-500/20 rounded-xl p-6"
+          className="bg-bg-secondary border border-red-500/20 rounded-xl p-6"
         >
           <h2 className="text-lg font-semibold text-white mb-2">
             {i18n.t('error.viewFailed', {

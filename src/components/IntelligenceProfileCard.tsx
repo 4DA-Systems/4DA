@@ -92,7 +92,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
     <div className="space-y-3">
       {/* Autophagy Accuracy Card */}
       {pulse && pulse.total_cycles > 0 && (
-        <div className="bg-[#1F1F1F] rounded-lg border border-border p-4 flex items-center gap-4">
+        <div className="bg-bg-tertiary rounded-lg border border-border p-4 flex items-center gap-4">
           <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-bg-tertiary flex items-center justify-center">
             <span className={`text-lg font-bold ${accuracyColor}`}>{accuracyPct}%</span>
           </div>
@@ -111,7 +111,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
 
       {/* Feedback Impact */}
       {feedbackCount > 0 && (
-        <div className="bg-[#1F1F1F] rounded-lg border border-border p-4 flex items-center gap-4">
+        <div className="bg-bg-tertiary rounded-lg border border-border p-4 flex items-center gap-4">
           <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-bg-tertiary flex items-center justify-center">
             <span className="text-lg font-bold text-accent-gold">{feedbackCount}</span>
           </div>
@@ -125,7 +125,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
 
       {/* Intelligence Growth (visible after 3+ snapshots) */}
       {growth && growth.days_active >= 3 && (
-        <div className="bg-[#1F1F1F] rounded-lg border border-border p-4">
+        <div className="bg-bg-tertiary rounded-lg border border-border p-4">
           <h4 className="text-sm font-medium text-white mb-2">
             {t('briefing.profile.intelligenceGrowth', 'Learning Progress')}
           </h4>
@@ -160,7 +160,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
       <KnowledgeGapsCard />
 
       {/* Intelligence Profile */}
-      <div className="bg-[#1F1F1F] rounded-lg border border-border p-5">
+      <div className="bg-bg-tertiary rounded-lg border border-border p-5">
         <h3 className="text-sm font-medium text-white mb-3">{t('briefing.profile.title')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Top Affinities */}
@@ -175,7 +175,7 @@ export const IntelligenceProfileCard = memo(function IntelligenceProfileCard() {
                     <span className="text-xs text-white truncate flex-1">{a.topic}</span>
                     <div className="w-12 h-1 bg-bg-tertiary rounded-full overflow-hidden flex-shrink-0">
                       <div
-                        className={`h-full rounded-full ${a.affinity_score > 0 ? 'bg-[#D4AF37]' : 'bg-[#8A8A8A]'}`}
+                        className={`h-full rounded-full ${a.affinity_score > 0 ? 'bg-accent-gold' : 'bg-text-muted'}`}
                         style={{ width: `${Math.min(Math.abs(a.affinity_score) * 100, 100)}%` }}
                       />
                     </div>
@@ -248,7 +248,7 @@ function KnowledgeGapsCard() {
   if (gaps.length === 0) return null;
 
   return (
-    <div className="bg-[#1F1F1F] rounded-lg border border-amber-500/20 p-4">
+    <div className="bg-bg-tertiary rounded-lg border border-amber-500/20 p-4">
       <h3 className="text-xs font-medium text-amber-400 mb-2">{t('briefing.profile.knowledgeGaps', { count: gaps.length })}</h3>
       <div className="flex flex-wrap gap-1.5">
         {gaps.slice(0, 8).map(gap => (

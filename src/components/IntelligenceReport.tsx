@@ -1,4 +1,5 @@
 import { memo, useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 
 // ============================================================================
@@ -43,10 +44,10 @@ interface IntelligenceReportRaw {
 
 function TrendArrow({ trend }: { trend: 'up' | 'down' | 'flat' }) {
   if (trend === 'up') {
-    return <span className="text-[#22C55E] text-xs font-medium">{'\u2191'}</span>;
+    return <span className="text-success text-xs font-medium">{'\u2191'}</span>;
   }
   if (trend === 'down') {
-    return <span className="text-[#EF4444] text-xs font-medium">{'\u2193'}</span>;
+    return <span className="text-error text-xs font-medium">{'\u2193'}</span>;
   }
   return <span className="text-text-muted text-xs">{'\u2192'}</span>;
 }
@@ -59,7 +60,7 @@ function MetricRow({ metric }: { metric: MetricData }) {
         <span className="text-sm font-medium text-white">{metric.value}</span>
         {metric.delta && (
           <span className={`text-xs font-medium ${
-            metric.trend === 'up' ? 'text-[#22C55E]' : metric.trend === 'down' ? 'text-[#EF4444]' : 'text-text-muted'
+            metric.trend === 'up' ? 'text-success' : metric.trend === 'down' ? 'text-error' : 'text-text-muted'
           }`}>
             {metric.delta}
           </span>
@@ -107,32 +108,32 @@ function trendFromDelta(delta: number): 'up' | 'down' | 'flat' {
   return 'flat';
 }
 
-function mapReportToIntelligenceData(report: IntelligenceReportRaw): IntelligenceData {
+function mapReportToIntelligenceData(report: IntelligenceReportRaw, t: (key: string) => string): IntelligenceData {
   const accuracyPct = Math.round(report.accuracy_current * 10) / 10;
   const accuracyDelta = Math.round(report.accuracy_delta * 10) / 10;
 
   const metrics: MetricData[] = [
     {
-      label: 'Relevance Accuracy',
+      label: t('report.relevanceAccuracy'),
       value: `${accuracyPct}%`,
       delta: `${accuracyDelta >= 0 ? '+' : ''}${accuracyDelta.toFixed(1)}%`,
       trend: trendFromDelta(accuracyDelta),
     },
     {
-      label: 'Topics Tracked',
+      label: t('report.topicsTracked'),
       value: formatNumber(report.topics_tracked),
       delta: report.topics_added > 0 ? `+${report.topics_added} new` : undefined,
       trend: trendFromDelta(report.topics_added),
     },
     {
-      label: 'Noise Rejected',
+      label: t('report.noiseRejected'),
       value: formatNumber(report.noise_rejected),
       delta: `${report.noise_rejection_pct.toFixed(1)}%`,
       trend: report.noise_rejection_pct > 50 ? 'up' : 'flat',
-      sublabel: 'rejection rate',
+      sublabel: t('report.rejectionRate'),
     },
     {
-      label: 'Time Saved',
+      label: t('report.timeSaved'),
       value: `${report.time_saved_hours.toFixed(1)}h`,
       trend: report.time_saved_hours > 0 ? 'up' : 'flat',
     },
@@ -140,18 +141,18 @@ function mapReportToIntelligenceData(report: IntelligenceReportRaw): Intelligenc
 
   const secondary: MetricData[] = [
     {
-      label: 'Security Alerts',
+      label: t('report.securityAlerts'),
       value: `${report.security_alerts}`,
-      delta: report.security_acted_on > 0 ? `${report.security_acted_on} acted` : undefined,
+      delta: report.security_acted_on > 0 ? `${report.security_acted_on} ${t('report.acted')}` : undefined,
       trend: report.security_acted_on > 0 ? 'up' : 'flat',
     },
     {
-      label: 'Decisions',
+      label: t('report.decisions'),
       value: `${report.decisions_recorded}`,
       trend: report.decisions_recorded > 0 ? 'up' : 'flat',
     },
     {
-      label: 'Feedback Signals',
+      label: t('report.feedbackSignals'),
       value: `${report.feedback_signals}`,
       trend: report.feedback_signals > 0 ? 'up' : 'flat',
     },
@@ -166,9 +167,9 @@ function mapReportToIntelligenceData(report: IntelligenceReportRaw): Intelligenc
   };
 }
 
-async function fetchIntelligenceData(): Promise<IntelligenceData> {
+async function fetchIntelligenceData(t: (key: string) => string): Promise<IntelligenceData> {
   const report = await cmd('get_intelligence_report', { period: undefined }) as IntelligenceReportRaw;
-  return mapReportToIntelligenceData(report);
+  return mapReportToIntelligenceData(report, t);
 }
 
 // ============================================================================
@@ -176,6 +177,7 @@ async function fetchIntelligenceData(): Promise<IntelligenceData> {
 // ============================================================================
 
 const IntelligenceReportCard = memo(function IntelligenceReportCard() {
+  const { t } = useTranslation();
   const [data, setData] = useState<IntelligenceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -183,14 +185,14 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
   const loadData = useCallback(() => {
     setLoading(true);
     setError(false);
-    fetchIntelligenceData()
+    fetchIntelligenceData(t)
       .then(setData)
       .catch(() => {
         setData(null);
         setError(true);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -200,15 +202,15 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-medium text-white">Your Intelligence This Month</h3>
+          <h3 className="text-sm font-medium text-white">{t('report.title')}</h3>
         </div>
         <div className="p-5 text-center">
-          <p className="text-xs text-text-muted mb-3">Unable to load intelligence data.</p>
+          <p className="text-xs text-text-muted mb-3">{t('report.unableToLoad')}</p>
           <button
             onClick={loadData}
             className="text-xs px-3 py-1.5 rounded bg-bg-tertiary border border-border text-text-secondary hover:text-white transition-colors"
           >
-            Retry
+            {t('action.retry')}
           </button>
         </div>
       </div>
@@ -224,14 +226,14 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
       <div className="px-5 py-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-medium text-white">Your Intelligence This Month</h3>
+            <h3 className="text-sm font-medium text-white">{t('report.title')}</h3>
             <p className="text-xs text-text-muted mt-1">
-              {monthName} — how 4DA compounded for you.
+              {t('report.subtitle', { month: monthName })}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <TrendArrow trend={data.accuracy_delta > 0 ? 'up' : 'down'} />
-            <span className={`text-xs font-medium ${data.accuracy_delta >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+            <span className={`text-xs font-medium ${data.accuracy_delta >= 0 ? 'text-success' : 'text-error'}`}>
               {data.accuracy_delta >= 0 ? '+' : ''}{data.accuracy_delta.toFixed(1)}%
             </span>
           </div>
@@ -242,7 +244,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
         {/* Accuracy Progress Bar */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-text-muted">Accuracy Improvement</span>
+            <span className="text-xs text-text-muted">{t('report.accuracyImprovement')}</span>
             <span className="text-xs text-white font-medium">{data.accuracy_pct}%</span>
           </div>
           <div
@@ -253,7 +255,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
             aria-valuemax={100}
           >
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#D4AF37]/60 to-[#D4AF37]"
+              className="h-full rounded-full bg-gradient-to-r from-accent-gold/60 to-accent-gold"
               style={{ width: `${Math.min(data.accuracy_pct, 100)}%` }}
             />
           </div>
@@ -281,7 +283,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
                 <span className="text-lg font-semibold text-white">{metric.value}</span>
                 {metric.delta && (
                   <span className={`text-xs font-medium ${
-                    metric.trend === 'up' ? 'text-[#22C55E]' : 'text-text-muted'
+                    metric.trend === 'up' ? 'text-success' : 'text-text-muted'
                   }`}>
                     {metric.delta}
                   </span>
@@ -298,10 +300,10 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
         {/* Footer */}
         <div className="pt-3 border-t border-border/30 flex items-center justify-between">
           <span className="text-xs text-text-muted/50">
-            Based on {formatNumber(data.items_processed)} items surfaced
+            {t('report.basedOn', { items: formatNumber(data.items_processed) })}
           </span>
           <span className="text-xs text-text-muted/50">
-            Updated today
+            {t('report.updatedToday')}
           </span>
         </div>
       </div>

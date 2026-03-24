@@ -2,6 +2,7 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import type {
   TechConvergenceReport,
@@ -38,9 +39,9 @@ function StatCard({ label, value, suffix, color }: { label: string; value: strin
 }
 
 const BUS_FACTOR_COLORS: Record<string, string> = {
-  critical: 'bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/25',
+  critical: 'bg-error/15 text-error border-error/25',
   high: 'bg-[#F97316]/15 text-[#F97316] border-[#F97316]/25',
-  medium: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/25',
+  medium: 'bg-accent-gold/15 text-accent-gold border-accent-gold/25',
   low: 'bg-white/5 text-text-muted border-border',
 };
 
@@ -49,6 +50,7 @@ const BUS_FACTOR_COLORS: Record<string, string> = {
 // ============================================================================
 
 export const ConvergenceTab = memo(function ConvergenceTab() {
+  const { t } = useTranslation();
   const [convergence, setConvergence] = useState<TechConvergenceReport | null>(null);
   const [health, setHealth] = useState<ProjectHealthComparison | null>(null);
   const [crossDeps, setCrossDeps] = useState<CrossProjectDep[]>([]);
@@ -91,10 +93,9 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
     return (
       <div className="p-5">
         <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
-          <p className="text-sm text-text-muted mb-2">No project data available</p>
+          <p className="text-sm text-text-muted mb-2">{t('convergence.noData')}</p>
           <p className="text-xs text-text-muted/60 leading-relaxed">
-            Run ACE discovery to analyze your projects. 4DA will detect shared
-            technologies, cross-project dependencies, and convergence patterns.
+            {t('convergence.noDataDesc')}
           </p>
         </div>
       </div>
@@ -106,13 +107,13 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
       {/* Summary Stats */}
       {convergence && (
         <div className="grid grid-cols-3 gap-3">
-          <StatCard label="Projects" value={convergence.total_projects} />
-          <StatCard label="Shared Tech" value={convergence.shared_technologies.length} color="text-[#22C55E]" />
+          <StatCard label={t('convergence.projects')} value={convergence.total_projects} />
+          <StatCard label={t('convergence.sharedTech')} value={convergence.shared_technologies.length} color="text-success" />
           <StatCard
-            label="Convergence"
+            label={t('convergence.convergence')}
             value={(convergence.convergence_score * 100).toFixed(0)}
             suffix="%"
-            color="text-[#D4AF37]"
+            color="text-accent-gold"
           />
         </div>
       )}
@@ -121,7 +122,7 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
       {convergence && convergence.shared_technologies.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Shared Technologies
+            {t('convergence.sharedTechnologies')}
           </h4>
           <div className="space-y-2">
             {convergence.shared_technologies.map(tech => (
@@ -129,11 +130,11 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
                 <span className="text-sm text-text-primary font-mono flex-1 min-w-0 truncate">{tech.name}</span>
                 <span className="text-xs text-text-muted shrink-0">{tech.category}</span>
                 <span className="text-xs text-text-secondary shrink-0">
-                  {tech.project_count} project{tech.project_count !== 1 ? 's' : ''}
+                  {t('convergence.projectCount', { count: tech.project_count })}
                 </span>
                 <div className="w-12 h-1.5 bg-bg-tertiary rounded-full overflow-hidden shrink-0">
                   <div
-                    className="h-full bg-[#22C55E] rounded-full"
+                    className="h-full bg-success rounded-full"
                     style={{ width: `${Math.min(tech.adoption_pct * 100, 100)}%` }}
                   />
                 </div>
@@ -147,7 +148,7 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
       {convergence && convergence.unique_technologies.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Unique to Single Projects
+            {t('convergence.uniqueToSingleProjects')}
           </h4>
           <div className="flex gap-2 flex-wrap">
             {convergence.unique_technologies.map(tech => {
@@ -170,15 +171,15 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
       {crossDeps.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Cross-Project Dependencies
+            {t('convergence.crossProjectDeps')}
           </h4>
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">Package</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Ecosystem</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Projects</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thPackage')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thEcosystem')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thProjects')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -199,16 +200,16 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
       {health && health.projects.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Project Health
+            {t('convergence.projectHealth')}
           </h4>
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">Project</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Deps</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Freshness</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Vulns</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thProject')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thDeps')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thFreshness')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('convergence.thVulns')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -218,14 +219,14 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
                     <td className="px-4 py-2.5 text-text-secondary">{proj.dependency_count}</td>
                     <td className="px-4 py-2.5">
                       <span className={`text-xs font-medium ${
-                        proj.freshness_score >= 0.8 ? 'text-[#22C55E]' :
-                        proj.freshness_score >= 0.5 ? 'text-[#D4AF37]' : 'text-[#EF4444]'
+                        proj.freshness_score >= 0.8 ? 'text-success' :
+                        proj.freshness_score >= 0.5 ? 'text-accent-gold' : 'text-error'
                       }`}>
                         {(proj.freshness_score * 100).toFixed(0)}%
                       </span>
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className={`text-xs font-medium ${proj.vulnerability_count > 0 ? 'text-[#EF4444]' : 'text-[#22C55E]'}`}>
+                      <span className={`text-xs font-medium ${proj.vulnerability_count > 0 ? 'text-error' : 'text-success'}`}>
                         {proj.vulnerability_count}
                       </span>
                     </td>

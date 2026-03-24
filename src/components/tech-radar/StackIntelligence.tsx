@@ -1,4 +1,5 @@
 import { useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { RadarEntry } from './RadarSVG';
 
@@ -80,6 +81,7 @@ export const StackIntelligence = memo(function StackIntelligence({
   entries,
   onEntryClick,
 }: StackIntelligenceProps) {
+  const { t } = useTranslation();
   const health = useMemo(() => computeHealthGrade(entries), [entries]);
   const dimensions = useMemo(() => computeDimensions(entries), [entries]);
 
@@ -111,12 +113,12 @@ export const StackIntelligence = memo(function StackIntelligence({
         <div style={{ fontSize: '48px', fontWeight: 700, color: health.color, lineHeight: 1 }}>{health.grade}</div>
         <div>
           <div style={{ fontSize: '11px', color: '#8A8A8A', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px' }}>
-            Stack Health
+            {t('stack.stackHealth')}
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
             {dimensions.map(d => (
               <span key={d.name} style={{ fontSize: '12px', color: '#A0A0A0' }}>
-                {d.name}: <span style={{ color: d.color, fontWeight: 600 }}>{d.grade}</span>
+                {t(`stack.dim.${d.name.toLowerCase()}`)}: <span style={{ color: d.color, fontWeight: 600 }}>{d.grade}</span>
               </span>
             ))}
           </div>
@@ -127,7 +129,7 @@ export const StackIntelligence = memo(function StackIntelligence({
       {attentionItems.length > 0 && (
         <div style={{ padding: '16px 24px', borderBottom: '1px solid #2A2A2A' }}>
           <div style={{ fontSize: '11px', color: '#EF4444', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
-            Needs Attention ({attentionItems.length})
+            {t('stack.needsAttention', { count: attentionItems.length })}
           </div>
           {attentionItems.map(entry => (
             <div
@@ -140,7 +142,7 @@ export const StackIntelligence = memo(function StackIntelligence({
             >
               <span style={{ color: '#FFFFFF', fontSize: '13px' }}>{entry.name}</span>
               <span style={{ fontSize: '11px', color: '#EF4444' }}>
-                {entry.movement === 'down' ? '\u2193 declining' : 'hold'}
+                {entry.movement === 'down' ? `\u2193 ${t('stack.declining')}` : t('stack.hold')}
               </span>
             </div>
           ))}
@@ -152,7 +154,7 @@ export const StackIntelligence = memo(function StackIntelligence({
         tier.entries.length > 0 && (
           <div key={tier.name} style={{ padding: '16px 24px' }}>
             <div style={{ fontSize: '11px', color: tier.color, textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
-              {tier.name} ({tier.entries.length})
+              {t(`stack.tier.${tier.ring}`)} ({tier.entries.length})
             </div>
             {tier.entries.map(entry => (
               <div
@@ -200,7 +202,7 @@ export const StackIntelligence = memo(function StackIntelligence({
       {movingEntries.length > 0 && (
         <div style={{ padding: '16px 24px', borderTop: '1px solid #2A2A2A' }}>
           <div style={{ fontSize: '11px', color: '#8A8A8A', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '10px' }}>
-            Movement
+            {t('stack.movement')}
           </div>
           {movingEntries.map(entry => (
             <div key={entry.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 12px', fontSize: '13px' }}>
@@ -209,7 +211,7 @@ export const StackIntelligence = memo(function StackIntelligence({
               </span>
               <span style={{ color: '#FFFFFF', width: '120px', flexShrink: 0 }}>{entry.name}</span>
               <span style={{ color: '#555555', fontSize: '11px' }}>
-                {entry.movement === 'up' ? 'accelerating' : entry.movement === 'down' ? 'declining' : 'new'} {'\u00B7'} {entry.signals.length} signals
+                {entry.movement === 'up' ? t('stack.accelerating') : entry.movement === 'down' ? t('stack.declining') : t('stack.new')} {'\u00B7'} {t('stack.signalCount', { count: entry.signals.length })}
               </span>
             </div>
           ))}

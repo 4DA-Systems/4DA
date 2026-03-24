@@ -75,7 +75,7 @@ export const TemporalSlider = memo(function TemporalSlider({ onSnapshotChange }:
         onChange={handleChange}
         disabled={!hasSnapshots}
         aria-label={t('techRadar.timeline')}
-        className="flex-1 h-1 appearance-none bg-[#2A2A2A] rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed accent-[#D4AF37]"
+        className="flex-1 h-1 appearance-none bg-border rounded-full cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed accent-accent-gold"
         style={{ colorScheme: 'dark' }}
       />
       <span className="text-[10px] text-text-secondary font-mono w-16 text-right whitespace-nowrap">

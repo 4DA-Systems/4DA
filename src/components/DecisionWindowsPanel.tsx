@@ -67,7 +67,7 @@ const WindowCard = memo(function WindowCard({
             {config.label}
           </span>
           {window.streets_engine && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20 font-medium">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent-gold/10 text-accent-gold border border-accent-gold/20 font-medium">
               {window.streets_engine}
             </span>
           )}
@@ -100,7 +100,7 @@ const WindowCard = memo(function WindowCard({
         </button>
         <button
           onClick={() => onDismiss(window.id)}
-          className="px-3 py-1.5 text-xs text-text-muted bg-bg-tertiary rounded-lg hover:text-text-secondary hover:bg-[#2A2A2A] transition-colors"
+          className="px-3 py-1.5 text-xs text-text-muted bg-bg-tertiary rounded-lg hover:text-text-secondary hover:bg-border transition-colors"
         >
           {t('action.dismiss')}
         </button>

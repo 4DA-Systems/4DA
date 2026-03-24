@@ -19,9 +19,9 @@ export interface DepEntry {
 // ============================================================================
 
 export const SEVERITY_COLORS: Record<Severity, string> = {
-  critical: 'bg-[#EF4444]/15 text-[#EF4444] border-[#EF4444]/25',
+  critical: 'bg-error/15 text-error border-error/25',
   high: 'bg-[#F97316]/15 text-[#F97316] border-[#F97316]/25',
-  medium: 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/25',
+  medium: 'bg-accent-gold/15 text-accent-gold border-accent-gold/25',
   low: 'bg-white/5 text-text-muted border-border',
 };
 
@@ -140,7 +140,7 @@ const DependencyTable = memo(function DependencyTable({ projectName, loading, de
                   </td>
                   <td className="px-4 py-2.5">
                     {dep.alerts.length > 0 ? (
-                      <span className="text-xs text-[#EF4444]">{dep.alerts.length}</span>
+                      <span className="text-xs text-error">{dep.alerts.length}</span>
                     ) : (
                       <span className="text-xs text-text-muted">--</span>
                     )}

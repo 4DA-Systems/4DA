@@ -24,14 +24,14 @@ export function FeedEchoBlock({ block }: Props) {
   }).length;
 
   return (
-    <div className="border border-[#D4AF37]/20 rounded-xl bg-[#141414] p-4 my-4">
+    <div className="border border-accent-gold/20 rounded-xl bg-bg-secondary p-4 my-4">
       <div className="flex items-center gap-2 mb-3">
-        <div className="w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
+        <div className="w-1.5 h-1.5 rounded-full bg-accent-gold animate-pulse" />
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
           Feed Signals Since Last Read
         </h4>
         {newCount > 0 && (
-          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-medium bg-[#D4AF37]/15 text-[#D4AF37] rounded-full">
+          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-medium bg-accent-gold/15 text-accent-gold rounded-full">
             {t('playbook.feedEchoNewItems', { count: newCount })}
           </span>
         )}
@@ -62,14 +62,14 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
 
   return (
     <div className="flex items-start gap-3 py-1.5 group">
-      <div className="w-1 h-1 rounded-full bg-[#D4AF37] mt-1.5 flex-shrink-0" />
+      <div className="w-1 h-1 rounded-full bg-accent-gold mt-1.5 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         {item.url ? (
           <a
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-text-secondary hover:text-[#D4AF37] transition-colors line-clamp-1"
+            className="text-xs text-text-secondary hover:text-accent-gold transition-colors line-clamp-1"
           >
             {item.title}
           </a>
@@ -77,9 +77,9 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
           <span className="text-xs text-text-secondary line-clamp-1">{item.title}</span>
         )}
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-[#8A8A8A]">{item.source}</span>
+          <span className="text-[10px] text-text-muted">{item.source}</span>
           {item.matched_topic && (
-            <span className="text-[10px] text-[#D4AF37]">#{item.matched_topic}</span>
+            <span className="text-[10px] text-accent-gold">#{item.matched_topic}</span>
           )}
         </div>
       </div>
@@ -88,8 +88,8 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
         disabled={saved}
         className={`flex-shrink-0 px-2 py-0.5 text-[10px] rounded transition-all ${
           saved
-            ? 'bg-[#22C55E]/15 text-[#22C55E] cursor-default'
-            : 'bg-[#1F1F1F] text-[#8A8A8A] hover:text-[#D4AF37] hover:bg-[#D4AF37]/10 opacity-0 group-hover:opacity-100'
+            ? 'bg-success/15 text-success cursor-default'
+            : 'bg-bg-tertiary text-text-muted hover:text-accent-gold hover:bg-accent-gold/10 opacity-0 group-hover:opacity-100'
         }`}
         aria-label={saved ? t('playbook.feedEchoSaved') : t('playbook.feedEchoSave')}
       >

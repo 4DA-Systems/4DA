@@ -84,7 +84,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
     <div className="mb-3">
       {/* Main bar */}
       <div
-        className="flex items-center gap-3 px-4 h-16 bg-[#0A0A0A] border-b border-[#2A2A2A]"
+        className="flex items-center gap-3 px-4 h-16 bg-bg-primary border-b border-border"
         role="banner"
         aria-label={t('app.title')}
       >
@@ -95,7 +95,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
-            <span className="text-xs text-[#A0A0A0] whitespace-nowrap" role="status" aria-live="polite">
+            <span className="text-xs text-text-secondary whitespace-nowrap" role="status" aria-live="polite">
               {statusText}
             </span>
             {monitoring?.enabled && (
@@ -107,7 +107,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         </div>
 
         {/* Divider */}
-        <div className="w-px h-6 bg-[#2A2A2A] flex-shrink-0" aria-hidden="true" />
+        <div className="w-px h-6 bg-border flex-shrink-0" aria-hidden="true" />
 
         {/* Center: Search input */}
         <form onSubmit={handleSearchSubmit} className="flex-1 min-w-0" role="search">
@@ -117,13 +117,13 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
             placeholder={t('search.placeholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-1.5 text-sm bg-[#141414] border border-[#2A2A2A] rounded-md text-white placeholder:text-[#8A8A8A] focus:outline-none focus:border-orange-500/40 transition-colors"
+            className="w-full px-3 py-1.5 text-sm bg-bg-secondary border border-border rounded-md text-white placeholder:text-text-muted focus:outline-none focus:border-orange-500/40 transition-colors"
             aria-label={t('search.placeholder')}
           />
         </form>
 
         {/* Divider */}
-        <div className="w-px h-6 bg-[#2A2A2A] flex-shrink-0" aria-hidden="true" />
+        <div className="w-px h-6 bg-border flex-shrink-0" aria-hidden="true" />
 
         {/* Right: badges + actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -173,7 +173,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           {isLoading && (
             <button
               onClick={() => cmd('cancel_analysis')}
-              className="w-8 h-8 flex items-center justify-center rounded-md bg-[#1F1F1F] text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-all"
+              className="w-8 h-8 flex items-center justify-center rounded-md bg-bg-tertiary text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-all"
               aria-label={t('action.cancelAnalysis', 'Cancel analysis')}
             >
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -207,8 +207,8 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           {/* Tier badge */}
           <span className={`px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded ${
             isPro
-              ? 'bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/30'
-              : 'bg-[#1F1F1F] text-gray-400 border border-[#2A2A2A]'
+              ? 'bg-accent-gold/20 text-accent-gold border border-accent-gold/30'
+              : 'bg-bg-tertiary text-gray-400 border border-border'
           }`}>
             {tier}
           </span>
@@ -220,7 +220,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           <button
             data-settings-trigger
             onClick={onOpenSettings}
-            className="w-8 h-8 flex items-center justify-center rounded-md bg-[#141414] text-[#A0A0A0] border border-[#2A2A2A] hover:bg-[#1F1F1F] hover:border-orange-500/30 transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-md bg-bg-secondary text-text-secondary border border-border hover:bg-bg-tertiary hover:border-orange-500/30 transition-all"
             aria-label={t('header.settings')}
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -233,7 +233,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
 
       {/* Progress line — 2px, full width, only during analysis */}
       {isLoading && state.progress > 0 && (
-        <div className="h-0.5 w-full bg-[#141414]">
+        <div className="h-0.5 w-full bg-bg-secondary">
           <div
             role="progressbar"
             aria-valuenow={Math.round(state.progress * 100)}

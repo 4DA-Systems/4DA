@@ -132,7 +132,7 @@ export function SsoConfigPanel() {
             {t('enterprise.sso.description', 'Configure SAML or OIDC authentication for your organization.')}
           </p>
         </div>
-        <span className="text-[10px] px-1.5 py-0.5 bg-[#22C55E]/15 text-[#22C55E] rounded font-medium">
+        <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
           Enterprise
         </span>
       </div>
@@ -140,7 +140,7 @@ export function SsoConfigPanel() {
       {/* Status */}
       {status && (
         <div className={`px-3 py-2 rounded text-xs ${
-          status.ok ? 'bg-[#22C55E]/10 text-[#22C55E]' : 'bg-[#EF4444]/10 text-[#EF4444]'
+          status.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
         }`}>
           {status.msg}
         </div>
@@ -148,7 +148,7 @@ export function SsoConfigPanel() {
 
       {/* Active Session */}
       {session && (
-        <div className="bg-bg-primary rounded-lg p-3 border border-[#22C55E]/30">
+        <div className="bg-bg-primary rounded-lg p-3 border border-success/30">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-white font-medium">{session.display_name}</p>
@@ -165,7 +165,7 @@ export function SsoConfigPanel() {
             </div>
             <button
               onClick={handleLogout}
-              className="text-[10px] text-text-muted hover:text-[#EF4444] transition-colors"
+              className="text-[10px] text-text-muted hover:text-error transition-colors"
             >
               {t('enterprise.sso.logout', 'Sign Out')}
             </button>
@@ -183,7 +183,7 @@ export function SsoConfigPanel() {
               id="sso-provider-type"
               value={form.provider_type}
               onChange={e => setForm(f => ({ ...f, provider_type: e.target.value }))}
-              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
             >
               <option value="saml">SAML 2.0</option>
               <option value="oidc">OpenID Connect</option>
@@ -198,7 +198,7 @@ export function SsoConfigPanel() {
               type="url"
               value={form.idp_url}
               onChange={e => setForm(f => ({ ...f, idp_url: e.target.value }))}
-              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
               placeholder="https://idp.example.com/saml/sso"
             />
           </div>
@@ -211,7 +211,7 @@ export function SsoConfigPanel() {
               type="text"
               value={form.entity_id}
               onChange={e => setForm(f => ({ ...f, entity_id: e.target.value }))}
-              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+              className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
               placeholder="com.4da.app"
             />
           </div>
@@ -225,7 +225,7 @@ export function SsoConfigPanel() {
                 value={form.certificate}
                 onChange={e => setForm(f => ({ ...f, certificate: e.target.value }))}
                 rows={4}
-                className="w-full px-2 py-1.5 text-[10px] font-mono bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50 resize-none"
+                className="w-full px-2 py-1.5 text-[10px] font-mono bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50 resize-none"
                 placeholder="-----BEGIN CERTIFICATE-----&#10;..."
               />
             </div>
@@ -241,7 +241,7 @@ export function SsoConfigPanel() {
                   type="text"
                   value={form.client_id}
                   onChange={e => setForm(f => ({ ...f, client_id: e.target.value }))}
-                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
                 />
               </div>
               <div>
@@ -251,7 +251,7 @@ export function SsoConfigPanel() {
                   type="url"
                   value={form.issuer}
                   onChange={e => setForm(f => ({ ...f, issuer: e.target.value }))}
-                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-[#22C55E]/50"
+                  className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
                   placeholder="https://idp.example.com"
                 />
               </div>
@@ -274,7 +274,7 @@ export function SsoConfigPanel() {
             <button
               onClick={handleSave}
               disabled={!form.idp_url.trim() || saving}
-              className="px-3 py-1.5 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors disabled:opacity-50"
+              className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
             >
               {saving ? t('action.saving', 'Saving...') : t('action.save', 'Save')}
             </button>
@@ -296,7 +296,7 @@ export function SsoConfigPanel() {
                     {config.provider_type.toUpperCase()} &mdash; {config.idp_url}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <div className={`w-1.5 h-1.5 rounded-full ${config.enabled ? 'bg-[#22C55E]' : 'bg-text-muted'}`} />
+                    <div className={`w-1.5 h-1.5 rounded-full ${config.enabled ? 'bg-success' : 'bg-text-muted'}`} />
                     <span className="text-[10px] text-text-muted">
                       {config.enabled ? 'Active' : 'Disabled'}
                     </span>
@@ -306,7 +306,7 @@ export function SsoConfigPanel() {
                   {!session && config.enabled && (
                     <button
                       onClick={handleLogin}
-                      className="text-[10px] px-2.5 py-1 bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors"
+                      className="text-[10px] px-2.5 py-1 bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
                     >
                       {t('enterprise.sso.signIn', 'Sign In with SSO')}
                     </button>
@@ -327,7 +327,7 @@ export function SsoConfigPanel() {
               </p>
               <button
                 onClick={() => setEditing(true)}
-                className="px-4 py-2 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded hover:bg-[#22C55E]/25 transition-colors"
+                className="px-4 py-2 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
               >
                 {t('enterprise.sso.configure', 'Configure SSO')}
               </button>

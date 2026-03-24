@@ -104,16 +104,16 @@ export default function SourceDebugger() {
           onKeyDown={handleKeyDown}
           placeholder="https://example.com/feed.xml"
           spellCheck={false}
-          className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-[#8A8A8A] transition-colors"
+          className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-text-muted transition-colors"
         />
         <button
           onClick={testFeed}
           disabled={loading || !url.trim()}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-white text-[#0A0A0A] rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-white text-bg-primary rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
           {loading ? (
             <>
-              <div className="w-3.5 h-3.5 border-2 border-[#0A0A0A]/30 border-t-[#0A0A0A] rounded-full animate-spin" />
+              <div className="w-3.5 h-3.5 border-2 border-bg-primary/30 border-t-bg-primary rounded-full animate-spin" />
               {t('toolkit.sourceDebugger.testing')}
             </>
           ) : (
@@ -139,24 +139,24 @@ export default function SourceDebugger() {
 
       {/* Validation error */}
       {validationError && (
-        <p className="text-xs text-[#EF4444]">{validationError}</p>
+        <p className="text-xs text-error">{validationError}</p>
       )}
 
       {/* Fetch error */}
       {error && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg">
+        <div className="flex items-center gap-3 px-4 py-3 bg-error/10 border border-error/30 rounded-lg">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span className="text-sm text-[#EF4444] flex-1">{error}</span>
+          <span className="text-sm text-error flex-1">{error}</span>
         </div>
       )}
 
       {/* Empty state */}
       {!result && !error && !loading && (
-        <div className="flex flex-col items-center justify-center py-16 text-[#8A8A8A]">
+        <div className="flex flex-col items-center justify-center py-16 text-text-muted">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-3 opacity-50">
             <path d="M4 11a9 9 0 019-9" />
             <path d="M4 4a16 16 0 0116 16" />
@@ -174,7 +174,7 @@ export default function SourceDebugger() {
           {result.errors.length > 0 && (
             <div className="space-y-1">
               {result.errors.map((err, i) => (
-                <div key={i} className="px-3 py-2 bg-[#EF4444]/10 border border-[#EF4444]/30 rounded-lg text-xs text-[#EF4444] font-mono">
+                <div key={i} className="px-3 py-2 bg-error/10 border border-error/30 rounded-lg text-xs text-error font-mono">
                   {err}
                 </div>
               ))}
@@ -213,7 +213,7 @@ export default function SourceDebugger() {
                 >
                   {/* Title as link */}
                   <div className="flex items-start gap-2 mb-1">
-                    <span className="text-[10px] text-[#8A8A8A] font-mono shrink-0 mt-0.5">
+                    <span className="text-[10px] text-text-muted font-mono shrink-0 mt-0.5">
                       {i + 1}
                     </span>
                     {item.url ? (
@@ -221,7 +221,7 @@ export default function SourceDebugger() {
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm text-white hover:text-[#D4AF37] transition-colors line-clamp-1"
+                        className="text-sm text-white hover:text-accent-gold transition-colors line-clamp-1"
                         title={item.title}
                       >
                         {item.title || '(untitled)'}
@@ -235,7 +235,7 @@ export default function SourceDebugger() {
 
                   {/* Published date */}
                   {item.published_at && (
-                    <p className="text-[10px] text-[#8A8A8A] font-mono ml-5 mb-1">
+                    <p className="text-[10px] text-text-muted font-mono ml-5 mb-1">
                       {item.published_at}
                     </p>
                   )}
@@ -252,7 +252,7 @@ export default function SourceDebugger() {
           )}
 
           {result.items.length === 0 && result.errors.length === 0 && (
-            <div className="text-center py-8 text-[#8A8A8A] text-sm">
+            <div className="text-center py-8 text-text-muted text-sm">
               {t('toolkit.sourceDebugger.noItems')}
             </div>
           )}

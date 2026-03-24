@@ -120,9 +120,6 @@ importers:
       playwright:
         specifier: ^1.58.2
         version: 1.58.2
-      png-to-ico:
-        specifier: ^3.0.1
-        version: 3.0.1
       sharp:
         specifier: ^0.34.5
         version: 0.34.5
@@ -2892,18 +2889,9 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  png-to-ico@3.0.1:
-    resolution: {integrity: sha512-S8BOAoaGd9gT5uaemQ62arIY3Jzco7Uc7LwUTqRyqJDTsKqOAiyfyN4dSdT0D+Zf8XvgztgpRbM5wnQd7EgYwg==}
-    engines: {node: '>=20'}
-    hasBin: true
-
   pngjs@3.4.0:
     resolution: {integrity: sha512-NCrCHhWmnQklfH4MtJMRjZ2a8c80qXeMlQMv2uVp9ISJMTt562SbGd6n2oq0PaPgKm7Z6pL9E2UlLIhC+SHL3w==}
     engines: {node: '>=4.0.0'}
-
-  pngjs@7.0.0:
-    resolution: {integrity: sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==}
-    engines: {node: '>=14.19.0'}
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -6375,15 +6363,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.2
 
-  png-to-ico@3.0.1:
-    dependencies:
-      '@types/node': 22.19.7
-      minimist: 1.2.8
-      pngjs: 7.0.0
-
   pngjs@3.4.0: {}
-
-  pngjs@7.0.0: {}
 
   possible-typed-array-names@1.1.0: {}
 

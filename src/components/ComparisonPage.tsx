@@ -35,14 +35,14 @@ const COMPETITORS: Array<{ id: Competitor; name: string; desc: string }> = [
   { id: 'bigtech', name: 'vs Big Tech', desc: 'When GitHub/MS ships feeds' },
 ];
 
-function ComparisonTable({ rows, competitorName }: { rows: ComparisonRow[]; competitorName: string }) {
+function ComparisonTable({ rows, competitorName, featureLabel, fourdaLabel }: { rows: ComparisonRow[]; competitorName: string; featureLabel: string; fourdaLabel: string }) {
   return (
     <div className="bg-bg-tertiary/50 border border-border rounded-lg overflow-hidden">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border">
-            <th className="text-left py-2.5 px-4 font-medium text-text-muted">Feature</th>
-            <th className="text-left py-2.5 px-4 font-medium text-orange-400 w-2/5">4DA</th>
+            <th className="text-left py-2.5 px-4 font-medium text-text-muted">{featureLabel}</th>
+            <th className="text-left py-2.5 px-4 font-medium text-orange-400 w-2/5">{fourdaLabel}</th>
             <th className="text-left py-2.5 px-4 font-medium text-text-secondary w-2/5">{competitorName}</th>
           </tr>
         </thead>
@@ -69,9 +69,10 @@ function ComparisonTable({ rows, competitorName }: { rows: ComparisonRow[]; comp
 }
 
 function OverviewSection() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">Competitive Position</h3>
+      <h3 className="text-lg font-semibold text-white">{t('comparison.competitivePosition')}</h3>
       <p className="text-sm text-text-secondary">
         4DA occupies a unique position: more focused than general aggregators, more proactive than
         search tools, more transparent than algorithmic feeds, and more private than any cloud service.
@@ -81,11 +82,11 @@ function OverviewSection() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2.5 px-3 font-medium text-text-muted">Feature</th>
+              <th className="text-left py-2.5 px-3 font-medium text-text-muted">{t('comparison.feature')}</th>
               <th className="text-center py-2.5 px-2 font-medium text-orange-400">4DA</th>
-              <th className="text-center py-2.5 px-2 font-medium text-text-muted">Feedly</th>
-              <th className="text-center py-2.5 px-2 font-medium text-text-muted">Perplexity</th>
-              <th className="text-center py-2.5 px-2 font-medium text-text-muted">HN</th>
+              <th className="text-center py-2.5 px-2 font-medium text-text-muted">{t('comparison.feedly')}</th>
+              <th className="text-center py-2.5 px-2 font-medium text-text-muted">{t('comparison.perplexity')}</th>
+              <th className="text-center py-2.5 px-2 font-medium text-text-muted">{t('comparison.hn')}</th>
             </tr>
           </thead>
           <tbody>
@@ -115,7 +116,7 @@ function OverviewSection() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-bg-tertiary/30 border border-border/50 rounded-lg p-4">
-          <p className="text-xs font-medium text-white mb-2">4DA's Moat</p>
+          <p className="text-xs font-medium text-white mb-2">{t('comparison.fourdaMoat')}</p>
           <div className="space-y-1.5 text-xs text-text-muted">
             <p>1. Automatic context discovery (zero-config)</p>
             <p>2. 5-axis scoring with confirmation gate</p>
@@ -125,7 +126,7 @@ function OverviewSection() {
           </div>
         </div>
         <div className="bg-bg-tertiary/30 border border-border/50 rounded-lg p-4">
-          <p className="text-xs font-medium text-white mb-2">Strategic Position</p>
+          <p className="text-xs font-medium text-white mb-2">{t('comparison.strategicPosition')}</p>
           <div className="space-y-1.5 text-xs text-text-muted">
             <p>More <span className="text-white">focused</span> than Feedly</p>
             <p>More <span className="text-white">proactive</span> than Hacker News</p>
@@ -140,6 +141,7 @@ function OverviewSection() {
 }
 
 function FeedlySection() {
+  const { t } = useTranslation();
   const rows: ComparisonRow[] = [
     { feature: 'Context discovery', fourda: 'Codebase scanning', competitor: 'Manual keywords', fourdaStatus: 'yes', competitorStatus: 'no' },
     { feature: 'Relevance scoring', fourda: 'KNN + LLM + behaviour', competitor: 'Keywords only', fourdaStatus: 'yes', competitorStatus: 'partial' },
@@ -152,18 +154,18 @@ function FeedlySection() {
   ];
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">4DA vs Feedly</h3>
+      <h3 className="text-lg font-semibold text-white">{t('comparison.vsFeedly')}</h3>
       <p className="text-sm text-text-secondary">
         Feedly is the incumbent RSS reader with 15M+ users. It excels at source breadth and team features.
         4DA excels at relevance depth and privacy.
       </p>
-      <ComparisonTable rows={rows} competitorName="Feedly" />
+      <ComparisonTable rows={rows} competitorName="Feedly" featureLabel={t('comparison.feature')} fourdaLabel="4DA" />
       <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
-        <p className="text-xs text-amber-400 font-medium mb-1">When to choose Feedly</p>
+        <p className="text-xs text-amber-400 font-medium mb-1">{t('comparison.whenChooseFeedly')}</p>
         <p className="text-xs text-text-muted">You need team collaboration, polished mobile apps, or 1000+ source integrations.</p>
       </div>
       <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
-        <p className="text-xs text-green-400 font-medium mb-1">When to choose 4DA</p>
+        <p className="text-xs text-green-400 font-medium mb-1">{t('comparison.whenChoose4DA')}</p>
         <p className="text-xs text-text-muted">You're a developer who values privacy, explainable scoring, and automatic context discovery from your codebase.</p>
       </div>
     </div>
@@ -171,6 +173,7 @@ function FeedlySection() {
 }
 
 function PerplexitySection() {
+  const { t } = useTranslation();
   const rows: ComparisonRow[] = [
     { feature: 'Interaction model', fourda: 'Proactive monitoring', competitor: 'Search-initiated', fourdaStatus: 'yes', competitorStatus: 'partial' },
     { feature: 'Context awareness', fourda: 'Codebase-aware', competitor: 'Query-based', fourdaStatus: 'yes', competitorStatus: 'no' },
@@ -182,16 +185,17 @@ function PerplexitySection() {
   ];
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">4DA vs Perplexity</h3>
+      <h3 className="text-lg font-semibold text-white">{t('comparison.vsPerplexity')}</h3>
       <p className="text-sm text-text-secondary">
         Perplexity is an AI search engine. It answers questions. 4DA surfaces what you didn't know to ask about.
       </p>
-      <ComparisonTable rows={rows} competitorName="Perplexity" />
+      <ComparisonTable rows={rows} competitorName="Perplexity" featureLabel={t('comparison.feature')} fourdaLabel="4DA" />
     </div>
   );
 }
 
 function HackerNewsSection() {
+  const { t } = useTranslation();
   const rows: ComparisonRow[] = [
     { feature: 'Personalisation', fourda: 'Learns your interests', competitor: 'Same for everyone', fourdaStatus: 'yes', competitorStatus: 'no' },
     { feature: 'Sources', fourda: 'HN + arXiv + Reddit + RSS', competitor: 'HN only', fourdaStatus: 'yes', competitorStatus: 'no' },
@@ -203,17 +207,18 @@ function HackerNewsSection() {
   ];
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">4DA vs Hacker News</h3>
+      <h3 className="text-lg font-semibold text-white">{t('comparison.vsHackerNews')}</h3>
       <p className="text-sm text-text-secondary">
         HN is the canonical tech aggregator. 4DA uses HN as a source — but filters it through your context
         so you see only what's relevant to YOUR work, not what 1M other developers voted on.
       </p>
-      <ComparisonTable rows={rows} competitorName="Hacker News" />
+      <ComparisonTable rows={rows} competitorName="Hacker News" featureLabel={t('comparison.feature')} fourdaLabel="4DA" />
     </div>
   );
 }
 
 function RssSection() {
+  const { t } = useTranslation();
   const rows: ComparisonRow[] = [
     { feature: 'Setup', fourda: 'Zero-config (scans codebase)', competitor: 'Manual feed curation', fourdaStatus: 'yes', competitorStatus: 'no' },
     { feature: 'Relevance', fourda: 'Semantic 5-axis scoring', competitor: '"New items in feed"', fourdaStatus: 'yes', competitorStatus: 'no' },
@@ -224,21 +229,22 @@ function RssSection() {
   ];
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">4DA vs RSS Readers</h3>
+      <h3 className="text-lg font-semibold text-white">{t('comparison.vsRssReaders')}</h3>
       <p className="text-sm text-text-secondary">
         RSS readers show you everything in your feeds. 4DA shows you only what's relevant to your work.
         If you already have curated feeds and enjoy manual browsing, RSS is simpler. If you want
         intelligence, 4DA is deeper.
       </p>
-      <ComparisonTable rows={rows} competitorName="RSS Readers" />
+      <ComparisonTable rows={rows} competitorName="RSS Readers" featureLabel={t('comparison.feature')} fourdaLabel="4DA" />
     </div>
   );
 }
 
 function BigTechSection() {
+  const { t } = useTranslation();
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white">When Big Tech Ships Developer Feeds</h3>
+      <h3 className="text-lg font-semibold text-white">{t('comparison.vsBigTech')}</h3>
       <p className="text-sm text-text-secondary">
         The highest-probability competitive threat: GitHub adds "Trending for You," Copilot adds
         relevant content, or JetBrains ships a developer feed plugin.
@@ -260,7 +266,7 @@ function BigTechSection() {
 
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-          <p className="text-xs text-red-400 font-medium mb-2">Their Approach</p>
+          <p className="text-xs text-red-400 font-medium mb-2">{t('comparison.theirApproach')}</p>
           <div className="space-y-1 text-xs text-text-muted">
             <p>Cloud-based, data feeds models</p>
             <p>Optimised for engagement</p>
@@ -270,7 +276,7 @@ function BigTechSection() {
           </div>
         </div>
         <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-4">
-          <p className="text-xs text-green-400 font-medium mb-2">4DA's Approach</p>
+          <p className="text-xs text-green-400 font-medium mb-2">{t('comparison.fourdaApproach')}</p>
           <div className="space-y-1 text-xs text-text-muted">
             <p>Local-first, data stays on machine</p>
             <p>Optimised for precision</p>
@@ -282,7 +288,7 @@ function BigTechSection() {
       </div>
 
       <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg p-4">
-        <p className="text-xs text-orange-400 font-medium mb-1">The Framework Defence</p>
+        <p className="text-xs text-orange-400 font-medium mb-1">{t('comparison.frameworkDefence')}</p>
         <p className="text-xs text-text-muted">
           4DA is not just a product — it's a framework. PASIFA, the Authority Stack, and AOS are
           published openly. If a competitor adopts these concepts, they validate the approach.

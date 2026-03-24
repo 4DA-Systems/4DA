@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from 'react';
+import i18n from '../i18n';
 
 interface PanelErrorBoundaryProps {
   name: string;
@@ -36,13 +37,13 @@ export class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, Panel
       return (
         <div role="alert" className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
           <p className="text-sm text-red-400">
-            {this.props.name} failed to load.
+            {i18n.t('panel.failedToLoad', { name: this.props.name })}
           </p>
           <button
             onClick={this.handleRetry}
             className="mt-2 px-3 py-1.5 text-xs font-medium text-text-secondary bg-bg-tertiary border border-border rounded-lg hover:text-white transition-colors"
           >
-            Retry
+            {i18n.t('action.retry')}
           </button>
         </div>
       );

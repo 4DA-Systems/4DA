@@ -2,6 +2,7 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { useState, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import type {
   AccuracyReport,
@@ -40,9 +41,9 @@ function LoadingSkeleton() {
 }
 
 const RISK_COLORS: Record<string, string> = {
-  critical: 'text-[#EF4444]',
+  critical: 'text-error',
   high: 'text-[#F97316]',
-  medium: 'text-[#D4AF37]',
+  medium: 'text-accent-gold',
   low: 'text-text-muted',
 };
 
@@ -51,6 +52,7 @@ const RISK_COLORS: Record<string, string> = {
 // ============================================================================
 
 export const AccuracyTab = memo(function AccuracyTab() {
+  const { t } = useTranslation();
   const [accuracy, setAccuracy] = useState<AccuracyReport | null>(null);
   const [report, setReport] = useState<IntelligenceReportData | null>(null);
   const [snapshot, setSnapshot] = useState<TemporalSnapshot | null>(null);
@@ -96,10 +98,9 @@ export const AccuracyTab = memo(function AccuracyTab() {
     return (
       <div className="p-5">
         <div className="bg-bg-primary rounded-lg border border-border/50 p-6 text-center">
-          <p className="text-sm text-text-muted mb-2">No intelligence data yet</p>
+          <p className="text-sm text-text-muted mb-2">{t('accuracy.noData')}</p>
           <p className="text-xs text-text-muted/60 leading-relaxed">
-            Intelligence data accumulates over time. Keep using 4DA to build
-            your accuracy history, tech snapshot, and knowledge graph.
+            {t('accuracy.noDataDesc')}
           </p>
         </div>
       </div>
@@ -113,17 +114,17 @@ export const AccuracyTab = memo(function AccuracyTab() {
         <div className="grid grid-cols-4 gap-3">
           {accuracy && (
             <StatCard
-              label="Accuracy"
+              label={t('accuracy.accuracy')}
               value={accuracy.accuracy_pct.toFixed(1)}
               suffix="%"
-              color={accuracy.accuracy_pct >= 70 ? 'text-[#22C55E]' : accuracy.accuracy_pct >= 50 ? 'text-[#D4AF37]' : 'text-[#EF4444]'}
+              color={accuracy.accuracy_pct >= 70 ? 'text-success' : accuracy.accuracy_pct >= 50 ? 'text-accent-gold' : 'text-error'}
             />
           )}
           {report && (
             <>
-              <StatCard label="Topics Tracked" value={report.topics_tracked} />
-              <StatCard label="Noise Rejected" value={`${report.noise_rejection_pct.toFixed(0)}`} suffix="%" color="text-[#22C55E]" />
-              <StatCard label="Time Saved" value={report.time_saved_hours.toFixed(1)} suffix="h" color="text-[#D4AF37]" />
+              <StatCard label={t('accuracy.topicsTracked')} value={report.topics_tracked} />
+              <StatCard label={t('accuracy.noiseRejected')} value={`${report.noise_rejection_pct.toFixed(0)}`} suffix="%" color="text-success" />
+              <StatCard label={t('accuracy.timeSaved')} value={report.time_saved_hours.toFixed(1)} suffix="h" color="text-accent-gold" />
             </>
           )}
         </div>
@@ -133,33 +134,33 @@ export const AccuracyTab = memo(function AccuracyTab() {
       {report && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Monthly Intelligence
+            {t('accuracy.monthlyIntelligence')}
           </h4>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-bg-primary rounded-lg border border-border/50 px-4 py-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-muted">Accuracy Delta</span>
-                <span className={`text-sm font-medium ${report.accuracy_delta >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                <span className="text-xs text-text-muted">{t('accuracy.accuracyDelta')}</span>
+                <span className={`text-sm font-medium ${report.accuracy_delta >= 0 ? 'text-success' : 'text-error'}`}>
                   {report.accuracy_delta >= 0 ? '+' : ''}{report.accuracy_delta.toFixed(1)}%
                 </span>
               </div>
             </div>
             <div className="bg-bg-primary rounded-lg border border-border/50 px-4 py-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-muted">New Topics</span>
+                <span className="text-xs text-text-muted">{t('accuracy.newTopics')}</span>
                 <span className="text-sm font-medium text-text-primary">{report.topics_added}</span>
               </div>
             </div>
             <div className="bg-bg-primary rounded-lg border border-border/50 px-4 py-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-muted">Decisions</span>
+                <span className="text-xs text-text-muted">{t('accuracy.decisions')}</span>
                 <span className="text-sm font-medium text-text-primary">{report.decisions_recorded}</span>
               </div>
             </div>
             <div className="bg-bg-primary rounded-lg border border-border/50 px-4 py-3">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-text-muted">Security Alerts</span>
-                <span className={`text-sm font-medium ${report.security_alerts > 0 ? 'text-[#EF4444]' : 'text-[#22C55E]'}`}>
+                <span className="text-xs text-text-muted">{t('accuracy.securityAlerts')}</span>
+                <span className={`text-sm font-medium ${report.security_alerts > 0 ? 'text-error' : 'text-success'}`}>
                   {report.security_alerts}
                 </span>
               </div>
@@ -172,7 +173,7 @@ export const AccuracyTab = memo(function AccuracyTab() {
       {snapshot && snapshot.tech_snapshot.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Tech Snapshot
+            {t('accuracy.techSnapshot')}
           </h4>
           <div className="space-y-2">
             {snapshot.tech_snapshot.map(tech => (
@@ -199,16 +200,16 @@ export const AccuracyTab = memo(function AccuracyTab() {
       {decaying.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-            Knowledge Decay
+            {t('accuracy.knowledgeDecay')}
           </h4>
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-bg-tertiary text-text-muted text-xs uppercase tracking-wider">
-                  <th className="text-left px-4 py-2.5 font-medium">Technology</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Weeks Idle</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Risk</th>
-                  <th className="text-left px-4 py-2.5 font-medium">Action</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thTechnology')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thWeeksIdle')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thRisk')}</th>
+                  <th className="text-left px-4 py-2.5 font-medium">{t('accuracy.thAction')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">

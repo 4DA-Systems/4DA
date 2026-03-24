@@ -178,7 +178,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
             <div className="text-xs text-text-muted">{t('action.loading')}</div>
           ) : detail?.decision ? (
             <div className="space-y-1">
-              <div className="text-xs text-[#D4AF37] font-medium">
+              <div className="text-xs text-accent-gold font-medium">
                 {t('techRadar.decisionRef', { id: detail.decision.id })}
               </div>
               <div className="text-xs text-text-secondary">{detail.decision.decision}</div>
@@ -187,7 +187,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
               )}
             </div>
           ) : (
-            <div className="text-xs text-[#D4AF37]">{t('techRadar.decisionRef', { id: entry.decision_ref })}</div>
+            <div className="text-xs text-accent-gold">{t('techRadar.decisionRef', { id: entry.decision_ref })}</div>
           )}
         </div>
       )}

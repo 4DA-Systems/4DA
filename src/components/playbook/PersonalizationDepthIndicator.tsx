@@ -60,7 +60,7 @@ export function PersonalizationDepthIndicator({ depth }: Props) {
         );
       })}
       {depth.llm_pending && (
-        <div className="w-1 h-1 rounded-full bg-[#D4AF37] animate-pulse ml-0.5" title="LLM upgrade pending" />
+        <div className="w-1 h-1 rounded-full bg-accent-gold animate-pulse ml-0.5" title="LLM upgrade pending" />
       )}
     </div>
   );

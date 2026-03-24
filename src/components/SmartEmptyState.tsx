@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface ExampleSignal {
   title: string;
@@ -49,6 +50,7 @@ interface SmartEmptyStateProps {
 }
 
 export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
+  const { t } = useTranslation();
   const key = useMemo(() => resolveStack(detectedStack), [detectedStack]);
   const signals = stackSignals[key] || stackSignals.default;
   const label = stackLabel(key);
@@ -56,7 +58,10 @@ export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
   return (
     <div className="bg-bg-primary rounded-lg px-6 py-8" aria-label="Example signals — real data will appear after your first analysis">
       <p className="text-sm text-text-secondary text-center mb-6">
-        While your first analysis runs, here's what {label ? `${label} ` : ''}developers saw this week
+        {label
+          ? t('empty.whileAnalysisRunsStack', { stack: label })
+          : t('empty.whileAnalysisRuns')
+        }
       </p>
 
       <div className="space-y-3">
@@ -77,14 +82,14 @@ export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
               className="text-[10px] px-2 py-1 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 font-medium uppercase tracking-wider flex-shrink-0"
               aria-label="This is an example signal, not real data"
             >
-              Example
+              {t('empty.example')}
             </span>
           </div>
         ))}
       </div>
 
       <p className="text-xs text-text-muted text-center mt-6">
-        Real signals arriving in ~2 minutes...
+        {t('empty.realSignalsArriving')}
       </p>
     </div>
   );

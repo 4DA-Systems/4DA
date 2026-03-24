@@ -118,7 +118,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
     return (
       <div className="bg-bg-secondary border border-border rounded-xl p-6 mt-4">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-accent-gold border-t-transparent rounded-full animate-spin" />
           <span className="text-sm text-text-secondary">{t('playbook.sovereign.loading')}</span>
         </div>
       </div>
@@ -131,7 +131,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-semibold text-white">{t('playbook.sovereign.title')}</h3>
-          <p className="text-xs text-[#8A8A8A] mt-0.5">
+          <p className="text-xs text-text-muted mt-0.5">
             {t('playbook.sovereign.subtitle')}
           </p>
         </div>
@@ -157,13 +157,13 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                 <span
                   className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
                     hasFacts
-                      ? 'bg-[#22C55E]/15 text-[#22C55E]'
-                      : 'bg-bg-tertiary text-[#8A8A8A]'
+                      ? 'bg-success/15 text-success'
+                      : 'bg-bg-tertiary text-text-muted'
                   }`}
                 >
                   {meta.icon}
                 </span>
-                <span className={`text-xs font-medium flex-1 ${hasFacts ? 'text-white' : 'text-[#8A8A8A]'}`}>
+                <span className={`text-xs font-medium flex-1 ${hasFacts ? 'text-white' : 'text-text-muted'}`}>
                   {meta.label}
                 </span>
                 {hasFacts && (
@@ -183,14 +183,14 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                     <div className="space-y-1.5">
                       {facts.map((fact, i) => (
                         <div key={i} className="flex items-start gap-2">
-                          <span className="text-[10px] text-[#8A8A8A] font-mono min-w-[80px] flex-shrink-0 pt-0.5">
+                          <span className="text-[10px] text-text-muted font-mono min-w-[80px] flex-shrink-0 pt-0.5">
                             {fact.key}
                           </span>
                           <span className="text-xs text-text-secondary font-mono break-all flex-1">
                             {fact.value}
                           </span>
                           {fact.source_lesson && fact.source_lesson !== 'manual' && (
-                            <span className="text-[9px] text-[#D4AF37] bg-[#D4AF37]/10 px-1.5 py-0.5 rounded flex-shrink-0">
+                            <span className="text-[9px] text-accent-gold bg-accent-gold/10 px-1.5 py-0.5 rounded flex-shrink-0">
                               {fact.source_lesson}
                             </span>
                           )}
@@ -203,7 +203,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                       ))}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-[#8A8A8A] italic">{meta.hint}</p>
+                    <p className="text-[10px] text-text-muted italic">{meta.hint}</p>
                   )}
                 </div>
               )}
@@ -214,13 +214,13 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
 
       {/* Manual Entry Form */}
       <div className="border-t border-border pt-4">
-        <p className="text-[10px] text-[#8A8A8A] mb-2 uppercase tracking-wide font-medium">{t('playbook.sovereign.manualEntry')}</p>
+        <p className="text-[10px] text-text-muted mb-2 uppercase tracking-wide font-medium">{t('playbook.sovereign.manualEntry')}</p>
         <div className="flex items-end gap-2">
           <div className="flex-shrink-0">
             <select
               value={manualCategory}
               onChange={(e) => setManualCategory(e.target.value)}
-              className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary focus:border-[#D4AF37] focus:outline-none"
+              className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary focus:border-accent-gold focus:outline-none"
             >
               {ALL_CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>{CATEGORY_META[cat].label}</option>
@@ -232,20 +232,20 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             value={manualKey}
             onChange={(e) => setManualKey(e.target.value)}
             placeholder={t('playbook.sovereign.keyPlaceholder')}
-            className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary w-28 focus:border-[#D4AF37] focus:outline-none font-mono"
+            className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary w-28 focus:border-accent-gold focus:outline-none font-mono"
           />
           <input
             type="text"
             value={manualValue}
             onChange={(e) => setManualValue(e.target.value)}
             placeholder={t('playbook.sovereign.valuePlaceholder')}
-            className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary flex-1 focus:border-[#D4AF37] focus:outline-none font-mono"
+            className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary flex-1 focus:border-accent-gold focus:outline-none font-mono"
             onKeyDown={(e) => e.key === 'Enter' && handleSaveFact()}
           />
           <button
             onClick={handleSaveFact}
             disabled={!manualKey.trim() || !manualValue.trim()}
-            className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-[#2A2A2A] hover:text-white transition-colors disabled:opacity-40"
+            className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-border hover:text-white transition-colors disabled:opacity-40"
           >
             {t('action.save')}
           </button>
@@ -256,12 +256,12 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       <div className="flex items-center gap-3">
         <button
           onClick={handleGenerate}
-          className="px-4 py-2 text-xs font-medium bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30 rounded-lg hover:bg-[#D4AF37]/25 transition-colors"
+          className="px-4 py-2 text-xs font-medium bg-accent-gold/15 text-accent-gold border border-accent-gold/30 rounded-lg hover:bg-accent-gold/25 transition-colors"
         >
           {t('playbook.sovereign.generateStackDoc')}
         </button>
         {profileCompleteness && profileCompleteness.missing.length > 0 && (
-          <span className="text-[10px] text-[#8A8A8A]">
+          <span className="text-[10px] text-text-muted">
             {t('playbook.sovereign.missing', { fields: profileCompleteness.missing.join(', ') })}
           </span>
         )}
@@ -275,13 +275,13 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigator.clipboard.writeText(generatedDocument)}
-                className="text-[10px] text-[#8A8A8A] hover:text-text-secondary transition-colors"
+                className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
               >
                 {t('action.copy')}
               </button>
               <button
                 onClick={() => setShowDocument(false)}
-                className="text-[10px] text-[#8A8A8A] hover:text-text-secondary transition-colors"
+                className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
               >
                 {t('action.close')}
               </button>

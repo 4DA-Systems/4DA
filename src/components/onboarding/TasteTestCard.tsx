@@ -68,7 +68,7 @@ export const TasteTestCard = memo(function TasteTestCard({
         <button
           onClick={onStrongInterest}
           aria-label={t('tasteTest.loveTitle', { title: card.title })}
-          className="w-10 h-10 flex items-center justify-center border border-border rounded-md hover:bg-bg-tertiary hover:border-[#D4AF37] hover:text-[#D4AF37] text-text-muted transition-colors"
+          className="w-10 h-10 flex items-center justify-center border border-border rounded-md hover:bg-bg-tertiary hover:border-accent-gold hover:text-accent-gold text-text-muted transition-colors"
           title={t('tasteTest.loveThis')}
         >
           ★

@@ -109,7 +109,7 @@ export function DataExportPanel() {
       {/* Status */}
       {exportResult && (
         <div className={`px-3 py-2 rounded text-xs ${
-          exportResult.ok ? 'bg-[#22C55E]/10 text-[#22C55E]' : 'bg-[#EF4444]/10 text-[#EF4444]'
+          exportResult.ok ? 'bg-success/10 text-success' : 'bg-error/10 text-error'
         }`}>
           {exportResult.msg}
         </div>
@@ -138,7 +138,7 @@ export function DataExportPanel() {
               <button
                 onClick={() => handleExportSection(section.key)}
                 disabled={singleExporting === section.key}
-                className="text-[10px] text-text-muted hover:text-[#22C55E] transition-colors ml-2"
+                className="text-[10px] text-text-muted hover:text-success transition-colors ml-2"
                 title={`Export ${section.label} only`}
               >
                 {singleExporting === section.key ? '...' : '\u{2B07}'}
@@ -152,7 +152,7 @@ export function DataExportPanel() {
       <button
         onClick={handleExportAll}
         disabled={exporting || selectedSections.size === 0}
-        className="w-full px-4 py-2.5 text-xs bg-[#22C55E]/15 text-[#22C55E] rounded-lg hover:bg-[#22C55E]/25 transition-colors disabled:opacity-50 font-medium"
+        className="w-full px-4 py-2.5 text-xs bg-success/15 text-success rounded-lg hover:bg-success/25 transition-colors disabled:opacity-50 font-medium"
       >
         {exporting
           ? t('enterprise.export.exporting', 'Exporting...')
@@ -182,7 +182,7 @@ export function DataExportPanel() {
                   <span className="text-[10px] text-text-muted">{formatDate(exp.created_at)}</span>
                   <button
                     onClick={() => handleDeleteExport(exp.export_id)}
-                    className="text-[10px] text-text-muted hover:text-[#EF4444] transition-colors"
+                    className="text-[10px] text-text-muted hover:text-error transition-colors"
                     aria-label="Delete export"
                   >
                     &#10005;
