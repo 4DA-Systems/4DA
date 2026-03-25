@@ -1086,6 +1086,28 @@ impl Database {
                 )?;
             }
 
+            // Phase 39: Briefing item history for novelty detection
+            if current_version < 39 {
+                Self::run_versioned_migration(
+                    &conn,
+                    38,
+                    39,
+                    "Phase 39: briefing_item_history",
+                    |c| {
+                        c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS briefing_item_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            item_title TEXT NOT NULL,
+                            source_type TEXT NOT NULL,
+                            briefing_date TEXT NOT NULL,
+                            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_briefing_history_date ON briefing_item_history(briefing_date);",
+                    )
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }

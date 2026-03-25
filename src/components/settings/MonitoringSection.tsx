@@ -274,8 +274,8 @@ export function MonitoringSection({
               className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
               style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
             >
-              <option value="critical_only">{t('settings.monitoring.criticalOnly')}</option>
-              <option value="high_and_above">{t('settings.monitoring.highAndAbove')}</option>
+              <option value="critical_only">{t('settings.monitoring.criticalOnly', 'Critical only')}</option>
+              <option value="high_and_above">{t('settings.monitoring.alertAndAbove', 'Alert and above')}</option>
               <option value="all">{t('settings.monitoring.allItems')}</option>
             </select>
           </div>
