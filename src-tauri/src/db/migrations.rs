@@ -1108,6 +1108,29 @@ impl Database {
                 )?;
             }
 
+            // Phase 40: Item necessity scores (persisted for MCP server access)
+            if current_version < 40 {
+                Self::run_versioned_migration(
+                    &conn,
+                    39,
+                    40,
+                    "Phase 40: item_necessity table for MCP access",
+                    |c| {
+                        c.execute_batch(
+                        "CREATE TABLE IF NOT EXISTS item_necessity (
+                            source_item_id INTEGER PRIMARY KEY REFERENCES source_items(id),
+                            necessity_score REAL NOT NULL DEFAULT 0.0,
+                            necessity_reason TEXT,
+                            necessity_category TEXT,
+                            necessity_urgency TEXT,
+                            scored_at TEXT NOT NULL DEFAULT (datetime('now'))
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_necessity_score ON item_necessity(necessity_score);",
+                    )
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
