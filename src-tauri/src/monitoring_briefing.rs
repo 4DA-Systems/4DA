@@ -200,6 +200,14 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         return None;
     }
 
+    // 4b. Novelty detection: filter items seen in last 3 days, track ongoing topics
+    let (items, ongoing_topics) = apply_novelty_filter(items, &today);
+
+    if items.is_empty() {
+        // All items were ongoing — nothing novel. Still fire but with empty-state.
+        // Don't return None — user should see "Your stack is quiet" in the briefing.
+    }
+
     let total_relevant = items.len();
 
     // 5. Mark as fired today — persist to settings AND in-memory state
@@ -226,7 +234,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
         total_relevant,
-        ongoing_topics: vec![], // Populated by novelty detection in future
+        ongoing_topics,
         knowledge_gaps,
         escalating_chains,
     })
@@ -289,6 +297,72 @@ pub fn send_morning_briefing_notification<R: Runtime>(
         gaps = briefing.knowledge_gaps.len(),
         "Intelligence briefing delivered"
     );
+}
+
+// ============================================================================
+// Novelty Detection
+// ============================================================================
+
+/// Filter briefing items for novelty — items whose titles appeared in the last 3 days
+/// are moved to "ongoing topics" instead of being shown again.
+/// Returns (novel_items, ongoing_topic_names).
+fn apply_novelty_filter(items: Vec<BriefingItem>, today: &str) -> (Vec<BriefingItem>, Vec<String>) {
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return (items, vec![]), // Can't check history, show everything
+    };
+
+    // Get titles shown in the last 3 days
+    let recent_titles: std::collections::HashSet<String> = {
+        let mut stmt = match conn.prepare(
+            "SELECT LOWER(item_title) FROM briefing_item_history
+             WHERE briefing_date >= date(?1, '-3 days')",
+        ) {
+            Ok(s) => s,
+            Err(_) => return (items, vec![]), // Table might not exist yet
+        };
+
+        stmt.query_map(rusqlite::params![today], |row| row.get::<_, String>(0))
+            .ok()
+            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default()
+    };
+
+    if recent_titles.is_empty() {
+        // No history yet — everything is novel. Record items for next time.
+        record_briefing_items(&conn, &items, today);
+        return (items, vec![]);
+    }
+
+    let mut novel = Vec::new();
+    let mut ongoing = Vec::new();
+
+    for item in items {
+        if recent_titles.contains(&item.title.to_lowercase()) {
+            ongoing.push(item.source_type.clone());
+        } else {
+            novel.push(item);
+        }
+    }
+
+    // Deduplicate ongoing topic names
+    ongoing.sort();
+    ongoing.dedup();
+
+    // Record novel items for future novelty checks
+    record_briefing_items(&conn, &novel, today);
+
+    (novel, ongoing)
+}
+
+/// Record briefing items in history for future novelty detection.
+fn record_briefing_items(conn: &rusqlite::Connection, items: &[BriefingItem], date: &str) {
+    for item in items {
+        let _ = conn.execute(
+            "INSERT INTO briefing_item_history (item_title, source_type, briefing_date) VALUES (?1, ?2, ?3)",
+            rusqlite::params![item.title, item.source_type, date],
+        );
+    }
 }
 
 // ============================================================================
