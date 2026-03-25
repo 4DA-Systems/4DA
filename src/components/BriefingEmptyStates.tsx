@@ -138,6 +138,8 @@ export function BriefingReadyState() {
 export function BriefingNoDataState() {
   const { t } = useTranslation();
   const startAnalysis = useAppStore(s => s.startAnalysis);
+  const setShowSettings = useAppStore(s => s.setShowSettings);
+  const embeddingMode = useAppStore(s => s.embeddingMode);
   const { containerRef: turingRef } = useGameComponent('game-turing-fire');
 
   useEffect(() => { registerGameComponent('game-simplex-unfold'); }, []);
@@ -159,6 +161,14 @@ export function BriefingNoDataState() {
         <p className="text-xs text-text-muted mt-3">
           {t('briefing.orPress')} <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
         </p>
+        {embeddingMode === 'keyword-only' && (
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-xs text-amber-400 hover:text-amber-300 transition-colors mt-3"
+          >
+            {t('briefing.configureAiHint', 'Keyword mode active — configure AI provider in Settings for better results')}
+          </button>
+        )}
       </div>
     </div>
   );

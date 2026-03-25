@@ -64,6 +64,10 @@ export function SmartEmptyState({ detectedStack }: SmartEmptyStateProps) {
         }
       </p>
 
+      <div className="text-xs text-amber-400/80 bg-amber-500/10 rounded px-3 py-1.5 mb-3">
+        {t('empty.exampleBanner', 'These are example signals based on your detected stack. Run an analysis to see real results.')}
+      </div>
+
       <div className="space-y-3">
         {signals.map(signal => (
           <div key={signal.title} className="bg-bg-tertiary rounded-lg border border-border p-4 flex items-start gap-3">

@@ -68,6 +68,10 @@ export function OnboardingChoiceGate({
           )}
         </p>
       </div>
+
+      <p className="text-[10px] text-text-muted mt-6">
+        {t('onboarding.keyboardHint', 'Pro tip: Press R to analyze, / to search, ? for all shortcuts')}
+      </p>
     </div>
   );
 }

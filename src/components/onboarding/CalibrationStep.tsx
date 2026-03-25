@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../../lib/commands';
+import { useAppStore } from '../../store';
 import type { CalibrationResult, Recommendation } from '../../types/calibration';
 
 interface CalibrationStepProps {
@@ -19,6 +20,9 @@ interface PullProgress {
 
 export function CalibrationStep({ isAnimating, onComplete, onBack }: CalibrationStepProps) {
   const { t } = useTranslation();
+  const embeddingMode = useAppStore(s => s.embeddingMode);
+  const discoveredContext = useAppStore(s => s.discoveredContext);
+  const userContext = useAppStore(s => s.userContext);
   const [result, setResult] = useState<CalibrationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +214,50 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         <div style={{ textAlign: 'center', padding: '24px 0', color: '#A0A0A0', fontSize: 13 }}>
           <p>{t('calibration.onboarding.noContent')}</p>
           <p style={{ fontSize: 11, color: '#8A8A8A', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
+        </div>
+      )}
+
+      {/* Setup summary */}
+      {result && (
+        <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+          <p style={{ fontSize: 11, color: '#A0A0A0', fontWeight: 500, marginBottom: 8 }}>
+            {t('calibration.onboarding.setupComplete', 'Setup complete:')}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
+              <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+                {embeddingMode === 'keyword-only'
+                  ? t('calibration.onboarding.summaryKeyword', 'Keyword mode — add AI key in Settings')
+                  : t('calibration.onboarding.summaryAI', 'AI provider configured')
+                }
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
+              <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+                {(discoveredContext?.tech?.length ?? 0) > 0
+                  ? t('calibration.onboarding.summaryProjects', {
+                      count: discoveredContext.tech.length,
+                      defaultValue: '{{count}} projects detected',
+                    })
+                  : t('calibration.onboarding.summaryNoProjects', 'No projects found — add directories in Settings')
+                }
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
+              <span style={{ fontSize: 11, color: '#A0A0A0' }}>
+                {(userContext?.interests?.length ?? 0) > 0
+                  ? t('calibration.onboarding.summaryInterests', {
+                      count: userContext!.interests!.length,
+                      defaultValue: '{{count}} interests set',
+                    })
+                  : t('calibration.onboarding.summaryDefaultInterests', 'Default interests — customize in Settings')
+                }
+              </span>
+            </div>
+          </div>
         </div>
       )}
 

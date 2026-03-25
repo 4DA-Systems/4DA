@@ -192,6 +192,46 @@ pub(crate) async fn fetch_all_sources(
                     },
                 );
 
+                // Freshness validation: detect stale/zombie sources
+                {
+                    use crate::sources::freshness::{get_source_thresholds, validate_freshness};
+                    let (min_expected, max_age_secs) = get_source_thresholds(source_type);
+                    let previous_ids: Vec<String> = db
+                        .get_recent_source_item_ids(source_type, 50)
+                        .unwrap_or_default();
+                    let report = validate_freshness(
+                        source_type,
+                        &items,
+                        &previous_ids,
+                        min_expected,
+                        max_age_secs,
+                    );
+                    if !matches!(
+                        report.state,
+                        crate::sources::freshness::SourceHealthState::Healthy
+                    ) {
+                        warn!(
+                            target: "4da::freshness",
+                            source = source_type,
+                            state = ?report.state,
+                            items = report.items_fetched,
+                            duplicate_ratio = report.duplicate_ratio,
+                            "Source health: {:?}",
+                            report.state
+                        );
+                        let _ = app.emit(
+                            "source-health-state",
+                            serde_json::json!({
+                                "source": source_type,
+                                "state": format!("{:?}", report.state),
+                                "items_fetched": report.items_fetched,
+                                "duplicate_ratio": report.duplicate_ratio,
+                                "warnings": report.warnings,
+                            }),
+                        );
+                    }
+                }
+
                 for (idx, item) in items.into_iter().take(max_items_per_source).enumerate() {
                     // Generate a numeric ID from source_id hash
                     let id = {
@@ -268,32 +308,72 @@ pub(crate) async fn fetch_all_sources(
                 }
             }
             Err(retry_err) => {
-                let failure_count = tracker.failure_count(source_name);
-                error!(target: "4da::sources", source = source_name, error = %retry_err, session_failures = failure_count, "Source fetch failed after retries - continuing with other sources");
-                db.record_source_health(
-                    source_type,
-                    false,
-                    0,
-                    elapsed_ms,
-                    Some(&format!("{retry_err}")),
-                )
-                .ok();
-                let _ = app.emit(
-                    "source-error",
-                    serde_json::json!({
-                        "source": source_type,
-                        "error": format!("{}", retry_err),
-                        "retry_count": retry_err.attempts,
-                        "session_failures": failure_count
-                    }),
-                );
+                // Try fallback endpoints before giving up
+                let fallback_items = {
+                    use crate::sources::fallback::try_fallbacks;
+                    let client = sources::shared_client();
+                    match try_fallbacks(source_type, &client, &retry_err.last_error).await {
+                        Ok(items) if !items.is_empty() => {
+                            info!(target: "4da::sources", source = source_name, count = items.len(), "Fallback cascade succeeded");
+                            db.record_source_health(
+                                source_type,
+                                true,
+                                items.len() as i64,
+                                elapsed_ms,
+                                None,
+                            )
+                            .ok();
+                            db.update_source_fetch_time(source_type).ok();
+                            let _ = app.emit(
+                                "source-fetched",
+                                serde_json::json!({
+                                    "source": source_type, "count": items.len(), "fallback": true
+                                }),
+                            );
+                            Some(items)
+                        }
+                        _ => None,
+                    }
+                };
 
-                // Record to local error telemetry for developer diagnostics
-                crate::telemetry::record_error_async(
-                    "source_fetch",
-                    &format!("{retry_err}"),
-                    Some(source_type),
-                );
+                if let Some(items) = fallback_items {
+                    // Process fallback items using the shared helper (DRY)
+                    process_source_items(
+                        db,
+                        &mut all_items,
+                        &mut new_items_to_embed,
+                        items,
+                        source_type,
+                    );
+                } else {
+                    // Original error handling — no fallback available or all fallbacks failed
+                    let failure_count = tracker.failure_count(source_name);
+                    error!(target: "4da::sources", source = source_name, error = %retry_err, session_failures = failure_count, "Source fetch failed after retries - continuing with other sources");
+                    db.record_source_health(
+                        source_type,
+                        false,
+                        0,
+                        elapsed_ms,
+                        Some(&format!("{retry_err}")),
+                    )
+                    .ok();
+                    let _ = app.emit(
+                        "source-error",
+                        serde_json::json!({
+                            "source": source_type,
+                            "error": format!("{}", retry_err),
+                            "retry_count": retry_err.attempts,
+                            "session_failures": failure_count
+                        }),
+                    );
+
+                    // Record to local error telemetry for developer diagnostics
+                    crate::telemetry::record_error_async(
+                        "source_fetch",
+                        &format!("{retry_err}"),
+                        Some(source_type),
+                    );
+                }
             }
         }
     }

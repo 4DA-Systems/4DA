@@ -769,6 +769,13 @@ export class FourDADatabase {
           relevance_score: Math.round(score * 100) / 100,
           created_at: item.created_at,
           discovered_ago: discoveredAgo,
+          // Necessity fields — populated from Rust analysis pipeline when available.
+          // The MCP server's simplified scoring does not compute necessity;
+          // these default to 0.0/null until the full PASIFA pipeline runs.
+          necessity_score: 0.0,
+          necessity_reason: null,
+          necessity_category: null,
+          necessity_urgency: null,
         });
       }
     }

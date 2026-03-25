@@ -27,6 +27,15 @@ const stageKeys: Record<InitStage, string> = {
   ready: 'splash.ready',
 };
 
+const stageExplanations: Record<InitStage, string> = {
+  starting: 'Initializing core systems',
+  database: 'Loading your settings and history',
+  embeddings: 'Checking AI provider availability',
+  context: 'Scanning your project environment',
+  sources: 'Preparing content pipelines',
+  ready: 'All systems operational',
+};
+
 const stageOrder: InitStage[] = ['starting', 'database', 'embeddings', 'context', 'sources', 'ready'];
 
 export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashScreenProps) {
@@ -217,13 +226,30 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         />
       </div>
 
+      {/* Estimated time hint */}
+      {stage !== 'ready' && !error && (
+        <p style={{
+          fontSize: '0.6875rem',
+          color: '#6B7280',
+          marginBottom: '0.75rem',
+        }}>
+          {t('splash.estimatedTime', 'Usually takes 10–30 seconds')}
+        </p>
+      )}
+
       {/* Status message */}
       <div style={{
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        gap: '0.75rem',
-        minHeight: '24px',
+        gap: '0.25rem',
+        minHeight: '40px',
       }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+        }}>
         {stage !== 'ready' && !error && (
           <div style={{
             width: '16px',
@@ -247,6 +273,17 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         }}>
           {error || t(stageKeys[stage])}
         </span>
+        </div>
+        {/* Stage explanation subtitle */}
+        {!error && (
+          <span style={{
+            fontSize: '0.6875rem',
+            color: '#6B7280',
+            transition: 'opacity 300ms',
+          }}>
+            {t(`splash.stageExplanation.${stage}`, stageExplanations[stage])}
+          </span>
+        )}
         {error && (
           <button
             onClick={() => window.location.reload()}
