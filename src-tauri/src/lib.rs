@@ -444,6 +444,11 @@ pub fn run() {
             monitoring_commands::get_launch_at_startup,
             monitoring_commands::set_notification_style,
             monitoring_commands::trigger_notification_preview,
+            // Morning briefing configuration
+            monitoring_commands::set_morning_briefing_enabled,
+            monitoring_commands::get_morning_briefing_config,
+            monitoring_commands::set_briefing_time,
+            monitoring_commands::trigger_briefing_preview,
             // Notification window
             notification_window::notification_clicked,
             // Briefing window
