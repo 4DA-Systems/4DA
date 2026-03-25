@@ -618,6 +618,10 @@ pub fn run() {
             autophagy_commands::get_autophagy_history,
             autophagy_pulse::get_intelligence_pulse,
             autophagy_commands::trigger_autophagy_cycle,
+            // Data Health
+            autophagy_commands::get_data_health,
+            autophagy_commands::run_deep_clean,
+            autophagy_commands::set_cleanup_retention,
             // Translation Pipeline
             translation_commands::get_translation_status,
             translation_commands::trigger_translation,

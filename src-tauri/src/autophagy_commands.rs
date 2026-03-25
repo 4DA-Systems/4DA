@@ -166,6 +166,87 @@ pub async fn trigger_autophagy_cycle() -> Result<AutophagyCycleResult> {
 }
 
 // ============================================================================
+// Data Health
+// ============================================================================
+
+/// Data health overview: DB stats + retention settings.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct DataHealth {
+    pub stats: crate::db::DbStats,
+    pub retention_days: u32,
+    pub db_size_mb: f64,
+    pub health_status: String, // "healthy", "growing", "needs_attention"
+}
+
+/// Get data health overview.
+#[tauri::command]
+pub async fn get_data_health() -> Result<DataHealth> {
+    let db = crate::get_database().map_err(|e| FourDaError::Internal(e.to_string()))?;
+    let stats = db.get_db_stats().map_err(FourDaError::Db)?;
+
+    let retention_days = {
+        let sm = crate::get_settings_manager().lock();
+        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+    };
+
+    let db_size_mb = stats.db_size_bytes as f64 / (1024.0 * 1024.0);
+
+    let health_status = if db_size_mb > 500.0 || stats.source_items > 100_000 {
+        "needs_attention".to_string()
+    } else if db_size_mb > 200.0 || stats.source_items > 50_000 {
+        "growing".to_string()
+    } else {
+        "healthy".to_string()
+    };
+
+    Ok(DataHealth {
+        stats,
+        retention_days,
+        db_size_mb: (db_size_mb * 10.0).round() / 10.0,
+        health_status,
+    })
+}
+
+/// Run deep database clean: prune all tables + VACUUM.
+#[tauri::command]
+pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
+    let retention_days = {
+        let sm = crate::get_settings_manager().lock();
+        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+    };
+
+    let db = crate::get_database().map_err(|e| FourDaError::Internal(e.to_string()))?;
+    let result = db.run_maintenance(retention_days as i64).map_err(FourDaError::Db)?;
+
+    info!(
+        target: "4da::autophagy",
+        deleted_items = result.deleted_items,
+        deleted_feedback = result.deleted_feedback,
+        deleted_intelligence = result.deleted_intelligence,
+        deleted_windows = result.deleted_windows,
+        vacuumed = result.vacuumed,
+        "Deep clean completed"
+    );
+
+    Ok(result)
+}
+
+/// Update the data retention period (days).
+#[tauri::command]
+pub async fn set_cleanup_retention(days: u32) -> Result<()> {
+    if !(7..=365).contains(&days) {
+        return Err(FourDaError::Internal("Retention must be between 7 and 365 days".into()));
+    }
+    let sm = crate::get_settings_manager();
+    let mut guard = sm.lock();
+    guard.get_mut().monitoring.cleanup_max_age_days = Some(days);
+    guard.save().map_err(|e| FourDaError::Internal(e.to_string()))?;
+    info!(target: "4da::autophagy", days, "Data retention period updated");
+    Ok(())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
