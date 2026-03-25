@@ -19,8 +19,11 @@ const KEYGEN_ACCOUNT_ID: &str = "runyourempirehq";
 #[allow(dead_code)] // Reason: Keygen validation URL reserved for license activation flow
 const KEYGEN_VALIDATE_URL: &str = "https://api.keygen.sh/v1/licenses/actions/validate-key";
 
-/// Hours before a cached validation result is considered stale
-const VALIDATION_CACHE_HOURS: u64 = 24;
+/// Hours before a cached validation result is considered stale.
+/// 7 days provides resilience for offline periods and intermittent keychain failures.
+/// The cache is refreshed on every successful online validation, so active users
+/// always have a fresh cache. The 7-day window only matters when offline.
+const VALIDATION_CACHE_HOURS: u64 = 168;
 
 /// Maximum license activation attempts per minute
 const MAX_ACTIVATION_ATTEMPTS_PER_MINUTE: u32 = 5;
@@ -71,19 +74,26 @@ pub(crate) fn reset_license_check_timestamp() {
 
 /// Check if a license key is available — in memory, keychain, or validation cache.
 ///
-/// If the in-memory key is empty but the keychain has it, re-hydrates the
-/// in-memory copy so subsequent checks are fast. This handles the case where
-/// keychain hydration failed at startup (intermittent Credential Manager issues).
+/// Three-layer fallback chain:
+/// 1. **In-memory** (loaded from settings.json at startup — fastest, most reliable since
+///    the key is now always persisted to disk)
+/// 2. **Keychain** (platform credential store — re-hydrates in-memory if found)
+/// 3. **Validation cache** (Keygen result — 7-day TTL, prevents downgrade during offline)
+///
+/// Returns true and re-hydrates `license` if ANY layer has the key.
 fn has_license_key_available(license: &mut LicenseConfig) -> bool {
-    // Fast path: in-memory key is present
+    // Fast path: in-memory key is present (loaded from settings.json at startup)
     if !license.license_key.is_empty() {
         return true;
     }
 
-    // Fallback: check keychain directly and re-hydrate if found
+    // Fallback: check keychain directly and re-hydrate if found.
+    // This covers the transition period for users who activated before the
+    // disk-persistence fix — their settings.json may still have an empty key.
     if let Ok(Some(key)) = keystore::get_secret("license_key") {
         if !key.is_empty() {
             info!(
+                target: "4da::license",
                 "Re-hydrated license key from keychain (was missing from in-memory settings)"
             );
             license.license_key = key;
@@ -92,16 +102,18 @@ fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     }
 
     // Tertiary: check if we have a valid Keygen validation cache for a paid tier.
-    // If the key was validated online recently, don't downgrade just because the
-    // keychain is temporarily unavailable.
+    // If the key was validated online recently, don't downgrade just because
+    // both disk and keychain are temporarily unavailable.
     if let Some(cache) = load_validation_cache() {
         if is_paid_tier(&cache.tier) {
             if let Ok(validated) = chrono::DateTime::parse_from_rfc3339(&cache.validated_at) {
                 let age = chrono::Utc::now().signed_duration_since(validated);
                 if age.num_hours() < VALIDATION_CACHE_HOURS as i64 {
                     info!(
-                        "License key missing but valid Keygen cache exists (tier: {}, validated: {})",
-                        cache.tier, cache.validated_at
+                        target: "4da::license",
+                        tier = %cache.tier,
+                        validated_at = %cache.validated_at,
+                        "License key missing but valid Keygen cache exists — preserving tier"
                     );
                     return true;
                 }
@@ -154,8 +166,20 @@ fn maybe_revalidate_license() {
     } else if !license.license_key.is_empty()
         && guard.get().license.license_key.is_empty()
     {
-        // Re-hydration happened — persist the key back into in-memory settings
+        // Re-hydration happened (from keychain) — persist key to BOTH in-memory
+        // settings AND disk for resilience against future keychain failures.
+        info!(
+            target: "4da::license",
+            "Re-hydrated license key during periodic check — persisting to disk"
+        );
         guard.get_mut().license.license_key = license.license_key;
+        if let Err(e) = guard.save() {
+            warn!(
+                target: "4da::license",
+                error = %e,
+                "Failed to persist re-hydrated license key to disk during periodic check"
+            );
+        }
     }
 }
 
@@ -217,9 +241,20 @@ pub fn validate_license_on_startup() {
     } else if !license.license_key.is_empty()
         && guard.get().license.license_key.is_empty()
     {
-        // Re-hydration happened — persist the key back into in-memory settings
-        info!("Re-hydrated license key into in-memory settings at startup");
+        // Re-hydration happened (from keychain) — persist key to BOTH in-memory
+        // settings AND disk so we don't depend on keychain again next startup.
+        info!(
+            target: "4da::license",
+            "Re-hydrated license key into in-memory settings at startup — persisting to disk"
+        );
         guard.get_mut().license.license_key = license.license_key;
+        if let Err(e) = guard.save() {
+            warn!(
+                target: "4da::license",
+                error = %e,
+                "Failed to persist re-hydrated license key to disk"
+            );
+        }
     }
 
     // Record the startup validation timestamp so periodic re-checks
@@ -366,12 +401,18 @@ pub struct KeygenValidationResult {
 }
 
 /// Get the path to the license validation cache file.
+/// Uses the runtime data directory (same location as settings.json and 4da.db)
+/// so it works in both dev and production builds.
+///
+/// NOTE: Derives path from `get_db_path()` rather than the SettingsManager to
+/// avoid a deadlock — this function is called from paths that already hold the
+/// settings lock (validate_license_on_startup, maybe_revalidate_license).
 fn cache_path() -> std::path::PathBuf {
-    let mut base = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    base.pop();
-    base.push("data");
-    base.push("license_cache.json");
-    base
+    let db_path = crate::state::get_db_path();
+    db_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("data"))
+        .join("license_cache.json")
 }
 
 /// SHA-256 hash a license key to a hex string (for cache comparison).

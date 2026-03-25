@@ -422,6 +422,7 @@ pub fn run() {
             settings_commands::get_trial_status,
             settings_commands::start_trial,
             settings_commands::validate_license,
+            settings_commands::recover_license_by_email,
             settings_commands::get_locale,
             settings_commands::set_locale,
             settings_commands::get_pro_value_report,
