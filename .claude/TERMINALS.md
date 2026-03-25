@@ -9,12 +9,14 @@
 
 ## Active Terminals
 
-<!-- Add entries below. Format:
-### T[N] — [short description]
-- **Status**: working | committing | done
-- **Since**: ISO timestamp (e.g., 2026-03-22T10:00:00Z)
-- **Commit Lock**: HELD | (omit if not held)
-- **Files**: list of files being modified
--->
-
-
+### T1 — Data Health System
+- **Status**: working
+- **Since**: 2026-03-25T15:00:00Z
+- **Files**:
+  - src-tauri/src/db/history.rs
+  - src-tauri/src/autophagy_commands.rs
+  - src-tauri/src/lib.rs
+  - src-tauri/src/monitoring.rs
+  - src/components/settings/MonitoringSection.tsx
+  - src/components/settings/DataHealthSection.tsx (new)
+  - src/types/index.ts (or analysis.ts — data health types)

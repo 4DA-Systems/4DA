@@ -556,6 +556,18 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                 warn!(target: "4da::monitor", error = %e, "Database cleanup failed");
                             }
                         }
+
+                        // Emit data health warning if DB is getting large
+                        if let Ok(stats) = db.get_db_stats() {
+                            let size_mb = stats.db_size_bytes as f64 / (1024.0 * 1024.0);
+                            if size_mb > 500.0 || stats.source_items > 100_000 {
+                                let _ = app.emit("data-health-warning", serde_json::json!({
+                                    "size_mb": (size_mb * 10.0).round() / 10.0,
+                                    "items": stats.source_items,
+                                    "message": format!("Database is {:.0}MB with {} items — consider running a deep clean", size_mb, stats.source_items),
+                                }));
+                            }
+                        }
                     }
                 }
             }

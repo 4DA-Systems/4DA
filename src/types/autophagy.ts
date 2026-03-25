@@ -75,6 +75,40 @@ export interface IntelligencePulseData {
   learning_narratives: string[];
 }
 
+// Data Health types (database maintenance + cleanup)
+
+export interface DbStats {
+  source_items: number;
+  context_chunks: number;
+  feedback_count: number;
+  sources_count: number;
+  embeddings_count: number;
+  digested_intelligence: number;
+  decision_windows: number;
+  autophagy_cycles: number;
+  necessity_scores: number;
+  db_size_bytes: number;
+  oldest_item_date: string | null;
+}
+
+export interface DataHealth {
+  stats: DbStats;
+  retention_days: number;
+  db_size_mb: number;
+  health_status: 'healthy' | 'growing' | 'needs_attention';
+}
+
+export interface MaintenanceResult {
+  deleted_items: number;
+  deleted_feedback: number;
+  deleted_void: number;
+  deleted_intelligence: number;
+  deleted_windows: number;
+  deleted_cycles: number;
+  deleted_necessity: number;
+  vacuumed: boolean;
+}
+
 export interface CompoundAdvantageScore {
   score: number;
   period: string;

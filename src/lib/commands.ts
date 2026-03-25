@@ -52,6 +52,8 @@ import type {
 import type {
   AutophagyCycleResult,
   AutophagyStatus,
+  DataHealth,
+  MaintenanceResult,
   DecisionWindow,
   CompoundAdvantageScore,
 } from '../types/autophagy';
@@ -221,6 +223,11 @@ interface CommandMap {
   get_autophagy_history: { params: { limit: number }; result: AutophagyCycleResult[] };
   trigger_autophagy_cycle: { params: Record<string, never>; result: AutophagyCycleResult };
   get_intelligence_pulse: { params: Record<string, never>; result: IntelligencePulseData };
+
+  // -- Data Health --
+  get_data_health: { params: Record<string, never>; result: DataHealth };
+  run_deep_clean: { params: Record<string, never>; result: MaintenanceResult };
+  set_cleanup_retention: { params: { days: number }; result: null };
 
   // -- Model Registry --
   get_model_registry: { params: Record<string, never>; result: { fetched_at: number; source: string; model_count: number; providers: Record<string, Array<{ id: string; provider: string; display_name: string; input_cost_per_token: number | null; output_cost_per_token: number | null; max_input_tokens: number | null; max_output_tokens: number | null }>> } };
