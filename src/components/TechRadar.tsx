@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
-import { useGameComponent } from '../hooks/use-game-component';
 
 import { StackIntelligence } from './tech-radar/StackIntelligence';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
@@ -11,27 +10,6 @@ import type { RadarEntry } from './tech-radar/RadarSVG';
 interface TechRadarData {
   generated_at: string;
   entries: RadarEntry[];
-}
-
-function RadarField({ entries, userStack }: { entries: RadarEntry[]; userStack: string[] }) {
-  const { containerRef, elementRef } = useGameComponent('game-radar-field');
-
-  useEffect(() => {
-    const el = elementRef.current;
-    if (!el || entries.length === 0) return;
-    const total = entries.length;
-    const byQuad = (q: string) => entries.filter(e => e.quadrant === q).length / total;
-    el.setParam?.('lang_energy', byQuad('languages'));
-    el.setParam?.('fw_energy', byQuad('frameworks'));
-    el.setParam?.('tool_energy', byQuad('tools'));
-    el.setParam?.('plat_energy', byQuad('platforms'));
-    el.setParam?.('moving_in', entries.filter(e => e.movement === 'up').length / total);
-    el.setParam?.('moving_out', entries.filter(e => e.movement === 'down').length / total);
-    const stackLower = userStack.map(s => s.toLowerCase());
-    el.setParam?.('stack_glow', entries.filter(e => stackLower.includes(e.name.toLowerCase())).length / total);
-  }, [entries, userStack, elementRef]);
-
-  return <div ref={containerRef} className="absolute inset-0 rounded-lg overflow-hidden" aria-hidden="true" />;
 }
 
 export const TechRadar = memo(function TechRadar() {
@@ -52,16 +30,14 @@ export const TechRadar = memo(function TechRadar() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Load radar data
   useEffect(() => {
     loadRadar();
   }, [loadRadar]);
 
-  // Load user's tech stack for highlighting
   useEffect(() => {
     cmd('get_user_context')
       .then((ctx) => setUserStack(ctx.tech_stack))
-      .catch((e) => console.warn('TechRadar: failed to load evolution data', e));
+      .catch((e) => console.warn('TechRadar: failed to load context', e));
   }, []);
 
   const handleEntryClick = useCallback((entry: RadarEntry) => {
@@ -73,17 +49,20 @@ export const TechRadar = memo(function TechRadar() {
   }, []);
 
   const handleSnapshotChange = useCallback((date: string | null) => {
-    if (date) {
+    if (date !== null) {
       cmd('get_radar_at_snapshot', { snapshotDate: date })
         .then((snapshot) => {
-          if (snapshot && (snapshot as unknown as { entries?: unknown[] }).entries) {
+          const typed = snapshot as unknown as { entries?: unknown[] } | null;
+          if (typed != null && Array.isArray(typed.entries)) {
             setData(snapshot as unknown as TechRadarData);
           }
         })
-        .catch((e) => console.warn('TechRadar: failed to trigger assessment', e));
+        .catch((e: unknown) => console.warn('TechRadar: failed to load snapshot', e));
     } else {
-      // Reload current radar
-      cmd('get_tech_radar').then(r => r as unknown as TechRadarData).then(setData).catch((e: unknown) => console.warn('TechRadar: failed to load radar after assessment', e));
+      cmd('get_tech_radar')
+        .then(r => r as unknown as TechRadarData)
+        .then(setData)
+        .catch((e: unknown) => console.warn('TechRadar: failed to reload', e));
     }
   }, []);
 
@@ -96,7 +75,7 @@ export const TechRadar = memo(function TechRadar() {
     );
   }
 
-  if (error) {
+  if (error !== null) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8">
         <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
@@ -128,19 +107,32 @@ export const TechRadar = memo(function TechRadar() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-          <span className="text-sm text-text-secondary">R</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-text-secondary">
+            <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1" opacity="0.4" />
+            <line x1="8" y1="1" x2="8" y2="4" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+            <line x1="8" y1="12" x2="8" y2="15" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+            <line x1="1" y1="8" x2="4" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+            <line x1="12" y1="8" x2="15" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.3" />
+          </svg>
         </div>
-        <div>
-          <h2 className="font-medium text-white text-sm">{t('techRadar.title')}</h2>
+        <div className="flex-1">
+          <h2 className="font-medium text-white text-sm">
+            {t('techRadar.title', 'Stack Intelligence')}
+          </h2>
           <p className="text-xs text-text-muted">
-            {t('techRadar.count', { count: data.entries.length })}
+            {t('techRadar.subtitle', 'Your technology landscape')}
           </p>
         </div>
+        {data.generated_at && (
+          <span className="text-[10px] text-text-muted">
+            {new Date(data.generated_at).toLocaleDateString()}
+          </span>
+        )}
       </div>
 
-      {/* Stack Intelligence dashboard with GAME background */}
-      <div className="relative p-4 flex justify-center">
-        <RadarField entries={data.entries} userStack={userStack} />
+      {/* Stack Intelligence */}
+      <div className="flex justify-center">
         <StackIntelligence
           entries={data.entries}
           userStack={userStack}
@@ -152,43 +144,19 @@ export const TechRadar = memo(function TechRadar() {
       <TemporalSlider onSnapshotChange={handleSnapshotChange} />
 
       {/* Legend */}
-      <div className="px-5 py-3 border-t border-border flex items-center gap-5 text-[10px] text-text-muted">
+      <div className="px-5 py-2.5 border-t border-border flex items-center gap-5 text-[10px] text-text-muted">
         <div className="flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <polygon points="5,1 2,7 8,7" fill="#22C55E" />
-          </svg>
-          <span>{t('techRadar.movingIn')}</span>
+          <span className="text-green-400">{'\u2191'}</span>
+          <span>{t('techRadar.movingIn', 'Rising')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <polygon points="5,9 2,3 8,3" fill="#EF4444" />
-          </svg>
-          <span>{t('techRadar.movingOut')}</span>
+          <span className="text-red-400">{'\u2193'}</span>
+          <span>{t('techRadar.movingOut', 'Declining')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-            <polygon points="5,1 9,5 5,9 1,5" fill="#D4AF37" />
-          </svg>
-          <span>{t('techRadar.new')}</span>
+          <span className="text-accent-gold">{'\u2726'}</span>
+          <span>{t('techRadar.new', 'New')}</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true">
-            <circle cx="4" cy="4" r="3" fill="#FFFFFF" />
-          </svg>
-          <span>{t('techRadar.stable')}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-            <circle cx="6" cy="6" r="3" fill="#FFFFFF" />
-            <circle cx="6" cy="6" r="5" fill="none" stroke="#D4AF37" strokeWidth="1.5" />
-          </svg>
-          <span>{t('techRadar.yourStack')}</span>
-        </div>
-        {data.generated_at && (
-          <span className="ms-auto text-text-muted">
-            {t('techRadar.generated', { date: new Date(data.generated_at).toLocaleDateString() })}
-          </span>
-        )}
       </div>
 
       {/* Entry Detail Panel */}

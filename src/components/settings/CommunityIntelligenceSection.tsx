@@ -56,35 +56,77 @@ export function CommunityIntelligenceSection() {
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
-            <svg
-              className="w-4 h-4 text-blue-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
-              />
-            </svg>
-          </div>
-          <div>
-            <h3 className="text-white font-medium text-sm">
-              {t('settings.community.title', 'Community Intelligence')}
-            </h3>
-            <p className="text-text-muted text-xs">
-              {t('settings.community.subtitle', 'Help improve scoring for all 4DA users')}
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+          <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+            />
+          </svg>
+        </div>
+        <div>
+          <h3 className="text-white font-medium text-sm">
+            {t('settings.community.title', 'Community Intelligence')}
+          </h3>
+          <p className="text-text-muted text-xs">
+            {t('settings.community.subtitle', 'Help improve scoring for all 4DA users')}
+          </p>
+        </div>
+      </div>
+
+      {/* Upfront education — always visible */}
+      <div className="mb-4 p-3 bg-bg-secondary rounded-lg border border-border">
+        <p className="text-[11px] text-text-muted leading-relaxed mb-3">
+          {t('settings.community.explanation',
+            'When enabled, 4DA periodically shares anonymous statistical patterns — like how scoring weights perform across different tech profiles. This helps improve accuracy for everyone. No content ever leaves your machine.')}
+        </p>
+
+        {/* Privacy guarantees — always visible, not hidden behind a confirmation */}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2 rounded bg-bg-tertiary">
+            <p className="text-[10px] text-blue-400 font-medium mb-1">
+              {t('settings.community.shared', "What's shared")}
             </p>
+            <ul className="text-[10px] text-text-muted space-y-0.5">
+              <li>{t('settings.community.sharedWeights', 'Anonymized scoring weights')}</li>
+              <li>{t('settings.community.sharedAccuracy', 'Stack profile accuracy metrics')}</li>
+              <li>{t('settings.community.sharedTrends', 'Aggregated topic trend signals')}</li>
+            </ul>
           </div>
+          <div className="p-2 rounded bg-bg-tertiary">
+            <p className="text-[10px] text-green-400 font-medium mb-1">
+              {t('settings.community.neverShared', 'Never shared')}
+            </p>
+            <ul className="text-[10px] text-text-muted space-y-0.5">
+              <li>{t('settings.community.neverContent', 'Your content, URLs, or bookmarks')}</li>
+              <li>{t('settings.community.neverIdentity', 'Your identity or API keys')}</li>
+              <li>{t('settings.community.neverStack', 'Your tech stack or interests')}</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Toggle — now the user knows exactly what they're opting into */}
+      <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-secondary">
+            {status.enabled
+              ? t('settings.community.statusActive', 'Contributing anonymously')
+              : t('settings.community.statusInactive', 'Not contributing')}
+          </span>
         </div>
 
         <button
-          onClick={handleToggle}
+          onClick={() => {
+            if (status.enabled) {
+              void handleToggle();
+            } else if (showConfirm) {
+              setShowConfirm(false);
+            } else {
+              setShowConfirm(true);
+            }
+          }}
           className={`relative w-10 h-5 rounded-full transition-colors ${
             status.enabled ? 'bg-green-500/40' : 'bg-gray-600'
           }`}
@@ -97,57 +139,34 @@ export function CommunityIntelligenceSection() {
         </button>
       </div>
 
-      {/* Confirmation Dialog */}
-      {showConfirm && (
-        <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-          <p className="text-sm text-white mb-2 font-medium">
-            {t('settings.community.confirmTitle', 'Enable Community Intelligence?')}
-          </p>
-          <div className="space-y-1.5 mb-3">
-            <p className="text-xs text-text-secondary">
-              {t('settings.community.shared', "What's shared:")}
-            </p>
-            <ul className="text-xs text-text-muted space-y-0.5 ms-3">
-              <li>{t('settings.community.sharedWeights', 'Anonymized scoring weights')}</li>
-              <li>{t('settings.community.sharedAccuracy', 'Stack profile accuracy metrics')}</li>
-              <li>{t('settings.community.sharedTrends', 'Aggregated topic trend signals')}</li>
-            </ul>
-            <p className="text-xs text-text-secondary mt-2">
-              {t('settings.community.neverShared', "What's NEVER shared:")}
-            </p>
-            <ul className="text-xs text-text-muted space-y-0.5 ms-3">
-              <li>{t('settings.community.neverContent', 'Your content, URLs, or bookmarks')}</li>
-              <li>{t('settings.community.neverIdentity', 'Your identity or API keys')}</li>
-              <li>{t('settings.community.neverStack', 'Your tech stack or interests')}</li>
-            </ul>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={confirmEnable}
-              className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded hover:bg-blue-500/30 transition-colors"
-            >
-              {t('settings.community.enable', 'Enable')}
-            </button>
-            <button
-              onClick={() => setShowConfirm(false)}
-              className="px-3 py-1.5 bg-bg-primary text-text-muted text-xs rounded hover:text-white transition-colors"
-            >
-              {t('settings.community.cancel', 'Cancel')}
-            </button>
-          </div>
+      {/* Soft confirmation — since the user already read the education above */}
+      {showConfirm && !status.enabled && (
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            onClick={() => { void confirmEnable(); }}
+            className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded hover:bg-blue-500/30 transition-colors"
+          >
+            {t('settings.community.confirmEnable', 'Yes, enable')}
+          </button>
+          <button
+            onClick={() => setShowConfirm(false)}
+            className="px-3 py-1.5 text-text-muted text-xs rounded hover:text-white transition-colors"
+          >
+            {t('settings.community.cancel', 'Cancel')}
+          </button>
         </div>
       )}
 
+      {/* Settings when enabled */}
       {status.enabled && (
-        <div className="space-y-3">
-          {/* Frequency */}
+        <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-text-secondary">
+            <span className="text-xs text-text-muted">
               {t('settings.community.frequency', 'Contribution frequency')}
             </span>
             <select
               value={status.frequency}
-              onChange={(e) => handleFrequencyChange(e.target.value)}
+              onChange={(e) => { void handleFrequencyChange(e.target.value); }}
               className="bg-bg-primary text-white text-xs rounded px-2 py-1 border border-border"
             >
               <option value="weekly">{t('settings.community.weekly', 'Weekly')}</option>
@@ -155,24 +174,13 @@ export function CommunityIntelligenceSection() {
             </select>
           </div>
 
-          {/* Last contribution */}
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">
-              {t('settings.community.lastContribution', 'Last contribution')}
-            </span>
-            <span className="text-text-secondary">
-              {status.last_contributed || t('settings.community.never', 'Never')}
-            </span>
-          </div>
-
-          {/* Anonymous ID preview */}
-          {status.anonymous_id_preview && (
+          {status.last_contributed != null && (
             <div className="flex items-center justify-between text-xs">
               <span className="text-text-muted">
-                {t('settings.community.anonymousId', 'Anonymous ID')}
+                {t('settings.community.lastContribution', 'Last contribution')}
               </span>
-              <span className="text-text-secondary font-mono">
-                {status.anonymous_id_preview}...
+              <span className="text-text-secondary">
+                {status.last_contributed}
               </span>
             </div>
           )}

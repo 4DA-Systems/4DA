@@ -115,7 +115,7 @@ describe('TechRadar', () => {
     expect(screen.getByTestId('radar-entry-panel')).toBeInTheDocument();
   });
 
-  it('shows entry count in subtitle', async () => {
+  it('shows subtitle after loading', async () => {
     const entries = [makeRadarEntry(), makeRadarEntry({ name: 'Vue' }), makeRadarEntry({ name: 'Svelte' })];
 
     mockInvoke.mockImplementation((cmd: string) => {
@@ -129,7 +129,7 @@ describe('TechRadar', () => {
     render(<TechRadar />);
 
     await waitFor(() => {
-      expect(screen.getByText('techRadar.count')).toBeInTheDocument();
+      expect(screen.getByText('techRadar.subtitle')).toBeInTheDocument();
     });
   });
 
@@ -148,8 +148,6 @@ describe('TechRadar', () => {
       expect(screen.getByText('techRadar.movingIn')).toBeInTheDocument();
       expect(screen.getByText('techRadar.movingOut')).toBeInTheDocument();
       expect(screen.getByText('techRadar.new')).toBeInTheDocument();
-      expect(screen.getByText('techRadar.stable')).toBeInTheDocument();
-      expect(screen.getByText('techRadar.yourStack')).toBeInTheDocument();
     });
   });
 });
