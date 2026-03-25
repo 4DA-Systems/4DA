@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! SQL Compile-Time Checker Integration Test
 //!
 //! Validates all SQL queries in the codebase against the database schema.

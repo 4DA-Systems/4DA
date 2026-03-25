@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Stack Intelligence — Master Simulation Harness
 //!
 //! Eleven tiers of validation:

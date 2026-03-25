@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Phase 4: Source adapter resilience tests
 //!
 //! Validates source error types, SourceItem edge cases, SourceConfig defaults,
@@ -28,8 +29,11 @@ fn test_source_error_display_variants() {
         "Parse variant should contain 'Parse error'"
     );
 
-    let rate_limited = SourceError::RateLimited;
-    assert_eq!(rate_limited.to_string(), "Rate limited");
+    let rate_limited = SourceError::RateLimited("try again later".to_string());
+    assert!(
+        rate_limited.to_string().contains("try again later"),
+        "RateLimited variant should contain the message"
+    );
 
     let disabled = SourceError::Disabled;
     assert_eq!(disabled.to_string(), "Source disabled");
