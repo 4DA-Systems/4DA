@@ -36,6 +36,14 @@ export interface RelevantItem {
   relevance_score: number;
   created_at: string;
   discovered_ago: string;
+  /** Necessity score: "what you'd regret missing" (0.0-1.0). Populated from Rust analysis pipeline when available. */
+  necessity_score: number;
+  /** One-line explanation of why this item is necessary. Null when necessity_score is 0. */
+  necessity_reason: string | null;
+  /** Necessity category: security_vulnerability, breaking_change, deprecation_notice, blind_spot, decision_relevant, none */
+  necessity_category: string | null;
+  /** Necessity urgency: immediate, this_week, awareness, none */
+  necessity_urgency: string | null;
 }
 
 // =============================================================================

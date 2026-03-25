@@ -83,6 +83,14 @@ export interface ScoreBreakdown {
   matched_window_id?: number;
   /** Skill gap boost from sovereign profile intelligence (0.0-0.20) */
   skill_gap_boost?: number;
+  /** Necessity score: "what you'd regret missing" (0.0-1.0) */
+  necessity_score?: number;
+  /** One-line explanation of why this item is necessary */
+  necessity_reason?: string;
+  /** Necessity category (security_vulnerability, breaking_change, deprecation_notice, blind_spot, decision_relevant, none) */
+  necessity_category?: string;
+  /** Necessity urgency (immediate, this_week, awareness, none) */
+  necessity_urgency?: string;
 }
 
 export interface AnalysisProgress {

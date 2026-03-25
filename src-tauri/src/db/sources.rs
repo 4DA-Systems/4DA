@@ -332,6 +332,25 @@ impl Database {
         Ok(())
     }
 
+    /// Get recent source_id values for a given source type (for duplicate detection).
+    pub fn get_recent_source_item_ids(
+        &self,
+        source_type: &str,
+        limit: usize,
+    ) -> SqliteResult<Vec<String>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT source_id FROM source_items WHERE source_type = ?1 ORDER BY last_seen DESC LIMIT ?2",
+        )?;
+        let ids = stmt
+            .query_map(params![source_type, limit as i64], |row| {
+                row.get::<_, String>(0)
+            })?
+            .filter_map(std::result::Result::ok)
+            .collect();
+        Ok(ids)
+    }
+
     /// Get source items by type
     pub fn get_source_items(
         &self,
