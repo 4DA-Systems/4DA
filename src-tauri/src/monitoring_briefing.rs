@@ -336,7 +336,7 @@ fn apply_novelty_filter(items: Vec<BriefingItem>, today: &str) -> (Vec<BriefingI
 
         stmt.query_map(rusqlite::params![today], |row| row.get::<_, String>(0))
             .ok()
-            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
             .unwrap_or_default()
     };
 
