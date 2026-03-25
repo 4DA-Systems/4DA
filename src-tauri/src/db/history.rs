@@ -2,6 +2,7 @@
 
 use rusqlite::{params, Result as SqliteResult};
 use tracing::info;
+use ts_rs::TS;
 
 use super::Database;
 
@@ -9,19 +10,34 @@ use super::Database;
 // Types
 // ============================================================================
 
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, TS)]
+#[ts(export, export_to = "bindings/")]
 pub struct MaintenanceResult {
     pub deleted_items: usize,
     pub deleted_feedback: usize,
     pub deleted_void: usize,
+    pub deleted_intelligence: usize,
+    pub deleted_windows: usize,
+    pub deleted_cycles: usize,
+    pub deleted_necessity: usize,
+    pub vacuumed: bool,
 }
 
-#[derive(Debug, Clone, Default, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, TS)]
+#[ts(export, export_to = "bindings/")]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct DbStats {
     pub source_items: i64,
     pub context_chunks: i64,
     pub feedback_count: i64,
     pub sources_count: i64,
+    pub embeddings_count: i64,
+    pub digested_intelligence: i64,
+    pub decision_windows: i64,
+    pub autophagy_cycles: i64,
+    pub necessity_scores: i64,
+    pub db_size_bytes: i64,
+    pub oldest_item_date: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -78,6 +94,42 @@ impl Database {
 
         let deleted_void: usize = conn.execute("DELETE FROM void_positions", []).unwrap_or(0);
 
+        // Clean superseded digested_intelligence older than 90 days
+        let deleted_intelligence: usize = conn.execute(
+            "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-90 days')",
+            [],
+        ).unwrap_or(0);
+
+        // Clean expired/closed decision_windows older than 60 days
+        let deleted_windows: usize = conn.execute(
+            "DELETE FROM decision_windows WHERE status IN ('expired', 'closed') AND created_at < datetime('now', '-60 days')",
+            [],
+        ).unwrap_or(0);
+
+        // Clean old autophagy_cycles older than 180 days (keep recent history)
+        let deleted_cycles: usize = conn.execute(
+            "DELETE FROM autophagy_cycles WHERE created_at < datetime('now', '-180 days')",
+            [],
+        ).unwrap_or(0);
+
+        // Clean orphaned necessity scores
+        let deleted_necessity: usize = conn.execute(
+            "DELETE FROM item_necessity WHERE source_item_id NOT IN (SELECT id FROM source_items)",
+            [],
+        ).unwrap_or(0);
+
+        // Clean orphaned embeddings (belt-and-suspenders with cleanup_old_items)
+        let _ = conn.execute(
+            "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
+            [],
+        );
+
+        info!(
+            target: "4da::db",
+            deleted_intelligence, deleted_windows, deleted_cycles, deleted_necessity,
+            "Deep clean: pruned unbounded tables"
+        );
+
         conn.execute_batch("PRAGMA optimize;")?;
         conn.execute_batch("VACUUM;")?;
 
@@ -85,6 +137,11 @@ impl Database {
             deleted_items,
             deleted_feedback,
             deleted_void,
+            deleted_intelligence,
+            deleted_windows,
+            deleted_cycles,
+            deleted_necessity,
+            vacuumed: true,
         })
     }
 
@@ -108,11 +165,51 @@ impl Database {
             .query_row("SELECT COUNT(*) FROM sources", [], |row| row.get(0))
             .unwrap_or(0);
 
+        let embeddings_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM source_vec", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let digested_intelligence: i64 = conn
+            .query_row("SELECT COUNT(*) FROM digested_intelligence", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let decision_windows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM decision_windows", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let autophagy_cycles: i64 = conn
+            .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let necessity_scores: i64 = conn
+            .query_row("SELECT COUNT(*) FROM item_necessity", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        // DB file size via PRAGMA
+        let db_size_bytes: i64 = conn
+            .query_row("SELECT page_count * page_size FROM pragma_page_count, pragma_page_size", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let oldest_item_date: Option<String> = conn
+            .query_row(
+                "SELECT MIN(created_at) FROM source_items",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(None);
+
         Ok(DbStats {
             source_items,
             context_chunks,
             feedback_count,
             sources_count,
+            embeddings_count,
+            digested_intelligence,
+            decision_windows,
+            autophagy_cycles,
+            necessity_scores,
+            db_size_bytes,
+            oldest_item_date,
         })
     }
 
