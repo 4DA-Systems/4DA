@@ -143,6 +143,7 @@ mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
 mod muse;
+mod muse_commands;
 mod natural_language_search;
 mod notification_window;
 mod novelty;
@@ -513,6 +514,16 @@ pub fn run() {
             developer_dna::export_developer_dna_markdown,
             developer_dna::export_developer_dna_svg,
             developer_dna::export_developer_dna_card,
+            // MUSE — Creative Context Engine (private parallel track)
+            muse_commands::muse_create_pack,
+            muse_commands::muse_list_packs,
+            muse_commands::muse_get_pack,
+            muse_commands::muse_set_pack_active,
+            muse_commands::muse_delete_pack,
+            muse_commands::muse_add_sources,
+            muse_commands::muse_list_sources,
+            muse_commands::muse_enrich_prompt,
+            muse_commands::muse_get_stats,
             // Content (article reader, AI summaries, saved items)
             content_commands::get_item_content,
             content_commands::get_item_summary,

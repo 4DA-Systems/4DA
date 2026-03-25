@@ -20,7 +20,8 @@ export type ToolCategory =
   | "decisions"
   | "agent"
   | "identity"
-  | "metabolism";
+  | "metabolism"
+  | "muse";
 
 /** Shape of each entry in the tool registry */
 export interface ToolRegistryEntry {
@@ -251,6 +252,44 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     schemaFile: "what-should-i-know.json",
     category: "agent",
     tags: ["agent", "briefing", "synthesis", "pre-task", "delegation", "advisories"],
+  },
+
+  // MUSE — Creative Context Engine
+  muse_create_pack: {
+    summary: "Create a new MUSE context pack for creative signals",
+    schemaFile: "muse-context.json",
+    category: "muse",
+    tags: ["muse", "creative", "pack", "create", "context"],
+  },
+  muse_list_packs: {
+    summary: "List all MUSE context packs with status and confidence",
+    schemaFile: "muse-context.json",
+    category: "muse",
+    tags: ["muse", "creative", "pack", "list"],
+  },
+  muse_enrich_prompt: {
+    summary: "Enrich a generation prompt with creative context from active MUSE pack",
+    schemaFile: "muse-context.json",
+    category: "muse",
+    tags: ["muse", "creative", "prompt", "generation", "influence", "enrich"],
+  },
+  muse_add_sources: {
+    summary: "Add source files (image/video/audio) to a MUSE context pack",
+    schemaFile: "muse-context.json",
+    category: "muse",
+    tags: ["muse", "creative", "sources", "files", "import"],
+  },
+  muse_stats: {
+    summary: "Get MUSE system statistics — packs, sources, generations",
+    schemaFile: "muse-context.json",
+    category: "muse",
+    tags: ["muse", "stats", "health", "overview"],
+  },
+  muse_activate_pack: {
+    summary: "Activate or deactivate a MUSE context pack for generation influence",
+    schemaFile: "muse-context.json",
+    category: "muse",
+    tags: ["muse", "creative", "pack", "activate", "toggle"],
   },
 };
 
