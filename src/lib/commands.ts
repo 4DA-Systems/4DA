@@ -571,6 +571,42 @@ interface CommandMap {
   // -- Waitlist --
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
   get_waitlist_signups: { params: Record<string, never>; result: Array<{ id: number; tier: string; email: string; name: string | null; team_size: string | null; company: string | null; role: string | null; source: string; signed_up_at: string }> };
+
+  // -- MUSE: Creative Context Engine (private parallel track, not user-facing) --
+  muse_create_pack: { params: { name: string; description?: string | null }; result: MusePack };
+  muse_list_packs: { params: { active_only?: boolean | null }; result: MusePack[] };
+  muse_get_pack: { params: { pack_id: string }; result: MusePack | null };
+  muse_set_pack_active: { params: { pack_id: string; active: boolean }; result: void };
+  muse_delete_pack: { params: { pack_id: string }; result: void };
+  muse_add_sources: { params: { pack_id: string; file_paths: string[] }; result: { added: number; skipped: number; total: number } };
+  muse_list_sources: { params: { pack_id: string }; result: MusePackSource[] };
+  muse_enrich_prompt: { params: { prompt: string; pack_id?: string | null }; result: string };
+  muse_get_stats: { params: Record<string, never>; result: { total_packs: number; active_packs: number; total_sources: number; total_generations: number } };
+}
+
+// MUSE types (private parallel track)
+interface MusePack {
+  id: string;
+  name: string;
+  description: string | null;
+  pack_type: string;
+  is_active: boolean;
+  source_count: number;
+  confidence: number;
+  topics: Array<{ label: string; weight: number }>;
+  anti_patterns: Array<{ label: string; weight: number }>;
+  created_at: string;
+  updated_at: string;
+}
+
+interface MusePackSource {
+  id: number;
+  pack_id: string;
+  file_path: string;
+  file_type: string;
+  extraction_status: string;
+  confidence: number;
+  file_hash: string | null;
 }
 
 
