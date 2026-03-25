@@ -101,6 +101,9 @@ pub(crate) struct ScoringContext {
     pub topic_half_lives: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
+    /// Topics with contradictory signals (both high affinity AND anti-topic).
+    /// Content touching these topics gets a necessity boost to help resolve confusion.
+    pub contradicted_topics: std::collections::HashSet<String>,
     /// Dominant persona from continuous taste inference (persona_index, weight)
     /// Present when dominant weight exceeds uniform threshold (> 0.2)
     // Diagnostic: populated for scoring introspection
