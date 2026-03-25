@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
 use tracing::{info, warn};
 
+use super::keystore;
 use super::LicenseConfig;
 
 // ============================================================================
@@ -68,10 +69,53 @@ pub(crate) fn reset_license_check_timestamp() {
     LAST_LICENSE_CHECK.store(0, Ordering::Relaxed);
 }
 
+/// Check if a license key is available — in memory, keychain, or validation cache.
+///
+/// If the in-memory key is empty but the keychain has it, re-hydrates the
+/// in-memory copy so subsequent checks are fast. This handles the case where
+/// keychain hydration failed at startup (intermittent Credential Manager issues).
+fn has_license_key_available(license: &mut LicenseConfig) -> bool {
+    // Fast path: in-memory key is present
+    if !license.license_key.is_empty() {
+        return true;
+    }
+
+    // Fallback: check keychain directly and re-hydrate if found
+    if let Ok(Some(key)) = keystore::get_secret("license_key") {
+        if !key.is_empty() {
+            info!(
+                "Re-hydrated license key from keychain (was missing from in-memory settings)"
+            );
+            license.license_key = key;
+            return true;
+        }
+    }
+
+    // Tertiary: check if we have a valid Keygen validation cache for a paid tier.
+    // If the key was validated online recently, don't downgrade just because the
+    // keychain is temporarily unavailable.
+    if let Some(cache) = load_validation_cache() {
+        if is_paid_tier(&cache.tier) {
+            if let Ok(validated) = chrono::DateTime::parse_from_rfc3339(&cache.validated_at) {
+                let age = chrono::Utc::now().signed_duration_since(validated);
+                if age.num_hours() < VALIDATION_CACHE_HOURS as i64 {
+                    info!(
+                        "License key missing but valid Keygen cache exists (tier: {}, validated: {})",
+                        cache.tier, cache.validated_at
+                    );
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
 /// Periodically re-run license integrity checks at runtime.
 ///
-/// If the tier claims paid access but no license key is present, the tier
-/// is reset to "free" and persisted — identical to `validate_license_on_startup`.
+/// If the tier claims paid access but no license key is present (checked
+/// in memory, keychain, and validation cache), the tier is reset to "free".
 /// Uses relaxed atomic ordering since a rare double-check is harmless.
 fn maybe_revalidate_license() {
     let now = std::time::SystemTime::now()
@@ -90,14 +134,14 @@ fn maybe_revalidate_license() {
 
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
-    let license = guard.get().license.clone();
+    let mut license = guard.get().license.clone();
 
     if is_paid_tier(license.tier.as_str())
         && !is_trial_active(&license)
-        && license.license_key.is_empty()
+        && !has_license_key_available(&mut license)
     {
         warn!(
-            "Runtime re-validation: tier '{}' with no license key — resetting to free",
+            "Runtime re-validation: tier '{}' with no license key (checked memory, keychain, and cache) — resetting to free",
             license.tier
         );
         guard.get_mut().license.tier = "free".to_string();
@@ -107,6 +151,11 @@ fn maybe_revalidate_license() {
                 e
             );
         }
+    } else if !license.license_key.is_empty()
+        && guard.get().license.license_key.is_empty()
+    {
+        // Re-hydration happened — persist the key back into in-memory settings
+        guard.get_mut().license.license_key = license.license_key;
     }
 }
 
@@ -144,28 +193,33 @@ pub fn is_signal() -> bool {
 }
 
 /// Validate license integrity on startup.
-/// If tier claims "signal"/"team"/"enterprise" but no valid license key exists,
-/// reset tier to "free" to prevent settings.json manipulation.
+/// If tier claims "signal"/"team"/"enterprise" but no valid license key exists
+/// (checked in memory, keychain, and validation cache), reset tier to "free".
 /// Also initializes the periodic re-validation timestamp.
 pub fn validate_license_on_startup() {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
-    let settings = guard.get().clone();
-    let license = &settings.license;
+    let mut license = guard.get().license.clone();
 
     // If tier is paid but no license key is set, reset to free
     if is_paid_tier(license.tier.as_str())
-        && !is_trial_active(license)
-        && license.license_key.is_empty()
+        && !is_trial_active(&license)
+        && !has_license_key_available(&mut license)
     {
         warn!(
-            "License tier is '{}' but no license key found — resetting to free",
+            "License tier is '{}' but no license key found (checked memory, keychain, and cache) — resetting to free",
             license.tier
         );
         guard.get_mut().license.tier = "free".to_string();
         if let Err(e) = guard.save() {
             warn!("Failed to reset license tier: {}", e);
         }
+    } else if !license.license_key.is_empty()
+        && guard.get().license.license_key.is_empty()
+    {
+        // Re-hydration happened — persist the key back into in-memory settings
+        info!("Re-hydrated license key into in-memory settings at startup");
+        guard.get_mut().license.license_key = license.license_key;
     }
 
     // Record the startup validation timestamp so periodic re-checks
