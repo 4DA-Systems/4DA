@@ -392,7 +392,7 @@ pub async fn set_briefing_time(time: String) -> Result<serde_json::Value> {
     if hour > 23 || minute > 59 {
         return Err("Time out of range (00:00–23:59)".into());
     }
-    let validated = format!("{:02}:{:02}", hour, minute);
+    let validated = format!("{hour:02}:{minute:02}");
 
     {
         let mut settings = get_settings_manager().lock();

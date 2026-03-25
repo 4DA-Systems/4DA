@@ -45,8 +45,7 @@ pub(super) fn build_corroboration(
             let where_clause = topic_like_clauses.join(" OR ");
             let query = format!(
                 "SELECT COUNT(DISTINCT source_type) FROM source_items \
-                 WHERE created_at >= datetime('now', '-3 days') AND ({})",
-                where_clause
+                 WHERE created_at >= datetime('now', '-3 days') AND ({where_clause})"
             );
             conn.query_row(&query, [], |row| row.get::<_, i64>(0))
                 .unwrap_or(1) as usize

@@ -2,6 +2,7 @@
 mod ace_context;
 mod affinity;
 mod analyzer;
+pub(crate) mod authority;
 #[cfg(test)]
 mod benchmark;
 mod calibration;

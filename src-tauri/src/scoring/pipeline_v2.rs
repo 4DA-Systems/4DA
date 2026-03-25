@@ -944,7 +944,17 @@ pub(crate) fn score_item(
         age_hours,
         content_type: Some(content_type.slug().to_string()),
     };
-    let necessity_result = necessity::compute_necessity(&necessity_inputs);
+    let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
+
+    // ── Source authority weighting for necessity ───────────────────────
+    // Security items are NOT penalized — a CVE is critical regardless of source.
+    // All other necessity categories are modulated by source authority.
+    if necessity_result.category != necessity::NecessityCategory::SecurityVulnerability
+        && necessity_result.score > 0.0
+    {
+        let authority = authority::source_authority(input.source_type);
+        necessity_result.score = (necessity_result.score * authority).clamp(0.0, 1.0);
+    }
 
     // ── Score breakdown ───────────────────────────────────────────────
     let score_breakdown = ScoreBreakdown {

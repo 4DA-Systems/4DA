@@ -133,16 +133,26 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
     return (
       <div className="space-y-4">
         {/* Progress bar */}
-        <div className="flex items-center gap-3 mb-2">
-          <div className="flex-1 bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
-            <div
-              className="bg-white h-full rounded-full transition-all duration-300"
-              style={{ width: `${Math.round(progress * 100)}%` }}
-            />
+        <div className="mb-2">
+          <div className="flex items-center gap-3">
+            <div className="flex-1 bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-white h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.round(progress * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-text-muted">
+              {Math.round(confidence * 100)}% confident
+            </span>
           </div>
-          <span className="text-xs text-text-muted">
-            {Math.round(confidence * 100)}% confident
-          </span>
+          <p className="text-[10px] text-text-muted mt-1 text-right">
+            {confidence < 0.3
+              ? 'Keep going \u2014 more responses improve accuracy'
+              : confidence < 0.7
+                ? 'Good start \u2014 a few more will help'
+                : 'Strong calibration \u2014 you can continue or finish now'
+            }
+          </p>
         </div>
 
         {error && <p className="text-red-400 text-xs">{error}</p>}

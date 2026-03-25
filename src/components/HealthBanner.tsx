@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { useAppStore } from '../store';
 
 interface HealthIssue {
   component: string;
@@ -26,6 +27,7 @@ const FIX_HINTS: Record<string, string> = {
  */
 export function HealthBanner() {
   const { t } = useTranslation();
+  const setShowSettings = useAppStore(s => s.setShowSettings);
   const [issues, setIssues] = useState<HealthIssue[]>([]);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -102,6 +104,14 @@ export function HealthBanner() {
                 {FIX_HINTS[issue.component] && (
                   <p className="text-[10px] text-text-muted mt-0.5">
                     {FIX_HINTS[issue.component]}
+                    {(issue.component === 'embedding' || issue.component === 'sources' || issue.component === 'settings') && (
+                      <button
+                        onClick={() => setShowSettings(true)}
+                        className="ml-1 text-amber-400 hover:text-amber-300 underline transition-colors"
+                      >
+                        {t('health.openSettings', 'Open Settings')}
+                      </button>
+                    )}
                   </p>
                 )}
               </div>

@@ -21,6 +21,8 @@ Items are scored based on:
 - ACE-detected context (recent files, projects, git activity)
 - Learned preferences from past interactions
 
+Each item includes necessity fields (necessity_score, necessity_reason, necessity_category, necessity_urgency) indicating how critical the item is — e.g., security vulnerabilities affecting your deps, breaking changes in your stack, or deprecation notices. These are populated from the full PASIFA analysis pipeline when available.
+
 Use this to find content relevant to the user's current context.`,
   inputSchema: {
     type: "object" as const,
