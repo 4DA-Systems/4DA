@@ -142,6 +142,7 @@ mod monitoring_briefing;
 mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
+mod muse;
 mod natural_language_search;
 mod notification_window;
 mod novelty;
