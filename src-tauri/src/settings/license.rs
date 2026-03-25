@@ -163,9 +163,7 @@ fn maybe_revalidate_license() {
                 e
             );
         }
-    } else if !license.license_key.is_empty()
-        && guard.get().license.license_key.is_empty()
-    {
+    } else if !license.license_key.is_empty() && guard.get().license.license_key.is_empty() {
         // Re-hydration happened (from keychain) — persist key to BOTH in-memory
         // settings AND disk for resilience against future keychain failures.
         info!(
@@ -238,9 +236,7 @@ pub fn validate_license_on_startup() {
         if let Err(e) = guard.save() {
             warn!("Failed to reset license tier: {}", e);
         }
-    } else if !license.license_key.is_empty()
-        && guard.get().license.license_key.is_empty()
-    {
+    } else if !license.license_key.is_empty() && guard.get().license.license_key.is_empty() {
         // Re-hydration happened (from keychain) — persist key to BOTH in-memory
         // settings AND disk so we don't depend on keychain again next startup.
         info!(
@@ -668,7 +664,9 @@ pub struct LicensePayload {
 /// Verify and decode a license key.
 /// Format: `4DA-{base64(json_payload)}.{base64(ed25519_signature)}`
 pub fn verify_license_key(key: &str) -> Result<LicensePayload> {
-    let key = key.trim();
+    // Strip ALL whitespace — users copying keys from emails often get line breaks
+    // or spaces injected in the middle of the base64. Valid keys never contain spaces.
+    let key: String = key.chars().filter(|c| !c.is_whitespace()).collect();
 
     // Sanity check: license keys are ~300-400 chars; reject obvious junk early
     if key.len() > 1024 {

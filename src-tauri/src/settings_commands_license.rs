@@ -58,7 +58,9 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
 #[tauri::command]
 pub async fn activate_license(license_key: String) -> Result<serde_json::Value> {
     crate::settings::check_activation_rate_limit()?;
-    if license_key.trim().is_empty() {
+    // Strip whitespace — users copying keys from emails often get line breaks injected
+    let license_key: String = license_key.chars().filter(|c| !c.is_whitespace()).collect();
+    if license_key.is_empty() {
         return Err("License key cannot be empty".into());
     }
 
