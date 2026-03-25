@@ -678,7 +678,7 @@ mod tests {
         // If briefing_time is 23:45 and current time is 00:05,
         // diff should be 20 (within 30-min window)
         let target = 23 * 60 + 45; // 1425
-        let now = 0 * 60 + 5; // 5
+        let now = 5; // 00:05
         let diff = ((now as i32 - target as i32) + 1440) % 1440;
         assert_eq!(diff, 20);
         assert!(diff <= 30);
@@ -689,7 +689,7 @@ mod tests {
         // If briefing_time is 23:45 and current time is 00:30,
         // diff should be 45 (outside 30-min window)
         let target = 23 * 60 + 45; // 1425
-        let now = 0 * 60 + 30; // 30
+        let now = 30; // 00:30
         let diff = ((now as i32 - target as i32) + 1440) % 1440;
         assert_eq!(diff, 45);
         assert!(diff > 30);
