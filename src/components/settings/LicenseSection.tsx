@@ -15,9 +15,13 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const daysRemaining = useAppStore(s => s.daysRemaining);
   const expiresAt = useAppStore(s => s.expiresAt);
 
+  const recoverLicenseByEmail = useAppStore(s => s.recoverLicenseByEmail);
+
   const [key, setKey] = useState('');
   const [starting, setStarting] = useState(false);
   const [activationResult, setActivationResult] = useState<{ ok: boolean; reason?: string } | null>(null);
+  const [recoveryEmail, setRecoveryEmail] = useState('');
+  const [recoveryResult, setRecoveryResult] = useState<{ ok: boolean; reason?: string } | null>(null);
 
   useEffect(() => {
     loadLicense();
@@ -42,6 +46,25 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
       onStatus(result.reason ? `Error: ${result.reason}` : t('settings.license.invalidKey'));
     }
     setTimeout(() => onStatus(''), 5000);
+  };
+
+  const handleRecover = async () => {
+    if (!recoveryEmail.trim()) return;
+    setRecoveryResult(null);
+    const result = await recoverLicenseByEmail(recoveryEmail.trim());
+    setRecoveryResult(result);
+    if (result.ok) {
+      onStatus(t('settings.license.activated'));
+      setRecoveryEmail('');
+    }
+    setTimeout(() => onStatus(''), 5000);
+  };
+
+  const recoveryReasonKey: Record<string, string> = {
+    not_found: 'settings.license.recovery.notFound',
+    expired: 'settings.license.recovery.expired',
+    network_error: 'settings.license.recovery.networkError',
+    rate_limited: 'settings.license.recovery.rateLimited',
   };
 
   const handleStartTrial = async () => {
@@ -153,6 +176,48 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
                 : activationResult.reason || t('settings.license.invalidKey')}
             </div>
           )}
+
+          {/* License recovery */}
+          <details className="border border-border rounded-lg">
+            <summary className="px-3 py-2 text-xs text-text-secondary cursor-pointer hover:text-white select-none">
+              {t('settings.license.recovery.title')}
+            </summary>
+            <div className="px-3 pb-3 space-y-2">
+              <p className="text-[10px] leading-relaxed text-text-muted">
+                {t('settings.license.recovery.explanation')}
+              </p>
+              <p className="text-[10px] leading-relaxed text-text-muted">
+                {t('settings.license.recovery.emailHint')}
+              </p>
+              <p className="text-[10px] leading-relaxed text-text-muted/60">
+                {t('settings.license.recovery.privacy')}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={recoveryEmail}
+                  onChange={e => setRecoveryEmail(e.target.value)}
+                  placeholder={t('settings.license.recovery.placeholder')}
+                  onKeyDown={e => e.key === 'Enter' && handleRecover()}
+                  className="flex-1 px-3 py-1.5 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-accent-gold/50"
+                />
+                <button
+                  onClick={handleRecover}
+                  disabled={licenseLoading || !recoveryEmail.trim()}
+                  className="px-3 py-1.5 text-xs font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
+                >
+                  {licenseLoading ? '...' : t('settings.license.recovery.retrieve')}
+                </button>
+              </div>
+              {recoveryResult && (
+                <div className={`text-xs p-2 rounded ${recoveryResult.ok ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'}`}>
+                  {recoveryResult.ok
+                    ? t('settings.license.recovery.success')
+                    : t(recoveryReasonKey[recoveryResult.reason ?? ''] ?? 'settings.license.recovery.networkError')}
+                </div>
+              )}
+            </div>
+          </details>
 
           {/* Trial button */}
           {canStartTrial && (

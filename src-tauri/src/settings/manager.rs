@@ -108,12 +108,13 @@ impl SettingsManager {
             match keystore::migrate_from_plaintext(&settings) {
                 Ok(report) => {
                     if !report.migrated.is_empty() {
-                        // Clear plaintext keys from the JSON file (keep in-memory copy)
+                        // Clear SECRET keys from the JSON file (keep in-memory copy).
+                        // license_key is intentionally kept on disk — it's a product
+                        // activation code, not a security secret.
                         let mut clean_settings = settings.clone();
                         clean_settings.llm.api_key = String::new();
                         clean_settings.llm.openai_api_key = String::new();
                         clean_settings.x_api_key = String::new();
-                        clean_settings.license.license_key = String::new();
 
                         if let Some(parent) = settings_path.parent() {
                             let _ = fs::create_dir_all(parent);
@@ -180,9 +181,15 @@ impl SettingsManager {
             fs::create_dir_all(parent)?;
         }
 
-        // Clone settings and clear secret fields that are safely in the keychain.
+        // Clone settings and clear SECRET fields that are safely in the keychain.
         // Only strip a key from disk if it's verified in the keychain -- otherwise
         // keep the plaintext version so the app still works without a keychain.
+        //
+        // NOTE: license_key is ALWAYS persisted to disk. Unlike API keys (which
+        // grant access to external services and are genuine secrets), the license
+        // key is a product activation code with no security risk from being on
+        // disk. Stripping it caused license loss when the platform keychain was
+        // unreliable (Windows Credential Manager intermittent failures).
         let mut disk_settings = self.settings.clone();
         if keystore::has_secret("llm_api_key") {
             disk_settings.llm.api_key = String::new();
@@ -193,9 +200,7 @@ impl SettingsManager {
         if keystore::has_secret("x_api_key") {
             disk_settings.x_api_key = String::new();
         }
-        if keystore::has_secret("license_key") {
-            disk_settings.license.license_key = String::new();
-        }
+        // license_key intentionally NOT stripped — always persisted to disk
 
         let json = serde_json::to_string_pretty(&disk_settings)?;
 
@@ -242,6 +247,15 @@ impl SettingsManager {
     /// Get the path to the settings file (for tests / diagnostics)
     pub fn get_settings_path(&self) -> &std::path::Path {
         &self.settings_path
+    }
+
+    /// Get the data directory (parent of settings.json).
+    /// Used by the license cache to resolve paths at runtime rather than
+    /// relying on compile-time CARGO_MANIFEST_DIR.
+    pub fn data_dir(&self) -> &std::path::Path {
+        self.settings_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
     }
 
     /// Update LLM provider settings.

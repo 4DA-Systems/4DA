@@ -55,6 +55,31 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     }
   },
 
+  recoverLicenseByEmail: async (email: string): Promise<{ ok: boolean; reason?: string; tier?: string }> => {
+    set({ licenseLoading: true });
+    try {
+      const result = await cmd('recover_license_by_email', { email });
+      if (result.success) {
+        set({
+          tier: result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',
+          licenseKey: result.license_key ?? '',
+          licenseLoading: false,
+          expired: false,
+          expiresAt: result.expires_at ?? null,
+          daysRemaining: result.expires_at ? 365 : 0,
+        });
+        get().loadStreetsTier?.();
+        return { ok: true, tier: result.tier };
+      }
+      set({ licenseLoading: false });
+      return { ok: false, reason: result.reason ?? 'Unknown error' };
+    } catch (e) {
+      set({ licenseLoading: false });
+      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+      return { ok: false, reason: msg };
+    }
+  },
+
   loadTrialStatus: async () => {
     try {
       const status = await cmd('get_trial_status') as unknown as TrialStatus;
