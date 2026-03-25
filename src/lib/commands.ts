@@ -583,9 +583,25 @@ interface CommandMap {
   muse_list_sources: { params: { pack_id: string }; result: MusePackSource[] };
   muse_enrich_prompt: { params: { prompt: string; pack_id?: string | null }; result: string };
   muse_get_stats: { params: Record<string, never>; result: { total_packs: number; active_packs: number; total_sources: number; total_generations: number } };
+  muse_extract_pack: { params: { pack_id: string }; result: { total: number; succeeded: number; failed: number; skipped: number } };
+  muse_analyze_image: { params: { file_path: string }; result: MuseVisualProfile };
 }
 
 // MUSE types (private parallel track)
+interface MuseVisualProfile {
+  dominant_colors: Array<{ hex: string; weight: number }>;
+  temperature: number;
+  contrast: number;
+  saturation: number;
+  harmony: string | null;
+  symmetry: number;
+  negative_space: number;
+  focal_point: string | null;
+  depth: number;
+  grain: number;
+  organic_vs_geometric: number;
+}
+
 interface MusePack {
   id: string;
   name: string;

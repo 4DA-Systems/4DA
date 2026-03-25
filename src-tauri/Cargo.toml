@@ -90,7 +90,7 @@ pdf-extract = "0.7"          # PDF text extraction
 lopdf = "0.32"               # PDF manipulation
 docx-rs = "0.4"              # Word document parsing
 calamine = "0.25"            # Excel spreadsheet parsing
-image = { version = "0.25", optional = true }    # Image loading/preprocessing (Month 2 - OCR)
+image = "0.25"                                    # Image analysis (MUSE creative extraction + OCR)
 ocrs = { version = "0.12", optional = true }     # Pure Rust OCR engine
 rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
@@ -157,7 +157,7 @@ harness = false
 
 [features]
 default = []
-ocr = ["dep:ocrs", "dep:rten", "dep:image"]
+ocr = ["dep:ocrs", "dep:rten"]
 archive = ["dep:zip", "dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
