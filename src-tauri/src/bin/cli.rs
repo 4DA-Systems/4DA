@@ -324,7 +324,7 @@ fn classify_signal<'a>(
         .iter()
         .chain(detected_tech.iter())
         .chain(deps.iter())
-        .map(|s| s.as_str())
+        .map(std::string::String::as_str)
         .collect();
 
     let matches_tech = |text: &str| -> bool {
@@ -545,9 +545,7 @@ fn cmd_health(conn: &rusqlite::Connection, json_mode: bool) {
     for (path, dep_count) in &projects {
         // Get the project name from path
         let name = PathBuf::from(path)
-            .file_name()
-            .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or_else(|| path.clone());
+            .file_name().map_or_else(|| path.clone(), |n| n.to_string_lossy().to_string());
 
         // Count dev vs prod deps
         let dev_count: i64 = conn
@@ -694,18 +692,15 @@ fn main() {
     }
 
     // Resolve database
-    let db_path = match resolve_db_path() {
-        Some(p) => p,
-        None => {
-            if json_mode {
-                println!("{{\"error\": \"4DA database not found\"}}");
-            } else {
-                eprintln!("4DA database not found.");
-                eprintln!("Make sure the 4DA desktop app has been run at least once,");
-                eprintln!("or set FOURDA_DB_PATH to point to your 4da.db file.");
-            }
-            process::exit(1);
+    let db_path = if let Some(p) = resolve_db_path() { p } else {
+        if json_mode {
+            println!("{{\"error\": \"4DA database not found\"}}");
+        } else {
+            eprintln!("4DA database not found.");
+            eprintln!("Make sure the 4DA desktop app has been run at least once,");
+            eprintln!("or set FOURDA_DB_PATH to point to your 4da.db file.");
         }
+        process::exit(1);
     };
 
     let conn = match open_db(&db_path) {
