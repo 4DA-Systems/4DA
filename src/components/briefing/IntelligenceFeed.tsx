@@ -108,7 +108,9 @@ const FeedItem = memo(function FeedItem({
   const handleClick = useCallback(() => {
     onRecordClick(item);
     if (item.url && isSafeUrl(item.url)) {
-      window.open(item.url, '_blank', 'noopener,noreferrer');
+      import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => {
+        window.open(item.url!, '_blank', 'noopener,noreferrer');
+      });
     }
   }, [item, onRecordClick]);
 

@@ -82,7 +82,13 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         click: 'click',
       };
 
-      await Promise.all([
+      // Optimistic UI update — card disappears immediately
+      set(state => ({
+        feedbackGiven: { ...state.feedbackGiven, [itemId]: actionType },
+      }));
+
+      // Backend calls are non-blocking: one failure doesn't prevent the others
+      const results = await Promise.allSettled([
         cmd('ace_record_interaction', {
           item_id: itemId,
           action_type: actionType,
@@ -102,10 +108,12 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         }),
       ]);
 
-      // Update feedback state
-      set(state => ({
-        feedbackGiven: { ...state.feedbackGiven, [itemId]: actionType },
-      }));
+      // Log any individual failures without reverting the UI
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          console.warn('Feedback command failed (non-blocking):', r.reason);
+        }
+      }
 
       // Track what was just learned for the visible learning loop
       const primaryTopic = topics[0] || null;

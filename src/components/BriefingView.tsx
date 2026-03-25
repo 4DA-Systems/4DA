@@ -111,7 +111,7 @@ export const BriefingView = memo(function BriefingView() {
                   <div className="min-w-0">
                     {item.url ? (
                       <button
-                        onClick={() => window.open(item.url!, '_blank', 'noopener,noreferrer')}
+                        onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => window.open(item.url!, '_blank', 'noopener,noreferrer'))}
                         className="text-sm text-white hover:text-orange-400 text-start transition-colors"
                       >
                         {item.title}

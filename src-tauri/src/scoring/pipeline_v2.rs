@@ -664,7 +664,7 @@ fn classify_signals(
                 if c.signal_type == signals::SignalType::SecurityAlert && has_non_dev_dep {
                     c.priority = signals::SignalPriority::Critical;
                     c.action = format!(
-                        "URGENT: Security issue affects your dependency {}",
+                        "Critical: Security issue affects your dependency {}",
                         matched_deps[0].package_name
                     );
                 } else if c.signal_type == signals::SignalType::BreakingChange
