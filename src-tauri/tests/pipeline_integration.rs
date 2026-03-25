@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Pipeline Integration Tests
 //!
 //! Tests the full source → store → query pipeline using the Database layer
