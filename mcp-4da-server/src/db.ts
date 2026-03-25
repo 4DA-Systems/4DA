@@ -759,6 +759,9 @@ export class FourDADatabase {
               ? `${hoursAgo} hours ago`
               : `${Math.round(hoursAgo / 24)} days ago`;
 
+        // Look up persisted necessity scores from Rust analysis pipeline
+        const necessity = this.getNecessityForItem(item.id);
+
         scoredItems.push({
           id: item.id,
           source_type: item.source_type,
@@ -769,13 +772,10 @@ export class FourDADatabase {
           relevance_score: Math.round(score * 100) / 100,
           created_at: item.created_at,
           discovered_ago: discoveredAgo,
-          // Necessity fields — populated from Rust analysis pipeline when available.
-          // The MCP server's simplified scoring does not compute necessity;
-          // these default to 0.0/null until the full PASIFA pipeline runs.
-          necessity_score: 0.0,
-          necessity_reason: null,
-          necessity_category: null,
-          necessity_urgency: null,
+          necessity_score: necessity.score,
+          necessity_reason: necessity.reason,
+          necessity_category: necessity.category,
+          necessity_urgency: necessity.urgency,
         });
       }
     }
@@ -796,6 +796,41 @@ export class FourDADatabase {
       WHERE id = ? AND source_type = ?
     `);
     return (stmt.get(itemId, sourceType) as SourceItem) || null;
+  }
+
+  /**
+   * Look up persisted necessity scores for an item (written by Rust analysis pipeline).
+   * Returns defaults (0.0/null) if no necessity data exists yet.
+   */
+  private getNecessityForItem(itemId: number): {
+    score: number;
+    reason: string | null;
+    category: string | null;
+    urgency: string | null;
+  } {
+    try {
+      const stmt = this.db.prepare(
+        `SELECT necessity_score, necessity_reason, necessity_category, necessity_urgency
+         FROM item_necessity WHERE source_item_id = ?`
+      );
+      const row = stmt.get(itemId) as {
+        necessity_score: number;
+        necessity_reason: string | null;
+        necessity_category: string | null;
+        necessity_urgency: string | null;
+      } | undefined;
+      if (row) {
+        return {
+          score: row.necessity_score,
+          reason: row.necessity_reason,
+          category: row.necessity_category,
+          urgency: row.necessity_urgency,
+        };
+      }
+    } catch {
+      // Table may not exist yet (pre-migration) — graceful fallback
+    }
+    return { score: 0.0, reason: null, category: null, urgency: null };
   }
 
   // ===========================================================================
