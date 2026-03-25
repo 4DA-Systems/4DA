@@ -16,10 +16,7 @@ use crate::muse;
 
 /// Create a new MUSE context pack
 #[tauri::command]
-pub async fn muse_create_pack(
-    name: String,
-    description: Option<String>,
-) -> Result<muse::MusePack> {
+pub async fn muse_create_pack(name: String, description: Option<String>) -> Result<muse::MusePack> {
     let conn = crate::open_db_connection()?;
     muse::pack::create_pack(&conn, &name, description.as_deref())
 }
@@ -123,6 +120,27 @@ pub async fn muse_enrich_prompt(prompt: String, pack_id: Option<String>) -> Resu
 pub async fn muse_get_stats() -> Result<muse::pack::PackStats> {
     let conn = crate::open_db_connection()?;
     muse::pack::pack_stats(&conn)
+}
+
+// ============================================================================
+// Extraction Commands
+// ============================================================================
+
+/// Extract creative signals from all pending source files in a pack.
+/// Runs image analysis (color, composition, texture) on each file,
+/// then aggregates results into the pack's unified visual profile.
+#[tauri::command]
+pub async fn muse_extract_pack(pack_id: String) -> Result<muse::extract::ExtractionReport> {
+    let conn = crate::open_db_connection()?;
+    muse::extract::extract_pack(&conn, &pack_id)
+}
+
+/// Analyze a single image file and return its visual profile.
+/// Useful for preview before adding to a pack.
+#[tauri::command]
+pub async fn muse_analyze_image(file_path: String) -> Result<muse::VisualProfile> {
+    let path = std::path::Path::new(&file_path);
+    muse::image_analysis::analyze_image(path)
 }
 
 // ============================================================================
