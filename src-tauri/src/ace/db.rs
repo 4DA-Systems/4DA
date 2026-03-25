@@ -10,8 +10,8 @@ use tracing::info;
 use crate::error::{Result, ResultExt};
 
 /// Run all ACE database migrations
-pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
-    let conn = conn.lock();
+pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
+    let conn = arc_conn.lock();
 
     conn.execute_batch(
         r#"
@@ -394,6 +394,13 @@ pub fn migrate(conn: &Arc<Mutex<Connection>>) -> Result<()> {
     .ok(); // ok() because table may already exist
 
     info!(target: "ace::db", "ACE database schema initialized with sqlite-vec");
+
+    // Drop the lock before calling MUSE migration (which takes its own lock)
+    drop(conn);
+
+    // Run MUSE migrations (extends ACE database with creative context tables)
+    crate::muse::db::migrate(arc_conn)?;
+
     Ok(())
 }
 
