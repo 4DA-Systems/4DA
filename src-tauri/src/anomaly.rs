@@ -308,6 +308,26 @@ pub fn detect_contradictions(conn: &Connection) -> Result<Vec<Anomaly>> {
     Ok(anomalies)
 }
 
+/// Return topic names that have contradictory signals (high affinity AND anti-topic).
+///
+/// Lightweight query for scoring pipeline — returns just the names, not full anomaly records.
+/// Used to boost necessity_score for content touching conflicted topics.
+pub fn get_contradicted_topics(conn: &Connection) -> Result<std::collections::HashSet<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT ta.topic
+         FROM topic_affinities ta
+         JOIN anti_topics at ON ta.topic = at.topic
+         WHERE ta.affinity_score > 0.3 AND at.confidence > 0.3",
+    )?;
+
+    let topics = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(topics)
+}
+
 /// Detect abnormal volume - z-score >2 from 7-day mean
 ///
 /// Analyzes daily interaction counts from the `interactions` table.
