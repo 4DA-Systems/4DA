@@ -4,9 +4,7 @@
 //! Phase 0: core operations with database persistence.
 //! Phase 1+: extractors populate profiles during pack creation.
 
-use parking_lot::Mutex;
 use rusqlite::{params, Connection};
-use std::sync::Arc;
 use tracing::info;
 use uuid::Uuid;
 
@@ -20,12 +18,11 @@ use super::{MuseMediaType, MusePack, MusePackSource, MusePackType, WeightedTopic
 
 /// Create a new empty context pack
 pub fn create_pack(
-    conn: &Arc<Mutex<Connection>>,
+    conn: &Connection,
     name: &str,
     description: Option<&str>,
 ) -> Result<MusePack> {
     let id = Uuid::new_v4().to_string();
-    let conn = conn.lock();
 
     conn.execute(
         r"INSERT INTO muse_packs (id, name, description, pack_type, is_active, source_count, confidence)
@@ -56,9 +53,7 @@ pub fn create_pack(
 }
 
 /// List all packs, optionally filtered by active status
-pub fn list_packs(conn: &Arc<Mutex<Connection>>, active_only: bool) -> Result<Vec<MusePack>> {
-    let conn = conn.lock();
-
+pub fn list_packs(conn: &Connection, active_only: bool) -> Result<Vec<MusePack>> {
     let query = if active_only {
         "SELECT id, name, description, pack_type, is_active, source_count, confidence,
                 thematic_topics, anti_patterns, style_embedding, created_at, updated_at
@@ -125,18 +120,13 @@ pub fn list_packs(conn: &Arc<Mutex<Connection>>, active_only: bool) -> Result<Ve
 }
 
 /// Get a single pack by ID
-pub fn get_pack(conn: &Arc<Mutex<Connection>>, pack_id: &str) -> Result<Option<MusePack>> {
+pub fn get_pack(conn: &Connection, pack_id: &str) -> Result<Option<MusePack>> {
     let packs = list_packs(conn, false)?;
     Ok(packs.into_iter().find(|p| p.id == pack_id))
 }
 
 /// Activate or deactivate a pack
-pub fn set_pack_active(
-    conn: &Arc<Mutex<Connection>>,
-    pack_id: &str,
-    active: bool,
-) -> Result<()> {
-    let conn = conn.lock();
+pub fn set_pack_active(conn: &Connection, pack_id: &str, active: bool) -> Result<()> {
     conn.execute(
         "UPDATE muse_packs SET is_active = ?1, updated_at = datetime('now') WHERE id = ?2",
         params![active as i64, pack_id],
@@ -148,9 +138,7 @@ pub fn set_pack_active(
 }
 
 /// Delete a pack and all its sources (CASCADE)
-pub fn delete_pack(conn: &Arc<Mutex<Connection>>, pack_id: &str) -> Result<()> {
-    let conn = conn.lock();
-
+pub fn delete_pack(conn: &Connection, pack_id: &str) -> Result<()> {
     // Delete from vec table first (no CASCADE on virtual tables)
     conn.execute(
         "DELETE FROM muse_style_vec WHERE rowid IN (SELECT rowid FROM muse_packs WHERE id = ?1)",
@@ -167,14 +155,12 @@ pub fn delete_pack(conn: &Arc<Mutex<Connection>>, pack_id: &str) -> Result<()> {
 
 /// Add a source file to a pack (queued for extraction)
 pub fn add_source(
-    conn: &Arc<Mutex<Connection>>,
+    conn: &Connection,
     pack_id: &str,
     file_path: &str,
     file_type: MuseMediaType,
     file_hash: Option<&str>,
 ) -> Result<i64> {
-    let conn = conn.lock();
-
     conn.execute(
         r"INSERT INTO muse_pack_sources (pack_id, file_path, file_type, extraction_status, file_hash)
           VALUES (?1, ?2, ?3, 'pending', ?4)",
@@ -196,12 +182,7 @@ pub fn add_source(
 }
 
 /// List sources for a pack
-pub fn list_sources(
-    conn: &Arc<Mutex<Connection>>,
-    pack_id: &str,
-) -> Result<Vec<MusePackSource>> {
-    let conn = conn.lock();
-
+pub fn list_sources(conn: &Connection, pack_id: &str) -> Result<Vec<MusePackSource>> {
     let mut stmt = conn
         .prepare(
             "SELECT id, pack_id, file_path, file_type, extraction_status, confidence, file_hash
@@ -247,9 +228,7 @@ pub fn list_sources(
 }
 
 /// Get count of packs by status
-pub fn pack_stats(conn: &Arc<Mutex<Connection>>) -> Result<PackStats> {
-    let conn = conn.lock();
-
+pub fn pack_stats(conn: &Connection) -> Result<PackStats> {
     let total: i64 = conn
         .query_row("SELECT COUNT(*) FROM muse_packs", [], |row| row.get(0))
         .unwrap_or(0);
@@ -299,14 +278,16 @@ pub struct PackStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::muse;
+    use parking_lot::Mutex;
+    use std::sync::Arc;
 
-    fn setup_test_db() -> Arc<Mutex<Connection>> {
+    fn setup_test_db() -> Connection {
         crate::register_sqlite_vec_extension();
         let conn = Connection::open_in_memory().expect("Failed to open in-memory DB");
+        // Run migration via Arc<Mutex<>> (migration API requirement)
         let arc = Arc::new(Mutex::new(conn));
-        muse::db::migrate(&arc).expect("MUSE migration failed");
-        arc
+        crate::muse::db::migrate(&arc).expect("MUSE migration failed");
+        Arc::try_unwrap(arc).expect("Arc still shared").into_inner()
     }
 
     #[test]
