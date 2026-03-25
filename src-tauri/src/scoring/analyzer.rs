@@ -355,6 +355,35 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         guard.last_completed_at = Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
     }
 
+    // Persist necessity scores to DB for MCP server access
+    {
+        let necessity_data: Vec<(u64, f32, Option<String>, Option<String>, Option<String>)> =
+            new_results
+                .iter()
+                .filter_map(|r| {
+                    let bd = r.score_breakdown.as_ref()?;
+                    if bd.necessity_score > 0.0 {
+                        Some((
+                            r.id,
+                            bd.necessity_score,
+                            bd.necessity_reason.clone(),
+                            bd.necessity_category.clone(),
+                            bd.necessity_urgency.clone(),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+        if !necessity_data.is_empty() {
+            if let Err(e) = db.persist_necessity_scores(&necessity_data) {
+                warn!(target: "4da::scoring", error = %e, "Failed to persist necessity scores");
+            } else {
+                info!(target: "4da::scoring", count = necessity_data.len(), "Necessity scores persisted to DB");
+            }
+        }
+    }
+
     // Emit background results event to frontend (silent - no UI progress)
     if let Err(e) = app.emit("background-results", &new_results) {
         tracing::warn!("Failed to emit 'background-results': {e}");
