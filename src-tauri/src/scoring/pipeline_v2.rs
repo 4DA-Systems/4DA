@@ -955,7 +955,7 @@ pub(crate) fn score_item(
         signal_priority: sig_priority.clone(),
         cve_severity: None, // CVE severity is folded into signal_priority by the classifier
         cvss_score: None,   // Not directly available at this pipeline stage
-        affected_project_count: 0, // TODO: wire cross-project dep counts when available
+        affected_project_count: count_affected_projects(db, &matched_dep_names),
         skill_gap_boost,
         window_boost,
         age_hours,
@@ -1070,4 +1070,31 @@ pub(crate) fn score_item(
         decision_boost_applied: window_boost,
         created_at: None,
     }
+}
+
+/// Count how many distinct projects use any of the matched dependencies.
+/// Returns 0 if no deps matched or the DB query fails (graceful degradation).
+fn count_affected_projects(db: &Database, matched_deps: &[String]) -> usize {
+    if matched_deps.is_empty() {
+        return 0;
+    }
+    let conn = db.conn.lock();
+    // Count distinct projects that have ANY of the matched deps
+    let placeholders: String = matched_deps
+        .iter()
+        .enumerate()
+        .map(|(i, _)| format!("?{}", i + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT COUNT(DISTINCT project_path) FROM project_dependencies WHERE LOWER(package_name) IN ({})",
+        placeholders
+    );
+    let params: Vec<String> = matched_deps.iter().map(|d| d.to_lowercase()).collect();
+    conn.query_row(
+        &sql,
+        rusqlite::params_from_iter(params.iter()),
+        |row: &rusqlite::Row<'_>| row.get(0),
+    )
+    .unwrap_or(0)
 }
