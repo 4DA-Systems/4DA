@@ -43,7 +43,9 @@ import {
   useKeyboardShortcuts,
   useToasts,
   useLicense,
+  useUiZoom,
 } from './hooks';
+import { ZoomIndicator } from './components/ZoomIndicator';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
@@ -53,6 +55,7 @@ import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 function App() {
   const { t } = useTranslation();
+  const { zoom, showIndicator } = useUiZoom();
   // Local UI state
   const [showSplash, setShowSplash] = useState(true);
   const showSettings = useAppStore(s => s.showSettings);
@@ -441,6 +444,7 @@ function App() {
 
         {/* Toast Notifications */}
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
+        <ZoomIndicator zoom={zoom} visible={showIndicator} />
         <FeedbackMilestone count={feedbackCount} />
         <Suspense fallback={null}><MilestoneOverlay /></Suspense>
 

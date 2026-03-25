@@ -243,6 +243,16 @@ body {
   to { transform: translateX(0); opacity: 1; }
 }
 
+/* Zoom indicator fade */
+@keyframes zoom-fade {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.animate-zoom-fade {
+  animation: zoom-fade 1.5s ease-out forwards;
+}
+
 /* Accessibility: Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-slow,
@@ -251,7 +261,8 @@ body {
   .radar-glow,
   .game-ring-burst,
   .game-ring-burst-delayed,
-  .game-achievement-card {
+  .game-achievement-card,
+  .animate-zoom-fade {
     animation: none !important;
   }
 
