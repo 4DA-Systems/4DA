@@ -322,7 +322,7 @@ pub fn get_contradicted_topics(conn: &Connection) -> Result<std::collections::Ha
 
     let topics = stmt
         .query_map([], |row| row.get::<_, String>(0))?
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .collect();
 
     Ok(topics)
