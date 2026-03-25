@@ -186,6 +186,14 @@ export function useAnalysis(
           }
         }),
 
+        listen<{ title: string; total_relevant: number; items: Array<{ title: string; source_type: string; score: number; signal_type?: string }> }>('morning-briefing-ready', (event) => {
+          const { total_relevant } = event.payload;
+          if (total_relevant > 0) {
+            useAppStore.getState().setShowBriefing(true);
+            useAppStore.getState().addToast('info', i18n.t('analysis.morningBriefingReady', { count: total_relevant, defaultValue: `Intelligence briefing: ${total_relevant} items` }));
+          }
+        }),
+
         listen<{ type: string; severity: string; description: string }>('anomaly-detected', (event) => {
           const { severity, description } = event.payload;
           if (severity === 'High' || severity === 'Critical') {
