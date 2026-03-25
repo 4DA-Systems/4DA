@@ -70,6 +70,9 @@ export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
           <p className="text-xs text-text-muted mt-2">{t('onboarding.welcome.skipHint')}</p>
         </div>
       )}
+      <p className="text-[10px] text-text-muted mt-6">
+        {t('onboarding.keyboardHint', 'Pro tip: Press R to analyze, / to search, ? for all shortcuts')}
+      </p>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { formatScore } from '../../utils/score';
@@ -33,8 +33,16 @@ export const AttentionCards = memo(function AttentionCards({
   onDismiss,
   onRecordClick,
 }: AttentionCardsProps) {
-  // Merge signals + top picks, max 5
-  const items = [...signalItems, ...topItems.slice(0, Math.max(0, 5 - signalItems.length))];
+  // Merge signals + top picks, max 5, sorted by necessity score (highest first)
+  const items = useMemo(() => {
+    const merged = [...signalItems, ...topItems.slice(0, Math.max(0, 5 - signalItems.length))];
+    return merged.sort((a, b) => {
+      const aNecessity = a.score_breakdown?.necessity_score ?? 0;
+      const bNecessity = b.score_breakdown?.necessity_score ?? 0;
+      if (aNecessity !== bNecessity) return bNecessity - aNecessity;
+      return 0; // preserve existing order as tiebreaker
+    });
+  }, [signalItems, topItems]);
 
   if (items.length === 0) return null;
 
@@ -75,7 +83,16 @@ const AttentionCard = memo(function AttentionCard({
   onRecordClick,
 }: AttentionCardProps) {
   const { t } = useTranslation();
-  const priority = item.signal_priority || 'alert';
+  const necessityScore = item.score_breakdown?.necessity_score ?? 0;
+  const necessityCategory = item.score_breakdown?.necessity_category;
+
+  // Priority from necessity: security vulnerabilities get critical styling,
+  // other high-necessity items get alert styling, otherwise fall back to signal_priority
+  const priority = necessityCategory === 'security_vulnerability'
+    ? 'critical'
+    : necessityScore > 0.60
+      ? 'alert'
+      : item.signal_priority || 'alert';
   const style = (PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.alert)!;
   const source = item.source_type || 'hackernews';
 
@@ -102,15 +119,17 @@ const AttentionCard = memo(function AttentionCard({
     return null; // Already acted on — remove from attention
   }
 
+  const hasNecessityHighlight = isSignal || necessityScore > 0.60 || necessityCategory === 'security_vulnerability';
+
   return (
     <div
       className={`flex-shrink-0 w-72 rounded-lg border ${
-        isSignal ? style.border : 'border-border'
+        hasNecessityHighlight ? style.border : 'border-border'
       } bg-bg-secondary p-4 flex flex-col gap-3 hover:border-white/20 transition-colors`}
     >
       {/* Header: signal badge + source + score */}
       <div className="flex items-center gap-2">
-        {isSignal && (
+        {hasNecessityHighlight && (
           <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${style.dot}`} />
         )}
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(source)}`}>

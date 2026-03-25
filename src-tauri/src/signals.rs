@@ -473,7 +473,7 @@ impl SignalClassifier {
             let chain_escalating = corroboration
                 .chain_phase
                 .as_deref()
-                .map_or(false, |p| p == "escalating" || p == "peak");
+                .is_some_and(|p| p == "escalating" || p == "peak");
             let has_strong_chain = corroboration_sources >= 3 && chain_escalating;
             if !dependency_confirmed && !has_strong_chain {
                 priority = SignalPriority::Alert;

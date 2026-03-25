@@ -304,7 +304,7 @@ export function LoadingState({
           onClick={onSkipAhead}
           className="mt-6 text-xs text-text-muted hover:text-white transition-colors"
         >
-          {t('firstRun.skipAhead', 'Skip ahead')} &rarr;
+          {t('firstRun.skipToResults', 'Skip to results')} &rarr;
         </button>
       )}
     </div>
