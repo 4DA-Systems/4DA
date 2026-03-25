@@ -42,7 +42,7 @@ function LoadingSkeleton() {
 
 const RISK_COLORS: Record<string, string> = {
   critical: 'text-error',
-  high: 'text-[#F97316]',
+  high: 'text-[var(--color-accent-action)]',
   medium: 'text-accent-gold',
   low: 'text-text-muted',
 };
