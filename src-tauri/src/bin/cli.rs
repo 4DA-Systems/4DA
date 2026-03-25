@@ -545,7 +545,8 @@ fn cmd_health(conn: &rusqlite::Connection, json_mode: bool) {
     for (path, dep_count) in &projects {
         // Get the project name from path
         let name = PathBuf::from(path)
-            .file_name().map_or_else(|| path.clone(), |n| n.to_string_lossy().to_string());
+            .file_name()
+            .map_or_else(|| path.clone(), |n| n.to_string_lossy().to_string());
 
         // Count dev vs prod deps
         let dev_count: i64 = conn
@@ -692,7 +693,9 @@ fn main() {
     }
 
     // Resolve database
-    let db_path = if let Some(p) = resolve_db_path() { p } else {
+    let db_path = if let Some(p) = resolve_db_path() {
+        p
+    } else {
         if json_mode {
             println!("{{\"error\": \"4DA database not found\"}}");
         } else {

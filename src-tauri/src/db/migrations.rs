@@ -1876,6 +1876,10 @@ mod tests {
             // Phase 34: Dependency Intelligence
             "user_dependencies",
             "dependency_alerts",
+            // Phase 39: Briefing history
+            "briefing_item_history",
+            // Phase 40: Necessity scoring persistence
+            "item_necessity",
         ];
         for table in &expected {
             assert!(
