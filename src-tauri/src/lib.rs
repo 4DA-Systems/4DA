@@ -525,6 +525,8 @@ pub fn run() {
             muse_commands::muse_list_sources,
             muse_commands::muse_enrich_prompt,
             muse_commands::muse_get_stats,
+            muse_commands::muse_extract_pack,
+            muse_commands::muse_analyze_image,
             // Content (article reader, AI summaries, saved items)
             content_commands::get_item_content,
             content_commands::get_item_summary,

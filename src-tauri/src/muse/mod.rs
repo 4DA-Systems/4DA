@@ -23,6 +23,8 @@
 //! No creative extractors yet — those ship in Phase 1 (image) and Phase 2 (audio/video).
 
 pub mod db;
+pub mod extract;
+pub mod image_analysis;
 pub mod influence;
 pub mod pack;
 
@@ -343,8 +345,8 @@ pub fn classify_media_type(extension: &str) -> Option<MuseMediaType> {
             Some(MuseMediaType::Audio)
         }
         // Creative project files
-        "aep" | "prproj" | "drp" | "als" | "flp" | "logicx" | "blend" | "c4d" | "ma"
-        | "mb" | "hip" | "nk" | "sketch" | "fig" | "xd" => Some(MuseMediaType::ProjectFile),
+        "aep" | "prproj" | "drp" | "als" | "flp" | "logicx" | "blend" | "c4d" | "ma" | "mb"
+        | "hip" | "nk" | "sketch" | "fig" | "xd" => Some(MuseMediaType::ProjectFile),
         _ => None,
     }
 }
@@ -352,11 +354,9 @@ pub fn classify_media_type(extension: &str) -> Option<MuseMediaType> {
 /// All file extensions MUSE can potentially process
 pub const MUSE_EXTENSIONS: &[&str] = &[
     // Image
-    "png", "jpg", "jpeg", "gif", "webp", "svg", "tiff", "tif", "bmp", "psd", "raw", "cr2",
-    "nef", "arw", "dng", "heic", "heif", "exr",
-    // Video
-    "mp4", "mov", "avi", "mkv", "webm", "flv", "wmv", "m4v",
-    // Audio
+    "png", "jpg", "jpeg", "gif", "webp", "svg", "tiff", "tif", "bmp", "psd", "raw", "cr2", "nef",
+    "arw", "dng", "heic", "heif", "exr", // Video
+    "mp4", "mov", "avi", "mkv", "webm", "flv", "wmv", "m4v", // Audio
     "wav", "flac", "mp3", "aiff", "aif", "ogg", "m4a", "aac", "wma", "opus",
     // Project files
     "aep", "prproj", "drp", "als", "flp", "blend", "c4d", "sketch", "fig", "xd",
@@ -394,18 +394,12 @@ mod tests {
 
     #[test]
     fn test_classify_project_types() {
-        assert_eq!(
-            classify_media_type("aep"),
-            Some(MuseMediaType::ProjectFile)
-        );
+        assert_eq!(classify_media_type("aep"), Some(MuseMediaType::ProjectFile));
         assert_eq!(
             classify_media_type("blend"),
             Some(MuseMediaType::ProjectFile)
         );
-        assert_eq!(
-            classify_media_type("als"),
-            Some(MuseMediaType::ProjectFile)
-        );
+        assert_eq!(classify_media_type("als"), Some(MuseMediaType::ProjectFile));
     }
 
     #[test]
