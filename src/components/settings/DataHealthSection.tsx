@@ -31,8 +31,8 @@ function HealthBadge({ status }: { status: string }) {
     needs_attention: 'Needs attention',
   };
   return (
-    <span className={`px-2 py-0.5 text-xs rounded border ${colors[status] || colors.healthy}`}>
-      {labels[status] || status}
+    <span className={`px-2 py-0.5 text-xs rounded border ${colors[status] ?? colors.healthy}`}>
+      {labels[status] ?? status}
     </span>
   );
 }
@@ -41,17 +41,18 @@ function StatRow({ label, value, muted }: { label: string; value: string | numbe
   return (
     <div className="flex items-center justify-between py-1">
       <span className="text-xs text-text-muted">{label}</span>
-      <span className={`text-xs font-mono ${muted ? 'text-text-muted' : 'text-text-secondary'}`}>{value}</span>
+      <span className={`text-xs font-mono ${muted === true ? 'text-text-muted' : 'text-text-secondary'}`}>{value}</span>
     </div>
   );
 }
 
 function CleanResultSummary({ result }: { result: MaintenanceResult }) {
+  const { t } = useTranslation();
   const total = result.deleted_items + result.deleted_feedback + result.deleted_intelligence
     + result.deleted_windows + result.deleted_cycles + result.deleted_necessity + result.deleted_void;
 
   if (total === 0) {
-    return <p className="text-xs text-text-muted mt-2">Database is already clean — nothing to remove.</p>;
+    return <p className="text-xs text-text-muted mt-2">{t('settings.dataHealth.alreadyClean', 'Database is already clean — nothing to remove.')}</p>;
   }
 
   const lines: string[] = [];
@@ -65,7 +66,7 @@ function CleanResultSummary({ result }: { result: MaintenanceResult }) {
 
   return (
     <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400">
-      <p className="font-medium">Cleaned {total} records{result.vacuumed ? ' + database compacted' : ''}</p>
+      <p className="font-medium">{t('settings.dataHealth.cleanedRecords', { count: total })}{result.vacuumed ? ` + ${t('settings.dataHealth.compacted', 'database compacted')}` : ''}</p>
       <p className="text-green-400/70 mt-0.5">{lines.join(', ')}</p>
     </div>
   );
@@ -94,7 +95,7 @@ export function DataHealthSection() {
   }, []);
 
   useEffect(() => {
-    loadHealth();
+    void loadHealth();
   }, [loadHealth]);
 
   // Listen for data health warnings from monitoring
@@ -102,7 +103,7 @@ export function DataHealthSection() {
     const unlisten = listen<{ message: string }>('data-health-warning', (event) => {
       setWarning(event.payload.message);
     });
-    return () => { unlisten.then(fn => fn()); };
+    return () => { void unlisten.then(fn => fn()); };
   }, []);
 
   const handleDeepClean = async () => {
@@ -113,7 +114,7 @@ export function DataHealthSection() {
       setCleanResult(result);
       setCleanState('done');
       // Refresh stats after clean
-      loadHealth();
+      void loadHealth();
     } catch {
       setCleanState('idle');
     }
@@ -167,7 +168,7 @@ export function DataHealthSection() {
       </div>
 
       {/* Warning banner */}
-      {warning && (
+      {warning != null && warning !== '' && (
         <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-400">
           {warning}
         </div>
@@ -189,10 +190,10 @@ export function DataHealthSection() {
           <StatRow label={t('settings.dataHealth.decisionWindows', 'Decision windows')} value={formatCount(stats.decision_windows)} />
           <StatRow label={t('settings.dataHealth.autophagyCycles', 'Autophagy cycles')} value={formatCount(stats.autophagy_cycles)} />
           <StatRow label={t('settings.dataHealth.necessityScores', 'Necessity scores')} value={formatCount(stats.necessity_scores)} />
-          {stats.oldest_item_date && (
+          {stats.oldest_item_date != null && stats.oldest_item_date !== '' && (
             <StatRow
               label={t('settings.dataHealth.oldestItem', 'Oldest item')}
-              value={stats.oldest_item_date.split('T')[0] || stats.oldest_item_date}
+              value={stats.oldest_item_date.split('T')[0] ?? stats.oldest_item_date}
               muted
             />
           )}
@@ -207,7 +208,7 @@ export function DataHealthSection() {
           </span>
           <span className="text-xs text-text-secondary font-mono">
             {retentionDays} {t('settings.dataHealth.days', 'days')}
-            {retentionSaving && <span className="text-orange-400 ms-1">saving...</span>}
+            {retentionSaving ? <span className="text-orange-400 ms-1">{t('settings.dataHealth.saving', 'saving...')}</span> : null}
           </span>
         </div>
         <input
@@ -216,15 +217,12 @@ export function DataHealthSection() {
           max={365}
           step={1}
           value={retentionDays}
-          onChange={(e) => handleRetentionChange(parseInt(e.target.value))}
+          onChange={(e) => { void handleRetentionChange(parseInt(e.target.value)); }}
           className="w-full h-1 bg-border rounded-full appearance-none cursor-pointer accent-orange-500"
         />
         <div className="flex justify-between text-[10px] text-text-muted mt-1">
-          <span>7d</span>
-          <span>30d</span>
-          <span>90d</span>
-          <span>180d</span>
-          <span>365d</span>
+          {/* eslint-disable-next-line i18next/no-literal-string */}
+          <span>7d</span><span>30d</span><span>90d</span><span>180d</span><span>365d</span>
         </div>
       </div>
 
@@ -247,7 +245,7 @@ export function DataHealthSection() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={handleDeepClean}
+                onClick={() => { void handleDeepClean(); }}
                 className="px-4 py-1.5 text-xs bg-orange-500/20 text-orange-400 rounded hover:bg-orange-500/30 transition-colors"
               >
                 {t('settings.dataHealth.confirmYes', 'Clean now')}
