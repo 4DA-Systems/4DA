@@ -844,6 +844,37 @@ impl Database {
         Ok(())
     }
 
+    /// Persist necessity scores for items so MCP server can query them.
+    /// Uses INSERT OR REPLACE (upsert) — safe to call repeatedly.
+    pub fn persist_necessity_scores(
+        &self,
+        items: &[(u64, f32, Option<String>, Option<String>, Option<String>)],
+    ) -> SqliteResult<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let conn = self.conn.lock();
+        // Ensure table exists (graceful for pre-migration DBs)
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS item_necessity (
+                source_item_id INTEGER PRIMARY KEY REFERENCES source_items(id),
+                necessity_score REAL NOT NULL DEFAULT 0.0,
+                necessity_reason TEXT,
+                necessity_category TEXT,
+                necessity_urgency TEXT,
+                scored_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )",
+        )?;
+        let mut stmt = conn.prepare_cached(
+            "INSERT OR REPLACE INTO item_necessity (source_item_id, necessity_score, necessity_reason, necessity_category, necessity_urgency, scored_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+        )?;
+        for (id, score, reason, category, urgency) in items {
+            stmt.execute(params![id, score, reason, category, urgency])?;
+        }
+        Ok(())
+    }
+
     /// Get aggregate scoring stats (lifetime rejection rate)
     pub fn get_scoring_stats(&self) -> SqliteResult<ScoringStatsAggregate> {
         let conn = self.conn.lock();
