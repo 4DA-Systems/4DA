@@ -11,7 +11,7 @@ interface DiagnosticCheck {
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; icon: string }> = {
   pass: { bg: 'bg-success/10', text: 'text-success', icon: '\u2714' },
-  warn: { bg: 'bg-[#F97316]/10', text: 'text-[#F97316]', icon: '\u26A0' },
+  warn: { bg: 'bg-[var(--color-accent-action)]/10', text: 'text-[var(--color-accent-action)]', icon: '\u26A0' },
   fail: { bg: 'bg-error/10', text: 'text-error', icon: '\u2716' },
   running: { bg: 'bg-[#3B82F6]/10', text: 'text-[#3B82F6]', icon: '\u23F3' },
 };
@@ -163,7 +163,7 @@ export function ConfigDiagnostics() {
             <span className="text-[10px] text-success">{passCount} passed</span>
           )}
           {warnCount > 0 && (
-            <span className="text-[10px] text-[#F97316]">{warnCount} warnings</span>
+            <span className="text-[10px] text-[var(--color-accent-action)]">{warnCount} warnings</span>
           )}
           {failCount > 0 && (
             <span className="text-[10px] text-error">{failCount} failed</span>

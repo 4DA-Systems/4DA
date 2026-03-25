@@ -165,7 +165,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           inset: '-8px',
           borderRadius: '50%',
           border: '2px solid transparent',
-          borderTopColor: '#F97316',
+          borderTopColor: 'var(--color-accent-action)',
           animation: 'spin 1.5s linear infinite',
         }} />
       </div>
@@ -184,7 +184,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
       {/* Tagline */}
       <p style={{
         fontSize: '1rem',
-        color: '#F97316',
+        color: 'var(--color-accent-action)',
         letterSpacing: '0.05em',
         marginBottom: '2.5rem',
         fontWeight: 500,
@@ -210,7 +210,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           style={{
             height: '100%',
             width: `${progress}%`,
-            backgroundColor: '#F97316',
+            backgroundColor: 'var(--color-accent-action)',
             borderRadius: '2px',
             transition: 'width 300ms ease-out',
           }}
@@ -228,7 +228,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
           <div style={{
             width: '16px',
             height: '16px',
-            border: '2px solid #F97316',
+            border: '2px solid var(--color-accent-action)',
             borderTopColor: 'transparent',
             borderRadius: '50%',
             animation: 'spin 0.8s linear infinite',
@@ -279,7 +279,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
               width: '8px',
               height: '8px',
               borderRadius: '50%',
-              backgroundColor: i <= currentStageIndex ? '#F97316' : 'var(--color-border)',
+              backgroundColor: i <= currentStageIndex ? 'var(--color-accent-action)' : 'var(--color-border)',
               transition: 'background-color 300ms',
             }}
           />

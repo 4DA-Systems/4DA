@@ -20,7 +20,7 @@ export interface DepEntry {
 
 export const SEVERITY_COLORS: Record<Severity, string> = {
   critical: 'bg-error/15 text-error border-error/25',
-  high: 'bg-[#F97316]/15 text-[#F97316] border-[#F97316]/25',
+  high: 'bg-[var(--color-accent-action)]/15 text-[var(--color-accent-action)] border-[var(--color-accent-action)]/25',
   medium: 'bg-accent-gold/15 text-accent-gold border-accent-gold/25',
   low: 'bg-white/5 text-text-muted border-border',
 };

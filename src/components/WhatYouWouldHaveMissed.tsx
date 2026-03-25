@@ -77,7 +77,7 @@ function getSignalColor(item: SourceRelevance): string {
   const type = item.score_breakdown?.content_type || item.signal_type;
   switch (type) {
     case 'security_alert': return '#EF4444';
-    case 'breaking_change': return '#F97316';
+    case 'breaking_change': return 'var(--color-accent-action)';
     case 'dependency_update': return '#3B82F6';
     default: return '#D4AF37';
   }

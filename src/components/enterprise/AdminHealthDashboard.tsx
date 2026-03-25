@@ -74,7 +74,7 @@ export function AdminHealthDashboard() {
   const statusColor = (status: string) => {
     switch (status) {
       case 'healthy': return 'bg-success';
-      case 'degraded': return 'bg-[#F97316]';
+      case 'degraded': return 'bg-[var(--color-accent-action)]';
       case 'down': return 'bg-error';
       default: return 'bg-text-muted';
     }
@@ -145,7 +145,7 @@ export function AdminHealthDashboard() {
         <div className="bg-bg-primary rounded-lg p-3 border border-border/50">
           <p className="text-[10px] text-text-muted">{t('enterprise.health.embeddings', 'Embeddings')}</p>
           <div className="flex items-center gap-2 mt-1">
-            <div className={`w-2 h-2 rounded-full ${diagnostics?.embedding_operational ? 'bg-success' : 'bg-[#F97316]'}`} />
+            <div className={`w-2 h-2 rounded-full ${diagnostics?.embedding_operational ? 'bg-success' : 'bg-[var(--color-accent-action)]'}`} />
             <span className="text-xs text-white">
               {diagnostics?.embedding_model || 'Not configured'}
             </span>
