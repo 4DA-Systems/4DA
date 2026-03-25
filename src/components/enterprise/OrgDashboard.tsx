@@ -147,7 +147,7 @@ export function OrgDashboard() {
                   <span className="text-xs text-white font-medium">{sig.signal_type}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded ${
                     sig.org_severity === 'critical' ? 'bg-error/15 text-error' :
-                    sig.org_severity === 'high' ? 'bg-[#F97316]/15 text-[#F97316]' :
+                    sig.org_severity === 'high' ? 'bg-[var(--color-accent-action)]/15 text-[var(--color-accent-action)]' :
                     'bg-accent-gold/15 text-accent-gold'
                   }`}>
                     {sig.org_severity}
