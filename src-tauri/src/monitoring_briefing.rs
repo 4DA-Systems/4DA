@@ -115,20 +115,8 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         return None;
     }
 
-    // 2. Check time window (within 30min of configured time)
+    // 2. Check if already fired today — check BEFORE time window to short-circuit early
     let now = chrono::Local::now();
-    let (target_hour, target_min) = parse_briefing_time(&briefing_time_str);
-    let now_mins = now.hour() * 60 + now.minute();
-    let target_mins = target_hour * 60 + target_min;
-
-    // Use modular arithmetic to handle midnight rollover correctly.
-    // E.g. briefing_time 23:45 (1425) and now 00:05 (5): diff = (5 - 1425 + 1440) % 1440 = 20
-    let diff = ((now_mins as i32 - target_mins as i32) + 1440) % 1440;
-    if diff > 30 {
-        return None;
-    }
-
-    // 3. Check if already fired today — check both persisted and in-memory state
     let today = now.format("%Y-%m-%d").to_string();
 
     // Check persisted date first (survives restarts)
@@ -146,6 +134,30 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             }
         }
     }
+
+    // 3. Time window check with catch-up logic.
+    //
+    // The briefing fires if EITHER:
+    // (a) We're within 30 minutes AFTER the configured time (normal case), OR
+    // (b) We're past the configured time and the briefing hasn't fired today (catch-up).
+    //
+    // Case (b) handles: user opens app at 10:00 but briefing time is 08:00.
+    // Without catch-up, they'd miss the briefing entirely.
+    let (target_hour, target_min) = parse_briefing_time(&briefing_time_str);
+    let now_mins = now.hour() * 60 + now.minute();
+    let target_mins = target_hour * 60 + target_min;
+
+    // Minutes elapsed since the target time (with midnight rollover)
+    let mins_since_target = ((now_mins as i32 - target_mins as i32) + 1440) % 1440;
+
+    // Not yet reached the target time today (more than 30 min before)
+    if mins_since_target > 1410 {
+        // We're BEFORE the target time (1410 = 1440-30, meaning we're 30+ min early)
+        return None;
+    }
+
+    // We're past the target time — the briefing hasn't fired today (checked above).
+    // Fire it. The already-fired-today check prevents double delivery.
 
     // 4. Get top relevant items from in-memory analysis state or DB
     let items: Vec<BriefingItem> = {
