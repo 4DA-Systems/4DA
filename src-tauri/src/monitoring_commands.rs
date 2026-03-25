@@ -346,6 +346,137 @@ pub async fn get_launch_at_startup(app: tauri::AppHandle) -> Result<bool> {
     Ok(autostart.is_enabled().unwrap_or(false))
 }
 
+// ============================================================================
+// Morning Briefing Configuration
+// ============================================================================
+
+/// Set whether the morning intelligence briefing is enabled.
+#[tauri::command]
+pub async fn set_morning_briefing_enabled(enabled: bool) -> Result<serde_json::Value> {
+    {
+        let mut settings = get_settings_manager().lock();
+        let m = settings.get().monitoring.clone();
+        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+            morning_briefing: Some(enabled),
+            ..m
+        });
+    }
+    info!(target: "4da::settings", morning_briefing = enabled, "Morning briefing updated");
+    Ok(serde_json::json!({
+        "morning_briefing": enabled,
+        "message": if enabled { "Morning briefing enabled" } else { "Morning briefing disabled" }
+    }))
+}
+
+/// Get the current morning briefing configuration.
+#[tauri::command]
+pub async fn get_morning_briefing_config() -> Result<serde_json::Value> {
+    let settings = get_settings_manager().lock();
+    let m = &settings.get().monitoring;
+    Ok(serde_json::json!({
+        "enabled": m.morning_briefing.unwrap_or(true),
+        "time": m.briefing_time.clone().unwrap_or_else(|| "08:00".to_string()),
+    }))
+}
+
+/// Set the morning briefing time (HH:MM format).
+#[tauri::command]
+pub async fn set_briefing_time(time: String) -> Result<serde_json::Value> {
+    // Validate HH:MM format
+    let parts: Vec<&str> = time.split(':').collect();
+    if parts.len() != 2 {
+        return Err("Invalid time format — use HH:MM".into());
+    }
+    let hour = parts[0].parse::<u32>().map_err(|_| "Invalid hour")?;
+    let minute = parts[1].parse::<u32>().map_err(|_| "Invalid minute")?;
+    if hour > 23 || minute > 59 {
+        return Err("Time out of range (00:00–23:59)".into());
+    }
+    let validated = format!("{:02}:{:02}", hour, minute);
+
+    {
+        let mut settings = get_settings_manager().lock();
+        let m = settings.get().monitoring.clone();
+        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+            briefing_time: Some(validated.clone()),
+            ..m
+        });
+    }
+    info!(target: "4da::settings", briefing_time = %validated, "Briefing time updated");
+    Ok(serde_json::json!({
+        "briefing_time": validated,
+        "message": format!("Briefing time set to {}", validated)
+    }))
+}
+
+/// Trigger the intelligence briefing window manually for testing/preview.
+#[tauri::command]
+pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_json::Value> {
+    use crate::monitoring_briefing::{
+        BriefingItem, BriefingNotification, ChainSummary, KnowledgeGap,
+    };
+
+    let now = chrono::Local::now();
+    let preview = BriefingNotification {
+        title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
+        items: vec![
+            BriefingItem {
+                title: "Critical RCE in SQLite 3.50 — affects all platforms".to_string(),
+                source_type: "hackernews".to_string(),
+                score: 0.95,
+                signal_type: Some("security_alert".to_string()),
+                url: Some("https://example.com/sqlite-cve".to_string()),
+                item_id: Some(1),
+                signal_priority: Some("critical".to_string()),
+                description: Some(
+                    "Patch SQLite immediately — your projects depend on it".to_string(),
+                ),
+                matched_deps: vec!["sqlite".to_string(), "rusqlite".to_string()],
+            },
+            BriefingItem {
+                title: "Tauri 3.0 drops macOS 11 support — migration guide".to_string(),
+                source_type: "github".to_string(),
+                score: 0.82,
+                signal_type: Some("breaking_change".to_string()),
+                url: Some("https://example.com/tauri3".to_string()),
+                item_id: Some(2),
+                signal_priority: Some("alert".to_string()),
+                description: Some("Review migration guide before upgrading".to_string()),
+                matched_deps: vec!["tauri".to_string()],
+            },
+            BriefingItem {
+                title: "Show HN: Rust testing framework 10x faster than cargo test".to_string(),
+                source_type: "hackernews".to_string(),
+                score: 0.71,
+                signal_type: Some("tool_discovery".to_string()),
+                url: None,
+                item_id: Some(3),
+                signal_priority: Some("advisory".to_string()),
+                description: Some("Evaluate for your Rust workflow".to_string()),
+                matched_deps: vec![],
+            },
+        ],
+        total_relevant: 3,
+        ongoing_topics: vec!["WebAssembly".to_string(), "AI agents".to_string()],
+        knowledge_gaps: vec![KnowledgeGap {
+            topic: "React".to_string(),
+            days_since_last: 12,
+        }],
+        escalating_chains: vec![ChainSummary {
+            name: "SQLite security chain (3 events)".to_string(),
+            phase: "escalating".to_string(),
+            link_count: 3,
+            action: "Review security implications for SQLite in your projects".to_string(),
+            confidence: 0.87,
+        }],
+    };
+
+    crate::briefing_window::show_briefing(&app, &preview);
+
+    info!(target: "4da::settings", "Briefing preview triggered");
+    Ok(serde_json::json!({ "message": "Briefing preview shown" }))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::monitoring::{BatchedNotification, MonitoringState};

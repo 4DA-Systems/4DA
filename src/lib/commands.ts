@@ -124,6 +124,10 @@ interface CommandMap {
   notification_clicked: { params: { item_id?: number | null }; result: void };
   briefing_item_clicked: { params: { item_id?: number | null }; result: void };
   briefing_open_url: { params: { url: string }; result: void };
+  set_morning_briefing_enabled: { params: { enabled: boolean }; result: { morning_briefing: boolean; message: string } };
+  get_morning_briefing_config: { params: Record<string, never>; result: { enabled: boolean; time: string } };
+  set_briefing_time: { params: { time: string }; result: { briefing_time: string; message: string } };
+  trigger_briefing_preview: { params: Record<string, never>; result: { message: string } };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
 
   // -- Taste Test Calibration --

@@ -93,6 +93,105 @@ function LaunchAtStartupToggle() {
   );
 }
 
+function MorningBriefingSection() {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(true);
+  const [time, setTime] = useState('08:00');
+  const [loaded, setLoaded] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+
+  useEffect(() => {
+    cmd('get_morning_briefing_config')
+      .then((config) => {
+        setEnabled(config.enabled);
+        setTime(config.time);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, []);
+
+  const toggleBriefing = async () => {
+    const next = !enabled;
+    setEnabled(next);
+    try {
+      await cmd('set_morning_briefing_enabled', { enabled: next });
+    } catch {
+      setEnabled(!next);
+    }
+  };
+
+  const updateTime = async (newTime: string) => {
+    setTime(newTime);
+    try {
+      await cmd('set_briefing_time', { time: newTime });
+    } catch {
+      // Revert handled by next load
+    }
+  };
+
+  const previewBriefing = async () => {
+    setPreviewing(true);
+    try {
+      await cmd('trigger_briefing_preview');
+    } catch {
+      // Non-fatal
+    }
+    setTimeout(() => setPreviewing(false), 2000);
+  };
+
+  if (!loaded) return null;
+
+  return (
+    <div className="space-y-3 p-3 bg-bg-secondary rounded-lg border border-border">
+      <div className="flex items-center justify-between">
+        <div>
+          <span className="text-sm text-white font-medium">
+            {t('settings.monitoring.morningBriefing', 'Intelligence Briefing')}
+          </span>
+          <p className="text-xs text-text-muted">
+            {t('settings.monitoring.morningBriefingDescription', 'Center-screen daily briefing with signals, knowledge gaps, and escalating chains')}
+          </p>
+        </div>
+        <button
+          onClick={toggleBriefing}
+          className={`relative w-10 h-5 rounded-full transition-colors ${
+            enabled ? 'bg-green-500/40' : 'bg-gray-600'
+          }`}
+        >
+          <span
+            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-5' : 'translate-x-0.5'
+            }`}
+          />
+        </button>
+      </div>
+
+      {enabled && (
+        <div className="flex items-center gap-3">
+          <label className="text-xs text-text-secondary">
+            {t('settings.monitoring.briefingTime', 'Briefing time')}
+          </label>
+          <input
+            type="time"
+            value={time}
+            onChange={(e) => updateTime(e.target.value)}
+            className="px-2 py-1 bg-bg-primary border border-border rounded text-sm text-white focus:border-orange-500 focus:outline-none"
+          />
+          <button
+            onClick={previewBriefing}
+            disabled={previewing}
+            className="ms-auto px-3 py-1 text-xs bg-bg-primary border border-border text-text-secondary rounded hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50"
+          >
+            {previewing
+              ? t('settings.monitoring.briefingPreviewing', 'Showing...')
+              : t('settings.monitoring.briefingPreview', 'Preview briefing')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function MonitoringSection({
   monitoring,
   monitoringInterval,
@@ -195,6 +294,8 @@ export function MonitoringSection({
               <option value="native">{t('settings.monitoring.styleNative', 'OS native')}</option>
             </select>
           </div>
+
+          <MorningBriefingSection />
 
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
           <LaunchAtStartupToggle />
