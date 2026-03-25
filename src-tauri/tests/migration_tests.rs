@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 //! Migration and settings hardening tests
 //!
 //! Tests that database migrations are transactional, backups are created,
