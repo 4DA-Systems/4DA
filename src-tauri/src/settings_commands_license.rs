@@ -100,9 +100,18 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     let mut guard = manager.lock();
 
     let settings = guard.get_mut();
-    // Store license key in platform keychain
+    // Store license key in platform keychain (best-effort — key also persists to disk).
+    // store_secret() always returns Ok(()) even on failure, so we verify with has_secret().
     if !license_key.is_empty() {
         let _ = crate::settings::keystore::store_secret("license_key", &license_key);
+        // Verify the keychain write actually stuck
+        if !crate::settings::keystore::has_secret("license_key") {
+            warn!(
+                target: "4da::license",
+                "Keychain write appeared to succeed but key not found on read-back. \
+                 License key will be persisted to settings.json as fallback."
+            );
+        }
     }
     settings.license.license_key = license_key;
     settings.license.tier = effective_tier.clone();
@@ -221,6 +230,86 @@ pub async fn validate_license() -> Result<serde_json::Value> {
         "cached": result.cached,
         "detail": result.detail,
     }))
+}
+
+/// Recover a license key by purchase email.
+/// Calls the Vercel API to look up the key, then auto-activates if found.
+#[tauri::command]
+pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value> {
+    validate_input_length(&email, "Email", 254)?;
+    crate::settings::check_activation_rate_limit()?;
+
+    let response = crate::http_client::HTTP_CLIENT
+        .get("https://4da.ai/api/streets/activate")
+        .query(&[("email", email.as_str())])
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+
+            match status {
+                200 => {
+                    // Extract license key and auto-activate
+                    let license_key = body["license_key"].as_str().unwrap_or("").to_string();
+                    let tier = body["tier"].as_str().unwrap_or("signal").to_string();
+
+                    if license_key.is_empty() {
+                        return Ok(serde_json::json!({ "success": false, "reason": "not_found" }));
+                    }
+
+                    // Auto-activate: store in keychain + settings
+                    let effective_tier = match tier.as_str() {
+                        "signal" | "team" | "enterprise" => tier.clone(),
+                        "pro" | "community" | "cohort" => "signal".to_string(),
+                        _ => tier.clone(),
+                    };
+
+                    let manager = get_settings_manager();
+                    let mut guard = manager.lock();
+                    let settings = guard.get_mut();
+
+                    let _ = crate::settings::keystore::store_secret("license_key", &license_key);
+                    settings.license.license_key = license_key.clone();
+                    settings.license.tier = effective_tier.clone();
+                    settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
+                    guard.save()?;
+
+                    info!(target: "4da::license", tier = %effective_tier, "License recovered and activated via email lookup");
+
+                    Ok(serde_json::json!({
+                        "success": true,
+                        "license_key": license_key,
+                        "tier": effective_tier,
+                        "expires_at": body["expires_at"],
+                        "status": body["status"],
+                    }))
+                }
+                404 => Ok(serde_json::json!({ "success": false, "reason": "not_found" })),
+                410 => Ok(serde_json::json!({
+                    "success": false,
+                    "reason": "expired",
+                    "detail": body["expired_at"].as_str().unwrap_or(""),
+                })),
+                _ => Ok(serde_json::json!({
+                    "success": false,
+                    "reason": "network_error",
+                    "detail": format!("Unexpected status: {}", status),
+                })),
+            }
+        }
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, "License recovery API unreachable");
+            Ok(serde_json::json!({
+                "success": false,
+                "reason": "network_error",
+                "detail": format!("Network error: {}", e),
+            }))
+        }
+    }
 }
 
 // ============================================================================

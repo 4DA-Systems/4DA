@@ -345,6 +345,7 @@ export interface LicenseSlice {
   proValueReport: import('../types').ProValueReport | null;
   loadLicense: () => Promise<void>;
   activateLicense: (key: string) => Promise<{ ok: boolean; reason?: string }>;
+  recoverLicenseByEmail: (email: string) => Promise<{ ok: boolean; reason?: string; tier?: string }>;
   loadTrialStatus: () => Promise<void>;
   startTrial: () => Promise<boolean>;
   isPro: () => boolean;
