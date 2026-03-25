@@ -229,7 +229,7 @@
   "settings.license.recovery.retrieve": "Retrieve License",
   "settings.license.recovery.placeholder": "your@email.com",
   "settings.license.recovery.success": "License recovered and activated!",
-  "settings.license.recovery.notFound": "No license found for this email. Make sure you're using the same email from your purchase.",
+  "settings.license.recovery.notFound": "No license found for this email. Check you're using the same email from your purchase. If you received your key directly, enter it in the activation field above.",
   "settings.license.recovery.expired": "Your license has expired. Renew at 4da.ai/signal to get a new key.",
   "settings.license.recovery.networkError": "Could not reach the recovery server. Check your internet connection and try again.",
   "settings.license.recovery.rateLimited": "Too many attempts. Please wait a moment before trying again.",
