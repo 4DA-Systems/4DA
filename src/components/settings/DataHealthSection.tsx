@@ -4,7 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../../lib/commands';
 import type { DataHealth, MaintenanceResult } from '../../types/autophagy';
 
-type CleanState = 'idle' | 'confirming' | 'cleaning' | 'done';
+type CleanState = 'idle' | 'cleaning' | 'done';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -226,60 +226,86 @@ export function DataHealthSection() {
         </div>
       </div>
 
-      {/* Deep clean button */}
-      <div className="space-y-2">
-        {cleanState === 'idle' && (
-          <button
-            onClick={() => setCleanState('confirming')}
-            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
-          >
-            {t('settings.dataHealth.deepClean', 'Deep clean database')}
-          </button>
-        )}
+      {/* Routine Maintenance */}
+      <div className="p-3 bg-bg-secondary rounded-lg border border-border">
+        <div className="flex items-center gap-2 mb-2.5">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-orange-400 flex-shrink-0">
+            <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5a5.5 5.5 0 110-11 5.5 5.5 0 010 11zM8 4v4.5l3 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span className="text-xs font-medium text-white">
+            {t('settings.dataHealth.maintenanceTitle', 'Routine maintenance')}
+          </span>
+        </div>
 
-        {cleanState === 'confirming' && (
-          <div className="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
-            <p className="text-xs text-orange-400 mb-2">
-              {t('settings.dataHealth.confirmClean',
-                'This will remove old items, expired data, and compact the database. Active intelligence is preserved.')}
+        <p className="text-[11px] text-text-muted mb-3 leading-relaxed">
+          {t('settings.dataHealth.maintenanceDesc',
+            'Removes expired data that has already been processed and is no longer needed. Think of it as emptying the recycling bin — your intelligence stays, the clutter goes.')}
+        </p>
+
+        {/* What happens — always visible */}
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="p-2 rounded bg-bg-tertiary">
+            <p className="text-[10px] text-green-400 font-medium mb-1">
+              {t('settings.dataHealth.preserved', 'Preserved')}
             </p>
-            <div className="flex gap-2">
+            <ul className="text-[10px] text-text-muted space-y-0.5">
+              <li>{t('settings.dataHealth.preserveCalibrations', 'Active calibrations')}</li>
+              <li>{t('settings.dataHealth.preserveRecent', 'Recent content')}</li>
+              <li>{t('settings.dataHealth.preserveDecisions', 'Open decisions')}</li>
+              <li>{t('settings.dataHealth.preserveProfile', 'Your profile & interests')}</li>
+            </ul>
+          </div>
+          <div className="p-2 rounded bg-bg-tertiary">
+            <p className="text-[10px] text-text-secondary font-medium mb-1">
+              {t('settings.dataHealth.removed', 'Cleaned up')}
+            </p>
+            <ul className="text-[10px] text-text-muted space-y-0.5">
+              <li>{t('settings.dataHealth.removeOld', 'Expired content')}</li>
+              <li>{t('settings.dataHealth.removeOrphaned', 'Orphaned records')}</li>
+              <li>{t('settings.dataHealth.removeSuperseded', 'Superseded data')}</li>
+              <li>{t('settings.dataHealth.removeFragments', 'Database fragments')}</li>
+            </ul>
+          </div>
+        </div>
+
+        {/* When to use hint */}
+        <p className="text-[10px] text-text-muted mb-3 italic">
+          {t('settings.dataHealth.whenToUse',
+            'Recommended monthly, or when the database size indicator above shows "Growing" or "Needs attention".')}
+        </p>
+
+        {/* Action area */}
+        <div className="space-y-2">
+          {cleanState === 'idle' && (
+            <button
+              onClick={() => { void handleDeepClean(); }}
+              className="w-full px-4 py-2 text-xs bg-bg-tertiary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+            >
+              {t('settings.dataHealth.runMaintenance', 'Run maintenance now')}
+            </button>
+          )}
+
+          {cleanState === 'cleaning' && (
+            <div className="flex items-center justify-center gap-2 py-2">
+              <div className="w-3 h-3 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-orange-400">
+                {t('settings.dataHealth.cleaning', 'Cleaning database...')}
+              </span>
+            </div>
+          )}
+
+          {cleanState === 'done' && cleanResult && (
+            <div>
+              <CleanResultSummary result={cleanResult} />
               <button
-                onClick={() => { void handleDeepClean(); }}
-                className="px-4 py-1.5 text-xs bg-orange-500/20 text-orange-400 rounded hover:bg-orange-500/30 transition-colors"
+                onClick={() => { setCleanState('idle'); setCleanResult(null); }}
+                className="mt-2 text-xs text-text-muted hover:text-white transition-colors"
               >
-                {t('settings.dataHealth.confirmYes', 'Clean now')}
-              </button>
-              <button
-                onClick={() => setCleanState('idle')}
-                className="px-4 py-1.5 text-xs bg-bg-secondary text-text-muted rounded hover:text-white transition-colors"
-              >
-                {t('settings.dataHealth.confirmNo', 'Cancel')}
+                {t('settings.dataHealth.dismiss', 'Dismiss')}
               </button>
             </div>
-          </div>
-        )}
-
-        {cleanState === 'cleaning' && (
-          <div className="flex items-center gap-2 p-3 bg-bg-secondary border border-border rounded-lg">
-            <div className="w-3 h-3 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs text-orange-400">
-              {t('settings.dataHealth.cleaning', 'Cleaning database...')}
-            </span>
-          </div>
-        )}
-
-        {cleanState === 'done' && cleanResult && (
-          <div>
-            <CleanResultSummary result={cleanResult} />
-            <button
-              onClick={() => { setCleanState('idle'); setCleanResult(null); }}
-              className="mt-2 text-xs text-text-muted hover:text-white transition-colors"
-            >
-              {t('settings.dataHealth.dismiss', 'Dismiss')}
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
