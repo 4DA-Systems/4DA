@@ -198,7 +198,7 @@ function App() {
     // Compute progressive disclosure tier from persisted state
     computeViewTier();
     // Prune stale personalization cache (non-blocking)
-    cmd('prune_personalization_cache').catch(() => {});
+    cmd('prune_personalization_cache').catch((e) => console.debug('[App] prune cache:', e));
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
   // Deep-link handler: 4da://activate?key=...

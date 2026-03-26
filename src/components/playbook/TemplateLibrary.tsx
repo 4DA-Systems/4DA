@@ -178,7 +178,7 @@ export function TemplateLibrary() {
   useEffect(() => {
     cmd('get_templates')
       .then(setTemplates)
-      .catch(() => { /* non-fatal */ });
+      .catch((e) => console.debug('[TemplateLibrary] get_templates:', e));
   }, []);
 
   const categories = useMemo(() => {

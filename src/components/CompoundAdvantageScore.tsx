@@ -45,7 +45,7 @@ export const CompoundAdvantageScore = memo(function CompoundAdvantageScore() {
     loadAdvantage();
     cmd('get_advantage_history', { period: 'weekly', limit: 8 })
       .then(setHistory)
-      .catch(() => {/* silent */});
+      .catch((e) => console.debug('[CompoundAdvantageScore] history:', e));
   }, [loadAdvantage]);
 
   if (!advantage) return null;

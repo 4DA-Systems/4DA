@@ -82,7 +82,7 @@ export function AuditLogViewer() {
     setOffset(0);
     loadAuditLog(auditActionFilter || undefined, auditResourceFilter || undefined, PAGE_SIZE, 0)
       .catch(e => setError(String(e)));
-    loadAuditSummary(30).catch(() => {});
+    loadAuditSummary(30).catch((e) => console.debug('[AuditLogViewer] summary:', e));
   }, [auditActionFilter, auditResourceFilter, loadAuditLog, loadAuditSummary]);
 
   const handleRefresh = useCallback(() => {
@@ -90,7 +90,7 @@ export function AuditLogViewer() {
     setError(null);
     loadAuditLog(auditActionFilter || undefined, auditResourceFilter || undefined, PAGE_SIZE, 0)
       .catch(e => setError(String(e)));
-    loadAuditSummary(30).catch(() => {});
+    loadAuditSummary(30).catch((e) => console.debug('[AuditLogViewer] summary refresh:', e));
   }, [auditActionFilter, auditResourceFilter, loadAuditLog, loadAuditSummary]);
 
   const handleLoadMore = useCallback(() => {
