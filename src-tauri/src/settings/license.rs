@@ -53,6 +53,12 @@ pub fn check_activation_rate_limit() -> Result<()> {
     Ok(())
 }
 
+/// Clear the activation rate limiter. Called after successful activation
+/// so users who typo'd several times aren't blocked from retrying.
+pub fn clear_activation_rate_limit() {
+    ACTIVATION_ATTEMPTS.lock().clear();
+}
+
 // ============================================================================
 // Periodic Runtime Re-validation
 // ============================================================================
@@ -650,11 +656,27 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
             save_validation_cache(&cache);
         }
 
+        // Map Keygen error codes to human-readable messages
+        let detail = match validation_code.as_str() {
+            "NO_MACHINES" | "NO_MACHINE" => {
+                "This license key requires device activation. Please contact support or check your email for activation instructions.".to_string()
+            }
+            "FINGERPRINT_SCOPE_REQUIRED" => {
+                "This license key requires device registration. Please contact support.".to_string()
+            }
+            "SUSPENDED" => "This license has been suspended. Please contact support.".to_string(),
+            "EXPIRED" => {
+                "This license has expired. Renew at 4da.ai/signal to get a new key.".to_string()
+            }
+            "NOT_FOUND" => "License key not recognized. Please check and try again.".to_string(),
+            _ => format!("License validation failed ({validation_code})"),
+        };
+
         KeygenValidationResult {
             online: true,
             tier: "free".to_string(),
             cached: false,
-            detail: format!("Invalid key ({validation_code})"),
+            detail,
             code: validation_code,
         }
     }
