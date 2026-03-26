@@ -80,7 +80,7 @@ pub(crate) fn compute_anti_penalty(topics: &[String], ace_ctx: &ACEContext) -> f
 /// Domain penalty for items with zero tech/topic overlap.
 /// If none of the item's extracted topics match ANY of: declared_tech, detected_tech, or active_topics,
 /// apply a strong penalty. No domain overlap = almost certainly noise.
-#[score_component(output_range = "0.0..=0.50")]
+#[score_component(output_range = "0.0..=0.60")]
 pub(crate) fn compute_off_domain_penalty(
     topics: &[String],
     ace_ctx: &ACEContext,

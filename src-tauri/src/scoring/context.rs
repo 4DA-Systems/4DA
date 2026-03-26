@@ -102,6 +102,86 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         (dp, cs, ow, cd, thl, sp)
     };
 
+    // ── ACE Auto-Enrichment: promote high-confidence detected tech into domain profile ──
+    let mut domain_profile = domain_profile;
+    {
+        // Access raw ACE detected tech (with confidence/category) before it's flattened to strings
+        let raw_detected_tech = match crate::get_ace_engine() {
+            Ok(ace) => ace.get_detected_tech().unwrap_or_default(),
+            Err(_) => vec![],
+        };
+        let mut promoted = 0usize;
+        for tech in &raw_detected_tech {
+            if tech.confidence >= 0.75
+                && matches!(
+                    tech.category,
+                    crate::ace::TechCategory::Language | crate::ace::TechCategory::Framework
+                )
+            {
+                let name_lower = tech.name.to_lowercase();
+                if !domain_profile.primary_stack.contains(&name_lower)
+                    && !domain_profile.all_tech.contains(&name_lower)
+                {
+                    domain_profile.all_tech.insert(name_lower.clone());
+                    domain_profile.ace_promoted_tech.insert(name_lower);
+                    promoted += 1;
+                }
+            }
+        }
+        if promoted > 0 {
+            tracing::info!(target: "4da::scoring", promoted, "ACE auto-enrichment: promoted detected tech into domain profile");
+        }
+    }
+
+    // ── Synthesize implicit interests from high-confidence ACE active topics ──
+    let mut interests = static_identity.interests;
+    {
+        let existing: std::collections::HashSet<String> =
+            interests.iter().map(|i| i.topic.to_lowercase()).collect();
+        let mut synthesized = 0usize;
+        for topic_name in &ace_ctx.active_topics {
+            if synthesized >= 5 {
+                break; // cap at 5 to avoid over-broadening
+            }
+            let conf = ace_ctx
+                .topic_confidence
+                .get(topic_name)
+                .copied()
+                .unwrap_or(0.0);
+            if conf >= 0.75 && !existing.contains(&topic_name.to_lowercase()) {
+                let embedding = topic_embeddings.get(topic_name).cloned();
+                interests.push(crate::context_engine::Interest {
+                    id: None,
+                    topic: topic_name.clone(),
+                    weight: 0.6,
+                    embedding,
+                    source: crate::context_engine::InterestSource::Inferred,
+                });
+                synthesized += 1;
+            }
+        }
+        if synthesized > 0 {
+            tracing::info!(target: "4da::scoring", synthesized, "ACE auto-enrichment: synthesized interests from active topics");
+        }
+    }
+
+    // ── Count implicit interactions for faster bootstrap exit ──
+    let implicit_interaction_count: i64 = {
+        let conn = crate::open_db_connection();
+        match conn {
+            Ok(c) => c
+                .query_row(
+                    "SELECT COUNT(*) FROM interactions WHERE ABS(signal_strength) >= 0.3",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0),
+            Err(_) => 0,
+        }
+    };
+    // 3 implicit signals = 1 effective explicit signal
+    let effective_feedback_count = feedback_interaction_count + implicit_interaction_count / 3;
+
     // Warm-start source preferences from stack profiles (only fills gaps)
     let mut source_quality = source_quality;
     if composed_stack.active {
@@ -186,14 +266,19 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         "ACE context loaded for scoring"
     );
 
-    if feedback_interaction_count < 10 {
-        info!(target: "4da::scoring", feedback_count = feedback_interaction_count, "Bootstrap mode: relaxed 1-signal gate for new user");
+    if effective_feedback_count < 10 {
+        info!(target: "4da::scoring",
+            explicit = feedback_interaction_count,
+            implicit = implicit_interaction_count,
+            effective = effective_feedback_count,
+            "Bootstrap mode: relaxed 1-signal gate for new user"
+        );
     }
 
     let context = ScoringContext {
         cached_context_count,
-        interest_count: static_identity.interests.len(),
-        interests: static_identity.interests,
+        interest_count: interests.len(),
+        interests,
         exclusions: static_identity.exclusions,
         ace_ctx,
         topic_embeddings,
@@ -202,7 +287,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         declared_tech,
         domain_profile,
         work_topics,
-        feedback_interaction_count,
+        feedback_interaction_count: effective_feedback_count,
         composed_stack,
         open_windows,
         calibration_deltas,

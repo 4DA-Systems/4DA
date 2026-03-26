@@ -530,6 +530,7 @@ pub(crate) fn score_item(
         affinity_mult,
         dep_match_score,
         stack_pain_match,
+        specificity_weight,
     );
 
     // Unified scoring (applies affinity + anti-penalty on gated score)
