@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0A0A0A">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%23F97316'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='Inter,sans-serif' font-weight='600' font-size='20' fill='white'%3E4%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <title>License Activated -- 4DA Signal</title>
+  
+  <meta name="description" content="Your 4DA Signal license is ready. Activate it in the app.">
+  
+  
+  <link rel="canonical" href="https://4da.ai/signal/success">
+  <meta name="robots" content="noindex">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A;
+      color: #FFFFFF;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 480px;
+      width: 100%;
+      margin: 20px;
+      text-align: center;
+    }
+    .check { font-size: 48px; margin-bottom: 16px; }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
+    .subtitle { font-size: 14px; color: #A0A0A0; margin-bottom: 32px; line-height: 1.5; }
+    .result { margin-top: 0; padding: 16px; border-radius: 8px; text-align: left; font-size: 13px; line-height: 1.6; }
+    .result.success { background: #22C55E10; border: 1px solid #22C55E30; color: #22C55E; }
+    .result.error { background: #EF444410; border: 1px solid #EF444430; color: #EF4444; }
+    .result.loading { background: #D4AF3710; border: 1px solid #D4AF3730; color: #D4AF37; }
+    .license-key {
+      display: block; margin-top: 8px; padding: 12px;
+      background: #0A0A0A; border: 1px solid #2A2A2A; border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace; font-size: 11px;
+      color: #D4AF37; word-break: break-all; user-select: all;
+    }
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+    .btn-row button {
+      flex: 1; padding: 12px 16px; font-size: 13px; font-weight: 600;
+      border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s;
+    }
+    .open-btn { background: #22C55E; color: #000; }
+    .open-btn:hover { background: #16A34A; }
+    .copy-btn { background: #1F1F1F; color: #A0A0A0; border: 1px solid #2A2A2A !important; }
+    .copy-btn:hover { color: #fff; border-color: #D4AF37 !important; }
+    .steps { margin-top: 24px; text-align: left; font-size: 13px; color: #A0A0A0; line-height: 1.8; }
+    .steps strong { color: #fff; }
+    a { color: #D4AF37; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    label { display: block; text-align: left; font-size: 13px; color: #A0A0A0; margin-bottom: 6px; }
+    input {
+      width: 100%; padding: 12px 16px; background: #0A0A0A;
+      border: 1px solid #2A2A2A; border-radius: 8px; color: #FFFFFF;
+      font-size: 14px; outline: none; transition: border-color 0.2s;
+    }
+    input:focus { border-color: #D4AF37; }
+    input::placeholder { color: #666; }
+    .btn-primary {
+      display: block; width: 100%; padding: 12px 24px; margin-top: 16px;
+      font-size: 14px; font-weight: 600; border: none; border-radius: 8px;
+      cursor: pointer; background: #D4AF37; color: #000; transition: all 0.2s;
+    }
+    .btn-primary:hover { background: #C4A030; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+
+
+  <!-- PostHog Analytics -->
+  <script>
+    !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister opt_out_capturing has_opted_out_capturing opt_in_capturing reset isFeatureEnabled getFeatureFlag getFeatureFlagPayload reloadFeatureFlags group identify setPersonProperties setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags resetGroups onFeatureFlags addFeatureFlagsHandler onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+    posthog.init('phc_TmxPJznGXgNopNfM8WOrJ5p6gRJUHT67y6lSjIW63U4', {
+      api_host: 'https://us.i.posthog.com',
+      person_profiles: 'identified_only',
+      capture_pageview: true,
+      capture_pageleave: true,
+      autocapture: true
+    });
+  </script>
+  <!-- Crisp Customer Support -->
+  <script type="text/javascript">
+    window.$crisp=[];
+    window.CRISP_WEBSITE_ID="PASTE_YOUR_CRISP_WEBSITE_ID_HERE";
+    $crisp.push(["safe", true]);
+    (function(){
+      var d=document;
+      var s=d.createElement("script");
+      s.src="https://client.crisp.chat/l.js";
+      s.async=1;
+      d.getElementsByTagName("head")[0].appendChild(s);
+    })();
+  </script>
+</head>
+<body>
+  
+  <div class="card">
+    <div class="check" id="check-icon">...</div>
+    <h1 id="heading">Retrieving your license...</h1>
+    <p class="subtitle" id="subtitle">Please wait a moment.</p>
+
+    <div id="auto-result"></div>
+
+    <div id="manual-form" style="display:none;">
+      <form onsubmit="return handleManual(event)">
+        <label for="email">Email address used at checkout</label>
+        <input type="email" id="email" placeholder="you@example.com" required>
+        <button type="submit" class="btn-primary" id="manual-btn">Retrieve License Key</button>
+      </form>
+    </div>
+
+    <div class="steps" id="steps" style="display:none;">
+      <p><strong>How to activate:</strong></p>
+      <p>1. Click "Open in 4DA" to activate instantly</p>
+      <p>2. Or copy the key and paste it in 4DA &rarr; Settings &rarr; License</p>
+      <p style="margin-top: 12px;"><a href="/signal">Back to Signal</a> &middot; <a href="/">Home</a></p>
+    </div>
+  </div>
+
+  <script>
+    var currentKey = null;
+
+    function showLicense(data) {
+      currentKey = data.license_key;
+      document.getElementById('check-icon').textContent = '\u2713';
+      document.getElementById('heading').textContent = 'Signal activated';
+      document.getElementById('subtitle').textContent = 'Your license key is ready. Click below to activate in 4DA.';
+
+      var el = document.getElementById('auto-result');
+      el.className = 'result success';
+      el.innerHTML =
+        '<p>Tier: <strong></strong></p>' +
+        '<code class="license-key"></code>' +
+        '<div class="btn-row">' +
+          '<button class="open-btn" onclick="openInApp()">Open in 4DA</button>' +
+          '<button class="copy-btn" onclick="copyKey()">Copy Key</button>' +
+        '</div>';
+      el.querySelector('strong').textContent = data.tier || 'signal';
+      el.querySelector('.license-key').textContent = data.license_key;
+      document.getElementById('steps').style.display = 'block';
+    }
+
+    function showError(msg) {
+      document.getElementById('check-icon').textContent = '!';
+      document.getElementById('heading').textContent = 'Could not auto-retrieve';
+      document.getElementById('subtitle').textContent = 'Enter the email you used at checkout.';
+      document.getElementById('manual-form').style.display = 'block';
+
+      var el = document.getElementById('auto-result');
+      if (msg) {
+        el.className = 'result error';
+        el.innerHTML = '<p></p>';
+        el.querySelector('p').textContent = msg;
+      }
+    }
+
+    function openInApp() {
+      if (!currentKey) return;
+      window.location.href = '4da://activate?key=' + encodeURIComponent(currentKey);
+    }
+
+    function copyKey() {
+      var key = document.querySelector('.license-key');
+      if (key) {
+        navigator.clipboard.writeText(key.textContent).then(function() {
+          var btn = document.querySelector('.copy-btn');
+          btn.textContent = 'Copied!';
+          setTimeout(function() { btn.textContent = 'Copy Key'; }, 2000);
+        });
+      }
+    }
+
+    async function fetchLicense(query) {
+      var resp = await fetch('/api/streets/activate?' + query);
+      var data = await resp.json();
+      if (resp.ok && data.license_key) {
+        showLicense(data);
+        return true;
+      }
+      return false;
+    }
+
+    async function handleManual(e) {
+      e.preventDefault();
+      var email = document.getElementById('email').value.trim();
+      var btn = document.getElementById('manual-btn');
+      if (!email) return false;
+
+      btn.disabled = true;
+      btn.textContent = 'Retrieving...';
+
+      try {
+        var ok = await fetchLicense('email=' + encodeURIComponent(email));
+        if (!ok) {
+          var el = document.getElementById('auto-result');
+          el.className = 'result error';
+          el.innerHTML = '<p>No license found for this email. It may take a moment after checkout. Try again in 30 seconds.</p>';
+        }
+      } catch {
+        var el2 = document.getElementById('auto-result');
+        el2.className = 'result error';
+        el2.innerHTML = '<p>Network error. Please try again.</p>';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Retrieve License Key';
+      return false;
+    }
+
+    // Auto-retrieve on page load
+    (async function() {
+      var params = new URLSearchParams(window.location.search);
+      var sessionId = params.get('session_id');
+
+      if (!sessionId) {
+        showError();
+        return;
+      }
+
+      // Webhook may not have fired yet — retry with increasing delays
+      // Total wait: ~24s (3+3+3+3+4+4+4s) which covers most Stripe webhook latencies
+      var delays = [3000, 3000, 3000, 3000, 4000, 4000, 4000];
+      for (var attempt = 0; attempt <= delays.length; attempt++) {
+        try {
+          var ok = await fetchLicense('session_id=' + encodeURIComponent(sessionId));
+          if (ok) return;
+        } catch {}
+        if (attempt < delays.length) await new Promise(function(r) { setTimeout(r, delays[attempt]); });
+      }
+
+      showError('Your license key is being generated. This usually takes 10\u201330 seconds. Enter your purchase email below to retrieve it, or refresh this page.');
+    })();
+  </script>
+
+</body>
+</html>
