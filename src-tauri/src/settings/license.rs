@@ -434,8 +434,18 @@ fn save_validation_cache(cache: &KeygenValidationCache) {
     }
     match serde_json::to_string_pretty(cache) {
         Ok(json) => {
-            if let Err(e) = std::fs::write(&path, json) {
+            if let Err(e) = std::fs::write(&path, &json) {
                 warn!(target: "4da::license", error = %e, "Failed to write license cache");
+            } else {
+                // Restrict to owner-only on Unix (matches settings.json handling)
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(
+                        &path,
+                        std::fs::Permissions::from_mode(0o600),
+                    );
+                }
             }
         }
         Err(e) => {
