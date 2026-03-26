@@ -107,10 +107,12 @@ impl Database {
         ).unwrap_or(0);
 
         // Clean old autophagy_cycles older than 180 days (keep recent history)
-        let deleted_cycles: usize = conn.execute(
-            "DELETE FROM autophagy_cycles WHERE created_at < datetime('now', '-180 days')",
-            [],
-        ).unwrap_or(0);
+        let deleted_cycles: usize = conn
+            .execute(
+                "DELETE FROM autophagy_cycles WHERE created_at < datetime('now', '-180 days')",
+                [],
+            )
+            .unwrap_or(0);
 
         // Clean orphaned necessity scores
         let deleted_necessity: usize = conn.execute(
@@ -170,15 +172,21 @@ impl Database {
             .unwrap_or(0);
 
         let digested_intelligence: i64 = conn
-            .query_row("SELECT COUNT(*) FROM digested_intelligence", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM digested_intelligence", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let decision_windows: i64 = conn
-            .query_row("SELECT COUNT(*) FROM decision_windows", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM decision_windows", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let autophagy_cycles: i64 = conn
-            .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM autophagy_cycles", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         let necessity_scores: i64 = conn
@@ -187,15 +195,17 @@ impl Database {
 
         // DB file size via PRAGMA
         let db_size_bytes: i64 = conn
-            .query_row("SELECT page_count * page_size FROM pragma_page_count, pragma_page_size", [], |row| row.get(0))
-            .unwrap_or(0);
-
-        let oldest_item_date: Option<String> = conn
             .query_row(
-                "SELECT MIN(created_at) FROM source_items",
+                "SELECT page_count * page_size FROM pragma_page_count, pragma_page_size",
                 [],
                 |row| row.get(0),
             )
+            .unwrap_or(0);
+
+        let oldest_item_date: Option<String> = conn
+            .query_row("SELECT MIN(created_at) FROM source_items", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(None);
 
         Ok(DbStats {
