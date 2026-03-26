@@ -114,6 +114,27 @@ impl Database {
 
         db.migrate()?;
 
+        // Quick integrity check — detect corruption early before it compounds.
+        // Uses quick_check (faster than integrity_check, catches most issues).
+        {
+            let conn = db.conn.lock();
+            match conn.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)) {
+                Ok(ref status) if status == "ok" => {
+                    tracing::debug!(target: "4da::db", "Database integrity: ok");
+                }
+                Ok(status) => {
+                    tracing::error!(
+                        target: "4da::db",
+                        status = %status,
+                        "DATABASE CORRUPTION DETECTED — quick_check failed. Consider restoring from backup."
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(target: "4da::db", error = %e, "Could not run integrity check");
+                }
+            }
+        }
+
         Ok(db)
     }
 

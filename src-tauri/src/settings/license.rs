@@ -280,6 +280,12 @@ pub fn take_downgrade_flag() -> bool {
     TIER_DOWNGRADED.swap(false, Ordering::Relaxed)
 }
 
+/// Get the timestamp of the last successful online license validation.
+/// Returns None if no cache exists or the cache is unreadable.
+pub fn get_last_validated_at() -> Option<String> {
+    load_validation_cache().map(|c| c.validated_at)
+}
+
 /// Check if a tier string represents a paid tier.
 /// Accepts legacy "pro" for backwards compatibility with existing settings.json files.
 fn is_paid_tier(tier: &str) -> bool {
