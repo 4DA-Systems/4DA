@@ -31,7 +31,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
     cmd('get_license_tier').then((result) => {
       const validated = (result as Record<string, unknown>).last_validated_at;
       if (typeof validated === 'string') setLastValidated(validated);
-    }).catch(() => {});
+    }).catch((e) => console.debug('[LicenseSection] tier fetch:', e));
   }, [loadLicense, loadTrialStatus]);
 
   const isPro = !expired && (tier === 'signal' || tier === 'team' || tier === 'enterprise' || tier === 'pro');

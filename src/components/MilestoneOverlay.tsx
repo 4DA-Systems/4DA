@@ -31,7 +31,7 @@ export const MilestoneOverlay = memo(function MilestoneOverlay() {
             localStorage.setItem(key, Date.now().toString());
             triggerBurst();
           }
-        }).catch(() => {});
+        }).catch((e) => console.debug('[MilestoneOverlay] intelligence growth:', e));
         continue;
       }
       if (m.id === 'feedback-10' && feedbackCount >= 10) triggered = true;

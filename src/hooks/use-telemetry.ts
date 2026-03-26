@@ -14,7 +14,7 @@ export function trackEvent(
     eventType,
     viewId,
     metadata: metadata ? JSON.stringify(metadata) : undefined,
-  }).catch(() => {});
+  }).catch((e) => console.debug('[telemetry] track_event:', e));
 }
 
 /**

@@ -29,8 +29,8 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
           .map(s => s.name);
         setEnabledSources(enabled.length > 0 ? enabled : ['Hacker News', 'Reddit', 'GitHub']);
       })
-      .catch(() => {
-        // Fallback: always-on sources if backend unavailable
+      .catch((e) => {
+        console.debug('[BriefingWarmupState] sources fallback:', e);
         setEnabledSources(['Hacker News', 'Reddit', 'GitHub']);
       });
   }, []);
