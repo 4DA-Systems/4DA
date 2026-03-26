@@ -446,8 +446,22 @@ fn hash_key(key: &str) -> String {
 /// Load the validation cache from disk. Returns `None` if missing or unparseable.
 fn load_validation_cache() -> Option<KeygenValidationCache> {
     let path = cache_path();
-    let content = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&content).ok()
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(target: "4da::license", error = %e, "Failed to read license cache");
+            }
+            return None;
+        }
+    };
+    match serde_json::from_str(&content) {
+        Ok(cache) => Some(cache),
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, "Failed to parse license cache — will be regenerated");
+            None
+        }
+    }
 }
 
 /// Persist the validation cache to disk.
@@ -638,11 +652,15 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
         .to_string();
 
     if valid {
-        // Extract tier from license metadata if available
+        // Extract tier from license metadata — MUST be present for valid keys.
+        // Never default to a paid tier on missing metadata: that would silently
+        // upgrade free users or cache a wrong tier. If metadata is absent, treat
+        // the response as valid but don't upgrade — preserve whatever tier the
+        // caller already has by returning "free" (callers compare and preserve).
         let tier = json
             .pointer("/data/attributes/metadata/tier")
             .and_then(|v| v.as_str())
-            .unwrap_or("pro")
+            .unwrap_or("free")
             .to_string();
 
         info!(target: "4da::license", tier = %tier, code = %validation_code, "Keygen validation succeeded");
