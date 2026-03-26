@@ -217,7 +217,9 @@ pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
     };
 
     let db = crate::get_database().map_err(|e| FourDaError::Internal(e.to_string()))?;
-    let result = db.run_maintenance(retention_days as i64).map_err(FourDaError::Db)?;
+    let result = db
+        .run_maintenance(retention_days as i64)
+        .map_err(FourDaError::Db)?;
 
     info!(
         target: "4da::autophagy",
@@ -236,12 +238,16 @@ pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
 #[tauri::command]
 pub async fn set_cleanup_retention(days: u32) -> Result<()> {
     if !(7..=365).contains(&days) {
-        return Err(FourDaError::Internal("Retention must be between 7 and 365 days".into()));
+        return Err(FourDaError::Internal(
+            "Retention must be between 7 and 365 days".into(),
+        ));
     }
     let sm = crate::get_settings_manager();
     let mut guard = sm.lock();
     guard.get_mut().monitoring.cleanup_max_age_days = Some(days);
-    guard.save().map_err(|e| FourDaError::Internal(e.to_string()))?;
+    guard
+        .save()
+        .map_err(|e| FourDaError::Internal(e.to_string()))?;
     info!(target: "4da::autophagy", days, "Data retention period updated");
     Ok(())
 }
