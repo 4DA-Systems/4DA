@@ -53,11 +53,6 @@ impl Default for WatcherConfig {
         for ext in ["zip", "tar", "gz", "tgz"] {
             watched_extensions.insert(ext.to_string());
         }
-        // MUSE creative context files (separate product, gated behind feature)
-        #[cfg(feature = "muse")]
-        for ext in crate::muse::MUSE_EXTENSIONS {
-            watched_extensions.insert((*ext).to_string());
-        }
 
         let mut skip_dirs = HashSet::new();
         for dir in [
