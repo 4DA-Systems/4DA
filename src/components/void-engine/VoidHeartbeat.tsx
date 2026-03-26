@@ -29,9 +29,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
       el.style.display = 'block';
       containerRef.current.appendChild(el);
       elementRef.current = el;
-    }).catch(() => {
-      // GAME component failed — CSS fallback already visible
-    });
+    }).catch((e) => console.debug('[VoidHeartbeat] GAME load:', e));
     const container = containerRef.current;
     return () => {
       cancelled = true;

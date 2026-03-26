@@ -45,9 +45,7 @@ export function useVoidSignals() {
         currentRef.current = s;
         setSignal(s);
       })
-      .catch(() => {
-        // Not available (browser mode) - stay at idle
-      });
+      .catch((e) => console.debug('[void-signals] not available:', e));
   }, []);
 
   // Listen for change events from Rust

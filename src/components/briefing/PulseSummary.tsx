@@ -34,7 +34,7 @@ export const PulseSummary = memo(function PulseSummary({
   } | null>(null);
 
   useEffect(() => {
-    cmd('get_session_diff').then(setDiff).catch(() => {});
+    cmd('get_session_diff').then(setDiff).catch((e) => console.debug('[PulseSummary] session diff:', e));
   }, []);
 
   const stats = useMemo(() => {
