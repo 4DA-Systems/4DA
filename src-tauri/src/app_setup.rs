@@ -359,7 +359,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             let settings = get_settings_manager().lock();
             settings.get().license.license_key.clone()
         };
-        if !license_key.is_empty() {
+        if !license_key.is_empty() && !license_key.starts_with("4DA-") {
+            // Only validate Keygen API keys at startup.
+            // Self-signed 4DA- keys are verified locally on-demand (get_license_tier / validate_license).
             let current_tier = {
                 let settings = get_settings_manager().lock();
                 settings.get().license.tier.clone()
