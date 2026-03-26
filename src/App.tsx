@@ -4,7 +4,6 @@
 import './i18n';
 
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
-import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import './App.css';
 import sunLogo from './assets/sun-logo.webp';
@@ -53,6 +52,7 @@ import { cmd } from './lib/commands';
 import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
+import { useAppListeners } from './hooks/use-app-listeners';
 function App() {
   const { t } = useTranslation();
   const { zoom, showIndicator } = useUiZoom();
@@ -201,99 +201,15 @@ function App() {
     cmd('prune_personalization_cache').catch((e) => console.debug('[App] prune cache:', e));
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
 
-  // Deep-link handler: 4da://activate?key=...
-  const activateLicense = useAppStore(s => s.activateLicense);
-  const activateStreetsLicense = useAppStore(s => s.activateStreetsLicense);
-  useEffect(() => {
-    const unlisten = listen<string>('deep-link-activate', async (event) => {
-      try {
-        const url = new URL(event.payload);
-        if (url.hostname === 'activate' || url.pathname === '/activate') {
-          const key = url.searchParams.get('key');
-          if (key) {
-            // Try both activation paths — the backend figures out the tier
-            const proResult = await activateLicense(key);
-            const streetsOk = await activateStreetsLicense(key);
-            if (proResult.ok || streetsOk) {
-              addToast('success', 'License activated successfully');
-            } else {
-              addToast('error', 'Invalid license key');
-            }
-          }
-        }
-      } catch {
-        // Ignore malformed URLs
-      }
-    });
-    return () => { unlisten.then(fn => fn()); };
-  }, [activateLicense, activateStreetsLicense, addToast]);
-
-  // Embedding status listener — surfaces degraded/unavailable state via toast
-  useEffect(() => {
-    const unlisten = listen<{ status: 'active' | 'degraded' | 'unavailable' }>('4da://embedding-status', (event) => {
-      setEmbeddingStatus(event.payload.status);
-      if (event.payload.status !== 'active') {
-        addToast('warning', event.payload.status === 'degraded'
-          ? 'Semantic scoring limited — embeddings using fallback'
-          : 'Embedding service unavailable — using keyword signals only');
-      }
-    });
-    return () => { unlisten.then(fn => fn()); };
-  }, [setEmbeddingStatus, addToast]);
-
-  // Framework + Comparison page triggers (from AboutPanel via custom events)
-  useEffect(() => {
-    const frameworkHandler = () => setShowFramework(true);
-    const comparisonHandler = () => setShowComparison(true);
-    window.addEventListener('4da:show-framework', frameworkHandler);
-    window.addEventListener('4da:show-comparison', comparisonHandler);
-    return () => {
-      window.removeEventListener('4da:show-framework', frameworkHandler);
-      window.removeEventListener('4da:show-comparison', comparisonHandler);
-    };
-  }, []);
-
-  // On mount: load cached results from previous session, or auto-analyze
-  useEffect(() => {
-    let cancelled = false;
-    const loadOrAnalyze = async () => {
-      try {
-        // First, try to load cached results from AnalysisState
-        const analysisState = await cmd('get_analysis_status');
-
-        if (cancelled) return;
-
-        if (analysisState.results && analysisState.results.length > 0) {
-          // Restore previous results
-          const results = analysisState.results;
-          const relevantCount = results.filter(r => r.relevant).length;
-          setState(s => ({
-            ...s,
-            relevanceResults: results,
-            nearMisses: analysisState.near_misses ?? null,
-            status: `${relevantCount}/${results.length} items relevant (cached)`,
-            analysisComplete: true,
-            loading: false,
-          }));
-          return;
-        }
-
-        // No cached results — auto-trigger analysis immediately
-        // (Skip if first-run or onboarding — FirstRunTransition handles analysis trigger)
-        if (cancelled || useAppStore.getState().isFirstRun) return;
-        const s = useAppStore.getState();
-        if (!s.isFirstRun && !s.showOnboarding) {
-          startAnalysis();
-        }
-      } catch {
-        // Silently ignore failures
-      }
-    };
-    loadOrAnalyze();
-
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
-  }, []);
+  // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
+  useAppListeners({
+    addToast,
+    setEmbeddingStatus,
+    setShowFramework,
+    setShowComparison,
+    setState,
+    startAnalysis,
+  });
 
   // Global keyboard shortcuts (extracted hook)
   const { focusedIndex } = useKeyboardShortcuts({
