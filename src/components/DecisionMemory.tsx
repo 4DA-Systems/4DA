@@ -4,50 +4,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 import { useGameComponent } from '../hooks/use-game-component';
 import type { DeveloperDecision } from '../store/decisions-slice';
-
-const DECISION_TYPES = [
-  'tech_choice',
-  'architecture',
-  'workflow',
-  'pattern',
-  'dependency',
-] as const;
-
-// Type labels use i18n: decisions.type.tech_choice, decisions.type.architecture, etc.
-
-const STATUS_STYLES: Record<string, { text: string; bg: string; border: string }> = {
-  active: {
-    text: 'text-green-400',
-    bg: 'bg-green-500/10',
-    border: 'border-green-500/20',
-  },
-  reconsidering: {
-    text: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/20',
-  },
-  superseded: {
-    text: 'text-text-muted',
-    bg: 'bg-gray-500/10',
-    border: 'border-gray-500/20',
-  },
-};
-
-interface NewDecisionForm {
-  decision_type: string;
-  subject: string;
-  decision: string;
-  rationale: string;
-  confidence: number;
-}
-
-const EMPTY_FORM: NewDecisionForm = {
-  decision_type: 'tech_choice',
-  subject: '',
-  decision: '',
-  rationale: '',
-  confidence: 0.8,
-};
+import { DECISION_TYPES, STATUS_STYLES, EMPTY_FORM } from './decision-memory-constants';
+import type { NewDecisionForm } from './decision-memory-constants';
 
 export const DecisionMemory = memo(function DecisionMemory() {
   const { t } = useTranslation();
