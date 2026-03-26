@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { cmd } from '../../lib/commands';
 
 export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) {
   const { t } = useTranslation();
@@ -22,10 +23,15 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const [activationResult, setActivationResult] = useState<{ ok: boolean; reason?: string } | null>(null);
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoveryResult, setRecoveryResult] = useState<{ ok: boolean; reason?: string } | null>(null);
+  const [lastValidated, setLastValidated] = useState<string | null>(null);
 
   useEffect(() => {
     loadLicense();
     loadTrialStatus();
+    cmd('get_license_tier').then((result) => {
+      const validated = (result as Record<string, unknown>).last_validated_at;
+      if (typeof validated === 'string') setLastValidated(validated);
+    }).catch(() => {});
   }, [loadLicense, loadTrialStatus]);
 
   const isPro = !expired && (tier === 'signal' || tier === 'team' || tier === 'enterprise' || tier === 'pro');
@@ -142,9 +148,16 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
 
       {/* Pro badge — show what's unlocked */}
       {isPro && (
-        <p className="text-xs text-text-muted mb-3">
-          {t('settings.license.proUnlocked')}{expiresAt && !expiryWarning ? ` ${t('settings.license.renewsOn', { date: new Date(expiresAt).toLocaleDateString() })}` : ` ${t('settings.license.verified')}`}
-        </p>
+        <div className="mb-3">
+          <p className="text-xs text-text-muted">
+            {t('settings.license.proUnlocked')}{expiresAt && !expiryWarning ? ` ${t('settings.license.renewsOn', { date: new Date(expiresAt).toLocaleDateString() })}` : ` ${t('settings.license.verified')}`}
+          </p>
+          {lastValidated && (
+            <p className="text-[10px] text-text-muted/50 mt-0.5">
+              {t('settings.license.lastVerified', { date: new Date(lastValidated).toLocaleDateString() })}
+            </p>
+          )}
+        </div>
       )}
 
       {/* License key input — show when not Pro or expired */}

@@ -46,6 +46,8 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     // One-shot flag: true if tier was downgraded since last check
     let was_downgraded = crate::settings::take_downgrade_flag();
 
+    let last_validated_at = crate::settings::get_last_validated_at();
+
     Ok(serde_json::json!({
         "tier": license.tier,
         "activated_at": license.activated_at,
@@ -55,6 +57,7 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
         "days_remaining": days_remaining,
         "expired": expired,
         "was_downgraded": was_downgraded,
+        "last_validated_at": last_validated_at,
     }))
 }
 
