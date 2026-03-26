@@ -370,27 +370,41 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 info!(target: "4da::license", "Startup license validation (Keygen)");
                 let result =
                     crate::settings::validate_license_key_keygen(&license_key, &current_tier).await;
-                if result.tier == current_tier {
+
+                // Re-read FRESH tier from settings after async completes.
+                // The user may have changed their license during the network call.
+                let manager = get_settings_manager();
+                let mut guard = manager.lock();
+                let fresh_tier = guard.get().license.tier.clone();
+
+                if result.tier == fresh_tier {
                     info!(target: "4da::license",
                         tier = %result.tier,
                         cached = result.cached,
                         detail = %result.detail,
-                        "Startup license validation complete"
+                        "Startup license validation complete — tier matches"
                     );
-                } else {
-                    let manager = get_settings_manager();
-                    let mut guard = manager.lock();
-                    let settings = guard.get_mut();
+                } else if result.tier != "free" && fresh_tier == "free" {
+                    // Keygen says paid but local says free — upgrade (key was validated)
                     info!(target: "4da::license",
-                        old_tier = %current_tier,
+                        old_tier = %fresh_tier,
                         new_tier = %result.tier,
                         detail = %result.detail,
-                        "Tier updated after startup Keygen validation"
+                        "Tier upgraded after startup Keygen validation"
                     );
-                    settings.license.tier = result.tier;
+                    guard.get_mut().license.tier = result.tier;
                     if let Err(e) = guard.save() {
                         warn!("Failed to save settings: {e}");
                     }
+                } else {
+                    // Keygen says free or different paid tier — log but DON'T downgrade.
+                    // The save-time invariant will correct if needed; don't race with user actions.
+                    info!(target: "4da::license",
+                        fresh_tier = %fresh_tier,
+                        keygen_tier = %result.tier,
+                        detail = %result.detail,
+                        "Startup Keygen result differs from current tier — not overwriting"
+                    );
                 }
             });
         }
