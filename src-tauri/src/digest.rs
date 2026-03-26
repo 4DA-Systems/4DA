@@ -850,7 +850,7 @@ mod tests {
                 discovered_at: Utc::now(),
                 summary: None,
                 signal_type: Some("tool_discovery".to_string()),
-                signal_priority: Some("alert".to_string()),
+                signal_priority: Some("high".to_string()),
                 signal_action: Some("Evaluate new Rust tool".to_string()),
             },
             DigestItem {
