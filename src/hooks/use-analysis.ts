@@ -132,8 +132,8 @@ export function useAnalysis(
         listen<{ mode: string; reason?: string }>('embedding-mode', (event) => {
           const mode = event.payload.mode as 'semantic' | 'keyword-only';
           useAppStore.getState().setEmbeddingMode(mode);
-          if (!useAppStore.getState().isFirstRun && mode === 'keyword-only') {
-            useAppStore.getState().addToast('info', i18n.t('analysis.keywordOnly'));
+          if (mode === 'keyword-only') {
+            useAppStore.getState().addToast('warning', i18n.t('analysis.keywordOnly'));
           }
         }),
 
