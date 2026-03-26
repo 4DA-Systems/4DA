@@ -334,17 +334,33 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
     match response {
         Ok(resp) => {
             let status = resp.status().as_u16();
-            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            let body: serde_json::Value = match resp.json().await {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(target: "4da::license", error = %e, "Failed to parse recovery response JSON");
+                    return Ok(
+                        serde_json::json!({ "success": false, "reason": "network_error", "detail": "Invalid response from server" }),
+                    );
+                }
+            };
 
             match status {
                 200 => {
-                    // Extract license key and auto-activate
+                    // Extract and validate license key
                     let license_key = body["license_key"].as_str().unwrap_or("").to_string();
-                    let tier = body["tier"].as_str().unwrap_or("signal").to_string();
-
                     if license_key.is_empty() {
                         return Ok(serde_json::json!({ "success": false, "reason": "not_found" }));
                     }
+                    // Validate key format — must be 4DA- or Keygen format
+                    if !license_key.starts_with("4DA-") && !license_key.contains('-') {
+                        warn!(target: "4da::license", "Recovery returned invalid key format");
+                        return Ok(
+                            serde_json::json!({ "success": false, "reason": "invalid_key", "detail": "Server returned invalid license key format" }),
+                        );
+                    }
+
+                    // Extract tier — default to "free" (not "signal") if missing
+                    let tier = body["tier"].as_str().unwrap_or("free").to_string();
 
                     // Auto-activate: store in keychain + settings
                     let effective_tier = match tier.as_str() {
