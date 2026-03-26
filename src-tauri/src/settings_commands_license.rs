@@ -43,6 +43,9 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
         (None, 0, false)
     };
 
+    // One-shot flag: true if tier was downgraded since last check
+    let was_downgraded = crate::settings::take_downgrade_flag();
+
     Ok(serde_json::json!({
         "tier": license.tier,
         "activated_at": license.activated_at,
@@ -51,6 +54,7 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
         "expires_at": expires_at,
         "days_remaining": days_remaining,
         "expired": expired,
+        "was_downgraded": was_downgraded,
     }))
 }
 
@@ -118,6 +122,9 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     settings.license.license_key = license_key;
     settings.license.tier = effective_tier.clone();
     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
+    // Clear trial state on paid activation — prevents double-trial exploit
+    // (user could otherwise downgrade and get another 45-day trial)
+    settings.license.trial_started_at = None;
     guard.save()?;
 
     info!(target: "4da::license", "License activated — tier: {}", effective_tier);
@@ -278,6 +285,7 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
                     settings.license.license_key = license_key.clone();
                     settings.license.tier = effective_tier.clone();
                     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
+                    settings.license.trial_started_at = None;
                     guard.save()?;
 
                     info!(target: "4da::license", tier = %effective_tier, "License recovered and activated via email lookup");

@@ -61,6 +61,10 @@ pub fn check_activation_rate_limit() -> Result<()> {
 /// Initialized to 0 so the first call always triggers validation.
 static LAST_LICENSE_CHECK: AtomicU64 = AtomicU64::new(0);
 
+/// Flag set when a paid tier is downgraded to free during re-validation.
+/// Read and cleared by `get_license_tier` to notify the frontend once.
+static TIER_DOWNGRADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Re-validate license integrity every 6 hours to prevent settings.json
 /// manipulation granting paid features between restarts.
 const LICENSE_REVALIDATION_INTERVAL_SECS: u64 = 21_600; // 6 hours
@@ -157,6 +161,7 @@ fn maybe_revalidate_license() {
             license.tier
         );
         guard.get_mut().license.tier = "free".to_string();
+        TIER_DOWNGRADED.store(true, Ordering::Relaxed);
         if let Err(e) = guard.save() {
             warn!(
                 "Failed to persist license reset during re-validation: {}",
@@ -233,6 +238,7 @@ pub fn validate_license_on_startup() {
             license.tier
         );
         guard.get_mut().license.tier = "free".to_string();
+        TIER_DOWNGRADED.store(true, Ordering::Relaxed);
         if let Err(e) = guard.save() {
             warn!("Failed to reset license tier: {}", e);
         }
@@ -260,6 +266,12 @@ pub fn validate_license_on_startup() {
         .unwrap_or_default()
         .as_secs();
     LAST_LICENSE_CHECK.store(now, Ordering::Relaxed);
+}
+
+/// Check and clear the tier-downgraded flag. Returns true once per downgrade event.
+/// Called by `get_license_tier` to include a one-shot notification in the response.
+pub fn take_downgrade_flag() -> bool {
+    TIER_DOWNGRADED.swap(false, Ordering::Relaxed)
 }
 
 /// Check if a tier string represents a paid tier.
@@ -441,10 +453,7 @@ fn save_validation_cache(cache: &KeygenValidationCache) {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(
-                        &path,
-                        std::fs::Permissions::from_mode(0o600),
-                    );
+                    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
                 }
             }
         }
