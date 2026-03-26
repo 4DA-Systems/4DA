@@ -55,10 +55,19 @@ pub(crate) fn count_confirmed_signals(
     affinity_mult: f32,
     dep_match_score: f32,
     stack_pain_match: bool,
+    best_keyword_specificity: f32,
 ) -> SignalConfirmation {
     let context_confirmed = context_score >= scoring_config::CONTEXT_THRESHOLD;
-    let interest_confirmed = interest_score >= scoring_config::INTEREST_THRESHOLD
-        || keyword_score >= scoring_config::KEYWORD_THRESHOLD;
+    // Broad interests (specificity < 0.50, e.g. "Open Source") cannot confirm the interest
+    // axis from keyword matching alone — they need corroboration from embedding similarity.
+    let interest_confirmed = if best_keyword_specificity < 0.50 {
+        // Broad interest: require BOTH keyword AND embedding confirmation
+        (keyword_score >= scoring_config::KEYWORD_THRESHOLD && interest_score >= 0.35)
+            || interest_score >= scoring_config::INTEREST_THRESHOLD
+    } else {
+        interest_score >= scoring_config::INTEREST_THRESHOLD
+            || keyword_score >= scoring_config::KEYWORD_THRESHOLD
+    };
     // ACE confirmed: require semantic boost OR active topic match (NOT broad detected_tech).
     // Uses word-boundary-aware matching to prevent "frustrating"->"rust" false positives.
     // Stack pain point match also contributes to ACE axis (content about your stack's problems).
@@ -111,6 +120,7 @@ pub(crate) fn apply_confirmation_gate(
     affinity_mult: f32,
     dep_match_score: f32,
     stack_pain_match: bool,
+    best_keyword_specificity: f32,
 ) -> (f32, u8, f32, Vec<String>) {
     let confirmation = count_confirmed_signals(
         context_score,
@@ -123,6 +133,7 @@ pub(crate) fn apply_confirmation_gate(
         affinity_mult,
         dep_match_score,
         stack_pain_match,
+        best_keyword_specificity,
     );
 
     let idx = (confirmation.count as usize).min(scoring_config::CONFIRMATION_GATE.len() - 1);
@@ -151,6 +162,7 @@ mod tests {
             1.0,   // neutral affinity
             0.0,   // no dep match
             false, // no stack pain match
+            1.0,   // specific interest
         );
         assert_eq!(conf.count, 0);
         assert!(!conf.context_confirmed);
@@ -173,6 +185,7 @@ mod tests {
             1.0,   // neutral affinity
             0.0,   // no dep match
             false, // no stack pain match
+            1.0,   // specific interest
         );
         assert_eq!(conf.count, 1);
         assert!(!conf.context_confirmed);
@@ -193,6 +206,7 @@ mod tests {
             1.0,   // neutral affinity
             0.0,   // no dep match
             false, // no stack pain match
+            1.0,   // specific interest
         );
         assert_eq!(conf.count, 2);
         assert!(conf.context_confirmed);
@@ -219,6 +233,7 @@ mod tests {
             1.0,   // neutral affinity
             0.0,   // no dep match
             false, // no stack pain match
+            1.0,   // specific interest
         );
         assert_eq!(count, 1);
         assert!(
@@ -244,6 +259,7 @@ mod tests {
             0.55, // HIGH interest
             0.10, 0.01, // low semantic, but ace_confirmed via detected_tech
             &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
+            1.0,   // specific interest
         );
         assert!(count >= 2, "Expected 2+ confirmed signals, got {}", count);
         assert!(
@@ -271,6 +287,7 @@ mod tests {
             1.20,  // affinity confirmed
             0.0,   // no dep match
             false, // no stack pain match
+            1.0,   // specific interest
         );
         assert_eq!(count, 4);
         assert_eq!(mult, 1.20);
@@ -291,6 +308,7 @@ mod tests {
             0.10, // low interest
             0.10, 0.01, // low semantic
             &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
+            1.0,   // specific interest
         );
         assert_eq!(count, 0);
         assert!(
@@ -311,6 +329,7 @@ mod tests {
             0.10, // interest NOT confirmed
             0.10, 0.01, // ace confirmed via tech
             &ace_ctx, &topics, 0.0, 1.0, 0.0, false, // no stack pain match
+            1.0,   // specific interest
         );
         let names = conf.confirmed_names();
         assert!(names.contains(&"context".to_string()));
@@ -334,6 +353,7 @@ mod tests {
             1.0,   // affinity: neutral
             0.30,  // dep_match_score: confirmed (above 0.20 threshold)
             false, // no stack pain match
+            1.0,   // specific interest
         );
 
         assert!(conf.interest_confirmed, "Interest should be confirmed");
@@ -364,6 +384,7 @@ mod tests {
             1.0,   // affinity: neutral
             0.30,  // dep_match_score: confirmed
             false, // no stack pain match
+            1.0,   // specific interest
         );
 
         assert!(conf.dependency_confirmed, "Dependency should be confirmed");
@@ -392,6 +413,7 @@ mod tests {
         let with_pain = count_confirmed_signals(
             0.10, 0.10, 0.10, 0.01, // all below thresholds
             &ace_ctx, &topics, 0.0, 1.0, 0.0, true, // stack_pain_match
+            1.0,  // specific interest
         );
         assert!(
             with_pain.ace_confirmed,
@@ -402,6 +424,7 @@ mod tests {
         let without_pain = count_confirmed_signals(
             0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0,
             false, // no stack_pain_match
+            1.0,   // specific interest
         );
         assert!(
             !without_pain.ace_confirmed,
@@ -422,6 +445,7 @@ mod tests {
             0.60, // HIGH interest (confirmed)
             0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0,
             true, // stack_pain_match → ACE confirmed
+            1.0,  // specific interest
         );
         assert_eq!(count, 2, "Interest + ACE(pain) = 2 signals");
         assert!(
@@ -441,6 +465,7 @@ mod tests {
         let (gated, count, _, _) = apply_confirmation_gate(
             0.90, // very high base
             0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, true, // only signal
+            1.0,  // specific interest
         );
         assert_eq!(count, 1, "Only ACE (via pain match) should be confirmed");
         assert!(
@@ -461,6 +486,7 @@ mod tests {
         // ACE confirmed via topic overlap alone
         let without_pain = count_confirmed_signals(
             0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, false,
+            1.0, // specific interest
         );
         assert!(without_pain.ace_confirmed);
         let count_without = without_pain.count;
@@ -468,6 +494,7 @@ mod tests {
         // ACE confirmed via topic overlap AND stack_pain_match
         let with_pain = count_confirmed_signals(
             0.10, 0.10, 0.10, 0.01, &ace_ctx, &topics, 0.0, 1.0, 0.0, true,
+            1.0, // specific interest
         );
         assert!(with_pain.ace_confirmed);
         assert_eq!(
@@ -492,6 +519,7 @@ mod tests {
             1.5,   // affinity: confirmed (>= 1.3)
             0.30,  // dep_match_score: confirmed
             false, // no stack pain match
+            1.0,   // specific interest
         );
 
         assert_eq!(conf.count, 5, "All 5 signals should be confirmed");
@@ -502,5 +530,51 @@ mod tests {
         assert!(names.contains(&"ace".to_string()));
         assert!(names.contains(&"learned".to_string()));
         assert!(names.contains(&"dependency".to_string()));
+    }
+
+    #[test]
+    fn broad_interest_keyword_only_does_not_confirm() {
+        // "Open Source" has specificity 0.25 — keyword match alone shouldn't confirm interest axis
+        let ace = ACEContext::default();
+        let conf = count_confirmed_signals(
+            0.0,  // no context
+            0.30, // below interest threshold (0.50)
+            0.80, // above keyword threshold (0.70)
+            0.0,  // no semantic
+            &ace,
+            &[],
+            0.0, // no feedback
+            1.0, // neutral affinity
+            0.0, // no deps
+            false,
+            0.25, // broad interest specificity
+        );
+        assert!(
+            !conf.interest_confirmed,
+            "Broad interest keyword-only should NOT confirm interest axis"
+        );
+    }
+
+    #[test]
+    fn broad_interest_with_embedding_confirms() {
+        // Broad interest with BOTH keyword AND embedding similarity should confirm
+        let ace = ACEContext::default();
+        let conf = count_confirmed_signals(
+            0.0,
+            0.40, // above 0.35 corroboration threshold
+            0.80, // above keyword threshold
+            0.0,
+            &ace,
+            &[],
+            0.0,
+            1.0,
+            0.0,
+            false,
+            0.25, // broad interest
+        );
+        assert!(
+            conf.interest_confirmed,
+            "Broad interest with keyword+embedding should confirm"
+        );
     }
 }

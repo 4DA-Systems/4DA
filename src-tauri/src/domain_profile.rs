@@ -30,6 +30,9 @@ pub struct DomainProfile {
     /// Domain concerns: non-tech keywords relevant to this developer type
     /// e.g. a desktop app dev cares about "packaging", "installer", "auto-update"
     pub domain_concerns: HashSet<String>,
+    /// High-confidence ACE tech auto-promoted into all_tech for scoring
+    /// (tracked separately so we know what was auto-promoted vs declared)
+    pub ace_promoted_tech: HashSet<String>,
 }
 
 impl DomainProfile {
@@ -116,6 +119,7 @@ pub fn build_domain_profile(conn: &rusqlite::Connection) -> DomainProfile {
         dependency_names,
         interest_topics,
         domain_concerns,
+        ace_promoted_tech: HashSet::new(),
     }
 }
 
@@ -540,6 +544,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["rust".to_string(), "performance".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
@@ -554,6 +559,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["fashion".to_string(), "dining".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.15);
@@ -568,6 +574,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["anything".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
@@ -582,6 +589,7 @@ mod tests {
             dependency_names: HashSet::from(["tokio".to_string()]),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["tokio".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.85);
@@ -596,6 +604,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::from(["machine learning".to_string()]),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["machine learning".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
@@ -629,6 +638,7 @@ mod tests {
             dependency_names: HashSet::from(["futures".to_string(), "tokio".to_string()]),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["futures".to_string(), "c++".to_string(), "hpx".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
@@ -643,6 +653,7 @@ mod tests {
             dependency_names: HashSet::from(["futures".to_string(), "tokio".to_string()]),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec![
             "futures".to_string(),
@@ -661,6 +672,7 @@ mod tests {
             dependency_names: HashSet::from(["tokio".to_string()]),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["tokio".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.85);
@@ -675,6 +687,7 @@ mod tests {
             dependency_names: HashSet::from(["futures".to_string()]),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec![
             "futures".to_string(),
@@ -694,6 +707,7 @@ mod tests {
             dependency_names: HashSet::from(["futures".to_string()]),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec![
             "futures".to_string(),
@@ -722,6 +736,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["desktop".to_string(), "java".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
@@ -746,6 +761,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["desktop".to_string(), "rust".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 1.0);
@@ -772,6 +788,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["database".to_string(), "mongodb".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.50);
@@ -828,6 +845,7 @@ mod tests {
                 "auto-update".to_string(),
                 "installer".to_string(),
             ]),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["packaging".to_string(), "strategies".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
@@ -848,6 +866,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["testing".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
@@ -862,6 +881,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["architecture".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);
@@ -878,6 +898,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::new(),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["rust".to_string(), "security".to_string()];
         // "rust" hits primary → 1.0 (cross-cutting doesn't downgrade)
@@ -895,6 +916,7 @@ mod tests {
             dependency_names: HashSet::new(),
             interest_topics: HashSet::new(),
             domain_concerns: HashSet::from(["accessibility".to_string()]),
+            ace_promoted_tech: HashSet::new(),
         };
         let topics = vec!["accessibility".to_string()];
         assert_eq!(compute_domain_relevance(&topics, &profile), 0.60);

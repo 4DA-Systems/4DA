@@ -81,6 +81,7 @@ struct RawSignals {
     stack_boost: f32,
     stack_pain_match: bool,
     topics: Vec<String>,
+    specificity_weight: f32,
 }
 
 /// Calibrated signal values ready for combination.
@@ -190,6 +191,7 @@ fn extract_signals(
         stack_boost,
         stack_pain_match,
         topics,
+        specificity_weight,
     }
 }
 
@@ -798,6 +800,7 @@ pub(crate) fn score_item(
         raw.affinity_mult,
         raw.dep_match_score,
         raw.stack_pain_match,
+        raw.specificity_weight,
     );
     let signal_count = confirmation.count;
     let confirmed_signals = confirmation.confirmed_names();
