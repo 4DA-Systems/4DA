@@ -69,6 +69,7 @@ fn make_domain(
             .map(std::string::ToString::to_string)
             .collect(),
         domain_concerns: HashSet::new(),
+        ace_promoted_tech: HashSet::new(),
     }
 }
 
