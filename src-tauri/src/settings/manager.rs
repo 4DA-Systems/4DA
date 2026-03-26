@@ -221,6 +221,34 @@ impl SettingsManager {
         }
         // license_key intentionally NOT stripped — always persisted to disk
 
+        // License tier invariant: if a valid self-signed key is present, the tier
+        // written to disk MUST match the key's embedded tier. This single guard
+        // makes tier corruption structurally impossible — no code path, present or
+        // future, can persist a wrong tier. The check is cheap (no I/O, no network).
+        if disk_settings.license.license_key.starts_with("4DA-") {
+            if let Ok(payload) =
+                crate::settings::verify_license_key(&disk_settings.license.license_key)
+            {
+                let expected_tier = match payload.tier.as_str() {
+                    "signal" | "team" | "enterprise" => payload.tier.clone(),
+                    "pro" | "community" | "cohort" => "signal".to_string(),
+                    _ => payload.tier.clone(),
+                };
+                let expired = chrono::DateTime::parse_from_rfc3339(&payload.expires_at)
+                    .map(|exp| exp.with_timezone(&chrono::Utc) < chrono::Utc::now())
+                    .unwrap_or(false);
+                if !expired && disk_settings.license.tier != expected_tier {
+                    tracing::warn!(
+                        target: "4da::license",
+                        attempted_tier = %disk_settings.license.tier,
+                        correct_tier = %expected_tier,
+                        "Save-time invariant: correcting tier before write"
+                    );
+                    disk_settings.license.tier = expected_tier;
+                }
+            }
+        }
+
         let json = serde_json::to_string_pretty(&disk_settings)?;
 
         // Backup existing settings before overwrite — enables recovery from corruption.
