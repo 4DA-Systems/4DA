@@ -7,7 +7,7 @@ use tracing::info;
 use ts_rs::TS;
 
 use crate::autophagy::AutophagyCycleResult;
-use crate::error::{FourDaError, Result};
+use crate::error::{FourDaError, Result, ResultExt};
 
 /// Autophagy system status overview.
 #[derive(Debug, Clone, Serialize, TS)]
@@ -182,7 +182,7 @@ pub struct DataHealth {
 /// Get data health overview.
 #[tauri::command]
 pub async fn get_data_health() -> Result<DataHealth> {
-    let db = crate::get_database().map_err(|e| FourDaError::Internal(e.to_string()))?;
+    let db = crate::get_database().context("database not initialized")?;
     let stats = db.get_db_stats().map_err(FourDaError::Db)?;
 
     let retention_days = {
@@ -216,7 +216,7 @@ pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
         sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
     };
 
-    let db = crate::get_database().map_err(|e| FourDaError::Internal(e.to_string()))?;
+    let db = crate::get_database().context("database not initialized")?;
     let result = db
         .run_maintenance(retention_days as i64)
         .map_err(FourDaError::Db)?;
@@ -245,9 +245,7 @@ pub async fn set_cleanup_retention(days: u32) -> Result<()> {
     let sm = crate::get_settings_manager();
     let mut guard = sm.lock();
     guard.get_mut().monitoring.cleanup_max_age_days = Some(days);
-    guard
-        .save()
-        .map_err(|e| FourDaError::Internal(e.to_string()))?;
+    guard.save().context("failed to save retention settings")?;
     info!(target: "4da::autophagy", days, "Data retention period updated");
     Ok(())
 }
