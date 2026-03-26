@@ -49,7 +49,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
       onStatus(t('settings.license.activated'));
       setKey('');
     } else {
-      onStatus(result.reason ? `Error: ${result.reason}` : t('settings.license.invalidKey'));
+      onStatus(result.reason ? t('error.license.validationFailed', { detail: result.reason }) : t('settings.license.invalidKey'));
     }
     setTimeout(() => onStatus(''), 5000);
   };
