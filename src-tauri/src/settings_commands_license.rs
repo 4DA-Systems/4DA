@@ -203,7 +203,9 @@ pub async fn start_trial() -> Result<serde_json::Value> {
     }))
 }
 
-/// Validate the current license key against the Keygen API.
+/// Validate the current license key.
+/// Self-signed 4DA- keys are verified locally (ed25519 signature).
+/// Keygen API keys are validated online.
 /// Returns the validation result and updates the tier in settings if needed.
 #[tauri::command]
 pub async fn validate_license() -> Result<serde_json::Value> {
@@ -223,26 +225,96 @@ pub async fn validate_license() -> Result<serde_json::Value> {
         }));
     }
 
-    let result = crate::settings::validate_license_key_keygen(&license_key, &current_tier).await;
+    // Route by key format: self-signed keys are verified locally,
+    // Keygen keys are validated via the Keygen API.
+    if license_key.starts_with("4DA-") {
+        // Self-signed ed25519 key — verify locally, NEVER send to Keygen
+        match crate::settings::verify_license_key(&license_key) {
+            Ok(payload) => {
+                let effective_tier = match payload.tier.as_str() {
+                    "signal" | "team" | "enterprise" => payload.tier.clone(),
+                    "pro" | "community" | "cohort" => "signal".to_string(),
+                    _ => payload.tier.clone(),
+                };
 
-    // Update tier in settings if it changed
-    if result.tier != current_tier {
-        let manager = get_settings_manager();
-        let mut guard = manager.lock();
-        let settings = guard.get_mut();
-        info!(target: "4da::license", old_tier = %current_tier, new_tier = %result.tier, "Tier updated after Keygen validation");
-        settings.license.tier = result.tier.clone();
-        if let Err(e) = guard.save() {
-            warn!("Failed to save settings after license update: {e}");
+                // Check if key has expired
+                let expired =
+                    if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
+                        exp.with_timezone(&chrono::Utc) < chrono::Utc::now()
+                    } else {
+                        false
+                    };
+
+                if expired {
+                    // Key expired — downgrade
+                    if current_tier != "free" {
+                        let manager = get_settings_manager();
+                        let mut guard = manager.lock();
+                        guard.get_mut().license.tier = "free".to_string();
+                        if let Err(e) = guard.save() {
+                            warn!("Failed to save settings after expired license: {e}");
+                        }
+                    }
+                    return Ok(serde_json::json!({
+                        "validated": false,
+                        "tier": "free",
+                        "cached": false,
+                        "detail": "License key has expired",
+                    }));
+                }
+
+                // Valid key — ensure tier is correct
+                if effective_tier != current_tier {
+                    let manager = get_settings_manager();
+                    let mut guard = manager.lock();
+                    info!(target: "4da::license", old_tier = %current_tier, new_tier = %effective_tier, "Tier corrected after local validation");
+                    guard.get_mut().license.tier = effective_tier.clone();
+                    if let Err(e) = guard.save() {
+                        warn!("Failed to save settings after license validation: {e}");
+                    }
+                }
+
+                Ok(serde_json::json!({
+                    "validated": true,
+                    "tier": effective_tier,
+                    "cached": false,
+                    "detail": "Valid (local signature verified)",
+                }))
+            }
+            Err(e) => {
+                warn!(target: "4da::license", error = %e, "Self-signed license key verification failed");
+                Ok(serde_json::json!({
+                    "validated": false,
+                    "tier": current_tier, // Don't downgrade on verification error — preserve existing tier
+                    "cached": false,
+                    "detail": format!("Verification failed: {e}"),
+                }))
+            }
         }
-    }
+    } else {
+        // Keygen API key — validate online
+        let result =
+            crate::settings::validate_license_key_keygen(&license_key, &current_tier).await;
 
-    Ok(serde_json::json!({
-        "validated": result.online || result.cached,
-        "tier": result.tier,
-        "cached": result.cached,
-        "detail": result.detail,
-    }))
+        // Update tier in settings if it changed
+        if result.tier != current_tier {
+            let manager = get_settings_manager();
+            let mut guard = manager.lock();
+            let settings = guard.get_mut();
+            info!(target: "4da::license", old_tier = %current_tier, new_tier = %result.tier, "Tier updated after Keygen validation");
+            settings.license.tier = result.tier.clone();
+            if let Err(e) = guard.save() {
+                warn!("Failed to save settings after license update: {e}");
+            }
+        }
+
+        Ok(serde_json::json!({
+            "validated": result.online || result.cached,
+            "tier": result.tier,
+            "cached": result.cached,
+            "detail": result.detail,
+        }))
+    }
 }
 
 /// Recover a license key by purchase email.
