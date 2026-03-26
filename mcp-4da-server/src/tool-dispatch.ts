@@ -43,12 +43,6 @@ import {
   executeRecordAgentFeedback,
   executeGetAgentFeedbackStats,
   executeWhatShouldIKnow,
-  executeMuseCreatePack,
-  executeMuseListPacks,
-  executeMuseEnrichPrompt,
-  executeMuseAddSources,
-  executeMuseGetStats,
-  executeMuseActivatePack,
 } from "./tools/index.js";
 
 /**
@@ -119,13 +113,6 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   // Synthesis
   what_should_i_know: executeWhatShouldIKnow,
 
-  // MUSE — Creative Context Engine
-  muse_create_pack: executeMuseCreatePack,
-  muse_list_packs: executeMuseListPacks,
-  muse_enrich_prompt: executeMuseEnrichPrompt,
-  muse_add_sources: executeMuseAddSources,
-  muse_stats: executeMuseGetStats,
-  muse_activate_pack: executeMuseActivatePack,
 };
 
 /**

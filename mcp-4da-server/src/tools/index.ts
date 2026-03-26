@@ -182,19 +182,3 @@ export {
   whatShouldIKnowTool,
   executeWhatShouldIKnow,
 } from "./what-should-i-know.js";
-
-// MUSE — Creative Context Engine (private parallel track)
-export {
-  museCreatePackTool,
-  executeMuseCreatePack,
-  museListPacksTool,
-  executeMuseListPacks,
-  museEnrichPromptTool,
-  executeMuseEnrichPrompt,
-  museAddSourcesTool,
-  executeMuseAddSources,
-  museGetStatsTool,
-  executeMuseGetStats,
-  museActivatePackTool,
-  executeMuseActivatePack,
-} from "./muse-context.js";
