@@ -30,14 +30,33 @@ impl SettingsManager {
         let usage_path = data_dir.join("usage.json");
 
         let mut settings = if settings_path.exists() {
-            match fs::read_to_string(&settings_path) {
-                Ok(content) => serde_json::from_str(&content).unwrap_or_else(|e| {
-                    warn!(target: "4da::settings", error = %e, "Failed to parse settings");
-                    Settings::default()
-                }),
-                Err(e) => {
-                    warn!(target: "4da::settings", error = %e, "Failed to read settings");
-                    Settings::default()
+            let load_result = fs::read_to_string(&settings_path)
+                .ok()
+                .and_then(|content| serde_json::from_str::<Settings>(&content).ok());
+
+            match load_result {
+                Some(s) => s,
+                None => {
+                    // Primary settings corrupted or unreadable — try backup
+                    let bak_path = settings_path.with_extension("json.bak");
+                    let bak_result = if bak_path.exists() {
+                        fs::read_to_string(&bak_path)
+                            .ok()
+                            .and_then(|content| serde_json::from_str::<Settings>(&content).ok())
+                    } else {
+                        None
+                    };
+
+                    match bak_result {
+                        Some(restored) => {
+                            warn!(target: "4da::settings", "settings.json corrupted — restored from backup");
+                            restored
+                        }
+                        None => {
+                            warn!(target: "4da::settings", "settings.json corrupted and no valid backup — using defaults");
+                            Settings::default()
+                        }
+                    }
                 }
             }
         } else {
@@ -203,6 +222,13 @@ impl SettingsManager {
         // license_key intentionally NOT stripped — always persisted to disk
 
         let json = serde_json::to_string_pretty(&disk_settings)?;
+
+        // Backup existing settings before overwrite — enables recovery from corruption.
+        // Only keeps one backup (settings.json.bak) to avoid clutter.
+        if self.settings_path.exists() {
+            let bak_path = self.settings_path.with_extension("json.bak");
+            let _ = fs::copy(&self.settings_path, &bak_path);
+        }
 
         // Atomic write: write to temp file then rename, so a crash mid-write
         // won't corrupt the original settings.json. fs::rename is atomic on
