@@ -39,9 +39,7 @@ export function HealthBanner() {
           setIssues(result);
         }
       })
-      .catch(() => {
-        // Health check itself failed — don't block the app
-      });
+      .catch((e) => console.debug('[HealthBanner] health check:', e));
   }, []);
 
   const handleDismiss = useCallback(() => {

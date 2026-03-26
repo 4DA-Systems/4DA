@@ -30,9 +30,7 @@ export function useExpandTracking(
           action_data: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
           item_topics: itemTopics,
           item_source: sourceType,
-        }).catch(() => {
-          // Silent — passive signal
-        });
+        }).catch((e) => console.debug('[expand-tracking] record:', e));
       }
       expandedAt.current = null;
     }
@@ -51,7 +49,7 @@ export function useExpandTracking(
             action_data: JSON.stringify({ type: 'click', dwell_time_seconds: dwellSeconds }),
             item_topics: itemTopics,
             item_source: sourceType,
-          }).catch(() => {});
+          }).catch((e) => console.debug('[expand-tracking] unmount record:', e));
         }
       }
     };

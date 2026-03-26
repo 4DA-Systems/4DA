@@ -71,7 +71,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       // Load model registry (non-blocking)
       cmd('get_model_registry').then((registry) => {
         set({ modelRegistry: registry });
-      }).catch(() => {});
+      }).catch((e) => console.debug('[settings] model registry:', e));
     } catch {
       /* settings not available */
     }

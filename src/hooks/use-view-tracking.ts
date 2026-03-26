@@ -50,9 +50,7 @@ export function useViewTracking({
         action_data: JSON.stringify({ visible_seconds: visibleSeconds }),
         item_topics: itemTopics,
         item_source: sourceType,
-      }).catch(() => {
-        // Silent — passive signal, not critical
-      });
+      }).catch((e) => console.debug('[view-tracking] record view:', e));
     },
     [itemId, sourceType, itemTopics],
   );
@@ -67,9 +65,7 @@ export function useViewTracking({
       action_data: null,
       item_topics: itemTopics,
       item_source: sourceType,
-    }).catch(() => {
-      // Silent — passive signal
-    });
+    }).catch((e) => console.debug('[view-tracking] record ignore:', e));
   }, [itemId, sourceType, hasExplicitFeedback, itemTopics]);
 
   useEffect(() => {

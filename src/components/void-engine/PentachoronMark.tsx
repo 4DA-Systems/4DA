@@ -29,9 +29,7 @@ export function PentachoronMark({ signal, size = 200 }: PentachoronMarkProps) {
       el.style.display = 'block';
       containerRef.current.appendChild(el);
       elementRef.current = el;
-    }).catch(() => {
-      // GAME component failed — CSS fallback visible
-    });
+    }).catch((e) => console.debug('[PentachoronMark] GAME load:', e));
     const container = containerRef.current;
     return () => {
       cancelled = true;
