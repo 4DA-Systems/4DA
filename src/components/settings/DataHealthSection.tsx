@@ -20,15 +20,16 @@ function formatCount(n: number): string {
 }
 
 function HealthBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const colors: Record<string, string> = {
     healthy: 'bg-green-500/20 text-green-400 border-green-500/30',
     growing: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
     needs_attention: 'bg-red-500/20 text-red-400 border-red-500/30',
   };
   const labels: Record<string, string> = {
-    healthy: 'Healthy',
-    growing: 'Growing',
-    needs_attention: 'Needs attention',
+    healthy: t('settings.dataHealth.statusHealthy', 'Healthy'),
+    growing: t('settings.dataHealth.statusGrowing', 'Growing'),
+    needs_attention: t('settings.dataHealth.statusNeedsAttention', 'Needs attention'),
   };
   return (
     <span className={`px-2 py-0.5 text-xs rounded border ${colors[status] ?? colors.healthy}`}>
@@ -56,13 +57,13 @@ function CleanResultSummary({ result }: { result: MaintenanceResult }) {
   }
 
   const lines: string[] = [];
-  if (result.deleted_items > 0) lines.push(`${result.deleted_items} old items`);
-  if (result.deleted_feedback > 0) lines.push(`${result.deleted_feedback} feedback entries`);
-  if (result.deleted_intelligence > 0) lines.push(`${result.deleted_intelligence} superseded calibrations`);
-  if (result.deleted_windows > 0) lines.push(`${result.deleted_windows} expired decision windows`);
-  if (result.deleted_cycles > 0) lines.push(`${result.deleted_cycles} old autophagy cycles`);
-  if (result.deleted_necessity > 0) lines.push(`${result.deleted_necessity} orphaned scores`);
-  if (result.deleted_void > 0) lines.push(`${result.deleted_void} void positions`);
+  if (result.deleted_items > 0) lines.push(t('settings.dataHealth.cleanItems', { count: result.deleted_items, defaultValue: '{{count}} old items' }));
+  if (result.deleted_feedback > 0) lines.push(t('settings.dataHealth.cleanFeedback', { count: result.deleted_feedback, defaultValue: '{{count}} feedback entries' }));
+  if (result.deleted_intelligence > 0) lines.push(t('settings.dataHealth.cleanCalibrations', { count: result.deleted_intelligence, defaultValue: '{{count}} superseded calibrations' }));
+  if (result.deleted_windows > 0) lines.push(t('settings.dataHealth.cleanWindows', { count: result.deleted_windows, defaultValue: '{{count}} expired decision windows' }));
+  if (result.deleted_cycles > 0) lines.push(t('settings.dataHealth.cleanCycles', { count: result.deleted_cycles, defaultValue: '{{count}} old autophagy cycles' }));
+  if (result.deleted_necessity > 0) lines.push(t('settings.dataHealth.cleanScores', { count: result.deleted_necessity, defaultValue: '{{count}} orphaned scores' }));
+  if (result.deleted_void > 0) lines.push(t('settings.dataHealth.cleanVoid', { count: result.deleted_void, defaultValue: '{{count}} void positions' }));
 
   return (
     <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400">
@@ -136,7 +137,7 @@ export function DataHealthSection() {
   if (loading) {
     return (
       <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-        <div className="text-xs text-text-muted">Loading data health...</div>
+        <div className="text-xs text-text-muted">{t('settings.dataHealth.loading', 'Loading data health...')}</div>
       </div>
     );
   }
