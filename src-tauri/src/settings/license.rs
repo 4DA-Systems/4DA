@@ -515,6 +515,23 @@ async fn validate_license_key_keygen_inner(
     current_tier: &str,
     skip_cache: bool,
 ) -> KeygenValidationResult {
+    // Safety guard: self-signed 4DA- keys must NEVER be sent to the Keygen API.
+    // They are verified locally via ed25519. Sending them to Keygen returns a
+    // rejection that gets cached as tier "free", corrupting the license state.
+    if license_key.starts_with("4DA-") {
+        tracing::warn!(
+            target: "4da::license",
+            "BUG GUARD: validate_license_key_keygen called with self-signed key — returning current tier"
+        );
+        return KeygenValidationResult {
+            online: false,
+            cached: false,
+            tier: current_tier.to_string(),
+            code: "self_signed".to_string(),
+            detail: "Self-signed key — use local verification".to_string(),
+        };
+    }
+
     if license_key.trim().is_empty() {
         return KeygenValidationResult {
             online: false,
