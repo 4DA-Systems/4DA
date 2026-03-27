@@ -129,6 +129,13 @@ export function extractFactors(b: ScoreBreakdown): Factor[] {
       effect: (b.confirmation_mult ?? 1) > 1 ? 'boost' : 'penalty', format: 'mult', max: 1.25,
     });
   }
+  if ((b.signal_strength_bonus ?? 0) > 0.01) {
+    factors.push({
+      key: 'strength', labelKey: 'scoreDrawer.factor.strength', label: 'Signal strength bonus', value: b.signal_strength_bonus ?? 0,
+      effect: 'boost', format: 'raw', max: 0.08,
+      detail: 'Strong confirmed signals raised the gate ceiling',
+    });
+  }
 
   return factors;
 }
@@ -171,4 +178,5 @@ export const FACTOR_DESCRIPTIONS: Record<string, string> = {
   anti: 'anti-topic penalty',
   competing: 'competing tech penalty',
   confirmation: 'signal confirmation',
+  strength: 'signal strength bonus',
 };

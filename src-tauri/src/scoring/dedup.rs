@@ -85,6 +85,97 @@ fn normalize_result_title(title: &str) -> String {
         .to_lowercase()
 }
 
+/// Compute Jaccard similarity between two title strings based on word tokens.
+/// Returns 0.0 (no overlap) to 1.0 (identical word sets).
+/// Used to catch near-duplicate content that URL and exact-title dedup miss
+/// (cross-posts, minor title variations, same content from different sources).
+fn jaccard_word_similarity(a: &str, b: &str) -> f32 {
+    let words_a: std::collections::HashSet<&str> =
+        a.split_whitespace().filter(|w| w.len() >= 2).collect();
+    let words_b: std::collections::HashSet<&str> =
+        b.split_whitespace().filter(|w| w.len() >= 2).collect();
+
+    if words_a.is_empty() || words_b.is_empty() {
+        return 0.0;
+    }
+
+    let intersection = words_a.intersection(&words_b).count();
+    let union = words_a.union(&words_b).count();
+
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f32 / union as f32
+    }
+}
+
+/// Fuzzy title deduplication: catches near-duplicates that URL/exact-title dedup miss.
+/// Uses Jaccard word similarity on normalized titles. Items with >= 0.75 word overlap
+/// are considered duplicates — the higher-scoring item survives.
+/// This catches cross-posted content and minor title variations.
+pub(crate) fn fuzzy_dedup_results(results: &mut Vec<SourceRelevance>) {
+    if results.len() < 2 {
+        return;
+    }
+
+    let initial = results.len();
+
+    // Pre-compute normalized titles
+    let normalized: Vec<String> = results.iter().map(|item| normalize_result_title(&item.title)).collect();
+
+    // Track which indices to remove (results are sorted desc, so i < j means i scored higher)
+    let mut remove_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();
+
+    for i in 0..results.len() {
+        if remove_indices.contains(&i) || results[i].excluded {
+            continue;
+        }
+        for j in (i + 1)..results.len() {
+            if remove_indices.contains(&j) || results[j].excluded {
+                continue;
+            }
+            let similarity = jaccard_word_similarity(&normalized[i], &normalized[j]);
+            if similarity >= 0.75 {
+                // j scored lower (results sorted desc) — mark for removal
+                remove_indices.insert(j);
+            }
+        }
+    }
+
+    if remove_indices.is_empty() {
+        return;
+    }
+
+    // Annotate survivors with similar titles from their fuzzy duplicates
+    for &removed_idx in &remove_indices {
+        let removed_title = results[removed_idx].title.clone();
+        for i in 0..results.len() {
+            if remove_indices.contains(&i) || i == removed_idx {
+                continue;
+            }
+            let sim = jaccard_word_similarity(&normalized[i], &normalized[removed_idx]);
+            if sim >= 0.75 {
+                results[i].similar_count += 1;
+                results[i].similar_titles.push(removed_title);
+                break;
+            }
+        }
+    }
+
+    // Remove fuzzy duplicates
+    let mut idx = 0;
+    results.retain(|_| {
+        let keep = !remove_indices.contains(&idx);
+        idx += 1;
+        keep
+    });
+
+    let removed = initial - results.len();
+    if removed > 0 {
+        info!(target: "4da::scoring", removed = removed, kept = results.len(), "Fuzzy title deduplication");
+    }
+}
+
 /// Topic-level deduplication: groups items sharing the same primary extracted topic.
 /// Keeps the highest-scoring item as representative and annotates with similar count/titles.
 /// Must be called after sort_results() so highest-scored items come first.

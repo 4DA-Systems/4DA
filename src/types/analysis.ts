@@ -91,6 +91,8 @@ export interface ScoreBreakdown {
   necessity_category?: string;
   /** Necessity urgency (immediate, this_week, awareness, none) */
   necessity_urgency?: string;
+  /** Signal strength bonus: ceiling adjustment for strong confirmed signals (0.0-0.08) */
+  signal_strength_bonus?: number;
 }
 
 export interface AnalysisProgress {
