@@ -6,10 +6,10 @@
 
 /// Novelty assessment result
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Reason: is_introductory/is_release/is_security fields set but only multiplier read in production
+#[allow(dead_code)] // Reason: intro_confidence/is_release/is_security fields set but only multiplier read in production
 pub struct NoveltyScore {
-    /// Whether this appears to be introductory/tutorial content
-    pub is_introductory: bool,
+    /// Graduated introductory confidence (0.0 = definitely not intro, 1.0 = strongly introductory)
+    pub intro_confidence: f32,
     /// Whether this appears to be a release/update announcement
     pub is_release: bool,
     /// Whether this is a security advisory (CVE, vulnerability, patch)
@@ -30,7 +30,7 @@ pub fn compute_novelty(
     topics: &[String],
     user_tech: &std::collections::HashSet<String>,
 ) -> NoveltyScore {
-    let is_introductory = detect_introductory(title, content);
+    let intro_confidence = detect_introductory_confidence(title, content);
     let is_release = detect_release(title, content);
     let is_security = detect_security(title, content);
 
@@ -39,91 +39,161 @@ pub fn compute_novelty(
 
     // Dependency-aware novelty: releases/security about YOUR tech get stronger boosts
     let multiplier = if is_security && about_known_tech {
-        // CVE/vulnerability in YOUR dependency = urgent, must-see
         1.30
     } else if is_security {
-        // Security news about unrelated tech = informational
         1.10
     } else if is_release && about_known_tech {
-        // Release of YOUR dependency = high value
         1.25
     } else if is_release {
-        // Release of unrelated tech = mild interest
         1.05
-    } else if is_introductory && about_known_tech {
-        // "Getting Started with Rust" for a Rust developer = noise
-        0.50
-    } else if is_introductory {
-        // Introductory content about unknown tech = mild penalty
-        0.80
+    } else if intro_confidence > 0.0 && about_known_tech {
+        // Graduated penalty: strong intro (1.0) → 0.50, weak intro (0.3) → 0.85
+        1.0 - (intro_confidence * 0.50)
+    } else if intro_confidence > 0.0 {
+        // Graduated penalty for unknown tech: strong intro (1.0) → 0.80, weak (0.3) → 0.94
+        1.0 - (intro_confidence * 0.20)
     } else {
         1.0
     };
 
     NoveltyScore {
-        is_introductory,
+        intro_confidence,
         is_release,
         is_security,
         multiplier,
     }
 }
 
-/// Detect introductory/tutorial content from title and content patterns
-fn detect_introductory(title: &str, content: &str) -> bool {
+/// Detect introductory/tutorial content with graduated confidence (0.0-1.0).
+///
+/// Strong patterns ("Getting Started", "for beginners") → 0.90-1.0
+/// Moderate patterns ("tutorial", "a guide to") → 0.50-0.70
+/// Weak/ambiguous patterns ("complete guide", "ultimate guide") → 0.30-0.50
+/// Advanced-term override: presence of sophisticated terms reduces confidence
+fn detect_introductory_confidence(title: &str, content: &str) -> f32 {
     let lower = title.to_lowercase();
+    let mut confidence: f32 = 0.0;
 
-    const INTRO_PATTERNS: &[&str] = &[
-        "getting started",
-        "beginner's guide",
-        "beginners guide",
-        "introduction to",
-        "intro to",
-        "what is",
-        "learn ",
-        "tutorial:",
-        "tutorial for",
-        "a guide to",
-        "complete guide",
-        "ultimate guide",
-        "how to get started",
-        "for beginners",
-        "101:",
-        " 101",
-        "basics of",
-        "fundamentals of",
-        "from scratch",
-        "step by step",
-        "your first",
-        "hello world",
-    ];
-
-    if INTRO_PATTERNS.iter().any(|p| lower.contains(p)) {
-        return true;
+    // Strong beginner patterns (0.90-1.0)
+    let strong_hits = STRONG_INTRO_PATTERNS
+        .iter()
+        .filter(|p| lower.contains(**p))
+        .count();
+    if strong_hits > 0 {
+        confidence = 0.90 + (strong_hits as f32 * 0.05).min(0.10);
     }
 
-    // Check content for tutorial patterns (if content is available)
-    if !content.is_empty() {
-        let content_lower = content.to_lowercase();
-        // Strong introductory signals in content body
-        let intro_phrases = [
-            "in this tutorial",
-            "in this beginner",
-            "let's start from scratch",
-            "first, install",
-            "prerequisites:",
-        ];
-        if intro_phrases
+    // Moderate patterns (add 0.50-0.70 if no strong hit)
+    if confidence == 0.0 {
+        let moderate_hits = MODERATE_INTRO_PATTERNS
             .iter()
-            .filter(|p| content_lower.contains(*p))
-            .count()
-            >= 2
-        {
-            return true;
+            .filter(|p| lower.contains(**p))
+            .count();
+        if moderate_hits > 0 {
+            confidence = 0.50 + (moderate_hits as f32 * 0.10).min(0.20);
         }
     }
 
-    false
+    // Weak/ambiguous patterns (add 0.30-0.50 if no stronger hit)
+    if confidence == 0.0 {
+        let weak_hits = WEAK_INTRO_PATTERNS
+            .iter()
+            .filter(|p| lower.contains(**p))
+            .count();
+        if weak_hits > 0 {
+            confidence = 0.30 + (weak_hits as f32 * 0.10).min(0.20);
+        }
+    }
+
+    // Content body patterns can ADD confidence (requires 2+ matches)
+    if !content.is_empty() && confidence < 1.0 {
+        let content_lower = content.to_lowercase();
+        let body_hits = INTRO_BODY_PHRASES
+            .iter()
+            .filter(|p| content_lower.contains(**p))
+            .count();
+        if body_hits >= 2 {
+            confidence = (confidence + 0.30).min(1.0);
+        }
+    }
+
+    // Advanced-term override: if title contains sophisticated terms from
+    // content_sophistication, REDUCE intro confidence (e.g., "How to Build
+    // a Custom Allocator" is NOT a beginner article despite "How to")
+    if confidence > 0.0 {
+        let advanced_hits = crate::content_sophistication::ADVANCED_TERMS
+            .iter()
+            .filter(|&&term| lower.contains(term))
+            .count();
+        if advanced_hits > 0 {
+            confidence = (confidence - 0.30 * advanced_hits as f32).max(0.0);
+        }
+    }
+
+    confidence.clamp(0.0, 1.0)
 }
+
+// Strong beginner patterns — high confidence that content is introductory
+const STRONG_INTRO_PATTERNS: &[&str] = &[
+    "getting started",
+    "beginner's guide",
+    "beginners guide",
+    "for beginners",
+    "complete beginner",
+    "absolute beginner",
+    "hello world",
+    "for dummies",
+    "101:",
+    " 101",
+    "your first",
+    "how to get started",
+    "in 5 minutes",
+    "in 10 minutes",
+    "in 15 minutes",
+    "made easy",
+    "simplified",
+    "quick start",
+    "quickstart",
+    "full project breakdown",
+];
+
+// Moderate patterns — could be intro OR moderately advanced
+const MODERATE_INTRO_PATTERNS: &[&str] = &[
+    "introduction to",
+    "intro to",
+    "tutorial:",
+    "tutorial for",
+    "learn ",
+    "learn how to",
+    "from scratch",
+    "step by step",
+    "step-by-step",
+    "basics of",
+    "fundamentals of",
+    "what is ",
+    "crash course",
+];
+
+// Weak/ambiguous patterns — may be advanced despite intro-sounding language
+const WEAK_INTRO_PATTERNS: &[&str] = &[
+    "a guide to",
+    "complete guide",
+    "ultimate guide",
+    "cheat sheet",
+];
+
+// Content body phrases that indicate tutorial structure
+const INTRO_BODY_PHRASES: &[&str] = &[
+    "in this tutorial",
+    "in this beginner",
+    "let's start from scratch",
+    "first, install",
+    "prerequisites:",
+    "npm install",
+    "pip install",
+    "let's create a new",
+    "open your terminal",
+];
 
 /// Detect release notes, version announcements, and update content
 fn detect_release(title: &str, content: &str) -> bool {
@@ -249,21 +319,35 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn test_introductory_detection() {
-        assert!(detect_introductory("Getting Started with Rust", ""));
-        assert!(detect_introductory("Introduction to Tauri 2.0", ""));
-        assert!(detect_introductory(
-            "Rust for Beginners: A Complete Guide",
-            ""
-        ));
-        assert!(!detect_introductory(
-            "Tokio 1.34: new task scheduling improvements",
-            ""
-        ));
-        assert!(!detect_introductory(
-            "Unsafe Rust patterns in production",
-            ""
-        ));
+    fn test_introductory_detection_graduated() {
+        // Strong intro patterns → high confidence
+        let conf = detect_introductory_confidence("Getting Started with Rust", "");
+        assert!(conf >= 0.85, "Expected >=0.85, got {conf}");
+
+        let conf = detect_introductory_confidence("Introduction to Tauri 2.0", "");
+        assert!(conf >= 0.45, "Expected >=0.45, got {conf}");
+
+        let conf = detect_introductory_confidence("Rust for Beginners: A Complete Guide", "");
+        assert!(conf >= 0.85, "Expected >=0.85, got {conf}");
+
+        // Non-intro → zero confidence
+        let conf = detect_introductory_confidence("Tokio 1.34: new task scheduling improvements", "");
+        assert_eq!(conf, 0.0);
+
+        let conf = detect_introductory_confidence("Unsafe Rust patterns in production", "");
+        assert_eq!(conf, 0.0);
+    }
+
+    #[test]
+    fn test_advanced_term_override() {
+        // "How to Build a Custom Allocator" contains "allocator" (advanced term)
+        // Despite weak intro framing, advanced term should reduce confidence
+        let conf = detect_introductory_confidence(
+            "A Guide to Building a Custom Allocator in Rust",
+            "",
+        );
+        // "a guide to" = weak (0.30-0.50), but "allocator" reduces by 0.30
+        assert!(conf < 0.25, "Advanced term should reduce intro confidence, got {conf}");
     }
 
     #[test]
@@ -302,9 +386,10 @@ mod tests {
         let topics = vec!["rust".to_string()];
 
         let result = compute_novelty("Getting Started with Rust", "", &topics, &user_tech);
-        assert!(result.is_introductory);
+        assert!(result.intro_confidence >= 0.85);
         assert!(!result.is_release);
-        assert_eq!(result.multiplier, 0.50); // Stronger penalty: noise for experts
+        // Graduated: strong intro (0.90+) × known tech → ~0.55 (was fixed 0.50)
+        assert!(result.multiplier < 0.60, "Expected <0.60, got {}", result.multiplier);
     }
 
     #[test]
@@ -363,7 +448,7 @@ mod tests {
         let topics = vec!["rust".to_string()];
 
         let result = compute_novelty("Advanced async patterns in Tokio", "", &topics, &user_tech);
-        assert!(!result.is_introductory);
+        assert!(result.intro_confidence == 0.0);
         assert!(!result.is_release);
         assert!(!result.is_security);
         assert_eq!(result.multiplier, 1.0);
@@ -375,7 +460,8 @@ mod tests {
         let topics = vec!["python".to_string()];
 
         let result = compute_novelty("Getting Started with Python", "", &topics, &user_tech);
-        assert!(result.is_introductory);
-        assert_eq!(result.multiplier, 0.80); // Mild penalty for unknown tech intro
+        assert!(result.intro_confidence >= 0.85);
+        // Graduated: strong intro × unknown tech → ~0.82 (was fixed 0.80)
+        assert!(result.multiplier < 0.85, "Expected <0.85, got {}", result.multiplier);
     }
 }

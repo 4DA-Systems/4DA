@@ -167,10 +167,10 @@ pub fn update_posterior(conn: &Connection, topics: &[String], signal_strength: f
 
     let (mut posterior, update_count) = load_posterior(conn)?;
 
-    // Dampening exponent: implicit signals are much weaker than explicit
-    // taste test responses. 0.15 means we need ~7 implicit signals to
-    // equal one taste test card response.
-    let dampen = 0.15_f64;
+    // Dampening exponent: implicit signals are weaker than explicit
+    // taste test responses. 0.22 means ~4.5 implicit signals to
+    // equal one taste test card response (faster convergence).
+    let dampen = 0.22_f64;
 
     for topic in topics {
         for (j, post) in posterior.iter_mut().enumerate().take(NUM_PERSONAS) {
