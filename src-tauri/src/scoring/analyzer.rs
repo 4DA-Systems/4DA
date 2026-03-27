@@ -113,6 +113,7 @@ pub(crate) async fn score_items_full(
 
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
+    scoring::fuzzy_dedup_results(&mut results);
     scoring::topic_dedup_results(&mut results);
     scoring::temporal_cluster_results(&mut results);
 

@@ -99,4 +99,9 @@ necessity_category: string | null,
 /**
  * Necessity urgency (immediate, this_week, awareness, none)
  */
-necessity_urgency: string | null, };
+necessity_urgency: string | null, 
+/**
+ * Signal strength bonus: ceiling adjustment for strong confirmed signals (0.0-0.08).
+ * Creates mid-band spread — strong 2-signal items score higher than weak 2-signal items.
+ */
+signal_strength_bonus: number, };

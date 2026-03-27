@@ -92,13 +92,23 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
       </div>
 
       <div className="px-4 py-3 space-y-4 max-h-[50vh] overflow-y-auto">
-        {/* Confirmation Gate */}
+        {/* Confirmation Gate with Signal Strengths */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] text-text-muted uppercase tracking-wider">
             {t('scoreDrawer.signals', 'Signals')}
           </span>
-          {['context', 'interest', 'ace', 'learned', 'dependency'].map(axis => {
+          {(['context', 'interest', 'ace', 'learned', 'dependency'] as const).map(axis => {
             const confirmed = confirmedSignals.includes(axis);
+            // Show strength value for confirmed signals from confidence_by_signal
+            const strengthMap: Record<string, string> = {
+              context: 'context',
+              interest: 'interest',
+              ace: 'ace_boost',
+              learned: 'feedback',
+              dependency: 'dependency',
+            };
+            const mappedKey = strengthMap[axis];
+            const strengthVal = mappedKey != null ? breakdown.confidence_by_signal?.[mappedKey] : undefined;
             return (
               <span
                 key={axis}
@@ -107,13 +117,22 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
                     ? 'bg-green-500/15 text-green-400 border-green-500/30'
                     : 'bg-bg-tertiary text-text-muted border-border'
                 }`}
+                title={confirmed && strengthVal != null ? `Strength: ${Math.round(strengthVal * 100)}%` : undefined}
               >
                 {confirmed ? '\u2713' : '\u2717'} {axis}
+                {confirmed && strengthVal != null && (
+                  <span className="text-green-300/60 ms-0.5 font-mono">{Math.round(strengthVal * 100)}</span>
+                )}
               </span>
             );
           })}
           <span className="text-[10px] text-text-muted ms-1">
             {signalCount}/5
+            {(breakdown.signal_strength_bonus ?? 0) > 0.01 && (
+              <span className="text-green-400 ms-1" title="Signal strength raised the gate ceiling">
+                +{Math.round((breakdown.signal_strength_bonus ?? 0) * 100)}
+              </span>
+            )}
           </span>
         </div>
 

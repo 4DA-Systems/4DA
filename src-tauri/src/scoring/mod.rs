@@ -32,7 +32,8 @@ pub(crate) use analyzer::{run_background_analysis, run_post_analysis_hooks, scor
 pub(crate) use calibration::{calibrate_score, compute_interest_score};
 pub(crate) use context::build_scoring_context;
 pub(crate) use dedup::{
-    compute_serendipity_candidates, dedup_results, sort_results, topic_dedup_results,
+    compute_serendipity_candidates, dedup_results, fuzzy_dedup_results, sort_results,
+    topic_dedup_results,
 };
 pub(crate) use dependencies::{match_dependencies, VersionDelta};
 pub(crate) use explanation::{

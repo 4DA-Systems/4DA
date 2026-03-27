@@ -41,6 +41,11 @@ const V2_GATE: [(f32, f32); 6] = [
 const BOOST_CAP_MIN: f32 = -0.15;
 const BOOST_CAP_MAX: f32 = 0.35;
 const KNN_CENTER: f32 = 0.49;
+
+/// Maximum gate ceiling bonus for strong signals (creates mid-band spread).
+/// Strong 2-signal items can reach 0.65 + 0.08 = 0.73 vs weak at 0.65.
+/// Only applies at 2+ signals — 0-1 signal ceilings are intentionally hard.
+const STRENGTH_BONUS_MAX: f32 = 0.08;
 const KNN_SCALE: f32 = 12.0;
 
 // ============================================================================
@@ -59,6 +64,92 @@ fn calibrate_knn(raw: f32) -> f32 {
         return 1.0;
     }
     1.0 / (1.0 + ((KNN_CENTER - raw) * KNN_SCALE).exp())
+}
+
+// ============================================================================
+// Signal strength bonus — mid-band spread
+// ============================================================================
+
+/// Compute how strong the confirmed signals are, normalized to [0.0, 1.0].
+/// Returns a bonus to add to the gate ceiling — strong 2-signal items get
+/// a higher ceiling than weak 2-signal items, creating sub-ranking.
+///
+/// Each confirmed axis contributes its "excess" above threshold (how far above
+/// the minimum confirmation level). The average excess drives the bonus.
+fn compute_signal_strength_bonus(
+    signal_count: u8,
+    context_score: f32,
+    interest_score: f32,
+    keyword_score: f32,
+    semantic_boost: f32,
+    dep_match_score: f32,
+    feedback_boost: f32,
+    affinity_mult: f32,
+    stack_pain_match: bool,
+) -> f32 {
+    // Only applies at 2+ signals — 0-1 ceilings are intentionally hard
+    if signal_count < 2 {
+        return 0.0;
+    }
+
+    let mut strengths: Vec<f32> = Vec::with_capacity(5);
+
+    // Context axis: excess above 0.45 threshold, normalized to [0, 1]
+    if context_score >= scoring_config::CONTEXT_THRESHOLD {
+        let excess =
+            (context_score - scoring_config::CONTEXT_THRESHOLD) / (1.0 - scoring_config::CONTEXT_THRESHOLD);
+        strengths.push(excess.clamp(0.0, 1.0));
+    }
+
+    // Interest axis: best of interest_score and keyword_score
+    let interest_confirmed = interest_score >= scoring_config::INTEREST_THRESHOLD
+        || keyword_score >= scoring_config::KEYWORD_THRESHOLD;
+    if interest_confirmed {
+        let best = interest_score.max(keyword_score);
+        let threshold = scoring_config::INTEREST_THRESHOLD.min(scoring_config::KEYWORD_THRESHOLD);
+        let excess = (best - threshold) / (1.0 - threshold).max(0.01);
+        strengths.push(excess.clamp(0.0, 1.0));
+    }
+
+    // ACE axis: semantic boost or active topic match
+    let ace_confirmed = semantic_boost >= scoring_config::SEMANTIC_THRESHOLD || stack_pain_match;
+    if ace_confirmed {
+        if semantic_boost >= scoring_config::SEMANTIC_THRESHOLD {
+            // Normalize semantic excess (practical range 0.18-0.50)
+            let excess = (semantic_boost - scoring_config::SEMANTIC_THRESHOLD) / 0.32;
+            strengths.push(excess.clamp(0.0, 1.0));
+        } else {
+            // stack_pain_match is binary — use flat 0.4
+            strengths.push(0.4);
+        }
+    }
+
+    // Learned axis: feedback or affinity
+    if feedback_boost > scoring_config::FEEDBACK_THRESHOLD
+        || affinity_mult >= scoring_config::AFFINITY_THRESHOLD
+    {
+        // Affinity-driven strength (affinity range 1.15-1.70)
+        if affinity_mult >= scoring_config::AFFINITY_THRESHOLD {
+            let excess = (affinity_mult - scoring_config::AFFINITY_THRESHOLD) / 0.55;
+            strengths.push(excess.clamp(0.0, 1.0));
+        } else {
+            strengths.push(0.4); // Feedback is less granular
+        }
+    }
+
+    // Dependency axis
+    if dep_match_score >= scoring_config::DEPENDENCY_THRESHOLD {
+        let excess =
+            (dep_match_score - scoring_config::DEPENDENCY_THRESHOLD) / (1.0 - scoring_config::DEPENDENCY_THRESHOLD);
+        strengths.push(excess.clamp(0.0, 1.0));
+    }
+
+    if strengths.is_empty() {
+        return 0.0;
+    }
+
+    let avg_strength = strengths.iter().sum::<f32>() / strengths.len() as f32;
+    avg_strength * STRENGTH_BONUS_MAX
 }
 
 // ============================================================================
@@ -586,9 +677,14 @@ fn apply_gate_effect(
     signal_count: u8,
     domain_relevance: f32,
     ctx: &ScoringContext,
+    strength_bonus: f32,
 ) -> f32 {
     let idx = (signal_count as usize).min(5);
-    let (conf_mult, score_ceiling) = V2_GATE[idx];
+    let (conf_mult, base_ceiling) = V2_GATE[idx];
+    // Adjust ceiling based on signal strength — strong signals get higher ceiling.
+    // This creates sub-ranking within gate tiers: strong 2-signal items at ~0.73
+    // are clearly differentiated from weak 2-signal items capped at 0.65.
+    let score_ceiling = (base_ceiling + strength_bonus).min(1.0);
 
     let gated = score * conf_mult;
 
@@ -859,10 +955,24 @@ pub(crate) fn score_item(
     };
     let boosted_score = (boosted_score + trend_boost).clamp(0.0, 1.0);
 
+    // ── Signal strength bonus (pre-gate) ─────────────────────────────
+    let strength_bonus = compute_signal_strength_bonus(
+        signal_count,
+        cal.context_score,
+        cal.interest_score,
+        cal.keyword_score,
+        cal.semantic_boost,
+        raw.dep_match_score,
+        raw.feedback_boost,
+        raw.affinity_mult,
+        raw.stack_pain_match,
+    );
+
     // ── Phase 7: Gate effect ──────────────────────────────────────────
     let conf_idx = (signal_count as usize).min(5);
     let confirmation_mult = V2_GATE[conf_idx].0;
-    let gated_score = apply_gate_effect(boosted_score, signal_count, raw.domain_relevance, ctx);
+    let gated_score =
+        apply_gate_effect(boosted_score, signal_count, raw.domain_relevance, ctx, strength_bonus);
 
     // ── Phase 8: Final adjustments ────────────────────────────────────
     let combined_score = apply_final_adjustments(gated_score, input.title);
@@ -1039,6 +1149,7 @@ pub(crate) fn score_item(
         } else {
             None
         },
+        signal_strength_bonus: strength_bonus,
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
