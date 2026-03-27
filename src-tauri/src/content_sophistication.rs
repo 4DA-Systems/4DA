@@ -191,7 +191,7 @@ fn count_code_block_lines(content: &str) -> usize {
 
 // --- Term Lists ---------------------------------------------------------------
 
-const ADVANCED_TERMS: &[&str] = &[
+pub(crate) const ADVANCED_TERMS: &[&str] = &[
     "allocator", "monomorphization", "vtable", "zero-copy", "lock-free",
     "wait-free", "linearizability", "consensus", "raft", "paxos",
     "sharding", "partitioning", "replication", "backpressure",

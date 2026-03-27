@@ -110,9 +110,14 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
             }
             if let Some(&rep_idx) = topic_to_representative.get(topic.as_str()) {
                 if rep_idx != i {
-                    // This item shares a topic with an earlier (higher-scored) item
-                    grouped_indices.insert(i);
-                    break;
+                    // Only dedup if this item scores significantly lower than representative.
+                    // Items within 0.10 of each other both survive (different perspectives).
+                    let rep_score = results[rep_idx].top_score;
+                    let this_score = results[i].top_score;
+                    if rep_score - this_score > 0.10 {
+                        grouped_indices.insert(i);
+                        break;
+                    }
                 }
             } else {
                 // First time seeing this topic — this item is the representative
