@@ -672,6 +672,7 @@ pub(crate) fn score_item(
         necessity_reason: None,
         necessity_category: None,
         necessity_urgency: None,
+        signal_strength_bonus: 0.0, // V1 pipeline: no strength bonus
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):

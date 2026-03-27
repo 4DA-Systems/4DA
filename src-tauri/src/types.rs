@@ -134,6 +134,10 @@ pub struct ScoreBreakdown {
     /// Necessity urgency (immediate, this_week, awareness, none)
     #[serde(default)]
     pub necessity_urgency: Option<String>,
+    /// Signal strength bonus: ceiling adjustment for strong confirmed signals (0.0-0.08).
+    /// Creates mid-band spread — strong 2-signal items score higher than weak 2-signal items.
+    #[serde(default)]
+    pub signal_strength_bonus: f32,
 }
 
 pub(crate) fn default_freshness() -> f32 {
