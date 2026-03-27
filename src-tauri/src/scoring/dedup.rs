@@ -121,7 +121,10 @@ pub(crate) fn fuzzy_dedup_results(results: &mut Vec<SourceRelevance>) {
     let initial = results.len();
 
     // Pre-compute normalized titles
-    let normalized: Vec<String> = results.iter().map(|item| normalize_result_title(&item.title)).collect();
+    let normalized: Vec<String> = results
+        .iter()
+        .map(|item| normalize_result_title(&item.title))
+        .collect();
 
     // Track which indices to remove (results are sorted desc, so i < j means i scored higher)
     let mut remove_indices: std::collections::HashSet<usize> = std::collections::HashSet::new();

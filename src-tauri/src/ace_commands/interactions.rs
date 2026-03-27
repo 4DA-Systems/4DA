@@ -54,6 +54,35 @@ pub async fn ace_record_interaction(
         "ignore" => ace::BehaviorAction::Ignore,
         "briefing_click" => ace::BehaviorAction::BriefingClick,
         "briefing_dismiss" => ace::BehaviorAction::BriefingDismiss,
+        "engagement_complete" => {
+            let total_seconds = action_data
+                .as_ref()
+                .and_then(|d| d.get("total_seconds").and_then(serde_json::Value::as_u64))
+                .unwrap_or(0);
+            let scroll_depth_pct = action_data
+                .as_ref()
+                .and_then(|d| {
+                    d.get("scroll_depth_pct")
+                        .and_then(serde_json::Value::as_f64)
+                })
+                .unwrap_or(0.0) as f32;
+            ace::BehaviorAction::EngagementComplete {
+                total_seconds,
+                scroll_depth_pct,
+            }
+        }
+        "save_with_context" => {
+            let context_str = action_data
+                .as_ref()
+                .and_then(|d| d.get("context").and_then(serde_json::Value::as_str))
+                .unwrap_or("useful_now");
+            let context = match context_str {
+                "reference" => ace::SaveContext::Reference,
+                "share" => ace::SaveContext::Share,
+                _ => ace::SaveContext::UsefulNow, // Default to UsefulNow
+            };
+            ace::BehaviorAction::SaveWithContext { context }
+        }
         _ => return Err(format!("Unknown action type: {action_type}").into()),
     };
 

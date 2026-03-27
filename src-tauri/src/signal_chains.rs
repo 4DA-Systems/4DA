@@ -500,6 +500,98 @@ pub fn resolve_chain(
 }
 
 // ============================================================================
+// Ecosystem Trend Velocity
+// ============================================================================
+
+/// Compute per-topic velocity over the last 7 days.
+///
+/// Velocity = (items_last_3_days - items_prior_4_days) / max(items_prior_4_days, 1)
+///
+/// Positive velocity = rising trend, negative = declining.
+/// Topics are extracted from source_items titles using the standard `extract_topics` utility.
+#[allow(dead_code)] // Reason: available for scoring pipeline integration (Phase 4 wiring pending)
+pub fn compute_topic_velocity(conn: &rusqlite::Connection) -> HashMap<String, f32> {
+    // Items from last 3 days (recent window)
+    let recent_items = query_items_in_range(conn, "-3 days");
+    // Items from 4-7 days ago (baseline window)
+    let baseline_items = query_items_in_range_between(conn, "-7 days", "-3 days");
+
+    // Count topics in each window
+    let recent_counts = count_topics(&recent_items);
+    let baseline_counts = count_topics(&baseline_items);
+
+    // Merge all topic keys
+    let all_topics: std::collections::HashSet<&String> =
+        recent_counts.keys().chain(baseline_counts.keys()).collect();
+
+    let mut velocities = HashMap::new();
+    for topic in all_topics {
+        let recent = *recent_counts.get(topic).unwrap_or(&0) as f32;
+        let baseline = *baseline_counts.get(topic).unwrap_or(&0) as f32;
+        let denominator = baseline.max(1.0);
+        let velocity = (recent - baseline) / denominator;
+        velocities.insert(topic.clone(), velocity);
+    }
+
+    velocities
+}
+
+/// Query source items created within a recent window (e.g., "-3 days" from now).
+fn query_items_in_range(conn: &rusqlite::Connection, offset: &str) -> Vec<(String, String)> {
+    let sql = format!(
+        "SELECT title, COALESCE(content, '') FROM source_items
+         WHERE created_at >= datetime('now', '{offset}')
+         ORDER BY created_at DESC LIMIT 500"
+    );
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })
+    .ok()
+    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+    .unwrap_or_default()
+}
+
+/// Query source items created between two offsets (e.g., "-7 days" to "-3 days").
+fn query_items_in_range_between(
+    conn: &rusqlite::Connection,
+    start_offset: &str,
+    end_offset: &str,
+) -> Vec<(String, String)> {
+    let sql = format!(
+        "SELECT title, COALESCE(content, '') FROM source_items
+         WHERE created_at >= datetime('now', '{start_offset}')
+           AND created_at < datetime('now', '{end_offset}')
+         ORDER BY created_at DESC LIMIT 500"
+    );
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })
+    .ok()
+    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+    .unwrap_or_default()
+}
+
+/// Count topic occurrences across a list of (title, content) pairs.
+fn count_topics(items: &[(String, String)]) -> HashMap<String, u32> {
+    let mut counts: HashMap<String, u32> = HashMap::new();
+    for (title, content) in items {
+        let topics = crate::extract_topics(title, content);
+        for topic in topics {
+            *counts.entry(topic).or_insert(0) += 1;
+        }
+    }
+    counts
+}
+
+// ============================================================================
 // Tauri Commands
 // ============================================================================
 

@@ -53,8 +53,8 @@ Output JSON array (one per article):
             .iter()
             .enumerate()
             .map(|(i, (id, title, content))| {
-                let snippet = if content.len() > 400 {
-                    let truncated: String = content.chars().take(400).collect();
+                let snippet = if content.len() > 2000 {
+                    let truncated: String = content.chars().take(2000).collect();
                     truncated
                 } else {
                     content.clone()

@@ -81,6 +81,8 @@ mod channel_render;
 pub mod channels;
 mod community_intelligence;
 mod competing_tech;
+mod concept_graph;
+mod content_analysis;
 mod content_commands;
 mod content_dna;
 mod content_quality;
@@ -100,6 +102,7 @@ mod delegation;
 #[path = "delegation_stub.rs"]
 mod delegation;
 mod dependency_commands;
+mod dependency_health;
 mod developer_dna;
 mod diagnostics;
 mod digest;

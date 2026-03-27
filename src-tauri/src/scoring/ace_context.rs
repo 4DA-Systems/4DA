@@ -90,7 +90,11 @@ pub(crate) fn get_ace_context() -> ACEContext {
             });
             let weight: f32 = if is_primary { 0.85 } else { 0.40 };
             // If tech already has a weight (from another project), take the max (primary wins)
-            let existing = ctx.tech_weights.get(&name_lower).copied().unwrap_or(0.0_f32);
+            let existing = ctx
+                .tech_weights
+                .get(&name_lower)
+                .copied()
+                .unwrap_or(0.0_f32);
             ctx.tech_weights.insert(name_lower, weight.max(existing));
         }
     }
@@ -121,22 +125,24 @@ pub(crate) fn get_ace_context() -> ACEContext {
         }
     }
 
-    // Merge recent work topics (last 2 hours) with high confidence.
-    // These represent what the user is actively working on RIGHT NOW,
-    // so they get elevated confidence to boost related content.
-    if let Ok(work_topics) = ace.get_recent_work_topics(2) {
+    // Merge session-aware work topics with graduated confidence.
+    // Uses gap-based session detection: current session gets highest confidence,
+    // previous same-day session gets moderate, yesterday gets low.
+    if let Ok(work_topics) = ace.get_session_aware_work_topics() {
         for (topic, weight) in work_topics {
             if !ctx.active_topics.contains(&topic) {
                 ctx.active_topics.push(topic.clone());
             }
-            // Recent work topics get high confidence (0.85-0.95 scaled by recency)
-            // weight ranges 0.5-1.0, maps to confidence 0.85-0.95
-            let work_confidence = 0.85 + (weight - 0.5) * 0.2;
+            // Session-aware weights map to confidence:
+            // weight 1.0 (current session) -> confidence 0.95
+            // weight 0.5 (previous session) -> confidence 0.85
+            // weight 0.2 (yesterday) -> confidence 0.79
+            let work_confidence = 0.75 + weight * 0.20;
             let existing = ctx.topic_confidence.get(&topic).copied().unwrap_or(0.0);
             ctx.topic_confidence
                 .insert(topic, existing.max(work_confidence));
         }
-        debug!(target: "4da::ace", "Merged recent work topics into ACE context");
+        debug!(target: "4da::ace", "Merged session-aware work topics into ACE context");
     }
 
     // Load dependency intelligence from project_dependencies table

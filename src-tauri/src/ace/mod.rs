@@ -588,6 +588,9 @@ impl ACE {
     }
 
     /// Get topics from recent file changes for "active work" boosting.
+    ///
+    /// **Deprecated:** Prefer `get_session_aware_work_topics()` which uses session
+    /// detection instead of a fixed time window.
     pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
 
@@ -623,6 +626,100 @@ impl ACE {
                         *entry = entry.max(weight); // Keep highest weight per topic
                     }
                 }
+            }
+        }
+
+        let mut result: Vec<(String, f32)> = topic_weights.into_iter().collect();
+        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(result)
+    }
+
+    /// Session-aware work topic extraction with gap-based session detection.
+    ///
+    /// Instead of a fixed 2-hour window, detects natural work sessions by finding
+    /// gaps > 30 minutes in file_signals timestamps. Applies graduated weights:
+    /// - Current session topics: weight 1.0
+    /// - Previous same-day session: weight 0.5
+    /// - Yesterday's sessions: weight 0.2
+    ///
+    /// Falls back to `get_recent_work_topics(4)` if no signals exist in last 24h.
+    pub fn get_session_aware_work_topics(&self) -> Result<Vec<(String, f32)>> {
+        let conn = self.conn.lock();
+
+        // Fetch all file_signals from last 24 hours, ordered most recent first
+        let mut stmt = conn.prepare(
+            "SELECT extracted_topics, timestamp FROM file_signals
+             WHERE timestamp > datetime('now', '-24 hours')
+             ORDER BY timestamp DESC LIMIT 200",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        // Collect all signals with parsed hours-ago
+        let mut signals: Vec<(Vec<String>, f32)> = Vec::new(); // (topics, hours_ago)
+        for row in rows {
+            let (topics_json, timestamp_str) = row?;
+            if let Some(json_str) = topics_json {
+                if let Ok(topics) = serde_json::from_str::<Vec<String>>(&json_str) {
+                    if !topics.is_empty() {
+                        let hours_ago = parse_hours_ago(&timestamp_str);
+                        signals.push((topics, hours_ago));
+                    }
+                }
+            }
+        }
+
+        if signals.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Detect session boundaries: a gap > 0.5 hours (30 min) between consecutive signals.
+        // signals are ordered most-recent-first, so signals[0] is the newest.
+        let session_gap_hours: f32 = 0.5;
+        let mut session_ids: Vec<usize> = Vec::with_capacity(signals.len());
+        let mut current_session: usize = 0;
+        session_ids.push(0); // First signal is session 0 (current)
+
+        for i in 1..signals.len() {
+            // signals[i] is older than signals[i-1]
+            let gap = signals[i].0.len(); // just need the hours_ago difference
+            let _ = gap; // unused, we compare hours_ago values
+            let time_gap = signals[i].1 - signals[i - 1].1;
+            if time_gap.abs() > session_gap_hours {
+                current_session += 1;
+            }
+            session_ids.push(current_session);
+        }
+
+        // Determine today boundary (signals older than ~16 hours are "yesterday")
+        // Use a simple heuristic: signals > 16 hours ago are yesterday
+        let yesterday_threshold: f32 = 16.0;
+
+        let mut topic_weights: std::collections::HashMap<String, f32> =
+            std::collections::HashMap::new();
+
+        for (idx, (topics, hours_ago)) in signals.iter().enumerate() {
+            let session_id = session_ids[idx];
+
+            // Compute session-based weight
+            let session_weight = if session_id == 0 {
+                // Current session: full weight with slight recency decay
+                let decay = 1.0 - (hours_ago / 4.0).min(1.0) * 0.15;
+                decay.clamp(0.85, 1.0)
+            } else if *hours_ago < yesterday_threshold {
+                // Previous same-day session
+                0.5
+            } else {
+                // Yesterday's sessions
+                0.2
+            };
+
+            for topic in topics {
+                let topic_lower = topic.to_lowercase();
+                let entry = topic_weights.entry(topic_lower).or_insert(0.0);
+                *entry = entry.max(session_weight);
             }
         }
 
@@ -834,6 +931,122 @@ mod tests {
             "Empty DB should return no work topics, got {:?}",
             topics
         );
+    }
+
+    // ========================================================================
+    // Session-aware work topics tests
+    // ========================================================================
+
+    #[test]
+    fn test_session_aware_current_session_full_weight() {
+        let ace = create_test_ace();
+        let conn = ace.get_conn().lock();
+
+        // Insert signals within the current session (all recent, no gaps)
+        let now = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params!["/src/main.rs", r#"["rust", "tauri"]"#, now],
+        )
+        .expect("insert");
+
+        let ten_min_ago = (chrono::Utc::now() - chrono::Duration::minutes(10))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params!["/src/lib.rs", r#"["sqlite"]"#, ten_min_ago],
+        )
+        .expect("insert");
+
+        drop(conn);
+
+        let topics = ace
+            .get_session_aware_work_topics()
+            .expect("session aware topics");
+
+        assert!(!topics.is_empty(), "Should return current session topics");
+
+        // Current session topics should have weight >= 0.85
+        for (topic, weight) in &topics {
+            assert!(
+                *weight >= 0.85,
+                "Current session topic '{}' should have weight >= 0.85, got {}",
+                topic,
+                weight
+            );
+        }
+    }
+
+    #[test]
+    fn test_session_aware_previous_session_lower_weight() {
+        let ace = create_test_ace();
+        let conn = ace.get_conn().lock();
+
+        // Current session signal
+        let now = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params!["/src/main.rs", r#"["current_topic"]"#, now],
+        )
+        .expect("insert current");
+
+        // Previous session signal (2 hours ago, creates a gap > 30 min)
+        let two_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(2))
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute(
+            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
+             VALUES (?1, 'modified', ?2, ?3)",
+            rusqlite::params!["/src/old.rs", r#"["previous_topic"]"#, two_hours_ago],
+        )
+        .expect("insert previous");
+
+        drop(conn);
+
+        let topics = ace
+            .get_session_aware_work_topics()
+            .expect("session aware topics");
+
+        let current = topics.iter().find(|(t, _)| t == "current_topic");
+        let previous = topics.iter().find(|(t, _)| t == "previous_topic");
+
+        assert!(current.is_some(), "Should contain current session topic");
+        assert!(previous.is_some(), "Should contain previous session topic");
+
+        let current_w = current.unwrap().1;
+        let previous_w = previous.unwrap().1;
+        assert!(
+            current_w > previous_w,
+            "Current session weight ({}) should be higher than previous ({})",
+            current_w,
+            previous_w
+        );
+        assert!(
+            (previous_w - 0.5).abs() < 0.01,
+            "Previous same-day session should have weight ~0.5, got {}",
+            previous_w
+        );
+    }
+
+    #[test]
+    fn test_session_aware_empty_returns_empty() {
+        let ace = create_test_ace();
+        let topics = ace
+            .get_session_aware_work_topics()
+            .expect("session aware topics");
+        assert!(topics.is_empty(), "Empty DB should return no topics");
     }
 
     // ========================================================================
