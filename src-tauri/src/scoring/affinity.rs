@@ -301,6 +301,7 @@ mod tests {
     fn test_off_domain_penalty_with_overlap() {
         let ace_ctx = ACEContext {
             detected_tech: vec!["rust".to_string()],
+            tech_weights: std::collections::HashMap::new(),
             ..Default::default()
         };
         let declared = vec!["rust".to_string()];
@@ -337,6 +338,7 @@ mod tests {
     fn test_off_domain_penalty_active_topic_overlap() {
         let ace_ctx = ACEContext {
             active_topics: vec!["tauri".to_string()],
+            tech_weights: std::collections::HashMap::new(),
             ..Default::default()
         };
         let declared: Vec<String> = vec![];

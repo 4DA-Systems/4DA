@@ -39,12 +39,14 @@ pub(crate) fn compute_semantic_ace_boost(
         }
     }
 
-    // Compute similarity with detected tech
+    // Compute similarity with detected tech (per-project weighted)
+    // Primary project tech → 0.85 weight, secondary → 0.40 (from ace_ctx.tech_weights)
     for tech in &ace_ctx.detected_tech {
         if let Some(tech_emb) = topic_embeddings.get(tech) {
             let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, tech_emb);
-            weighted_sum += sim * 0.6; // Detected tech is auto-inferred, weaker than declared (1.0)
-            weight_total += 0.6;
+            let tech_weight = ace_ctx.tech_weights.get(tech).copied().unwrap_or(0.6);
+            weighted_sum += sim * tech_weight;
+            weight_total += tech_weight;
             max_similarity = max_similarity.max(sim);
         }
     }

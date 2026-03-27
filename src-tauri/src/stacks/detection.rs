@@ -108,6 +108,7 @@ mod tests {
             topic_affinities: HashMap::new(),
             dependency_info: HashMap::new(),
             peak_hours: Vec::new(),
+            tech_weights: HashMap::new(),
         }
     }
 

@@ -28,6 +28,10 @@ pub(crate) struct ACEContext {
     /// Peak commit hours (0-23) from git analysis, sorted by frequency (most active first).
     /// Used to give a slight freshness boost to content published during active coding hours.
     pub peak_hours: Vec<u8>,
+    /// Per-tech scoring weight based on project source.
+    /// Primary project tech (same dir as CWD) → 0.85, secondary → 0.40.
+    /// Used by semantic scoring instead of flat 0.6 for all detected tech.
+    pub tech_weights: HashMap<String, f32>,
 }
 
 /// Fetch ACE-discovered context for relevance scoring
@@ -56,7 +60,12 @@ pub(crate) fn get_ace_context() -> ACEContext {
     // Exclude Platform (e.g. "windows", "macos", "linux") — developing ON a platform
     // doesn't mean the user is interested in content ABOUT that platform.
     if let Ok(tech) = ace.get_detected_tech() {
-        ctx.detected_tech = tech
+        // Determine primary project directory (CWD or first context_dir)
+        let primary_dir = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+
+        let filtered: Vec<_> = tech
             .iter()
             .filter(|t| {
                 matches!(
@@ -67,8 +76,23 @@ pub(crate) fn get_ace_context() -> ACEContext {
                 ) && t.confidence >= 0.5
             })
             .take(20)
-            .map(|t| t.name.to_lowercase())
             .collect();
+
+        for t in &filtered {
+            let name_lower = t.name.to_lowercase();
+            ctx.detected_tech.push(name_lower.clone());
+
+            // Compute per-tech weight from evidence path (primary vs secondary project)
+            let is_primary = t.evidence.iter().any(|ev| {
+                let ev_lower = ev.to_lowercase().replace('\\', "/");
+                let primary_normalized = primary_dir.replace('\\', "/");
+                ev_lower.contains(&primary_normalized)
+            });
+            let weight: f32 = if is_primary { 0.85 } else { 0.40 };
+            // If tech already has a weight (from another project), take the max (primary wins)
+            let existing = ctx.tech_weights.get(&name_lower).copied().unwrap_or(0.0_f32);
+            ctx.tech_weights.insert(name_lower, weight.max(existing));
+        }
     }
 
     // Get anti-topics WITH confidence scores

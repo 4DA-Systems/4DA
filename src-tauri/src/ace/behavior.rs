@@ -376,19 +376,25 @@ impl ACE {
         Ok(())
     }
 
-    /// Get topic affinities
+    /// Get topic affinities (default threshold: 5 exposures)
     pub fn get_topic_affinities(&self) -> Result<Vec<TopicAffinity>> {
+        self.get_topic_affinities_min(5)
+    }
+
+    /// Get topic affinities with custom minimum exposure threshold.
+    /// Use lower threshold (2-3) in bootstrap mode for faster learning.
+    pub fn get_topic_affinities_min(&self, min_exposures: i64) -> Result<Vec<TopicAffinity>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT topic, positive_signals, negative_signals, total_exposures,
                     affinity_score, confidence, last_interaction
              FROM topic_affinities
-             WHERE total_exposures >= 5
+             WHERE total_exposures >= ?1
              ORDER BY ABS(affinity_score) DESC
              LIMIT 100",
         )?;
 
-        let rows = stmt.query_map([], |row| {
+        let rows = stmt.query_map([min_exposures], |row| {
             Ok(TopicAffinity {
                 topic: row.get(0)?,
                 embedding: None,

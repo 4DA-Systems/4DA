@@ -418,6 +418,7 @@ mod tests {
     fn test_generate_explanation_declared_tech() {
         let ace_ctx = ACEContext {
             detected_tech: vec!["rust".to_string()],
+            tech_weights: std::collections::HashMap::new(),
             ..Default::default()
         };
         let explanation = generate_relevance_explanation(
@@ -463,6 +464,7 @@ mod tests {
     fn test_generate_explanation_skill_gap_with_stack() {
         let ace_ctx = ACEContext {
             detected_tech: vec!["rust".to_string()],
+            tech_weights: std::collections::HashMap::new(),
             ..Default::default()
         };
         let explanation = generate_relevance_explanation(
