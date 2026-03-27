@@ -104,4 +104,9 @@ necessity_urgency: string | null,
  * Signal strength bonus: ceiling adjustment for strong confirmed signals (0.0-0.08).
  * Creates mid-band spread — strong 2-signal items score higher than weak 2-signal items.
  */
-signal_strength_bonus: number, };
+signal_strength_bonus: number,
+/**
+ * Content analysis multiplier from cached LLM pre-analysis (0.55-1.15, default 1.0).
+ * Adjusts score based on technical depth and audience level.
+ */
+content_analysis_mult: number, };

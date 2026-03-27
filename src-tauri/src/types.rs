@@ -138,6 +138,10 @@ pub struct ScoreBreakdown {
     /// Creates mid-band spread — strong 2-signal items score higher than weak 2-signal items.
     #[serde(default)]
     pub signal_strength_bonus: f32,
+    /// Content analysis multiplier from cached LLM pre-analysis (0.55-1.15, default 1.0).
+    /// Adjusts score based on technical depth and audience level.
+    #[serde(default = "default_quality_mult")]
+    pub content_analysis_mult: f32,
 }
 
 pub(crate) fn default_freshness() -> f32 {

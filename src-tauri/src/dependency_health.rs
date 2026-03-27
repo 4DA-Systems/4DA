@@ -57,7 +57,6 @@ pub enum HealthStatus {
 ///    for the package → `SecurityAlert`
 /// 2. If the package hasn't appeared in `source_items` titles for 180+ days → `Stale`
 /// 3. Otherwise → `Healthy`
-#[allow(dead_code)] // Reason: called by monitoring_jobs scheduler (Phase 4 wiring pending)
 pub fn check_dependency_health(conn: &Connection) -> Result<Vec<DependencyHealth>> {
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -201,7 +200,6 @@ fn compute_days_since_last_mention(conn: &Connection, package_name: &str) -> Opt
 /// - SecurityAlert deps → "security_patch" window: "Security: {dep} has known vulnerability"
 ///
 /// Deduplicates against existing open windows to avoid flooding.
-#[allow(dead_code)] // Reason: called by monitoring_jobs scheduler (Phase 4 wiring pending)
 pub fn create_proactive_windows(conn: &Connection, health: &[DependencyHealth]) -> Result<()> {
     let existing_windows = get_open_windows(conn);
     let existing_deps: HashSet<(String, Option<String>)> = existing_windows
@@ -292,6 +290,40 @@ fn insert_window(
     )?;
 
     Ok(())
+}
+
+// ============================================================================
+// Background Job Entry Point
+// ============================================================================
+
+/// Run a full dependency health check as a background job.
+///
+/// Opens its own DB connection, checks all direct non-dev dependencies,
+/// and creates proactive decision windows for any actionable findings
+/// (stale, security alert, or major-version-behind).
+///
+/// Called by the monitoring scheduler on a 6-hour interval.
+pub fn run_dependency_health_check() -> Result<Vec<DependencyHealth>> {
+    let conn = crate::open_db_connection()?;
+    let health = check_dependency_health(&conn)?;
+    let actionable: Vec<_> = health
+        .iter()
+        .filter(|h| {
+            matches!(
+                h.health_status,
+                HealthStatus::Stale | HealthStatus::SecurityAlert | HealthStatus::MajorBehind
+            )
+        })
+        .collect();
+    if !actionable.is_empty() {
+        create_proactive_windows(&conn, &health)?;
+        info!(
+            target: "4da::health",
+            alerts = actionable.len(),
+            "Dependency health: created proactive windows"
+        );
+    }
+    Ok(health)
 }
 
 // ============================================================================

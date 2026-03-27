@@ -47,6 +47,9 @@ pub use commands::{
     run_background_behavior_decay, run_background_health_check,
 };
 
+// Re-export dependency health background job (Layer 5 — 6-hour scheduler interval)
+pub use dependency_health::run_dependency_health_check;
+
 // Re-exports from state (preserves `use crate::accessor` interface)
 pub(crate) use state::{
     get_ace_engine, get_ace_engine_mut, get_analysis_abort, get_analysis_state, get_context_dir,

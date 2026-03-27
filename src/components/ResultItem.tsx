@@ -50,6 +50,10 @@ interface ResultItemProps {
   ) => void;
   /** Other scored items available for comparison */
   comparePool?: SourceRelevance[];
+  /** Zero-based index in the results list (for scroll depth tracking) */
+  itemIndex?: number;
+  /** Total items in the results list (for scroll depth tracking) */
+  totalItems?: number;
 }
 
 export const ResultItem = memo(function ResultItem({
@@ -61,6 +65,8 @@ export const ResultItem = memo(function ResultItem({
   feedbackGiven,
   onRecordInteraction,
   comparePool,
+  itemIndex,
+  totalItems,
 }: ResultItemProps) {
   const { t } = useTranslation();
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -85,6 +91,8 @@ export const ResultItem = memo(function ResultItem({
     enabled: !isExpanded, // Passive scroll tracking when collapsed
     hasExplicitFeedback: !!feedback,
     itemTopics,
+    itemIndex,
+    totalItems,
   });
 
   // Track expand dwell time — emits click+dwell when collapsed/unmounted

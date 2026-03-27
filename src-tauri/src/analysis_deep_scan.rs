@@ -606,6 +606,107 @@ pub(crate) async fn run_multi_source_analysis_impl(
         }
     }
 
+    // Layer 6: Concept Graph serendipity — inject items from 2-3 hop conceptual neighbors
+    // This is ADDITIVE to the existing serendipity engine above. The concept graph discovers
+    // content the user wouldn't find through direct interest matching by traversing
+    // co-occurrence edges in the topic graph.
+    {
+        if let Ok(cg_conn) = open_db_connection() {
+            let user_topics: Vec<String> = scoring_ctx.ace_ctx.active_topics.clone();
+            if !user_topics.is_empty() {
+                match crate::concept_graph::build_concept_graph(&cg_conn) {
+                    Ok(graph) if !graph.is_empty() => {
+                        let neighbors = crate::concept_graph::find_conceptual_neighbors(
+                            &graph,
+                            &user_topics,
+                            3,
+                        );
+                        match crate::concept_graph::select_serendipity_item(&cg_conn, &neighbors) {
+                            Ok(Some(item_id)) => {
+                                // Load the item from DB and convert to SourceRelevance
+                                if let Ok(db) = get_database() {
+                                    if let Ok(Some(stored)) = db.get_source_item_by_id(item_id) {
+                                        // Avoid injecting a duplicate already in results
+                                        let already_present =
+                                            results.iter().any(|r| r.id == stored.id as u64);
+                                        if !already_present {
+                                            let sr = SourceRelevance {
+                                                id: stored.id as u64,
+                                                title: stored.title,
+                                                url: stored.url,
+                                                top_score: 0.45, // moderate score — serendipity, not top-ranked
+                                                matches: vec![],
+                                                relevant: true,
+                                                context_score: 0.0,
+                                                interest_score: 0.0,
+                                                excluded: false,
+                                                excluded_by: None,
+                                                source_type: stored.source_type,
+                                                explanation: Some(
+                                                    "Concept Graph: discovered via conceptual neighbors \
+                                                     (2-3 hops from your interests)"
+                                                        .to_string(),
+                                                ),
+                                                confidence: Some(0.4),
+                                                score_breakdown: None,
+                                                signal_type: None,
+                                                signal_priority: None,
+                                                signal_action: None,
+                                                signal_triggers: None,
+                                                signal_horizon: None,
+                                                similar_count: 0,
+                                                similar_titles: vec![],
+                                                serendipity: true,
+                                                streets_engine: None,
+                                                decision_window_match: None,
+                                                decision_boost_applied: 0.0,
+                                                created_at: None,
+                                            };
+                                            info!(
+                                                target: "4da::analysis",
+                                                item_id,
+                                                title = %sr.title,
+                                                "Concept graph: injecting serendipitous item"
+                                            );
+                                            results.push(sr);
+                                            scoring::sort_results(&mut results);
+                                        }
+                                    }
+                                }
+                            }
+                            Ok(None) => {
+                                tracing::debug!(
+                                    target: "4da::analysis",
+                                    "Concept graph: no suitable serendipity candidate found"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::debug!(
+                                    target: "4da::analysis",
+                                    error = %e,
+                                    "Concept graph: serendipity selection failed (non-fatal)"
+                                );
+                            }
+                        }
+                    }
+                    Ok(_) => {
+                        tracing::debug!(
+                            target: "4da::analysis",
+                            "Concept graph: empty graph (insufficient feedback data)"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            target: "4da::analysis",
+                            error = %e,
+                            "Concept graph: build failed (non-fatal)"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     // LLM Reranking (if enabled and within daily limits)
     emit_narration(
         app,
