@@ -63,6 +63,8 @@ pub struct MonitoringState {
     pub last_morning_briefing_date: parking_lot::Mutex<Option<String>>,
     /// Last CVE scan timestamp (unix seconds)
     pub last_cve_scan: AtomicU64,
+    /// Last dependency health check timestamp (unix seconds)
+    pub last_dep_health_check: AtomicU64,
 }
 
 impl Default for MonitoringState {
@@ -81,6 +83,7 @@ impl Default for MonitoringState {
             batched_items: parking_lot::Mutex::new(Vec::new()),
             last_morning_briefing_date: parking_lot::Mutex::new(None),
             last_cve_scan: AtomicU64::new(0),
+            last_dep_health_check: AtomicU64::new(0),
         }
     }
 }
@@ -216,6 +219,7 @@ const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
 const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
 const CVE_SCAN_INTERVAL: u64 = 3600; // 1 hour (was 30 min — advisory DBs update hourly)
 const DB_MAINTENANCE_INTERVAL: u64 = 14400; // 4 hours (was 1 hr — WAL checkpoint fine at lower freq)
+const DEP_HEALTH_INTERVAL: u64 = 21600; // 6 hours — dependency health check (Layer 5)
 
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
@@ -324,6 +328,37 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 tokio::spawn(async move {
                     crate::monitoring_jobs::run_cve_scan(&cve_app).await;
                 });
+            }
+
+            // Dependency health check — every 6 hours (Layer 5)
+            // Classifies dependency health from local DB data and creates
+            // proactive decision windows for stale or vulnerable packages.
+            let last_dep_health = state.last_dep_health_check.load(Ordering::Relaxed);
+            if now - last_dep_health >= DEP_HEALTH_INTERVAL {
+                state.last_dep_health_check.store(now, Ordering::Relaxed);
+                match crate::run_dependency_health_check() {
+                    Ok(health) => {
+                        let actionable = health
+                            .iter()
+                            .filter(|h| {
+                                !matches!(
+                                    h.health_status,
+                                    crate::dependency_health::HealthStatus::Healthy
+                                        | crate::dependency_health::HealthStatus::Unknown
+                                )
+                            })
+                            .count();
+                        info!(
+                            target: "4da::monitor",
+                            total = health.len(),
+                            actionable,
+                            "Dependency health check completed"
+                        );
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::monitor", error = %e, "Dependency health check failed");
+                    }
+                }
             }
 
             // Proactive chain prediction notifications — hourly

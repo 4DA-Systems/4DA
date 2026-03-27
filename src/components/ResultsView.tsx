@@ -419,6 +419,8 @@ export function ResultsView({
                         feedbackGiven={feedbackGiven}
                         onRecordInteraction={recordInteraction}
                         comparePool={expandedItem === item.id ? filteredResults : undefined}
+                        itemIndex={idx}
+                        totalItems={filteredResults.length}
                       />
                     </div>
                   </div>
