@@ -84,6 +84,7 @@ mod competing_tech;
 mod content_commands;
 mod content_dna;
 mod content_quality;
+mod content_sophistication;
 mod context_commands;
 mod context_engine;
 mod data_export;

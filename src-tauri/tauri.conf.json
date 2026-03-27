@@ -82,7 +82,18 @@
     "windows": {
       "webviewInstallMode": {
         "type": "embedBootstrapper"
+      },
+      "signCommand": "powershell -NoProfile -File ..\\scripts\\sign-windows.ps1 %1",
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": "../icons/icon.ico",
+        "headerImage": null,
+        "sidebarImage": null
       }
-    }
+    },
+    "publisher": "4DA Systems Pty Ltd",
+    "copyright": "Copyright (c) 2025-2026 4DA Systems Pty Ltd. All rights reserved.",
+    "shortDescription": "Privacy-first developer intelligence",
+    "longDescription": "4DA surfaces developer-relevant content from across the internet, scored against your actual codebase. Privacy-first, local-first, zero configuration."
   }
 }
