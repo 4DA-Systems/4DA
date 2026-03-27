@@ -331,7 +331,8 @@ mod tests {
         assert!(conf >= 0.85, "Expected >=0.85, got {conf}");
 
         // Non-intro → zero confidence
-        let conf = detect_introductory_confidence("Tokio 1.34: new task scheduling improvements", "");
+        let conf =
+            detect_introductory_confidence("Tokio 1.34: new task scheduling improvements", "");
         assert_eq!(conf, 0.0);
 
         let conf = detect_introductory_confidence("Unsafe Rust patterns in production", "");
@@ -342,12 +343,13 @@ mod tests {
     fn test_advanced_term_override() {
         // "How to Build a Custom Allocator" contains "allocator" (advanced term)
         // Despite weak intro framing, advanced term should reduce confidence
-        let conf = detect_introductory_confidence(
-            "A Guide to Building a Custom Allocator in Rust",
-            "",
-        );
+        let conf =
+            detect_introductory_confidence("A Guide to Building a Custom Allocator in Rust", "");
         // "a guide to" = weak (0.30-0.50), but "allocator" reduces by 0.30
-        assert!(conf < 0.25, "Advanced term should reduce intro confidence, got {conf}");
+        assert!(
+            conf < 0.25,
+            "Advanced term should reduce intro confidence, got {conf}"
+        );
     }
 
     #[test]
@@ -389,7 +391,11 @@ mod tests {
         assert!(result.intro_confidence >= 0.85);
         assert!(!result.is_release);
         // Graduated: strong intro (0.90+) × known tech → ~0.55 (was fixed 0.50)
-        assert!(result.multiplier < 0.60, "Expected <0.60, got {}", result.multiplier);
+        assert!(
+            result.multiplier < 0.60,
+            "Expected <0.60, got {}",
+            result.multiplier
+        );
     }
 
     #[test]
@@ -462,6 +468,10 @@ mod tests {
         let result = compute_novelty("Getting Started with Python", "", &topics, &user_tech);
         assert!(result.intro_confidence >= 0.85);
         // Graduated: strong intro × unknown tech → ~0.82 (was fixed 0.80)
-        assert!(result.multiplier < 0.85, "Expected <0.85, got {}", result.multiplier);
+        assert!(
+            result.multiplier < 0.85,
+            "Expected <0.85, got {}",
+            result.multiplier
+        );
     }
 }

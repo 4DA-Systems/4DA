@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 38;
+        const TARGET_VERSION: i64 = 42;
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
@@ -1131,6 +1131,58 @@ impl Database {
                 )?;
             }
 
+            // Phase 41: Content analysis cache (deep pre-score content analysis)
+            if current_version < 41 {
+                Self::run_versioned_migration(
+                    &conn,
+                    40,
+                    41,
+                    "Phase 41: content_analyses table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS content_analyses (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                source_item_id INTEGER NOT NULL,
+                                content_hash TEXT NOT NULL,
+                                technical_depth INTEGER NOT NULL,
+                                novelty INTEGER NOT NULL,
+                                audience_level TEXT NOT NULL,
+                                key_insight TEXT,
+                                analyzed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                UNIQUE(content_hash)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_content_analyses_hash ON content_analyses(content_hash);
+                            CREATE INDEX IF NOT EXISTS idx_content_analyses_item ON content_analyses(source_item_id);",
+                        )
+                    },
+                )?;
+            }
+
+            if current_version < 42 {
+                Self::run_versioned_migration(
+                    &conn,
+                    41,
+                    42,
+                    "Phase 42: view_count column on source_items for return-visit tracking",
+                    |c| {
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='view_count'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE source_items ADD COLUMN view_count INTEGER DEFAULT 0;",
+                            )?;
+                            info!("Added view_count column to source_items");
+                        }
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1880,6 +1932,8 @@ mod tests {
             "briefing_item_history",
             // Phase 40: Necessity scoring persistence
             "item_necessity",
+            // Phase 41: Content analysis cache
+            "content_analyses",
         ];
         for table in &expected {
             assert!(
