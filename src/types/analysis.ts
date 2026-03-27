@@ -93,6 +93,8 @@ export interface ScoreBreakdown {
   necessity_urgency?: string;
   /** Signal strength bonus: ceiling adjustment for strong confirmed signals (0.0-0.08) */
   signal_strength_bonus?: number;
+  /** Content analysis multiplier from cached LLM pre-analysis (0.55-1.15, default 1.0) */
+  content_analysis_mult?: number;
 }
 
 export interface AnalysisProgress {

@@ -353,7 +353,7 @@ fn compute_relevance(
 
 /// Returns (quality_score, freshness, source_quality_boost, competing_mult, content_quality_mult,
 ///          content_dna_mult, content_type, novelty_mult, ecosystem_shift_mult, stack_competing_mult,
-///          sophistication_mult)
+///          sophistication_mult, content_analysis_mult)
 #[allow(clippy::type_complexity)]
 fn compute_quality_composite(
     relevance_score: f32,
@@ -361,6 +361,7 @@ fn compute_quality_composite(
     ctx: &ScoringContext,
     raw: &RawSignals,
     options: &ScoringOptions,
+    db: &Database,
 ) -> (
     f32,
     f32,
@@ -369,6 +370,7 @@ fn compute_quality_composite(
     f32,
     f32,
     crate::content_dna::ContentType,
+    f32,
     f32,
     f32,
     f32,
@@ -487,6 +489,20 @@ fn compute_quality_composite(
     );
     let sophistication_mult = sophistication.multiplier;
 
+    // Content analysis multiplier (from cached LLM pre-analysis, if available)
+    let content_analysis_mult = {
+        let hash = crate::content_analysis::content_hash(input.content);
+        crate::content_analysis::get_cached_analysis(db, &hash)
+            .ok()
+            .flatten()
+            .map(|a| {
+                let is_senior = ctx.ace_ctx.detected_tech.len() > 15
+                    && ctx.domain_profile.dependency_names.len() > 50;
+                crate::content_analysis::analysis_to_multiplier(&a, is_senior)
+            })
+            .unwrap_or(1.0)
+    };
+
     // Asymmetric dampening function
     let dampen = |m: f32| {
         if m < 1.0 {
@@ -514,6 +530,7 @@ fn compute_quality_composite(
         * dampen(ecosystem_shift_mult)
         * dampen(stack_competing_mult)
         * dampen(sophistication_mult)
+        * dampen(content_analysis_mult)
         * dampen(freshness)
         * dampen(source_quality_mult)
         * dampen(raw.affinity_mult)
@@ -534,6 +551,7 @@ fn compute_quality_composite(
         ecosystem_shift_mult,
         stack_competing_mult,
         sophistication_mult,
+        content_analysis_mult,
     )
 }
 
@@ -931,7 +949,8 @@ pub(crate) fn score_item(
         ecosystem_shift_mult,
         stack_competing_mult,
         _sophistication_mult,
-    ) = compute_quality_composite(relevance_score, input, ctx, &raw, options);
+        content_analysis_mult,
+    ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db);
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
     let (
@@ -1155,6 +1174,7 @@ pub(crate) fn score_item(
             None
         },
         signal_strength_bonus: strength_bonus,
+        content_analysis_mult,
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
