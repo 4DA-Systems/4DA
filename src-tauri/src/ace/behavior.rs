@@ -12,6 +12,18 @@ use super::ACE;
 // Behavior Types
 // ============================================================================
 
+/// Context for saves — different contexts produce different decay rates and strengths
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum SaveContext {
+    /// Useful right now — boost intent + decision window relevance
+    UsefulNow,
+    /// Long-term reference — slower affinity decay
+    Reference,
+    /// Worth sharing — high-quality content signal
+    Share,
+}
+
 /// Types of user behavior we track
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -31,6 +43,15 @@ pub enum BehaviorAction {
     BriefingClick,
     /// User dismissed the briefing without clicking any item
     BriefingDismiss,
+    /// Deep engagement signal: user consumed content thoroughly
+    EngagementComplete {
+        total_seconds: u64,
+        scroll_depth_pct: f32,
+    },
+    /// Save with explicit context — produces context-dependent decay & strength
+    SaveWithContext {
+        context: SaveContext,
+    },
 }
 
 impl BehaviorAction {
@@ -52,6 +73,19 @@ impl BehaviorAction {
             BehaviorAction::Ignore => -0.1,
             BehaviorAction::BriefingClick => 0.7, // Curated content click = stronger than general click
             BehaviorAction::BriefingDismiss => -0.2, // Mild negative — briefing wasn't useful today
+            BehaviorAction::EngagementComplete {
+                total_seconds,
+                scroll_depth_pct,
+            } => {
+                let depth_factor = scroll_depth_pct.clamp(0.0, 1.0) * 0.4;
+                let dwell_factor = (*total_seconds as f32 / 120.0).min(0.3);
+                0.3 + depth_factor + dwell_factor // Range: 0.3 to 1.0
+            }
+            BehaviorAction::SaveWithContext { context } => match context {
+                SaveContext::UsefulNow => 1.2,
+                SaveContext::Reference => 0.9,
+                SaveContext::Share => 1.0,
+            },
         }
     }
 }
@@ -167,6 +201,34 @@ impl ACE {
         };
 
         self.store_interaction(&signal)?;
+
+        // Return-visit tracking: on click-like actions, increment view_count on source_items
+        // and boost strength for return visits (view_count >= 2)
+        let signal = if matches!(
+            action,
+            BehaviorAction::Click { .. }
+                | BehaviorAction::BriefingClick
+                | BehaviorAction::EngagementComplete { .. }
+        ) {
+            let view_count = self.increment_view_count(item_id).unwrap_or(0);
+            if view_count >= 2 {
+                // Return visit — user came back to this content, strong interest signal
+                debug!(target: "ace::behavior",
+                    item_id = item_id,
+                    view_count = view_count,
+                    "Return visit detected — boosting strength to 1.5"
+                );
+                BehaviorSignal {
+                    signal_strength: 1.5,
+                    ..signal
+                }
+            } else {
+                signal
+            }
+        } else {
+            signal
+        };
+
         self.update_topic_affinities(&signal)?;
 
         if signal.signal_strength < -0.5 {
@@ -246,6 +308,8 @@ impl ACE {
             BehaviorAction::Ignore => "ignore",
             BehaviorAction::BriefingClick => "briefing_click",
             BehaviorAction::BriefingDismiss => "briefing_dismiss",
+            BehaviorAction::EngagementComplete { .. } => "engagement_complete",
+            BehaviorAction::SaveWithContext { .. } => "save_with_context",
         };
 
         let action_data = serde_json::to_string(&signal.action).unwrap_or_default();
@@ -265,6 +329,24 @@ impl ACE {
         )?;
 
         Ok(())
+    }
+
+    /// Increment view_count on source_items and return the new count.
+    /// Returns 0 if the item doesn't exist (no-op for non-existent items).
+    fn increment_view_count(&self, item_id: i64) -> Result<i64> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET view_count = COALESCE(view_count, 0) + 1 WHERE id = ?1",
+            rusqlite::params![item_id],
+        )?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COALESCE(view_count, 0) FROM source_items WHERE id = ?1",
+                rusqlite::params![item_id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        Ok(count)
     }
 
     fn update_topic_affinities(&self, signal: &BehaviorSignal) -> Result<()> {
@@ -770,5 +852,133 @@ mod tests {
     fn test_ignore_strength() {
         let action = BehaviorAction::Ignore;
         assert!((action.compute_strength() - (-0.1)).abs() < f32::EPSILON);
+    }
+
+    // ========================================================================
+    // Phase 2: Engagement Depth tests
+    // ========================================================================
+
+    #[test]
+    fn test_engagement_complete_minimum() {
+        // Zero scroll, zero time → base 0.3
+        let action = BehaviorAction::EngagementComplete {
+            total_seconds: 0,
+            scroll_depth_pct: 0.0,
+        };
+        assert!(
+            (action.compute_strength() - 0.3).abs() < f32::EPSILON,
+            "Min engagement should be 0.3, got {}",
+            action.compute_strength()
+        );
+    }
+
+    #[test]
+    fn test_engagement_complete_maximum() {
+        // Full scroll, 120+ seconds → 0.3 + 0.4 + 0.3 = 1.0
+        let action = BehaviorAction::EngagementComplete {
+            total_seconds: 200,
+            scroll_depth_pct: 1.0,
+        };
+        assert!(
+            (action.compute_strength() - 1.0).abs() < f32::EPSILON,
+            "Max engagement should be 1.0, got {}",
+            action.compute_strength()
+        );
+    }
+
+    #[test]
+    fn test_engagement_complete_partial() {
+        // 50% scroll, 60 seconds → 0.3 + (0.5 * 0.4) + (60/120).min(0.3) = 0.3 + 0.2 + 0.15 = 0.65
+        let action = BehaviorAction::EngagementComplete {
+            total_seconds: 60,
+            scroll_depth_pct: 0.5,
+        };
+        let expected = 0.3 + (0.5 * 0.4) + (60.0_f32 / 120.0).min(0.3);
+        assert!(
+            (action.compute_strength() - expected).abs() < 1e-6,
+            "Partial engagement expected {}, got {}",
+            expected,
+            action.compute_strength()
+        );
+    }
+
+    #[test]
+    fn test_engagement_complete_clamps_scroll() {
+        // scroll_depth_pct > 1.0 should clamp to 1.0
+        let action = BehaviorAction::EngagementComplete {
+            total_seconds: 0,
+            scroll_depth_pct: 2.0,
+        };
+        // 0.3 + (1.0 * 0.4) + 0.0 = 0.7
+        assert!(
+            (action.compute_strength() - 0.7).abs() < f32::EPSILON,
+            "Clamped scroll should give 0.7, got {}",
+            action.compute_strength()
+        );
+    }
+
+    // ========================================================================
+    // Phase 2: SaveWithContext tests
+    // ========================================================================
+
+    #[test]
+    fn test_save_with_context_useful_now() {
+        let action = BehaviorAction::SaveWithContext {
+            context: SaveContext::UsefulNow,
+        };
+        assert!(
+            (action.compute_strength() - 1.2).abs() < f32::EPSILON,
+            "UsefulNow should be 1.2, got {}",
+            action.compute_strength()
+        );
+    }
+
+    #[test]
+    fn test_save_with_context_reference() {
+        let action = BehaviorAction::SaveWithContext {
+            context: SaveContext::Reference,
+        };
+        assert!(
+            (action.compute_strength() - 0.9).abs() < f32::EPSILON,
+            "Reference should be 0.9, got {}",
+            action.compute_strength()
+        );
+    }
+
+    #[test]
+    fn test_save_with_context_share() {
+        let action = BehaviorAction::SaveWithContext {
+            context: SaveContext::Share,
+        };
+        assert!(
+            (action.compute_strength() - 1.0).abs() < f32::EPSILON,
+            "Share should be 1.0, got {}",
+            action.compute_strength()
+        );
+    }
+
+    // ========================================================================
+    // Phase 2: Serde round-trip tests
+    // ========================================================================
+
+    #[test]
+    fn test_engagement_complete_serde_roundtrip() {
+        let action = BehaviorAction::EngagementComplete {
+            total_seconds: 90,
+            scroll_depth_pct: 0.75,
+        };
+        let json = serde_json::to_string(&action).expect("serialize");
+        let deserialized: BehaviorAction = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(action, deserialized);
+    }
+
+    #[test]
+    fn test_save_with_context_serde_roundtrip() {
+        let action = BehaviorAction::SaveWithContext {
+            context: SaveContext::Reference,
+        };
+        let json = serde_json::to_string(&action).expect("serialize");
+        let deserialized: BehaviorAction = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(action, deserialized);
     }
 }

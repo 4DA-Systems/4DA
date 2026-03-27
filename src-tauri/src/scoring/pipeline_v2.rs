@@ -96,8 +96,8 @@ fn compute_signal_strength_bonus(
 
     // Context axis: excess above 0.45 threshold, normalized to [0, 1]
     if context_score >= scoring_config::CONTEXT_THRESHOLD {
-        let excess =
-            (context_score - scoring_config::CONTEXT_THRESHOLD) / (1.0 - scoring_config::CONTEXT_THRESHOLD);
+        let excess = (context_score - scoring_config::CONTEXT_THRESHOLD)
+            / (1.0 - scoring_config::CONTEXT_THRESHOLD);
         strengths.push(excess.clamp(0.0, 1.0));
     }
 
@@ -139,8 +139,8 @@ fn compute_signal_strength_bonus(
 
     // Dependency axis
     if dep_match_score >= scoring_config::DEPENDENCY_THRESHOLD {
-        let excess =
-            (dep_match_score - scoring_config::DEPENDENCY_THRESHOLD) / (1.0 - scoring_config::DEPENDENCY_THRESHOLD);
+        let excess = (dep_match_score - scoring_config::DEPENDENCY_THRESHOLD)
+            / (1.0 - scoring_config::DEPENDENCY_THRESHOLD);
         strengths.push(excess.clamp(0.0, 1.0));
     }
 
@@ -971,8 +971,13 @@ pub(crate) fn score_item(
     // ── Phase 7: Gate effect ──────────────────────────────────────────
     let conf_idx = (signal_count as usize).min(5);
     let confirmation_mult = V2_GATE[conf_idx].0;
-    let gated_score =
-        apply_gate_effect(boosted_score, signal_count, raw.domain_relevance, ctx, strength_bonus);
+    let gated_score = apply_gate_effect(
+        boosted_score,
+        signal_count,
+        raw.domain_relevance,
+        ctx,
+        strength_bonus,
+    );
 
     // ── Phase 8: Final adjustments ────────────────────────────────────
     let combined_score = apply_final_adjustments(gated_score, input.title);

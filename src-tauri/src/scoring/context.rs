@@ -45,10 +45,12 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
 
     let ace_ctx = get_ace_context();
 
-    // Load recent work topics for intent-aware scoring (last 2h of git/file activity)
+    // Load session-aware work topics for intent scoring.
+    // Uses gap-based session detection instead of a fixed 2h window:
+    // current session = 1.0, previous same-day = 0.5, yesterday = 0.2
     let work_topics: Vec<String> = match crate::get_ace_engine() {
         Ok(ace) => ace
-            .get_recent_work_topics(2)
+            .get_session_aware_work_topics()
             .unwrap_or_default()
             .into_iter()
             .map(|(topic, _weight)| topic)
