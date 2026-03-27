@@ -261,7 +261,8 @@ fn compute_relevance(
 // ============================================================================
 
 /// Returns (quality_score, freshness, source_quality_boost, competing_mult, content_quality_mult,
-///          content_dna_mult, content_type, novelty_mult, ecosystem_shift_mult, stack_competing_mult)
+///          content_dna_mult, content_type, novelty_mult, ecosystem_shift_mult, stack_competing_mult,
+///          sophistication_mult)
 #[allow(clippy::type_complexity)]
 fn compute_quality_composite(
     relevance_score: f32,
@@ -277,6 +278,7 @@ fn compute_quality_composite(
     f32,
     f32,
     crate::content_dna::ContentType,
+    f32,
     f32,
     f32,
     f32,
@@ -385,6 +387,15 @@ fn compute_quality_composite(
         &ctx.composed_stack,
     );
 
+    // Content sophistication (audience-aware depth scoring)
+    let sophistication = crate::content_sophistication::compute_sophistication(
+        input.title,
+        input.content,
+        ctx.ace_ctx.detected_tech.len(),
+        &ctx.domain_profile,
+    );
+    let sophistication_mult = sophistication.multiplier;
+
     // Asymmetric dampening function
     let dampen = |m: f32| {
         if m < 1.0 {
@@ -411,6 +422,7 @@ fn compute_quality_composite(
         * dampen(novelty.multiplier)
         * dampen(ecosystem_shift_mult)
         * dampen(stack_competing_mult)
+        * dampen(sophistication_mult)
         * dampen(freshness)
         * dampen(source_quality_mult)
         * dampen(raw.affinity_mult)
@@ -430,6 +442,7 @@ fn compute_quality_composite(
         novelty.multiplier,
         ecosystem_shift_mult,
         stack_competing_mult,
+        sophistication_mult,
     )
 }
 
@@ -821,6 +834,7 @@ pub(crate) fn score_item(
         novelty_mult,
         ecosystem_shift_mult,
         stack_competing_mult,
+        _sophistication_mult,
     ) = compute_quality_composite(relevance_score, input, ctx, &raw, options);
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
