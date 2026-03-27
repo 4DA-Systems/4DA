@@ -235,9 +235,21 @@ fn assess_information_density(title: &str) -> f32 {
 
     // Boost: quantified claims (10MB, 100x, 5 seconds, 10K)
     let quantity_patterns = [
-        "mb ", "gb ", "kb ", "ms ", " seconds", " minutes",
-        "x faster", "x slower", "x improvement", "x speed",
-        "k stars", "k users", "% ", "10x", "100x",
+        "mb ",
+        "gb ",
+        "kb ",
+        "ms ",
+        " seconds",
+        " minutes",
+        "x faster",
+        "x slower",
+        "x improvement",
+        "x speed",
+        "k stars",
+        "k users",
+        "% ",
+        "10x",
+        "100x",
     ];
     if quantity_patterns.iter().any(|p| lower.contains(p)) {
         density += 0.10;
@@ -245,8 +257,13 @@ fn assess_information_density(title: &str) -> f32 {
 
     // Boost: comparison/benchmark language (concrete, measurable)
     let comparison_patterns = [
-        " vs ", " versus ", "benchmark", "comparison",
-        "performance", "latency", "throughput",
+        " vs ",
+        " versus ",
+        "benchmark",
+        "comparison",
+        "performance",
+        "latency",
+        "throughput",
     ];
     if comparison_patterns.iter().any(|p| lower.contains(p)) {
         density += 0.10;
@@ -254,9 +271,18 @@ fn assess_information_density(title: &str) -> f32 {
 
     // Boost: specific technical terms (actionable content)
     let specific_indicators = [
-        "migration", "changelog", "breaking change", "deprecat",
-        "vulnerability", "advisory", "release", "architecture",
-        "implementation", "production", "zero-day", "cve-",
+        "migration",
+        "changelog",
+        "breaking change",
+        "deprecat",
+        "vulnerability",
+        "advisory",
+        "release",
+        "architecture",
+        "implementation",
+        "production",
+        "zero-day",
+        "cve-",
     ];
     if specific_indicators.iter().any(|p| lower.contains(p)) {
         density += 0.10;
@@ -264,10 +290,15 @@ fn assess_information_density(title: &str) -> f32 {
 
     // Penalty: vague qualifiers without substance
     let vague_patterns = [
-        "interesting", "thoughts on", "opinions on",
-        "what do you think", "anyone else",
-        "is it just me", "am i the only",
-        "hot take", "unpopular opinion",
+        "interesting",
+        "thoughts on",
+        "opinions on",
+        "what do you think",
+        "anyone else",
+        "is it just me",
+        "am i the only",
+        "hot take",
+        "unpopular opinion",
     ];
     if vague_patterns.iter().any(|p| lower.contains(p)) {
         density -= 0.15;
