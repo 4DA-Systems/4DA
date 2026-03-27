@@ -256,9 +256,20 @@ pub(crate) async fn apply_llm_reranking(
             }
 
             if judgment.relevant {
-                // LLM confirms — LLM score dominates (70/30 blend)
-                result.top_score =
-                    (result.top_score * 0.3 + judgment.confidence * 0.7).clamp(0.0, 1.0);
+                // LLM confirms — balanced blend (50/50) to respect pipeline scoring
+                let blended =
+                    (result.top_score * 0.50 + judgment.confidence * 0.50).clamp(0.0, 1.0);
+                // Gate-respect: if item had weak signal confirmation (<2 signals),
+                // cap LLM-boosted score to prevent overriding the confirmation gate
+                let signal_count = result
+                    .score_breakdown
+                    .as_ref()
+                    .map_or(0, |b| b.signal_count);
+                result.top_score = if signal_count < 2 {
+                    blended.min(0.55)
+                } else {
+                    blended
+                };
                 if !judgment.reasoning.is_empty() {
                     result.explanation = Some(judgment.reasoning.clone());
                 }
