@@ -28,11 +28,16 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
     let content_depth = assess_content_depth(content);
     let source_authority = url.map_or(1.0, assess_source_authority);
 
-    // Combine: title quality matters most, content depth secondary
+    let info_density = assess_information_density(title);
+
+    // Combine: original weights preserved for calibration stability.
+    // Info density acts as a bonus/penalty layer — dense titles get a small boost,
+    // vague titles get a small penalty. Conservative to avoid breaking recall.
     let raw = title_quality * 0.5 + content_depth * 0.3 + source_authority * 0.2;
+    let density_adjustment = (info_density - 0.5) * 0.10; // -0.05 to +0.05
 
     // Map to multiplier range [0.5, 1.2]
-    let multiplier = (raw * 0.7 + 0.5).clamp(0.5, 1.2);
+    let multiplier = (raw * 0.7 + 0.5 + density_adjustment).clamp(0.5, 1.2);
 
     ContentQuality {
         title_quality,
@@ -208,6 +213,69 @@ fn assess_source_authority(url: &str) -> f32 {
     1.0 // Neutral
 }
 
+/// Assess information density of a title (0.0 = vague, 1.0 = highly specific).
+/// Rewards titles containing concrete, actionable details:
+/// - Version numbers ("v2.0", "React 19")
+/// - Quantified claims ("10MB", "100x faster")
+/// - Comparison/benchmark language
+/// - Specific technical terms (migration, changelog, CVE)
+fn assess_information_density(title: &str) -> f32 {
+    let mut density: f32 = 0.5; // Start at neutral
+    let lower = title.to_lowercase();
+
+    // Boost: contains version numbers (v2.0, v19, 3.x, React 19)
+    let has_version = lower.contains(" v") && lower.chars().any(|c| c.is_ascii_digit())
+        || lower
+            .as_bytes()
+            .windows(3)
+            .any(|w| w[0].is_ascii_digit() && w[1] == b'.' && w[2].is_ascii_digit());
+    if has_version {
+        density += 0.15;
+    }
+
+    // Boost: quantified claims (10MB, 100x, 5 seconds, 10K)
+    let quantity_patterns = [
+        "mb ", "gb ", "kb ", "ms ", " seconds", " minutes",
+        "x faster", "x slower", "x improvement", "x speed",
+        "k stars", "k users", "% ", "10x", "100x",
+    ];
+    if quantity_patterns.iter().any(|p| lower.contains(p)) {
+        density += 0.10;
+    }
+
+    // Boost: comparison/benchmark language (concrete, measurable)
+    let comparison_patterns = [
+        " vs ", " versus ", "benchmark", "comparison",
+        "performance", "latency", "throughput",
+    ];
+    if comparison_patterns.iter().any(|p| lower.contains(p)) {
+        density += 0.10;
+    }
+
+    // Boost: specific technical terms (actionable content)
+    let specific_indicators = [
+        "migration", "changelog", "breaking change", "deprecat",
+        "vulnerability", "advisory", "release", "architecture",
+        "implementation", "production", "zero-day", "cve-",
+    ];
+    if specific_indicators.iter().any(|p| lower.contains(p)) {
+        density += 0.10;
+    }
+
+    // Penalty: vague qualifiers without substance
+    let vague_patterns = [
+        "interesting", "thoughts on", "opinions on",
+        "what do you think", "anyone else",
+        "is it just me", "am i the only",
+        "hot take", "unpopular opinion",
+    ];
+    if vague_patterns.iter().any(|p| lower.contains(p)) {
+        density -= 0.15;
+    }
+
+    density.clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,5 +361,67 @@ mod tests {
             "Vague 3-word title should be penalized: {}",
             vague
         );
+    }
+
+    // ====================================================================
+    // assess_information_density tests
+    // ====================================================================
+
+    #[test]
+    fn test_info_density_version_numbers() {
+        let dense = assess_information_density("React v19 released with server components");
+        let vague = assess_information_density("New React features released");
+        assert!(
+            dense > vague,
+            "Version numbers should boost density: {} vs {}",
+            dense,
+            vague
+        );
+    }
+
+    #[test]
+    fn test_info_density_quantified_claims() {
+        let dense = assess_information_density("Built a Julia IDE in 10MB install");
+        let vague = assess_information_density("Built a Julia IDE");
+        assert!(
+            dense > vague,
+            "Quantified claims should boost density: {} vs {}",
+            dense,
+            vague
+        );
+    }
+
+    #[test]
+    fn test_info_density_vague_penalty() {
+        let specific = assess_information_density("SQLite migration guide for breaking changes");
+        let vague = assess_information_density("Interesting thoughts on databases anyone else");
+        assert!(
+            specific > vague,
+            "Vague titles should score lower: {} vs {}",
+            specific,
+            vague
+        );
+    }
+
+    #[test]
+    fn test_info_density_comparison_boost() {
+        let dense = assess_information_density("Bun vs Node.js benchmark throughput comparison");
+        let plain = assess_information_density("Testing Bun and Node.js together");
+        assert!(
+            dense > plain,
+            "Comparison content should boost density: {} vs {}",
+            dense,
+            plain
+        );
+    }
+
+    #[test]
+    fn test_info_density_range() {
+        let high = assess_information_density(
+            "React v19.1 benchmark: 100x faster rendering migration changelog",
+        );
+        let low = assess_information_density("thoughts on stuff is it just me hot take");
+        assert!(high <= 1.0 && high >= 0.0, "Should be in range: {}", high);
+        assert!(low <= 1.0 && low >= 0.0, "Should be in range: {}", low);
     }
 }

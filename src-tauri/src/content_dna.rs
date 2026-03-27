@@ -16,6 +16,9 @@ pub enum ContentType {
     Tutorial,
     ShowAndTell,
     Question,
+    /// Generic help request: low-information troubleshooting questions.
+    /// "(help!)", "doesn't work", "error when..." — harsher than Question.
+    HelpRequest,
     Hiring,
     Discussion,
 }
@@ -30,6 +33,7 @@ impl ContentType {
             ContentType::Tutorial => "tutorial",
             ContentType::ShowAndTell => "show_and_tell",
             ContentType::Question => "question",
+            ContentType::HelpRequest => "help_request",
             ContentType::Hiring => "hiring",
             ContentType::Discussion => "discussion",
         }
@@ -44,6 +48,7 @@ impl ContentType {
             ContentType::Tutorial => 0.85,
             ContentType::ShowAndTell => 0.60,
             ContentType::Question => 0.70,
+            ContentType::HelpRequest => 0.55,
             ContentType::Hiring => 0.30,
             ContentType::Discussion => 1.00,
         }
@@ -93,12 +98,20 @@ pub fn classify_content(title: &str, content: &str) -> (ContentType, f32) {
         );
     }
 
-    // 6. Question
+    // 6. Generic Help Request (harsher than regular question — low information density)
+    if is_generic_help_request(&title_lower) {
+        return (
+            ContentType::HelpRequest,
+            ContentType::HelpRequest.multiplier(),
+        );
+    }
+
+    // 7. Question
     if is_question(&title_lower) {
         return (ContentType::Question, ContentType::Question.multiplier());
     }
 
-    // 7. Tutorial
+    // 8. Tutorial
     if is_tutorial(&title_lower) {
         return (ContentType::Tutorial, ContentType::Tutorial.multiplier());
     }
@@ -244,6 +257,63 @@ fn is_show_and_tell(title: &str) -> bool {
         "check out my",
         "here's what i built",
         "here is what i built",
+    ];
+    contains_patterns.iter().any(|p| title.contains(p))
+}
+
+/// Detect generic help requests — low-information troubleshooting questions.
+/// "(help!)", "doesn't work", "error when..." without specifics.
+/// These get a harsher penalty (0.55) than regular questions (0.70) because
+/// they lack the specificity that makes questions useful for learning.
+fn is_generic_help_request(title: &str) -> bool {
+    // End patterns: "(help!)", "(help?)", "help needed"
+    let end_patterns = [
+        "(help!)",
+        "(help?)",
+        "(help)",
+        "help!",
+        "help?",
+        "please help",
+        "help needed",
+        "help me",
+        "any ideas?",
+        "any suggestions?",
+        "any thoughts?",
+    ];
+    if end_patterns.iter().any(|p| title.ends_with(p)) {
+        return true;
+    }
+
+    // Start patterns: vague problem descriptions
+    let start_patterns = [
+        "error when",
+        "problem with",
+        "issue with",
+        "trouble with",
+        "struggling with",
+        "stuck on",
+        "can't get",
+        "cannot get",
+        "unable to",
+        "why does my",
+        "why doesn't",
+        "why won't",
+        "why isn't",
+    ];
+    if start_patterns.iter().any(|p| title.starts_with(p)) {
+        return true;
+    }
+
+    // Contains patterns: generic troubleshooting
+    let contains_patterns = [
+        "doesn't work",
+        "does not work",
+        "not working",
+        "broken after",
+        "stopped working",
+        "won't compile",
+        "won't build",
+        "can anyone explain",
     ];
     contains_patterns.iter().any(|p| title.contains(p))
 }
