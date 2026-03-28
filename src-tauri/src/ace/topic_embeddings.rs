@@ -7,6 +7,7 @@ use tracing::{debug, info};
 
 use crate::error::{Result, ResultExt};
 
+use super::embedding::EmbeddingService;
 use super::ACE;
 
 // ============================================================================
@@ -230,6 +231,11 @@ impl ACE {
             Some(service) => service.lock().find_similar(query, &topic_strings, top_k),
             None => Err("Embedding service not initialized".into()),
         }
+    }
+
+    /// Access the embedding service (for maintenance operations like cache pruning).
+    pub fn embedding_service(&self) -> Option<&Mutex<EmbeddingService>> {
+        self.embedding_service.as_ref()
     }
 
     /// Check if embedding service is operational
