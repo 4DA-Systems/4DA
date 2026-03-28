@@ -279,6 +279,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
                     }
+
+                    // Prune stale embedding cache entries (>30 days old)
+                    if let Ok(ace) = crate::get_ace_engine() {
+                        if let Some(emb_service) = ace.embedding_service() {
+                            if let Err(e) = emb_service.lock().prune_stale_embeddings() {
+                                warn!(target: "4da::monitor", error = %e, "Embedding cache pruning failed");
+                            }
+                        }
+                    }
                 }
             }
 

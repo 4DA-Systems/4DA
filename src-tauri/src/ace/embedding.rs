@@ -271,11 +271,13 @@ impl EmbeddingService {
         Ok(embedding)
     }
 
-    /// Get cached embedding from database
+    /// Get cached embedding from database.
+    /// Entries older than 30 days are considered stale and ignored,
+    /// forcing re-generation with the current model.
     fn get_cached_embedding(&self, text: &str) -> Result<Option<Vec<f32>>> {
         let conn = self.conn.lock();
         let result: std::result::Result<Vec<u8>, _> = conn.query_row(
-            "SELECT embedding FROM embedding_cache WHERE text = ?1",
+            "SELECT embedding FROM embedding_cache WHERE text = ?1 AND created_at > datetime('now', '-30 days')",
             [text],
             |row| row.get(0),
         );
@@ -303,6 +305,26 @@ impl EmbeddingService {
         .context("Failed to cache embedding")?;
 
         Ok(())
+    }
+
+    /// Remove embedding cache entries older than 30 days.
+    /// Called during maintenance cycles to prevent unbounded DB growth.
+    pub fn prune_stale_embeddings(&self) -> Result<usize> {
+        let conn = self.conn.lock();
+        let deleted = conn
+            .execute(
+                "DELETE FROM embedding_cache WHERE created_at < datetime('now', '-30 days')",
+                [],
+            )
+            .context("Failed to prune stale embeddings")?;
+        if deleted > 0 {
+            tracing::info!(
+                target: "ace::embedding",
+                deleted,
+                "Pruned stale embedding cache entries"
+            );
+        }
+        Ok(deleted)
     }
 
     /// Compute cosine similarity between two embeddings
