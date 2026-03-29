@@ -46,7 +46,10 @@ fn sdf_circle(p: vec2<f32>, radius: f32) -> f32 {
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    let edge = 0.005;
+    let core = smoothstep(edge, -edge, d);
+    let halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 fn hash2(p: vec2<f32>) -> f32 {
@@ -105,7 +108,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.920000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 2: noise_field ──
@@ -117,7 +120,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.200000, 0.800000, 0.900000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 3: outer_ring ──
@@ -129,7 +132,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(1.000000, 0.850000, 0.250000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     return final_color;
@@ -172,7 +175,10 @@ float sdf_circle(vec2 p, float radius){
 }
 
 float apply_glow(float d, float intensity){
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    float edge = 0.005;
+    float core = smoothstep(edge, -edge, d);
+    float halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 float hash2(vec2 p){
@@ -231,7 +237,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.920000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 2: noise_field ──
@@ -244,7 +250,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.200000, 0.800000, 0.900000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 3: outer_ring ──
@@ -257,7 +263,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(1.000000, 0.850000, 0.250000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     fragColor = final_color;
