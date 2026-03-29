@@ -101,6 +101,27 @@ pub async fn set_llm_provider(
     base_url: Option<String>,
     openai_api_key: Option<String>,
 ) -> Result<()> {
+    // Input length validation — prevents buffer bloat attacks
+    if provider.len() > 50 {
+        return Err("Provider name too long".into());
+    }
+    if api_key.len() > 500 {
+        return Err("API key too long".into());
+    }
+    if model.len() > 200 {
+        return Err("Model name too long".into());
+    }
+    if let Some(ref url) = base_url {
+        if url.len() > 500 {
+            return Err("Base URL too long".into());
+        }
+    }
+    if let Some(ref key) = openai_api_key {
+        if key.len() > 500 {
+            return Err("OpenAI API key too long".into());
+        }
+    }
+
     // Validate provider
     let valid_providers = ["anthropic", "openai", "openai-compatible", "ollama", "none"];
     if !valid_providers.contains(&provider.as_str()) {
@@ -138,18 +159,30 @@ pub async fn set_llm_provider(
     Ok(())
 }
 
-/// Get LLM configuration including the actual API key (for MCP server use).
-///
-/// This returns the in-memory key (hydrated from keychain) so MCP servers
-/// can authenticate without accessing the keychain directly.
+/// Returns LLM configuration for MCP servers — keys are masked for security.
+/// MCP servers should retrieve actual keys through the backend keychain, not IPC.
 #[tauri::command]
 pub async fn get_llm_key_for_mcp() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
     let guard = manager.lock();
     let settings = guard.get();
+
+    // Mask the API key — only show first 8 and last 4 chars
+    let masked_key = if settings.llm.api_key.len() > 12 {
+        let key = &settings.llm.api_key;
+        format!("{}...{}", &key[..8], &key[key.len()-4..])
+    } else if !settings.llm.api_key.is_empty() {
+        "****".to_string()
+    } else {
+        String::new()
+    };
+
+    let has_key = !settings.llm.api_key.is_empty();
+
     Ok(serde_json::json!({
         "provider": settings.llm.provider,
-        "api_key": settings.llm.api_key,
+        "api_key_masked": masked_key,
+        "has_api_key": has_key,
         "model": settings.llm.model,
         "base_url": settings.llm.base_url,
     }))

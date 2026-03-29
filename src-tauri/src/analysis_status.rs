@@ -56,13 +56,15 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
 
         match result {
             Ok(Ok(results)) => {
-                // Compute near_misses while we have the guard, then release it
-                // so downstream operations can acquire other locks freely.
+                // Store results INTO state BEFORE marking completed.
+                // This ensures the frontend can always read results from state
+                // even if the event emission below fails or races.
                 let near_misses = crate::types::extract_near_misses(&results);
-                guard.completed = true;
+                guard.results = Some(results.clone());
                 guard.near_misses = near_misses;
                 guard.last_completed_at =
                     Some(chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string());
+                guard.completed = true; // Mark completed LAST — after all data is stored
                 drop(guard);
 
                 // Downstream operations all take &[SourceRelevance] — use references
@@ -435,6 +437,20 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
 pub(crate) async fn cancel_analysis() -> Result<()> {
     get_analysis_abort().store(true, Ordering::SeqCst);
     info!(target: "4da::analysis", "Analysis cancellation requested");
+
+    // Give the analysis task up to 5 seconds to observe the abort flag and stop
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+    // Force cleanup if the task is still marked as running
+    let state = get_analysis_state();
+    let mut guard = state.lock();
+    if guard.running {
+        warn!(target: "4da::analysis", "Analysis still running after cancellation timeout — forcing cleanup");
+        guard.running = false;
+        guard.error = Some("Analysis cancelled by user".to_string());
+    }
+    drop(guard);
+
     Ok(())
 }
 

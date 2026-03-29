@@ -596,6 +596,9 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     if query_text.is_empty() {
         return Err("Query cannot be empty".into());
     }
+    if query_text.len() > 5000 {
+        return Err("Query too long (maximum 5000 characters)".into());
+    }
 
     crate::settings::require_signal_feature("natural_language_query")?;
     let is_pro = crate::settings::is_signal();
