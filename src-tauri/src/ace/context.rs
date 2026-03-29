@@ -247,6 +247,28 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
             .context("Failed to update active topic")?;
         }
 
+        // Rich topic extraction — deeper semantic signals from file content
+        let ext = change
+            .path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("");
+        if let Ok(content) = std::fs::read_to_string(&change.path) {
+            let rich_topics = super::watcher::extract_rich_topics(&content, ext);
+            for (topic, confidence) in &rich_topics {
+                conn.execute(
+                    "INSERT INTO active_topics (topic, weight, confidence, source, last_seen)
+                     VALUES (?1, ?2, ?3, 'file_content', datetime('now'))
+                     ON CONFLICT(topic) DO UPDATE SET
+                        weight = MAX(excluded.weight, active_topics.weight),
+                        confidence = MAX(excluded.confidence, active_topics.confidence),
+                        last_seen = datetime('now')",
+                    rusqlite::params![topic, confidence, confidence],
+                )
+                .ok(); // Non-critical — don't fail the whole batch
+            }
+        }
+
         // Store extracted document content in indexed_documents and document_chunks
         if let Some(text) = extracted_text {
             if !text.is_empty() {

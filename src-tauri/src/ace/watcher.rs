@@ -565,6 +565,264 @@ fn extract_generic_topics(content: &str, topics: &mut HashSet<String>) {
 }
 
 // ============================================================================
+// Rich Topic Extraction — deeper semantic analysis of file content
+// ============================================================================
+
+/// Extract richer semantic topics from file content beyond basic imports.
+/// Returns (topic, confidence) pairs. Supplements the basic extract_topics_from_content().
+pub fn extract_rich_topics(content: &str, file_ext: &str) -> Vec<(String, f32)> {
+    let mut topics: Vec<(String, f32)> = Vec::new();
+
+    match file_ext {
+        "rs" => extract_rich_rust(content, &mut topics),
+        "ts" | "tsx" | "js" | "jsx" => extract_rich_js(content, &mut topics),
+        "py" => extract_rich_python(content, &mut topics),
+        _ => {}
+    }
+
+    // Universal patterns (all languages)
+    extract_rich_universal(content, &mut topics);
+
+    // Dedup by topic name, keep highest confidence
+    topics.sort_by(|a, b| a.0.cmp(&b.0));
+    topics.dedup_by(|a, b| {
+        if a.0 == b.0 {
+            b.1 = b.1.max(a.1);
+            true
+        } else {
+            false
+        }
+    });
+
+    topics
+}
+
+fn extract_rich_rust(content: &str, topics: &mut Vec<(String, f32)>) {
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // fn signatures → extract function purpose from name
+        if (trimmed.starts_with("pub fn ")
+            || trimmed.starts_with("pub async fn ")
+            || trimmed.starts_with("fn ")
+            || trimmed.starts_with("async fn "))
+            && !trimmed.starts_with("fn main")
+        {
+            let cleaned = trimmed.replace("pub ", "").replace("async ", "");
+            let name = cleaned
+                .strip_prefix("fn ")
+                .unwrap_or("")
+                .split('(')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if name.len() >= 4 {
+                // Split snake_case into semantic tokens
+                for part in name.split('_') {
+                    if part.len() >= 3
+                        && !["get", "set", "new", "the", "for", "mut", "ref"].contains(&part)
+                    {
+                        topics.push((part.to_string(), 0.5));
+                    }
+                }
+            }
+        }
+
+        // impl blocks → trait/type being implemented
+        if trimmed.starts_with("impl ") {
+            let rest = trimmed.strip_prefix("impl ").unwrap_or("");
+            let type_name = if rest.contains(" for ") {
+                rest.split(" for ")
+                    .nth(1)
+                    .and_then(|s| s.split_whitespace().next())
+            } else {
+                rest.split_whitespace().next()
+            };
+            if let Some(name) = type_name {
+                let clean = name.trim_matches(&['<', '>', '{'][..]);
+                if clean.len() >= 3 {
+                    topics.push((clean.to_lowercase(), 0.65));
+                }
+            }
+        }
+
+        // Error handling patterns
+        if trimmed.contains("anyhow::") || trimmed.contains("thiserror") {
+            topics.push(("error_handling".to_string(), 0.5));
+        }
+        if trimmed.contains("MutexGuard")
+            || trimmed.contains("RwLock")
+            || trimmed.contains("Arc<Mutex")
+        {
+            topics.push(("concurrency".to_string(), 0.6));
+        }
+        if trimmed.contains(".await") || trimmed.contains("tokio::spawn") {
+            topics.push(("async_runtime".to_string(), 0.55));
+        }
+    }
+
+    // Detect broader patterns from content
+    if content.contains("rusqlite") || content.contains("diesel") || content.contains("sqlx") {
+        topics.push(("database".to_string(), 0.7));
+    }
+    if content.contains("reqwest") || content.contains("hyper") || content.contains("axum") {
+        topics.push(("http".to_string(), 0.65));
+    }
+}
+
+fn extract_rich_js(content: &str, topics: &mut Vec<(String, f32)>) {
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Export function/const names → API surface
+        if trimmed.starts_with("export function ")
+            || trimmed.starts_with("export const ")
+            || trimmed.starts_with("export async function ")
+        {
+            let cleaned = trimmed
+                .replace("export ", "")
+                .replace("async ", "")
+                .replace("function ", "")
+                .replace("const ", "");
+            let name = cleaned
+                .split(&['(', ':', ' ', '='][..])
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if name.len() >= 4 {
+                // Split camelCase
+                let mut parts = Vec::new();
+                let mut current = String::new();
+                for ch in name.chars() {
+                    if ch.is_uppercase() && !current.is_empty() {
+                        parts.push(current.to_lowercase());
+                        current = String::new();
+                    }
+                    current.push(ch);
+                }
+                if !current.is_empty() {
+                    parts.push(current.to_lowercase());
+                }
+                for part in parts {
+                    if part.len() >= 3
+                        && !["get", "set", "use", "the", "for"].contains(&part.as_str())
+                    {
+                        topics.push((part, 0.5));
+                    }
+                }
+            }
+        }
+
+        // React hooks
+        if trimmed.contains("useState") {
+            topics.push(("state_management".to_string(), 0.5));
+        }
+        if trimmed.contains("useEffect") {
+            topics.push(("side_effects".to_string(), 0.5));
+        }
+        if trimmed.contains("useMemo") || trimmed.contains("useCallback") {
+            topics.push(("performance_optimization".to_string(), 0.5));
+        }
+    }
+
+    // Broader patterns
+    if content.contains("fetch(") || content.contains("axios") {
+        topics.push(("api_calls".to_string(), 0.6));
+    }
+    if content.contains("tailwind") || content.contains("className=") {
+        topics.push(("styling".to_string(), 0.45));
+    }
+}
+
+fn extract_rich_python(content: &str, topics: &mut Vec<(String, f32)>) {
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // class/def definitions
+        if trimmed.starts_with("class ") {
+            let name = trimmed
+                .strip_prefix("class ")
+                .unwrap_or("")
+                .split(&['(', ':'][..])
+                .next()
+                .unwrap_or("")
+                .trim();
+            if name.len() >= 3 {
+                topics.push((name.to_lowercase(), 0.6));
+            }
+        }
+        if trimmed.starts_with("def ") || trimmed.starts_with("async def ") {
+            let name = trimmed
+                .replace("async ", "")
+                .strip_prefix("def ")
+                .unwrap_or("")
+                .split('(')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if name.len() >= 4 && !name.starts_with('_') {
+                for part in name.split('_') {
+                    if part.len() >= 3 {
+                        topics.push((part.to_string(), 0.5));
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn extract_rich_universal(content: &str, topics: &mut Vec<(String, f32)>) {
+    // TODO/FIXME — active problems the developer is thinking about
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.contains("TODO") || trimmed.contains("FIXME") || trimmed.contains("HACK") {
+            topics.push(("active_problem".to_string(), 0.7));
+            // Try to extract the topic from the comment
+            let comment = trimmed
+                .split("TODO")
+                .last()
+                .or_else(|| trimmed.split("FIXME").last())
+                .or_else(|| trimmed.split("HACK").last())
+                .unwrap_or("");
+            let clean = comment.trim_start_matches(&[':', ' ', '-'][..]).trim();
+            if clean.len() >= 5 {
+                // First 3 meaningful words as topic
+                let words: Vec<&str> = clean
+                    .split_whitespace()
+                    .filter(|w| w.len() >= 3)
+                    .take(3)
+                    .collect();
+                if !words.is_empty() {
+                    topics.push((words.join("_").to_lowercase(), 0.6));
+                }
+            }
+        }
+    }
+
+    // Test-related patterns
+    if content.contains("#[test]")
+        || content.contains("#[tokio::test]")
+        || content.contains("describe(")
+        || content.contains("it(")
+        || content.contains("test(")
+    {
+        topics.push(("testing".to_string(), 0.55));
+    }
+
+    // Security patterns
+    if content.contains("password")
+        || content.contains("secret")
+        || content.contains("api_key")
+        || content.contains("token")
+    {
+        topics.push(("security".to_string(), 0.6));
+    }
+}
+
+// ============================================================================
 // State Persistence
 // ============================================================================
 

@@ -527,6 +527,7 @@ pub fn run() {
             ace_commands::ace_save_watcher_state,
             ace_commands::ace_get_rate_limit_status,
             ace_commands::ace_get_suggested_interests,
+            ace_commands::get_active_work_context,
             ace_commands::ace_get_unresolved_anomalies,
             ace_commands::ace_detect_anomalies,
             ace_commands::ace_resolve_anomaly,

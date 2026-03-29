@@ -5,9 +5,8 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
-import { useVoidSignals } from '../hooks/use-void-signals';
-
 import { MomentumHero } from './momentum/MomentumHero';
+import { ActiveWorkSection, type ActiveWorkData } from './momentum/ActiveWorkSection';
 import { AttentionSection } from './momentum/AttentionSection';
 import { MovingSection } from './momentum/MovingSection';
 import { PositioningSection } from './momentum/PositioningSection';
@@ -48,8 +47,8 @@ export const Momentum = memo(function Momentum() {
   const [chains, setChains] = useState<SignalChainWithPrediction[]>([]);
   const [aweData, setAweData] = useState<{ principles?: string[] } | null>(null);
 
-  // Real-time signal for shader
-  const signal = useVoidSignals();
+  // Active work context
+  const [activeWork, setActiveWork] = useState<ActiveWorkData | null>(null);
 
   // Detail panel
   const [selectedEntry, setSelectedEntry] = useState<RadarEntry | null>(null);
@@ -73,7 +72,8 @@ export const Momentum = memo(function Momentum() {
       cmd('get_advantage_history', { period: 'weekly', limit: 8 }),
       cmd('get_signal_chains_predicted'),
       cmd('run_awe_recall', { domain: 'software-engineering' }),
-    ]).then(([radarR, ctxR, gapsR, , advR, histR, chainsR, aweR]) => {
+      cmd('get_active_work_context'),
+    ]).then(([radarR, ctxR, gapsR, , advR, histR, chainsR, aweR, workR]) => {
       if (radarR.status === 'fulfilled') setRadarData(radarR.value as unknown as TechRadarData);
       else setError(String(radarR.reason));
       if (ctxR.status === 'fulfilled') setUserStack((ctxR.value as { tech_stack: string[] }).tech_stack);
@@ -86,6 +86,9 @@ export const Momentum = memo(function Momentum() {
           const parsed = typeof aweR.value === 'string' ? JSON.parse(aweR.value) : aweR.value;
           setAweData(parsed as { principles?: string[] });
         } catch { setAweData(null); }
+      }
+      if (workR.status === 'fulfilled') {
+        setActiveWork(workR.value as ActiveWorkData);
       }
     }).finally(() => setLoading(false));
   }, [loadWindows]);
@@ -135,8 +138,11 @@ export const Momentum = memo(function Momentum() {
   return (
     <>
       <div className="space-y-6">
-        {/* Hero: Purpose-built shader field + precision gauges */}
-        <MomentumHero signal={signal} advantage={advantage} history={history} entries={entries} gaps={gaps} />
+        {/* Hero: Precision gauge row */}
+        <MomentumHero advantage={advantage} history={history} entries={entries} gaps={gaps} />
+
+        {/* Active Work Context */}
+        <ActiveWorkSection data={activeWork} />
 
         {/* What Needs Attention */}
         <AttentionSection
