@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { cmd } from '../../lib/commands';
 
 import type { TasteProfileSummary } from '../../types/calibration';
@@ -90,6 +90,41 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
     }
   }, [currentCard]);
 
+  // Keyboard navigation for taste test cards
+  useEffect(() => {
+    if (phase !== 'cards' || !currentCard || cardAnimating) return;
+    const handler = (e: KeyboardEvent) => {
+      // Don't capture if user is in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'y':
+        case '1':
+          e.preventDefault();
+          respond('interested');
+          break;
+        case 'ArrowLeft':
+        case 'n':
+        case '2':
+          e.preventDefault();
+          respond('not_interested');
+          break;
+        case 'ArrowUp':
+        case 's':
+        case '3':
+          e.preventDefault();
+          respond('strong_interest');
+          break;
+        case 'Escape':
+          e.preventDefault();
+          onSkip();
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [phase, currentCard, cardAnimating, respond, onSkip]);
+
   // Intro phase
   if (phase === 'intro') {
     return (
@@ -165,7 +200,10 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
           isAnimating={cardAnimating}
         />
 
-        <div className="text-center">
+        <div className="text-center space-y-2">
+          <p className="text-[10px] text-text-muted/60">
+            Keyboard: <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">&rarr;</kbd> interested &middot; <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">&larr;</kbd> skip &middot; <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">&uarr;</kbd> love &middot; <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">Esc</kbd> done
+          </p>
           <button
             onClick={onSkip}
             className="text-text-muted text-xs hover:text-text-secondary transition-colors"

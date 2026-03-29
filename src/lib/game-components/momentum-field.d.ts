@@ -58,11 +58,7 @@ interface GameMomentumFieldElement extends HTMLElement {
   /** Default: 0.5 */
   advantage: number;
   /** Default: 0.5 */
-  trend_norm: number;
-  /** Default: 0.5 */
   metabolism: number;
-  /** Default: 0.3 */
-  density: number;
   /** Default: 0 */
   urgency: number;
   /** Default: 0.7 */
