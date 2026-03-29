@@ -546,7 +546,8 @@ pub async fn export_all_data(format: String) -> Result<ExportManifest> {
 
     let file_content = if format == "csv" {
         // For CSV, convert each section
-        let mut csv = String::from("# 4DA Data Export\n");
+        // Start with UTF-8 BOM for Excel compatibility (prevents garbled CJK text)
+        let mut csv = String::from("\u{FEFF}# 4DA Data Export\n");
         csv.push_str(&format!("# Export ID: {export_id}\n"));
         csv.push_str(&format!("# Created: {}\n", chrono::Utc::now().to_rfc3339()));
         csv.push_str(&format!("# Total Records: {total_records}\n\n"));

@@ -201,42 +201,22 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         info!(target: "4da::monitor", enabled = config.enabled, interval_mins = config.interval_minutes, "Loaded monitoring settings");
     }
 
-    // Auto-enable launch-at-startup on first run.
-    // If launch_at_startup has never been set (None), activate the autostart plugin
-    // so 4DA runs silently on boot. Users can disable in Settings > Monitoring.
+    // First run: persist launch_at_startup as false (opt-in, not opt-out).
+    // Users can enable in Settings > Monitoring. We don't auto-enroll in autostart
+    // without explicit consent — that's a user-hostile pattern.
     {
-        let should_enable = {
+        let should_persist = {
             let settings = get_settings_manager().lock();
             settings.get().monitoring.launch_at_startup.is_none()
         };
-        if should_enable {
-            let startup_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                use tauri_plugin_autostart::ManagerExt;
-                let autostart = startup_handle.autolaunch();
-                match autostart.enable() {
-                    Ok(()) => {
-                        info!(target: "4da::startup", "Auto-start enabled (first run default)");
-                        // Persist so we don't re-trigger on next launch
-                        let mut settings = get_settings_manager().lock();
-                        let m = settings.get().monitoring.clone();
-                        let _ = settings.set_monitoring_config(crate::settings::MonitoringConfig {
-                            launch_at_startup: Some(true),
-                            ..m
-                        });
-                    }
-                    Err(e) => {
-                        warn!(target: "4da::startup", error = %e, "Failed to enable auto-start on first run");
-                        // Still persist as false so we don't retry every launch
-                        let mut settings = get_settings_manager().lock();
-                        let m = settings.get().monitoring.clone();
-                        let _ = settings.set_monitoring_config(crate::settings::MonitoringConfig {
-                            launch_at_startup: Some(false),
-                            ..m
-                        });
-                    }
-                }
+        if should_persist {
+            let mut settings = get_settings_manager().lock();
+            let m = settings.get().monitoring.clone();
+            let _ = settings.set_monitoring_config(crate::settings::MonitoringConfig {
+                launch_at_startup: Some(false),
+                ..m
             });
+            info!(target: "4da::startup", "First run: launch_at_startup defaulted to false (opt-in)");
         }
     }
 
