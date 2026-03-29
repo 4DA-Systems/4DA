@@ -1,31 +1,37 @@
 import { useRef, useEffect, useCallback, memo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { registerGameComponent } from '../../lib/game-components';
 import type { VoidSignal } from '../../types';
 import type { CompoundAdvantageScore } from '../../types/autophagy';
+import type { KnowledgeGap } from '../../types/innovation';
+import type { RadarEntry } from '../tech-radar/RadarSVG';
+import { MomentumGauges } from './MomentumGauges';
 
 // ---------------------------------------------------------------------------
-// Sparkline (inline — keeps component self-contained)
+// Data Bridge — maps 4DA intelligence state to shader uniforms
 // ---------------------------------------------------------------------------
 
-function Sparkline({ data }: { data: number[] }) {
-  if (data.length < 2) return null;
-  const max = Math.max(...data, 1);
-  const min = Math.min(...data, 0);
-  const range = max - min || 1;
-  const w = 64, h = 20;
-  const pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ');
-  return (
-    <svg width={w} height={h} className="inline-block opacity-60">
-      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" className="text-accent-gold" />
-    </svg>
-  );
-}
+function computeFieldParams(
+  advantage: CompoundAdvantageScore | null,
+  signal: VoidSignal,
+  entries: RadarEntry[],
+  gaps: KnowledgeGap[],
+): Record<string, number> {
+  const score = advantage !== null ? advantage.score / 100 : 0.3;
+  const trend = advantage !== null ? advantage.trend : 0;
+  const critGaps = gaps.filter(g => g.gap_severity === 'critical' || g.gap_severity === 'high').length;
+  const coverage = entries.length > 0 ? 1 - (critGaps / entries.length) : 0.8;
 
-function TrendArrow({ trend }: { trend: number }) {
-  if (trend > 0.05) return <span className="text-green-400 text-sm">{'\u2191'}</span>;
-  if (trend < -0.05) return <span className="text-red-400 text-sm">{'\u2193'}</span>;
-  return <span className="text-text-muted text-sm">{'\u2192'}</span>;
+  return {
+    advantage: score,
+    trend_norm: (trend + 1) / 2,
+    trend_warm_r: trend > 0 ? 0.83 : 0.3,
+    trend_warm_g: trend > 0 ? 0.65 : 0.4,
+    metabolism: signal.metabolism,
+    density: Math.min(entries.filter(e => e.movement !== 'stable').length / 15, 1),
+    urgency: signal.signal_urgency,
+    confidence: advantage !== null ? advantage.calibration_accuracy : 0.5,
+    coverage,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -36,26 +42,29 @@ export interface MomentumHeroProps {
   signal: VoidSignal;
   advantage: CompoundAdvantageScore | null;
   history: number[];
+  entries: RadarEntry[];
+  gaps: KnowledgeGap[];
 }
 
-export const MomentumHero = memo(function MomentumHero({ signal, advantage, history }: MomentumHeroProps) {
-  const { t } = useTranslation();
+export const MomentumHero = memo(function MomentumHero({
+  signal, advantage, history, entries, gaps,
+}: MomentumHeroProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const elementRef = useRef<HTMLElement | null>(null);
 
-  // Mount GAME shader
+  // Mount the purpose-built momentum-field shader
   useEffect(() => {
     let cancelled = false;
-    registerGameComponent('game-signal-waveform').then(() => {
+    registerGameComponent('game-momentum-field').then(() => {
       if (cancelled || !containerRef.current) return;
-      const el = document.createElement('game-signal-waveform');
+      const el = document.createElement('game-momentum-field');
       el.style.width = '100%';
       el.style.height = '100%';
       el.style.display = 'block';
       el.style.borderRadius = '8px';
       containerRef.current.appendChild(el);
       elementRef.current = el;
-    }).catch(() => { /* graceful — hero works without shader */ });
+    }).catch(() => { /* graceful — gauges work without shader */ });
     const container = containerRef.current;
     return () => {
       cancelled = true;
@@ -66,51 +75,35 @@ export const MomentumHero = memo(function MomentumHero({ signal, advantage, hist
     };
   }, []);
 
-  // Drive shader from VoidSignal
+  // Drive shader uniforms from real intelligence data
   const setParam = useCallback((name: string, value: number) => {
     const el = elementRef.current as (HTMLElement & { setParam?: (n: string, v: number) => void }) | null;
     el?.setParam?.(name, value);
   }, []);
 
   useEffect(() => {
-    setParam('intensity', signal.signal_intensity);
-    setParam('pulse', signal.pulse);
-    setParam('heat', signal.heat);
-    setParam('color_shift', signal.advantage_trend > 0 ? 0.6 : signal.advantage_trend < 0 ? -0.4 : 0);
-    setParam('metabolism', signal.metabolism);
-  }, [signal, setParam]);
-
-  const score = advantage ? Math.round(advantage.score) : null;
-  const scoreColor = score !== null && score >= 60 ? 'text-green-400'
-    : score !== null && score >= 30 ? 'text-accent-gold'
-    : 'text-text-secondary';
-
-  const sparkData = history.length >= 2
-    ? history
-    : advantage ? [Math.max(advantage.score - 8, 0), advantage.score - 3, advantage.score] : [];
+    const params = computeFieldParams(advantage, signal, entries, gaps);
+    for (const [key, val] of Object.entries(params)) {
+      setParam(key, val);
+    }
+  }, [advantage, signal, entries, gaps, setParam]);
 
   return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden flex" style={{ height: 120 }}>
-      {/* Shader waveform */}
-      <div ref={containerRef} className="flex-1 min-w-0 bg-[#0D0D0D]" />
+    <div className="space-y-3">
+      {/* Momentum Field — ambient intelligence horizon */}
+      <div
+        ref={containerRef}
+        className="w-full bg-[#0A0A0A] rounded-lg border border-border overflow-hidden"
+        style={{ height: 80 }}
+      />
 
-      {/* Compound Advantage */}
-      <div className="w-48 flex flex-col items-center justify-center px-4 border-s border-border gap-1">
-        {score !== null ? (
-          <>
-            <div className="flex items-center gap-1.5">
-              <span className={`text-2xl font-bold tabular-nums ${scoreColor}`}>{score}</span>
-              <TrendArrow trend={advantage!.trend} />
-            </div>
-            <Sparkline data={sparkData} />
-            <span className="text-[9px] text-text-muted uppercase tracking-widest">
-              {t('momentum.compoundAdvantage')}
-            </span>
-          </>
-        ) : (
-          <span className="text-[10px] text-text-muted">{t('momentum.loading')}</span>
-        )}
-      </div>
+      {/* Gauge Row — precise measurements */}
+      <MomentumGauges
+        advantage={advantage}
+        history={history}
+        entries={entries}
+        gaps={gaps}
+      />
     </div>
   );
 });
