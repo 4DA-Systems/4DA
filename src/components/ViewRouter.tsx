@@ -12,7 +12,7 @@ import { ResultsView } from './ResultsView';
 // Lazy-loaded views — each only loads when navigated to
 const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m.BriefingView })));
 const SavedItemsView = lazy(() => import('./SavedItemsView').then(m => ({ default: m.SavedItemsView })));
-const TechRadar = lazy(() => import('./TechRadar').then(m => ({ default: m.TechRadar })));
+const Momentum = lazy(() => import('./Momentum').then(m => ({ default: m.Momentum })));
 const DecisionMemory = lazy(() => import('./DecisionMemory').then(m => ({ default: m.DecisionMemory })));
 const SovereignDeveloperProfile = lazy(() => import('./SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
@@ -23,7 +23,7 @@ const WisdomPanel = lazy(() => import('./WisdomPanel').then(m => ({ default: m.W
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
-const DecisionWindowsPanel = lazy(() => import('./DecisionWindowsPanel').then(m => ({ default: m.DecisionWindowsPanel })));
+// DecisionWindowsPanel functionality absorbed into Momentum component
 const WeeklyIntelligenceSummary = lazy(() => import('./WeeklyIntelligenceSummary').then(m => ({ default: m.WeeklyIntelligenceSummary })));
 const IntelligenceReportCard = lazy(() => import('./IntelligenceReport'));
 const SecurityDashboard = lazy(() => import('./SecurityDashboard'));
@@ -62,7 +62,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
   const [viewAnnouncement, setViewAnnouncement] = useState('');
   useEffect(() => {
     const labelKey = VIEW_LABEL_KEYS[activeView];
-    if (labelKey) {
+    if (labelKey !== undefined && labelKey !== '') {
       setViewAnnouncement(t('app.viewChanged', { view: t(labelKey), defaultValue: 'Navigated to {{view}}' }));
     }
   }, [activeView, t]);
@@ -87,13 +87,10 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
           <SovereignDeveloperProfile />
         </ViewErrorBoundary>
       ) : activeView === 'insights' ? (
-        <ViewErrorBoundary viewName="Decisions">
-          <section aria-label={t('nav.insights', { defaultValue: 'Radar' })} className="space-y-6">
-            <PanelErrorBoundary name="Decision Windows">
-              <DecisionWindowsPanel />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Tech Radar">
-              <TechRadar />
+        <ViewErrorBoundary viewName="Momentum">
+          <section aria-label={t('nav.insights', { defaultValue: 'Momentum' })} className="space-y-6">
+            <PanelErrorBoundary name="Momentum">
+              <Momentum />
             </PanelErrorBoundary>
             <PanelErrorBoundary name="Wisdom Panel">
               <WisdomPanel />

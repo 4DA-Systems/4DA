@@ -243,6 +243,11 @@ body {
   to { transform: translateX(0); opacity: 1; }
 }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 /* Zoom indicator fade */
 @keyframes zoom-fade {
   0% { opacity: 1; }
