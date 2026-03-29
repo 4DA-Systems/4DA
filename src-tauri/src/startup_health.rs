@@ -44,6 +44,8 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     check_embedding_provider(&data_dir, &mut issues);
     check_source_adapters(&mut issues);
     check_disk_write(&data_dir, &mut issues);
+    check_disk_space(&data_dir, &mut issues);
+    check_database_size(&data_dir, &mut issues);
 
     // Log results
     if issues.is_empty() {
@@ -248,6 +250,154 @@ pub(crate) fn check_disk_write(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>
     }
 }
 
+/// Check 6: Disk space — warn if less than 500MB, error if less than 100MB.
+fn check_disk_space(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    let available = get_available_disk_space(data_dir);
+    if available == 0 {
+        return; // Could not determine — skip silently
+    }
+    let available_mb = available / (1024 * 1024);
+    if available_mb < 100 {
+        issues.push(HealthIssue {
+            component: "disk",
+            severity: HealthSeverity::Error,
+            message: format!(
+                "Critically low disk space: only {}MB available. 4DA needs space for its database and cache.",
+                available_mb
+            ),
+        });
+    } else if available_mb < 500 {
+        issues.push(HealthIssue {
+            component: "disk",
+            severity: HealthSeverity::Warning,
+            message: format!(
+                "Low disk space: {}MB available. Consider freeing space to prevent issues.",
+                available_mb
+            ),
+        });
+    }
+}
+
+/// Get available disk space in bytes for the volume containing the given path.
+/// Uses platform-specific APIs (Win32 on Windows, statvfs on Unix).
+#[allow(unsafe_code)]
+fn get_available_disk_space(path: &Path) -> u64 {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let mut free_bytes: u64 = 0;
+        // SAFETY: Calling Win32 GetDiskFreeSpaceExW with valid aligned pointers
+        let result = unsafe {
+            GetDiskFreeSpaceExW(
+                wide.as_ptr(),
+                &mut free_bytes as *mut u64,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if result != 0 { free_bytes } else { 0 }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Use statvfs on Unix
+        use std::ffi::CString;
+        let path_cstr = match CString::new(path.to_string_lossy().as_bytes()) {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        // SAFETY: Calling POSIX statvfs with a valid null-terminated C string
+        unsafe {
+            let mut stat: libc::statvfs = std::mem::zeroed();
+            if libc::statvfs(path_cstr.as_ptr(), &mut stat) == 0 {
+                stat.f_bavail as u64 * stat.f_frsize as u64
+            } else {
+                0
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+extern "system" {
+    fn GetDiskFreeSpaceExW(
+        lp_directory_name: *const u16,
+        lp_free_bytes_available_to_caller: *mut u64,
+        lp_total_number_of_bytes: *mut u64,
+        lp_total_number_of_free_bytes: *mut u64,
+    ) -> i32;
+}
+
+/// Check 7: Database size — warn if the database is getting large.
+fn check_database_size(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    let db_path = data_dir.join("4da.db");
+    if let Ok(meta) = std::fs::metadata(&db_path) {
+        let size_mb = meta.len() / (1024 * 1024);
+        if size_mb > 500 {
+            issues.push(HealthIssue {
+                component: "database",
+                severity: HealthSeverity::Warning,
+                message: format!(
+                    "Database is {}MB. Consider running database optimization in Settings to reclaim space.",
+                    size_mb
+                ),
+            });
+        }
+    }
+    // Also check WAL file size
+    let wal_path = data_dir.join("4da.db-wal");
+    if let Ok(meta) = std::fs::metadata(&wal_path) {
+        let size_mb = meta.len() / (1024 * 1024);
+        if size_mb > 100 {
+            issues.push(HealthIssue {
+                component: "database",
+                severity: HealthSeverity::Warning,
+                message: format!(
+                    "Database WAL file is {}MB. A checkpoint will run automatically.",
+                    size_mb
+                ),
+            });
+        }
+    }
+}
+
+// ============================================================================
+// Diagnostic Report (for support)
+// ============================================================================
+
+/// Generate a comprehensive diagnostic report for troubleshooting.
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct DiagnosticReport {
+    pub app_version: &'static str,
+    pub platform: &'static str,
+    pub arch: &'static str,
+    pub data_dir: String,
+    pub db_size_bytes: u64,
+    pub settings_exists: bool,
+    pub disk_available_mb: u64,
+    pub health_issues: Vec<HealthIssue>,
+}
+
+pub(crate) fn generate_diagnostic_report() -> DiagnosticReport {
+    let data_dir = get_data_dir();
+    let issues = run_startup_health_check();
+    let db_size = std::fs::metadata(data_dir.join("4da.db"))
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let disk_available = get_available_disk_space(&data_dir);
+
+    DiagnosticReport {
+        app_version: env!("CARGO_PKG_VERSION"),
+        platform: std::env::consts::OS,
+        arch: std::env::consts::ARCH,
+        data_dir: data_dir.display().to_string(),
+        db_size_bytes: db_size,
+        settings_exists: data_dir.join("settings.json").exists(),
+        disk_available_mb: disk_available / (1024 * 1024),
+        health_issues: issues,
+    }
+}
+
 // ============================================================================
 // Tauri Command
 // ============================================================================
@@ -257,4 +407,10 @@ pub(crate) fn check_disk_write(data_dir: &PathBuf, issues: &mut Vec<HealthIssue>
 pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
     // Re-run checks so frontend gets a fresh snapshot.
     run_startup_health_check()
+}
+
+/// Returns a full diagnostic report for support/troubleshooting.
+#[tauri::command]
+pub(crate) fn get_diagnostic_report() -> DiagnosticReport {
+    generate_diagnostic_report()
 }

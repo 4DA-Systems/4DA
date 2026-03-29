@@ -85,16 +85,17 @@ describe('toast-slice', () => {
       expect(useAppStore.getState().toasts).toHaveLength(0);
     });
 
-    it('error toast has longer duration', () => {
+    it('error toast persists until dismissed (no auto-dismiss)', () => {
       useAppStore.getState().addToast('error', 'Error toast');
       expect(useAppStore.getState().toasts).toHaveLength(1);
 
-      // Error duration is 8000ms, check at 4000ms it's still there
-      vi.advanceTimersByTime(4000);
+      // Error toasts do NOT auto-dismiss — they persist for accessibility
+      vi.advanceTimersByTime(10000);
       expect(useAppStore.getState().toasts).toHaveLength(1);
 
-      // After full 8000ms it's removed
-      vi.advanceTimersByTime(4000);
+      // Must be manually dismissed
+      const id = useAppStore.getState().toasts[0]!.id;
+      useAppStore.getState().removeToast(id);
       expect(useAppStore.getState().toasts).toHaveLength(0);
     });
   });

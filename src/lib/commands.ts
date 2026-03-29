@@ -406,6 +406,7 @@ interface CommandMap {
 
   // -- Startup Health --
   get_startup_health: { params: Record<string, never>; result: StartupHealthIssue[] };
+  get_diagnostic_report: { params: Record<string, never>; result: DiagnosticReport };
 
   // -- Error Telemetry --
   get_error_telemetry: { params: { limit?: number }; result: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] };
@@ -696,6 +697,18 @@ interface StartupHealthIssue {
   component: string;
   severity: 'warning' | 'error';
   message: string;
+}
+
+/** Diagnostic report for support/troubleshooting (mirrors Rust DiagnosticReport) */
+interface DiagnosticReport {
+  app_version: string;
+  platform: string;
+  arch: string;
+  data_dir: string;
+  db_size_bytes: number;
+  settings_exists: boolean;
+  disk_available_mb: number;
+  health_issues: StartupHealthIssue[];
 }
 
 
