@@ -1,4 +1,6 @@
 import type { RadarEntry } from '../tech-radar/RadarSVG';
+import type { DecisionWindow } from '../../types/autophagy';
+import type { KnowledgeGap } from '../../types/innovation';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -9,14 +11,94 @@ export function isInUserStack(name: string, stack: string[]): boolean {
   return stack.some(s => s.toLowerCase() === lower);
 }
 
-/** Deterministic hash for consistent positioning. */
-export function hashString(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
+// ---------------------------------------------------------------------------
+// Attention Item — unified type for the "What Needs Attention" section
+// ---------------------------------------------------------------------------
+
+export type AttentionKind = 'security' | 'decision_window' | 'knowledge_gap';
+
+export interface AttentionItem {
+  id: string;
+  kind: AttentionKind;
+  title: string;
+  detail: string;
+  urgency: number; // 0-1 for sorting
+  entryName?: string; // links to a RadarEntry for drill-down
+  windowId?: number;
+}
+
+export function buildAttentionItems(
+  entries: RadarEntry[],
+  userStack: string[],
+  windows: DecisionWindow[],
+  gaps: KnowledgeGap[],
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): AttentionItem[] {
+  const items: AttentionItem[] = [];
+
+  // 1. Security advisories on YOUR stack techs
+  for (const e of entries) {
+    const secSignals = e.signals.filter(s => /security|advisory|vuln|cve/i.test(s));
+    if (secSignals.length > 0 && isInUserStack(e.name, userStack)) {
+      items.push({
+        id: `sec-${e.name}`,
+        kind: 'security',
+        title: t('momentum.securityAlert', { name: e.name }),
+        detail: secSignals[0]!,
+        urgency: 0.95,
+        entryName: e.name,
+      });
+    }
   }
-  return Math.abs(hash);
+
+  // 2. Decision windows that are open (sorted by urgency)
+  const openWindows = windows.filter(w => w.status === 'open');
+  for (const w of openWindows) {
+    const timeLeft = getTimeRemaining(w.expires_at);
+    items.push({
+      id: `win-${w.id}`,
+      kind: 'decision_window',
+      title: w.title,
+      detail: timeLeft
+        ? t('momentum.windowExpiringDetail', { time: timeLeft, urgency: Math.round(w.urgency * 100) })
+        : w.description ?? `${w.window_type} — urgency ${Math.round(w.urgency * 100)}%`,
+      urgency: w.urgency,
+      windowId: w.id,
+    });
+  }
+
+  // 3. Knowledge gaps (critical and high only)
+  const severeGaps = gaps.filter(g => g.gap_severity === 'critical' || g.gap_severity === 'high');
+  for (const g of severeGaps) {
+    items.push({
+      id: `gap-${g.dependency}`,
+      kind: 'knowledge_gap',
+      title: t('momentum.knowledgeGap', { dependency: g.dependency }),
+      detail: t('momentum.knowledgeGapDetail', { days: g.days_since_last_engagement }),
+      urgency: g.gap_severity === 'critical' ? 0.85 : 0.6,
+    });
+  }
+
+  // Sort by urgency descending, cap at 5
+  items.sort((a, b) => b.urgency - a.urgency);
+  return items.slice(0, 5);
+}
+
+// ---------------------------------------------------------------------------
+// Time helpers
+// ---------------------------------------------------------------------------
+
+export function getTimeRemaining(expiresAt: string | null): string | null {
+  if (!expiresAt) return null;
+  const now = Date.now();
+  const exp = new Date(expiresAt).getTime();
+  const diff = exp - now;
+  if (diff <= 0) return 'Expired';
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h left`;
+  if (hours > 0) return `${hours}h left`;
+  return `${Math.floor(diff / (1000 * 60))}m left`;
 }
 
 // ---------------------------------------------------------------------------
@@ -30,30 +112,48 @@ export function generateNarrative(
 ): string {
   const mentionMatch = entry.signals.find(s => /\d+\s*mention/i.test(s));
   const mentionCount = mentionMatch?.match(/(\d+)/)?.[1] ?? null;
+  const affinityMatch = entry.signals.find(s => /affinity\s*[\d.]+|engagement.*[\d.]+/i.test(s));
+  const decisionMatch = entry.signals.find(s => /decision|Active decision/i.test(s));
   const securitySignals = entry.signals.filter(s => /security|advisory|vuln|cve/i.test(s));
-  const decisionSignals = entry.signals.filter(s => /decision|favor|rejected/i.test(s));
 
+  // Build meaningful narrative sentences from signal data
   const parts: string[] = [];
 
   switch (entry.movement) {
-    case 'up':
-      if (mentionCount !== null) parts.push(t('momentum.mentionsRecent', { count: mentionCount }));
-      if (securitySignals.length > 0) parts.push(t('momentum.securityCount', { count: securitySignals.length }));
-      if (parts.length === 0 && entry.signals.length > 0) parts.push(entry.signals[0]!);
-      return parts.length > 0 ? parts.join(', ') : t('momentum.risingActivity');
+    case 'up': {
+      if (mentionCount !== null) {
+        parts.push(t('momentum.mentionsRecent', { count: mentionCount }));
+      }
+      if (affinityMatch) {
+        parts.push(affinityMatch);
+      }
+      if (securitySignals.length > 0) {
+        parts.push(t('momentum.securityCount', { count: securitySignals.length }));
+      }
+      if (parts.length === 0 && entry.signals.length > 0) {
+        parts.push(entry.signals[0]!);
+      }
+      return parts.length > 0 ? parts.join('. ') : t('momentum.risingActivity');
+    }
 
-    case 'new':
+    case 'new': {
       if (isStack) return t('momentum.newInStack');
+      if (decisionMatch) return decisionMatch;
       return t('momentum.newAppearing', { count: entry.signals.length });
+    }
 
-    case 'down':
+    case 'down': {
+      if (securitySignals.length > 0) return securitySignals[0]!;
+      const decisionSignals = entry.signals.filter(s => /decision|favor|rejected/i.test(s));
       if (decisionSignals.length > 0) return decisionSignals[0]!;
       return t('momentum.decliningActivity');
+    }
 
-    default:
+    default: {
       if (isStack && entry.signals.length > 0) return entry.signals[0]!;
       if (isStack) return t('momentum.coreStable');
       return t('momentum.stable');
+    }
   }
 }
 
@@ -61,7 +161,7 @@ export function generateNarrative(
 // Filtering & Sorting
 // ---------------------------------------------------------------------------
 
-/** Filter to entries worth showing as narrative cards. */
+/** Filter to entries worth showing as narrative cards (non-stable, or stable stack with signals). */
 export function filterNoteworthy(entries: RadarEntry[], userStack: string[]): RadarEntry[] {
   return entries.filter(e => {
     if (e.movement !== 'stable') return true;
@@ -81,55 +181,14 @@ export function sortByMomentum(entries: RadarEntry[]): RadarEntry[] {
 }
 
 // ---------------------------------------------------------------------------
-// Decision Prompt Derivation
+// Stack Health — determines dot color in the "Your Stack" section
 // ---------------------------------------------------------------------------
 
-export interface DerivedPrompt {
-  id: string;
-  text: string;
-  subtext: string;
-  type: 'track' | 'security' | 'declining' | 'version';
-  entryName: string;
-}
+export type StackHealth = 'healthy' | 'noteworthy' | 'attention';
 
-export function deriveDecisionPrompts(entries: RadarEntry[], userStack: string[]): DerivedPrompt[] {
-  const prompts: DerivedPrompt[] = [];
-
-  for (const e of entries) {
-    // New tech not in stack — offer to track
-    if (e.movement === 'new' && !isInUserStack(e.name, userStack)) {
-      prompts.push({
-        id: `track-${e.name}`,
-        text: `Track ${e.name} as an interest?`,
-        subtext: `Appeared in ${e.signals.length} signal${e.signals.length !== 1 ? 's' : ''} recently`,
-        type: 'track',
-        entryName: e.name,
-      });
-    }
-
-    // Security signals on stack tech
-    const secSignals = e.signals.filter(s => /security|advisory|vuln|cve/i.test(s));
-    if (secSignals.length > 0 && isInUserStack(e.name, userStack)) {
-      prompts.push({
-        id: `security-${e.name}`,
-        text: `${secSignals.length} security advisor${secSignals.length !== 1 ? 'ies' : 'y'} for ${e.name}`,
-        subtext: secSignals[0]!,
-        type: 'security',
-        entryName: e.name,
-      });
-    }
-
-    // Declining stack tech
-    if (e.movement === 'down' && isInUserStack(e.name, userStack)) {
-      prompts.push({
-        id: `declining-${e.name}`,
-        text: `${e.name} engagement is declining`,
-        subtext: 'Still core to your work?',
-        type: 'declining',
-        entryName: e.name,
-      });
-    }
-  }
-
-  return prompts.slice(0, 5);
+export function getStackHealth(entry: RadarEntry): StackHealth {
+  const hasSecuritySignal = entry.signals.some(s => /security|advisory|vuln|cve|deprecated/i.test(s));
+  if (hasSecuritySignal) return 'attention';
+  if (entry.movement === 'down') return 'noteworthy';
+  return 'healthy';
 }

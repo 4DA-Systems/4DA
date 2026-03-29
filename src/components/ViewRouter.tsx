@@ -6,28 +6,20 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
-import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { ResultsView } from './ResultsView';
 
 // Lazy-loaded views — each only loads when navigated to
 const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m.BriefingView })));
 const SavedItemsView = lazy(() => import('./SavedItemsView').then(m => ({ default: m.SavedItemsView })));
 const Momentum = lazy(() => import('./Momentum').then(m => ({ default: m.Momentum })));
-const DecisionMemory = lazy(() => import('./DecisionMemory').then(m => ({ default: m.DecisionMemory })));
 const SovereignDeveloperProfile = lazy(() => import('./SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
 const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
 const ChannelsView = lazy(() => import('./channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
 const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ default: m.CalibrationView })));
-const WisdomPanel = lazy(() => import('./WisdomPanel').then(m => ({ default: m.WisdomPanel })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
-// DecisionWindowsPanel functionality absorbed into Momentum component
-const WeeklyIntelligenceSummary = lazy(() => import('./WeeklyIntelligenceSummary').then(m => ({ default: m.WeeklyIntelligenceSummary })));
-const IntelligenceReportCard = lazy(() => import('./IntelligenceReport'));
-const SecurityDashboard = lazy(() => import('./SecurityDashboard'));
-const DependencyDashboard = lazy(() => import('./DependencyDashboard'));
 const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
 
 interface ViewRouterProps {
@@ -88,29 +80,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         </ViewErrorBoundary>
       ) : activeView === 'insights' ? (
         <ViewErrorBoundary viewName="Momentum">
-          <section aria-label={t('nav.insights', { defaultValue: 'Momentum' })} className="space-y-6">
-            <PanelErrorBoundary name="Momentum">
-              <Momentum />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Wisdom Panel">
-              <WisdomPanel />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Decision Memory">
-              <DecisionMemory />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Weekly Intelligence Summary">
-              <WeeklyIntelligenceSummary />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Intelligence Report">
-              <IntelligenceReportCard />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Security Dashboard">
-              <SecurityDashboard />
-            </PanelErrorBoundary>
-            <PanelErrorBoundary name="Dependency Dashboard">
-              <DependencyDashboard />
-            </PanelErrorBoundary>
-          </section>
+          <Momentum />
         </ViewErrorBoundary>
       ) : activeView === 'saved' ? (
         <ViewErrorBoundary viewName="Saved">
