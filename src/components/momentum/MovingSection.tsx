@@ -1,17 +1,20 @@
+// Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
+// Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
+
 import { useMemo, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { RadarEntry } from '../tech-radar/RadarSVG';
 import { filterNoteworthy, sortByMomentum, generateNarrative, isInUserStack } from './momentum-utils';
 
 // ---------------------------------------------------------------------------
-// Movement badge
+// Movement badge styles
 // ---------------------------------------------------------------------------
 
-const MOVEMENT_STYLE: Record<string, { label: string; border: string; text: string; bg: string }> = {
-  up:     { label: 'Rising',    border: 'border-green-500/30', text: 'text-green-400', bg: 'bg-green-500/10' },
-  new:    { label: 'New',       border: 'border-amber-500/30', text: 'text-accent-gold', bg: 'bg-amber-500/10' },
-  down:   { label: 'Declining', border: 'border-red-500/30',   text: 'text-red-400',   bg: 'bg-red-500/10' },
-  stable: { label: 'Core',      border: 'border-border',       text: 'text-text-muted', bg: 'bg-bg-tertiary' },
+const MOVEMENT_STYLE: Record<string, { border: string; text: string; bg: string }> = {
+  up:     { border: 'border-green-500/30', text: 'text-green-400', bg: 'bg-green-500/10' },
+  new:    { border: 'border-amber-500/30', text: 'text-accent-gold', bg: 'bg-amber-500/10' },
+  down:   { border: 'border-red-500/30',   text: 'text-red-400',   bg: 'bg-red-500/10' },
+  stable: { border: 'border-border',       text: 'text-text-muted', bg: 'bg-bg-tertiary' },
 };
 
 // ---------------------------------------------------------------------------
@@ -42,14 +45,17 @@ const NarrativeCard = memo(function NarrativeCard({
       style={{ animation: `slideInRight 0.4s ease-out ${index * 60}ms both` }}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <h4 className="text-sm font-semibold text-white group-hover:text-accent-gold transition-colors">
+        <h4 className="text-sm font-semibold text-white group-hover:text-accent-gold transition-colors truncate">
           {entry.name}
         </h4>
         {isStack && (
-          <span className="w-1.5 h-1.5 rounded-full bg-accent-gold flex-shrink-0" title={t('momentum.inYourStack')} />
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-accent-gold flex-shrink-0"
+            title={t('momentum.inYourStack')}
+          />
         )}
         <span className={`ms-auto text-[10px] px-1.5 py-0.5 rounded font-medium ${style.text} ${style.bg} flex-shrink-0`}>
-          {t(`momentum.movement.${entry.movement}`, style.label)}
+          {t(`momentum.movement.${entry.movement}`, { defaultValue: entry.movement })}
         </span>
       </div>
       <p className="text-xs text-text-secondary leading-relaxed">{narrative}</p>
@@ -66,22 +72,22 @@ const NarrativeCard = memo(function NarrativeCard({
 // Main Component
 // ---------------------------------------------------------------------------
 
-export interface MomentumNarrativesProps {
+export interface MovingSectionProps {
   entries: RadarEntry[];
   userStack: string[];
   onEntryClick: (entry: RadarEntry) => void;
 }
 
-export const MomentumNarratives = memo(function MomentumNarratives({
+export const MovingSection = memo(function MovingSection({
   entries,
   userStack,
   onEntryClick,
-}: MomentumNarrativesProps) {
+}: MovingSectionProps) {
   const { t } = useTranslation();
 
   const cards = useMemo(() => {
     const noteworthy = filterNoteworthy(entries, userStack);
-    return sortByMomentum(noteworthy).slice(0, 8);
+    return sortByMomentum(noteworthy).slice(0, 6);
   }, [entries, userStack]);
 
   const handleClick = useCallback(
@@ -89,20 +95,14 @@ export const MomentumNarratives = memo(function MomentumNarratives({
     [onEntryClick],
   );
 
-  if (cards.length === 0) {
-    return (
-      <div className="px-5 py-6 text-center border-b border-border">
-        <p className="text-sm text-text-muted">{t('momentum.noMovement')}</p>
-      </div>
-    );
-  }
+  if (cards.length === 0) return null;
 
   return (
-    <div className="px-4 py-4 border-b border-border">
+    <section aria-label={t('momentum.whatsMoving')}>
       <h3 className="text-[10px] text-text-muted uppercase tracking-wider font-medium mb-3 px-1">
-        {t('momentum.whatsHappening')}
+        {t('momentum.whatsMoving')}
       </h3>
-      <div className="grid grid-cols-1 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {cards.map((entry, i) => (
           <NarrativeCard
             key={entry.name}
@@ -114,6 +114,6 @@ export const MomentumNarratives = memo(function MomentumNarratives({
           />
         ))}
       </div>
-    </div>
+    </section>
   );
 });
