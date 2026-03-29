@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import sunLogo from '../../assets/sun-logo.webp';
@@ -10,6 +11,16 @@ interface WelcomeStepProps {
 
 export function WelcomeStep({ isAnimating, onNext, onSkip }: WelcomeStepProps) {
   const { t } = useTranslation();
+
+  // Enter key advances, Escape skips
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') { e.preventDefault(); onNext(); }
+      if (e.key === 'Escape' && onSkip) { e.preventDefault(); onSkip(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onNext, onSkip]);
 
   return (
     <div className={`text-center transition-all duration-500 ${isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
