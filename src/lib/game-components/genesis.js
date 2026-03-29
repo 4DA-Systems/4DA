@@ -47,7 +47,10 @@ fn sdf_circle(p: vec2<f32>, radius: f32) -> f32 {
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    let edge = 0.005;
+    let core = smoothstep(edge, -edge, d);
+    let halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 fn hash2(p: vec2<f32>) -> f32 {
@@ -109,7 +112,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var sdf_result = fbm2((p * 3.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(5.000000), 0.500000, 2.000000);
         var color_result = vec4<f32>(cosine_palette(sdf_result, vec3<f32>(0.020000, 0.010000, 0.050000), vec3<f32>(0.100000, 0.050000, 0.150000), vec3<f32>(1.000000, 0.800000, 0.600000), vec3<f32>(0.000000, 0.200000, 0.400000)), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 2: seed ──
@@ -123,7 +126,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.960000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 3: membrane ──
@@ -137,7 +140,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.900000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 4: tendrils ──
@@ -152,7 +155,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.850000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 5: boundary ──
@@ -164,7 +167,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.300000, 0.300000, 0.400000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     return final_color;
@@ -208,7 +211,10 @@ float sdf_circle(vec2 p, float radius){
 }
 
 float apply_glow(float d, float intensity){
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    float edge = 0.005;
+    float core = smoothstep(edge, -edge, d);
+    float halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 float hash2(vec2 p){
@@ -269,7 +275,7 @@ void main(){
         float sdf_result = fbm2((p * 3.000000 + vec2(time * 0.1, time * 0.07)), int(5.000000), 0.500000, 2.000000);
         vec4 color_result = vec4(cosine_palette(sdf_result, vec3(0.020000, 0.010000, 0.050000), vec3(0.100000, 0.050000, 0.150000), vec3(1.000000, 0.800000, 0.600000), vec3(0.000000, 0.200000, 0.400000)), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 2: seed ──
@@ -284,7 +290,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.960000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 3: membrane ──
@@ -299,7 +305,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.900000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 4: tendrils ──
@@ -315,7 +321,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.850000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 5: boundary ──
@@ -328,7 +334,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.300000, 0.300000, 0.400000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     fragColor = final_color;

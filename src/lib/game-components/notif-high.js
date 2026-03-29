@@ -47,7 +47,10 @@ fn sdf_circle(p: vec2<f32>, radius: f32) -> f32 {
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    let edge = 0.005;
+    let core = smoothstep(edge, -edge, d);
+    let halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 fn aces_tonemap(x: vec3<f32>) -> vec3<f32> {
@@ -162,7 +165,10 @@ float sdf_circle(vec2 p, float radius){
 }
 
 float apply_glow(float d, float intensity){
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    float edge = 0.005;
+    float core = smoothstep(edge, -edge, d);
+    float halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 vec3 aces_tonemap(vec3 x) {

@@ -69,7 +69,10 @@ fn sdf_box(p: vec2<f32>, w: f32, h: f32) -> f32 {
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    let edge = 0.005;
+    let core = smoothstep(edge, -edge, d);
+    let halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 fn hash2(p: vec2<f32>) -> f32 {
@@ -134,7 +137,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.830000, 0.690000, 0.220000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 2: inner_ring ──
@@ -148,7 +151,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.930000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 3: middle ──
@@ -162,7 +165,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.500000, 0.300000, 0.900000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 4: corona ──
@@ -177,7 +180,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
         color_result = mix(color_result, prev_color, 0.850000);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 5: edge ──
@@ -189,7 +192,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var color_result = vec4<f32>(vec3<f32>(glow_result), 1.0);
         color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.300000, 0.300000, 0.350000), 1.0);
         let lc = color_result.rgb;
-        final_color = vec4<f32>(final_color.rgb + lc, 1.0);
+        final_color = vec4<f32>(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     return final_color;
@@ -255,7 +258,10 @@ float sdf_box(vec2 p, float w, float h){
 }
 
 float apply_glow(float d, float intensity){
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    float edge = 0.005;
+    float core = smoothstep(edge, -edge, d);
+    float halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 float hash2(vec2 p){
@@ -320,7 +326,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.830000, 0.690000, 0.220000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 2: inner_ring ──
@@ -335,7 +341,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.930000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 3: middle ──
@@ -350,7 +356,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.500000, 0.300000, 0.900000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 4: corona ──
@@ -366,7 +372,7 @@ void main(){
         vec4 prev_color = texture(u_prev_frame, v_uv);
         color_result = mix(color_result, prev_color, 0.850000);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     // ── Layer 5: edge ──
@@ -379,7 +385,7 @@ void main(){
         vec4 color_result = vec4(vec3(glow_result), 1.0);
         color_result = vec4(color_result.rgb * vec3(0.300000, 0.300000, 0.350000), 1.0);
         vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb + lc, 1.0);
+        final_color = vec4(final_color.rgb + lc - final_color.rgb * lc, 1.0);
     }
 
     fragColor = final_color;

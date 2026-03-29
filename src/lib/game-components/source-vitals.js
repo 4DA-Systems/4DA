@@ -55,7 +55,10 @@ fn sdf_hex(p: vec2<f32>, r: f32) -> f32 {
 }
 
 fn apply_glow(d: f32, intensity: f32) -> f32 {
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    let edge = 0.005;
+    let core = smoothstep(edge, -edge, d);
+    let halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 fn hash2(p: vec2<f32>) -> f32 {
@@ -210,7 +213,10 @@ float sdf_hex(vec2 p, float r){
 }
 
 float apply_glow(float d, float intensity){
-    return exp(-max(d, 0.0) * intensity * 8.0);
+    float edge = 0.005;
+    float core = smoothstep(edge, -edge, d);
+    float halo = intensity / (1.0 + max(d, 0.0) * max(d, 0.0) * intensity * intensity * 16.0);
+    return core + halo;
 }
 
 float hash2(vec2 p){
