@@ -409,7 +409,7 @@ impl Database {
         hours: i64,
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
         let mut stmt = conn.prepare(
@@ -508,7 +508,7 @@ impl Database {
 
     /// Count total items
     pub fn total_item_count(&self) -> SqliteResult<i64> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         conn.query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
     }
 
@@ -647,7 +647,7 @@ impl Database {
 
     /// Get source health for all sources
     pub fn get_source_health(&self) -> SqliteResult<Vec<SourceHealthRecord>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
 
         let mut stmt = conn.prepare(
             "SELECT source_type, status, last_success, last_error, error_count,
