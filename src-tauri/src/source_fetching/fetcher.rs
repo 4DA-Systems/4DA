@@ -186,6 +186,13 @@ pub(crate) async fn fetch_all_sources(
         // Circuit breaker: skip sources with 5+ consecutive failures
         if db.is_circuit_open(source_type) {
             warn!(target: "4da::sources", source = source_name, "Circuit breaker OPEN - skipping (too many failures)");
+            let _ = app.emit("source-circuit-break", serde_json::json!({
+                "source": source_type,
+                "source_name": source_name,
+                "status": "open",
+                "message": "Temporarily disabled after 5+ consecutive failures",
+                "session_failures": tracker.failure_count(source_name),
+            }));
             let _ = app.emit("source-error", serde_json::json!({
                 "source": source_type, "error": "Circuit breaker open (5+ failures)", "retry_count": 0
             }));

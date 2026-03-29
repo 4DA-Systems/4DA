@@ -284,8 +284,11 @@ export function ResultsView({
                     <game-tetrahedron style={{ width: '64px', height: '64px', display: 'block' }} />
                   </div>
                   <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
-                  <p className="text-sm text-text-muted mb-5">
+                  <p className="text-sm text-text-muted mb-3">
                     {t('results.startAnalysis')}
+                  </p>
+                  <p className="text-xs text-text-muted/70 mb-5 max-w-md mx-auto leading-relaxed">
+                    {t('results.howItWorks')}
                   </p>
                   <SmartEmptyState detectedStack={discoveredContext?.tech?.map(item => item.name) ?? []} />
                   <button
@@ -296,6 +299,9 @@ export function ResultsView({
                   </button>
                   <p className="text-xs text-text-muted mt-3">
                     or press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
+                  </p>
+                  <p className="text-[10px] text-text-muted/50 mt-2">
+                    {t('results.analyzeHint')}
                   </p>
                 </>
               )}

@@ -23,6 +23,10 @@ use tracing::{info, warn};
 /// Backoff delays for retry attempts (1s, 2s, 4s as specified).
 const RETRY_BACKOFF_SECS: [u64; 3] = [1, 2, 4];
 
+/// Extended backoff for rate-limited requests (seconds).
+/// Much longer than normal backoff to respect API rate limits.
+const RATE_LIMIT_BACKOFF_SECS: u64 = 30;
+
 /// Maximum number of fetch attempts (1 initial + 2 retries = 3 total).
 const MAX_RETRY_ATTEMPTS: usize = 3;
 
@@ -60,6 +64,22 @@ fn is_retryable(err: &SourceError) -> bool {
         SourceError::Disabled => false,
         // Forbidden (403) means auth/permission issues — retrying won't help
         SourceError::Forbidden(_) => false,
+    }
+}
+
+/// Check whether a SourceError indicates a rate-limit (HTTP 429) condition.
+/// Matches the explicit RateLimited variant, plus common rate-limit indicators
+/// in error strings (for errors tunnelled through Network/Other variants).
+fn is_rate_limited(err: &SourceError) -> bool {
+    match err {
+        SourceError::RateLimited(_) => true,
+        SourceError::Network(msg) | SourceError::Other(msg) => {
+            let lower = msg.to_lowercase();
+            lower.contains("429")
+                || lower.contains("rate limit")
+                || lower.contains("too many requests")
+        }
+        _ => false,
     }
 }
 
@@ -115,16 +135,35 @@ where
                 }
 
                 if attempt < MAX_RETRY_ATTEMPTS {
-                    let delay_secs = RETRY_BACKOFF_SECS.get(attempt - 1).copied().unwrap_or(4);
-                    warn!(
-                        target: "4da::retry",
-                        adapter = adapter_name,
-                        attempt,
-                        max_attempts = MAX_RETRY_ATTEMPTS,
-                        error = %e,
-                        delay_secs,
-                        "Fetch failed, retrying after backoff"
-                    );
+                    let rate_limited = is_rate_limited(&e);
+                    let delay_secs = if rate_limited {
+                        // Use extended backoff for rate-limited requests
+                        RATE_LIMIT_BACKOFF_SECS
+                    } else {
+                        RETRY_BACKOFF_SECS.get(attempt - 1).copied().unwrap_or(4)
+                    };
+
+                    if rate_limited {
+                        warn!(
+                            target: "4da::retry",
+                            adapter = adapter_name,
+                            attempt,
+                            max_attempts = MAX_RETRY_ATTEMPTS,
+                            error = %e,
+                            delay_secs,
+                            "Rate limited (HTTP 429) — using extended backoff"
+                        );
+                    } else {
+                        warn!(
+                            target: "4da::retry",
+                            adapter = adapter_name,
+                            attempt,
+                            max_attempts = MAX_RETRY_ATTEMPTS,
+                            error = %e,
+                            delay_secs,
+                            "Fetch failed, retrying after backoff"
+                        );
+                    }
                     tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
                 }
 
@@ -171,7 +210,10 @@ impl AdapterFailureTracker {
         let mut map = self
             .failures
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "4da::sources", "Mutex poisoned in failure tracker (record_success): {e}");
+                e.into_inner()
+            });
         map.insert(adapter_name.to_string(), 0);
     }
 
@@ -180,7 +222,10 @@ impl AdapterFailureTracker {
         let mut map = self
             .failures
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "4da::sources", "Mutex poisoned in failure tracker (record_failure): {e}");
+                e.into_inner()
+            });
         let count = map.entry(adapter_name.to_string()).or_insert(0);
         *count += 1;
     }
@@ -190,7 +235,10 @@ impl AdapterFailureTracker {
         let map = self
             .failures
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "4da::sources", "Mutex poisoned in failure tracker (failure_count): {e}");
+                e.into_inner()
+            });
         map.get(adapter_name).copied().unwrap_or(0)
     }
 
@@ -199,7 +247,10 @@ impl AdapterFailureTracker {
         let map = self
             .failures
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "4da::sources", "Mutex poisoned in failure tracker (persistent_failures): {e}");
+                e.into_inner()
+            });
         map.iter()
             .filter(|(_, &count)| count >= 2)
             .map(|(name, &count)| (name.clone(), count))
