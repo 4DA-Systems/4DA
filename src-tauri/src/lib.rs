@@ -77,6 +77,7 @@ mod autophagy_pulse;
 mod briefing_window;
 mod calibration_commands;
 mod calibration_probes;
+pub mod capabilities;
 mod channel_changelog;
 mod channel_commands;
 mod channel_provenance;
@@ -458,6 +459,7 @@ pub fn run() {
             settings_commands::test_llm_connection,
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
+            settings_commands::cancel_ollama_pull,
             settings_commands::list_provider_models,
             settings_commands::detect_local_servers,
             settings_commands::get_llm_key_for_mcp,
@@ -668,6 +670,9 @@ pub fn run() {
             commands::get_diagnostics,
             startup_health::get_startup_health,
             startup_health::get_diagnostic_report,
+            // Capability Health (Graceful Degradation Framework)
+            capabilities::get_capability_states,
+            capabilities::get_capability_summary,
             // Scoring Validation (persona-based precision testing)
             scoring::validation::runner::run_scoring_validation,
             // Feedback -> Autophagy bridge

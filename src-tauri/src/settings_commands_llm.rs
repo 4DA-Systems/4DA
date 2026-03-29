@@ -1,5 +1,7 @@
 //! LLM provider commands: test connection, Ollama status, model pulling.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use tracing::{info, warn};
 
 use crate::error::Result;
@@ -8,6 +10,9 @@ use crate::settings::LLMProvider;
 use tauri::{AppHandle, Emitter};
 
 use crate::get_settings_manager;
+
+/// Abort flag for cancelling an in-progress Ollama model pull.
+static OLLAMA_PULL_ABORT: AtomicBool = AtomicBool::new(false);
 
 /// Test LLM connection
 #[tauri::command]
@@ -314,6 +319,9 @@ pub async fn pull_ollama_model(
     model: String,
     base_url: Option<String>,
 ) -> Result<serde_json::Value> {
+    // Reset the abort flag so a previous cancellation doesn't immediately kill this pull
+    OLLAMA_PULL_ABORT.store(false, Ordering::Relaxed);
+
     let url = base_url.unwrap_or_else(|| "http://localhost:11434".to_string());
     let pull_url = format!("{url}/api/pull");
 
@@ -343,6 +351,21 @@ pub async fn pull_ollama_model(
     let mut buffer = Vec::new();
 
     while let Some(chunk) = stream.next().await {
+        // Check for cancellation on each chunk
+        if OLLAMA_PULL_ABORT.load(Ordering::Relaxed) {
+            info!(target: "4da::ollama", model = %model, "Model pull cancelled by user");
+            let _ = app.emit(
+                "ollama-pull-progress",
+                serde_json::json!({
+                    "model": model,
+                    "status": "cancelled",
+                    "percent": 0,
+                    "done": true
+                }),
+            );
+            return Err("Model download cancelled".into());
+        }
+
         let chunk = chunk.map_err(|e| format!("Stream error: {e}"))?;
         buffer.extend_from_slice(&chunk);
 
@@ -503,4 +526,12 @@ pub async fn detect_local_servers() -> Result<serde_json::Value> {
     }
 
     Ok(serde_json::json!({ "servers": detected }))
+}
+
+/// Cancel an in-progress Ollama model pull
+#[tauri::command]
+pub async fn cancel_ollama_pull() -> Result<String> {
+    OLLAMA_PULL_ABORT.store(true, Ordering::Relaxed);
+    info!(target: "4da::ollama", "Ollama pull cancellation requested");
+    Ok("Cancellation requested".to_string())
 }

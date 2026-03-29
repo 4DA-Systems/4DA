@@ -122,27 +122,42 @@ export function SetupAIProvider({
             <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
             {t('onboarding.apiKeys.installingModels')}
           </div>
-          {Object.entries(pullProgress).map(([model, p]) => (
-            <div key={model} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-text-secondary font-mono">{model}</span>
-                <span className="text-text-muted">
-                  {p.done ? t('onboarding.apiKeys.pullComplete') : p.status || `${p.percent}%`}
-                </span>
+          {Object.entries(pullProgress).map(([model, p]) => {
+            const isCancelled = p.status === 'cancelled';
+            return (
+              <div key={model} className="space-y-1">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-text-primary font-mono font-medium">{model}</span>
+                  <span className={isCancelled ? 'text-red-400' : 'text-text-muted'}>
+                    {isCancelled
+                      ? 'Cancelled'
+                      : p.done
+                        ? t('onboarding.apiKeys.pullComplete')
+                        : p.status || `${p.percent}%`}
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      isCancelled ? 'bg-red-500' : p.done ? 'bg-green-500' : 'bg-orange-500'
+                    }`}
+                    style={{ width: `${isCancelled ? 100 : p.done ? 100 : p.percent}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    p.done ? 'bg-green-500' : 'bg-orange-500'
-                  }`}
-                  style={{ width: `${p.done ? 100 : p.percent}%` }}
-                />
-              </div>
-            </div>
-          ))}
-          <p className="text-xs text-text-muted">
-            {t('onboarding.apiKeys.pullWaitMessage')}
-          </p>
+            );
+          })}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-text-muted">
+              {t('onboarding.apiKeys.pullWaitMessage')}
+            </p>
+            <button
+              onClick={() => cmd('cancel_ollama_pull')}
+              className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+            >
+              Cancel Download
+            </button>
+          </div>
         </div>
       )}
 

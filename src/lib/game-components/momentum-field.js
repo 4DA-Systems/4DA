@@ -32,9 +32,7 @@ const WGSL_F = `struct Uniforms {
     p_trend_warm_r: f32,
     p_trend_warm_g: f32,
     p_advantage: f32,
-    p_trend_norm: f32,
     p_metabolism: f32,
-    p_density: f32,
     p_urgency: f32,
     p_confidence: f32,
 };
@@ -84,10 +82,6 @@ fn fbm2(p: vec2<f32>, octaves: i32, persistence: f32, lacunarity: f32) -> f32 {
     return value / max_val;
 }
 
-fn cosine_palette(t: f32, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
-    return a + b * cos(6.28318 * (c * t + d));
-}
-
 fn aces_tonemap(x: vec3<f32>) -> vec3<f32> {
     let a = x * (2.51 * x + 0.03);
     let b = x * (2.43 * x + 0.59) + 0.14;
@@ -110,43 +104,43 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let trend_warm_r = u.p_trend_warm_r;
     let trend_warm_g = u.p_trend_warm_g;
     let advantage = u.p_advantage;
-    let trend_norm = u.p_trend_norm;
     let metabolism = u.p_metabolism;
-    let density = u.p_density;
     let urgency = u.p_urgency;
     let confidence = u.p_confidence;
 
     var final_color = vec4<f32>(0.0, 0.0, 0.0, 0.0);
 
-    // ── Layer 0: flow ──
+    // ── Layer 0: band ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let warp_x = fbm2(p * 2.500000 + vec2<f32>(0.0, 1.3), i32(3.000000), 0.040000, 2.000000);
-        let warp_y = fbm2(p * 2.500000 + vec2<f32>(1.7, 0.0), i32(3.000000), 0.040000, 2.000000);
-        p = p + vec2<f32>(warp_x, warp_y) * 0.040000; }
-        var sdf_result = fbm2((p * 4.000000 + vec2<f32>(time * 0.1, time * 0.07)), i32(3.000000), 0.450000, 2.000000);
-        let pal_rgb = cosine_palette(sdf_result, vec3<f32>(0.030000, 0.030000, 0.040000), vec3<f32>(0.150000, 0.120000, 0.060000), vec3<f32>(0.600000, 0.400000, 0.150000), vec3<f32>(0.000000, 0.080000, 0.120000));
-        var color_result = vec4<f32>(pal_rgb, clamp(dot(pal_rgb, vec3<f32>(0.299, 0.587, 0.114)) * 2.0, 0.0, 1.0));
+        { let warp_x = fbm2(p * 1.200000 + vec2<f32>(0.0, 1.3), i32(2.000000), 0.030000, 2.000000);
+        let warp_y = fbm2(p * 1.200000 + vec2<f32>(1.7, 0.0), i32(2.000000), 0.030000, 2.000000);
+        p = p + vec2<f32>(warp_x, warp_y) * 0.030000; }
+        var sdf_result = abs(length(p) - 0.500000) - 0.015000;
+        let glow_pulse = 1.800000 * (0.9 + 0.1 * sin(time * 2.0));
+        let glow_result = apply_glow(sdf_result, glow_pulse);
+        var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(trend_warm_r, trend_warm_g, 0.120000), color_result.a);
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
-        color_result = mix(color_result, prev_color, 0.920000);
+        color_result = mix(color_result, prev_color, 0.900000);
         let la = color_result.a;
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
     }
 
-    // ── Layer 1: band ──
+    // ── Layer 1: atmosphere ──
     {
         var p = vec2<f32>(uv.x * aspect, uv.y);
-        { let warp_x = fbm2(p * 1.800000 + vec2<f32>(0.0, 1.3), i32(2.000000), 0.050000, 2.000000);
-        let warp_y = fbm2(p * 1.800000 + vec2<f32>(1.7, 0.0), i32(2.000000), 0.050000, 2.000000);
-        p = p + vec2<f32>(warp_x, warp_y) * 0.050000; }
-        var sdf_result = abs(length(p) - 0.500000) - 0.020000;
-        let glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
+        { let warp_x = fbm2(p * 1.500000 + vec2<f32>(0.0, 1.3), i32(2.000000), 0.020000, 2.000000);
+        let warp_y = fbm2(p * 1.500000 + vec2<f32>(1.7, 0.0), i32(2.000000), 0.020000, 2.000000);
+        p = p + vec2<f32>(warp_x, warp_y) * 0.020000; }
+        var sdf_result = abs(length(p) - 0.500000) - 0.060000;
+        let glow_pulse = 0.600000 * (0.9 + 0.1 * sin(time * 2.0));
         let glow_result = apply_glow(sdf_result, glow_pulse);
         var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-        color_result = vec4<f32>(color_result.rgb * vec3<f32>(trend_warm_r, trend_warm_g, 0.120000), color_result.a);
+        color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.080000, 0.080000, 0.120000), color_result.a);
         let prev_color = textureSample(prev_frame, prev_sampler, input.uv);
-        color_result = mix(color_result, prev_color, 0.880000);
+        color_result = mix(color_result, prev_color, 0.940000);
         let la = color_result.a;
         let lc = color_result.rgb;
         final_color = vec4<f32>(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
@@ -161,18 +155,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             var then_color: vec4<f32>;
             var else_color: vec4<f32>;
             { var p = p_then;
-            var sdf_result = noise2(p * 2.500000 + vec2<f32>(time * 0.1, time * 0.07));
-            let glow_pulse = 0.800000 * (0.9 + 0.1 * sin(time * 2.0));
+            var sdf_result = abs(length(p) - 0.500000) - 0.040000;
+            let glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
             let glow_result = apply_glow(sdf_result, glow_pulse);
             var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.850000, 0.250000, 0.080000), color_result.a);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.700000, 0.200000, 0.050000), color_result.a);
             then_color = color_result; }
             { var p = p_then;
-            var sdf_result = noise2(p * 2.500000 + vec2<f32>(time * 0.1, time * 0.07));
-            let glow_pulse = 0.100000 * (0.9 + 0.1 * sin(time * 2.0));
+            var sdf_result = abs(length(p) - 0.500000) - 0.040000;
+            let glow_pulse = 0.200000 * (0.9 + 0.1 * sin(time * 2.0));
             let glow_result = apply_glow(sdf_result, glow_pulse);
             var color_result = vec4<f32>(vec3<f32>(glow_result), glow_result);
-            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.050000, 0.050000, 0.080000), color_result.a);
+            color_result = vec4<f32>(color_result.rgb * vec3<f32>(0.040000, 0.040000, 0.060000), color_result.a);
             else_color = color_result; }
             color_result = select(else_color, then_color, (urgency > 0.300000));
         }
@@ -215,9 +209,7 @@ uniform float u_aspect_ratio;
 uniform float u_p_trend_warm_r;
 uniform float u_p_trend_warm_g;
 uniform float u_p_advantage;
-uniform float u_p_trend_norm;
 uniform float u_p_metabolism;
-uniform float u_p_density;
 uniform float u_p_urgency;
 uniform float u_p_confidence;
 uniform sampler2D u_prev_frame;
@@ -261,10 +253,6 @@ float fbm2(vec2 p, int octaves, float persistence, float lacunarity){
     return value / max_val;
 }
 
-vec3 cosine_palette(float t, vec3 a, vec3 b, vec3 c, vec3 d){
-    return a + b * cos(6.28318 * (c * t + d));
-}
-
 vec3 aces_tonemap(vec3 x) {
     vec3 a = x * (2.51 * x + 0.03);
     vec3 b = x * (2.43 * x + 0.59) + 0.14;
@@ -286,44 +274,45 @@ void main(){
     float trend_warm_r = u_p_trend_warm_r;
     float trend_warm_g = u_p_trend_warm_g;
     float advantage = u_p_advantage;
-    float trend_norm = u_p_trend_norm;
     float metabolism = u_p_metabolism;
-    float density = u_p_density;
     float urgency = u_p_urgency;
     float confidence = u_p_confidence;
 
     vec4 final_color = vec4(0.0, 0.0, 0.0, 0.0);
 
-    // ── Layer 0: flow ──
+    // ── Layer 0: band ──
     {
         vec2 p = vec2(uv.x * aspect, uv.y);
-        { float warp_x = fbm2(p * 2.500000 + vec2(0.0, 1.3), int(3.000000), 0.040000, 2.000000);
-        float warp_y = fbm2(p * 2.500000 + vec2(1.7, 0.0), int(3.000000), 0.040000, 2.000000);
-        p = p + vec2(warp_x, warp_y) * 0.040000; }
-        float sdf_result = fbm2((p * 4.000000 + vec2(time * 0.1, time * 0.07)), int(3.000000), 0.450000, 2.000000);
-        vec3 pal_rgb = cosine_palette(sdf_result, vec3(0.030000, 0.030000, 0.040000), vec3(0.150000, 0.120000, 0.060000), vec3(0.600000, 0.400000, 0.150000), vec3(0.000000, 0.080000, 0.120000));
-        vec4 color_result = vec4(pal_rgb, clamp(dot(pal_rgb, vec3(0.299, 0.587, 0.114)) * 2.0, 0.0, 1.0));
-        vec4 prev_color = texture(u_prev_frame, v_uv);
-        color_result = mix(color_result, prev_color, 0.920000);
-        float la = color_result.a;
-        vec3 lc = color_result.rgb;
-        final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
-    }
-
-    // ── Layer 1: band ──
-    {
-        vec2 p = vec2(uv.x * aspect, uv.y);
-        { float warp_x = fbm2(p * 1.800000 + vec2(0.0, 1.3), int(2.000000), 0.050000, 2.000000);
-        float warp_y = fbm2(p * 1.800000 + vec2(1.7, 0.0), int(2.000000), 0.050000, 2.000000);
-        p = p + vec2(warp_x, warp_y) * 0.050000; }
-        float sdf_result = abs(length(p) - 0.500000) - 0.020000;
-        float glow_pulse = 1.500000 * (0.9 + 0.1 * sin(time * 2.0));
+        { float warp_x = fbm2(p * 1.200000 + vec2(0.0, 1.3), int(2.000000), 0.030000, 2.000000);
+        float warp_y = fbm2(p * 1.200000 + vec2(1.7, 0.0), int(2.000000), 0.030000, 2.000000);
+        p = p + vec2(warp_x, warp_y) * 0.030000; }
+        float sdf_result = abs(length(p) - 0.500000) - 0.015000;
+        float glow_pulse = 1.800000 * (0.9 + 0.1 * sin(time * 2.0));
         float glow_result = apply_glow(sdf_result, glow_pulse);
 
         vec4 color_result = vec4(vec3(glow_result), glow_result);
         color_result = vec4(color_result.rgb * vec3(trend_warm_r, trend_warm_g, 0.120000), color_result.a);
         vec4 prev_color = texture(u_prev_frame, v_uv);
-        color_result = mix(color_result, prev_color, 0.880000);
+        color_result = mix(color_result, prev_color, 0.900000);
+        float la = color_result.a;
+        vec3 lc = color_result.rgb;
+        final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
+    }
+
+    // ── Layer 1: atmosphere ──
+    {
+        vec2 p = vec2(uv.x * aspect, uv.y);
+        { float warp_x = fbm2(p * 1.500000 + vec2(0.0, 1.3), int(2.000000), 0.020000, 2.000000);
+        float warp_y = fbm2(p * 1.500000 + vec2(1.7, 0.0), int(2.000000), 0.020000, 2.000000);
+        p = p + vec2(warp_x, warp_y) * 0.020000; }
+        float sdf_result = abs(length(p) - 0.500000) - 0.060000;
+        float glow_pulse = 0.600000 * (0.9 + 0.1 * sin(time * 2.0));
+        float glow_result = apply_glow(sdf_result, glow_pulse);
+
+        vec4 color_result = vec4(vec3(glow_result), glow_result);
+        color_result = vec4(color_result.rgb * vec3(0.080000, 0.080000, 0.120000), color_result.a);
+        vec4 prev_color = texture(u_prev_frame, v_uv);
+        color_result = mix(color_result, prev_color, 0.940000);
         float la = color_result.a;
         vec3 lc = color_result.rgb;
         final_color = vec4(final_color.rgb * (1.0 - la) + lc, final_color.a * (1.0 - la) + la);
@@ -338,20 +327,20 @@ void main(){
             vec4 then_color;
             vec4 else_color;
             { vec2 p = p_then;
-            float sdf_result = noise2(p * 2.500000 + vec2(time * 0.1, time * 0.07));
-            float glow_pulse = 0.800000 * (0.9 + 0.1 * sin(time * 2.0));
+            float sdf_result = abs(length(p) - 0.500000) - 0.040000;
+            float glow_pulse = 1.200000 * (0.9 + 0.1 * sin(time * 2.0));
             float glow_result = apply_glow(sdf_result, glow_pulse);
 
             vec4 color_result = vec4(vec3(glow_result), glow_result);
-            color_result = vec4(color_result.rgb * vec3(0.850000, 0.250000, 0.080000), color_result.a);
+            color_result = vec4(color_result.rgb * vec3(0.700000, 0.200000, 0.050000), color_result.a);
             then_color = color_result; }
             { vec2 p = p_then;
-            float sdf_result = noise2(p * 2.500000 + vec2(time * 0.1, time * 0.07));
-            float glow_pulse = 0.100000 * (0.9 + 0.1 * sin(time * 2.0));
+            float sdf_result = abs(length(p) - 0.500000) - 0.040000;
+            float glow_pulse = 0.200000 * (0.9 + 0.1 * sin(time * 2.0));
             float glow_result = apply_glow(sdf_result, glow_pulse);
 
             vec4 color_result = vec4(vec3(glow_result), glow_result);
-            color_result = vec4(color_result.rgb * vec3(0.050000, 0.050000, 0.080000), color_result.a);
+            color_result = vec4(color_result.rgb * vec3(0.040000, 0.040000, 0.060000), color_result.a);
             else_color = color_result; }
             color_result = (urgency > 0.300000) ? then_color : else_color;
         }
@@ -365,7 +354,7 @@ void main(){
     fragColor = final_color;
 }
 `;
-const UNIFORMS = [{name:'trend_warm_r',default:0},{name:'trend_warm_g',default:0},{name:'advantage',default:0.5},{name:'trend_norm',default:0.5},{name:'metabolism',default:0.5},{name:'density',default:0.3},{name:'urgency',default:0},{name:'confidence',default:0.7}];
+const UNIFORMS = [{name:'trend_warm_r',default:0},{name:'trend_warm_g',default:0},{name:'advantage',default:0.5},{name:'metabolism',default:0.5},{name:'urgency',default:0},{name:'confidence',default:0.7}];
 const PASS_WGSL_0 = `// Post-processing pass: soft
 
 struct Uniforms {
@@ -394,7 +383,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let pixel = textureSample(pass_tex, pass_sampler, uv);
     var color_result = pixel;
 
-    let vign = 1.0 - 0.350000 * length(uv - 0.5);
+    let vign = 1.0 - 0.300000 * length(uv - 0.5);
     color_result = vec4<f32>(color_result.rgb * vign, color_result.a * vign);
     return color_result;
 }
@@ -897,11 +886,10 @@ class GameRendererGL {
 class GameResonanceNetwork {
   constructor() {
     this._couplings = [
-      { source: 'advantage', target: 'flow', field: 'brightness', weight: 0.5 },
-      { source: 'advantage', target: 'band', field: 'brightness', weight: 0.6 },
-      { source: 'metabolism', target: 'flow', field: 'brightness', weight: 0.2 },
-      { source: 'confidence', target: 'flow', field: 'brightness', weight: 0.15 },
-      { source: 'density', target: 'flow', field: 'brightness', weight: 0.1 },
+      { source: 'advantage', target: 'band', field: 'brightness', weight: 0.7 },
+      { source: 'advantage', target: 'atmosphere', field: 'brightness', weight: 0.4 },
+      { source: 'metabolism', target: 'band', field: 'brightness', weight: 0.15 },
+      { source: 'confidence', target: 'atmosphere', field: 'brightness', weight: 0.1 },
       { source: 'urgency', target: 'alert', field: 'brightness', weight: 0.9 },
     ];
     this._damping = 0.95;
@@ -1056,12 +1044,8 @@ class MomentumField extends HTMLElement {
   set trend_warm_g(v) { this.setParam('trend_warm_g', v); }
   get advantage() { return this._renderer?.userParams['advantage'] ?? this._pendingParams['advantage'] ?? 0.5; }
   set advantage(v) { this.setParam('advantage', v); }
-  get trend_norm() { return this._renderer?.userParams['trend_norm'] ?? this._pendingParams['trend_norm'] ?? 0.5; }
-  set trend_norm(v) { this.setParam('trend_norm', v); }
   get metabolism() { return this._renderer?.userParams['metabolism'] ?? this._pendingParams['metabolism'] ?? 0.5; }
   set metabolism(v) { this.setParam('metabolism', v); }
-  get density() { return this._renderer?.userParams['density'] ?? this._pendingParams['density'] ?? 0.3; }
-  set density(v) { this.setParam('density', v); }
   get urgency() { return this._renderer?.userParams['urgency'] ?? this._pendingParams['urgency'] ?? 0; }
   set urgency(v) { this.setParam('urgency', v); }
   get confidence() { return this._renderer?.userParams['confidence'] ?? this._pendingParams['confidence'] ?? 0.7; }
