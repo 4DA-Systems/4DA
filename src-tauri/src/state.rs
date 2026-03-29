@@ -202,6 +202,11 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
                     "sqlite-vec verification query failed — disabling vector search"
                 );
                 SQLITE_VEC_AVAILABLE.store(false, Ordering::Relaxed);
+                crate::capabilities::report_degraded(
+                    crate::capabilities::Capability::VectorSearch,
+                    "sqlite-vec extension failed to load",
+                    "Keyword search only (no vector similarity)",
+                );
             }
         }
     }
