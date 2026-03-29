@@ -34,14 +34,43 @@ pub(crate) async fn fetch_all_sources(
 ) -> Result<Vec<(GenericSourceItem, Vec<f32>)>> {
     use sources::Source;
 
-    // Phase 4: Network connectivity check before fetching
-    // Multi-target parallel race: resolves on first successful response
-    let client = sources::shared_client();
-    let timeout = std::time::Duration::from_secs(4);
-    let online = tokio::select! {
-        r = client.head("https://1.1.1.1/cdn-cgi/trace").timeout(timeout).send() => r.is_ok(),
-        r = client.head("https://dns.google/resolve?name=example.com").timeout(timeout).send() => r.is_ok(),
-        r = client.head("https://httpbin.org/get").timeout(timeout).send() => r.is_ok(),
+    // Network connectivity check with caching (avoid re-checking every fetch)
+    static LAST_ONLINE_CHECK: std::sync::Mutex<Option<(std::time::Instant, bool)>> = std::sync::Mutex::new(None);
+
+    let online = {
+        let cached = LAST_ONLINE_CHECK.lock().ok().and_then(|guard| {
+            guard.as_ref().and_then(|(when, result)| {
+                if when.elapsed() < std::time::Duration::from_secs(30) {
+                    Some(*result)
+                } else {
+                    None
+                }
+            })
+        });
+
+        if let Some(cached_result) = cached {
+            cached_result
+        } else {
+            let client = sources::shared_client();
+            let timeout = std::time::Duration::from_secs(8);
+
+            // Check multiple endpoints — succeed if ANY responds
+            // Includes user's API endpoints so corporate networks work
+            let check_result = tokio::select! {
+                r = client.head("https://1.1.1.1/cdn-cgi/trace").timeout(timeout).send() => r.is_ok(),
+                r = client.head("https://dns.google/resolve?name=example.com").timeout(timeout).send() => r.is_ok(),
+                r = client.head("https://httpbin.org/get").timeout(timeout).send() => r.is_ok(),
+                r = client.head("https://hacker-news.firebaseio.com/v0/topstories.json").timeout(timeout).send() => r.is_ok(),
+                r = client.head("https://api.github.com").timeout(timeout).send() => r.is_ok(),
+            };
+
+            // Cache the result
+            if let Ok(mut guard) = LAST_ONLINE_CHECK.lock() {
+                *guard = Some((std::time::Instant::now(), check_result));
+            }
+
+            check_result
+        }
     };
 
     if !online {

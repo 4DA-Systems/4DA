@@ -47,6 +47,56 @@ pub(crate) fn initialize_pre_tauri() {
             info!(target: "4da::startup", "Cleaned stale temp directory");
         }
     }
+
+    // Verify data directory is writable before attempting database operations
+    {
+        use crate::state::get_db_path;
+        let db_path = get_db_path();
+        if let Some(data_dir) = db_path.parent() {
+            // Ensure directory exists
+            if let Err(e) = std::fs::create_dir_all(data_dir) {
+                error!(target: "4da::startup", path = ?data_dir, error = %e,
+                    "FATAL: Cannot create data directory. Check file permissions.");
+                // Show a native dialog on platforms that support it
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let msg = format!(
+                        "4DA cannot create its data directory:\n{}\n\nError: {}\n\nPlease check file permissions and try again.",
+                        data_dir.display(), e
+                    );
+                    // Use rfd (if available) or just eprintln for now
+                    eprintln!("FATAL: {msg}");
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    eprintln!(
+                        "FATAL: 4DA cannot create data directory: {}\nError: {}\nPlease check permissions.",
+                        data_dir.display(), e
+                    );
+                }
+                std::process::exit(1);
+            }
+            // Test writability by creating and removing a temp file
+            let test_file = data_dir.join(".4da_write_test");
+            match std::fs::write(&test_file, b"test") {
+                Ok(()) => {
+                    let _ = std::fs::remove_file(&test_file);
+                }
+                Err(e) => {
+                    error!(target: "4da::startup", path = ?data_dir, error = %e,
+                        "FATAL: Data directory exists but is not writable.");
+                    eprintln!(
+                        "FATAL: 4DA data directory is not writable: {}\nError: {}\n\
+                        Please check permissions or set FOURDA_DB_PATH to a writable location.",
+                        data_dir.display(), e
+                    );
+                    std::process::exit(1);
+                }
+            }
+            info!(target: "4da::startup", path = ?data_dir, "Data directory verified writable");
+        }
+    }
+
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
     info!(target: "4da::startup", model = "all-MiniLM-L6-v2", dimensions = 384, "Embedding model");
 
@@ -472,6 +522,12 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
             let default_value = true;
             user_pref.unwrap_or(default_value)
         };
+        // Safety: if tray setup failed, never hide to tray (window becomes unreachable)
+        let tray_available = app_handle
+            .try_state::<parking_lot::Mutex<Option<tauri::tray::TrayIcon<tauri::Wry>>>>()
+            .map(|state| state.lock().is_some())
+            .unwrap_or(false);
+        let close_to_tray = close_to_tray && tray_available;
         if close_to_tray {
             api.prevent_close();
             if let Some(window) = app_handle.get_webview_window("main") {

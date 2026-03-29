@@ -88,6 +88,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                 async move { embed_texts_openai(&t, &key).await }
             })
             .await
+            .map(validate_embeddings)
         }
         "ollama" => {
             let base_url = llm_settings.base_url.clone();
@@ -98,6 +99,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                 async move { embed_texts_ollama(&t, &url).await }
             })
             .await
+            .map(validate_embeddings)
         }
         "anthropic" => {
             // Anthropic doesn't have embeddings API - use dedicated OpenAI key or fallback to Ollama
@@ -109,7 +111,8 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                     let t = texts.clone();
                     async move { embed_texts_openai(&t, &key).await }
                 })
-                .await;
+                .await
+                .map(validate_embeddings);
             }
             // Try Ollama as fallback
             if let Some(base_url) = &llm_settings.base_url {
@@ -124,7 +127,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                         })
                         .await
                     {
-                        return Ok(result);
+                        return Ok(validate_embeddings(result));
                     }
                 }
             }
@@ -135,6 +138,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                 async move { embed_texts_ollama(&t, &None).await }
             })
             .await
+            .map(validate_embeddings)
         }
         // "none" or unknown provider: try Ollama at default localhost as zero-config fallback
         // This enables scoring for users who have Ollama installed but haven't configured a provider
@@ -146,7 +150,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
             })
             .await
             {
-                Ok(result)
+                Ok(validate_embeddings(result))
             } else {
                 // Ollama not available — return zero vectors as graceful fallback
                 // Scoring will work on non-embedding axes (keyword, dependency, source affinity)
@@ -225,6 +229,25 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
 
 /// Target embedding dimensions matching DB vec0 schema
 const TARGET_EMBEDDING_DIMS: usize = 384;
+
+/// Validate embedding vectors — replace NaN/Inf with zero vectors.
+/// This prevents corrupted embeddings from silently degrading search quality.
+fn validate_embeddings(embeddings: Vec<Vec<f32>>) -> Vec<Vec<f32>> {
+    embeddings
+        .into_iter()
+        .map(|vec| {
+            if vec.iter().any(|v| v.is_nan() || v.is_infinite()) {
+                tracing::warn!(
+                    target: "4da::embeddings",
+                    "Detected NaN/Inf in embedding vector — replacing with zero vector"
+                );
+                vec![0.0f32; TARGET_EMBEDDING_DIMS]
+            } else {
+                vec
+            }
+        })
+        .collect()
+}
 
 /// Truncate embedding to TARGET_EMBEDDING_DIMS and L2-normalize.
 /// nomic-embed-text is a Matryoshka model so truncation preserves semantic quality.
@@ -520,6 +543,68 @@ mod tests {
             TARGET_EMBEDDING_DIMS, 384,
             "Embedding dims must match DB vec0 schema (384)"
         );
+    }
+
+    // ========================================================================
+    // validate_embeddings tests
+    // ========================================================================
+
+    #[test]
+    fn test_validate_clean_vectors_unchanged() {
+        let input = vec![vec![1.0f32, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
+        let result = validate_embeddings(input.clone());
+        assert_eq!(result, input, "Clean vectors should pass through unchanged");
+    }
+
+    #[test]
+    fn test_validate_nan_replaced_with_zero_vector() {
+        let input = vec![vec![1.0, f32::NAN, 0.0], vec![0.0, 1.0, 0.0]];
+        let result = validate_embeddings(input);
+        assert_eq!(
+            result[0],
+            vec![0.0f32; TARGET_EMBEDDING_DIMS],
+            "Vector with NaN should be replaced with zero vector"
+        );
+        assert_eq!(
+            result[1],
+            vec![0.0, 1.0, 0.0],
+            "Clean vector should be unchanged"
+        );
+    }
+
+    #[test]
+    fn test_validate_inf_replaced_with_zero_vector() {
+        let input = vec![vec![f32::INFINITY, 0.0, 0.0]];
+        let result = validate_embeddings(input);
+        assert_eq!(
+            result[0],
+            vec![0.0f32; TARGET_EMBEDDING_DIMS],
+            "Vector with Inf should be replaced with zero vector"
+        );
+    }
+
+    #[test]
+    fn test_validate_neg_inf_replaced_with_zero_vector() {
+        let input = vec![vec![0.0, f32::NEG_INFINITY, 0.0]];
+        let result = validate_embeddings(input);
+        assert_eq!(
+            result[0],
+            vec![0.0f32; TARGET_EMBEDDING_DIMS],
+            "Vector with -Inf should be replaced with zero vector"
+        );
+    }
+
+    #[test]
+    fn test_validate_empty_input_returns_empty() {
+        let result = validate_embeddings(vec![]);
+        assert!(result.is_empty(), "Empty input should return empty vec");
+    }
+
+    #[test]
+    fn test_validate_zero_vector_unchanged() {
+        let input = vec![vec![0.0f32; TARGET_EMBEDDING_DIMS]];
+        let result = validate_embeddings(input.clone());
+        assert_eq!(result, input, "Zero vector should pass through unchanged");
     }
 
     // ========================================================================

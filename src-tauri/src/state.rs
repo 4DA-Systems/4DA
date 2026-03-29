@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::ace;
 use crate::context_engine::ContextEngine;
@@ -119,15 +119,49 @@ fn get_platform_data_dir() -> PathBuf {
     PathBuf::from("data")
 }
 
+/// Whether the sqlite-vec extension loaded successfully.
+/// Starts `true` (optimistic) and is set to `false` if loading panics or
+/// the post-load verification query fails.
+static SQLITE_VEC_AVAILABLE: AtomicBool = AtomicBool::new(true);
+
+/// Check whether vector search (sqlite-vec) is available.
+/// Returns `false` if the extension failed to load or verification failed,
+/// meaning the app should fall back to keyword-only search.
+pub fn is_vector_search_available() -> bool {
+    SQLITE_VEC_AVAILABLE.load(Ordering::Relaxed)
+}
+
 /// Register the sqlite-vec extension globally (idempotent).
 /// Single source of truth — all code needing sqlite-vec calls this.
+///
+/// Wraps the unsafe FFI call in `catch_unwind` so a panic in the extension
+/// loader cannot crash the entire application. On failure the extension is
+/// marked unavailable and the app degrades to keyword-only search.
 #[allow(unsafe_code)]
 pub fn register_sqlite_vec_extension() {
-    #[allow(clippy::missing_transmute_annotations)]
-    unsafe {
-        rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
-            sqlite_vec::sqlite3_vec_init as *const (),
-        )));
+    let result = std::panic::catch_unwind(|| {
+        #[allow(clippy::missing_transmute_annotations)]
+        unsafe {
+            rusqlite::ffi::sqlite3_auto_extension(Some(std::mem::transmute(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )));
+        }
+    });
+
+    if let Err(panic_info) = result {
+        let msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = panic_info.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic".to_string()
+        };
+        error!(
+            target: "4da::state",
+            error = %msg,
+            "sqlite-vec extension failed to load — falling back to keyword-only search"
+        );
+        SQLITE_VEC_AVAILABLE.store(false, Ordering::Relaxed);
     }
 }
 
@@ -153,6 +187,24 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
          PRAGMA busy_timeout = 5000;",
     )
     .context("Failed to set connection PRAGMAs")?;
+
+    // Verify sqlite-vec actually works on this connection.
+    // Even if register didn't panic, the extension might fail at query time.
+    if is_vector_search_available() {
+        match conn.query_row("SELECT vec_version()", [], |row| row.get::<_, String>(0)) {
+            Ok(version) => {
+                info!(target: "4da::state", version = %version, "sqlite-vec verified");
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::state",
+                    error = %e,
+                    "sqlite-vec verification query failed — disabling vector search"
+                );
+                SQLITE_VEC_AVAILABLE.store(false, Ordering::Relaxed);
+            }
+        }
+    }
 
     Ok(conn)
 }
@@ -649,6 +701,8 @@ mod tests {
     fn test_register_sqlite_vec_extension_is_idempotent() {
         register_sqlite_vec_extension();
         register_sqlite_vec_extension();
+        // After successful registration, the extension should be marked available
+        assert!(is_vector_search_available());
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         let result: String = conn
             .query_row("SELECT vec_version()", [], |row| row.get(0))

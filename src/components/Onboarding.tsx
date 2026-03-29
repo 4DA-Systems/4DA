@@ -41,7 +41,23 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
   const [step, setStep] = useState<Step>(getPersistedStep);
   const [isAnimating, setIsAnimating] = useState(true);
+  const [hasProviderConfigured, setHasProviderConfigured] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Check AI provider configuration state when approaching the choice gate
+  useEffect(() => {
+    if (step === 'choice' || step === 'taste') {
+      cmd('get_settings')
+        .then((settings) => {
+          const llm = settings.llm;
+          const configured = llm.has_api_key || llm.provider === 'ollama';
+          setHasProviderConfigured(configured);
+        })
+        .catch(() => {
+          setHasProviderConfigured(false);
+        });
+    }
+  }, [step]);
 
   const currentIndex = steps.indexOf(step);
 
@@ -201,6 +217,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         {step === 'choice' && (
           <OnboardingChoiceGate
             isAnimating={isAnimating}
+            hasProviderConfigured={hasProviderConfigured}
             onStartUsing={handleSkipToContent}
             onContinueSetup={nextStep}
           />

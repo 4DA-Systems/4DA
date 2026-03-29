@@ -124,7 +124,13 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
 zeroize = "1"
+
+# Keyring — cross-platform credential storage (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 keyring = { version = "3", features = ["sync-secret-service", "linux-native"] }
+
+# Platform-specific dependencies
+[target.'cfg(not(windows))'.dependencies]
+libc = "0.2"
 
 [[bin]]
 name = "4da"
