@@ -78,11 +78,14 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_error_serializes_as_string() {
+    fn test_error_serializes_as_structured_object() {
         let err = FourDaError::Config("invalid API key".into());
         let json = serde_json::to_string(&err).expect("serialize error");
-        // FourDaError serializes as a plain string (its Display output)
-        assert_eq!(json, "\"Config error: invalid API key\"");
+        // FourDaError serializes as a structured UserError object
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse JSON");
+        assert!(val.is_object(), "Should be a JSON object, got: {json}");
+        assert_eq!(val["code"].as_str().unwrap(), "E2001");
+        assert!(val["detail"].as_str().unwrap().contains("invalid API key"));
     }
 
     #[test]
@@ -198,9 +201,11 @@ mod tests {
     fn test_empty_error_message() {
         let err = FourDaError::Internal(String::new());
         assert_eq!(err.to_string(), "");
-        // Should still serialize
+        // Should still serialize as structured UserError
         let json = serde_json::to_string(&err).unwrap();
-        assert_eq!(json, "\"\"");
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse JSON");
+        assert!(val.is_object());
+        assert_eq!(val["code"].as_str().unwrap(), "E9999");
     }
 
     #[test]
@@ -348,45 +353,39 @@ mod tests {
     // --- Serialization: Db variant serializes with Display prefix ---
 
     #[test]
-    fn test_db_error_serializes_with_prefix() {
+    fn test_db_error_serializes_as_structured() {
         let sqlite_err = rusqlite::Error::QueryReturnedNoRows;
         let err: FourDaError = sqlite_err.into();
         let json = serde_json::to_string(&err).expect("serialize Db error");
-        // Serialized form is the Display string wrapped in quotes
-        assert!(
-            json.starts_with("\"Database error:"),
-            "Db serialization should start with '\"Database error:', got '{}'",
-            json
-        );
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse JSON");
+        assert!(val.is_object());
+        assert!(val["code"].as_str().unwrap().starts_with("E3"));
+        assert_eq!(val["title"].as_str().unwrap(), "Database error");
     }
 
     // --- Serialization: Io variant serializes with Display prefix ---
 
     #[test]
-    fn test_io_error_serializes_with_prefix() {
+    fn test_io_error_serializes_as_structured() {
         let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "no such file");
         let err: FourDaError = io_err.into();
         let json = serde_json::to_string(&err).expect("serialize Io error");
-        assert!(
-            json.starts_with("\"IO error:"),
-            "Io serialization should start with '\"IO error:', got '{}'",
-            json
-        );
-        assert!(json.contains("no such file"));
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse JSON");
+        assert!(val.is_object());
+        assert_eq!(val["code"].as_str().unwrap(), "E3004"); // NotFound
+        assert_eq!(val["title"].as_str().unwrap(), "File not found");
     }
 
     // --- Serialization: Json variant serializes with Display prefix ---
 
     #[test]
-    fn test_json_error_serializes_with_prefix() {
+    fn test_json_error_serializes_as_structured() {
         let json_err = serde_json::from_str::<serde_json::Value>("not json").unwrap_err();
         let err: FourDaError = json_err.into();
         let json = serde_json::to_string(&err).expect("serialize Json error");
-        assert!(
-            json.starts_with("\"JSON error:"),
-            "Json serialization should start with '\"JSON error:', got '{}'",
-            json
-        );
+        let val: serde_json::Value = serde_json::from_str(&json).expect("parse JSON");
+        assert!(val.is_object());
+        assert_eq!(val["code"].as_str().unwrap(), "E9999"); // Json maps to catch-all
     }
 
     // --- ResultExt works with rusqlite::Error ---
@@ -443,16 +442,20 @@ mod tests {
     // --- Serialization roundtrip: serialize then deserialize as plain string ---
 
     #[test]
-    fn test_serialization_produces_plain_json_string() {
+    fn test_serialization_produces_structured_user_error() {
         let err = FourDaError::Analysis("model unavailable".into());
         let json = serde_json::to_value(&err).expect("to_value");
-        // Must be a JSON string, not an object/array
+        // Serializes as a structured UserError object (not a plain string)
         assert!(
-            json.is_string(),
-            "FourDaError should serialize as a JSON string, got {:?}",
+            json.is_object(),
+            "FourDaError should serialize as a structured UserError object, got {:?}",
             json
         );
-        assert_eq!(json.as_str().unwrap(), "Analysis error: model unavailable");
+        assert_eq!(json["code"].as_str().unwrap(), "E5010");
+        assert_eq!(json["title"].as_str().unwrap(), "Analysis failed");
+        assert!(json["detail"].as_str().unwrap().contains("model unavailable"));
+        assert!(json["remediation"].is_array());
+        assert_eq!(json["severity"].as_str().unwrap(), "error");
     }
 
     // --- From<String> with empty string ---

@@ -1867,6 +1867,7 @@ dependencies = [
  "jsonwebtoken",
  "keyring",
  "lettre",
+ "libc",
  "lopdf 0.32.0",
  "notify",
  "ocrs",

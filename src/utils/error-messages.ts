@@ -103,12 +103,66 @@ const ERROR_PATTERNS: ErrorPattern[] = [
 const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
 
 /**
+ * Structured error from the 4DA backend (matches Rust UserError).
+ * When the backend returns errors, they now come as structured objects
+ * with error codes, titles, details, and remediation steps.
+ */
+export interface StructuredError {
+  code: string;
+  title: string;
+  detail: string;
+  remediation: string[];
+  severity: 'info' | 'warning' | 'error' | 'critical';
+}
+
+/**
+ * Check if an error is a structured error from the backend.
+ */
+export function isStructuredError(error: unknown): error is StructuredError {
+  if (typeof error !== 'object' || error === null) return false;
+  const obj = error as Record<string, unknown>;
+  return typeof obj.code === 'string' && typeof obj.title === 'string' && typeof obj.detail === 'string';
+}
+
+/**
+ * Parse a structured error from various error shapes.
+ * The backend may return the error directly or wrapped in a string.
+ */
+export function parseStructuredError(error: unknown): StructuredError | null {
+  // Direct object
+  if (isStructuredError(error)) return error;
+
+  // String that might be JSON
+  const raw = typeof error === 'string' ? error : error instanceof Error ? error.message : String(error ?? '');
+  try {
+    const parsed = JSON.parse(raw);
+    if (isStructuredError(parsed)) return parsed;
+  } catch {
+    // Not JSON — fall through to pattern matching
+  }
+  return null;
+}
+
+/**
  * Translate a raw backend error into a user-friendly message.
+ *
+ * First tries to parse as a structured error (from the new error framework).
+ * Falls back to regex pattern matching for legacy/unstructured errors.
  *
  * @param error - The raw error from a Tauri invoke catch block (can be any type)
  * @returns A user-friendly error string
  */
 export function translateError(error: unknown): string {
+  // Try structured error first (new backend error framework)
+  const structured = parseStructuredError(error);
+  if (structured) {
+    // Return title + detail for toast display
+    if (structured.remediation.length > 0) {
+      return `${structured.title}: ${structured.detail} ${structured.remediation[0]}`;
+    }
+    return `${structured.title}: ${structured.detail}`;
+  }
+
   const raw = error instanceof Error ? error.message : String(error ?? '');
 
   if (!raw || raw === 'undefined' || raw === 'null') {

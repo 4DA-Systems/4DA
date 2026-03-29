@@ -233,9 +233,20 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Check every minute
+        let mut last_wake_time = std::time::Instant::now();
 
         loop {
             interval.tick().await;
+
+            // Power-aware scheduling: detect sleep/wake and stagger deferred jobs
+            let elapsed_since_last = last_wake_time.elapsed();
+            let likely_woke_from_sleep = elapsed_since_last > Duration::from_secs(120);
+            if likely_woke_from_sleep {
+                // System likely slept — stagger jobs to avoid CPU spike on wake
+                info!(target: "4da::monitor", elapsed_secs = elapsed_since_last.as_secs(), "Detected wake from sleep — staggering deferred jobs");
+                tokio::time::sleep(Duration::from_secs(10)).await;
+            }
+            last_wake_time = std::time::Instant::now();
 
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

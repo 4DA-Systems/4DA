@@ -328,6 +328,34 @@ mod utils_edge_tests;
 // App Entry
 // ============================================================================
 
+/// Check for required Linux shared libraries.
+/// Returns list of missing library descriptions.
+#[cfg(target_os = "linux")]
+fn check_linux_dependencies() -> Vec<String> {
+    let mut missing = Vec::new();
+
+    // Check via ldconfig (most reliable for runtime detection)
+    let check_lib = |lib_pattern: &str| -> bool {
+        std::process::Command::new("ldconfig")
+            .args(["-p"])
+            .output()
+            .map(|out| {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                stdout.contains(lib_pattern)
+            })
+            .unwrap_or(false)
+    };
+
+    if !check_lib("libwebkit2gtk-4.1") {
+        missing.push("libwebkit2gtk-4.1 (WebView rendering engine)".to_string());
+    }
+    if !check_lib("libgtk-3") {
+        missing.push("libgtk-3 (GTK UI framework)".to_string());
+    }
+
+    missing
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Must be set BEFORE any WebKitGTK initialization
@@ -342,6 +370,27 @@ pub fn run() {
                     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
                 }
             }
+        }
+    }
+
+    // Pre-flight: verify critical Linux dependencies before Tauri tries to use them.
+    // Without these, Tauri crashes with cryptic errors. Better to fail clearly.
+    #[cfg(target_os = "linux")]
+    {
+        let missing_libs = check_linux_dependencies();
+        if !missing_libs.is_empty() {
+            eprintln!("\n\u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}");
+            eprintln!("\u{2551}  4DA: Missing required system libraries              \u{2551}");
+            eprintln!("\u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}\n");
+            for lib in &missing_libs {
+                eprintln!("  \u{2717} {lib}");
+            }
+            eprintln!("\nInstall with:");
+            eprintln!("  Ubuntu/Debian:  sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev");
+            eprintln!("  Fedora/RHEL:    sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel");
+            eprintln!("  Arch Linux:     sudo pacman -S webkit2gtk-4.1 gtk3 libappindicator-gtk3");
+            eprintln!();
+            std::process::exit(1);
         }
     }
 
@@ -617,6 +666,7 @@ pub fn run() {
             // Diagnostics
             commands::get_diagnostics,
             startup_health::get_startup_health,
+            startup_health::get_diagnostic_report,
             // Scoring Validation (persona-based precision testing)
             scoring::validation::runner::run_scoring_validation,
             // Feedback -> Autophagy bridge

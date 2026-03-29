@@ -12,6 +12,30 @@ use std::path::PathBuf;
 use tracing::{info, warn};
 
 // ============================================================================
+// Atomic file helpers
+// ============================================================================
+
+/// Atomic file replacement. On Unix, fs::rename is atomic on the same volume.
+/// On Windows, we need a different approach since rename can fail if target exists.
+fn atomic_replace(tmp: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        // On Windows, try rename first (works if target doesn't exist or isn't locked).
+        // If it fails, fall back to: remove target then rename.
+        if std::fs::rename(tmp, target).is_ok() {
+            return Ok(());
+        }
+        // Target likely exists and is locked — try remove + rename
+        let _ = std::fs::remove_file(target);
+        std::fs::rename(tmp, target)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::rename(tmp, target)
+    }
+}
+
+// ============================================================================
 // Settings Manager
 // ============================================================================
 
@@ -112,7 +136,7 @@ impl SettingsManager {
             if let Ok(json) = serde_json::to_string_pretty(&settings) {
                 let tmp_path = settings_path.with_extension("json.tmp");
                 if fs::write(&tmp_path, &json).is_ok() {
-                    let _ = fs::rename(&tmp_path, &settings_path);
+                    let _ = atomic_replace(&tmp_path, &settings_path);
                 }
             }
         }
@@ -141,7 +165,7 @@ impl SettingsManager {
                         if let Ok(json) = serde_json::to_string_pretty(&clean_settings) {
                             let tmp_path = settings_path.with_extension("json.tmp");
                             if fs::write(&tmp_path, &json).is_ok() {
-                                let _ = fs::rename(&tmp_path, &settings_path);
+                                let _ = atomic_replace(&tmp_path, &settings_path);
                             }
                         }
                         info!(
@@ -199,6 +223,10 @@ impl SettingsManager {
         if let Some(parent) = self.settings_path.parent() {
             fs::create_dir_all(parent)?;
         }
+
+        // Clean up any orphaned temp file from a previous crash
+        let tmp_path = self.settings_path.with_extension("json.tmp");
+        let _ = fs::remove_file(&tmp_path); // ignore error if doesn't exist
 
         // Clone settings and clear SECRET fields that are safely in the keychain.
         // Only strip a key from disk if it's verified in the keychain -- otherwise
@@ -258,12 +286,18 @@ impl SettingsManager {
             let _ = fs::copy(&self.settings_path, &bak_path);
         }
 
-        // Atomic write: write to temp file then rename, so a crash mid-write
-        // won't corrupt the original settings.json. fs::rename is atomic on
-        // the same volume.
-        let tmp_path = self.settings_path.with_extension("json.tmp");
+        // Atomic write: write to temp file, verify, then rename, so a crash
+        // mid-write won't corrupt the original settings.json.
         fs::write(&tmp_path, &json)?;
-        fs::rename(&tmp_path, &self.settings_path)?;
+
+        // Verify temp file is valid before replacing
+        let verify = fs::read_to_string(&tmp_path)?;
+        if serde_json::from_str::<serde_json::Value>(&verify).is_err() {
+            let _ = fs::remove_file(&tmp_path);
+            return Err("Settings serialization produced invalid JSON".into());
+        }
+
+        atomic_replace(&tmp_path, &self.settings_path)?;
 
         // Restrict file permissions to owner-only
         #[cfg(unix)]
@@ -284,7 +318,7 @@ impl SettingsManager {
         let json = serde_json::to_string_pretty(&self.usage)?;
         let tmp_path = self.usage_path.with_extension("json.tmp");
         fs::write(&tmp_path, &json)?;
-        fs::rename(&tmp_path, &self.usage_path)?;
+        atomic_replace(&tmp_path, &self.usage_path)?;
         Ok(())
     }
 

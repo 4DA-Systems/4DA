@@ -14,7 +14,9 @@ export const createToastSlice: StateCreator<AppStore, [], [], ToastSlice> = (set
     }
 
     const id = ++toastId;
-    const duration = action ? 6000 : type === 'error' ? 8000 : 4000;
+    // Error toasts persist until dismissed (no auto-dismiss) for accessibility.
+    // Toasts with actions get extra time. Info/success/warning auto-dismiss.
+    const duration = type === 'error' ? 0 : action ? 6000 : 4000;
 
     set(state => {
       // Double-check inside set() to handle rapid concurrent calls
@@ -33,11 +35,14 @@ export const createToastSlice: StateCreator<AppStore, [], [], ToastSlice> = (set
       return { toasts: next };
     });
 
-    const timer = setTimeout(() => {
-      toastTimers.delete(id);
-      set(state => ({ toasts: state.toasts.filter(t => t.id !== id) }));
-    }, duration);
-    toastTimers.set(id, timer);
+    // duration=0 means no auto-dismiss (error toasts persist until user dismisses)
+    if (duration > 0) {
+      const timer = setTimeout(() => {
+        toastTimers.delete(id);
+        set(state => ({ toasts: state.toasts.filter(t => t.id !== id) }));
+      }, duration);
+      toastTimers.set(id, timer);
+    }
   },
 
   removeToast: (id) => {
