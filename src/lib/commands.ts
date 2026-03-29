@@ -115,7 +115,7 @@ interface CommandMap {
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
   list_provider_models: { params: { provider: string; baseUrl: string | null; apiKey: string | null }; result: { models: string[]; error?: string } };
   detect_local_servers: { params: Record<string, never>; result: { servers: Array<{ name: string; base_url: string; model_count: number; running: boolean }> } };
-  get_llm_key_for_mcp: { params: Record<string, never>; result: { provider: string; api_key: string; model: string; base_url: string | null } };
+  get_llm_key_for_mcp: { params: Record<string, never>; result: { provider: string; api_key_masked: string; has_api_key: boolean; model: string; base_url: string | null } };
   detect_environment: { params: Record<string, never>; result: { has_anthropic_env: boolean; anthropic_env_preview: string; has_openai_env: boolean; openai_env_preview: string; ollama_running: boolean; ollama_url: string | null } };
   import_env_key: { params: { provider: string }; result: string };
   validate_api_key: { params: { provider: string; key: string; baseUrl?: string | null }; result: { valid: boolean; format_ok: boolean; connection_ok: boolean; error: string | null; model_access: string[] } };

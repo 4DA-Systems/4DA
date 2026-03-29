@@ -8,12 +8,26 @@ use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
-use crate::error::{Result, ResultExt};
+use crate::error::{FourDaError, Result, ResultExt};
 use crate::utils::sanitize_path;
 use crate::{
     ace_commands, chunk_text, embed_texts, get_context_dir, get_database, get_settings_manager,
     ContextFile, SUPPORTED_EXTENSIONS,
 };
+
+/// Validate that user input doesn't exceed a reasonable length.
+/// Prevents buffer bloat, memory exhaustion, and DoS via oversized strings.
+fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<()> {
+    if value.len() > max_len {
+        return Err(FourDaError::Config(format!(
+            "{} is too long ({} chars, maximum {})",
+            field,
+            value.len(),
+            max_len
+        )));
+    }
+    Ok(())
+}
 
 /// Directories to skip during recursive context scanning
 const SKIP_DIRS: &[&str] = &[
@@ -438,6 +452,9 @@ pub async fn get_awe_summary() -> Result<String> {
 /// Run AWE transmute and return the result as structured output.
 #[tauri::command]
 pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
+    validate_input_length(&query, "query", 10000)?;
+    validate_input_length(&mode, "mode", 50)?;
+
     let awe_bin = find_awe_binary();
     let Some(awe_path) = awe_bin else {
         return Err("AWE binary not found. Build with: cargo build --release -p awe-cli".into());
@@ -535,6 +552,8 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
 /// Quick sanity check on a decision.
 #[tauri::command]
 pub async fn run_awe_quick_check(query: String) -> Result<String> {
+    validate_input_length(&query, "query", 10000)?;
+
     let awe_bin = find_awe_binary();
     let Some(awe_path) = awe_bin else {
         return Err("AWE binary not found".into());
@@ -560,6 +579,8 @@ pub async fn run_awe_quick_check(query: String) -> Result<String> {
 /// Model consequences of a decision.
 #[tauri::command]
 pub async fn run_awe_consequence_scan(query: String) -> Result<String> {
+    validate_input_length(&query, "query", 10000)?;
+
     let awe_bin = find_awe_binary();
     let Some(awe_path) = awe_bin else {
         return Err("AWE binary not found".into());
@@ -589,6 +610,10 @@ pub async fn run_awe_feedback(
     outcome: String,
     details: String,
 ) -> Result<String> {
+    validate_input_length(&decision_id, "decision_id", 500)?;
+    validate_input_length(&outcome, "outcome", 100)?;
+    validate_input_length(&details, "details", 5000)?;
+
     let awe_bin = find_awe_binary();
     let Some(awe_path) = awe_bin else {
         return Err("AWE binary not found".into());
@@ -613,6 +638,8 @@ pub async fn run_awe_feedback(
 /// Recall accumulated wisdom for a domain.
 #[tauri::command]
 pub async fn run_awe_recall(domain: String) -> Result<String> {
+    validate_input_length(&domain, "domain", 200)?;
+
     let awe_bin = find_awe_binary();
     let Some(awe_path) = awe_bin else {
         return Err("AWE binary not found".into());
@@ -630,6 +657,8 @@ pub async fn run_awe_recall(domain: String) -> Result<String> {
 /// Get calibration data for a domain.
 #[tauri::command]
 pub async fn run_awe_calibration(domain: String) -> Result<String> {
+    validate_input_length(&domain, "domain", 200)?;
+
     let awe_bin = find_awe_binary();
     let Some(awe_path) = awe_bin else {
         return Err("AWE binary not found".into());
@@ -734,6 +763,44 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
         if !path.is_dir() {
             return Err(format!("Path is not a directory: {}", sanitize_path(&converted)).into());
         }
+
+        // Block sensitive system directories
+        #[cfg(not(target_os = "windows"))]
+        {
+            let canonical = std::fs::canonicalize(&converted).unwrap_or_else(|_| PathBuf::from(&converted));
+            let canonical_str = canonical.to_string_lossy();
+            const SENSITIVE_PATHS: &[&str] = &[
+                "/etc", "/var", "/sys", "/proc", "/dev", "/boot", "/sbin",
+                "/root", "/tmp",
+            ];
+            const SENSITIVE_PATTERNS: &[&str] = &[
+                "/.ssh", "/.gnupg", "/.aws", "/.config/gcloud",
+            ];
+            for sp in SENSITIVE_PATHS {
+                if canonical_str == *sp || canonical_str.starts_with(&format!("{}/", sp)) {
+                    return Err(FourDaError::Config(format!(
+                        "Cannot add system directory as context: {}",
+                        sanitize_path(&converted)
+                    )));
+                }
+            }
+            for pattern in SENSITIVE_PATTERNS {
+                if canonical_str.contains(pattern) {
+                    return Err(FourDaError::Config(format!(
+                        "Cannot add sensitive directory as context: {}",
+                        sanitize_path(&converted)
+                    )));
+                }
+            }
+        }
+
+        // Block filesystem root on any platform
+        if converted == "/" || converted == "\\" || (converted.len() == 3 && converted.ends_with(":\\")) {
+            return Err(FourDaError::Config(
+                "Cannot add filesystem root as context directory".into()
+            ));
+        }
+
         converted_dirs.push(converted);
     }
 
