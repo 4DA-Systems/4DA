@@ -145,8 +145,8 @@ export const Momentum = memo(function Momentum() {
           items={attentionItems}
           techCount={entries.length}
           onViewEntry={handleViewEntry}
-          onActOnWindow={actOnWindow}
-          onCloseWindow={closeWindow}
+          onActOnWindow={(id: number) => { void actOnWindow(id); }}
+          onCloseWindow={(id: number) => { void closeWindow(id); }}
         />
 
         {/* Section 2: What's Moving */}
