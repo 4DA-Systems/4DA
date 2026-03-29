@@ -122,6 +122,22 @@ impl ACE {
     pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self> {
         db::migrate(&conn)?;
 
+        // Verify ACE database integrity (same defense as main DB)
+        {
+            let conn_guard = conn.lock();
+            match conn_guard.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)) {
+                Ok(result) if result == "ok" => {
+                    info!(target: "4da::ace", "ACE database integrity verified");
+                }
+                Ok(result) => {
+                    warn!(target: "4da::ace", result = %result, "ACE database integrity check returned warnings");
+                }
+                Err(e) => {
+                    warn!(target: "4da::ace", error = %e, "ACE database integrity check failed — continuing with caution");
+                }
+            }
+        }
+
         let scanner = ProjectScanner::new();
         let git_analyzer = GitAnalyzer::default();
         let watcher_persistence = WatcherStatePersistence::new(conn.clone()).ok();

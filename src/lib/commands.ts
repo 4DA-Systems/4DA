@@ -196,6 +196,7 @@ interface CommandMap {
   generate_cli_briefing: { params: Record<string, never>; result: string };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };
   get_source_quality: { params: Record<string, never>; result: SourceQualityReport[] };
+  reset_source_circuit_breaker: { params: { source_type: string }; result: string };
 
   // -- Decisions --
   get_decisions: { params: { limit?: number; decisionType?: string; status?: string }; result: DeveloperDecision[] };

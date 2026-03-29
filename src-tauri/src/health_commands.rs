@@ -85,6 +85,23 @@ pub async fn get_source_quality() -> Result<Vec<crate::health::SourceQualityRepo
     Ok(crate::health::compute_source_quality(&conn, 30))
 }
 
+/// Reset circuit breaker for a specific source, allowing it to be retried.
+#[tauri::command]
+pub async fn reset_source_circuit_breaker(source_type: String) -> Result<String> {
+    if source_type.len() > 50 {
+        return Err("Source type too long".into());
+    }
+    let db = get_database()?;
+    let conn = db.conn.lock();
+    conn.execute(
+        "UPDATE source_health SET consecutive_failures = 0, status = 'healthy' WHERE source_type = ?1",
+        rusqlite::params![source_type],
+    )
+    .map_err(FourDaError::Db)?;
+    tracing::info!(target: "4da::sources", source = %source_type, "Circuit breaker manually reset");
+    Ok(format!("Circuit breaker reset for {source_type}"))
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

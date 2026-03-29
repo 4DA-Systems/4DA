@@ -227,10 +227,44 @@ impl Database {
             .unwrap_or(1);
 
         const TARGET_VERSION: i64 = 42;
+
+        // Downgrade detection: if DB schema is newer than this binary expects,
+        // show a clear error instead of silently corrupting the schema.
+        if current_version > TARGET_VERSION {
+            return Err(rusqlite::Error::QueryReturnedNoRows).map_err(|_| {
+                rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_MISMATCH),
+                    Some(format!(
+                        "Database schema version {} is newer than this version of 4DA supports (max {}). \
+                         You may be running an older version of 4DA against a newer database. \
+                         Please update 4DA or restore a database backup.",
+                        current_version, TARGET_VERSION
+                    )),
+                )
+            });
+        }
+
         if current_version < TARGET_VERSION {
             // Drop the conn lock briefly to allow backup (needs filesystem access)
             drop(conn);
             self.backup_before_migration(current_version);
+
+            // Validate backup was written correctly
+            let backup_path = self
+                .db_path
+                .with_extension(format!("db.backup.v{current_version}"));
+            if let Ok(backup_meta) = std::fs::metadata(&backup_path) {
+                if backup_meta.len() == 0 {
+                    tracing::warn!(target: "4da::db", "Migration backup is empty — skipping backup validation");
+                } else {
+                    tracing::info!(target: "4da::db",
+                        backup_path = ?backup_path,
+                        size_bytes = backup_meta.len(),
+                        "Migration backup validated"
+                    );
+                }
+            }
+
             // Re-acquire the lock
             let conn = self.conn.lock();
 

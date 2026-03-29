@@ -187,6 +187,37 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
         .await
         .context("OpenAI API request failed")?;
 
+    // Check for rate limiting (HTTP 429) before consuming the response body
+    let status = response.status();
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+        let retry_after = response
+            .headers()
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30);
+        tracing::warn!(
+            target: "4da::embeddings",
+            retry_after_secs = retry_after,
+            "OpenAI rate limited — backing off"
+        );
+        return Err(
+            format!("Rate limited by OpenAI (retry after {}s)", retry_after).into(),
+        );
+    }
+
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        let truncated = if body_text.len() > 200 {
+            format!("{}...", &body_text[..200])
+        } else {
+            body_text
+        };
+        return Err(
+            format!("OpenAI API error {}: {}", status.as_u16(), truncated).into(),
+        );
+    }
+
     let json: serde_json::Value = response
         .json()
         .await
@@ -436,6 +467,8 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
 
 /// Retry an async operation with exponential backoff.
 /// Returns the first successful result, or the last error after max_retries.
+/// Rate-limit errors (containing "rate limit" or "429") use an extended backoff
+/// of 30s instead of the normal exponential schedule.
 async fn retry_with_backoff<F, Fut, T>(operation_name: &str, max_retries: u32, f: F) -> Result<T>
 where
     F: Fn() -> Fut,
@@ -448,16 +481,48 @@ where
             Err(e) => {
                 last_error = e.to_string();
                 if attempt < max_retries {
-                    let delay_secs = 3u64.pow(attempt); // 1s, 3s, 9s
-                    tracing::warn!(
-                        target: "4da::retry",
-                        attempt = attempt + 1,
-                        max = max_retries + 1,
-                        delay_secs,
-                        operation = operation_name,
-                        error = %last_error,
-                        "Retrying after error"
-                    );
+                    // Detect rate-limit errors and use extended backoff
+                    let lower = last_error.to_lowercase();
+                    let is_rate_limited = lower.contains("rate limit")
+                        || lower.contains("429")
+                        || lower.contains("too many requests");
+
+                    let delay_secs = if is_rate_limited {
+                        // Parse retry-after hint from error message if present
+                        let retry_after = lower
+                            .find("retry after ")
+                            .and_then(|pos| {
+                                let after = &last_error[pos + 12..];
+                                after
+                                    .chars()
+                                    .take_while(|c| c.is_ascii_digit())
+                                    .collect::<String>()
+                                    .parse::<u64>()
+                                    .ok()
+                            })
+                            .unwrap_or(30);
+                        tracing::warn!(
+                            target: "4da::retry",
+                            attempt = attempt + 1,
+                            max = max_retries + 1,
+                            delay_secs = retry_after,
+                            operation = operation_name,
+                            "Rate limited — using extended backoff"
+                        );
+                        retry_after
+                    } else {
+                        let delay = 3u64.pow(attempt); // 1s, 3s, 9s
+                        tracing::warn!(
+                            target: "4da::retry",
+                            attempt = attempt + 1,
+                            max = max_retries + 1,
+                            delay_secs = delay,
+                            operation = operation_name,
+                            error = %last_error,
+                            "Retrying after error"
+                        );
+                        delay
+                    };
                     tokio::time::sleep(std::time::Duration::from_secs(delay_secs)).await;
                 }
             }

@@ -578,6 +578,7 @@ pub fn run() {
             // Source Health
             health_commands::get_source_health_status,
             health_commands::get_source_quality,
+            health_commands::reset_source_circuit_breaker,
             // Decision Intelligence
             decisions::get_decisions,
             decisions::record_developer_decision,
