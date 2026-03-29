@@ -5,15 +5,19 @@ import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
+import { useVoidSignals } from '../hooks/use-void-signals';
 
+import { MomentumHero } from './momentum/MomentumHero';
 import { AttentionSection } from './momentum/AttentionSection';
 import { MovingSection } from './momentum/MovingSection';
+import { PositioningSection } from './momentum/PositioningSection';
 import { StackGlance } from './momentum/StackGlance';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
 import { buildAttentionItems } from './momentum/momentum-utils';
 
 import type { RadarEntry } from './tech-radar/RadarSVG';
-import type { KnowledgeGap } from '../types/innovation';
+import type { KnowledgeGap, SignalChainWithPrediction } from '../types/innovation';
+import type { CompoundAdvantageScore as CompoundScore } from '../types/autophagy';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -31,12 +35,21 @@ interface TechRadarData {
 export const Momentum = memo(function Momentum() {
   const { t } = useTranslation();
 
-  // Radar + context data
+  // Core data
   const [radarData, setRadarData] = useState<TechRadarData | null>(null);
   const [userStack, setUserStack] = useState<string[]>([]);
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Positioning data
+  const [advantage, setAdvantage] = useState<CompoundScore | null>(null);
+  const [history, setHistory] = useState<number[]>([]);
+  const [chains, setChains] = useState<SignalChainWithPrediction[]>([]);
+  const [aweData, setAweData] = useState<{ principles?: string[] } | null>(null);
+
+  // Real-time signal for shader
+  const signal = useVoidSignals();
 
   // Detail panel
   const [selectedEntry, setSelectedEntry] = useState<RadarEntry | null>(null);
@@ -56,17 +69,23 @@ export const Momentum = memo(function Momentum() {
       cmd('get_user_context'),
       cmd('get_knowledge_gaps'),
       loadWindows(),
-    ]).then(([radarResult, ctxResult, gapsResult]) => {
-      if (radarResult.status === 'fulfilled') {
-        setRadarData(radarResult.value as unknown as TechRadarData);
-      } else {
-        setError(String(radarResult.reason));
-      }
-      if (ctxResult.status === 'fulfilled') {
-        setUserStack((ctxResult.value as { tech_stack: string[] }).tech_stack);
-      }
-      if (gapsResult.status === 'fulfilled') {
-        setGaps(gapsResult.value as KnowledgeGap[]);
+      cmd('get_compound_advantage'),
+      cmd('get_advantage_history', { period: 'weekly', limit: 8 }),
+      cmd('get_signal_chains_predicted'),
+      cmd('run_awe_recall', { domain: 'software-engineering' }),
+    ]).then(([radarR, ctxR, gapsR, , advR, histR, chainsR, aweR]) => {
+      if (radarR.status === 'fulfilled') setRadarData(radarR.value as unknown as TechRadarData);
+      else setError(String(radarR.reason));
+      if (ctxR.status === 'fulfilled') setUserStack((ctxR.value as { tech_stack: string[] }).tech_stack);
+      if (gapsR.status === 'fulfilled') setGaps(gapsR.value as KnowledgeGap[]);
+      if (advR.status === 'fulfilled') setAdvantage(advR.value as CompoundScore);
+      if (histR.status === 'fulfilled') setHistory(histR.value as number[]);
+      if (chainsR.status === 'fulfilled') setChains(chainsR.value as SignalChainWithPrediction[]);
+      if (aweR.status === 'fulfilled') {
+        try {
+          const parsed = typeof aweR.value === 'string' ? JSON.parse(aweR.value) : aweR.value;
+          setAweData(parsed as { principles?: string[] });
+        } catch { setAweData(null); }
       }
     }).finally(() => setLoading(false));
   }, [loadWindows]);
@@ -74,7 +93,6 @@ export const Momentum = memo(function Momentum() {
   // Handlers
   const handleEntryClick = useCallback((entry: RadarEntry) => setSelectedEntry(entry), []);
   const handleClosePanel = useCallback(() => setSelectedEntry(null), []);
-
   const handleViewEntry = useCallback((name: string) => {
     const entry = radarData?.entries.find(e => e.name === name);
     if (entry) setSelectedEntry(entry);
@@ -86,7 +104,6 @@ export const Momentum = memo(function Momentum() {
     [radarData, userStack, windows, gaps, t],
   );
 
-  // Loading state
   if (loading) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 flex flex-col items-center justify-center gap-2">
@@ -96,7 +113,6 @@ export const Momentum = memo(function Momentum() {
     );
   }
 
-  // Error state
   if (error !== null) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
@@ -105,7 +121,6 @@ export const Momentum = memo(function Momentum() {
     );
   }
 
-  // Empty state
   if (!radarData || radarData.entries.length === 0) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 text-center">
@@ -120,27 +135,10 @@ export const Momentum = memo(function Momentum() {
   return (
     <>
       <div className="space-y-6">
-        {/* Page header */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-text-secondary">
-              <path d="M2 12L5 5L8 8L11 3L14 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="5" cy="5" r="1.5" fill="currentColor" opacity="0.4" />
-              <circle cx="11" cy="3" r="1.5" fill="currentColor" opacity="0.4" />
-            </svg>
-          </div>
-          <div className="flex-1">
-            <h2 className="font-medium text-white text-sm">{t('momentum.title')}</h2>
-            <p className="text-xs text-text-muted">{t('momentum.subtitle')}</p>
-          </div>
-          {radarData.generated_at && (
-            <span className="text-[10px] text-text-muted">
-              {new Date(radarData.generated_at).toLocaleDateString()}
-            </span>
-          )}
-        </div>
+        {/* Hero: Shader waveform + Compound Advantage */}
+        <MomentumHero signal={signal} advantage={advantage} history={history} />
 
-        {/* Section 1: What Needs Attention */}
+        {/* What Needs Attention */}
         <AttentionSection
           items={attentionItems}
           techCount={entries.length}
@@ -149,22 +147,16 @@ export const Momentum = memo(function Momentum() {
           onCloseWindow={(id: number) => { void closeWindow(id); }}
         />
 
-        {/* Section 2: What's Moving */}
-        <MovingSection
-          entries={entries}
-          userStack={userStack}
-          onEntryClick={handleEntryClick}
-        />
+        {/* What's Moving */}
+        <MovingSection entries={entries} userStack={userStack} onEntryClick={handleEntryClick} />
 
-        {/* Section 3: Your Stack at a Glance */}
-        <StackGlance
-          entries={entries}
-          userStack={userStack}
-          onEntryClick={handleEntryClick}
-        />
+        {/* Positioning: Signal Chains + AWE Wisdom */}
+        <PositioningSection chains={chains} aweData={aweData} advantage={advantage} />
+
+        {/* Your Stack */}
+        <StackGlance entries={entries} userStack={userStack} onEntryClick={handleEntryClick} />
       </div>
 
-      {/* Entry Detail Panel (overlay) */}
       <RadarEntryPanel entry={selectedEntry} onClose={handleClosePanel} />
     </>
   );
