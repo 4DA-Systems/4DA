@@ -230,27 +230,24 @@ impl FileWatcher {
                 }
 
                 // Check if we should flush pending changes
-                let should_flush = {
-                    let pending = pending_changes.lock();
+                // Single lock acquisition for check + drain to avoid TOCTOU race
+                let changes_to_flush: Option<Vec<FileChange>> = {
+                    let mut pending = pending_changes.lock();
                     let last_time = *last_batch_time.lock();
-
-                    !pending.is_empty() && last_time.elapsed() >= debounce_duration
-                };
-
-                if should_flush {
-                    let changes: Vec<FileChange> = {
-                        let mut pending = pending_changes.lock();
+                    if !pending.is_empty() && last_time.elapsed() >= debounce_duration {
                         let changes: Vec<_> = pending.values().cloned().collect();
                         pending.clear();
-                        changes
-                    };
+                        Some(changes)
+                    } else {
+                        None
+                    }
+                };
+                // Locks released BEFORE callback
 
+                if let Some(changes) = changes_to_flush {
                     *last_batch_time.lock() = Instant::now();
-
-                    if !changes.is_empty() {
-                        if let Some(ref cb) = *callback.lock() {
-                            cb(changes);
-                        }
+                    if let Some(ref cb) = *callback.lock() {
+                        cb(changes);
                     }
                 }
             }

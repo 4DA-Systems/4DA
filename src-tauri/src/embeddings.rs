@@ -249,12 +249,30 @@ fn validate_embeddings(embeddings: Vec<Vec<f32>>) -> Vec<Vec<f32>> {
         .collect()
 }
 
-/// Truncate embedding to TARGET_EMBEDDING_DIMS and L2-normalize.
-/// nomic-embed-text is a Matryoshka model so truncation preserves semantic quality.
+/// Ensure embedding has exactly TARGET_EMBEDDING_DIMS dimensions, then L2-normalize.
+/// - Too long: truncate (Matryoshka models preserve quality at lower dims)
+/// - Too short: zero-pad (prevents KNN dimension mismatch — critical for sqlite-vec)
+/// - Exact: pass through, normalizing only if truncated/padded
 fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
-    if embedding.len() > TARGET_EMBEDDING_DIMS {
+    let modified = if embedding.len() > TARGET_EMBEDDING_DIMS {
         embedding.truncate(TARGET_EMBEDDING_DIMS);
-        // Re-normalize after truncation (Matryoshka requirement)
+        true
+    } else if embedding.len() < TARGET_EMBEDDING_DIMS {
+        tracing::warn!(
+            target: "4da::embeddings",
+            got = embedding.len(),
+            expected = TARGET_EMBEDDING_DIMS,
+            "Embedding shorter than target — zero-padding to prevent KNN mismatch"
+        );
+        embedding.resize(TARGET_EMBEDDING_DIMS, 0.0);
+        true
+    } else {
+        false
+    };
+
+    // Re-normalize after dimension change (Matryoshka requirement for truncation,
+    // and correctness requirement for padding)
+    if modified {
         let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
             for v in &mut embedding {
@@ -457,11 +475,25 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_truncate_short_vector_unchanged() {
-        // Vector shorter than TARGET_EMBEDDING_DIMS should pass through unchanged
+    fn test_truncate_short_vector_padded_and_normalized() {
+        // Vector shorter than TARGET_EMBEDDING_DIMS should be zero-padded and normalized
         let v = vec![1.0f32, 0.0, 0.0];
-        let result = truncate_and_normalize(v.clone());
-        assert_eq!(result, v, "Short vector should not be modified");
+        let result = truncate_and_normalize(v);
+        assert_eq!(
+            result.len(),
+            TARGET_EMBEDDING_DIMS,
+            "Short vector should be padded to TARGET_EMBEDDING_DIMS"
+        );
+        // First element should be normalized (1.0 / norm where norm = 1.0)
+        assert!(
+            (result[0] - 1.0).abs() < 1e-5,
+            "First element should be ~1.0 after normalization"
+        );
+        // Padding elements should all be 0.0
+        assert!(
+            result[3..].iter().all(|&v| v == 0.0),
+            "Padded elements should be 0.0"
+        );
     }
 
     #[test]
