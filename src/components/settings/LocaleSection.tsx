@@ -38,19 +38,18 @@ const CURRENCIES = [
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
+  { code: 'es', name: 'Espa\u00f1ol' },
+  { code: 'fr', name: 'Fran\u00e7ais' },
   { code: 'de', name: 'Deutsch' },
-  { code: 'fr', name: 'Francais' },
-  { code: 'es', name: 'Espanol' },
-  { code: 'pt', name: 'Portugues' },
-  { code: 'nl', name: 'Nederlands' },
   { code: 'it', name: 'Italiano' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'sv', name: 'Svenska' },
-  { code: 'no', name: 'Norsk' },
-  { code: 'da', name: 'Dansk' },
-  { code: 'fi', name: 'Suomi' },
-  { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064A\u0629' },
+  { code: 'pt-BR', name: 'Portugu\u00eas (BR)' },
+  { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
+  { code: 'ja', name: '\u65e5\u672c\u8a9e' },
+  { code: 'ko', name: '\ud55c\uad6d\uc5b4' },
+  { code: 'zh', name: '\u4e2d\u6587' },
+  { code: 'tr', name: 'T\u00fcrk\u00e7e' },
+  { code: 'hi', name: '\u0939\u093f\u0928\u094d\u0926\u0940' },
+  { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629' },
 ];
 
 function getLanguageName(code: string): string {
