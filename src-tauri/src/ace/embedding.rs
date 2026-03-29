@@ -150,8 +150,7 @@ impl EmbeddingService {
         if cache.len() >= Self::MAX_CACHE_ENTRIES {
             // Evict oldest 20% instead of full clear — preserves hot cache entries
             let evict_count = Self::MAX_CACHE_ENTRIES / 5;
-            let keys_to_remove: Vec<String> =
-                cache.keys().take(evict_count).cloned().collect();
+            let keys_to_remove: Vec<String> = cache.keys().take(evict_count).cloned().collect();
             for key in keys_to_remove {
                 cache.remove(&key);
             }

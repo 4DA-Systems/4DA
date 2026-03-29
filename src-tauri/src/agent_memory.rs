@@ -279,11 +279,21 @@ pub async fn store_agent_memory(
     expires_at: Option<String>,
 ) -> Result<i64> {
     // Input length validation — prevents database bloat from oversized inserts
-    if session_id.len() > 200 { return Err("Session ID too long".into()); }
-    if agent_type.len() > 100 { return Err("Agent type too long".into()); }
-    if memory_type.len() > 100 { return Err("Memory type too long".into()); }
-    if subject.len() > 1000 { return Err("Subject too long".into()); }
-    if content.len() > 50_000 { return Err("Content too long (max 50KB)".into()); }
+    if session_id.len() > 200 {
+        return Err("Session ID too long".into());
+    }
+    if agent_type.len() > 100 {
+        return Err("Agent type too long".into());
+    }
+    if memory_type.len() > 100 {
+        return Err("Memory type too long".into());
+    }
+    if subject.len() > 1000 {
+        return Err("Subject too long".into());
+    }
+    if content.len() > 50_000 {
+        return Err("Content too long (max 50KB)".into());
+    }
 
     let conn = crate::open_db_connection()?;
     store_memory(

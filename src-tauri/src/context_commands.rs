@@ -767,15 +767,13 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
         // Block sensitive system directories
         #[cfg(not(target_os = "windows"))]
         {
-            let canonical = std::fs::canonicalize(&converted).unwrap_or_else(|_| PathBuf::from(&converted));
+            let canonical =
+                std::fs::canonicalize(&converted).unwrap_or_else(|_| PathBuf::from(&converted));
             let canonical_str = canonical.to_string_lossy();
             const SENSITIVE_PATHS: &[&str] = &[
-                "/etc", "/var", "/sys", "/proc", "/dev", "/boot", "/sbin",
-                "/root", "/tmp",
+                "/etc", "/var", "/sys", "/proc", "/dev", "/boot", "/sbin", "/root", "/tmp",
             ];
-            const SENSITIVE_PATTERNS: &[&str] = &[
-                "/.ssh", "/.gnupg", "/.aws", "/.config/gcloud",
-            ];
+            const SENSITIVE_PATTERNS: &[&str] = &["/.ssh", "/.gnupg", "/.aws", "/.config/gcloud"];
             for sp in SENSITIVE_PATHS {
                 if canonical_str == *sp || canonical_str.starts_with(&format!("{}/", sp)) {
                     return Err(FourDaError::Config(format!(
@@ -795,9 +793,12 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
         }
 
         // Block filesystem root on any platform
-        if converted == "/" || converted == "\\" || (converted.len() == 3 && converted.ends_with(":\\")) {
+        if converted == "/"
+            || converted == "\\"
+            || (converted.len() == 3 && converted.ends_with(":\\"))
+        {
             return Err(FourDaError::Config(
-                "Cannot add filesystem root as context directory".into()
+                "Cannot add filesystem root as context directory".into(),
             ));
         }
 

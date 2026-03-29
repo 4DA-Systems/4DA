@@ -78,7 +78,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         other => other,
     };
 
-    match effective_provider {
+    let result = match effective_provider {
         "openai" => {
             let api_key = llm_settings.api_key.clone();
             let texts = texts.to_vec();
@@ -158,13 +158,25 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                     target: "4da::embeddings",
                     "No embedding provider configured and Ollama not reachable. Using zero vectors."
                 );
+                crate::capabilities::report_degraded(
+                    crate::capabilities::Capability::EmbeddingSearch,
+                    "No embedding provider available",
+                    "Keyword matching only (no semantic search)",
+                );
                 Ok(texts
                     .iter()
                     .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
                     .collect())
             }
         }
+    };
+
+    // Report capability state based on result
+    if result.is_ok() {
+        crate::capabilities::report_restored(crate::capabilities::Capability::EmbeddingSearch);
     }
+
+    result
 }
 
 /// Generate embeddings using OpenAI API
@@ -201,9 +213,7 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
             retry_after_secs = retry_after,
             "OpenAI rate limited — backing off"
         );
-        return Err(
-            format!("Rate limited by OpenAI (retry after {}s)", retry_after).into(),
-        );
+        return Err(format!("Rate limited by OpenAI (retry after {}s)", retry_after).into());
     }
 
     if !status.is_success() {
@@ -213,9 +223,7 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
         } else {
             body_text
         };
-        return Err(
-            format!("OpenAI API error {}: {}", status.as_u16(), truncated).into(),
-        );
+        return Err(format!("OpenAI API error {}: {}", status.as_u16(), truncated).into());
     }
 
     let json: serde_json::Value = response

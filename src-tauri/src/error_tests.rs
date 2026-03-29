@@ -453,7 +453,10 @@ mod tests {
         );
         assert_eq!(json["code"].as_str().unwrap(), "E5010");
         assert_eq!(json["title"].as_str().unwrap(), "Analysis failed");
-        assert!(json["detail"].as_str().unwrap().contains("model unavailable"));
+        assert!(json["detail"]
+            .as_str()
+            .unwrap()
+            .contains("model unavailable"));
         assert!(json["remediation"].is_array());
         assert_eq!(json["severity"].as_str().unwrap(), "error");
     }
