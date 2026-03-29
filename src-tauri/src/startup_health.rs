@@ -296,7 +296,11 @@ fn get_available_disk_space(path: &Path) -> u64 {
                 std::ptr::null_mut(),
             )
         };
-        if result != 0 { free_bytes } else { 0 }
+        if result != 0 {
+            free_bytes
+        } else {
+            0
+        }
     }
     #[cfg(not(target_os = "windows"))]
     {

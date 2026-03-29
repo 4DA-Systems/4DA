@@ -170,7 +170,7 @@ pub async fn get_llm_key_for_mcp() -> Result<serde_json::Value> {
     // Mask the API key — only show first 8 and last 4 chars
     let masked_key = if settings.llm.api_key.len() > 12 {
         let key = &settings.llm.api_key;
-        format!("{}...{}", &key[..8], &key[key.len()-4..])
+        format!("{}...{}", &key[..8], &key[key.len() - 4..])
     } else if !settings.llm.api_key.is_empty() {
         "****".to_string()
     } else {

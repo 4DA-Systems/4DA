@@ -208,7 +208,7 @@ impl FourDaError {
                         title: "File not found".into(),
                         detail: "A required file or directory is missing.".into(),
                         remediation: vec![
-                            "Try restarting 4DA — it will recreate missing files.".into(),
+                            "Try restarting 4DA — it will recreate missing files.".into()
                         ],
                         severity: ErrorSeverity::Warning,
                     },

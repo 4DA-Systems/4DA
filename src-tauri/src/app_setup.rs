@@ -88,7 +88,8 @@ pub(crate) fn initialize_pre_tauri() {
                     eprintln!(
                         "FATAL: 4DA data directory is not writable: {}\nError: {}\n\
                         Please check permissions or set FOURDA_DB_PATH to a writable location.",
-                        data_dir.display(), e
+                        data_dir.display(),
+                        e
                     );
                     std::process::exit(1);
                 }
@@ -181,9 +182,17 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Set up system tray (non-fatal: app works without tray)
     let tray = match monitoring::setup_tray(app.handle()) {
-        Ok(tray) => Some(tray),
+        Ok(tray) => {
+            crate::capabilities::report_restored(crate::capabilities::Capability::SystemTray);
+            Some(tray)
+        }
         Err(e) => {
             warn!("System tray setup failed, continuing without tray: {e}");
+            crate::capabilities::report_unavailable(
+                crate::capabilities::Capability::SystemTray,
+                "System tray not supported on this desktop environment",
+                "The app works normally without a tray icon. Use the main window instead.",
+            );
             None
         }
     };
@@ -765,6 +774,11 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
 
     if context_dirs.is_empty() {
         warn!(target: "4da::startup", "No context directories available, ACE will wait for configuration");
+        crate::capabilities::report_degraded(
+            crate::capabilities::Capability::AceContext,
+            "No project directories configured",
+            "Add project directories in Settings for personalized scoring",
+        );
         return;
     }
 
