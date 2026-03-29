@@ -521,11 +521,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
 
-                        // Bridge accuracy feedback from ACE behavior data into calibration
-                        if let Ok(ace) = crate::state::get_ace_engine() {
-                            let ace_conn = ace.get_conn().lock();
+                        // Bridge accuracy feedback from ACE behavior data into calibration.
+                        // Uses a fresh connection for ACE data to avoid lock ordering violation
+                        // (holding both ace_conn and daily_conn simultaneously could deadlock).
+                        if let Ok(ace_read_conn) = crate::state::open_db_connection() {
                             match crate::autophagy::bridge_accuracy_feedback(
-                                &ace_conn,
+                                &ace_read_conn,
                                 &daily_conn,
                                 max_age_days as i64,
                             ) {

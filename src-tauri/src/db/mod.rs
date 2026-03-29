@@ -82,7 +82,14 @@ pub struct ScoringStatsAggregate {
 pub struct Database {
     pub(crate) conn: Arc<Mutex<Connection>>,
     pub(crate) db_path: PathBuf,
+    /// Pool of read-only connections for parallel query execution.
+    /// These bypass the writer lock, allowing concurrent reads during writes.
+    read_pool: Vec<Mutex<Connection>>,
 }
+
+/// Number of read-only connections in the pool.
+/// SQLite WAL mode allows concurrent readers, so this gives us parallelism.
+const READ_POOL_SIZE: usize = 3;
 
 impl Database {
     /// Initialize database with sqlite-vec extension
@@ -107,9 +114,42 @@ impl Database {
         ",
         )?;
 
+        // Create read-only connection pool for parallel queries.
+        // WAL mode allows multiple concurrent readers alongside one writer.
+        // Skip pool for in-memory databases (tests) — they can't share connections.
+        let is_file_db = db_path.to_string_lossy() != ":memory:";
+        let mut read_pool = Vec::with_capacity(if is_file_db { READ_POOL_SIZE } else { 0 });
+        if is_file_db {
+            for i in 0..READ_POOL_SIZE {
+                match Connection::open_with_flags(
+                    db_path,
+                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+                        | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
+                        | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+                ) {
+                    Ok(reader) => {
+                        reader
+                            .execute_batch(
+                                "PRAGMA busy_timeout = 5000;
+                                 PRAGMA cache_size = -16000;
+                                 PRAGMA mmap_size = 134217728;
+                                 PRAGMA query_only = ON;",
+                            )
+                            .ok();
+                        read_pool.push(Mutex::new(reader));
+                    }
+                    Err(e) => {
+                        tracing::warn!(target: "4da::db", index = i, error = %e, "Failed to create read pool connection");
+                    }
+                }
+            }
+            tracing::info!(target: "4da::db", pool_size = read_pool.len(), "Read connection pool initialized");
+        }
+
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
             db_path: db_path.to_path_buf(),
+            read_pool,
         };
 
         db.migrate()?;
@@ -136,6 +176,20 @@ impl Database {
         }
 
         Ok(db)
+    }
+
+    /// Borrow a read-only connection from the pool for parallel query execution.
+    /// Falls back to the writer connection if the pool is exhausted.
+    /// Use this for SELECT queries that don't need write access.
+    pub fn read_conn(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        // Try each pool connection with try_lock (non-blocking)
+        for reader in &self.read_pool {
+            if let Some(guard) = reader.try_lock() {
+                return guard;
+            }
+        }
+        // All readers busy — fall back to writer (contention, but correct)
+        self.conn.lock()
     }
 
     /// Checkpoint the WAL file if it exceeds the size threshold.
@@ -228,7 +282,7 @@ impl Database {
 
     /// Get all context embeddings
     pub fn get_all_contexts(&self) -> SqliteResult<Vec<StoredContext>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let mut stmt = conn.prepare(
             "SELECT id, source_file, content_hash, text, embedding, created_at
              FROM context_chunks",
@@ -258,7 +312,7 @@ impl Database {
 
     /// Get context count
     pub fn context_count(&self) -> SqliteResult<i64> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         conn.query_row("SELECT COUNT(*) FROM context_chunks", [], |row| row.get(0))
     }
 
@@ -268,7 +322,7 @@ impl Database {
         query_embedding: &[f32],
         limit: usize,
     ) -> SqliteResult<Vec<SimilarityResult>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let embedding_blob = embedding_to_blob(query_embedding);
 
         let mut stmt = conn.prepare(
@@ -297,7 +351,7 @@ impl Database {
         query_embedding: &[f32],
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let embedding_blob = embedding_to_blob(query_embedding);
 
         let mut stmt = conn.prepare(

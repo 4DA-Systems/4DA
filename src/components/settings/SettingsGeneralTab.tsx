@@ -4,6 +4,7 @@ import { LocaleSection } from './LocaleSection';
 import { ShowAllViewsToggle } from './ShowAllViewsToggle';
 import { MonitoringSection } from './MonitoringSection';
 import { DataHealthSection } from './DataHealthSection';
+import { SystemHealthSection } from './SystemHealthSection';
 import { DigestSection } from './DigestSection';
 import { CommunityIntelligenceSection } from './CommunityIntelligenceSection';
 
@@ -50,6 +51,10 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
             onUpdateInterval={onUpdateInterval}
             onTestNotification={onTestNotification}
           />
+        </PanelErrorBoundary>
+
+        <PanelErrorBoundary name="System Health">
+          <SystemHealthSection />
         </PanelErrorBoundary>
 
         <PanelErrorBoundary name="Data Health">
