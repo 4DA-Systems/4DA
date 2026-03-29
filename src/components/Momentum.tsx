@@ -135,8 +135,8 @@ export const Momentum = memo(function Momentum() {
   return (
     <>
       <div className="space-y-6">
-        {/* Hero: Shader waveform + Compound Advantage */}
-        <MomentumHero signal={signal} advantage={advantage} history={history} />
+        {/* Hero: Purpose-built shader field + precision gauges */}
+        <MomentumHero signal={signal} advantage={advantage} history={history} entries={entries} gaps={gaps} />
 
         {/* What Needs Attention */}
         <AttentionSection
