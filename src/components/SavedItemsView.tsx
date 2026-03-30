@@ -6,9 +6,12 @@ import type { SavedItem } from '../types';
 import { getSourceLabel, getSourceColorClass } from '../config/sources';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
+import { formatLocalDate } from '../utils/format-date';
+import { useTranslatedContent } from './ContentTranslationProvider';
 
 export function SavedItemsView() {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const [items, setItems] = useState<SavedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +40,14 @@ export function SavedItemsView() {
   }, []);
 
   useEffect(() => { loadItems(); }, [loadItems]);
+
+  // Request content translation for saved items
+  useEffect(() => {
+    if (items.length === 0) return;
+    requestTranslation(
+      items.map((item) => ({ id: String(item.item_id), text: item.title })),
+    );
+  }, [items, requestTranslation]);
 
   const handleRemove = useCallback(async (itemId: number) => {
     // Optimistic UI: remove immediately
@@ -136,10 +147,10 @@ export function SavedItemsView() {
                           rel="noopener noreferrer"
                           className="text-sm text-white hover:text-orange-400 hover:underline decoration-orange-400/50 font-medium transition-colors"
                         >
-                          {item.title}
+                          {getTranslated(String(item.item_id), item.title)}
                         </a>
                       ) : (
-                        <p className="text-sm text-white font-medium">{item.title}</p>
+                        <p className="text-sm text-white font-medium">{getTranslated(String(item.item_id), item.title)}</p>
                       )}
 
                       {item.summary ? (
@@ -150,7 +161,7 @@ export function SavedItemsView() {
 
                       <div className="flex items-center gap-3 mt-1.5">
                         <span className="text-[10px] text-text-muted">
-                          {item.saved_at ? new Date(item.saved_at + 'Z').toLocaleDateString() : ''}
+                          {item.saved_at ? formatLocalDate(item.saved_at + 'Z') : ''}
                         </span>
                         {item.url && (
                           <button

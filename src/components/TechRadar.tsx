@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { formatLocalDate } from '../utils/format-date';
 
 import { StackIntelligence } from './tech-radar/StackIntelligence';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
@@ -126,7 +127,7 @@ export const TechRadar = memo(function TechRadar() {
         </div>
         {data.generated_at && (
           <span className="text-[10px] text-text-muted">
-            {new Date(data.generated_at).toLocaleDateString()}
+            {formatLocalDate(data.generated_at)}
           </span>
         )}
       </div>

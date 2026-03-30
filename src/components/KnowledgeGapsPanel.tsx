@@ -2,6 +2,7 @@ import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
+import { useTranslatedContent } from './ContentTranslationProvider';
 import type { KnowledgeGap } from '../types';
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: string }> = {
@@ -13,6 +14,7 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: strin
 
 export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
   const [gaps, setGaps] = useState<KnowledgeGap[]>([]);
   const [expanded, setExpanded] = useState(false);
 
@@ -86,10 +88,10 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                       <div key={item.item_id} className="text-[11px]">
                         {item.url ? (
                           <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-text-secondary hover:text-white transition-colors">
-                            {item.title}
+                            {getTranslated(String(item.item_id), item.title)}
                           </a>
                         ) : (
-                          <span className="text-text-secondary">{item.title}</span>
+                          <span className="text-text-secondary">{getTranslated(String(item.item_id), item.title)}</span>
                         )}
                       </div>
                     ))}

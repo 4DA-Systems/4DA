@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { formatLocalDate } from '../../utils/format-date';
 import type { RadarEntry } from './RadarSVG';
 
 // ============================================================================
@@ -205,7 +206,7 @@ export const RadarEntryPanel = memo(function RadarEntryPanel({ entry, onClose }:
                 <div className="text-[10px] text-text-muted flex items-center gap-1">
                   <span>{item.source_type}</span>
                   <span>&middot;</span>
-                  <span>{new Date(item.created_at).toLocaleDateString()}</span>
+                  <span>{formatLocalDate(item.created_at)}</span>
                 </div>
               </div>
             ))}
