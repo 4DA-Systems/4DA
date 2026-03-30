@@ -193,6 +193,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 "System tray not supported on this desktop environment",
                 "The app works normally without a tray icon. Use the main window instead.",
             );
+            // Notify frontend so it can hide tray-related UI elements
+            let _ = app.emit(
+                "tray-unavailable",
+                serde_json::json!({
+                    "reason": "System tray not supported on this desktop environment",
+                    "desktop": std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default(),
+                }),
+            );
             None
         }
     };

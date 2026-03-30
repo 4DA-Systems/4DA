@@ -47,6 +47,13 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
     check_disk_space(&data_dir, &mut issues);
     check_database_size(&data_dir, &mut issues);
 
+    #[cfg(target_os = "linux")]
+    {
+        check_cjk_fonts(&mut issues);
+        check_dbus_available(&mut issues);
+        check_display_server(&mut issues);
+    }
+
     // Log results
     if issues.is_empty() {
         info!(target: "4da::startup", "Health check passed: all systems nominal");
@@ -362,6 +369,83 @@ fn check_database_size(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
                 ),
             });
         }
+    }
+}
+
+/// Check if CJK fonts are available (affects Chinese, Japanese, Korean users).
+#[cfg(target_os = "linux")]
+fn check_cjk_fonts(issues: &mut Vec<HealthIssue>) {
+    // Check for common CJK font paths
+    let cjk_font_dirs = [
+        "/usr/share/fonts/opentype/noto",
+        "/usr/share/fonts/google-noto-cjk",
+        "/usr/share/fonts/noto-cjk",
+        "/usr/share/fonts/truetype/noto",
+    ];
+    let has_cjk = cjk_font_dirs
+        .iter()
+        .any(|d| std::path::Path::new(d).exists());
+
+    // Also check via fc-list if available
+    let has_cjk = has_cjk
+        || std::process::Command::new("fc-list")
+            .args([":lang=ja"])
+            .output()
+            .map(|o| !o.stdout.is_empty())
+            .unwrap_or(false);
+
+    if !has_cjk {
+        issues.push(HealthIssue {
+            component: "fonts",
+            severity: HealthSeverity::Warning,
+            message: "CJK fonts not detected. Chinese, Japanese, and Korean text may not display correctly. Install noto-fonts-cjk (Arch), fonts-noto-cjk (Debian), or google-noto-sans-cjk-fonts (Fedora).".to_string(),
+        });
+    }
+}
+
+/// Check if D-Bus is available (required for notifications and keyring).
+#[cfg(target_os = "linux")]
+fn check_dbus_available(issues: &mut Vec<HealthIssue>) {
+    let dbus_running = std::env::var("DBUS_SESSION_BUS_ADDRESS").is_ok()
+        || std::path::Path::new("/run/dbus/system_bus_socket").exists();
+
+    if !dbus_running {
+        issues.push(HealthIssue {
+            component: "dbus",
+            severity: HealthSeverity::Warning,
+            message: "D-Bus session bus not detected. Notifications, system tray, and secure credential storage may not work. This is expected in containers and WSL1.".to_string(),
+        });
+    }
+}
+
+/// Check display server type and warn about known issues.
+#[cfg(target_os = "linux")]
+fn check_display_server(issues: &mut Vec<HealthIssue>) {
+    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_default();
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP")
+        .unwrap_or_default()
+        .to_uppercase();
+
+    // GNOME + Wayland: tray won't work
+    if session_type == "wayland" && desktop.contains("GNOME") {
+        issues.push(HealthIssue {
+            component: "display",
+            severity: HealthSeverity::Warning,
+            message: "GNOME on Wayland detected. System tray is not available natively. Install the AppIndicator extension for tray support, or use the main window instead.".to_string(),
+        });
+    }
+
+    // Tiling WM users might need floating window hints
+    let tiling_wms = ["I3", "SWAY", "HYPRLAND", "BSPWM", "DWM"];
+    if tiling_wms.iter().any(|wm| desktop.contains(wm)) {
+        issues.push(HealthIssue {
+            component: "display",
+            severity: HealthSeverity::Warning,
+            message: format!(
+                "{} detected. You may need to add a floating window rule for 4DA. Notification popups may appear tiled instead of floating.",
+                desktop.split(':').next().unwrap_or(&desktop)
+            ),
+        });
     }
 }
 
