@@ -173,16 +173,23 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
     }
 
     // Emit data to the notification webview.
-    // If the JS listener isn't ready yet, retry after a short delay.
+    // If the JS listener isn't ready yet, retry with backoff up to ~3 seconds.
     if !WINDOW_READY.load(Ordering::Relaxed) {
-        info!(target: "4da::notify", "Window not ready, deferring notification by 500ms");
+        info!(target: "4da::notify", "Window not ready, deferring notification with retry loop");
         let app_deferred = app.clone();
         let data_deferred = data.clone();
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let delays_ms: &[u64] = &[200, 400, 800, 1500];
+            for (attempt, &delay) in delays_ms.iter().enumerate() {
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                if WINDOW_READY.load(Ordering::Relaxed) {
+                    info!(target: "4da::notify", attempt = attempt + 1, "Window became ready");
+                    break;
+                }
+            }
             if let Err(e) = app_deferred.emit_to(WINDOW_LABEL, "notification-data", &data_deferred)
             {
-                warn!(target: "4da::notify", error = %e, "Deferred emit failed");
+                warn!(target: "4da::notify", error = %e, "Deferred emit failed after retries");
             }
         });
     } else if let Err(e) = app.emit_to(WINDOW_LABEL, "notification-data", &data) {
