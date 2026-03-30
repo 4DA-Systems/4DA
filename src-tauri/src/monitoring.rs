@@ -245,6 +245,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 // System likely slept — stagger jobs to avoid CPU spike on wake
                 info!(target: "4da::monitor", elapsed_secs = elapsed_since_last.as_secs(), "Detected wake from sleep — staggering deferred jobs");
                 tokio::time::sleep(Duration::from_secs(10)).await;
+
+                // Report network capability as potentially stale after sleep
+                crate::capabilities::report_degraded(
+                    crate::capabilities::Capability::SourceFetching,
+                    "Network state uncertain after sleep/wake",
+                    "Re-checking connectivity on next source fetch",
+                );
             }
             last_wake_time = std::time::Instant::now();
 

@@ -54,6 +54,12 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
         check_display_server(&mut issues);
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        check_icloud_interference(&data_dir, &mut issues);
+        check_macos_keychain(&mut issues);
+    }
+
     // Log results
     if issues.is_empty() {
         info!(target: "4da::startup", "Health check passed: all systems nominal");
@@ -445,6 +451,56 @@ fn check_display_server(issues: &mut Vec<HealthIssue>) {
                 "{} detected. You may need to add a floating window rule for 4DA. Notification popups may appear tiled instead of floating.",
                 desktop.split(':').next().unwrap_or(&desktop)
             ),
+        });
+    }
+}
+
+/// Check if the data directory is inside an iCloud Drive synced folder.
+/// iCloud sync + SQLite WAL = database corruption risk.
+#[cfg(target_os = "macos")]
+fn check_icloud_interference(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    let data_str = data_dir.to_string_lossy();
+
+    // Check common iCloud sync paths
+    let icloud_indicators = [
+        "Library/Mobile Documents",
+        "CloudStorage",
+        "iCloud Drive",
+        ".icloud",
+    ];
+
+    let in_icloud = icloud_indicators
+        .iter()
+        .any(|pattern| data_str.contains(pattern));
+
+    // Also check if the data directory has the .icloud file (synced marker)
+    let has_icloud_marker = data_dir.join(".icloud").exists();
+
+    if in_icloud || has_icloud_marker {
+        issues.push(HealthIssue {
+            component: "storage",
+            severity: HealthSeverity::Error,
+            message: "Data directory appears to be inside iCloud Drive. This can corrupt the database during sync. Move 4DA's data directory outside of iCloud-synced folders, or set FOURDA_DB_PATH to a non-synced location.".to_string(),
+        });
+    }
+}
+
+/// Check if macOS Keychain is accessible (affects API key storage).
+#[cfg(target_os = "macos")]
+fn check_macos_keychain(issues: &mut Vec<HealthIssue>) {
+    // Try to detect if the keychain daemon is running
+    // On macOS, securityd should always be running, but in some CI/container environments it may not be
+    let securityd_running = std::process::Command::new("pgrep")
+        .args(["-x", "securityd"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    if !securityd_running {
+        issues.push(HealthIssue {
+            component: "keychain",
+            severity: HealthSeverity::Warning,
+            message: "macOS Keychain service (securityd) not detected. API keys will be stored in plaintext. This is expected in CI/container environments.".to_string(),
         });
     }
 }

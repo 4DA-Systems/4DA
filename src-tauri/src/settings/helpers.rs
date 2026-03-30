@@ -52,6 +52,30 @@ pub fn detect_system_locale() -> LocaleConfig {
         };
     }
 
+    // macOS: LANG/LC_ALL often not set. Use 'defaults read' to get system language.
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = std::process::Command::new("defaults")
+            .args(["read", "-g", "AppleLocale"])
+            .output()
+        {
+            let locale_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            // AppleLocale format: "en_US", "ja_JP", "fr_FR", etc.
+            if let Some(lang) = locale_str.split('_').next() {
+                if !lang.is_empty() && lang.len() == 2 {
+                    let country = locale_str.split('_').nth(1).unwrap_or("US").to_uppercase();
+                    let language = lang.to_lowercase();
+                    let currency = country_to_currency(&country);
+                    return LocaleConfig {
+                        country,
+                        language,
+                        currency,
+                    };
+                }
+            }
+        }
+    }
+
     LocaleConfig::default()
 }
 
