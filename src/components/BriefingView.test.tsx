@@ -43,6 +43,21 @@ function setMockState(overrides: Record<string, unknown>) {
     closeWindow: vi.fn(),
     compoundAdvantage: null,
     loadCompoundAdvantage: vi.fn(),
+    // AWE slice
+    aweSummary: null,
+    awePatterns: null,
+    awePendingDecisions: [],
+    aweGrowthTrajectory: null,
+    aweWisdomWell: null,
+    aweLoading: false,
+    aweLastSync: null,
+    loadAweSummary: vi.fn(),
+    loadAwePatterns: vi.fn(),
+    loadAwePendingDecisions: vi.fn(),
+    loadAweGrowthTrajectory: vi.fn(),
+    loadAweWisdomWell: vi.fn(),
+    submitAweBatchFeedback: vi.fn(),
+    runAweAutoFeedback: vi.fn(),
     ...overrides,
   };
 }
