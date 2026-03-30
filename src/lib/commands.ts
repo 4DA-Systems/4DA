@@ -100,6 +100,15 @@ interface CommandMap {
   run_awe_feedback: { params: { decisionId: string; outcome: string; details: string }; result: string };
   run_awe_recall: { params: { domain: string }; result: string };
   run_awe_calibration: { params: { domain: string }; result: string };
+  // AWE page-specific commands
+  get_awe_pattern_match: { params: { query: string; domain: string }; result: string };
+  get_awe_decision_history: { params: { domain: string; limit: number }; result: string };
+  get_awe_pending_decisions: { params: { limit: number }; result: string };
+  get_awe_wisdom_well: { params: { domain: string }; result: string };
+  get_awe_growth_trajectory: { params: { domain: string }; result: string };
+  submit_awe_batch_feedback: { params: { feedbacks: Array<{ decision_id: string; outcome: string; details: string }> }; result: string };
+  run_awe_auto_feedback: { params: Record<string, never>; result: string };
+  run_awe_purge: { params: { dryRun: boolean }; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 
