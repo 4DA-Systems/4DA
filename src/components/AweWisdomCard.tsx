@@ -11,6 +11,8 @@ interface AweSummary {
   decisions: number;
   principles: number;
   pending: number;
+  feedback_count: number;
+  feedback_coverage: number;
   top_principle: string | null;
   health: string | null;
 }
@@ -151,7 +153,7 @@ export const AweWisdomCard = memo(function AweWisdomCard() {
           <StatCell value={summary.decisions} label={t('awe.decisions')} />
           <StatCell value={summary.principles} label={t('awe.principles')} />
           <StatCell
-            value={summary.decisions > 0 ? `${Math.round(((summary.decisions - summary.pending) / summary.decisions) * 100)}%` : '--'}
+            value={summary.feedback_coverage > 0 ? `${summary.feedback_coverage}%` : '--'}
             label={t('awe.feedbackRate')}
           />
         </div>

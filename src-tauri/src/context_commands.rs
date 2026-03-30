@@ -373,39 +373,80 @@ pub async fn get_awe_summary() -> Result<String> {
         "decisions": 0,
         "principles": 0,
         "pending": 0,
+        "feedback_count": 0,
+        "feedback_coverage": 0,
         "top_principle": null,
         "health": null,
     });
 
-    // Get health data
-    if let Ok(output) =
-        run_awe_with_timeout(std::process::Command::new(&awe_path).args(["health"]), 15)
-    {
+    // Use calibration command for accurate counts (health reports a subset)
+    if let Ok(output) = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(["calibration"]),
+        15,
+    ) {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // Parse "Decisions tracked: N"
-        if let Some(cap) = stdout.lines().find(|l| l.contains("Decisions tracked")) {
-            if let Some(num) = cap.split_whitespace().last() {
-                if let Ok(n) = num.parse::<u64>() {
-                    summary["decisions"] = serde_json::json!(n);
+        // Parse "Total decisions tracked: N"
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.contains("decisions tracked") || trimmed.contains("Decisions tracked") {
+                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                    if let Ok(n) = num.parse::<u64>() {
+                        summary["decisions"] = serde_json::json!(n);
+                    }
                 }
-            }
-        }
-        // Parse "Principles extracted: N"
-        if let Some(cap) = stdout.lines().find(|l| l.contains("Principles extracted")) {
-            if let Some(num) = cap.split_whitespace().last() {
-                if let Ok(n) = num.parse::<u64>() {
-                    summary["principles"] = serde_json::json!(n);
+            } else if trimmed.contains("feedback") && trimmed.contains("recorded") {
+                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                    if let Ok(n) = num.parse::<u64>() {
+                        summary["feedback_count"] = serde_json::json!(n);
+                    }
                 }
-            }
-        }
-        // Parse "Confirmed: N (X%)"
-        if let Some(cap) = stdout.lines().find(|l| l.contains("Confirmed:")) {
-            let parts: Vec<&str> = cap.split_whitespace().collect();
-            if parts.len() >= 2 {
-                summary["health"] = serde_json::json!(cap.trim());
+            } else if trimmed.contains("coverage") || trimmed.contains("Coverage") {
+                // Parse "Feedback coverage: 42%"
+                if let Some(pct) = trimmed.split_whitespace().find(|w| w.ends_with('%')) {
+                    if let Ok(n) = pct.trim_end_matches('%').parse::<u64>() {
+                        summary["feedback_coverage"] = serde_json::json!(n);
+                    }
+                }
+            } else if trimmed.contains("principles") && trimmed.contains("Validated") {
+                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                    if let Ok(n) = num.parse::<u64>() {
+                        summary["principles"] = serde_json::json!(n);
+                    }
+                }
             }
         }
     }
+
+    // Fallback to health for principles count if calibration didn't provide it
+    if summary["principles"] == 0 {
+        if let Ok(output) =
+            run_awe_with_timeout(std::process::Command::new(&awe_path).args(["health"]), 15)
+        {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(cap) = stdout.lines().find(|l| l.contains("Principles extracted")) {
+                if let Some(num) = cap.split_whitespace().last() {
+                    if let Ok(n) = num.parse::<u64>() {
+                        summary["principles"] = serde_json::json!(n);
+                    }
+                }
+            }
+        }
+    }
+
+    // Compute health status from feedback coverage
+    let coverage = summary["feedback_coverage"].as_u64().unwrap_or(0);
+    let health = if coverage >= 90 {
+        "healthy"
+    } else if coverage >= 70 {
+        "good"
+    } else if coverage >= 40 {
+        "learning"
+    } else if coverage > 0 {
+        "needs_feedback"
+    } else {
+        "cold"
+    };
+    summary["health"] = serde_json::json!(health);
 
     // Get top principle from wisdom command
     if let Ok(output) = run_awe_with_timeout(
