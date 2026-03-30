@@ -6,6 +6,7 @@ import { useGameComponent } from '../hooks/use-game-component';
 import type { DeveloperDecision } from '../store/decisions-slice';
 import { DECISION_TYPES, STATUS_STYLES, EMPTY_FORM } from './decision-memory-constants';
 import type { NewDecisionForm } from './decision-memory-constants';
+import { formatLocalDate } from '../utils/format-date';
 
 export const DecisionMemory = memo(function DecisionMemory() {
   const { t } = useTranslation();
@@ -345,9 +346,9 @@ export const DecisionMemory = memo(function DecisionMemory() {
 
                       {/* Metadata row */}
                       <div className="flex items-center gap-3 text-[10px] text-text-muted">
-                        <span>{t('decisions.createdDate', { date: new Date(d.created_at).toLocaleDateString() })}</span>
+                        <span>{t('decisions.createdDate', { date: formatLocalDate(d.created_at) })}</span>
                         {d.updated_at !== d.created_at && (
-                          <span>{t('decisions.updatedDate', { date: new Date(d.updated_at).toLocaleDateString() })}</span>
+                          <span>{t('decisions.updatedDate', { date: formatLocalDate(d.updated_at) })}</span>
                         )}
                         {d.superseded_by !== null && (
                           <span className="text-amber-400/70">

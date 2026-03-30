@@ -5,6 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { ResultItem } from './ResultItem';
 import { SmartEmptyState } from './SmartEmptyState';
 import { ContextPanel } from './context-panel';
+import { useTranslatedContent } from './ContentTranslationProvider';
 import { getStageLabel } from '../utils/score';
 import { getSourceLabel } from '../config/sources';
 import { useAppStore } from '../store';
@@ -21,6 +22,7 @@ export function ResultsView({
   focusedIndex,
 }: ResultsViewProps) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   useEffect(() => { registerGameComponent('game-tetrahedron'); }, []);
   // Data selectors (may change, use useShallow)
   const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
@@ -75,6 +77,15 @@ export function ResultsView({
   // 5b. Memoize computed filter counts and unique sources
   const relevantCount = useMemo(() => filteredResults.filter(r => r.relevant).length, [filteredResults]);
   const topPicksCount = useMemo(() => filteredResults.filter(r => r.top_score >= 0.72).length, [filteredResults]);
+
+  // Request content translation for visible results + near misses
+  useEffect(() => {
+    const items = [
+      ...filteredResults.map((r) => ({ id: String(r.id), text: r.title })),
+      ...(state.nearMisses ?? []).map((r) => ({ id: String(r.id), text: r.title })),
+    ];
+    if (items.length > 0) requestTranslation(items);
+  }, [filteredResults, state.nearMisses, requestTranslation]);
   const uniqueSources = useMemo(
     () => [...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
       .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b))),
@@ -351,7 +362,7 @@ export function ResultsView({
                           {Math.round(item.top_score * 100)}%
                         </span>
                         <span className="text-sm text-text-secondary truncate">
-                          {item.title}
+                          {getTranslated(String(item.id), item.title)}
                         </span>
                         <span className="text-[10px] text-text-muted shrink-0 ms-auto">
                           {item.source_type}

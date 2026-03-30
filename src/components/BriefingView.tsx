@@ -11,10 +11,12 @@ import { BriefingWarmupState } from './BriefingWarmupState';
 import { EngagementPulse } from './EngagementPulse';
 import { useLicense } from '../hooks/use-license';
 import { useBriefingDerived } from '../hooks/use-briefing-derived';
+import { useTranslatedContent } from './ContentTranslationProvider';
 import type { SourceRelevance } from '../types';
 
 export const BriefingView = memo(function BriefingView() {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
 
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
@@ -114,10 +116,10 @@ export const BriefingView = memo(function BriefingView() {
                         onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => window.open(item.url!, '_blank', 'noopener,noreferrer'))}
                         className="text-sm text-white hover:text-orange-400 text-start transition-colors"
                       >
-                        {item.title}
+                        {getTranslated(`free_${i}`, item.title)}
                       </button>
                     ) : (
-                      <span className="text-sm text-white">{item.title}</span>
+                      <span className="text-sm text-white">{getTranslated(`free_${i}`, item.title)}</span>
                     )}
                     <span className="text-xs text-text-muted ms-2">{item.source}</span>
                   </div>
@@ -128,7 +130,7 @@ export const BriefingView = memo(function BriefingView() {
               <div className="mt-4 pt-3 border-t border-border">
                 <h3 className="text-xs font-medium text-amber-400 mb-2">{t('briefing.stackAlerts')}</h3>
                 {freeBriefing.stack_alerts.map((alert, i) => (
-                  <div key={i} className="text-xs text-text-secondary py-0.5">{alert.title}</div>
+                  <div key={i} className="text-xs text-text-secondary py-0.5">{getTranslated(`alert_${i}`, alert.title)}</div>
                 ))}
               </div>
             )}

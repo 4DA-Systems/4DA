@@ -62,6 +62,7 @@ export function LocaleSection() {
   const [language, setLanguage] = useState('en');
   const [currency, setCurrency] = useState('USD');
   const [loaded, setLoaded] = useState(false);
+  const [translationCoverage, setTranslationCoverage] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +104,16 @@ export function LocaleSection() {
   const handleLanguageChange = useCallback((code: string) => {
     setLanguage(code);
     i18n.changeLanguage(code);
+    localStorage.setItem('4da_language', code);
     saveLocale(country, code, currency);
+    // Check translation coverage for the new language
+    if (code !== 'en') {
+      cmd('get_translation_status', { lang: code })
+        .then((status) => setTranslationCoverage(Math.round(status.coverage ?? 0)))
+        .catch(() => setTranslationCoverage(null));
+    } else {
+      setTranslationCoverage(null);
+    }
   }, [country, currency, i18n, saveLocale]);
 
   const handleCurrencyChange = useCallback((cur: string) => {
@@ -178,6 +188,27 @@ export function LocaleSection() {
           <p className="text-xs text-text-muted pt-1">
             {t('settings.locale.priceInfo', { currency, language: getLanguageName(language) })}
           </p>
+
+          {/* Translation coverage indicator */}
+          {language !== 'en' && translationCoverage !== null && (
+            <div className="flex items-center gap-2 pt-1">
+              <div className="flex-1 h-1.5 bg-bg-secondary rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    translationCoverage >= 95 ? 'bg-green-500' :
+                    translationCoverage >= 80 ? 'bg-amber-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${translationCoverage}%` }}
+                />
+              </div>
+              <span className={`text-[10px] ${
+                translationCoverage >= 95 ? 'text-green-400' :
+                translationCoverage >= 80 ? 'text-amber-400' : 'text-red-400'
+              }`}>
+                {translationCoverage}%
+              </span>
+            </div>
+          )}
 
           {/* Translation Editor toggle (only for non-English) */}
           {language !== 'en' && (
