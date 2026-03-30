@@ -11,6 +11,7 @@ import { AttentionSection } from './momentum/AttentionSection';
 import { MovingSection } from './momentum/MovingSection';
 import { PositioningSection } from './momentum/PositioningSection';
 import { StackGlance } from './momentum/StackGlance';
+import { AweWisdomCard } from './AweWisdomCard';
 import { RadarEntryPanel } from './tech-radar/RadarEntryPanel';
 import { buildAttentionItems } from './momentum/momentum-utils';
 
@@ -158,6 +159,9 @@ export const Momentum = memo(function Momentum() {
 
         {/* Positioning: Signal Chains + AWE Wisdom */}
         <PositioningSection chains={chains} aweData={aweData} advantage={advantage} />
+
+        {/* AWE Wisdom Engine */}
+        <AweWisdomCard />
 
         {/* Your Stack */}
         <StackGlance entries={entries} userStack={userStack} onEntryClick={handleEntryClick} />
