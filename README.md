@@ -243,6 +243,23 @@ Add to your Claude Code config:
 4. **Minimal** — no feature bloat; every element earns its place
 5. **Signal over noise** — 99%+ rejection rate is a feature, not a bug
 
+## Trust & Verification
+
+4DA is architectured so that trust in us is optional — your data never leaves your machine. But don't take our word for it. Verify every claim:
+
+| Document | What It Covers |
+|----------|---------------|
+| [**Trust Architecture**](docs/TRUST-ARCHITECTURE.md) | Why local-first means you don't need to trust us |
+| [**Network Transparency**](docs/NETWORK-TRANSPARENCY.md) | Every outbound connection, with source code references |
+| [**Privacy (Plain Language)**](docs/PRIVACY-PLAIN-LANGUAGE.md) | One-page, no-legalese privacy summary |
+| [**Build from Source**](docs/BUILD-FROM-SOURCE.md) | Compile it yourself and verify the binary |
+| [**Verify Downloads**](docs/VERIFY-DOWNLOADS.md) | Check signatures, checksums, and code signing |
+| [**Security Audit Guide**](docs/SECURITY-AUDIT-GUIDE.md) | Map of trust-critical code paths for auditors |
+| [**Privacy Policy**](docs/legal/PRIVACY-POLICY.md) | Full legal privacy policy |
+| [**Security Policy**](SECURITY.md) | Vulnerability reporting and security model |
+
+**Zero telemetry. Zero analytics. Zero tracking. Zero user accounts.** The free tier makes zero calls to 4DA Systems. With Ollama, the app runs fully offline.
+
 ## CLI
 
 The CLI reads from the same database as the desktop app. No extra setup needed.
@@ -287,7 +304,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 **Free** — $0 forever. No credit card. No account. No expiration.
 - All 10 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (31 tools), CLI
 
-**Pro** — $12/month or $99/year. BYOK — you bring your own API key.
+**Signal** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
 
 ## License
