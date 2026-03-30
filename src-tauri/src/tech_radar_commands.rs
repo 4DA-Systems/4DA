@@ -161,6 +161,94 @@ pub async fn get_radar_at_snapshot(snapshot_date: String) -> Result<serde_json::
 // Tests
 // ============================================================================
 
+// ============================================================================
+// LLM Narrative Synthesis
+// ============================================================================
+
+/// Generate natural-language narratives for moving technologies.
+/// Uses the LLM pipeline to produce one-sentence summaries like:
+/// "React Server Components adoption is accelerating — 3 of your dependencies shipped RSC support"
+/// Falls back gracefully if no LLM is configured.
+#[tauri::command]
+pub async fn generate_tech_narratives() -> Result<serde_json::Value> {
+    let conn = crate::open_db_connection()?;
+    let radar = crate::tech_radar::compute_radar(&conn)?;
+
+    let moving: Vec<&crate::tech_radar::RadarEntry> = radar
+        .entries
+        .iter()
+        .filter(|e| !matches!(e.movement, crate::tech_radar::RadarMovement::Stable))
+        .take(8)
+        .collect();
+
+    if moving.is_empty() {
+        return Ok(json!({ "narratives": {} }));
+    }
+
+    // Build a compact prompt for the LLM
+    let mut tech_summaries = String::new();
+    for entry in &moving {
+        let movement = match entry.movement {
+            crate::tech_radar::RadarMovement::Up => "rising",
+            crate::tech_radar::RadarMovement::Down => "declining",
+            crate::tech_radar::RadarMovement::New => "newly appearing",
+            crate::tech_radar::RadarMovement::Stable => "stable",
+        };
+        let signals_text = entry.signals.join("; ");
+        tech_summaries.push_str(&format!(
+            "- {} ({}): {}\n",
+            entry.name, movement, signals_text
+        ));
+    }
+
+    let prompt = format!(
+        "You are a developer intelligence assistant. For each technology below, write ONE concise sentence \
+         explaining what's happening and why it matters to a developer. Be specific, reference the signals. \
+         No preamble, no markdown. Format: TechName: sentence\n\n{tech_summaries}"
+    );
+
+    // Try LLM synthesis
+    let llm_result: std::result::Result<String, crate::error::FourDaError> = async {
+        let llm_settings = {
+            let settings = crate::get_settings_manager().lock();
+            settings.get().llm.clone()
+        };
+        if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {
+            return Err(crate::error::FourDaError::Config("No LLM configured".into()));
+        }
+        let client = crate::llm::LLMClient::new(llm_settings);
+        let messages = vec![crate::llm::Message {
+            role: "user".to_string(),
+            content: prompt.clone(),
+        }];
+        let response = client.complete(
+            "You are a concise developer intelligence assistant. Write exactly one sentence per technology.",
+            messages,
+        ).await?;
+        Ok(response.content)
+    }.await;
+
+    match llm_result {
+        Ok(response) => {
+            let mut narratives = serde_json::Map::new();
+            for line in response.lines() {
+                if let Some((name, narrative)) = line.split_once(':') {
+                    let clean_name = name.trim().to_lowercase();
+                    let clean_narrative = narrative.trim().to_string();
+                    if !clean_narrative.is_empty() {
+                        narratives.insert(clean_name, json!(clean_narrative));
+                    }
+                }
+            }
+            Ok(json!({ "narratives": narratives }))
+        }
+        Err(e) => {
+            debug!(target: "4da::radar", error = %e, "LLM narrative synthesis unavailable, using signal-based fallback");
+            Ok(json!({ "narratives": {} }))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
