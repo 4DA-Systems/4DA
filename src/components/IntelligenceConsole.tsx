@@ -7,14 +7,15 @@ import { cmd } from '../lib/commands';
 import { AccuracyTab } from './intelligence/AccuracyTab';
 import { ConvergenceTab } from './intelligence/ConvergenceTab';
 import { CostTab } from './intelligence/CostTab';
+import { WisdomTab } from './intelligence/WisdomTab';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type ConsoleTab = 'accuracy' | 'convergence' | 'costs';
+type ConsoleTab = 'accuracy' | 'convergence' | 'costs' | 'wisdom';
 
-const TAB_IDS: ConsoleTab[] = ['accuracy', 'convergence', 'costs'];
+const TAB_IDS: ConsoleTab[] = ['accuracy', 'convergence', 'costs', 'wisdom'];
 
 // ============================================================================
 // TabButton
@@ -149,6 +150,7 @@ export const IntelligenceConsole = memo(function IntelligenceConsole() {
         {tab === 'accuracy' && <AccuracyTab />}
         {tab === 'convergence' && <ConvergenceTab />}
         {tab === 'costs' && <CostTab />}
+        {tab === 'wisdom' && <WisdomTab />}
       </div>
     </div>
   );
