@@ -322,6 +322,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         });
     });
 
+    // AWE: sync wisdom into context on startup (non-blocking, best-effort)
+    // This ensures PASIFA scoring is informed by decision history from the first analysis.
+    tauri::async_runtime::spawn(async {
+        match crate::context_commands::sync_awe_wisdom().await {
+            Ok(msg) => info!(target: "4da::awe", msg = %msg, "AWE wisdom synced on startup"),
+            Err(e) => warn!(target: "4da::awe", error = %e, "AWE startup sync failed (non-fatal — AWE may not be installed)"),
+        }
+    });
+
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");

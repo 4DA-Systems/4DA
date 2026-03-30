@@ -53,6 +53,22 @@ function makeDefaultStore(): Record<string, unknown> {
 
     // Browser mode (true in test env — no Tauri)
     isBrowserMode: true,
+
+    // AWE slice
+    aweSummary: null,
+    awePatterns: null,
+    awePendingDecisions: [],
+    aweGrowthTrajectory: null,
+    aweWisdomWell: null,
+    aweLoading: false,
+    aweLastSync: null,
+    loadAweSummary: vi.fn(),
+    loadAwePatterns: vi.fn(),
+    loadAwePendingDecisions: vi.fn(),
+    loadAweGrowthTrajectory: vi.fn(),
+    loadAweWisdomWell: vi.fn(),
+    submitAweBatchFeedback: vi.fn(),
+    runAweAutoFeedback: vi.fn(),
   };
 }
 
