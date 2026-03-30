@@ -598,6 +598,7 @@ pub fn run() {
             tech_radar::get_tech_radar,
             tech_radar::get_radar_entry,
             tech_radar_commands::get_radar_entry_detail,
+            tech_radar_commands::generate_tech_narratives,
             tech_radar_commands::get_radar_snapshots,
             tech_radar_commands::get_radar_at_snapshot,
             // Agent Memory

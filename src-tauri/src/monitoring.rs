@@ -271,6 +271,59 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // Active Work Topic Embedding — every 5 min (piggyback on health check)
+            // Embeds recent file-content topics that lack embeddings, so the scoring
+            // pipeline gets semantic (not just keyword) work signals.
+            if now - last_health < 2 {
+                if let Ok(ace) = crate::get_ace_engine() {
+                    if let Some(emb_service) = ace.embedding_service() {
+                        let topics_to_embed: Vec<String> = {
+                            let conn = ace.conn.lock();
+                            conn.prepare(
+                                "SELECT topic FROM active_topics
+                                 WHERE source = 'file_content'
+                                 AND last_seen > datetime('now', '-4 hours')
+                                 AND embedding IS NULL
+                                 ORDER BY weight DESC LIMIT 10",
+                            )
+                            .ok()
+                            .and_then(|mut stmt| {
+                                stmt.query_map([], |row| row.get::<_, String>(0))
+                                    .ok()
+                                    .map(|rows| rows.flatten().collect())
+                            })
+                            .unwrap_or_default()
+                        };
+                        if !topics_to_embed.is_empty() {
+                            match emb_service.lock().embed_batch(&topics_to_embed) {
+                                Ok(embeddings) => {
+                                    let conn = ace.conn.lock();
+                                    let mut embedded = 0usize;
+                                    for (topic, emb) in
+                                        topics_to_embed.iter().zip(embeddings.iter())
+                                    {
+                                        let blob =
+                                            crate::ace::topic_embeddings::embedding_to_blob(emb);
+                                        if conn.execute(
+                                            "UPDATE active_topics SET embedding = ?1 WHERE topic = ?2",
+                                            rusqlite::params![blob, topic],
+                                        ).is_ok() {
+                                            embedded += 1;
+                                        }
+                                    }
+                                    if embedded > 0 {
+                                        info!(target: "4da::monitor", count = embedded, "Embedded active work topics");
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::debug!(target: "4da::monitor", error = %e, "Active work embedding skipped");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Database maintenance — hourly WAL checkpoint + PRAGMA optimize
             // Prevents WAL bloat (139MB+ observed) and keeps query planner current
             let last_health_for_db = state.last_health_check.load(Ordering::Relaxed);
