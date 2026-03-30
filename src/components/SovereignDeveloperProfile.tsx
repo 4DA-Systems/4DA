@@ -4,6 +4,7 @@ import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
 import type { DimensionCompleteness } from '../types/profile';
 import { DeveloperDnaSection } from './DeveloperDnaSection';
+import { ProfileWisdomDna } from './awe/ProfileWisdomDna';
 
 const IntelligenceProfileCard = lazy(() => import('./IntelligenceProfileCard').then(m => ({ default: m.IntelligenceProfileCard })));
 const LearningIndicator = lazy(() => import('./LearningIndicator').then(m => ({ default: m.LearningIndicator })));
@@ -357,6 +358,9 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
           )}
         </div>
       )}
+
+      {/* AWE Wisdom DNA — growth phase, decision velocity, coverage */}
+      <ProfileWisdomDna />
 
       {/* Developer DNA (on-demand) */}
       <DeveloperDnaSection />

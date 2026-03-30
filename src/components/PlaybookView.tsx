@@ -10,6 +10,7 @@ import { TemplateLibrary } from './playbook/TemplateLibrary';
 import { PlaybookSidebar } from './playbook/PlaybookSidebar';
 import { useGameComponent } from '../hooks/use-game-component';
 import PlaybookLessonList from './playbook/PlaybookLessonList';
+import { PlaybookWisdomResonance } from './awe/PlaybookWisdomResonance';
 
 function PlaybookPathway({ progress, streak }: { progress: number; streak: number }) {
   const { containerRef, elementRef } = useGameComponent('game-playbook-pathway');
@@ -291,6 +292,11 @@ export const PlaybookView = memo(function PlaybookView() {
               completedSet={completedSet}
               personalizedLessons={personalizedLessons}
               onLessonToggle={handleLessonToggle}
+            />
+
+            {/* AWE Wisdom Resonance — shows which lessons align with real decisions */}
+            <PlaybookWisdomResonance
+              moduleTopics={playbookContent.lessons.map(l => l.title)}
             />
 
             {/* Sovereign Profile Panel — show when viewing Module S */}
