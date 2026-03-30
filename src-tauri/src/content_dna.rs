@@ -39,18 +39,20 @@ impl ContentType {
         }
     }
 
+    /// Content utility multiplier — calibrated for experienced developers.
+    /// Experienced devs value depth, peer projects, and security over tutorials/Q&A.
     pub fn multiplier(&self) -> f32 {
         match self {
             ContentType::SecurityAdvisory => 1.30,
-            ContentType::ReleaseNotes => 1.15,
             ContentType::BreakingChange => 1.25,
-            ContentType::DeepDive => 1.10,
-            ContentType::Tutorial => 0.85,
-            ContentType::ShowAndTell => 0.60,
-            ContentType::Question => 0.70,
-            ContentType::HelpRequest => 0.55,
-            ContentType::Hiring => 0.30,
+            ContentType::ReleaseNotes => 1.15,
+            ContentType::DeepDive => 1.15,
+            ContentType::ShowAndTell => 0.85,
             ContentType::Discussion => 1.00,
+            ContentType::Tutorial => 0.80,
+            ContentType::Question => 0.65,
+            ContentType::HelpRequest => 0.50,
+            ContentType::Hiring => 0.30,
         }
     }
 }
@@ -441,7 +443,7 @@ mod tests {
         let (ct, mult) =
             classify_content("Show HN: I built a terminal music player in Rust", "short");
         assert_eq!(ct, ContentType::ShowAndTell);
-        assert_eq!(mult, 0.60);
+        assert_eq!(mult, 0.85); // Peer projects valuable for experienced devs
     }
 
     #[test]
@@ -454,14 +456,14 @@ mod tests {
     fn test_question() {
         let (ct, mult) = classify_content("How do I handle async errors in Rust?", "");
         assert_eq!(ct, ContentType::Question);
-        assert_eq!(mult, 0.70);
+        assert_eq!(mult, 0.65);
     }
 
     #[test]
     fn test_tutorial() {
         let (ct, mult) = classify_content("How to build a REST API with Axum", "");
         assert_eq!(ct, ContentType::Tutorial);
-        assert_eq!(mult, 0.85);
+        assert_eq!(mult, 0.80);
     }
 
     #[test]
@@ -476,7 +478,7 @@ mod tests {
         let long_content = "x".repeat(2500);
         let (ct, mult) = classify_content("Understanding memory allocators in Rust", &long_content);
         assert_eq!(ct, ContentType::DeepDive);
-        assert_eq!(mult, 1.10);
+        assert_eq!(mult, 1.15); // Experienced devs crave depth
     }
 
     #[test]
