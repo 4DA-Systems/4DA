@@ -2,6 +2,7 @@ import { memo, useMemo } from 'react';
 import { PulseSummary } from './PulseSummary';
 import { AttentionCards } from './AttentionCards';
 import { IntelligenceFeed } from './IntelligenceFeed';
+import { AweWisdomCard } from '../AweWisdomCard';
 import type { SourceRelevance, SourceHealthStatus, FeedbackAction } from '../../types';
 import type { BriefingState } from '../../store/types';
 
@@ -75,6 +76,9 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
         onRecordClick={onRecordClick}
         onViewAll={() => setActiveView('results')}
       />
+
+      {/* Zone 4: AWE Wisdom — accumulated intelligence */}
+      <AweWisdomCard />
     </>
   );
 });
