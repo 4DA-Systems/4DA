@@ -203,6 +203,23 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
+# STEP 4b: Translation validation
+# ─────────────────────────────────────────────────────────────────────────────
+info "Translation completeness check"
+
+TRANS_EXIT=0
+TRANS_OUTPUT=$(node scripts/validate-translations.cjs 2>&1) || TRANS_EXIT=$?
+
+if [ "$TRANS_EXIT" -eq 0 ]; then
+  pass "Translations: all locales complete (0 errors, 0 warnings)"
+  record_pass "Translation validation"
+else
+  fail "Translation validation found issues"
+  echo "$TRANS_OUTPUT" | tail -15
+  record_fail "Translation validation: $TRANS_OUTPUT"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
 # STEP 5: E2E tests (Playwright)
 # ─────────────────────────────────────────────────────────────────────────────
 step 5 "E2E tests (Playwright)"
