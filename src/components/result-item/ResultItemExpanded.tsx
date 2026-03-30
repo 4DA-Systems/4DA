@@ -3,6 +3,7 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
 import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
+import { ResultDecisionBacklink } from '../awe/ResultDecisionBacklink';
 import { ScoreBreakdownRow } from './ScoreBreakdownRow';
 import { FeedbackButtons } from './FeedbackButtons';
 import { StreetsEngineLink } from './StreetsEngineLink';
@@ -85,6 +86,11 @@ export function ResultItemExpanded({
         isTopPick={isTopPick}
         isHighConfidence={isHighConfidence}
       />
+
+      {/* AWE Decision Backlink */}
+      <div className="mb-2">
+        <ResultDecisionBacklink topic={item.title} />
+      </div>
 
       {/* Feedback Buttons */}
       <FeedbackButtons
