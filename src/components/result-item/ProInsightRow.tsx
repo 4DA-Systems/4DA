@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../../types';
 import { useLicense } from '../../hooks/use-license';
 import { useAppStore } from '../../store';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { formatScore } from '../../utils/score';
 
 interface ProInsightRowProps {
@@ -109,6 +110,7 @@ function ProStar() {
 
 /** Full inline intelligence for Pro users */
 function ProInsightDetail({ item }: { item: SourceRelevance }) {
+  const { getTranslated } = useTranslatedContent();
   const b = item.score_breakdown;
   const parts: string[] = [];
 
@@ -130,7 +132,7 @@ function ProInsightDetail({ item }: { item: SourceRelevance }) {
       {/* Signal action (tactical advice) */}
       {item.signal_action && (
         <div className="text-[10px] text-cyan-400/80 leading-snug">
-          {item.signal_action}
+          {getTranslated(String(item.id) + '_action', item.signal_action)}
         </div>
       )}
       {/* Score explanation */}

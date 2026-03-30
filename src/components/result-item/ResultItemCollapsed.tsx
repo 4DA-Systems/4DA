@@ -4,6 +4,7 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
+import { formatLocalDateTime } from '../../utils/format-date';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 
 interface ResultItemCollapsedProps {
@@ -100,7 +101,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
 
         {/* Age */}
         {item.created_at && (
-          <span className="flex-shrink-0 text-[10px] text-text-muted/60" title={new Date(item.created_at).toLocaleString()}>
+          <span className="flex-shrink-0 text-[10px] text-text-muted/60" title={formatLocalDateTime(item.created_at)}>
             {formatRelativeAge(item.created_at)}
           </span>
         )}

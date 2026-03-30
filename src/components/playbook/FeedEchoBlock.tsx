@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { TemporalBlock, FeedEchoItem } from '../../types/personalization';
 
 interface Props {
@@ -47,6 +48,7 @@ export function FeedEchoBlock({ block }: Props) {
 
 function FeedEchoRow({ item }: { item: FeedEchoItem }) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
   const [saved, setSaved] = useState(false);
 
   const handleSave = useCallback(() => {
@@ -71,10 +73,10 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
             rel="noopener noreferrer"
             className="text-xs text-text-secondary hover:text-accent-gold transition-colors line-clamp-1"
           >
-            {item.title}
+            {getTranslated(`echo_${item.source}_${item.matched_topic}`, item.title)}
           </a>
         ) : (
-          <span className="text-xs text-text-secondary line-clamp-1">{item.title}</span>
+          <span className="text-xs text-text-secondary line-clamp-1">{getTranslated(`echo_${item.source}_${item.matched_topic}`, item.title)}</span>
         )}
         <div className="flex items-center gap-2 mt-0.5">
           <span className="text-[10px] text-text-muted">{item.source}</span>

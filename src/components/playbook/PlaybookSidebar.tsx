@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MODULE_IDS, CheckIcon, ProgressRing } from './PlaybookIcons';
+import { PlaybookLanguageSelector } from './PlaybookLanguageSelector';
 import type { PlaybookProgress, PlaybookModule } from '../../types/playbook';
 
 interface PlaybookSidebarProps {
@@ -102,6 +103,11 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
           <p className="text-[10px] text-text-muted">{t('playbook.templatesSubtitle')}</p>
         </div>
       </button>
+
+      {/* Language selector for lesson content */}
+      <div className="mt-3 pt-3 border-t border-border">
+        <PlaybookLanguageSelector activeModuleId={activeModuleId} />
+      </div>
 
       {/* Free tier notice */}
       <div className="mt-4 pt-4 border-t border-border">

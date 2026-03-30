@@ -258,6 +258,45 @@ body {
   animation: zoom-fade 1.5s ease-out forwards;
 }
 
+/* ============================================================================
+   RTL (Right-to-Left) Layout Support
+   Activated by useDirection() hook setting document.documentElement.dir="rtl"
+   ============================================================================ */
+
+/* Code blocks and monospace content are always LTR regardless of page direction */
+[dir="rtl"] pre,
+[dir="rtl"] code,
+[dir="rtl"] .font-mono,
+[dir="rtl"] kbd {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
+/* Mirror directional icons in RTL mode */
+[dir="rtl"] .icon-directional,
+[dir="rtl"] [data-direction-aware="true"] {
+  transform: scaleX(-1);
+}
+
+/* Scrollbar position for RTL */
+[dir="rtl"] ::-webkit-scrollbar {
+  direction: rtl;
+}
+
+/* Ensure flex layouts flow correctly in RTL */
+[dir="rtl"] .flex-row-force-ltr {
+  direction: ltr;
+}
+
+/* Score badges, progress bars, and numeric indicators stay LTR */
+[dir="rtl"] .font-mono,
+[dir="rtl"] [role="progressbar"],
+[dir="rtl"] .score-badge {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 /* Accessibility: Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse-slow,

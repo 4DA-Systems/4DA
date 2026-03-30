@@ -4,6 +4,7 @@ import { formatScore, getScoreColor } from '../../utils/score';
 import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
 import { ResultDecisionBacklink } from '../awe/ResultDecisionBacklink';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { ScoreBreakdownRow } from './ScoreBreakdownRow';
 import { FeedbackButtons } from './FeedbackButtons';
 import { StreetsEngineLink } from './StreetsEngineLink';
@@ -34,6 +35,8 @@ export function ResultItemExpanded({
   onGenerateSummary,
 }: ResultItemExpandedProps) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
+  const displayTitle = getTranslated(String(item.id), item.title);
   return (
     <div id={`result-detail-${item.id}`} className="px-4 pb-3 border-t border-border/50 mt-2 pt-3">
       {/* Why This Matters - Full Display */}
@@ -89,7 +92,7 @@ export function ResultItemExpanded({
 
       {/* AWE Decision Backlink */}
       <div className="mb-2">
-        <ResultDecisionBacklink topic={item.title} />
+        <ResultDecisionBacklink topic={displayTitle} />
       </div>
 
       {/* Feedback Buttons */}

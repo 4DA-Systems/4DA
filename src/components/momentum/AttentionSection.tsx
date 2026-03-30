@@ -3,6 +3,7 @@
 
 import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { AttentionItem } from './momentum-utils';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,7 @@ const AttentionCard = memo(function AttentionCard({
   index: number;
 }) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
   const cfg = KIND_CONFIG[item.kind] ?? KIND_CONFIG.security!;
 
   return (
@@ -72,7 +74,7 @@ const AttentionCard = memo(function AttentionCard({
         <span className={`text-xs font-bold ${cfg.accent}`}>{cfg.icon}</span>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-white font-medium leading-snug">{item.title}</p>
+        <p className="text-sm text-white font-medium leading-snug">{getTranslated(item.id, item.title)}</p>
         <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">{item.detail}</p>
       </div>
       <div className="flex items-center gap-1.5 flex-shrink-0">
