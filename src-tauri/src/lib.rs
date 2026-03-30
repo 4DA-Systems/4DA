@@ -296,6 +296,8 @@ mod webhooks;
 
 mod telemetry;
 mod toolkit_intelligence;
+mod content_translation;
+mod content_translation_commands;
 mod translation_commands;
 #[cfg(test)]
 mod translation_commands_tests;
@@ -682,6 +684,8 @@ pub fn run() {
             playbook_commands::get_playbook_content,
             playbook_commands::get_playbook_progress,
             playbook_commands::mark_lesson_complete,
+            playbook_commands::translate_playbook_module,
+            playbook_commands::get_lesson_translation_status,
             // Content Personalization (Sovereign Content Engine)
             content_personalization::commands::get_personalized_lesson,
             content_personalization::commands::get_personalized_lessons_batch,
@@ -747,6 +751,12 @@ pub fn run() {
             translation_commands::save_translation_override,
             translation_commands::get_translation_overrides,
             translation_commands::delete_translation_override,
+            // Content Translation (real-time feed/briefing translation)
+            content_translation_commands::translate_content,
+            content_translation_commands::translate_content_batch,
+            content_translation_commands::get_content_translation_settings,
+            content_translation_commands::get_translation_cache_stats,
+            content_translation_commands::purge_translation_cache,
             // GAME Engine
             game_commands::get_game_state,
             game_commands::get_achievements,

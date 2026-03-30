@@ -39,7 +39,11 @@ pub(crate) fn translations_dir() -> PathBuf {
 }
 
 /// Load translations for a language (if not already cached).
-#[allow(dead_code)] // Reason: i18n system built but not yet called from Rust backend
+///
+/// Searches `data/translations/{lang}/` first (runtime translations),
+/// then falls back to `src/locales/{lang}/` (bundled frontend translations)
+/// so the Rust `t()` function works in development without pre-generating
+/// translation files.
 fn ensure_loaded(lang: &str) {
     {
         let cache = TRANSLATIONS.read();
@@ -49,26 +53,43 @@ fn ensure_loaded(lang: &str) {
     }
 
     let dir = translations_dir().join(lang);
-    if !dir.exists() {
+
+    // Fallback: frontend locale directory (for development)
+    let fallback_dir = {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        manifest_dir
+            .parent()
+            .map(|p| p.join("src").join("locales").join(lang))
+    };
+
+    let search_dirs: Vec<&std::path::Path> = [Some(dir.as_path()), fallback_dir.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter(|d| d.exists())
+        .collect();
+
+    if search_dirs.is_empty() {
         debug!(target: "4da::i18n", lang, "No translations directory found");
         return;
     }
 
     let mut namespaces = HashMap::new();
 
-    // Load all JSON files in the language directory
-    if let Ok(entries) = std::fs::read_dir(&dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("json") {
-                if let Ok(content) = std::fs::read_to_string(&path) {
-                    if let Ok(value) = serde_json::from_str::<Value>(&content) {
-                        let ns = path
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("ui")
-                            .to_string();
-                        namespaces.insert(ns, value);
+    for search_dir in search_dirs {
+        if let Ok(entries) = std::fs::read_dir(search_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if let Ok(value) = serde_json::from_str::<Value>(&content) {
+                            let ns = path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("ui")
+                                .to_string();
+                            // Don't overwrite if already loaded from primary dir
+                            namespaces.entry(ns).or_insert(value);
+                        }
                     }
                 }
             }
@@ -91,7 +112,6 @@ fn ensure_loaded(lang: &str) {
 /// ## Variables
 /// Pass a slice of `(name, value)` pairs for interpolation.
 /// Uses `{{name}}` placeholder syntax matching i18next frontend.
-#[allow(dead_code)] // Reason: i18n system built but not yet called from Rust backend
 pub fn t(key: &str, lang: &str, vars: &[(&str, &str)]) -> String {
     // Parse namespace from key
     let (namespace, lookup_key) = if let Some(colon_pos) = key.find(':') {
@@ -124,7 +144,6 @@ pub fn t(key: &str, lang: &str, vars: &[(&str, &str)]) -> String {
 }
 
 /// Look up a dotted key path in a JSON value.
-#[allow(dead_code)] // Reason: helper for t(), which is not yet called from Rust backend
 fn lookup_nested<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     let parts: Vec<&str> = key.split('.').collect();
     let mut current = value;

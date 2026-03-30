@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 42;
+        const TARGET_VERSION: i64 = 43;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1217,6 +1217,39 @@ impl Database {
                 )?;
             }
 
+            // Phase 43: Content translation cache for multilingual feed items
+            if current_version < 43 {
+                Self::run_versioned_migration(
+                    &conn,
+                    42,
+                    43,
+                    "Phase 43: translation_cache for multilingual content",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS translation_cache (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                content_hash TEXT NOT NULL,
+                                source_lang TEXT NOT NULL DEFAULT 'en',
+                                target_lang TEXT NOT NULL,
+                                source_text TEXT NOT NULL,
+                                translated_text TEXT NOT NULL,
+                                provider TEXT NOT NULL,
+                                model_version TEXT,
+                                created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                                last_used_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+                                use_count INTEGER NOT NULL DEFAULT 1
+                            );
+                            CREATE UNIQUE INDEX IF NOT EXISTS idx_translation_cache_lookup
+                                ON translation_cache(content_hash, target_lang);
+                            CREATE INDEX IF NOT EXISTS idx_translation_cache_expiry
+                                ON translation_cache(last_used_at);",
+                        )?;
+                        info!(target: "4da::db", "Created translation_cache table for multilingual content");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -1968,6 +2001,8 @@ mod tests {
             "item_necessity",
             // Phase 41: Content analysis cache
             "content_analyses",
+            // Phase 43: Multilingual content translation cache
+            "translation_cache",
         ];
         for table in &expected {
             assert!(
