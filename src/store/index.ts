@@ -25,6 +25,7 @@ import { createIntelligencePulseSlice } from './intelligence-pulse-slice';
 import { createTeamSlice } from './team-slice';
 import { createEnterpriseSlice } from './enterprise-slice';
 import { createTeamIntelligenceSlice } from './team-intelligence-slice';
+import { createAweSlice } from './awe-slice';
 
 // Re-export all types
 export type {
@@ -71,4 +72,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createTeamSlice(...a),
   ...createEnterpriseSlice(...a),
   ...createTeamIntelligenceSlice(...a),
+  ...createAweSlice(...a),
 }));
