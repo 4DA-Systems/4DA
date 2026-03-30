@@ -125,13 +125,14 @@ impl ProjectScanner {
         skip_dirs.insert(".DocumentRevisions-V100".to_string());
 
         Self {
-            max_depth: 5,
+            max_depth: 8, // Deep enough for monorepos and nested workspaces
             skip_dirs,
         }
     }
 
-    /// Maximum signals to collect (prevents OOM on huge repos)
-    const MAX_SIGNALS: usize = 500;
+    /// Maximum signals to collect (prevents OOM on huge repos).
+    /// 2000 signals covers large codebases with 100+ packages/services.
+    const MAX_SIGNALS: usize = 2000;
 
     /// Maximum path length to process (Windows MAX_PATH guard)
     #[cfg(target_os = "windows")]
