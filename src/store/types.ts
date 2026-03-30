@@ -381,4 +381,5 @@ export type AppStore =
   & import('./intelligence-pulse-slice').IntelligencePulseSlice
   & import('./team-slice').TeamSlice
   & import('./enterprise-slice').EnterpriseSlice
-  & import('./team-intelligence-slice').TeamIntelligenceSlice;
+  & import('./team-intelligence-slice').TeamIntelligenceSlice
+  & import('./awe-slice').AweSlice;
