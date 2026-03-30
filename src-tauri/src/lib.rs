@@ -91,6 +91,7 @@ mod content_commands;
 mod content_dna;
 mod content_quality;
 mod content_sophistication;
+mod awe_commands;
 mod context_commands;
 mod context_engine;
 mod data_export;
@@ -555,6 +556,15 @@ pub fn run() {
             // Briefing window
             briefing_window::briefing_item_clicked,
             briefing_window::briefing_open_url,
+            // AWE page-specific commands
+            awe_commands::get_awe_pattern_match,
+            awe_commands::get_awe_decision_history,
+            awe_commands::get_awe_pending_decisions,
+            awe_commands::get_awe_wisdom_well,
+            awe_commands::get_awe_growth_trajectory,
+            awe_commands::submit_awe_batch_feedback,
+            awe_commands::run_awe_auto_feedback,
+            awe_commands::run_awe_purge,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,
