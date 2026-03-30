@@ -357,19 +357,61 @@ fn check_linux_dependencies() -> Vec<String> {
     missing
 }
 
+/// Detect NVIDIA GPU using multiple methods (lspci may not be available).
+#[cfg(target_os = "linux")]
+fn detect_nvidia_gpu() -> bool {
+    // Method 1: lspci (most common, may not be installed)
+    if let Ok(output) = std::process::Command::new("lspci").output() {
+        let lspci = String::from_utf8_lossy(&output.stdout);
+        if lspci.contains("NVIDIA") {
+            return true;
+        }
+    }
+
+    // Method 2: Check /proc/driver/nvidia (present if NVIDIA kernel module loaded)
+    if std::path::Path::new("/proc/driver/nvidia").exists() {
+        return true;
+    }
+
+    // Method 3: Check for nvidia kernel modules via /sys
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        if modules.contains("nvidia") {
+            return true;
+        }
+    }
+
+    // Method 4: Check glxinfo environment (if mesa reports nvidia)
+    if let Ok(renderer) = std::env::var("__GLX_VENDOR_LIBRARY_NAME") {
+        if renderer.to_lowercase().contains("nvidia") {
+            return true;
+        }
+    }
+
+    false
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Must be set BEFORE any WebKitGTK initialization
     #[cfg(target_os = "linux")]
     {
-        // Detect NVIDIA GPU and apply WebKitGTK workaround for blank screen
-        // This is the #1 reported Tauri Linux issue (tauri-apps/tauri#9304)
+        // DMABUF renderer can cause blank screens on NVIDIA (and some AMD) with WebKitGTK.
+        // Disable it proactively unless user explicitly opts in.
         if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
-            if let Ok(output) = std::process::Command::new("lspci").output() {
-                let lspci = String::from_utf8_lossy(&output.stdout);
-                if lspci.contains("NVIDIA") {
-                    std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-                }
+            let has_nvidia = detect_nvidia_gpu();
+            let on_wayland = std::env::var("WAYLAND_DISPLAY").is_ok()
+                || std::env::var("XDG_SESSION_TYPE")
+                    .map(|v| v == "wayland")
+                    .unwrap_or(false);
+
+            if has_nvidia {
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+                tracing::info!(target: "4da::startup", "NVIDIA GPU detected — disabled DMABUF renderer");
+            } else if on_wayland {
+                // Wayland + DMABUF can also cause issues with some mesa versions.
+                // Be conservative: disable unless we're sure it's safe.
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+                tracing::info!(target: "4da::startup", "Wayland session detected — disabled DMABUF renderer (safety)");
             }
         }
     }

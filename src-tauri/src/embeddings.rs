@@ -324,7 +324,11 @@ fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
 
 /// Generate embeddings using Ollama API
 async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Result<Vec<Vec<f32>>> {
-    let base = base_url.as_deref().unwrap_or("http://localhost:11434");
+    let env_host = std::env::var("OLLAMA_HOST").ok();
+    let base = base_url
+        .as_deref()
+        .or(env_host.as_deref())
+        .unwrap_or("http://localhost:11434");
 
     if texts.is_empty() {
         return Ok(vec![]);
