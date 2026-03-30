@@ -715,7 +715,7 @@ pub async fn run_awe_calibration(domain: String) -> Result<String> {
 }
 
 /// Run an AWE subprocess with a timeout to prevent indefinite blocking.
-fn run_awe_with_timeout(
+pub(crate) fn run_awe_with_timeout(
     cmd: &mut std::process::Command,
     timeout_secs: u64,
 ) -> std::result::Result<std::process::Output, String> {
@@ -745,7 +745,7 @@ fn run_awe_with_timeout(
 }
 
 /// Find the AWE binary (release build).
-fn find_awe_binary() -> Option<String> {
+pub(crate) fn find_awe_binary() -> Option<String> {
     let candidates = [
         "D:\\runyourempire\\awe\\target\\release\\awe.exe",
         "/d/runyourempire/awe/target/release/awe",
