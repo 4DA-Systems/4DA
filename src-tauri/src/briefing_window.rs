@@ -129,14 +129,27 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
     }
 
     // Emit data to the briefing webview.
+    // If the JS listener isn't registered yet, retry with exponential backoff
+    // up to ~5 seconds total. This handles cold starts, slow disks, and first launch.
     if !WINDOW_READY.load(Ordering::Relaxed) {
-        info!(target: "4da::briefing", "Window not ready, deferring briefing by 500ms");
+        info!(target: "4da::briefing", "Window not ready, deferring briefing with retry loop");
         let app_deferred = app.clone();
         let data = briefing.clone();
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let delays_ms: &[u64] = &[200, 400, 800, 1500, 2500];
+            for (attempt, &delay) in delays_ms.iter().enumerate() {
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                if WINDOW_READY.load(Ordering::Relaxed) {
+                    info!(target: "4da::briefing", attempt = attempt + 1, "Window became ready");
+                    break;
+                }
+            }
+            // Emit regardless — even if not ready, the listener may be registered
+            // but the ready event failed to propagate.
             if let Err(e) = app_deferred.emit_to(WINDOW_LABEL, "briefing-data", &data) {
-                warn!(target: "4da::briefing", error = %e, "Deferred briefing emit failed");
+                warn!(target: "4da::briefing", error = %e, "Deferred briefing emit failed after retries");
+            } else {
+                info!(target: "4da::briefing", "Briefing data emitted after deferred wait");
             }
         });
     } else if let Err(e) = app.emit_to(WINDOW_LABEL, "briefing-data", briefing) {

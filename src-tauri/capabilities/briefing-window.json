@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "briefing-window",
+  "description": "Capability for the center-screen intelligence briefing window",
+  "windows": ["briefing"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "opener:default"
+  ]
+}
