@@ -262,6 +262,8 @@ interface CommandMap {
   get_playbook_content: { params: { moduleId: string }; result: PlaybookContent };
   get_playbook_progress: { params: Record<string, never>; result: PlaybookProgress };
   mark_lesson_complete: { params: { moduleId: string; lessonIdx: number }; result: void };
+  translate_playbook_module: { params: { moduleId: string; lang: string }; result: string };
+  get_lesson_translation_status: { params: { lang: string }; result: Record<string, boolean> };
   parse_lesson_commands: { params: { moduleId: string; lessonIdx: number }; result: ParsedCommand[] };
   execute_streets_command: { params: { commandId: string; command: string; riskLevel: string }; result: CommandExecutionResult };
   execute_lesson_commands: { params: { moduleId: string; lessonIdx: number; maxRisk: string }; result: CommandExecutionResult[] };
@@ -372,6 +374,13 @@ interface CommandMap {
   get_translation_overrides: { params: { lang: string }; result: Record<string, string> };
   delete_translation_override: { params: { lang: string; namespace: string; key: string }; result: void };
   trigger_translation: { params: { lang: string }; result: void };
+
+  // -- Content Translation (real-time feed/briefing translation) --
+  translate_content: { params: { id: string; text: string; source_lang?: string }; result: ContentTranslationResult };
+  translate_content_batch: { params: { items: ContentTranslationRequest[] }; result: ContentTranslationResult[] };
+  get_content_translation_settings: { params: Record<string, never>; result: ContentTranslationSettings };
+  get_translation_cache_stats: { params: Record<string, never>; result: TranslationCacheStats };
+  purge_translation_cache: { params: Record<string, never>; result: number };
 
   // -- STREETS Localization --
   get_regional_data: { params: Record<string, never>; result: RegionalData };
@@ -1166,6 +1175,34 @@ interface TranslationEntry {
   override_value: string | null;
 }
 
+// Content translation (real-time feed/briefing translation)
+interface ContentTranslationRequest {
+  id: string;
+  text: string;
+  source_lang?: string;
+}
+
+interface ContentTranslationResult {
+  id: string;
+  original: string;
+  translated: string;
+  from_cache: boolean;
+  provider: string;
+}
+
+interface ContentTranslationSettings {
+  enabled: boolean;
+  provider: string;
+  target_lang: string;
+}
+
+interface TranslationCacheStats {
+  target_lang: string;
+  total_entries: number;
+  active_entries: number;
+  total_lookups: number;
+}
+
 interface DigestConfig {
   enabled: boolean;
   schedule: string;
@@ -1760,6 +1797,9 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'synthesize_search',
   'generate_briefing',
   'setup_and_verify_ollama',
+  'translate_content',
+  'translate_content_batch',
+  'translate_playbook_module',
 ]);
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
@@ -1801,6 +1841,10 @@ export type {
   RadarEntryDetail,
   TranslationStatus,
   TranslationEntry,
+  ContentTranslationRequest,
+  ContentTranslationResult,
+  ContentTranslationSettings,
+  TranslationCacheStats,
   DigestConfig,
   ListeningPort,
   HttpProbeRequest,

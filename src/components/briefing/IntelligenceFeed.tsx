@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { formatScore, getScoreColor, formatRelativeAge } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
 interface IntelligenceFeedProps {
@@ -103,6 +104,8 @@ const FeedItem = memo(function FeedItem({
   onRecordClick,
 }: FeedItemProps) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
+  const displayTitle = getTranslated(String(item.id), item.title);
   const source = item.source_type || 'hackernews';
 
   const handleClick = useCallback(() => {
@@ -150,7 +153,7 @@ const FeedItem = memo(function FeedItem({
         onClick={handleClick}
         className="flex-1 min-w-0 text-sm text-start text-text-primary truncate hover:text-orange-400 transition-colors"
       >
-        {item.title}
+        {displayTitle}
       </button>
 
       {/* Age */}
