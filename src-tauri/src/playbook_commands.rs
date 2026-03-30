@@ -358,6 +358,73 @@ pub fn mark_lesson_complete(
     Ok(())
 }
 
+/// Translate a STREETS module's markdown content to the target language.
+///
+/// Reads the English source, translates via the LLM translation pipeline,
+/// and saves to `docs/streets/{lang}/`. Returns the number of lessons translated.
+#[tauri::command]
+pub async fn translate_playbook_module(module_id: String, lang: String) -> Result<String> {
+    use crate::translation_pipeline;
+
+    if lang == "en" {
+        return Ok("English is the source language — no translation needed".to_string());
+    }
+
+    let filename = module_id_to_filename(&module_id)
+        .ok_or_else(|| format!("Unknown module: {module_id}"))?;
+
+    // Read English source
+    let base_dir = get_content_dir();
+    let source_path = base_dir.join(filename);
+    if !source_path.exists() {
+        return Err(format!("Source file not found: {}", filename).into());
+    }
+    let source_content = fs::read_to_string(&source_path)?;
+
+    // Translate markdown
+    let translated = translation_pipeline::translate_markdown(&source_content, &lang).await?;
+
+    // Save to localized directory
+    let target_dir = base_dir.join(&lang);
+    fs::create_dir_all(&target_dir)?;
+    let target_path = target_dir.join(filename);
+    fs::write(&target_path, &translated)?;
+
+    let lesson_count = parse_lessons(&translated).len();
+    tracing::info!(
+        target: "4da::streets",
+        module = %module_id,
+        lang = %lang,
+        lessons = lesson_count,
+        "Translated STREETS module"
+    );
+
+    Ok(format!("Translated {} ({} lessons) to {}", module_id, lesson_count, lang))
+}
+
+/// Get available lesson translations for a language.
+///
+/// Returns a map of module_id -> bool indicating whether translated content exists.
+#[tauri::command]
+pub fn get_lesson_translation_status(lang: String) -> Result<std::collections::HashMap<String, bool>> {
+    let base_dir = get_content_dir();
+    let lang_dir = base_dir.join(&lang);
+
+    let mut status = std::collections::HashMap::new();
+    for (id, _, _, _) in MODULE_DEFS {
+        let has_translation = if lang == "en" {
+            true
+        } else if let Some(filename) = module_id_to_filename(id) {
+            lang_dir.join(filename).exists()
+        } else {
+            false
+        };
+        status.insert(id.to_string(), has_translation);
+    }
+
+    Ok(status)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,8 +1,9 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { PulseSummary } from './PulseSummary';
 import { AttentionCards } from './AttentionCards';
 import { IntelligenceFeed } from './IntelligenceFeed';
 import { BriefingWisdomSignal } from '../awe/BriefingWisdomSignal';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance, SourceHealthStatus, FeedbackAction } from '../../types';
 import type { BriefingState } from '../../store/types';
 
@@ -44,6 +45,25 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
     () => new Set(signalItems.map(s => s.id)),
     [signalItems],
   );
+
+  // Request content translation for all visible items
+  const { requestTranslation } = useTranslatedContent();
+  useEffect(() => {
+    const allItems = [...signalItems, ...topItems, ...results];
+    if (allItems.length === 0) return;
+
+    // Deduplicate by ID and request translation
+    const seen = new Set<number>();
+    const items = allItems
+      .filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      })
+      .map((item) => ({ id: String(item.id), text: item.title }));
+
+    requestTranslation(items);
+  }, [results, signalItems, topItems, requestTranslation]);
 
   return (
     <>

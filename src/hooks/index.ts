@@ -16,3 +16,4 @@ export type { ItemSummaryState } from './use-item-summary';
 export { useLicense } from './use-license';
 export { useViewTracking } from './use-view-tracking';
 export { useUiZoom } from './use-ui-zoom';
+export { useContentTranslation } from './use-content-translation';

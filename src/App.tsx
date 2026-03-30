@@ -45,6 +45,7 @@ import {
   useUiZoom,
 } from './hooks';
 import { ZoomIndicator } from './components/ZoomIndicator';
+import { ContentTranslationProvider } from './components/ContentTranslationProvider';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useAppStore } from './store';
@@ -413,7 +414,9 @@ function App() {
 function AppWithErrorBoundary() {
   return (
     <ErrorBoundary>
-      <App />
+      <ContentTranslationProvider>
+        <App />
+      </ContentTranslationProvider>
     </ErrorBoundary>
   );
 }

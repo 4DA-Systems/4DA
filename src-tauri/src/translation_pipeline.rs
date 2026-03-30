@@ -81,7 +81,6 @@ pub async fn translate_batch(
 }
 
 /// Translate markdown content preserving structure.
-#[allow(dead_code)] // Reason: public API for STREETS lesson translation; no callers yet
 pub async fn translate_markdown(content: &str, target_lang: &str) -> Result<String> {
     let client = get_llm_client()?;
 
@@ -256,12 +255,15 @@ fn lang_name(code: &str) -> &str {
         "es" => "Spanish",
         "fr" => "French",
         "hi" => "Hindi",
+        "it" => "Italian",
         "ja" => "Japanese",
         "ko" => "Korean",
         "nl" => "Dutch",
         "pl" => "Polish",
+        "pt-BR" => "Brazilian Portuguese",
         "pt" => "Portuguese",
         "ru" => "Russian",
+        "tr" => "Turkish",
         "zh" => "Simplified Chinese",
         _ => code,
     }
@@ -359,12 +361,15 @@ mod tests {
             ("es", "Spanish"),
             ("fr", "French"),
             ("hi", "Hindi"),
+            ("it", "Italian"),
             ("ja", "Japanese"),
             ("ko", "Korean"),
             ("nl", "Dutch"),
             ("pl", "Polish"),
+            ("pt-BR", "Brazilian Portuguese"),
             ("pt", "Portuguese"),
             ("ru", "Russian"),
+            ("tr", "Turkish"),
             ("zh", "Simplified Chinese"),
         ];
         for (code, name) in supported {

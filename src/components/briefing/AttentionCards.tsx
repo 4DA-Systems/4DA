@@ -4,6 +4,7 @@ import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { formatScore } from '../../utils/score';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useGameComponent } from '../../hooks/use-game-component';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
 interface AttentionCardsProps {
@@ -83,6 +84,8 @@ const AttentionCard = memo(function AttentionCard({
   onRecordClick,
 }: AttentionCardProps) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
+  const displayTitle = getTranslated(String(item.id), item.title);
   const necessityScore = item.score_breakdown?.necessity_score ?? 0;
   const necessityCategory = item.score_breakdown?.necessity_category;
 
@@ -148,7 +151,7 @@ const AttentionCard = memo(function AttentionCard({
         onClick={handleOpen}
         className="text-sm text-white text-start leading-snug line-clamp-2 hover:text-orange-400 transition-colors"
       >
-        {isSignal && item.signal_action ? item.signal_action : item.title}
+        {isSignal && item.signal_action ? item.signal_action : displayTitle}
       </button>
 
       {/* Why — single line */}

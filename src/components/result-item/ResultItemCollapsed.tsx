@@ -4,6 +4,7 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 
 interface ResultItemCollapsedProps {
   item: SourceRelevance;
@@ -30,6 +31,8 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   fallbackReason,
 }: ResultItemCollapsedProps) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
+  const displayTitle = getTranslated(String(item.id), item.title);
   const scoreTooltip = useMemo(() => {
     const keys = getScoreFactorKeys(item);
     if (keys.length === 0) return undefined;
@@ -80,7 +83,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
                 item.relevant ? 'text-text-primary' : 'text-text-secondary'
               }`}
             >
-              {item.title}
+              {displayTitle}
             </a>
           ) : (
             <button
@@ -90,7 +93,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
                 item.relevant ? 'text-text-primary' : 'text-text-secondary'
               }`}
             >
-              {item.title}
+              {displayTitle}
             </button>
           )}
         </div>
