@@ -417,6 +417,9 @@ interface CommandMap {
   // -- Active Work Context --
   get_active_work_context: { params: Record<string, never>; result: { topics: Array<{ topic: string; weight: number; confidence: number; last_seen: string }>; file_changes_last_hour: number; active_project: string | null } };
 
+  // -- Tech Narratives (LLM-synthesized) --
+  generate_tech_narratives: { params: Record<string, never>; result: { narratives: Record<string, string> } };
+
   // -- Error Telemetry --
   get_error_telemetry: { params: { limit?: number }; result: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] };
   get_error_summary_cmd: { params: Record<string, never>; result: { total_errors: number; total_occurrences: number; by_category: { category: string; unique_errors: number; total_occurrences: number }[]; top_errors: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] } };
