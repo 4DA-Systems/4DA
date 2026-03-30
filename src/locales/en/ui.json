@@ -2152,6 +2152,18 @@
   "wisdom.outcome_partial": "Partial",
   "wisdom.outcome_too_early": "Too Early",
 
+  "awe.loading": "Loading wisdom graph...",
+  "awe.cardTitle": "Wisdom Engine",
+  "awe.decisions": "Decisions",
+  "awe.principles": "Principles",
+  "awe.feedbackRate": "Feedback",
+  "awe.pendingCount": "{{count}} pending",
+  "awe.validatedPrinciples": "Validated Principles",
+  "awe.showMore": "+{{count}} more",
+  "awe.showLess": "Show less",
+  "awe.earlyStage": "AWE is still learning. Principles emerge after 5+ decisions with feedback.",
+  "awe.pendingNudge": "{{count}} decisions awaiting outcome feedback",
+
   "console.title": "Intelligence Console",
   "console.subtitle": "Accuracy tracking, project convergence, and AI cost analysis.",
   "console.growing": "Intelligence Growing",
