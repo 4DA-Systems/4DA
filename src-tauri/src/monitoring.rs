@@ -745,15 +745,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 // 1. Sync AWE wisdom into context for PASIFA scoring
                 tauri::async_runtime::spawn(async {
                     match crate::context_commands::sync_awe_wisdom().await {
-                        Ok(msg) => info!(target: "4da::awe", msg = %msg, "Daily AWE wisdom sync complete"),
-                        Err(e) => warn!(target: "4da::awe", error = %e, "Daily AWE wisdom sync failed (non-fatal)"),
+                        Ok(msg) => {
+                            info!(target: "4da::awe", msg = %msg, "Daily AWE wisdom sync complete")
+                        }
+                        Err(e) => {
+                            warn!(target: "4da::awe", error = %e, "Daily AWE wisdom sync failed (non-fatal)")
+                        }
                     }
                 });
                 // 2. Auto-infer feedback from git history
                 tauri::async_runtime::spawn(async {
                     match crate::awe_commands::run_awe_auto_feedback().await {
-                        Ok(msg) => info!(target: "4da::awe", msg = %msg, "Daily AWE auto-feedback complete"),
-                        Err(e) => warn!(target: "4da::awe", error = %e, "Daily AWE auto-feedback failed (non-fatal)"),
+                        Ok(msg) => {
+                            info!(target: "4da::awe", msg = %msg, "Daily AWE auto-feedback complete")
+                        }
+                        Err(e) => {
+                            warn!(target: "4da::awe", error = %e, "Daily AWE auto-feedback failed (non-fatal)")
+                        }
                     }
                 });
             }

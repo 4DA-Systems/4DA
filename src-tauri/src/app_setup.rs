@@ -327,7 +327,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     tauri::async_runtime::spawn(async {
         match crate::context_commands::sync_awe_wisdom().await {
             Ok(msg) => info!(target: "4da::awe", msg = %msg, "AWE wisdom synced on startup"),
-            Err(e) => warn!(target: "4da::awe", error = %e, "AWE startup sync failed (non-fatal — AWE may not be installed)"),
+            Err(e) => {
+                warn!(target: "4da::awe", error = %e, "AWE startup sync failed (non-fatal — AWE may not be installed)")
+            }
         }
     });
 

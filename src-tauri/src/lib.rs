@@ -74,6 +74,7 @@ mod attention;
 mod autophagy;
 mod autophagy_commands;
 mod autophagy_pulse;
+mod awe_commands;
 mod briefing_window;
 mod calibration_commands;
 mod calibration_probes;
@@ -91,7 +92,6 @@ mod content_commands;
 mod content_dna;
 mod content_quality;
 mod content_sophistication;
-mod awe_commands;
 mod context_commands;
 mod context_engine;
 mod data_export;
@@ -294,10 +294,10 @@ mod sso;
 #[path = "webhooks_stub.rs"]
 mod webhooks;
 
-mod telemetry;
-mod toolkit_intelligence;
 mod content_translation;
 mod content_translation_commands;
+mod telemetry;
+mod toolkit_intelligence;
 mod translation_commands;
 #[cfg(test)]
 mod translation_commands_tests;
