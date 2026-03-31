@@ -763,11 +763,19 @@ fn classify_signals(
     let show_and_tell_blocked =
         *content_type == crate::content_dna::ContentType::ShowAndTell && domain_relevance < 1.0;
 
-    if !(options.apply_signals
-        && relevant
-        && combined_score >= 0.30
-        && domain_relevance >= 0.70
-        && !show_and_tell_blocked)
+    // Security advisories and breaking changes with dependency matches bypass
+    // the domain_relevance gate — a CVE in your deps is urgent regardless
+    // of how "on-domain" the advisory text appears.
+    let is_critical_content = (*content_type == crate::content_dna::ContentType::SecurityAdvisory
+        || *content_type == crate::content_dna::ContentType::BreakingChange)
+        && !matched_deps.is_empty();
+
+    if !is_critical_content
+        && !(options.apply_signals
+            && relevant
+            && combined_score >= 0.30
+            && domain_relevance >= 0.70
+            && !show_and_tell_blocked)
     {
         return (None, None, None, None, None);
     }
@@ -1001,6 +1009,22 @@ pub(crate) fn score_item(
     // ── Phase 8: Final adjustments ────────────────────────────────────
     let combined_score = apply_final_adjustments(gated_score, input.title);
 
+    // ── Critical content fast-path ─────────────────────────────────────
+    // Security advisories and breaking changes affecting user's actual
+    // dependencies ALWAYS surface, regardless of relevance score.
+    // This prevents the gate from silently dropping critical alerts.
+    let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
+    let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
+    let has_dep_match = raw.dep_match_score > 0.0;
+    let critical_fast_path = (is_security || is_breaking) && has_dep_match;
+
+    // If critical fast-path, boost score to ensure it passes the gate
+    let combined_score = if critical_fast_path && combined_score < 0.50 {
+        combined_score.max(0.50) // Floor at 0.50 for security items matching deps
+    } else {
+        combined_score
+    };
+
     // ── Relevance determination ───────────────────────────────────────
     let bootstrap_mode = ctx.feedback_interaction_count < 10;
     let min_signals = if bootstrap_mode {
@@ -1008,9 +1032,10 @@ pub(crate) fn score_item(
     } else {
         scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
     };
-    let relevant = combined_score >= get_relevance_threshold()
-        && (signal_count >= min_signals
-            || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE);
+    let relevant = critical_fast_path  // Critical items always relevant
+        || (combined_score >= get_relevance_threshold()
+            && (signal_count >= min_signals
+                || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE));
 
     // ── Explanation ───────────────────────────────────────────────────
     let explanation = if relevant || combined_score >= 0.3 {
