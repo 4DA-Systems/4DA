@@ -126,6 +126,14 @@ pub(crate) async fn fetch_all_sources(
             "producthunt",
             Box::new(crate::sources::producthunt::ProductHuntSource::new()) as Box<dyn Source>,
         ),
+        (
+            "cve",
+            Box::new(crate::sources::cve::CveSource::new()) as Box<dyn Source>,
+        ),
+        (
+            "osv",
+            Box::new(crate::sources::osv::OsvSource::new()) as Box<dyn Source>,
+        ),
     ];
 
     let sources: Vec<Box<dyn Source>> = all_sources
