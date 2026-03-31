@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
+import { formatLocalDate } from '../../utils/format-date';
 
 export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) {
   const { t } = useTranslation();
@@ -120,7 +121,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
           <p className="text-xs font-medium text-error mb-1">{t('settings.license.expired')}</p>
           <p className="text-[10px] text-error/70">
             {expiresAt
-              ? t('settings.license.expiredOn', { date: new Date(expiresAt).toLocaleDateString() })
+              ? t('settings.license.expiredOn', { date: formatLocalDate(new Date(expiresAt)) })
               : t('settings.license.expiredGeneric')}
           </p>
           <a
@@ -150,11 +151,11 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
       {isPro && (
         <div className="mb-3">
           <p className="text-xs text-text-muted">
-            {t('settings.license.proUnlocked')}{expiresAt && !expiryWarning ? ` ${t('settings.license.renewsOn', { date: new Date(expiresAt).toLocaleDateString() })}` : ` ${t('settings.license.verified')}`}
+            {t('settings.license.proUnlocked')}{expiresAt && !expiryWarning ? ` ${t('settings.license.renewsOn', { date: formatLocalDate(new Date(expiresAt)) })}` : ` ${t('settings.license.verified')}`}
           </p>
           {lastValidated && (
             <p className="text-[10px] text-text-muted/50 mt-0.5">
-              {t('settings.license.lastVerified', { date: new Date(lastValidated).toLocaleDateString() })}
+              {t('settings.license.lastVerified', { date: formatLocalDate(new Date(lastValidated)) })}
             </p>
           )}
         </div>

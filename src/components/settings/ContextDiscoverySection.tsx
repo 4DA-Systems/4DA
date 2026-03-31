@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { formatLocalDate } from '../../utils/format-date';
 
 interface ContextDiscoverySectionProps {
   scanDirectories: string[];
@@ -112,7 +113,7 @@ export function ContextDiscoverySection({
           <div className="bg-bg-secondary rounded-lg p-4 border border-border space-y-3">
             <div className="text-xs text-text-muted flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-              {t('settings.context.discoveredContext')} {discoveredContext.lastScan && `(${new Date(discoveredContext.lastScan).toLocaleDateString()})`}
+              {t('settings.context.discoveredContext')} {discoveredContext.lastScan && `(${formatLocalDate(new Date(discoveredContext.lastScan))})`}
             </div>
             {discoveredContext.tech.length > 0 && (
               <div>

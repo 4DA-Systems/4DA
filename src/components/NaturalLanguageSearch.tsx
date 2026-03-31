@@ -7,6 +7,7 @@ import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
 import { useGameComponent } from '../hooks/use-game-component';
 import { reportError } from '../lib/error-reporter';
+import { formatLocalDate } from '../utils/format-date';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
 import { SynthesisPanel, type SynthesisResponse } from './search/SynthesisPanel';
 import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
@@ -347,7 +348,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                           {item.timestamp && (
                             <>
                               <span>{'\u2022'}</span>
-                              <span>{new Date(item.timestamp).toLocaleDateString()}</span>
+                              <span>{formatLocalDate(new Date(item.timestamp))}</span>
                             </>
                           )}
                         </div>
