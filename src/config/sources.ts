@@ -14,7 +14,9 @@ export type SourceId =
   | 'cve'
   | 'osv'
   | 'npm_registry'
-  | 'pypi';
+  | 'pypi'
+  | 'crates_io'
+  | 'huggingface';
 
 interface SourceMeta {
   /** Short display label (e.g. "HN") */
@@ -40,6 +42,8 @@ const SOURCES: Record<SourceId, SourceMeta> = {
   osv: { label: 'OSV', fullName: 'OSV Vulnerabilities', colorClass: 'bg-red-500/20 text-red-300' },
   npm_registry: { label: 'npm', fullName: 'npm Registry', colorClass: 'bg-red-700/20 text-red-300' },
   pypi: { label: 'PyPI', fullName: 'Python Package Index', colorClass: 'bg-blue-600/20 text-blue-300' },
+  crates_io: { label: 'Crates', fullName: 'crates.io', colorClass: 'bg-orange-700/20 text-orange-300' },
+  huggingface: { label: 'HF', fullName: 'Hugging Face', colorClass: 'bg-yellow-500/20 text-yellow-400' },
 };
 
 /** All valid source IDs */
