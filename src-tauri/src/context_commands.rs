@@ -389,13 +389,19 @@ pub async fn get_awe_summary() -> Result<String> {
         for line in stdout.lines() {
             let trimmed = line.trim();
             if trimmed.contains("decisions tracked") || trimmed.contains("Decisions tracked") {
-                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                if let Some(num) = trimmed
+                    .split_whitespace()
+                    .find(|w| w.parse::<u64>().is_ok())
+                {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["decisions"] = serde_json::json!(n);
                     }
                 }
             } else if trimmed.contains("feedback") && trimmed.contains("recorded") {
-                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                if let Some(num) = trimmed
+                    .split_whitespace()
+                    .find(|w| w.parse::<u64>().is_ok())
+                {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["feedback_count"] = serde_json::json!(n);
                     }
@@ -408,7 +414,10 @@ pub async fn get_awe_summary() -> Result<String> {
                     }
                 }
             } else if trimmed.contains("principles") && trimmed.contains("Validated") {
-                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                if let Some(num) = trimmed
+                    .split_whitespace()
+                    .find(|w| w.parse::<u64>().is_ok())
+                {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["principles"] = serde_json::json!(n);
                     }
