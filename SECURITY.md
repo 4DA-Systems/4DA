@@ -60,7 +60,7 @@ The following are **not** considered vulnerabilities:
 
 ### BYOK (Bring Your Own Key)
 
-Users provide their own API keys. Keys are stored exclusively in `data/settings.json` on the local filesystem and are never transmitted to 4DA Systems or any third party. Keys are sent only to the API endpoints the user has explicitly configured.
+Users provide their own API keys. Keys are stored in your operating system's native credential manager (Windows Credential Manager, macOS Keychain, or Linux Secret Service) and are never transmitted to 4DA Systems or any third party. Keys are sent only to the API endpoints the user has explicitly configured.
 
 ### Local-First Architecture
 
