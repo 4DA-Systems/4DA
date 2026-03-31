@@ -134,6 +134,14 @@ pub(crate) async fn fetch_all_sources(
             "osv",
             Box::new(crate::sources::osv::OsvSource::new()) as Box<dyn Source>,
         ),
+        (
+            "npm_registry",
+            Box::new(crate::sources::npm_registry::NpmRegistrySource::new()) as Box<dyn Source>,
+        ),
+        (
+            "pypi",
+            Box::new(crate::sources::pypi::PypiSource::new()) as Box<dyn Source>,
+        ),
     ];
 
     let sources: Vec<Box<dyn Source>> = all_sources
