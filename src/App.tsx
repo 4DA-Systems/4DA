@@ -19,6 +19,7 @@ import { ViewTabBar } from './components/ViewTabBar';
 import { ViewRouter } from './components/ViewRouter';
 import { UpdateBanner } from './components/UpdateBanner';
 import { HealthBanner } from './components/HealthBanner';
+import { CriticalAlertBanner } from './components/CriticalAlertBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
@@ -330,6 +331,8 @@ function App() {
         )}
 
         <main id="main-content">
+        {/* Critical security alerts — persistent until acknowledged */}
+        <CriticalAlertBanner />
         {/* Health warnings — dismissible, only shows if issues found */}
         <HealthBanner />
 
