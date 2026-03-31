@@ -65,8 +65,14 @@ pub struct PypiSource {
 }
 
 impl PypiSource {
-    /// Create a new PyPI source with default popular packages
+    /// Create a new PyPI source — uses real deps from ACE if available
     pub fn new() -> Self {
+        let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem("pypi");
+        let packages = if ace_packages.is_empty() {
+            DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+        } else {
+            ace_packages
+        };
         Self {
             config: SourceConfig {
                 enabled: true,
@@ -75,7 +81,7 @@ impl PypiSource {
                 custom: None,
             },
             client: super::shared_client(),
-            packages: DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect(),
+            packages,
         }
     }
 

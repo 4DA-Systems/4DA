@@ -262,12 +262,16 @@ impl AdapterFailureTracker {
 // Settings loader helpers
 // ============================================================================
 
-/// Load RSS feed URLs from settings
+/// Load RSS feed URLs from settings (falls back to curated defaults if empty)
 pub(crate) fn load_rss_feeds_from_settings() -> Vec<String> {
     let settings = get_settings_manager().lock();
     let feeds = settings.get_rss_feeds();
     drop(settings);
-    feeds
+    if feeds.is_empty() {
+        load_default_rss_feeds()
+    } else {
+        feeds
+    }
 }
 
 /// Load Twitter handles and X API key from settings
@@ -301,6 +305,67 @@ pub(crate) fn load_github_languages_from_settings() -> Vec<String> {
     } else {
         langs
     }
+}
+
+/// Load user's actual dependency names from ACE for a specific ecosystem.
+/// Returns package names extracted from project manifests (Cargo.toml, package.json, etc.).
+/// Falls back to empty vec if no deps are tracked yet.
+pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let manifest_types: Vec<&str> = match ecosystem {
+        "npm" => vec!["PackageJson"],
+        "crates.io" | "rust" => vec!["CargoToml"],
+        "pypi" | "python" => vec!["PyprojectToml", "RequirementsTxt"],
+        "go" => vec!["GoMod"],
+        "maven" | "java" => vec!["PomXml", "BuildGradle"],
+        "nuget" | "csharp" => vec!["Csproj"],
+        "rubygems" | "ruby" => vec!["Gemfile"],
+        "packagist" | "php" => vec!["ComposerJson"],
+        _ => return Vec::new(),
+    };
+
+    match crate::temporal::get_all_dependencies(&conn) {
+        Ok(deps) => {
+            let mut packages: Vec<String> = deps
+                .into_iter()
+                .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
+                .map(|d| d.package_name)
+                .collect();
+            packages.sort();
+            packages.dedup();
+            packages
+        }
+        Err(e) => {
+            tracing::debug!(target: "4da::sources", error = %e, ecosystem = ecosystem, "No ACE deps available");
+            Vec::new()
+        }
+    }
+}
+
+/// Load default RSS feeds if user hasn't configured any
+pub(crate) fn load_default_rss_feeds() -> Vec<String> {
+    vec![
+        "https://blog.rust-lang.org/feed.xml".to_string(),
+        "https://go.dev/blog/feed.atom".to_string(),
+        "https://deno.com/feed".to_string(),
+        "https://bun.sh/blog/rss.xml".to_string(),
+        "https://changelog.com/news/feed".to_string(),
+        "https://www.ietf.org/blog/feed/".to_string(),
+        "https://www.w3.org/blog/news/feed/".to_string(),
+        "https://engineering.fb.com/feed/".to_string(),
+        "https://netflixtechblog.com/feed".to_string(),
+        "https://github.blog/feed/".to_string(),
+        "https://blog.cloudflare.com/rss".to_string(),
+        "https://martinfowler.com/feed.atom".to_string(),
+        "https://simonwillison.net/atom/everything/".to_string(),
+        "https://jvns.ca/atom.xml".to_string(),
+        "https://danluu.com/atom.xml".to_string(),
+        "https://arstechnica.com/feed/".to_string(),
+    ]
 }
 
 // ============================================================================

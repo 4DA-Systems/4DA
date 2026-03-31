@@ -77,9 +77,15 @@ pub struct CratesIoSource {
 }
 
 impl CratesIoSource {
-    /// Create a new crates.io source with default monitored crates
+    /// Create a new crates.io source — uses real deps from ACE if available
     pub fn new() -> Self {
-        Self::with_crates(DEFAULT_CRATES.iter().map(|s| s.to_string()).collect())
+        let ace_crates = crate::source_fetching::load_ace_packages_for_ecosystem("crates.io");
+        let crates = if ace_crates.is_empty() {
+            DEFAULT_CRATES.iter().map(|s| s.to_string()).collect()
+        } else {
+            ace_crates
+        };
+        Self::with_crates(crates)
     }
 
     /// Create a crates.io source with a custom crate list

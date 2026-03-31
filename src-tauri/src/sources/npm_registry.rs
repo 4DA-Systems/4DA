@@ -85,6 +85,13 @@ pub struct NpmRegistrySource {
 impl NpmRegistrySource {
     /// Create a new npm registry source with default popular packages.
     pub fn new() -> Self {
+        // Use real user deps from ACE if available, fall back to popular defaults
+        let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem("npm");
+        let packages = if ace_packages.is_empty() {
+            DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect()
+        } else {
+            ace_packages
+        };
         Self {
             config: SourceConfig {
                 enabled: true,
@@ -93,7 +100,7 @@ impl NpmRegistrySource {
                 custom: None,
             },
             client: super::shared_client(),
-            packages: DEFAULT_PACKAGES.iter().map(|s| s.to_string()).collect(),
+            packages,
         }
     }
 
