@@ -106,6 +106,12 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
           item_id: itemId,
           relevant: actionType === 'save' || actionType === 'click',
         }),
+        // Feed AWE wisdom engine — interactions become decision patterns
+        cmd('record_awe_interaction_feedback', {
+          itemTitle: item.title,
+          interaction: actionType,
+          sourceType: item.source_type || 'unknown',
+        }),
       ]);
 
       // Log any individual failures without reverting the UI

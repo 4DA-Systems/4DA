@@ -109,6 +109,8 @@ interface CommandMap {
   submit_awe_batch_feedback: { params: { feedbacks: Array<{ decision_id: string; outcome: string; details: string }> }; result: string };
   run_awe_auto_feedback: { params: Record<string, never>; result: string };
   run_awe_purge: { params: { dryRun: boolean }; result: string };
+  get_awe_candidates: { params: { domain: string }; result: string };
+  record_awe_interaction_feedback: { params: { itemTitle: string; interaction: string; sourceType: string }; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 

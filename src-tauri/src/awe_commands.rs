@@ -29,6 +29,104 @@ fn run_awe(args: &[&str], timeout_secs: u64) -> Result<String> {
 }
 
 // ============================================================================
+// Candidate Principles — "Patterns are forming"
+// ============================================================================
+
+/// Get candidate principle counts from AWE wisdom report.
+#[tauri::command]
+pub async fn get_awe_candidates(domain: String) -> Result<String> {
+    let result = run_awe(&["wisdom", "-d", &domain], 15);
+    let (mut cand, mut anti, mut analyzed, mut cov) = (0u64, 0u64, 0u64, 0u64);
+    if let Ok(stdout) = result {
+        for line in stdout.lines() {
+            let t = line.trim();
+            if t.starts_with("Candidate principles:") {
+                cand = t
+                    .rsplit_once(':')
+                    .and_then(|(_, v)| v.trim().parse().ok())
+                    .unwrap_or(0);
+            } else if t.starts_with("Candidate anti-patterns:") {
+                anti = t
+                    .rsplit_once(':')
+                    .and_then(|(_, v)| v.trim().parse().ok())
+                    .unwrap_or(0);
+            } else if t.starts_with("Decisions analyzed:") {
+                analyzed = t
+                    .rsplit_once(':')
+                    .and_then(|(_, v)| v.trim().parse().ok())
+                    .unwrap_or(0);
+            } else if t.starts_with("Feedback coverage:") {
+                cov = t
+                    .rsplit_once(':')
+                    .and_then(|(_, v)| v.trim().trim_end_matches('%').parse().ok())
+                    .unwrap_or(0);
+            }
+        }
+    }
+    Ok(serde_json::json!({
+        "candidates": cand,
+        "anti_patterns": anti,
+        "decisions_analyzed": analyzed,
+        "coverage_pct": cov,
+    })
+    .to_string())
+}
+
+// ============================================================================
+// Interaction Feedback — User behavior feeds AWE
+// ============================================================================
+
+/// Record user interaction as AWE feedback. Non-blocking.
+#[tauri::command]
+pub async fn record_awe_interaction_feedback(
+    item_title: String,
+    interaction: String,
+    source_type: String,
+) -> Result<String> {
+    let awe_path = match find_awe_binary() {
+        Some(p) => p,
+        None => return Ok(r#"{"status":"skipped"}"#.into()),
+    };
+    let outcome = match interaction.as_str() {
+        "save" => "confirmed",
+        "dismiss" | "mark_irrelevant" => "refuted",
+        _ => "partial",
+    };
+    let verb = match interaction.as_str() {
+        "save" => "saved",
+        "dismiss" => "dismissed",
+        "click" => "clicked",
+        o => o,
+    };
+    let stmt = format!("User {} '{}' from {}", verb, item_title, source_type);
+    let _ = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args([
+            "transmute",
+            &stmt,
+            "--stages",
+            "receive",
+            "-d",
+            "software-engineering",
+        ]),
+        10,
+    );
+    let id = format!("ux_{}", chrono::Utc::now().timestamp_millis());
+    let _ = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args([
+            "feedback",
+            &id,
+            "--outcome",
+            outcome,
+            "--details",
+            &format!("Auto: user {} from {}", verb, source_type),
+        ]),
+        10,
+    );
+    info!(target: "4da::awe", %interaction, %outcome, "AWE interaction feedback");
+    Ok(serde_json::json!({"status": "recorded", "outcome": outcome}).to_string())
+}
+
+// ============================================================================
 // Pattern Matching — "I've seen this pattern before" (Briefing page)
 // ============================================================================
 
