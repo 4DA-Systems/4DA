@@ -1,6 +1,7 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { formatLocalDate } from '../utils/format-date';
 import type { ProValueReport } from '../types';
 
 const STATS_CONFIG = [
@@ -64,7 +65,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
 
   const depthPercent = Math.min(100, Math.round((report.data_age_days / 365) * 100));
   const activeSinceFormatted = report.active_since
-    ? new Date(report.active_since).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    ? formatLocalDate(new Date(report.active_since))
     : null;
 
   return (
