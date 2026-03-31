@@ -18,7 +18,7 @@ docs/distribution/
     submissions.md                       # Ready-to-paste copy for every directory
     official-registry.md                 # MCP Registry setup instructions
   content/
-    devto-mcp-architecture.md            # Article: "Building a 30-Tool MCP Server"
+    devto-mcp-architecture.md            # Article: "Building a 33-Tool MCP Server"
     devto-codebase-awareness.md          # Article: "Why Your AI Doesn't Know What You Build"
     show-hn.md                           # Show HN post + strategy + prepared responses
   community/
