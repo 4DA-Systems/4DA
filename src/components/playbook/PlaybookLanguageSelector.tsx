@@ -112,6 +112,8 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
               onClick={() => {
                 i18n.changeLanguage(lang.code);
                 localStorage.setItem('4da_language', lang.code);
+                // Sync language to backend so Rust get_user_language() is correct
+                cmd('set_locale', { country: '', language: lang.code, currency: '' }).catch(() => {});
                 setShowPicker(false);
                 onLanguageChange?.();
               }}
