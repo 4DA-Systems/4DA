@@ -12,7 +12,9 @@ export type SourceId =
   | 'lobsters'
   | 'devto'
   | 'cve'
-  | 'osv';
+  | 'osv'
+  | 'npm_registry'
+  | 'pypi';
 
 interface SourceMeta {
   /** Short display label (e.g. "HN") */
@@ -36,6 +38,8 @@ const SOURCES: Record<SourceId, SourceMeta> = {
   devto: { label: 'Dev.to', fullName: 'Dev.to', colorClass: 'bg-green-500/20 text-green-400' },
   cve: { label: 'CVE', fullName: 'Security Advisories', colorClass: 'bg-red-600/20 text-red-400' },
   osv: { label: 'OSV', fullName: 'OSV Vulnerabilities', colorClass: 'bg-red-500/20 text-red-300' },
+  npm_registry: { label: 'npm', fullName: 'npm Registry', colorClass: 'bg-red-700/20 text-red-300' },
+  pypi: { label: 'PyPI', fullName: 'Python Package Index', colorClass: 'bg-blue-600/20 text-blue-300' },
 };
 
 /** All valid source IDs */
