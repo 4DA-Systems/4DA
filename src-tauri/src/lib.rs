@@ -567,6 +567,8 @@ pub fn run() {
             awe_commands::submit_awe_batch_feedback,
             awe_commands::run_awe_auto_feedback,
             awe_commands::run_awe_purge,
+            awe_commands::get_awe_candidates,
+            awe_commands::record_awe_interaction_feedback,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,

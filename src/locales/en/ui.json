@@ -2206,6 +2206,10 @@
   "awe.console.unavailable": "AWE is not available",
   "awe.console.wellEmpty": "No wisdom data yet. Principles emerge as decisions accumulate feedback.",
   "awe.console.queueEmpty": "All decisions have feedback recorded",
+  "awe.console.candidatesForming": "{{count}} candidate patterns forming",
+  "awe.momentum.candidatesForming": "{{count}} patterns forming — principles emerge at 7+ evidence",
+  "awe.pulse.compounding": "AWE tracking {{decisions}} decisions — {{principles}} principles validated",
+  "awe.pulse.learning": "AWE learning from {{decisions}} decisions — {{coverage}}% feedback coverage",
 
   "console.title": "Intelligence Console",
   "console.subtitle": "Accuracy tracking, project convergence, and AI cost analysis.",
