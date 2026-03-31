@@ -142,6 +142,31 @@ pub(crate) async fn fetch_all_sources(
             "pypi",
             Box::new(crate::sources::pypi::PypiSource::new()) as Box<dyn Source>,
         ),
+        (
+            "crates_io",
+            Box::new(crate::sources::crates_io::CratesIoSource::new()) as Box<dyn Source>,
+        ),
+        (
+            "huggingface",
+            Box::new(crate::sources::huggingface::HuggingFaceSource::new()) as Box<dyn Source>,
+        ),
+        (
+            "stackoverflow",
+            Box::new(crate::sources::stackoverflow::StackOverflowSource::new()) as Box<dyn Source>,
+        ),
+        (
+            "bluesky",
+            Box::new(crate::sources::bluesky::BlueskySource::new()) as Box<dyn Source>,
+        ),
+        (
+            "papers_with_code",
+            Box::new(crate::sources::papers_with_code::PapersWithCodeSource::new())
+                as Box<dyn Source>,
+        ),
+        (
+            "go_modules",
+            Box::new(crate::sources::go_modules::GoModulesSource::new()) as Box<dyn Source>,
+        ),
     ];
 
     let sources: Vec<Box<dyn Source>> = all_sources
