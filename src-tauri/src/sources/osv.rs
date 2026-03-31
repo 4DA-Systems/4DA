@@ -137,10 +137,7 @@ impl OsvSource {
     ///
     /// The OSV API allows querying by ecosystem alone (no package name required),
     /// which returns recently-published vulns for that entire ecosystem.
-    async fn fetch_ecosystem_vulns(
-        &self,
-        ecosystem: &str,
-    ) -> SourceResult<Vec<OsvVulnerability>> {
+    async fn fetch_ecosystem_vulns(&self, ecosystem: &str) -> SourceResult<Vec<OsvVulnerability>> {
         let body = OsvQueryRequest {
             package: Some(OsvPackage {
                 name: String::new(),
@@ -185,10 +182,7 @@ impl OsvSource {
     }
 
     /// Fetch vulnerabilities across multiple ecosystems using the batch endpoint.
-    async fn fetch_batch_vulns(
-        &self,
-        ecosystems: &[&str],
-    ) -> SourceResult<Vec<OsvVulnerability>> {
+    async fn fetch_batch_vulns(&self, ecosystems: &[&str]) -> SourceResult<Vec<OsvVulnerability>> {
         let queries: Vec<OsvQueryRequest> = ecosystems
             .iter()
             .map(|eco| OsvQueryRequest {
@@ -310,10 +304,7 @@ impl Source for OsvSource {
         Ok(all_items)
     }
 
-    async fn fetch_items_deep(
-        &self,
-        _items_per_category: usize,
-    ) -> SourceResult<Vec<SourceItem>> {
+    async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
@@ -630,10 +621,7 @@ mod tests {
         };
 
         let item = vuln_to_source_item(&vuln);
-        assert_eq!(
-            item.url,
-            Some("https://advisory.example.com".to_string())
-        );
+        assert_eq!(item.url, Some("https://advisory.example.com".to_string()));
     }
 
     #[test]
@@ -700,20 +688,14 @@ mod tests {
         let vulns = response.vulns.unwrap();
         assert_eq!(vulns.len(), 1);
         assert_eq!(vulns[0].id, "GHSA-test-0001");
-        assert_eq!(
-            vulns[0].summary.as_deref(),
-            Some("SQL injection in ORM")
-        );
+        assert_eq!(vulns[0].summary.as_deref(), Some("SQL injection in ORM"));
 
         let severity = vulns[0].severity.as_ref().unwrap();
         assert_eq!(severity[0].severity_type, "CVSS_V3");
         assert_eq!(severity[0].score, "9.8");
 
         let affected = vulns[0].affected.as_ref().unwrap();
-        assert_eq!(
-            affected[0].package.as_ref().unwrap().ecosystem,
-            "npm"
-        );
+        assert_eq!(affected[0].package.as_ref().unwrap().ecosystem, "npm");
     }
 
     #[test]

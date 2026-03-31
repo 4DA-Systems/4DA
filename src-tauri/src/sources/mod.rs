@@ -22,6 +22,7 @@ pub mod freshness;
 pub mod github;
 pub mod hackernews;
 pub mod lobsters;
+pub mod osv;
 pub mod producthunt;
 pub mod rate_limiter;
 pub mod reddit;

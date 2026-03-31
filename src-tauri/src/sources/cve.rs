@@ -146,7 +146,6 @@ fn parse_github_advisory(item: &serde_json::Value) -> Option<CveAdvisory> {
 // ============================================================================
 
 /// Convert CVE advisories to SourceItems for the PASIFA scoring pipeline.
-#[allow(dead_code)]
 pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<SourceItem> {
     advisories
         .iter()
@@ -177,6 +176,90 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
             }
         })
         .collect()
+}
+
+// ============================================================================
+// Source trait implementation
+// ============================================================================
+
+use super::{Source, SourceConfig, SourceError, SourceResult};
+use async_trait::async_trait;
+
+/// Security advisory source — fetches CVEs from GitHub Advisory Database
+pub struct CveSource {
+    config: SourceConfig,
+}
+
+impl CveSource {
+    pub fn new() -> Self {
+        Self {
+            config: SourceConfig {
+                enabled: true,
+                max_items: 30,
+                fetch_interval_secs: 3600,
+                custom: None,
+            },
+        }
+    }
+}
+
+impl Default for CveSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Source for CveSource {
+    fn source_type(&self) -> &'static str {
+        "cve"
+    }
+    fn name(&self) -> &'static str {
+        "Security Advisories"
+    }
+    fn config(&self) -> &SourceConfig {
+        &self.config
+    }
+    fn set_config(&mut self, config: SourceConfig) {
+        self.config = config;
+    }
+
+    async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
+        if !self.config.enabled {
+            return Err(SourceError::Disabled);
+        }
+        let advisories = fetch_github_advisories(None)
+            .await
+            .map_err(|e| SourceError::Network(e.to_string()))?;
+        let items = advisories_to_source_items(&advisories);
+        tracing::info!(target: "4da::sources", count = items.len(), "CVE: Fetched security advisories");
+        Ok(items.into_iter().take(self.config.max_items).collect())
+    }
+
+    async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+        if !self.config.enabled {
+            return Err(SourceError::Disabled);
+        }
+        let ecosystems = ["npm", "pip", "go", "rubygems", "maven", "nuget", "rust"];
+        let mut all_items = Vec::new();
+        for eco in &ecosystems {
+            match fetch_github_advisories(Some(eco)).await {
+                Ok(advisories) => {
+                    let items = advisories_to_source_items(&advisories);
+                    all_items.extend(items.into_iter().take(items_per_category));
+                }
+                Err(e) => {
+                    tracing::warn!(target: "4da::sources", ecosystem = eco, error = %e, "CVE: Failed for ecosystem");
+                }
+            }
+        }
+        tracing::info!(target: "4da::sources", count = all_items.len(), "CVE: Deep scan complete");
+        Ok(all_items)
+    }
+
+    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
+        Ok(item.content.clone())
+    }
 }
 
 // ============================================================================
