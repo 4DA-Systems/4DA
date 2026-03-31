@@ -10,7 +10,9 @@ export type SourceId =
   | 'twitter'
   | 'producthunt'
   | 'lobsters'
-  | 'devto';
+  | 'devto'
+  | 'cve'
+  | 'osv';
 
 interface SourceMeta {
   /** Short display label (e.g. "HN") */
@@ -32,6 +34,8 @@ const SOURCES: Record<SourceId, SourceMeta> = {
   producthunt: { label: 'PH', fullName: 'Product Hunt', colorClass: 'bg-orange-600/20 text-orange-300' },
   lobsters: { label: 'Lobsters', fullName: 'Lobsters', colorClass: 'bg-red-600/20 text-red-400' },
   devto: { label: 'Dev.to', fullName: 'Dev.to', colorClass: 'bg-green-500/20 text-green-400' },
+  cve: { label: 'CVE', fullName: 'Security Advisories', colorClass: 'bg-red-600/20 text-red-400' },
+  osv: { label: 'OSV', fullName: 'OSV Vulnerabilities', colorClass: 'bg-red-500/20 text-red-300' },
 };
 
 /** All valid source IDs */
