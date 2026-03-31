@@ -16,7 +16,11 @@ export type SourceId =
   | 'npm_registry'
   | 'pypi'
   | 'crates_io'
-  | 'huggingface';
+  | 'huggingface'
+  | 'stackoverflow'
+  | 'bluesky'
+  | 'papers_with_code'
+  | 'go_modules';
 
 interface SourceMeta {
   /** Short display label (e.g. "HN") */
@@ -44,6 +48,10 @@ const SOURCES: Record<SourceId, SourceMeta> = {
   pypi: { label: 'PyPI', fullName: 'Python Package Index', colorClass: 'bg-blue-600/20 text-blue-300' },
   crates_io: { label: 'Crates', fullName: 'crates.io', colorClass: 'bg-orange-700/20 text-orange-300' },
   huggingface: { label: 'HF', fullName: 'Hugging Face', colorClass: 'bg-yellow-500/20 text-yellow-400' },
+  stackoverflow: { label: 'SO', fullName: 'Stack Overflow', colorClass: 'bg-orange-500/20 text-orange-300' },
+  bluesky: { label: 'Bsky', fullName: 'Bluesky', colorClass: 'bg-blue-400/20 text-blue-300' },
+  papers_with_code: { label: 'PwC', fullName: 'Papers with Code', colorClass: 'bg-indigo-500/20 text-indigo-300' },
+  go_modules: { label: 'Go', fullName: 'Go Modules', colorClass: 'bg-cyan-500/20 text-cyan-300' },
 };
 
 /** All valid source IDs */

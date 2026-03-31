@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 pub mod arxiv;
+pub mod bluesky;
 pub mod crates_io;
 pub mod cve;
 pub(crate) mod cve_matching;
@@ -21,16 +22,19 @@ pub mod devto;
 pub mod fallback;
 pub mod freshness;
 pub mod github;
+pub mod go_modules;
 pub mod hackernews;
 pub mod huggingface;
 pub mod lobsters;
 pub mod npm_registry;
 pub mod osv;
+pub mod papers_with_code;
 pub mod producthunt;
 pub mod pypi;
 pub mod rate_limiter;
 pub mod reddit;
 pub mod rss;
+pub mod stackoverflow;
 pub mod twitter;
 pub mod youtube;
 
