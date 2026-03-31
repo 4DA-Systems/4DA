@@ -139,7 +139,7 @@ The App checks for updates using the standard Tauri updater, which queries GitHu
 
 See [GitHub's Privacy Statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement) for how GitHub handles server logs.
 
-### 2.10 Team Relay (Optional, Paid Feature)
+### 2.10 Team Relay (Optional, Enterprise Feature)
 
 4DA offers a Team Relay feature for teams to sync relevant content metadata across devices. This feature is designed with the same privacy-first principles as the rest of the App:
 
