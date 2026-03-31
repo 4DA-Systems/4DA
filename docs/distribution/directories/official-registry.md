@@ -66,7 +66,7 @@ Review the generated `server.json` and ensure these fields are correct:
 ```json
 {
   "name": "@4da/mcp-server",
-  "description": "30 MCP tools for codebase-aware developer intelligence. Gives Claude, Cursor, Copilot awareness of your tech stack, dependencies, and decisions. Scores HN, arXiv, Reddit, GitHub content against what you build. Local-only, privacy-first.",
+  "description": "33 MCP tools for codebase-aware developer intelligence. Gives Claude, Cursor, Copilot awareness of your tech stack, dependencies, and decisions. Scores HN, arXiv, Reddit, GitHub content against what you build. Local-only, privacy-first.",
   "repository": "https://github.com/runyourempire/4DA",
   "homepage": "https://4da.ai",
   "license": "MIT",

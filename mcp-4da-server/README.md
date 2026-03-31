@@ -3,10 +3,10 @@
 [![npm version](https://img.shields.io/npm/v/@4da/mcp-server?color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-brightgreen)](https://nodejs.org/)
-[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-30-white)](https://4da.ai)
+[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-33-white)](https://4da.ai)
 [![smithery badge](https://smithery.ai/badge/@4da/mcp-server)](https://smithery.ai/server/@4da/mcp-server)
 
-**30 MCP tools that give your AI coding assistant memory, context, and awareness of what you actually build.**
+**33 MCP tools that give your AI coding assistant memory, context, and awareness of what you actually build.**
 
 Your AI writes code without knowing your tech stack, your dependencies, or that the library it just recommended has a critical CVE from yesterday. This MCP server fixes that. It connects Claude Code, Cursor, Copilot, and Windsurf to a local intelligence engine that reads your `Cargo.toml`, `package.json`, `go.mod`, and `requirements.txt` -- then scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what matters to you.
 
@@ -36,7 +36,7 @@ Claude:  [calls check_decision_alignment, tech_radar, trend_analysis]
 
 Most MCP servers expose 1-5 tools that wrap a cloud API. This is different:
 
-- **30 tools** across 8 categories -- content scoring, decision memory, knowledge gaps, agent autonomy, and more
+- **33 tools** across 8 categories -- content scoring, decision memory, knowledge gaps, agent autonomy, and more
 - **Codebase-aware** -- reads your actual project files, not just what you tell it
 - **Privacy-first** -- reads from a local SQLite database, zero network calls, no telemetry
 - **Works offline** -- the intelligence engine runs entirely on your machine with optional Ollama for local LLM
@@ -261,7 +261,7 @@ No. The MCP server reads from a local SQLite database on your filesystem. It mak
 **Which AI tools does this work with?**
 Any tool that supports the [Model Context Protocol](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code with Copilot, and any custom MCP client.
 
-**Why 30 tools instead of 3?**
+**Why 33 tools instead of 3?**
 Because developer context is not one thing. Knowing your tech stack is different from tracking your dependencies, which is different from remembering your architectural decisions, which is different from detecting that a trending HN post is about the exact library version you pinned last week. Each tool serves a distinct intelligence function. They compose naturally -- your AI picks the right ones for each question.
 
 **What content sources does 4DA monitor?**

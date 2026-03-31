@@ -4,6 +4,7 @@
 import { useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { useGameComponent } from '../../hooks/use-game-component';
 
 // ============================================================================
 // Constants
@@ -68,27 +69,48 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
   const loadAweSummary = useAppStore(s => s.loadAweSummary);
   const loadAweGrowthTrajectory = useAppStore(s => s.loadAweGrowthTrajectory);
 
+  // GAME shader — must be called before any early returns (React hooks rule)
+  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-score-fingerprint');
+
   useEffect(() => {
     void loadAweSummary();
     void loadAweGrowthTrajectory();
   }, [loadAweSummary, loadAweGrowthTrajectory]);
 
+  const traj = aweGrowthTrajectory;
+  const decisions = traj?.decisions ?? 0;
+  const feedback_coverage = traj?.feedback_coverage ?? 0;
+  const principles_formed = traj?.principles_formed ?? 0;
+
+  // Update GAME shader params
+  useEffect(() => {
+    const el = gameEl.current;
+    if (el) {
+      el.setParam?.('relevance', Math.min(decisions / 500, 1));
+      el.setParam?.('freshness', feedback_coverage / 100);
+      el.setParam?.('depth', Math.min(principles_formed / 10, 1));
+      el.setParam?.('confidence', feedback_coverage >= 70 ? 0.9 : 0.4);
+    }
+  }, [decisions, feedback_coverage, principles_formed, gameEl]);
+
   // Don't render if AWE data isn't available
   if (!aweSummary || !aweSummary.available) return null;
-  if (!aweGrowthTrajectory) return null;
+  if (!traj) return null;
 
-  const { growth_phase, decisions, feedback_coverage, principles_formed } = aweGrowthTrajectory;
+  const { growth_phase } = traj;
   const phaseConfig = PHASE_CONFIG[growth_phase] ?? PHASE_CONFIG.cold_start!;
   const pendingCount = aweSummary.pending;
 
   // Gap-to-impact: how many resolved decisions could generate new principles
-  // Rough heuristic: ~5 feedback results per principle
   const potentialPrinciples = pendingCount > 0 ? Math.max(1, Math.floor(pendingCount / 5)) : 0;
 
   return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden relative">
+      {/* GAME wisdom fingerprint */}
+      <div ref={gameRef} className="absolute top-3 right-3 w-16 h-16 rounded-lg overflow-hidden opacity-50" aria-hidden="true" />
+
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+      <div className="relative px-4 py-3 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-accent-gold text-sm">{'\u25C7'}</span>
           <h4 className="text-[10px] text-accent-gold uppercase tracking-wider font-medium">
@@ -104,7 +126,7 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
         {/* Big metrics row */}
         <div className="grid grid-cols-3 gap-2">
           <BigMetric value={decisions} label={t('awe.profile.decisionVelocity')} />
-          <BigMetric value={principles_formed} label={t('awe.profile.principlesFormed')} />
+          <BigMetric value={principles_formed} label={t('awe.profile.principles_formed')} />
           <BigMetric
             value={feedback_coverage > 0 ? `${feedback_coverage}%` : '--'}
             label={t('awe.profile.coverage')}

@@ -1,7 +1,7 @@
 {
   "name": "@4da/mcp-server",
   "version": "4.0.1",
-  "description": "30 MCP tools for codebase-aware developer intelligence. Gives Claude, Cursor, Copilot awareness of your tech stack, dependencies, and decisions. Scores HN, arXiv, Reddit, GitHub content against what you build. Local-only, privacy-first.",
+  "description": "33 MCP tools for codebase-aware developer intelligence. Gives Claude, Cursor, Copilot awareness of your tech stack, dependencies, and decisions. Scores HN, arXiv, Reddit, GitHub content against what you build. Local-only, privacy-first.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

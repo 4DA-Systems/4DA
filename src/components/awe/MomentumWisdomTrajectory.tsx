@@ -4,6 +4,7 @@
 import { useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { useGameComponent } from '../../hooks/use-game-component';
 
 // ============================================================================
 // Constants
@@ -92,22 +93,41 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
   const loadAweSummary = useAppStore(s => s.loadAweSummary);
   const loadAweGrowthTrajectory = useAppStore(s => s.loadAweGrowthTrajectory);
 
+  // GAME shader — must be called before any early returns (React hooks rule)
+  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-momentum-field');
+
   useEffect(() => {
     void loadAweSummary();
     void loadAweGrowthTrajectory();
   }, [loadAweSummary, loadAweGrowthTrajectory]);
 
+  const trajectory = aweGrowthTrajectory;
+  const principles_formed = trajectory?.principles_formed ?? 0;
+  const feedback_coverage = trajectory?.feedback_coverage ?? 0;
+
+  // Update GAME shader params when data changes
+  useEffect(() => {
+    const el = gameEl.current;
+    if (el) {
+      el.setParam?.('principleCount', principles_formed);
+      el.setParam?.('coverage', feedback_coverage / 100);
+    }
+  }, [principles_formed, feedback_coverage, gameEl]);
+
   // Don't render if AWE data isn't available
   if (!aweSummary || !aweSummary.available) return null;
-  if (!aweGrowthTrajectory) return null;
+  if (!trajectory) return null;
 
-  const { growth_phase, decisions, principles_formed, feedback_coverage } = aweGrowthTrajectory;
+  const { growth_phase, decisions } = trajectory;
   const pendingCount = aweSummary.pending;
 
   return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden relative">
+      {/* GAME atmosphere layer */}
+      <div ref={gameRef} className="absolute inset-0 opacity-[0.06] pointer-events-none" aria-hidden="true" />
+
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+      <div className="relative px-4 py-3 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-accent-gold text-sm">{'\u25C7'}</span>
           <h4 className="text-[10px] text-accent-gold uppercase tracking-wider font-medium">

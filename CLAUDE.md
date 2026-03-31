@@ -149,5 +149,5 @@ Do NOT record the same decision in all three. Route by purpose. AWE is for decis
 
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.claude/commands/` (project-specific commands)
-- MCP servers: memory (persistent decisions/learnings), 4da (31 intelligence tools), awe (7 wisdom tools)
+- MCP servers: memory (persistent decisions/learnings), 4da (33 intelligence tools), awe (7 wisdom tools)
 - Hooks: wisdom gates (PreToolUse), consequence processing + AWE wisdom injection (UserPromptSubmit), session capture + AWE feedback tracking (Stop), prompt analyzer

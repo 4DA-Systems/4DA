@@ -9,7 +9,7 @@
 - **STREETS Playbook** — 7 modules for developer growth, all included free
 - **AI briefings** (Free) — AI-generated daily and weekly intelligence summaries
 - **Score Autopsy & intelligence panels** (Signal) — full scoring transparency, knowledge gaps, signal chains
-- **30 MCP tools** — deep integration with Claude Code, Cursor, and GitHub Copilot
+- **33 MCP tools** — deep integration with Claude Code, Cursor, and GitHub Copilot
 - **Full i18n support** — internationalized interface out of the box
 
 ## Download

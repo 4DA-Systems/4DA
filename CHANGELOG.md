@@ -41,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Command Deck with git operations and project management
 - Decision Journal for tracking and reviewing technical decisions
 - Knowledge gap detection identifies blind spots in your project dependencies
-- MCP integration: 30 tools for Claude Code, Cursor, and Copilot
+- MCP integration: 33 tools for Claude Code, Cursor, and Copilot
 
 **Privacy & Security**
 - Runs 100% locally — zero telemetry, zero data collection

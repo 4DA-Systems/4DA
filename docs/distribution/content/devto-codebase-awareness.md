@@ -42,7 +42,7 @@ Each layer adds resolution. A security advisory for `lodash` is noise for a Rust
 
 ## How This Works in Practice
 
-The `@4da/mcp-server` package exposes 30 tools to any MCP-compatible AI assistant (Claude Code, Cursor, Windsurf, VS Code Copilot). These tools read from a local SQLite database populated by the 4DA desktop app, which runs the scanning and scoring in the background.
+The `@4da/mcp-server` package exposes 33 tools to any MCP-compatible AI assistant (Claude Code, Cursor, Windsurf, VS Code Copilot). These tools read from a local SQLite database populated by the 4DA desktop app, which runs the scanning and scoring in the background.
 
 Here is what becomes possible:
 
