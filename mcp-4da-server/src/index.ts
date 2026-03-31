@@ -14,7 +14,7 @@
 /**
  * 4DA MCP Server v4.0.0 — Intelligence Platform
  *
- * 30 tools across 8 categories. Exposes 4DA's codebase-aware content
+ * 33 tools across 8 categories. Exposes 4DA's codebase-aware content
  * scoring engine to any AI tool that speaks MCP.
  *
  * Categories:
@@ -274,7 +274,7 @@ async function main() {
   // Help
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-  @4da/mcp-server — 30 tools for codebase-aware developer intelligence
+  @4da/mcp-server — 33 tools for codebase-aware developer intelligence
 
   Usage:
     npx @4da/mcp-server              Start MCP server (stdio transport)

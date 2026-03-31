@@ -100,7 +100,7 @@ Verify `mcp-4da-server/src/db.ts` has:
 **Pass criteria:**
 - Zero TypeScript errors
 - Doctor reports all checks pass or only optional warnings
-- All 30 tools registered
+- All 33 tools registered
 - Package.json has all required fields
 - No hardcoded platform-specific paths
 - Native binding failure produces actionable error
@@ -110,7 +110,7 @@ Verify `mcp-4da-server/src/db.ts` has:
 ## MCP Server
 Status: PASS | FAIL
 TypeScript: clean (0 errors)
-Tools: 30/30 registered
+Tools: 33/33 registered
 Doctor: all pass (N warnings)
 Package: valid for npm publish
 Cross-platform: no hardcoded paths
@@ -277,7 +277,7 @@ Commit: [git rev-parse --short HEAD]
 | Section | Status | Details |
 |---------|--------|---------|
 | Scoring Benchmark | PASS/FAIL | 22/22 tests, 100% precision |
-| MCP Server | PASS/FAIL | 30 tools, clean build |
+| MCP Server | PASS/FAIL | 33 tools, clean build |
 | First-Run Experience | PASS/FAIL | 0 P0, 0 P1 issues |
 | Build Health | PASS/FAIL | All tests pass |
 | MCP Wiring | PASS/FAIL | DB path verified, graceful degradation |

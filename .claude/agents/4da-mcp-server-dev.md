@@ -31,7 +31,7 @@ Spawn this agent when:
 
 ## Key Knowledge
 
-### MCP Server Structure (v1.0.0 — 30 tools)
+### MCP Server Structure (v1.0.0 — 33 tools)
 
 ```
 mcp-4da-server/
@@ -45,9 +45,9 @@ mcp-4da-server/
     http-transport.ts     # Streamable HTTP transport (spec 2025-03-26)
     doctor.ts             # Installation health checker (--doctor flag)
     setup.ts              # Zero-friction editor config (--setup flag)
-    schemas/              # 30 JSON schemas (one per tool)
+    schemas/              # 33 JSON schemas (one per tool)
     tools/
-      index.ts            # Tool exports (30 tools)
+      index.ts            # Tool exports (33 tools)
       get-relevant-content.ts    # Core: query filtered content
       get-context.ts             # Core: user interests/tech stack
       explain-relevance.ts       # Core: score breakdown
