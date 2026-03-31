@@ -79,7 +79,11 @@ pub fn get_content_translation_settings() -> Result<content_translation::Content
 
     Ok(content_translation::ContentTranslationSettings {
         enabled,
-        provider: if has_llm { "auto".to_string() } else { "disabled".to_string() },
+        provider: if has_llm {
+            "auto".to_string()
+        } else {
+            "disabled".to_string()
+        },
         target_lang,
     })
 }

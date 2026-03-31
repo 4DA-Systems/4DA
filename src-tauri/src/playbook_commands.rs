@@ -370,8 +370,8 @@ pub async fn translate_playbook_module(module_id: String, lang: String) -> Resul
         return Ok("English is the source language — no translation needed".to_string());
     }
 
-    let filename = module_id_to_filename(&module_id)
-        .ok_or_else(|| format!("Unknown module: {module_id}"))?;
+    let filename =
+        module_id_to_filename(&module_id).ok_or_else(|| format!("Unknown module: {module_id}"))?;
 
     // Read English source
     let base_dir = get_content_dir();
@@ -399,14 +399,19 @@ pub async fn translate_playbook_module(module_id: String, lang: String) -> Resul
         "Translated STREETS module"
     );
 
-    Ok(format!("Translated {} ({} lessons) to {}", module_id, lesson_count, lang))
+    Ok(format!(
+        "Translated {} ({} lessons) to {}",
+        module_id, lesson_count, lang
+    ))
 }
 
 /// Get available lesson translations for a language.
 ///
 /// Returns a map of module_id -> bool indicating whether translated content exists.
 #[tauri::command]
-pub fn get_lesson_translation_status(lang: String) -> Result<std::collections::HashMap<String, bool>> {
+pub fn get_lesson_translation_status(
+    lang: String,
+) -> Result<std::collections::HashMap<String, bool>> {
     let base_dir = get_content_dir();
     let lang_dir = base_dir.join(&lang);
 

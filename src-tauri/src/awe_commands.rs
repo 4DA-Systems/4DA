@@ -21,8 +21,10 @@ fn require_awe() -> Result<String> {
 /// Helper: run AWE command and return stdout as string.
 fn run_awe(args: &[&str], timeout_secs: u64) -> Result<String> {
     let awe_path = require_awe()?;
-    let output =
-        run_awe_with_timeout(std::process::Command::new(&awe_path).args(args), timeout_secs)?;
+    let output = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(args),
+        timeout_secs,
+    )?;
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
@@ -239,10 +241,7 @@ pub async fn submit_awe_batch_feedback(feedbacks: Vec<serde_json::Value>) -> Res
     let mut error_count = 0;
 
     for fb in &feedbacks {
-        let decision_id = fb
-            .get("decision_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let decision_id = fb.get("decision_id").and_then(|v| v.as_str()).unwrap_or("");
         let outcome = fb.get("outcome").and_then(|v| v.as_str()).unwrap_or("");
         let details = fb
             .get("details")
