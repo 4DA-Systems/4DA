@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { useAppStore } from '../../store';
 import { RelativeTimestamp } from './BriefingHelpers';
 import type { SourceRelevance, SourceHealthStatus } from '../../types';
 import type { BriefingState } from '../../store/types';
@@ -115,13 +116,27 @@ export const PulseSummary = memo(function PulseSummary({
     return 'bg-text-muted/50';
   }, [signalCount, stats.relevant]);
 
+  // AWE voice — subtle wisdom line beneath the pulse
+  const aweSummary = useAppStore(s => s.aweSummary);
+  const loadAweSummary = useAppStore(s => s.loadAweSummary);
+  useEffect(() => { if (!aweSummary) void loadAweSummary(); }, [aweSummary, loadAweSummary]);
+
   return (
     <div className="relative px-5 py-4">
       <div className="flex items-center gap-3">
         <div className={`w-2 h-2 rounded-full flex-shrink-0 ${moodDot}`} />
-        <p className={`text-sm leading-relaxed ${moodColor}`}>
-          {summary}
-        </p>
+        <div className="flex-1">
+          <p className={`text-sm leading-relaxed ${moodColor}`}>
+            {summary}
+          </p>
+          {aweSummary?.available === true && aweSummary.decisions > 0 && (
+            <p className="text-[11px] text-accent-gold/70 mt-0.5">
+              {aweSummary.feedback_coverage >= 70
+                ? t('awe.pulse.compounding', { decisions: aweSummary.decisions, principles: aweSummary.principles })
+                : t('awe.pulse.learning', { decisions: aweSummary.decisions, coverage: aweSummary.feedback_coverage })}
+            </p>
+          )}
+        </div>
         {briefing.lastGenerated && (
           <div className="flex-shrink-0 ms-auto">
             <RelativeTimestamp date={briefing.lastGenerated} />

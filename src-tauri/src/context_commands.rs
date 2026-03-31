@@ -724,10 +724,36 @@ pub async fn run_awe_calibration(domain: String) -> Result<String> {
 }
 
 /// Run an AWE subprocess with a timeout to prevent indefinite blocking.
+///
+/// Automatically injects the user's LLM API key so AWE uses LLM-powered
+/// transmutation instead of algorithmic-only mode.
 pub(crate) fn run_awe_with_timeout(
     cmd: &mut std::process::Command,
     timeout_secs: u64,
 ) -> std::result::Result<std::process::Output, String> {
+    // Pass user's API key to AWE for LLM-powered transmutation
+    if let Ok(mgr) = std::panic::catch_unwind(crate::get_settings_manager) {
+        let guard = mgr.lock();
+        let s = guard.get();
+        if !s.llm.api_key.is_empty() {
+            match s.llm.provider.as_str() {
+                "anthropic" => {
+                    cmd.env("ANTHROPIC_API_KEY", &s.llm.api_key);
+                }
+                "openai" => {
+                    cmd.env("OPENAI_API_KEY", &s.llm.api_key);
+                }
+                "ollama" => {
+                    cmd.env("AWE_OLLAMA_MODEL", &s.llm.model);
+                    if let Some(ref url) = s.llm.base_url {
+                        cmd.env("AWE_OLLAMA_URL", url);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     let mut child = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
