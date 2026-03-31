@@ -51,6 +51,16 @@ export function formatLocalDateTime(dateInput: string | Date): string {
   }).format(date);
 }
 
+/** Format a date as month + year (e.g., "March 2026" or locale equivalent). */
+export function formatLocalMonthYear(dateInput: string | Date): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+  if (isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(getUserLocale(), {
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
 /** Format a date as relative time (e.g., "3 days ago"). Uses Intl.RelativeTimeFormat. */
 export function formatRelativeDate(dateInput: string | Date): string {
   const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;

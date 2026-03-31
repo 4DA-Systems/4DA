@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../../utils/playbook-markdown';
+import { formatLocalDateTime } from '../../utils/format-date';
 import { ProvenanceTooltip } from './ProvenanceTooltip';
 import { ChannelChangelog } from './ChannelChangelog';
 import type { RenderProvenance } from '../../types/channels';
@@ -247,10 +248,5 @@ function ChannelContentBody({
 
 function formatDateTime(dateStr: string): string {
   const date = new Date(dateStr + 'Z');
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatLocalDateTime(date);
 }

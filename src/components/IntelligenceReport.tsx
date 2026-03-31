@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { formatLocalMonthYear } from '../utils/format-date';
 
 // ============================================================================
 // Types
@@ -218,7 +219,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
   }
 
   const now = new Date();
-  const monthName = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const monthName = formatLocalMonthYear(now);
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
