@@ -76,7 +76,7 @@ pub trait Source: Send + Sync {
 
 New source files must stay within limits:
 - **TypeScript/TSX**: 350 lines (warn), 500 lines (error)
-- **Rust**: 600 lines (warn), 1000 lines (error)
+- **Rust**: 800 lines (warn), 1500 lines (error)
 
 If your file exceeds limits, split it. Run `pnpm run validate:sizes` to check.
 

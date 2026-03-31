@@ -133,7 +133,7 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 
 ## Quick Start
 
-**Prerequisites:** [Rust](https://rustup.rs/) 1.70+, [Node.js](https://nodejs.org/) 18+, [pnpm](https://pnpm.io/)
+**Prerequisites:** [Rust](https://rustup.rs/) 1.93+ (pinned in `rust-toolchain.toml`), [Node.js](https://nodejs.org/) 20+, [pnpm](https://pnpm.io/)
 
 ```bash
 git clone https://github.com/runyourempire/4DA.git
@@ -159,7 +159,7 @@ Your Codebase                    External Sources
      │                                │
      ▼                                ▼
 ┌─────────────┐              ┌──────────────┐
-│     ACE     │              │  11 Source    │
+│     ACE     │              │  10 Source    │
 │  Scanner +  │              │  Adapters     │
 │  Git Watch  │              │  (background) │
 └──────┬──────┘              └──────┬───────┘
@@ -202,13 +202,13 @@ cd mcp-4da-server
 pnpm install && pnpm build
 ```
 
-**31 tools across 8 categories:**
+**33 tools across 8 categories:**
 - **Core** — `get_relevant_content`, `get_context`, `explain_relevance`, `record_feedback`
 - **Intelligence** — `daily_briefing`, `get_actionable_signals`, `score_autopsy`, `trend_analysis`, `context_analysis`, `topic_connections`, `signal_chains`, `semantic_shifts`, `attention_report`
 - **Diagnostic** — `source_health`, `config_validator`, `llm_status`
 - **Innovation** — `knowledge_gaps`, `project_health`, `reverse_mentions`, `export_context_packet`
 - **Decision Intelligence** — `decision_memory`, `tech_radar`, `check_decision_alignment`
-- **Agent Autonomy** — `agent_memory`, `agent_session_brief`, `delegation_score`
+- **Agent Autonomy** — `agent_memory`, `agent_session_brief`, `delegation_score`, `record_agent_feedback`, `agent_feedback_stats`, `what_should_i_know`
 - **Developer DNA** — `developer_dna`
 - **Intelligence Metabolism** — `autophagy_status`, `decision_windows`, `compound_advantage`
 
@@ -283,7 +283,7 @@ cd src-tauri && cargo build --release --bin 4da
 ```bash
 pnpm tauri dev              # Dev server (localhost:4444)
 cargo test                  # Rust tests (from src-tauri/)
-pnpm test                   # Frontend tests (157)
+pnpm test                   # Frontend tests
 pnpm validate:all           # Full validation (lint + types + tests + build)
 ```
 
@@ -302,7 +302,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 10 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (31 tools), CLI
+- All 10 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (33 tools), CLI
 
 **Signal** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
