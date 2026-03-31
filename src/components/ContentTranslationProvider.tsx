@@ -26,6 +26,8 @@ interface ContentTranslationContextValue {
   isTranslating: boolean;
   /** Request translation for specific items. */
   requestTranslation: (items: ContentTranslationRequest[]) => void;
+  /** Why translation is not active (empty string if active). */
+  inactiveReason: string;
 }
 
 const ContentTranslationContext = createContext<ContentTranslationContextValue>({
@@ -33,6 +35,7 @@ const ContentTranslationContext = createContext<ContentTranslationContextValue>(
   isActive: false,
   isTranslating: false,
   requestTranslation: () => {},
+  inactiveReason: '',
 });
 
 // ============================================================================
@@ -48,6 +51,7 @@ export const ContentTranslationProvider = memo(function ContentTranslationProvid
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [isActive, setIsActive] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [inactiveReason, setInactiveReason] = useState('');
   const pendingRef = useRef<Set<string>>(new Set());
   const batchQueueRef = useRef<ContentTranslationRequest[]>([]);
   const batchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -56,12 +60,30 @@ export const ContentTranslationProvider = memo(function ContentTranslationProvid
   useEffect(() => {
     if (i18n.language === 'en') {
       setIsActive(false);
+      setInactiveReason('');
       return;
     }
 
+    // Sync language to backend settings
+    cmd('set_locale', { country: '', language: i18n.language, currency: '' }).catch(() => {});
+
     cmd('get_content_translation_settings')
-      .then((settings) => setIsActive(settings.enabled))
-      .catch(() => setIsActive(false));
+      .then((settings) => {
+        setIsActive(settings.enabled);
+        if (!settings.enabled) {
+          setInactiveReason(
+            settings.provider === 'disabled'
+              ? 'no_llm'
+              : '',
+          );
+        } else {
+          setInactiveReason('');
+        }
+      })
+      .catch(() => {
+        setIsActive(false);
+        setInactiveReason('error');
+      });
   }, [i18n.language]);
 
   // Clear translations on language change
@@ -130,7 +152,7 @@ export const ContentTranslationProvider = memo(function ContentTranslationProvid
 
   return (
     <ContentTranslationContext.Provider
-      value={{ getTranslated, isActive, isTranslating, requestTranslation }}
+      value={{ getTranslated, isActive, isTranslating, requestTranslation, inactiveReason }}
     >
       {children}
     </ContentTranslationContext.Provider>
