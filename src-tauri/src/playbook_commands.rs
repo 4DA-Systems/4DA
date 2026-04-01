@@ -143,7 +143,7 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
     let mut current_content = String::new();
 
     for line in content.lines() {
-        if line.starts_with("## Lesson") {
+        if is_lesson_heading(line) {
             // Save previous lesson
             if !current_title.is_empty() {
                 lessons.push(PlaybookLesson {
@@ -151,7 +151,6 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
                     content: current_content.trim().to_string(),
                 });
             }
-            // Extract title from "## Lesson N: Title"
             current_title = line.trim_start_matches('#').trim().to_string();
             current_content = String::new();
         } else if !current_title.is_empty() {
@@ -159,7 +158,6 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
             current_content.push('\n');
         }
     }
-    // Don't forget the last lesson
     if !current_title.is_empty() {
         lessons.push(PlaybookLesson {
             title: current_title,
@@ -168,6 +166,19 @@ pub(crate) fn parse_lessons(content: &str) -> Vec<PlaybookLesson> {
     }
 
     lessons
+}
+
+/// Detect lesson headings in any language.
+///
+/// Matches: "## Lesson 1: ...", "## Lektion 1: ...", "## レッスン 1: ...",
+/// "## 第 1 课：...", "## الدرس 1: ..." — any ## heading with a digit and colon.
+fn is_lesson_heading(line: &str) -> bool {
+    if !line.starts_with("## ") || line.starts_with("### ") {
+        return false;
+    }
+    let after = &line[3..];
+    after.chars().any(|c| c.is_ascii_digit())
+        && (after.contains(':') || after.contains('\u{FF1A}'))
 }
 
 #[tauri::command]
@@ -538,6 +549,61 @@ Lesson body here.";
         assert_eq!(lessons.len(), 1);
         assert_eq!(lessons[0].title, "Lesson 1: Actual Lesson");
         assert_eq!(lessons[0].content, "Lesson body here.");
+    }
+
+    // ---- multilingual lesson heading tests ----
+
+    #[test]
+    fn test_parse_lessons_german() {
+        let content = "## Lektion 1: Das Rig-Audit\nInhalt.\n## Lektion 2: Der LLM-Stack\nMehr.";
+        let lessons = parse_lessons(content);
+        assert_eq!(lessons.len(), 2, "German headings must parse");
+    }
+
+    #[test]
+    fn test_parse_lessons_japanese() {
+        let content = "## レッスン 1: リグ監査\n内容。\n## レッスン 2: LLMスタック\n内容。";
+        let lessons = parse_lessons(content);
+        assert_eq!(lessons.len(), 2, "Japanese headings must parse");
+    }
+
+    #[test]
+    fn test_parse_lessons_chinese() {
+        let content = "## 第 1 课：设备审计\n内容。\n## 第 2 课：LLM技术栈\n内容。";
+        let lessons = parse_lessons(content);
+        assert_eq!(lessons.len(), 2, "Chinese headings must parse");
+    }
+
+    #[test]
+    fn test_parse_lessons_arabic() {
+        let content = "## الدرس 1: تدقيق\nمحتوى.\n## الدرس 2: مكدس\nمحتوى.";
+        let lessons = parse_lessons(content);
+        assert_eq!(lessons.len(), 2, "Arabic headings must parse");
+    }
+
+    #[test]
+    fn test_parse_lessons_spanish() {
+        let content = "## Leccion 1: Auditoria\nContenido.\n## Leccion 2: Stack\nContenido.";
+        let lessons = parse_lessons(content);
+        assert_eq!(lessons.len(), 2, "Spanish headings must parse");
+    }
+
+    #[test]
+    fn test_parse_lessons_korean() {
+        let content = "## 레슨 1: 감사\n내용.\n## 레슨 2: 스택\n내용.";
+        let lessons = parse_lessons(content);
+        assert_eq!(lessons.len(), 2, "Korean headings must parse");
+    }
+
+    #[test]
+    fn test_is_lesson_heading_rejects_subheadings() {
+        assert!(!is_lesson_heading("### Section 1: Details"));
+    }
+
+    #[test]
+    fn test_is_lesson_heading_rejects_plain_h2() {
+        assert!(!is_lesson_heading("## Module Title"));
+        assert!(!is_lesson_heading("## What Comes Next"));
     }
 
     // ---- struct construction & serialization tests ----
