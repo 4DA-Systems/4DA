@@ -111,13 +111,13 @@ export const BriefingView = memo(function BriefingView() {
               {freeBriefing.signal_priorities && Object.keys(freeBriefing.signal_priorities).length > 0 && (
                 <div className="flex gap-3 mt-2">
                   {(freeBriefing.signal_priorities.critical ?? 0) > 0 && (
-                    <span className="text-[10px] font-mono text-red-400">{freeBriefing.signal_priorities.critical} critical</span>
+                    <span className="text-[10px] font-mono text-red-400">{freeBriefing.signal_priorities.critical} {t('briefing.priorityCritical')}</span>
                   )}
                   {(freeBriefing.signal_priorities.alert ?? 0) > 0 && (
-                    <span className="text-[10px] font-mono text-orange-400">{freeBriefing.signal_priorities.alert} alert</span>
+                    <span className="text-[10px] font-mono text-orange-400">{freeBriefing.signal_priorities.alert} {t('briefing.priorityAlert')}</span>
                   )}
                   {(freeBriefing.signal_priorities.advisory ?? 0) > 0 && (
-                    <span className="text-[10px] font-mono text-amber-400">{freeBriefing.signal_priorities.advisory} advisory</span>
+                    <span className="text-[10px] font-mono text-amber-400">{freeBriefing.signal_priorities.advisory} {t('briefing.priorityAdvisory')}</span>
                   )}
                 </div>
               )}
@@ -130,7 +130,7 @@ export const BriefingView = memo(function BriefingView() {
               )}
               {freeBriefing.wisdom_signals && freeBriefing.wisdom_signals.length > 0 && (
                 <div>
-                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">Wisdom</h3>
+                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">{t('briefing.sectionWisdom')}</h3>
                   <div className="space-y-2">
                     {freeBriefing.wisdom_signals.map((signal, i) => (
                       <div key={i} className="pl-2 border-l-2 border-[#D4AF37]/25 py-1">
@@ -147,7 +147,7 @@ export const BriefingView = memo(function BriefingView() {
                 </div>
               )}
               <div>
-                <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">Signals</h3>
+                <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">{t('briefing.sectionSignals')}</h3>
                 <div className="space-y-1">
                   {freeBriefing.top_items?.map((item, i) => {
                     const pc = item.signal_priority === 'critical' ? 'bg-red-500'
@@ -187,12 +187,12 @@ export const BriefingView = memo(function BriefingView() {
               )}
               {freeBriefing.knowledge_gaps && freeBriefing.knowledge_gaps.length > 0 && (
                 <div>
-                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-amber-400 uppercase mb-2">Blind Spots</h3>
+                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-amber-400 uppercase mb-2">{t('briefing.sectionBlindSpots')}</h3>
                   <div className="space-y-1">
                     {freeBriefing.knowledge_gaps.map((gap, i) => (
                       <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-amber-500/[0.03]">
                         <span className="text-[11px] font-medium text-text-secondary">{gap.topic}</span>
-                        <span className="text-[10px] font-mono text-text-muted">{gap.days_since_last}d</span>
+                        <span className="text-[10px] font-mono text-text-muted">{t('briefing.daysSilent', { days: gap.days_since_last })}</span>
                       </div>
                     ))}
                   </div>
@@ -200,7 +200,7 @@ export const BriefingView = memo(function BriefingView() {
               )}
             </div>
             <div className="px-5 py-3 border-t border-border flex items-center justify-between">
-              <span className="text-[10px] font-mono text-text-muted">{freeBriefing.total_items} signals analyzed</span>
+              <span className="text-[10px] font-mono text-text-muted">{t('briefing.signalsAnalyzed', { count: freeBriefing.total_items })}</span>
               <button
                 onClick={generateBriefing}
                 className="px-3 py-1.5 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all font-medium"
