@@ -86,6 +86,9 @@ pub struct BriefingNotification {
     /// AWE wisdom signals — validated principles and anti-patterns from the Wisdom Graph
     #[serde(default)]
     pub wisdom_signals: Vec<WisdomSignal>,
+    /// LLM-synthesized intelligence narrative (populated async after initial delivery)
+    #[serde(default)]
+    pub synthesis: Option<String>,
 }
 
 // ============================================================================
@@ -264,6 +267,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         knowledge_gaps,
         escalating_chains,
         wisdom_signals,
+        synthesis: None,
     })
 }
 
@@ -677,6 +681,133 @@ pub fn generate_briefing_text() -> String {
 }
 
 // ============================================================================
+// LLM Morning Brief Synthesis
+// ============================================================================
+
+/// Synthesize a narrative morning intelligence briefing using LLM.
+pub(crate) async fn synthesize_morning_briefing(
+    briefing: &BriefingNotification,
+) -> std::result::Result<String, String> {
+    let llm_settings = {
+        let settings = crate::get_settings_manager().lock();
+        settings.get().llm.clone()
+    };
+
+    if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {
+        return Err("No LLM configured".into());
+    }
+
+    let (tech_summary, topics_summary) = {
+        let ace_ctx = crate::scoring::get_ace_context();
+        let tech = if ace_ctx.detected_tech.is_empty() {
+            "Not configured".to_string()
+        } else {
+            ace_ctx.detected_tech.iter().take(15).cloned().collect::<Vec<_>>().join(", ")
+        };
+        let topics = if ace_ctx.active_topics.is_empty() {
+            "General development".to_string()
+        } else {
+            ace_ctx.active_topics.iter().take(10).cloned().collect::<Vec<_>>().join(", ")
+        };
+        (tech, topics)
+    };
+
+    let items_text = briefing.items.iter().enumerate().map(|(i, item)| {
+        let tag = item.signal_priority.as_deref()
+            .map(|p| format!("[{}] ", p.to_uppercase()))
+            .unwrap_or_default();
+        let desc = item.description.as_deref().unwrap_or("");
+        let deps = if item.matched_deps.is_empty() {
+            String::new()
+        } else {
+            format!(" (affects: {})", item.matched_deps.join(", "))
+        };
+        format!("{}. {}{} — {}{}", i + 1, tag, item.title, desc, deps)
+    }).collect::<Vec<_>>().join("\n");
+
+    let chains_text = if briefing.escalating_chains.is_empty() {
+        String::new()
+    } else {
+        let c = briefing.escalating_chains.iter().map(|c| {
+            format!("- {} ({}, {} signals): {}", c.name, c.phase, c.link_count, c.action)
+        }).collect::<Vec<_>>().join("\n");
+        format!("\nEscalating chains:\n{c}\n")
+    };
+
+    let gaps_text = if briefing.knowledge_gaps.is_empty() {
+        String::new()
+    } else {
+        let g = briefing.knowledge_gaps.iter().map(|g| {
+            format!("- {}: {}d silent", g.topic, g.days_since_last)
+        }).collect::<Vec<_>>().join("\n");
+        format!("\nBlind spots:\n{g}\n")
+    };
+
+    let wisdom_text = if briefing.wisdom_signals.is_empty() {
+        String::new()
+    } else {
+        let w = briefing.wisdom_signals.iter().map(|w| {
+            let label = if w.signal_type == "anti-pattern" { "AVOID" } else { "PRINCIPLE" };
+            format!("- [{}] ({:.0}%) {}", label, w.confidence * 100.0, w.text)
+        }).collect::<Vec<_>>().join("\n");
+        format!("\nAWE Wisdom:\n{w}\n")
+    };
+
+    let system_prompt = r#"You are 4DA's Intelligence Synthesis Engine. Produce a concise morning intelligence briefing for a developer. This appears as a desktop widget — every word must earn its place.
+
+Format as plain text with these sections:
+
+SITUATION
+One paragraph (2-3 sentences). What changed overnight? Lead with the most important signal.
+
+PRIORITY
+1-3 items. What demands attention today? Be specific — name exact technology, version, or project affected.
+
+PATTERN
+One sentence connecting signals across sources, if a pattern exists. Skip entirely if nothing connects.
+
+Rules:
+- Reference the user's tech stack and projects by name
+- Be precise: "tokio 1.38 security advisory" not "a security issue"
+- If nothing is urgent, say "Your stack is quiet overnight"
+- Maximum 120 words — this is a widget, not a report
+- No markdown, no bullet markers, use plain dashes for lists
+- Start with content directly — no meta-text like "here is your briefing""#;
+
+    let user_prompt = format!(
+        "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\n\
+         {count} signals:\n{items}\n{chains}{gaps}{wisdom}\n\
+         Synthesize my morning intelligence briefing.",
+        tech = tech_summary, topics = topics_summary,
+        count = briefing.items.len(), items = items_text,
+        chains = chains_text, gaps = gaps_text, wisdom = wisdom_text,
+    );
+
+    let llm_client = crate::llm::LLMClient::new(llm_settings);
+    let messages = vec![crate::llm::Message {
+        role: "user".to_string(),
+        content: user_prompt,
+    }];
+
+    let start = std::time::Instant::now();
+    match llm_client.complete(system_prompt, messages).await {
+        Ok(response) => {
+            tracing::info!(
+                target: "4da::briefing",
+                tokens = response.input_tokens + response.output_tokens,
+                elapsed_ms = start.elapsed().as_millis(),
+                "Morning brief synthesis complete"
+            );
+            Ok(response.content)
+        }
+        Err(e) => {
+            tracing::warn!(target: "4da::briefing", error = %e, "Morning brief synthesis failed");
+            Err(format!("LLM synthesis failed: {e}"))
+        }
+    }
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -775,6 +906,7 @@ mod tests {
                 confidence: 0.85,
                 signal_type: "principle".to_string(),
             }],
+            synthesis: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);

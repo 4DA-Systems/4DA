@@ -759,6 +759,35 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
                 }
 
+                // Async LLM synthesis — narrative intelligence brief
+                {
+                    let app_synth = app.clone();
+                    let briefing_synth = briefing.clone();
+                    tauri::async_runtime::spawn(async move {
+                        match crate::monitoring_briefing::synthesize_morning_briefing(
+                            &briefing_synth,
+                        )
+                        .await
+                        {
+                            Ok(synthesis) => {
+                                info!(target: "4da::briefing", "Morning brief synthesis ready");
+                                let _ = app_synth.emit_to(
+                                    "briefing",
+                                    "briefing-synthesis",
+                                    &synthesis,
+                                );
+                                let _ = app_synth.emit(
+                                    "morning-briefing-synthesis",
+                                    serde_json::json!({ "synthesis": synthesis }),
+                                );
+                            }
+                            Err(e) => {
+                                info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
+                            }
+                        }
+                    });
+                }
+
                 // AWE daily jobs — piggyback on morning briefing trigger (once per day)
                 // 1. Sync AWE wisdom into context for PASIFA scoring
                 tauri::async_runtime::spawn(async {
