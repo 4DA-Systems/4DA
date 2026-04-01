@@ -8,7 +8,7 @@
 //! are designed for specific UI integration points.
 
 use crate::context_commands::{find_awe_binary, run_awe_with_timeout};
-use tracing::{info, warn};
+use tracing::info;
 
 type Result<T> = std::result::Result<T, String>;
 
