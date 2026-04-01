@@ -77,6 +77,30 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         "freelancer? seeking",
     ];
 
+    // Single lock: extract both priority map and signal counts
+    let (priority_map, signal_priorities): (HashMap<String, String>, HashMap<String, usize>) = {
+        let state = get_analysis_state().lock();
+        if let Some(ref results) = state.results {
+            let pmap: HashMap<String, String> = results
+                .iter()
+                .filter_map(|r| {
+                    r.signal_priority
+                        .as_ref()
+                        .map(|p| (r.title.clone(), p.clone()))
+                })
+                .collect();
+            let mut scounts: HashMap<String, usize> = HashMap::new();
+            for r in results.iter().filter(|r| r.relevant && !r.excluded) {
+                if let Some(ref priority) = r.signal_priority {
+                    *scounts.entry(priority.clone()).or_insert(0) += 1;
+                }
+            }
+            (pmap, scounts)
+        } else {
+            (HashMap::new(), HashMap::new())
+        }
+    };
+
     // Top 5 items with filtering and source diversity
     let mut top_items: Vec<serde_json::Value> = Vec::new();
     let mut diversity_counts: HashMap<String, usize> = HashMap::new();
@@ -107,12 +131,7 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         }
         *count += 1;
 
-        let priority = {
-            let state = get_analysis_state().lock();
-            state.results.as_ref().and_then(|results| {
-                results.iter().find(|r| r.title == *title).and_then(|r| r.signal_priority.clone())
-            })
-        };
+        let priority = priority_map.get(title).cloned();
         top_items.push(serde_json::json!({
             "title": title,
             "url": url,
@@ -152,20 +171,6 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
     for (_, _, source, _) in &items {
         *source_counts.entry(source.clone()).or_default() += 1;
     }
-
-    // Signal priorities from in-memory state
-    let signal_priorities = {
-        let state = get_analysis_state().lock();
-        let mut priorities = HashMap::new();
-        if let Some(ref results) = state.results {
-            for r in results.iter().filter(|r| r.relevant && !r.excluded) {
-                if let Some(ref priority) = r.signal_priority {
-                    *priorities.entry(priority.clone()).or_insert(0usize) += 1;
-                }
-            }
-        }
-        priorities
-    };
 
     // Knowledge gaps: tech with no recent signals
     let knowledge_gaps: Vec<serde_json::Value> = {
