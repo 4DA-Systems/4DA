@@ -26,6 +26,19 @@ fn source_interval(source: &str) -> Duration {
         "arxiv" => Duration::from_secs(3),
         // Twitter/X API varies by tier
         "twitter" => Duration::from_secs(2),
+        // Security feeds
+        "cve" => Duration::from_secs(3),
+        "osv" => Duration::from_secs(2),
+        // Package registries (CDN-fronted, permissive)
+        "npm_registry" => Duration::from_millis(500),
+        "pypi" => Duration::from_millis(500),
+        "crates_io" => Duration::from_secs(1),
+        "go_modules" => Duration::from_secs(1),
+        // Community/research
+        "huggingface" => Duration::from_secs(2),
+        "stackoverflow" => Duration::from_secs(2),
+        "bluesky" => Duration::from_secs(2),
+        "papers_with_code" => Duration::from_secs(2),
         // Default for everything else
         _ => DEFAULT_MIN_INTERVAL,
     }
