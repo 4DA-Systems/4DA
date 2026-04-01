@@ -39,6 +39,7 @@ export function CriticalAlertBanner() {
     relevanceResults
       .filter((r: SourceRelevance) =>
         r.signal_priority === 'critical'
+        && (r.signal_action?.startsWith('Critical:') ?? false)
         && !acknowledged.has(r.id),
       )
       .map((r: SourceRelevance) => ({
@@ -49,7 +50,7 @@ export function CriticalAlertBanner() {
         source_type: r.source_type,
         url: r.url ?? undefined,
       }))
-      .slice(0, 5),
+      .slice(0, 3),
     [relevanceResults, acknowledged],
   );
 
@@ -83,7 +84,7 @@ export function CriticalAlertBanner() {
     const first = criticalAlerts[0];
     if (first == null) return;
     if ('Notification' in window && Notification.permission === 'granted') {
-      void new Notification('4DA — Critical Security Alert', {
+      void new Notification('4DA — Attention', {
         body: first.signal_action ?? first.title,
         tag: `4da-critical-${String(first.id)}`,
         requireInteraction: true,
@@ -94,15 +95,15 @@ export function CriticalAlertBanner() {
   if (criticalAlerts.length === 0) return null;
 
   return (
-    <div className="mx-4 mt-2 mb-1 bg-red-500/10 border border-red-500/40 rounded-lg overflow-hidden">
+    <div className="mx-4 mt-2 mb-1 bg-amber-500/8 border border-amber-500/30 rounded-lg overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-          <span className="text-sm font-medium text-red-400">
+          <div className="w-2 h-2 rounded-full bg-amber-400" />
+          <span className="text-sm font-medium text-amber-400">
             {criticalAlerts.length === 1
-              ? t('alerts.criticalSingular', 'Critical Security Alert')
-              : t('alerts.criticalPlural', '{{count}} Critical Alerts', { count: criticalAlerts.length })}
+              ? t('alerts.criticalSingular', 'Needs Attention')
+              : t('alerts.criticalPlural', '{{count}} Items Need Attention', { count: criticalAlerts.length })}
           </span>
         </div>
         {criticalAlerts.length > 1 && (
@@ -120,10 +121,10 @@ export function CriticalAlertBanner() {
         {criticalAlerts.map(alert => (
           <div
             key={alert.id}
-            className="flex items-start justify-between gap-2 text-xs bg-red-500/5 rounded px-2 py-1.5"
+            className="flex items-start justify-between gap-2 text-xs bg-amber-500/5 rounded px-2 py-1.5"
           >
             <div className="flex-1 min-w-0">
-              <div className="text-red-300 font-medium truncate">
+              <div className="text-amber-200 font-medium truncate">
                 {alert.signal_action != null && alert.signal_action !== '' ? alert.signal_action : alert.title}
               </div>
               {alert.signal_action != null && alert.signal_action !== '' && (
@@ -142,7 +143,7 @@ export function CriticalAlertBanner() {
                       window.open(alert.url!, '_blank', 'noopener,noreferrer');
                     });
                   }}
-                  className="text-red-400 hover:text-red-300 transition-colors underline cursor-pointer"
+                  className="text-amber-400 hover:text-amber-300 transition-colors underline cursor-pointer"
                 >
                   {t('alerts.details', 'Details')}
                 </button>
