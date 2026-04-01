@@ -222,9 +222,12 @@ export interface FreeBriefingData {
   success: boolean;
   empty: boolean;
   message?: string;
-  top_items?: Array<{ title: string; url: string | null; source: string; score: string }>;
+  top_items?: Array<{ title: string; url: string | null; source: string; score: string; signal_priority?: string | null }>;
   stack_alerts?: Array<{ title: string; url: string | null; source: string }>;
   source_summary?: Record<string, number>;
+  signal_priorities?: Record<string, number>;
+  knowledge_gaps?: Array<{ topic: string; days_since_last: number }>;
+  wisdom_signals?: Array<{ text: string; confidence: number; signal_type: string }>;
   total_items?: number;
   generated_at?: string;
 }

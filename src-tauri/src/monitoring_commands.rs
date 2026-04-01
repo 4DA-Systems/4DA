@@ -470,6 +470,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
             confidence: 0.87,
         }],
         wisdom_signals: vec![],
+        synthesis: None,
     };
 
     crate::briefing_window::show_briefing(&app, &preview);

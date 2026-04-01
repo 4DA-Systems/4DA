@@ -107,11 +107,18 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         }
         *count += 1;
 
+        let priority = {
+            let state = get_analysis_state().lock();
+            state.results.as_ref().and_then(|results| {
+                results.iter().find(|r| r.title == *title).and_then(|r| r.signal_priority.clone())
+            })
+        };
         top_items.push(serde_json::json!({
             "title": title,
             "url": url,
             "source": source,
             "score": format!("{:.0}%", score * 100.0),
+            "signal_priority": priority,
         }));
     }
 
@@ -146,6 +153,73 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         *source_counts.entry(source.clone()).or_default() += 1;
     }
 
+    // Signal priorities from in-memory state
+    let signal_priorities = {
+        let state = get_analysis_state().lock();
+        let mut priorities = HashMap::new();
+        if let Some(ref results) = state.results {
+            for r in results.iter().filter(|r| r.relevant && !r.excluded) {
+                if let Some(ref priority) = r.signal_priority {
+                    *priorities.entry(priority.clone()).or_insert(0usize) += 1;
+                }
+            }
+        }
+        priorities
+    };
+
+    // Knowledge gaps: tech with no recent signals
+    let knowledge_gaps: Vec<serde_json::Value> = {
+        let mut gaps = Vec::new();
+        if let Ok(conn) = crate::open_db_connection() {
+            for tech in &ace_ctx.detected_tech {
+                let tech_lower = tech.to_lowercase();
+                if let Ok(days) = conn.query_row(
+                    "SELECT CAST(julianday('now') - julianday(MAX(created_at)) AS INTEGER) FROM source_items WHERE LOWER(title) LIKE ?1",
+                    rusqlite::params![format!("%{}%", tech_lower)],
+                    |row| row.get::<_, i64>(0),
+                ) {
+                    if days >= 5 {
+                        gaps.push(serde_json::json!({ "topic": tech, "days_since_last": days }));
+                    }
+                }
+            }
+        }
+        gaps.sort_by(|a, b| b["days_since_last"].as_i64().unwrap_or(0).cmp(&a["days_since_last"].as_i64().unwrap_or(0)));
+        gaps.truncate(5);
+        gaps
+    };
+
+    // Wisdom signals from AWE
+    let wisdom_signals: Vec<serde_json::Value> = {
+        if let Some(path) = crate::context_commands::find_awe_binary() {
+            if let Ok(output) = crate::context_commands::run_awe_with_timeout(
+                std::process::Command::new(&path).args(["wisdom", "--domain", "software-engineering"]),
+                10,
+            ) {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut signals = Vec::new();
+                let mut current_type = "";
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.contains("VALIDATED PRINCIPLES") { current_type = "principle"; }
+                    else if trimmed.contains("ANTI-PATTERNS") { current_type = "anti-pattern"; }
+                    else if trimmed.starts_with('[') && !current_type.is_empty() {
+                        if let Some(end) = trimmed.find(']') {
+                            let conf = trimmed[1..end].trim_end_matches('%').parse::<f64>().unwrap_or(0.0) / 100.0;
+                            let text = trimmed[end + 1..].trim();
+                            if !text.is_empty() && conf > 0.0 {
+                                signals.push(serde_json::json!({ "text": text, "confidence": conf, "signal_type": current_type }));
+                            }
+                        }
+                    }
+                }
+                signals.sort_by(|a, b| b["confidence"].as_f64().unwrap_or(0.0).partial_cmp(&a["confidence"].as_f64().unwrap_or(0.0)).unwrap_or(std::cmp::Ordering::Equal));
+                signals.truncate(3);
+                signals
+            } else { vec![] }
+        } else { vec![] }
+    };
+
     // GAME: track briefing generation
     if let Ok(db) = crate::get_database() {
         for a in crate::game_engine::increment_counter(db, "briefings", 1) {
@@ -159,6 +233,9 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         "top_items": top_items,
         "stack_alerts": stack_alerts,
         "source_summary": source_counts,
+        "signal_priorities": signal_priorities,
+        "knowledge_gaps": knowledge_gaps,
+        "wisdom_signals": wisdom_signals,
         "total_items": items.len(),
         "generated_at": chrono::Utc::now().to_rfc3339(),
     }))
