@@ -178,7 +178,7 @@ describe('FeedbackButtons', () => {
     expect(screen.getByText(/feedback\.marked/)).toBeInTheDocument();
   });
 
-  it('disables all feedback buttons after any feedback is given', () => {
+  it('disables feedback action buttons after any feedback is given', () => {
     render(
       <FeedbackButtons
         item={defaultItem}
@@ -186,11 +186,22 @@ describe('FeedbackButtons', () => {
         onRecordInteraction={mockOnRecordInteraction}
       />,
     );
-    // The Save and Dismiss and Not Relevant buttons should all be disabled
-    const buttons = screen.getAllByRole('button');
-    buttons.forEach((btn) => {
+    // Save, Dismiss, and Not Relevant buttons should be disabled.
+    // Open Link button remains enabled (it uses Tauri opener, not a feedback action).
+    const allButtons = screen.getAllByRole('button');
+    const feedbackButtons = allButtons.filter(
+      (btn) => btn.textContent !== 'feedback.openLink',
+    );
+    feedbackButtons.forEach((btn) => {
       expect(btn).toBeDisabled();
     });
+    // Open Link should still be enabled
+    const openLink = allButtons.find(
+      (btn) => btn.textContent === 'feedback.openLink',
+    );
+    if (openLink) {
+      expect(openLink).not.toBeDisabled();
+    }
   });
 
   it('does not call onRecordInteraction when buttons are disabled', () => {
@@ -207,7 +218,7 @@ describe('FeedbackButtons', () => {
     expect(mockOnRecordInteraction).not.toHaveBeenCalled();
   });
 
-  it('Open Link opens in new tab', () => {
+  it('Open Link is a button that uses Tauri opener plugin', () => {
     render(
       <FeedbackButtons
         item={defaultItem}
@@ -216,9 +227,8 @@ describe('FeedbackButtons', () => {
       />,
     );
     const link = screen.getByText('feedback.openLink');
-    expect(link).toHaveAttribute('target', '_blank');
-    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
-    expect(link).toHaveAttribute('href', defaultItem.url);
+    // Open Link is now a <button> that calls @tauri-apps/plugin-opener instead of an <a> tag
+    expect(link.tagName).toBe('BUTTON');
   });
 
   it('has accessible group label', () => {

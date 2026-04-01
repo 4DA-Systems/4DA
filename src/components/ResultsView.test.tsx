@@ -110,6 +110,21 @@ vi.mock('./context-panel', () => ({
   ContextPanel: () => <div data-testid="context-panel" />,
 }));
 
+vi.mock('./SmartEmptyState', () => ({
+  SmartEmptyState: () => <div data-testid="smart-empty-state" />,
+}));
+
+vi.mock('./ContentTranslationProvider', () => ({
+  useTranslatedContent: () => ({
+    getTranslated: (_id: string, text: string) => text,
+    requestTranslation: vi.fn(),
+  }),
+}));
+
+vi.mock('../lib/game-components', () => ({
+  registerGameComponent: vi.fn(),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock hooks and utils
 // ---------------------------------------------------------------------------
@@ -122,6 +137,7 @@ vi.mock('../hooks', () => ({
     setSearchQuery: vi.fn(),
     sourceFilters: new Set<string>(),
     toggleSourceFilter: vi.fn(),
+    resetSourceFilters: vi.fn(),
     sortBy: 'score',
     setSortBy: vi.fn(),
     showOnlyRelevant: false,
@@ -143,6 +159,7 @@ vi.mock('../utils/score', () => ({
 vi.mock('../config/sources', () => ({
   getSourceLabel: (s: string) => s,
   getSourceFullName: (s: string) => s,
+  ALL_SOURCE_IDS: new Set(['hackernews']),
 }));
 
 // ---------------------------------------------------------------------------
@@ -153,8 +170,6 @@ import { ResultsView } from './ResultsView';
 const defaultProps = {
   newItemIds: new Set<number>(),
   focusedIndex: -1,
-  renderLimit: 50,
-  setRenderLimit: vi.fn(),
 };
 
 describe('ResultsView', () => {

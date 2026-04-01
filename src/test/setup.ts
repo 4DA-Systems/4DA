@@ -41,6 +41,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 // Mock Tauri plugin opener
 vi.mock('@tauri-apps/plugin-opener', () => ({
   open: vi.fn(),
+  openUrl: vi.fn(),
 }));
 
 // Mock react-i18next — passthrough t() returns the key itself
