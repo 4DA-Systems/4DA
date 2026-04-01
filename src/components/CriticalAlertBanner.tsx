@@ -134,14 +134,18 @@ export function CriticalAlertBanner() {
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {alert.url != null && alert.url !== '' && (
-                <a
-                  href={alert.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-red-400 hover:text-red-300 transition-colors underline"
+                <button
+                  onClick={() => {
+                    import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+                      void openUrl(alert.url!);
+                    }).catch(() => {
+                      window.open(alert.url!, '_blank', 'noopener,noreferrer');
+                    });
+                  }}
+                  className="text-red-400 hover:text-red-300 transition-colors underline cursor-pointer"
                 >
                   {t('alerts.details', 'Details')}
-                </a>
+                </button>
               )}
               <button
                 onClick={() => { handleAcknowledge(alert.id); }}
