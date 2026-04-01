@@ -254,6 +254,39 @@ impl Source for PypiSource {
         Ok(items)
     }
 
+    async fn fetch_items_deep(&self, _items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
+        // Deep fetch: query all monitored packages (same as regular but logs differently)
+        if !self.config.enabled {
+            return Err(SourceError::Disabled);
+        }
+
+        info!(
+            target: "4da::sources",
+            packages = self.packages.len(),
+            "PyPI deep scan: fetching all monitored packages"
+        );
+
+        let mut items = Vec::new();
+        for package in &self.packages {
+            match self.fetch_package(package).await {
+                Ok(item) => items.push(item),
+                Err(SourceError::RateLimited(_)) => break,
+                Err(e) => {
+                    warn!(
+                        target: "4da::sources",
+                        package = %package,
+                        error = %e,
+                        "PyPI: Failed to fetch package in deep scan"
+                    );
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+
+        info!(target: "4da::sources", items = items.len(), "PyPI deep scan complete");
+        Ok(items)
+    }
+
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
         // PyPI items already have full content from the JSON API
         Ok(item.content.clone())
