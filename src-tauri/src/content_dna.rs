@@ -65,17 +65,38 @@ pub fn classify_content_for_source(
     source_type: &str,
 ) -> (ContentType, f32) {
     match source_type {
+        // Security feeds: ALWAYS SecurityAdvisory — highest boost, triggers critical fast-path
         "cve" | "osv" => return (ContentType::SecurityAdvisory, 1.30),
+
+        // Package registries: ReleaseNotes by default, BreakingChange if deprecated/yanked/EOL
         "npm_registry" | "crates_io" | "pypi" | "go_modules" => {
             let tl = title.to_lowercase();
-            if tl.contains("deprecated") || tl.contains("yanked") || tl.contains("[deprecated]") {
+            if tl.contains("deprecated")
+                || tl.contains("yanked")
+                || tl.contains("[deprecated]")
+                || tl.contains("end of life")
+                || tl.contains("no longer maintained")
+                || tl.contains("archived")
+                || tl.contains("unmaintained")
+            {
                 return (ContentType::BreakingChange, 1.25);
             }
             return (ContentType::ReleaseNotes, 1.15);
         }
+
+        // AI/ML model releases — treated as release notes for new model versions
         "huggingface" => return (ContentType::ReleaseNotes, 1.15),
+
+        // Research papers with code — deep technical content
         "papers_with_code" => return (ContentType::DeepDive, 1.15),
-        "stackoverflow" => return (ContentType::Question, 0.65),
+
+        // Stack Overflow: neutral multiplier — relevance comes from tag matching
+        // against user's stack, not from content type. Don't penalize SO questions
+        // since they're curated developer pain signals.
+        "stackoverflow" => return (ContentType::Discussion, 1.00),
+
+        // Bluesky: fall through to regex — posts can be anything
+        // (announcements, discussions, questions, show-and-tell)
         _ => {}
     }
     classify_content(title, content)
