@@ -380,6 +380,36 @@ pub(crate) fn get_source_registry() -> &'static Mutex<SourceRegistry> {
         let youtube_channels = load_youtube_channels_from_settings();
         registry.register(Box::new(YouTubeSource::with_channels(youtube_channels)));
 
+        // Register remaining original sources
+        registry.register(Box::new(crate::sources::lobsters::LobstersSource::new()));
+        registry.register(Box::new(crate::sources::devto::DevtoSource::new()));
+
+        // Security intelligence sources
+        registry.register(Box::new(crate::sources::cve::CveSource::new()));
+        registry.register(Box::new(crate::sources::osv::OsvSource::new()));
+
+        // Package registry sources (ACE-integrated — monitors user's actual deps)
+        registry.register(Box::new(
+            crate::sources::npm_registry::NpmRegistrySource::new(),
+        ));
+        registry.register(Box::new(crate::sources::pypi::PypiSource::new()));
+        registry.register(Box::new(crate::sources::crates_io::CratesIoSource::new()));
+        registry.register(Box::new(crate::sources::go_modules::GoModulesSource::new()));
+
+        // AI/ML + Research
+        registry.register(Box::new(
+            crate::sources::huggingface::HuggingFaceSource::new(),
+        ));
+        registry.register(Box::new(
+            crate::sources::papers_with_code::PapersWithCodeSource::new(),
+        ));
+
+        // Community + Social
+        registry.register(Box::new(
+            crate::sources::stackoverflow::StackOverflowSource::new(),
+        ));
+        registry.register(Box::new(crate::sources::bluesky::BlueskySource::new()));
+
         info!(target: "4da::sources", count = registry.count(), "Source registry ready");
         Mutex::new(registry)
     })
