@@ -350,9 +350,12 @@ pub(crate) fn score_item(
     let content_quality =
         crate::content_quality::compute_content_quality(input.title, input.content, input.url);
 
-    // Content DNA: utility multiplier by content type
-    let (content_type, content_dna_mult) =
-        crate::content_dna::classify_content(input.title, input.content);
+    // Content DNA: source-type-aware utility multiplier
+    let (content_type, content_dna_mult) = crate::content_dna::classify_content_for_source(
+        input.title,
+        input.content,
+        input.source_type,
+    );
 
     // Novelty: penalize introductory content for known tech, boost releases
     let novelty = crate::novelty::compute_novelty(
