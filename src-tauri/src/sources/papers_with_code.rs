@@ -107,6 +107,7 @@ impl Source for PapersWithCodeSource {
         let response = self
             .client
             .get(&url)
+            .header("User-Agent", "4DA-Developer-OS/1.0")
             .send()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
