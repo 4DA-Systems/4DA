@@ -51,18 +51,20 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
   return (
     <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions', { defaultValue: 'Feedback actions' })}>
       {item.url && isSafeUrl(item.url) && (
-        <a
-          href={item.url}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
           onClick={(e) => {
             e.stopPropagation();
             onRecordInteraction(item.id, 'click', item);
+            import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+              void openUrl(item.url!);
+            }).catch(() => {
+              window.open(item.url!, '_blank', 'noopener,noreferrer');
+            });
           }}
-          className="px-3 py-1.5 text-xs bg-accent-primary text-bg-primary rounded hover:bg-text-secondary transition-colors font-medium"
+          className="px-3 py-1.5 text-xs bg-accent-primary text-bg-primary rounded hover:bg-text-secondary transition-colors font-medium cursor-pointer"
         >
           {t('feedback.openLink')}
-        </a>
+        </button>
       )}
       <button
         onClick={handleSave}
