@@ -1250,6 +1250,25 @@ impl Database {
                 )?;
             }
 
+            // Phase 44: Performance indexes for hot query paths
+            if current_version < 44 {
+                Self::run_versioned_migration(
+                    &conn,
+                    43,
+                    44,
+                    "Phase 44: performance indexes for feedback and source_items",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+                            CREATE INDEX IF NOT EXISTS idx_feedback_relevant ON feedback(relevant);
+                            CREATE INDEX IF NOT EXISTS idx_source_items_created_at ON source_items(created_at);",
+                        )?;
+                        info!(target: "4da::db", "Created performance indexes for feedback and source_items");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
