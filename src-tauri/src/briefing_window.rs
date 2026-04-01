@@ -1,17 +1,18 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! Center-screen intelligence briefing window for 4DA.
+//! Desktop-level intelligence briefing window for 4DA.
 //!
 //! A dedicated webview (separate from the signal notification window) that displays
-//! the daily morning briefing with enriched data: functional hyperlinks, knowledge
-//! gaps, signal priorities, and matched dependencies.
+//! the daily morning briefing with enriched data: synthesized intelligence,
+//! knowledge gaps, signal priorities, and AWE wisdom signals.
 //!
 //! The briefing window is:
-//! - 560×480 logical pixels, centered on the primary monitor
-//! - Transparent, borderless, always-on-top, excluded from taskbar
+//! - 560×480 logical pixels, positioned bottom-right above the taskbar
+//! - Transparent, borderless, pinned to desktop level (behind all windows)
 //! - Pre-created on app startup (hidden) for instant display
-//! - Auto-dismisses after 60 seconds if no interaction
+//! - Only visible when the user exposes their desktop
+//! - Never steals focus, never interrupts fullscreen applications
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -58,7 +59,7 @@ pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()>
     .decorations(false)
     .transparent(true)
     .shadow(false)
-    .always_on_top(true)
+    .always_on_top(false)
     .skip_taskbar(true)
     .focused(false)
     .resizable(false)
@@ -100,8 +101,8 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
         }
     };
 
-    // Center on primary monitor.
-    let centered = (|| -> tauri::Result<()> {
+    // Position bottom-right, above the taskbar — like a desktop widget.
+    let positioned = (|| -> tauri::Result<()> {
         let monitor = window
             .primary_monitor()?
             .or_else(|| window.available_monitors().ok()?.into_iter().next());
@@ -113,9 +114,11 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
 
             let win_w = (WINDOW_WIDTH as f64 * scale) as i32;
             let win_h = (WINDOW_HEIGHT as f64 * scale) as i32;
+            let margin_right = (24.0 * scale) as i32;
+            let margin_bottom = (80.0 * scale) as i32; // Above the taskbar
 
-            let px = monitor_pos.x + (screen.width as i32 - win_w) / 2;
-            let py = monitor_pos.y + (screen.height as i32 - win_h) / 2;
+            let px = monitor_pos.x + (screen.width as i32 - win_w) - margin_right;
+            let py = monitor_pos.y + (screen.height as i32 - win_h) - margin_bottom;
 
             window.set_position(PhysicalPosition::new(px, py))?;
         } else {
@@ -124,8 +127,8 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
         Ok(())
     })();
 
-    if let Err(e) = centered {
-        warn!(target: "4da::briefing", error = %e, "Failed to center briefing window");
+    if let Err(e) = positioned {
+        warn!(target: "4da::briefing", error = %e, "Failed to position briefing window");
     }
 
     // Emit data to the briefing webview.
@@ -156,12 +159,14 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
         warn!(target: "4da::briefing", error = %e, "Failed to emit briefing data");
     }
 
-    // Show the window and take focus (briefings deserve attention).
+    // Show the window without stealing focus — never interrupt the user.
     if let Err(e) = window.show() {
         warn!(target: "4da::briefing", error = %e, "Failed to show briefing window");
         return;
     }
-    let _ = window.set_focus();
+    // Pin to desktop level — behind all normal windows, at the same z-order
+    // as desktop icons. Only visible when the desktop is exposed.
+    crate::desktop_pin::pin_to_desktop(&window);
 
     info!(
         target: "4da::briefing",
