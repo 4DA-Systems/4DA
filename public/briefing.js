@@ -16,6 +16,8 @@ var chainsSection = document.getElementById('chains-section');
 var chainsList = document.getElementById('chains-list');
 var wisdomSection = document.getElementById('wisdom-section');
 var wisdomList = document.getElementById('wisdom-list');
+var synthesisSection = document.getElementById('synthesis-section');
+var synthesisText = document.getElementById('synthesis-text');
 var gapsSection = document.getElementById('gaps-section');
 var gapsList = document.getElementById('gaps-list');
 var ongoingSection = document.getElementById('ongoing-section');
@@ -178,6 +180,14 @@ function buildChainsHtml(chains) {
 }
 
 function renderBriefing(data) {
+  // LLM Synthesis
+  if (data.synthesis) {
+    synthesisSection.style.display = '';
+    synthesisText.textContent = data.synthesis;
+  } else {
+    synthesisSection.style.display = 'none';
+  }
+
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
 
@@ -346,6 +356,14 @@ async function init() {
 
     await listen('briefing-data', function (event) {
       showBriefing(event.payload);
+    });
+
+    // Async synthesis arrives after initial briefing
+    await listen('briefing-synthesis', function (event) {
+      if (event.payload && synthesisSection && synthesisText) {
+        synthesisSection.style.display = '';
+        synthesisText.textContent = event.payload;
+      }
     });
 
     emitTauri('briefing-ready');
