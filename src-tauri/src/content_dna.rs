@@ -57,6 +57,30 @@ impl ContentType {
     }
 }
 
+/// Source-type-aware content classification. If the source type has a known
+/// default content type, that override takes precedence over regex classification.
+pub fn classify_content_for_source(
+    title: &str,
+    content: &str,
+    source_type: &str,
+) -> (ContentType, f32) {
+    match source_type {
+        "cve" | "osv" => return (ContentType::SecurityAdvisory, 1.30),
+        "npm_registry" | "crates_io" | "pypi" | "go_modules" => {
+            let tl = title.to_lowercase();
+            if tl.contains("deprecated") || tl.contains("yanked") || tl.contains("[deprecated]") {
+                return (ContentType::BreakingChange, 1.25);
+            }
+            return (ContentType::ReleaseNotes, 1.15);
+        }
+        "huggingface" => return (ContentType::ReleaseNotes, 1.15),
+        "papers_with_code" => return (ContentType::DeepDive, 1.15),
+        "stackoverflow" => return (ContentType::Question, 0.65),
+        _ => {}
+    }
+    classify_content(title, content)
+}
+
 /// Classify content into a type and return (type, utility_multiplier).
 /// Checked in priority order — first match wins.
 pub fn classify_content(title: &str, content: &str) -> (ContentType, f32) {

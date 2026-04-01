@@ -65,18 +65,27 @@ pub struct FreshnessReport {
 /// Returns `(min_expected_items, max_acceptable_age_secs)` for a source.
 pub fn get_source_thresholds(source_name: &str) -> (usize, u64) {
     match source_name {
-        "hackernews" => (20, 3600),  // 20 items, 1h freshness
-        "reddit" => (10, 7200),      // 10 items, 2h freshness
-        "github" => (5, 86400),      // 5 items, 24h freshness
-        "arxiv" => (3, 172800),      // 3 items, 48h freshness (papers)
-        "rss" => (1, 86400),         // 1 item, 24h freshness
-        "twitter" => (5, 3600),      // 5 items, 1h freshness
-        "devto" => (5, 43200),       // 5 items, 12h freshness
-        "lobsters" => (10, 7200),    // 10 items, 2h freshness
-        "producthunt" => (3, 86400), // 3 items, 24h freshness
-        "youtube" => (1, 604800),    // 1 item, 7d freshness (channels)
-        "cve" => (0, 604800),        // 0 items ok, 7d freshness
-        _ => (1, 86400),             // default: 1 item, 24h
+        "hackernews" => (20, 3600),        // 20 items, 1h freshness
+        "reddit" => (10, 7200),            // 10 items, 2h freshness
+        "github" => (5, 86400),            // 5 items, 24h freshness
+        "arxiv" => (3, 172800),            // 3 items, 48h freshness (papers)
+        "rss" => (1, 86400),               // 1 item, 24h freshness
+        "twitter" => (5, 3600),            // 5 items, 1h freshness
+        "devto" => (5, 43200),             // 5 items, 12h freshness
+        "lobsters" => (10, 7200),          // 10 items, 2h freshness
+        "producthunt" => (3, 86400),       // 3 items, 24h freshness
+        "youtube" => (1, 604800),          // 1 item, 7d freshness (channels)
+        "cve" => (0, 604800),              // 0 items ok, 7d freshness
+        "osv" => (0, 604800),              // 0 items ok, 7d (vulnerability feed)
+        "npm_registry" => (5, 86400),      // 5 items, 24h (package versions)
+        "pypi" => (5, 86400),              // 5 items, 24h
+        "crates_io" => (5, 86400),         // 5 items, 24h
+        "go_modules" => (5, 86400),        // 5 items, 24h
+        "huggingface" => (3, 86400),       // 3 items, 24h
+        "stackoverflow" => (10, 21600),    // 10 items, 6h
+        "bluesky" => (5, 7200),            // 5 items, 2h
+        "papers_with_code" => (3, 172800), // 3 items, 48h
+        _ => (1, 86400),                   // default: 1 item, 24h
     }
 }
 
