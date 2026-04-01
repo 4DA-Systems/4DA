@@ -198,3 +198,4 @@ known_hosts
 .pypirc
 
 .vercel
+data/settings.json.bak
