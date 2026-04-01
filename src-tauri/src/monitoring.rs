@@ -359,6 +359,24 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
                     }
+
+                    // Weekly VACUUM to reclaim disk space after deletions
+                    static LAST_VACUUM: AtomicU64 = AtomicU64::new(0);
+                    let last_vac = LAST_VACUUM.load(Ordering::Relaxed);
+                    const VACUUM_INTERVAL: u64 = 7 * 24 * 3600; // Weekly
+                    if now - last_vac >= VACUUM_INTERVAL {
+                        LAST_VACUUM.store(now, Ordering::Relaxed);
+                        if let Ok(db) = crate::get_database() {
+                            match db.conn.lock().execute_batch("VACUUM;") {
+                                Ok(()) => {
+                                    info!(target: "4da::monitor", "Weekly VACUUM completed — disk space reclaimed");
+                                }
+                                Err(e) => {
+                                    warn!(target: "4da::monitor", error = %e, "Weekly VACUUM failed");
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
