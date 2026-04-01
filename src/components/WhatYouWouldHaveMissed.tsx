@@ -190,9 +190,24 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                     {signalLabel}
                   </span>
                 )}
-                <p className="text-sm text-white font-medium truncate">
-                  {criticalSave.title}
-                </p>
+                {criticalSave.url ? (
+                  <button
+                    onClick={() => {
+                      import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+                        void openUrl(criticalSave.url!);
+                      }).catch(() => {
+                        window.open(criticalSave.url!, '_blank', 'noopener,noreferrer');
+                      });
+                    }}
+                    className="text-sm text-white font-medium truncate hover:text-accent-gold transition-colors text-left cursor-pointer"
+                  >
+                    {criticalSave.title}
+                  </button>
+                ) : (
+                  <p className="text-sm text-white font-medium truncate">
+                    {criticalSave.title}
+                  </p>
+                )}
                 <p className="text-xs text-text-muted mt-1">
                   {criticalSave.explanation || criticalSave.source_type}
                   {criticalSave.score_breakdown?.matched_deps?.length ? (
