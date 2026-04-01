@@ -240,7 +240,9 @@ export interface BriefingSlice {
   sourceHealth: SourceHealthStatus[];
   freeBriefing: FreeBriefingData | null;
   freeBriefingLoading: boolean;
+  morningBriefSynthesis: string | null;
   setShowBriefing: (show: boolean) => void;
+  setMorningBriefSynthesis: (synthesis: string | null) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
   generateBriefing: () => Promise<void>;

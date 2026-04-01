@@ -194,6 +194,12 @@ export function useAnalysis(
           }
         }),
 
+        listen<{ synthesis: string }>('morning-briefing-synthesis', (event) => {
+          if (event.payload.synthesis) {
+            useAppStore.getState().setMorningBriefSynthesis(event.payload.synthesis);
+          }
+        }),
+
         listen<{ type: string; severity: string; description: string }>('anomaly-detected', (event) => {
           const { severity, description } = event.payload;
           if (severity === 'High' || severity === 'Critical') {
