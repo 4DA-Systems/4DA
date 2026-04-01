@@ -58,6 +58,14 @@ pub struct ChainSummary {
     pub confidence: f64,
 }
 
+/// AWE wisdom signal — a validated principle or anti-pattern from the Wisdom Graph
+#[derive(Debug, Clone, Serialize)]
+pub struct WisdomSignal {
+    pub text: String,
+    pub confidence: f32,
+    pub signal_type: String, // "principle" or "anti-pattern"
+}
+
 /// Morning briefing notification content.
 /// Enriched for center-screen briefing window with knowledge gaps, ongoing topics,
 /// and escalating signal chains.
@@ -75,6 +83,9 @@ pub struct BriefingNotification {
     /// Signal chains in escalating or peak phase — top-level briefing section
     #[serde(default)]
     pub escalating_chains: Vec<ChainSummary>,
+    /// AWE wisdom signals — validated principles and anti-patterns from the Wisdom Graph
+    #[serde(default)]
+    pub wisdom_signals: Vec<WisdomSignal>,
 }
 
 // ============================================================================
@@ -242,6 +253,9 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // 7. Detect escalating signal chains for top-level briefing section
     let escalating_chains = detect_escalating_chains();
 
+    // 8. Recall AWE wisdom signals — validated principles and anti-patterns
+    let wisdom_signals = recall_awe_wisdom();
+
     Some(BriefingNotification {
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
@@ -249,50 +263,25 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         ongoing_topics,
         knowledge_gaps,
         escalating_chains,
+        wisdom_signals,
     })
 }
 
-/// Send a morning briefing via the center-screen briefing window.
+/// Send a morning briefing via the desktop-level briefing window and OS notification.
 ///
-/// Falls back to OS native notification if the briefing window is unavailable.
+/// The briefing window is pinned to the desktop level — behind all normal windows,
+/// never stealing focus, never interrupting fullscreen applications.
+/// A companion OS notification alerts the user that the briefing is ready.
 pub fn send_morning_briefing_notification<R: Runtime>(
     app: &AppHandle<R>,
     briefing: &BriefingNotification,
 ) {
-    // Primary: center-screen intelligence briefing window
+    // Primary: desktop-level briefing window (ambient, non-intrusive)
     crate::briefing_window::show_briefing(app, briefing);
 
-    // Also send a subtle OS notification as a backup (e.g. if user has multiple monitors
-    // and the briefing window is on the wrong one, or if window init failed).
-    let body = if briefing.items.is_empty() {
-        "No new signals since last check.".to_string()
-    } else {
-        let mut lines: Vec<String> = Vec::new();
-        for item in briefing.items.iter().take(3) {
-            let signal_tag = item
-                .signal_type
-                .as_deref()
-                .map(|s| format!("[{}] ", s.to_uppercase()))
-                .unwrap_or_default();
-            lines.push(format!(
-                "{}{}",
-                signal_tag,
-                strip_control_chars(&item.title)
-            ));
-        }
-        if briefing.total_relevant > 3 {
-            lines.push(format!("...and {} more", briefing.total_relevant - 3));
-        }
-        lines.join("\n")
-    };
+    // Companion: native OS notification with concise professional summary
+    let body = build_notification_summary(briefing);
 
-    let body = if body.len() > 200 {
-        format!("{}...", truncate_safe(&body, 197))
-    } else {
-        body
-    };
-
-    // OS notification as companion (non-blocking)
     if let Err(e) = app
         .notification()
         .builder()
@@ -300,15 +289,67 @@ pub fn send_morning_briefing_notification<R: Runtime>(
         .body(&body)
         .show()
     {
-        warn!(target: "4da::briefing", error = %e, "OS notification fallback failed (briefing window is primary)");
+        warn!(target: "4da::briefing", error = %e, "OS notification failed (briefing window is primary)");
     }
 
     info!(
         target: "4da::briefing",
         items = briefing.total_relevant,
         gaps = briefing.knowledge_gaps.len(),
-        "Intelligence briefing delivered"
+        chains = briefing.escalating_chains.len(),
+        wisdom = briefing.wisdom_signals.len(),
+        "Intelligence briefing delivered (desktop widget + OS notification)"
     );
+}
+
+/// Build a concise, professional summary for the OS notification body.
+///
+/// Format: "1 escalating chain · 2 critical signals · 5 relevant items"
+/// Prioritizes actionable info: chains first, then signals, then gaps.
+fn build_notification_summary(briefing: &BriefingNotification) -> String {
+    let mut parts: Vec<String> = Vec::new();
+
+    if !briefing.escalating_chains.is_empty() {
+        let n = briefing.escalating_chains.len();
+        parts.push(format!("{n} escalating chain{}", if n != 1 { "s" } else { "" }));
+    }
+
+    let critical = briefing.items.iter()
+        .filter(|i| i.signal_priority.as_deref() == Some("critical")).count();
+    let alert = briefing.items.iter()
+        .filter(|i| i.signal_priority.as_deref() == Some("alert")).count();
+    if critical > 0 {
+        parts.push(format!("{critical} critical signal{}", if critical != 1 { "s" } else { "" }));
+    }
+    if alert > 0 {
+        parts.push(format!("{alert} alert{}", if alert != 1 { "s" } else { "" }));
+    }
+    if briefing.total_relevant > 0 {
+        let n = briefing.total_relevant;
+        parts.push(format!("{n} relevant item{}", if n != 1 { "s" } else { "" }));
+    }
+    if !briefing.knowledge_gaps.is_empty() {
+        let n = briefing.knowledge_gaps.len();
+        parts.push(format!("{n} blind spot{}", if n != 1 { "s" } else { "" }));
+    }
+    let principles = briefing.wisdom_signals.iter()
+        .filter(|s| s.signal_type == "principle").count();
+    if principles > 0 {
+        parts.push(format!("{principles} wisdom signal{}", if principles != 1 { "s" } else { "" }));
+    }
+
+    if parts.is_empty() {
+        return "No new signals since last check.".to_string();
+    }
+
+    let summary = parts.join(" · ");
+    if let Some(top) = briefing.items.first() {
+        let safe_title = strip_control_chars(&top.title);
+        let title = truncate_safe(&safe_title, 80);
+        format!("{summary}\n{title}")
+    } else {
+        summary
+    }
 }
 
 // ============================================================================
@@ -477,6 +518,72 @@ fn detect_escalating_chains() -> Vec<ChainSummary> {
             vec![]
         }
     }
+}
+
+// ============================================================================
+// AWE Wisdom Recall
+// ============================================================================
+
+/// Recall AWE wisdom signals relevant to the morning briefing.
+///
+/// Fetches validated principles and anti-patterns from the Wisdom Graph.
+/// These provide decision context from accumulated project experience.
+fn recall_awe_wisdom() -> Vec<WisdomSignal> {
+    let awe_path = match crate::context_commands::find_awe_binary() {
+        Some(p) => p,
+        None => return vec![],
+    };
+
+    let output = match crate::context_commands::run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args(["wisdom", "--domain", "software-engineering"]),
+        15,
+    ) {
+        Ok(o) => o,
+        Err(e) => {
+            tracing::warn!(target: "4da::briefing", error = %e, "AWE wisdom recall failed for briefing");
+            return vec![];
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut signals = Vec::new();
+    let mut current_type = "";
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.contains("VALIDATED PRINCIPLES") {
+            current_type = "principle";
+        } else if trimmed.contains("ANTI-PATTERNS") {
+            current_type = "anti-pattern";
+        } else if trimmed.starts_with('[') && !current_type.is_empty() {
+            // Parse "[85%] statement text"
+            if let Some(bracket_end) = trimmed.find(']') {
+                let confidence_str = &trimmed[1..bracket_end];
+                let confidence = confidence_str
+                    .trim_end_matches('%')
+                    .parse::<f32>()
+                    .unwrap_or(0.0)
+                    / 100.0;
+                let text = trimmed[bracket_end + 1..].trim().to_string();
+                if !text.is_empty() && confidence > 0.0 {
+                    signals.push(WisdomSignal {
+                        text,
+                        confidence,
+                        signal_type: current_type.to_string(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort by confidence descending, take top 5
+    signals.sort_by(|a, b| {
+        b.confidence
+            .partial_cmp(&a.confidence)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    signals.truncate(5);
+    signals
 }
 
 // ============================================================================
@@ -663,6 +770,11 @@ mod tests {
                 action: "Review tokio security patches".to_string(),
                 confidence: 0.85,
             }],
+            wisdom_signals: vec![WisdomSignal {
+                text: "Always test migration paths before releasing".to_string(),
+                confidence: 0.85,
+                signal_type: "principle".to_string(),
+            }],
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
@@ -671,6 +783,9 @@ mod tests {
         assert_eq!(briefing.knowledge_gaps[0].days_since_last, 7);
         assert_eq!(briefing.escalating_chains.len(), 1);
         assert_eq!(briefing.escalating_chains[0].phase, "escalating");
+        assert_eq!(briefing.wisdom_signals.len(), 1);
+        assert_eq!(briefing.wisdom_signals[0].signal_type, "principle");
+        assert!(briefing.wisdom_signals[0].confidence > 0.8);
     }
 
     #[test]

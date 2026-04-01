@@ -96,6 +96,7 @@ mod context_commands;
 mod context_engine;
 mod data_export;
 pub mod db;
+mod desktop_pin;
 mod decision_advantage;
 mod decision_advantage_commands;
 mod decision_signals;
