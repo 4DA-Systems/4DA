@@ -190,6 +190,24 @@ html, body {
 .briefing-body::-webkit-scrollbar-thumb:hover { background: #3A3A3A; }
 
 /* ========================================================================
+   LLM Synthesis
+   ======================================================================== */
+
+.synthesis-section {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.synthesis-text {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* ========================================================================
    Section Labels
    ======================================================================== */
 
