@@ -7,7 +7,7 @@ import { SmartEmptyState } from './SmartEmptyState';
 import { ContextPanel } from './context-panel';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { getStageLabel } from '../utils/score';
-import { getSourceLabel } from '../config/sources';
+import { getSourceLabel, ALL_SOURCE_IDS } from '../config/sources';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
 import { registerGameComponent } from '../lib/game-components';
@@ -86,10 +86,14 @@ export function ResultsView({
     ];
     if (items.length > 0) requestTranslation(items);
   }, [filteredResults, state.nearMisses, requestTranslation]);
-  const uniqueSources = useMemo(
-    () => [...new Set(state.relevanceResults.map(r => r.source_type || 'hackernews'))]
-      .sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b))),
+  // Show ALL registered sources (not just those with results) so users see full coverage
+  const sourcesWithResults = useMemo(
+    () => new Set(state.relevanceResults.map(r => r.source_type || 'hackernews')),
     [state.relevanceResults],
+  );
+  const uniqueSources = useMemo(
+    () => [...ALL_SOURCE_IDS].sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b))),
+    [],
   );
 
   return (
@@ -167,21 +171,26 @@ export function ResultsView({
               {/* Source Filters */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
                 <span className="text-xs text-text-muted">{t('results.sources')}</span>
-                {uniqueSources.map(id => (
-                    <button
-                      key={id}
-                      onClick={() => toggleSourceFilter(id)}
-                      aria-pressed={sourceFilters.has(id)}
-                      aria-label={`Filter ${getSourceLabel(id)} source`}
-                      className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                        sourceFilters.has(id)
-                          ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                          : 'text-text-muted hover:text-text-secondary'
-                      }`}
-                    >
-                      {getSourceLabel(id)}
-                    </button>
-                  ))}
+                {uniqueSources.map(id => {
+                    const hasResults = sourcesWithResults.has(id);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => { toggleSourceFilter(id); }}
+                        aria-pressed={sourceFilters.has(id)}
+                        aria-label={`Filter ${getSourceLabel(id)} source`}
+                        className={`px-2 py-1 text-xs rounded-lg transition-all ${
+                          sourceFilters.has(id)
+                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                            : hasResults
+                            ? 'text-text-muted hover:text-text-secondary'
+                            : 'text-text-muted/40 hover:text-text-muted'
+                        }`}
+                      >
+                        {getSourceLabel(id)}
+                      </button>
+                    );
+                  })}
               </div>
 
               {/* Sort */}
