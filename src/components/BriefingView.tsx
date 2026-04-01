@@ -21,7 +21,7 @@ export const BriefingView = memo(function BriefingView() {
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
     lastBackgroundResultsAt, sourceHealth,
-    freeBriefing, freeBriefingLoading,
+    freeBriefing, freeBriefingLoading, morningBriefSynthesis,
   } = useAppStore(
     useShallow((s) => ({
       briefing: s.aiBriefing,
@@ -33,6 +33,7 @@ export const BriefingView = memo(function BriefingView() {
       sourceHealth: s.sourceHealth,
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
+      morningBriefSynthesis: s.morningBriefSynthesis,
     })),
   );
 
@@ -122,6 +123,11 @@ export const BriefingView = memo(function BriefingView() {
               )}
             </div>
             <div className="p-5 space-y-4">
+              {morningBriefSynthesis && (
+                <div className="pb-3 mb-1 border-b border-border">
+                  <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
+                </div>
+              )}
               {freeBriefing.wisdom_signals && freeBriefing.wisdom_signals.length > 0 && (
                 <div>
                   <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">Wisdom</h3>

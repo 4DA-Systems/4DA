@@ -18,8 +18,10 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   sourceHealth: [],
   freeBriefing: null,
   freeBriefingLoading: false,
+  morningBriefSynthesis: null,
 
   setShowBriefing: (show) => set({ showBriefing: show }),
+  setMorningBriefSynthesis: (synthesis) => set({ morningBriefSynthesis: synthesis }),
   setAutoBriefingEnabled: (enabled) => set({ autoBriefingEnabled: enabled }),
   setLastBackgroundResultsAt: (date) => set({ lastBackgroundResultsAt: date }),
 
