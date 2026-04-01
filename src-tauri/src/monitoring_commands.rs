@@ -469,6 +469,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
             action: "Review security implications for SQLite in your projects".to_string(),
             confidence: 0.87,
         }],
+        wisdom_signals: vec![],
     };
 
     crate::briefing_window::show_briefing(&app, &preview);

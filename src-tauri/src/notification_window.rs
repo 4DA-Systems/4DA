@@ -98,7 +98,7 @@ pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     .decorations(false)
     .transparent(true)
     .shadow(false)
-    .always_on_top(true)
+    .always_on_top(false)
     .skip_taskbar(true)
     .focused(false)
     .resizable(false)

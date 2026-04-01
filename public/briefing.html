@@ -15,33 +15,49 @@
     <div id="card" class="briefing-card">
       <!-- Header -->
       <div class="briefing-header">
-        <span id="briefing-title" class="briefing-title">4DA Intelligence Briefing</span>
+        <div class="header-left">
+          <span class="briefing-label">INTELLIGENCE BRIEFING</span>
+          <span id="briefing-date" class="briefing-date"></span>
+        </div>
         <button id="dismiss-btn" class="dismiss-btn" aria-label="Dismiss briefing">&times;</button>
       </div>
 
-      <!-- Escalating chains (top-level, before items) -->
-      <div id="chains-section" class="chains-section" style="display:none">
-        <div class="section-header chains-header">Escalating Chains</div>
-        <div id="chains-list" class="chains-list"></div>
-      </div>
+      <!-- Scrollable content area -->
+      <div class="briefing-body">
+        <!-- Escalating chains -->
+        <div id="chains-section" class="section chains-section" style="display:none">
+          <div class="section-label section-label--urgent">ESCALATING</div>
+          <div id="chains-list" class="chains-list"></div>
+        </div>
 
-      <!-- Scrollable items list -->
-      <div id="items-list" class="items-list"></div>
+        <!-- AWE Wisdom signals -->
+        <div id="wisdom-section" class="section wisdom-section" style="display:none">
+          <div class="section-label section-label--wisdom">WISDOM</div>
+          <div id="wisdom-list" class="wisdom-list"></div>
+        </div>
 
-      <!-- Knowledge gaps section -->
-      <div id="gaps-section" class="gaps-section" style="display:none">
-        <div class="section-header gaps-header">Blind Spots</div>
-        <div id="gaps-list" class="gaps-list"></div>
-      </div>
+        <!-- Top signals -->
+        <div id="items-section" class="section items-section">
+          <div class="section-label">SIGNALS</div>
+          <div id="items-list" class="items-list"></div>
+        </div>
 
-      <!-- Ongoing topics (collapsed) -->
-      <div id="ongoing-section" class="ongoing-section" style="display:none">
-        <div id="ongoing-line" class="ongoing-line"></div>
+        <!-- Knowledge gaps / blind spots -->
+        <div id="gaps-section" class="section gaps-section" style="display:none">
+          <div class="section-label section-label--caution">BLIND SPOTS</div>
+          <div id="gaps-list" class="gaps-list"></div>
+        </div>
+
+        <!-- Ongoing topics -->
+        <div id="ongoing-section" class="ongoing-section" style="display:none">
+          <div id="ongoing-line" class="ongoing-line"></div>
+        </div>
       </div>
 
       <!-- Footer -->
       <div class="briefing-footer">
         <span id="total-count" class="total-count"></span>
+        <button id="open-app-btn" class="open-app-btn">Open 4DA</button>
       </div>
     </div>
   </div>
