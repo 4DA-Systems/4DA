@@ -299,19 +299,9 @@ body {
 
 /* Accessibility: Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
-  .animate-pulse-slow,
-  .animate-glow,
-  .animate-slide-in,
-  .radar-glow,
-  .game-ring-burst,
-  .game-ring-burst-delayed,
-  .game-achievement-card,
-  .animate-zoom-fade {
-    animation: none !important;
-  }
-
-  /* Disable any inline-styled animations */
-  [style*="animation"] {
-    animation: none !important;
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
