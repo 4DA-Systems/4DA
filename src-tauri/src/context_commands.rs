@@ -353,10 +353,10 @@ pub async fn sync_awe_wisdom() -> Result<String> {
 
 /// Get AWE wisdom summary — lightweight read-only query.
 /// Returns structured data about the Wisdom Graph state without syncing.
+/// All AWE binary calls run in parallel for maximum speed.
 #[tauri::command]
 pub async fn get_awe_summary() -> Result<String> {
-    let awe_bin = find_awe_binary();
-    let Some(awe_path) = awe_bin else {
+    if find_awe_binary().is_none() {
         return Ok(serde_json::json!({
             "available": false,
             "decisions": 0,
@@ -366,7 +366,14 @@ pub async fn get_awe_summary() -> Result<String> {
             "health": null,
         })
         .to_string());
-    };
+    }
+
+    // Run all AWE queries in parallel (was sequential: 4 × 3-5s = 12-20s → now 3-5s total)
+    let (calibration, wisdom, pending) = tokio::join!(
+        run_awe_async(&["calibration"], 10),
+        run_awe_async(&["wisdom", "-d", "software-engineering"], 10),
+        run_awe_async(&["pending", "--limit", "100"], 10),
+    );
 
     let mut summary = serde_json::json!({
         "available": true,
@@ -379,45 +386,31 @@ pub async fn get_awe_summary() -> Result<String> {
         "health": null,
     });
 
-    // Use calibration command for accurate counts (health reports a subset)
-    if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path).args(["calibration"]),
-        15,
-    ) {
+    // Parse calibration output
+    if let Ok(ref output) = calibration {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // Parse "Total decisions tracked: N"
         for line in stdout.lines() {
             let trimmed = line.trim();
             if trimmed.contains("decisions tracked") || trimmed.contains("Decisions tracked") {
-                if let Some(num) = trimmed
-                    .split_whitespace()
-                    .find(|w| w.parse::<u64>().is_ok())
-                {
+                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["decisions"] = serde_json::json!(n);
                     }
                 }
             } else if trimmed.contains("feedback") && trimmed.contains("recorded") {
-                if let Some(num) = trimmed
-                    .split_whitespace()
-                    .find(|w| w.parse::<u64>().is_ok())
-                {
+                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["feedback_count"] = serde_json::json!(n);
                     }
                 }
             } else if trimmed.contains("coverage") || trimmed.contains("Coverage") {
-                // Parse "Feedback coverage: 42%"
                 if let Some(pct) = trimmed.split_whitespace().find(|w| w.ends_with('%')) {
                     if let Ok(n) = pct.trim_end_matches('%').parse::<u64>() {
                         summary["feedback_coverage"] = serde_json::json!(n);
                     }
                 }
             } else if trimmed.contains("principles") && trimmed.contains("Validated") {
-                if let Some(num) = trimmed
-                    .split_whitespace()
-                    .find(|w| w.parse::<u64>().is_ok())
-                {
+                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["principles"] = serde_json::json!(n);
                     }
@@ -426,44 +419,19 @@ pub async fn get_awe_summary() -> Result<String> {
         }
     }
 
-    // Fallback to health for principles count if calibration didn't provide it
-    if summary["principles"] == 0 {
-        if let Ok(output) =
-            run_awe_with_timeout(std::process::Command::new(&awe_path).args(["health"]), 15)
-        {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            if let Some(cap) = stdout.lines().find(|l| l.contains("Principles extracted")) {
-                if let Some(num) = cap.split_whitespace().last() {
-                    if let Ok(n) = num.parse::<u64>() {
-                        summary["principles"] = serde_json::json!(n);
-                    }
-                }
-            }
-        }
-    }
-
-    // Compute health status from feedback coverage
+    // Health status from feedback coverage
     let coverage = summary["feedback_coverage"].as_u64().unwrap_or(0);
-    let health = if coverage >= 90 {
-        "healthy"
-    } else if coverage >= 70 {
-        "good"
-    } else if coverage >= 40 {
-        "learning"
-    } else if coverage > 0 {
-        "needs_feedback"
-    } else {
-        "cold"
-    };
-    summary["health"] = serde_json::json!(health);
+    summary["health"] = serde_json::json!(match coverage {
+        90.. => "healthy",
+        70..=89 => "good",
+        40..=69 => "learning",
+        1..=39 => "needs_feedback",
+        _ => "cold",
+    });
 
-    // Get top principle from wisdom command
-    if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path).args(["wisdom", "-d", "software-engineering"]),
-        15,
-    ) {
+    // Parse wisdom output — top principle
+    if let Ok(ref output) = wisdom {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        // Find first principle line: "[85%] statement"
         for line in stdout.lines() {
             let trimmed = line.trim();
             if trimmed.starts_with('[') && trimmed.contains(']') {
@@ -479,13 +447,25 @@ pub async fn get_awe_summary() -> Result<String> {
                 }
             }
         }
+        // Also extract principles count if calibration didn't provide it
+        if summary["principles"] == 0 {
+            let principle_count = stdout.lines()
+                .filter(|l| l.trim().starts_with('[') && l.contains(']'))
+                .filter(|l| {
+                    l.split(']').nth(1).map_or(false, |t| {
+                        let t = t.trim();
+                        !t.is_empty() && !t.starts_with("Evidence") && !t.starts_with("Status")
+                    })
+                })
+                .count();
+            if principle_count > 0 {
+                summary["principles"] = serde_json::json!(principle_count);
+            }
+        }
     }
 
-    // Get pending count
-    if let Ok(output) = run_awe_with_timeout(
-        std::process::Command::new(&awe_path).args(["pending", "--limit", "100"]),
-        15,
-    ) {
+    // Parse pending count
+    if let Ok(ref output) = pending {
         let stdout = String::from_utf8_lossy(&output.stdout);
         if let Some(cap) = stdout.lines().find(|l| l.contains("decision(s) need")) {
             if let Some(num) = cap.split_whitespace().next() {
@@ -779,8 +759,53 @@ pub(crate) fn run_awe_with_timeout(
     }
 }
 
-/// Find the AWE binary (release build).
-pub(crate) fn find_awe_binary() -> Option<String> {
+/// Async version of AWE subprocess execution — non-blocking, uses tokio.
+///
+/// Preferred over `run_awe_with_timeout` in async contexts (Tauri commands).
+/// The sync version is retained for callers in synchronous contexts.
+pub(crate) async fn run_awe_async(
+    args: &[&str],
+    timeout_secs: u64,
+) -> std::result::Result<std::process::Output, String> {
+    let awe_path = find_awe_binary()
+        .ok_or_else(|| "AWE binary not found".to_string())?;
+
+    let mut cmd = tokio::process::Command::new(&awe_path);
+    cmd.args(args)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+
+    // Inject API keys
+    if let Ok(mgr) = std::panic::catch_unwind(crate::get_settings_manager) {
+        let guard = mgr.lock();
+        let s = guard.get();
+        if !s.llm.api_key.is_empty() {
+            match s.llm.provider.as_str() {
+                "anthropic" => { cmd.env("ANTHROPIC_API_KEY", &s.llm.api_key); }
+                "openai" => { cmd.env("OPENAI_API_KEY", &s.llm.api_key); }
+                "ollama" => {
+                    cmd.env("AWE_OLLAMA_MODEL", &s.llm.model);
+                    if let Some(ref url) = s.llm.base_url {
+                        cmd.env("AWE_OLLAMA_URL", url);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(timeout_secs),
+        cmd.output(),
+    ).await {
+        Ok(Ok(output)) => Ok(output),
+        Ok(Err(e)) => Err(format!("AWE process error: {e}")),
+        Err(_) => Err(format!("AWE timed out after {timeout_secs}s")),
+    }
+}
+
+/// Cached AWE binary path — resolved once, reused for all calls.
+static AWE_BINARY_PATH: std::sync::LazyLock<Option<String>> = std::sync::LazyLock::new(|| {
     let candidates = [
         "D:\\runyourempire\\awe\\target\\release\\awe.exe",
         "/d/runyourempire/awe/target/release/awe",
@@ -790,10 +815,14 @@ pub(crate) fn find_awe_binary() -> Option<String> {
             return Some(path.to_string());
         }
     }
-    // Check AWE_BIN env var
     std::env::var("AWE_BIN")
         .ok()
         .filter(|p| std::path::Path::new(p).exists())
+});
+
+/// Find the AWE binary (release build). Cached after first lookup.
+pub(crate) fn find_awe_binary() -> Option<String> {
+    AWE_BINARY_PATH.clone()
 }
 
 /// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects).
