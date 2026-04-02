@@ -715,22 +715,32 @@ pub(crate) fn run_awe_with_timeout(
     if let Ok(mgr) = std::panic::catch_unwind(crate::get_settings_manager) {
         let guard = mgr.lock();
         let s = guard.get();
-        if !s.llm.api_key.is_empty() {
-            match s.llm.provider.as_str() {
-                "anthropic" => {
-                    cmd.env("ANTHROPIC_API_KEY", &s.llm.api_key);
-                }
-                "openai" => {
-                    cmd.env("OPENAI_API_KEY", &s.llm.api_key);
-                }
-                "ollama" => {
-                    cmd.env("AWE_OLLAMA_MODEL", &s.llm.model);
-                    if let Some(ref url) = s.llm.base_url {
+        match s.llm.provider.as_str() {
+            // Cloud providers need an API key
+            "anthropic" if !s.llm.api_key.is_empty() => {
+                cmd.env("ANTHROPIC_API_KEY", &s.llm.api_key);
+            }
+            "openai" if !s.llm.api_key.is_empty() => {
+                cmd.env("OPENAI_API_KEY", &s.llm.api_key);
+            }
+            "openai-compatible" if !s.llm.api_key.is_empty() => {
+                cmd.env("OPENAI_API_KEY", &s.llm.api_key);
+            }
+            // Ollama needs NO api_key — just model name and optional URL
+            "ollama" => {
+                let model = if s.llm.model.is_empty() {
+                    "llama3.2".to_string()
+                } else {
+                    s.llm.model.clone()
+                };
+                cmd.env("AWE_OLLAMA_MODEL", &model);
+                if let Some(ref url) = s.llm.base_url {
+                    if !url.is_empty() {
                         cmd.env("AWE_OLLAMA_URL", url);
                     }
                 }
-                _ => {}
             }
+            _ => {}
         }
     }
 
@@ -775,22 +785,25 @@ pub(crate) async fn run_awe_async(
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 
-    // Inject API keys
+    // Inject LLM provider config — AWE uses the same provider as 4DA
     if let Ok(mgr) = std::panic::catch_unwind(crate::get_settings_manager) {
         let guard = mgr.lock();
         let s = guard.get();
-        if !s.llm.api_key.is_empty() {
-            match s.llm.provider.as_str() {
-                "anthropic" => { cmd.env("ANTHROPIC_API_KEY", &s.llm.api_key); }
-                "openai" => { cmd.env("OPENAI_API_KEY", &s.llm.api_key); }
-                "ollama" => {
-                    cmd.env("AWE_OLLAMA_MODEL", &s.llm.model);
-                    if let Some(ref url) = s.llm.base_url {
-                        cmd.env("AWE_OLLAMA_URL", url);
-                    }
-                }
-                _ => {}
+        match s.llm.provider.as_str() {
+            "anthropic" if !s.llm.api_key.is_empty() => {
+                cmd.env("ANTHROPIC_API_KEY", &s.llm.api_key);
             }
+            "openai" | "openai-compatible" if !s.llm.api_key.is_empty() => {
+                cmd.env("OPENAI_API_KEY", &s.llm.api_key);
+            }
+            "ollama" => {
+                let model = if s.llm.model.is_empty() { "llama3.2".to_string() } else { s.llm.model.clone() };
+                cmd.env("AWE_OLLAMA_MODEL", &model);
+                if let Some(ref url) = s.llm.base_url {
+                    if !url.is_empty() { cmd.env("AWE_OLLAMA_URL", url); }
+                }
+            }
+            _ => {}
         }
     }
 
