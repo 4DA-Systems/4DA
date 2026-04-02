@@ -260,8 +260,8 @@ interface CommandMap {
   get_template_content: { params: { templateId: string }; result: { id: string; title: string; description: string; category: string; content: string } };
 
   // -- Playbook (STREETS) --
-  get_playbook_modules: { params: Record<string, never>; result: PlaybookModule[] };
-  get_playbook_content: { params: { moduleId: string }; result: PlaybookContent };
+  get_playbook_modules: { params: { lang?: string }; result: PlaybookModule[] };
+  get_playbook_content: { params: { moduleId: string; lang?: string }; result: PlaybookContent };
   get_playbook_progress: { params: Record<string, never>; result: PlaybookProgress };
   mark_lesson_complete: { params: { moduleId: string; lessonIdx: number }; result: void };
   translate_playbook_module: { params: { moduleId: string; lang: string }; result: string };

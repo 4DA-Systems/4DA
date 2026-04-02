@@ -24,6 +24,7 @@ export interface PlaybookSlice {
   loadPersonalizedContentBatch: (moduleId: string, lessonCount: number) => Promise<void>;
   loadStreetsTier: () => Promise<void>;
   activateStreetsLicense: (key: string) => Promise<boolean>;
+  reloadForLanguage: () => Promise<void>;
 }
 
 export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> = (set, get) => ({
@@ -38,7 +39,9 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
 
   loadPlaybookModules: async () => {
     try {
-      const modules = await cmd('get_playbook_modules');
+      const lang = typeof localStorage !== 'undefined'
+        ? localStorage.getItem('4da_language') || 'en' : 'en';
+      const modules = await cmd('get_playbook_modules', { lang });
       set({ playbookModules: modules });
     } catch (e) {
       set({ playbookError: String(e) });
@@ -48,7 +51,9 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   loadPlaybookContent: async (moduleId: string) => {
     set({ playbookLoading: true, playbookError: null, activeModuleId: moduleId });
     try {
-      const content = await cmd('get_playbook_content', { moduleId });
+      const lang = typeof localStorage !== 'undefined'
+        ? localStorage.getItem('4da_language') || 'en' : 'en';
+      const content = await cmd('get_playbook_content', { moduleId, lang });
       set({ playbookContent: content, playbookLoading: false });
     } catch (e) {
       set({ playbookError: String(e), playbookLoading: false });
@@ -129,5 +134,14 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
   activateStreetsLicense: async (_key: string) => {
     // No-op: community/cohort tiers removed. Kept for UI compat.
     return false;
+  },
+
+  reloadForLanguage: async () => {
+    set({ playbookContent: null, personalizedLessons: {} });
+    await get().loadPlaybookModules();
+    const activeId = get().activeModuleId;
+    if (activeId) {
+      await get().loadPlaybookContent(activeId);
+    }
   },
 });
