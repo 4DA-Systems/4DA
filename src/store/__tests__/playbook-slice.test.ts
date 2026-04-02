@@ -77,7 +77,7 @@ describe('playbook-slice', () => {
 
       await useAppStore.getState().loadPlaybookModules();
 
-      expect(invoke).toHaveBeenCalledWith('get_playbook_modules', {});
+      expect(invoke).toHaveBeenCalledWith('get_playbook_modules', expect.objectContaining({ lang: expect.any(String) }));
       expect(useAppStore.getState().playbookModules).toEqual(mockModules);
     });
 
