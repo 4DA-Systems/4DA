@@ -197,6 +197,7 @@ html, body {
   margin-bottom: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 .synthesis-text {
@@ -205,6 +206,11 @@ html, body {
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-wrap: break-word;
+  max-height: 110px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
 }
 
 /* ========================================================================
