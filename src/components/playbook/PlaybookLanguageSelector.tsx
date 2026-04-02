@@ -8,6 +8,7 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { useAppStore } from '../../store';
 
 const LANGUAGES: { code: string; name: string; native: string }[] = [
   { code: 'en', name: 'English', native: 'English' },
@@ -109,12 +110,12 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
           {LANGUAGES.map((lang) => (
             <button
               key={lang.code}
-              onClick={() => {
+              onClick={async () => {
                 i18n.changeLanguage(lang.code);
                 localStorage.setItem('4da_language', lang.code);
-                // Sync language to backend so Rust get_user_language() is correct
-                cmd('set_locale', { country: '', language: lang.code, currency: '' }).catch(() => {});
+                await cmd('set_locale', { country: '', language: lang.code, currency: '' }).catch(() => {});
                 setShowPicker(false);
+                useAppStore.getState().reloadForLanguage();
                 onLanguageChange?.();
               }}
               className={`w-full text-start px-3 py-2 text-xs hover:bg-bg-tertiary transition-colors flex items-center justify-between ${
