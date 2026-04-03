@@ -774,6 +774,21 @@ Rules:
 - No markdown, no bullet markers, use plain dashes for lists
 - Start with content directly — no meta-text like "here is your briefing""#;
 
+    // Append language instruction for non-English users
+    let lang = crate::i18n::get_user_language();
+    let language_instruction = if lang != "en" {
+        let lang_name = crate::content_translation::lang_display_name(&lang);
+        format!(
+            "\n\nIMPORTANT: Write this entire briefing in {lang_name}. \
+             Keep technical terms (React, Kubernetes, API, TypeScript, etc.) in English. \
+             Use natural {lang_name} phrasing — do not translate word-for-word from English. \
+             Section headers (SITUATION, PRIORITY, PATTERN) should also be in {lang_name}."
+        )
+    } else {
+        String::new()
+    };
+    let full_system_prompt = format!("{system_prompt}{language_instruction}");
+
     let user_prompt = format!(
         "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\n\
          {count} signals:\n{items}\n{chains}{gaps}{wisdom}\n\
@@ -790,7 +805,7 @@ Rules:
     }];
 
     let start = std::time::Instant::now();
-    match llm_client.complete(system_prompt, messages).await {
+    match llm_client.complete(&full_system_prompt, messages).await {
         Ok(response) => {
             tracing::info!(
                 target: "4da::briefing",
