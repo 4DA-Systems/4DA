@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
+import { useTranslatedContent } from './ContentTranslationProvider';
 import { DimensionBar, StatusRow, RecommendationItem } from './calibration/CalibrationComponents';
 import { gradeColor } from './calibration/calibration-utils';
 import type { CalibrationResult, Recommendation } from '../types/calibration';
@@ -11,6 +12,7 @@ import { translateError } from '../utils/error-messages';
 
 export function CalibrationView() {
   const { t } = useTranslation();
+  const { requestTranslation } = useTranslatedContent();
   const [result, setResult] = useState<CalibrationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +44,18 @@ export function CalibrationView() {
       runCalibration();
     }
   }, [runCalibration]);
+
+  // Request translations for calibration recommendation content
+  useEffect(() => {
+    if (result?.recommendations?.length) {
+      requestTranslation(result.recommendations.flatMap((rec, i) => {
+        const recId = rec.action_type ?? `rec-${i}`;
+        const items = [{ id: `cal-title-${recId}`, text: rec.title }];
+        if (rec.description) items.push({ id: `cal-desc-${recId}`, text: rec.description });
+        return items;
+      }));
+    }
+  }, [result?.recommendations, requestTranslation]);
 
   // Listen for Ollama pull progress
   useEffect(() => {

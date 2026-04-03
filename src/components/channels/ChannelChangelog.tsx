@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { ChannelChangelog as ChangelogType } from '../../types/channels';
 
 interface Props {
@@ -8,7 +9,14 @@ interface Props {
 
 export function ChannelChangelog({ changelog }: Props) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (changelog.summary) {
+      requestTranslation([{ id: `cl-summary-${changelog.from_version}-${changelog.to_version}`, text: changelog.summary }]);
+    }
+  }, [changelog.summary, changelog.from_version, changelog.to_version, requestTranslation]);
 
   const totalChanges =
     changelog.added_lines.length + changelog.removed_lines.length;
@@ -25,7 +33,7 @@ export function ChannelChangelog({ changelog }: Props) {
           <span className="text-sm font-medium text-text-secondary">
             {t('channels.changelog')}
           </span>
-          <span className="text-xs text-text-muted">{changelog.summary}</span>
+          <span className="text-xs text-text-muted">{getTranslated(`cl-summary-${changelog.from_version}-${changelog.to_version}`, changelog.summary)}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-text-muted">

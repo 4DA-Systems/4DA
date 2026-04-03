@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { Recommendation } from '../../types/calibration';
 import { priorityColor } from './calibration-utils';
 
@@ -88,6 +89,8 @@ interface RecommendationItemProps {
 }
 
 export function RecommendationItem({ rec, index, actionInProgress, onAction }: RecommendationItemProps) {
+  const { getTranslated } = useTranslatedContent();
+  const recId = rec.action_type ?? `rec-${index}`;
   return (
     <div className={`py-2 ${index > 0 ? 'border-t border-bg-tertiary' : ''}`}>
       <div className="flex items-center gap-2">
@@ -98,11 +101,11 @@ export function RecommendationItem({ rec, index, actionInProgress, onAction }: R
           {rec.priority}
         </span>
         <span className="text-[13px] font-medium text-white">
-          {rec.title}
+          {getTranslated(`cal-title-${recId}`, rec.title)}
         </span>
       </div>
       <p className="mt-1 mb-0 text-xs text-text-secondary leading-[1.4]">
-        {rec.description}
+        {getTranslated(`cal-desc-${recId}`, rec.description)}
       </p>
       <div className="flex items-center gap-2 mt-1">
         <ActionButton rec={rec} actionInProgress={actionInProgress} onAction={onAction} />

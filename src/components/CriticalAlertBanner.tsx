@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
 import type { SourceRelevance } from '../types/analysis';
 
@@ -22,6 +23,7 @@ interface CriticalAlert {
  */
 export function CriticalAlertBanner() {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const relevanceResults = useAppStore(s => s.appState.relevanceResults);
   const [acknowledged, setAcknowledged] = useState<Set<number>>(
     () => {
@@ -78,6 +80,17 @@ export function CriticalAlertBanner() {
     });
   }, [criticalAlerts]);
 
+  // Request translations for critical alert content
+  useEffect(() => {
+    if (criticalAlerts.length > 0) {
+      requestTranslation(criticalAlerts.flatMap(a => {
+        const items = [{ id: `alert-title-${a.id}`, text: a.title }];
+        if (a.signal_action) items.push({ id: `alert-action-${a.id}`, text: a.signal_action });
+        return items;
+      }));
+    }
+  }, [criticalAlerts, requestTranslation]);
+
   // Trigger browser notification for new critical alerts when app is hidden
   useEffect(() => {
     if (criticalAlerts.length === 0 || !document.hidden) return;
@@ -125,11 +138,13 @@ export function CriticalAlertBanner() {
           >
             <div className="flex-1 min-w-0">
               <div className="text-amber-200 font-medium truncate">
-                {alert.signal_action != null && alert.signal_action !== '' ? alert.signal_action : alert.title}
+                {alert.signal_action != null && alert.signal_action !== ''
+                  ? getTranslated(`alert-action-${alert.id}`, alert.signal_action)
+                  : getTranslated(`alert-title-${alert.id}`, alert.title)}
               </div>
               {alert.signal_action != null && alert.signal_action !== '' && (
                 <div className="text-text-muted truncate mt-0.5">
-                  {alert.title}
+                  {getTranslated(`alert-title-${alert.id}`, alert.title)}
                 </div>
               )}
             </div>
