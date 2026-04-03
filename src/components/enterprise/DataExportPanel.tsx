@@ -10,14 +10,14 @@ interface ExportManifest {
   total_records: number;
 }
 
-const EXPORT_SECTIONS = [
-  { key: 'profile', label: 'User Profile & Tech Stack', icon: '\u{1F464}' },
-  { key: 'decisions', label: 'Decision Journal', icon: '\u{1F4DD}' },
-  { key: 'signals', label: 'Signal Chains', icon: '\u{1F4E1}' },
-  { key: 'sources', label: 'Source Configuration', icon: '\u{1F517}' },
-  { key: 'briefings', label: 'Briefing History', icon: '\u{1F4C4}' },
-  { key: 'feedback', label: 'Feedback & Engagement', icon: '\u{1F44D}' },
-  { key: 'learned', label: 'Learned Behavior', icon: '\u{1F9E0}' },
+const EXPORT_SECTION_KEYS = [
+  { key: 'profile', i18nKey: 'enterprise.export.section.profile', fallback: 'User Profile & Tech Stack', icon: '\u{1F464}' },
+  { key: 'decisions', i18nKey: 'enterprise.export.section.decisions', fallback: 'Decision Journal', icon: '\u{1F4DD}' },
+  { key: 'signals', i18nKey: 'enterprise.export.section.signals', fallback: 'Signal Chains', icon: '\u{1F4E1}' },
+  { key: 'sources', i18nKey: 'enterprise.export.section.sources', fallback: 'Source Configuration', icon: '\u{1F517}' },
+  { key: 'briefings', i18nKey: 'enterprise.export.section.briefings', fallback: 'Briefing History', icon: '\u{1F4C4}' },
+  { key: 'feedback', i18nKey: 'enterprise.export.section.feedback', fallback: 'Feedback & Engagement', icon: '\u{1F44D}' },
+  { key: 'learned', i18nKey: 'enterprise.export.section.learned', fallback: 'Learned Behavior', icon: '\u{1F9E0}' },
 ];
 
 export function DataExportPanel() {
@@ -28,7 +28,7 @@ export function DataExportPanel() {
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [selectedSections, setSelectedSections] = useState<Set<string>>(
-    new Set(EXPORT_SECTIONS.map(s => s.key))
+    new Set(EXPORT_SECTION_KEYS.map(s => s.key))
   );
   const [singleExporting, setSingleExporting] = useState<string | null>(null);
 
@@ -121,30 +121,33 @@ export function DataExportPanel() {
           {t('enterprise.export.sections', 'Export Sections')}
         </h4>
         <div className="grid grid-cols-2 gap-1.5">
-          {EXPORT_SECTIONS.map(section => (
-            <div
-              key={section.key}
-              className="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border/50"
-            >
-              <label className="flex items-center gap-2 cursor-pointer flex-1">
-                <input
-                  type="checkbox"
-                  checked={selectedSections.has(section.key)}
-                  onChange={() => toggleSection(section.key)}
-                  className="rounded border-border"
-                />
-                <span className="text-xs text-white">{section.label}</span>
-              </label>
-              <button
-                onClick={() => handleExportSection(section.key)}
-                disabled={singleExporting === section.key}
-                className="text-[10px] text-text-muted hover:text-success transition-colors ms-2"
-                title={`Export ${section.label} only`}
+          {EXPORT_SECTION_KEYS.map(section => {
+            const label = t(section.i18nKey, section.fallback);
+            return (
+              <div
+                key={section.key}
+                className="flex items-center justify-between px-3 py-2 bg-bg-primary rounded-lg border border-border/50"
               >
-                {singleExporting === section.key ? '...' : '\u{2B07}'}
-              </button>
-            </div>
-          ))}
+                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedSections.has(section.key)}
+                    onChange={() => toggleSection(section.key)}
+                    className="rounded border-border"
+                  />
+                  <span className="text-xs text-white">{label}</span>
+                </label>
+                <button
+                  onClick={() => handleExportSection(section.key)}
+                  disabled={singleExporting === section.key}
+                  className="text-[10px] text-text-muted hover:text-success transition-colors ms-2"
+                  title={t('enterprise.export.exportOnly', { defaultValue: 'Export {{label}} only', label })}
+                >
+                  {singleExporting === section.key ? '...' : '\u{2B07}'}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 

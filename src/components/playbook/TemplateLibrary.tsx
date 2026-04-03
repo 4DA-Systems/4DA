@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { cmd } from '../../lib/commands';
 
 // Inline template type (previously in types/coach.ts)
@@ -24,18 +25,19 @@ function CategoryFilter({
   active: string;
   onSelect: (cat: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap gap-2">
       <button
         onClick={() => onSelect('all')}
-        aria-label="Filter: All categories"
+        aria-label={t('playbook.templates.filterAll', 'Filter: All categories')}
         className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
           active === 'all'
             ? 'bg-accent-gold/15 text-accent-gold border-accent-gold/30'
             : 'bg-bg-tertiary text-text-secondary border-border hover:text-white hover:border-accent-gold/20'
         }`}
       >
-        All
+        {t('playbook.templates.all', 'All')}
       </button>
       {categories.map(cat => (
         <button
@@ -66,9 +68,11 @@ function CategoryBadge({ category }: { category: string }) {
 function TemplateCard({
   template,
   onOpen,
+  getTranslated,
 }: {
   template: Template;
   onOpen: (t: Template) => void;
+  getTranslated: (id: string, original: string) => string;
 }) {
   return (
     <button
@@ -78,12 +82,12 @@ function TemplateCard({
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <h4 className="text-sm font-semibold text-white group-hover:text-accent-gold transition-colors leading-snug">
-          {template.title}
+          {getTranslated(`tpl-title-${template.id}`, template.title)}
         </h4>
         <CategoryBadge category={template.category} />
       </div>
       <p className="text-xs text-text-secondary leading-relaxed line-clamp-2">
-        {template.description}
+        {getTranslated(`tpl-desc-${template.id}`, template.description)}
       </p>
     </button>
   );
@@ -171,6 +175,8 @@ function TemplateViewer({
 // ---------------------------------------------------------------------------
 
 export function TemplateLibrary() {
+  const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [activeCategory, setActiveCategory] = useState('all');
   const [viewingTemplate, setViewingTemplate] = useState<Template | null>(null);
@@ -180,6 +186,16 @@ export function TemplateLibrary() {
       .then(setTemplates)
       .catch((e) => console.debug('[TemplateLibrary] get_templates:', e));
   }, []);
+
+  // Request translations for template titles and descriptions
+  useEffect(() => {
+    if (templates.length > 0) {
+      requestTranslation(templates.flatMap(tpl => [
+        { id: `tpl-title-${tpl.id}`, text: tpl.title },
+        { id: `tpl-desc-${tpl.id}`, text: tpl.description },
+      ]));
+    }
+  }, [templates, requestTranslation]);
 
   const categories = useMemo(() => {
     const cats = new Set(templates.map(t => t.category));
@@ -195,9 +211,9 @@ export function TemplateLibrary() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h3 className="text-sm font-semibold text-white">Templates</h3>
+        <h3 className="text-sm font-semibold text-white">{t('playbook.templates.title', 'Templates')}</h3>
         <p className="text-xs text-text-muted mt-0.5">
-          Actionable templates for launching and growing your revenue engines
+          {t('playbook.templates.description', 'Actionable templates for launching and growing your revenue engines')}
         </p>
       </div>
 
@@ -218,6 +234,7 @@ export function TemplateLibrary() {
               key={template.id}
               template={template}
               onOpen={setViewingTemplate}
+              getTranslated={getTranslated}
             />
           ))}
         </div>
@@ -243,8 +260,8 @@ export function TemplateLibrary() {
           </div>
           <p className="text-sm text-text-secondary max-w-sm">
             {templates.length === 0
-              ? 'No templates available yet.'
-              : 'No templates match this category.'}
+              ? t('playbook.templates.empty', 'No templates available yet.')
+              : t('playbook.templates.noMatch', 'No templates match this category.')}
           </p>
         </div>
       )}
