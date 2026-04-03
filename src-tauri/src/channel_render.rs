@@ -559,6 +559,7 @@ mod tests {
                 embedding: vec![],
                 created_at: Utc::now(),
                 last_seen: Utc::now(),
+                detected_lang: "en".to_string(),
             },
             0.9,
         )];
