@@ -143,9 +143,20 @@ pub fn t(key: &str, lang: &str, vars: &[(&str, &str)]) -> String {
     key.to_string()
 }
 
-/// Look up a dotted key path in a JSON value.
+/// Look up a key in a JSON value.
+///
+/// Tries the key as a flat string first (e.g. `"type.securityAlert"`),
+/// then falls back to nested traversal (e.g. `{"type": {"securityAlert": ...}}`).
 fn lookup_nested<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
+    // Try flat key first (how i18next stores keys)
+    if let Some(v) = value.get(key) {
+        return Some(v);
+    }
+    // Fall back to nested dot-traversal
     let parts: Vec<&str> = key.split('.').collect();
+    if parts.len() <= 1 {
+        return None;
+    }
     let mut current = value;
     for part in parts {
         current = current.get(part)?;
@@ -200,5 +211,25 @@ mod tests {
         // With no translation files loaded, t() should return the key itself
         let result = t("some.missing.key", "xx", &[]);
         assert_eq!(result, "some.missing.key");
+    }
+
+    #[test]
+    fn test_en_translations_load() {
+        // Verify English locale files load and flat dotted keys resolve correctly
+        assert_eq!(
+            t("signals:type.securityAlert", "en", &[]),
+            "Security Alert"
+        );
+        assert_eq!(t("ui:app.title", "en", &[]), "4DA");
+    }
+
+    #[test]
+    fn test_variable_interpolation() {
+        let result = t(
+            "signals:action.securityReview",
+            "en",
+            &[("title", "CVE-2026")],
+        );
+        assert_eq!(result, "Review security implications: CVE-2026");
     }
 }
