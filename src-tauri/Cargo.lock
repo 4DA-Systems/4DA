@@ -1906,6 +1906,7 @@ dependencies = [
  "uhlc",
  "urlencoding",
  "uuid",
+ "whichlang",
  "x25519-dalek",
  "x509-cert",
  "zerocopy",
@@ -7598,6 +7599,12 @@ name = "weezl"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
+
+[[package]]
+name = "whichlang"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b9aa3ad29c3d08283ac6b769e3ec15ad1ddb88af7d2e9bc402c574973b937e7"
 
 [[package]]
 name = "winapi"
