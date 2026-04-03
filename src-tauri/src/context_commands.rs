@@ -817,6 +817,40 @@ pub(crate) async fn run_awe_async(
     }
 }
 
+/// Validate that a binary path is safe to execute.
+///
+/// Rejects relative paths, `..` traversal, non-existent files, and (on Windows)
+/// paths that don't end with `.exe`. Intended to prevent PATH-manipulation attacks
+/// when resolving the AWE binary.
+fn validate_binary_path(path: &str) -> bool {
+    use std::path::Component;
+
+    if path.is_empty() {
+        return false;
+    }
+
+    let p = Path::new(path);
+
+    // Must be absolute — reject relative paths entirely
+    if !p.is_absolute() {
+        return false;
+    }
+
+    // Reject any `..` components (directory traversal)
+    if p.components().any(|c| matches!(c, Component::ParentDir)) {
+        return false;
+    }
+
+    // On Windows, the binary must have an .exe extension
+    #[cfg(windows)]
+    if !path.to_lowercase().ends_with(".exe") {
+        return false;
+    }
+
+    // Must point to a file that actually exists
+    p.is_file()
+}
+
 /// Cached AWE binary path — resolved once, reused for all calls.
 static AWE_BINARY_PATH: std::sync::LazyLock<Option<String>> = std::sync::LazyLock::new(|| {
     let candidates = [
@@ -824,13 +858,23 @@ static AWE_BINARY_PATH: std::sync::LazyLock<Option<String>> = std::sync::LazyLoc
         "/d/runyourempire/awe/target/release/awe",
     ];
     for path in &candidates {
-        if std::path::Path::new(path).exists() {
+        if validate_binary_path(path) {
+            info!(target: "4da::awe", path = path, "AWE binary resolved from hardcoded candidate");
             return Some(path.to_string());
         }
     }
-    std::env::var("AWE_BIN")
-        .ok()
-        .filter(|p| std::path::Path::new(p).exists())
+    if let Some(env_path) = std::env::var("AWE_BIN").ok().filter(|p| !p.is_empty()) {
+        if validate_binary_path(&env_path) {
+            info!(target: "4da::awe", path = %env_path, "AWE binary resolved from AWE_BIN env var");
+            return Some(env_path);
+        }
+        warn!(
+            target: "4da::awe",
+            path = %env_path,
+            "AWE_BIN env var rejected: path failed validation (must be absolute, no .., must exist)"
+        );
+    }
+    None
 });
 
 /// Find the AWE binary (release build). Cached after first lookup.
@@ -1035,5 +1079,41 @@ mod tests {
     fn is_meta_doc_mixed_case_with_underscore() {
         // Has lowercase — not screaming case
         assert!(!is_meta_doc("My_Custom_Doc.md"));
+    }
+
+    // --- validate_binary_path tests ---
+
+    #[test]
+    fn test_validate_binary_path_rejects_relative() {
+        assert!(!validate_binary_path("./awe"));
+        assert!(!validate_binary_path("awe"));
+        assert!(!validate_binary_path("bin/awe"));
+    }
+
+    #[test]
+    fn test_validate_binary_path_rejects_traversal() {
+        assert!(!validate_binary_path("/usr/bin/../tmp/evil"));
+        assert!(!validate_binary_path("C:\\Users\\..\\tmp\\evil.exe"));
+    }
+
+    #[test]
+    fn test_validate_binary_path_rejects_empty() {
+        assert!(!validate_binary_path(""));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_validate_binary_path_rejects_non_exe_on_windows() {
+        // Even if it's absolute and exists, non-.exe should be rejected on Windows
+        assert!(!validate_binary_path("C:\\Windows\\System32\\cmd"));
+    }
+
+    #[test]
+    fn test_validate_binary_path_rejects_nonexistent() {
+        // Absolute path, no traversal, but file doesn't exist
+        #[cfg(windows)]
+        assert!(!validate_binary_path("C:\\nonexistent\\path\\binary.exe"));
+        #[cfg(not(windows))]
+        assert!(!validate_binary_path("/nonexistent/path/binary"));
     }
 }
