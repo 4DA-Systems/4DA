@@ -230,11 +230,14 @@ impl Digest {
     /// Format digest as plain text
     // Text rendering: used by email digest delivery
     pub fn to_text(&self) -> String {
+        let lang = crate::i18n::get_user_language();
         let mut output = String::new();
 
+        let digest_title = crate::i18n::t("ui:digest.title", &lang, &[]);
+        let digest_subtitle = crate::i18n::t("ui:digest.subtitle", &lang, &[]);
         output.push_str("═══════════════════════════════════════════════════════════════\n");
-        output.push_str("                    4DA DIGEST\n");
-        output.push_str("           The internet searched for you.\n");
+        output.push_str(&format!("                    {digest_title}\n"));
+        output.push_str(&format!("           {digest_subtitle}\n"));
         output.push_str("═══════════════════════════════════════════════════════════════\n\n");
 
         output.push_str(&format!(
@@ -242,15 +245,18 @@ impl Digest {
             self.period_start.format("%Y-%m-%d %H:%M"),
             self.period_end.format("%Y-%m-%d %H:%M")
         ));
-        output.push_str(&format!("Items found: {}\n", self.summary.total_items));
+        let items_found_label = crate::i18n::t("ui:digest.itemsFound", &lang, &[]);
+        output.push_str(&format!("{items_found_label} {}\n", self.summary.total_items));
+        let avg_rel_label = crate::i18n::t("ui:digest.avgRelevance", &lang, &[]);
         output.push_str(&format!(
-            "Average relevance: {:.1}%\n",
+            "{avg_rel_label} {:.1}%\n",
             self.summary.avg_relevance * 100.0
         ));
         output.push('\n');
 
         // Sources breakdown
-        output.push_str("Sources:\n");
+        let sources_label = crate::i18n::t("ui:digest.sources", &lang, &[]);
+        output.push_str(&format!("{sources_label}\n"));
         for (source, count) in &self.summary.sources {
             output.push_str(&format!("  - {source}: {count} items\n"));
         }
@@ -258,7 +264,8 @@ impl Digest {
 
         // Top topics
         if !self.summary.top_topics.is_empty() {
-            output.push_str("Top Topics:\n");
+            let topics_label = crate::i18n::t("ui:digest.topTopics", &lang, &[]);
+            output.push_str(&format!("{topics_label}\n"));
             for (topic, count) in &self.summary.top_topics {
                 output.push_str(&format!("  - {topic} ({count})\n"));
             }
@@ -272,8 +279,9 @@ impl Digest {
             .filter(|i| i.signal_type.is_some())
             .collect();
         if !signal_items.is_empty() {
+            let signals_label = crate::i18n::t("ui:digest.signals", &lang, &[]);
             output.push_str("───────────────────────────────────────────────────────────────\n");
-            output.push_str("                      SIGNALS\n");
+            output.push_str(&format!("                      {signals_label}\n"));
             output.push_str("───────────────────────────────────────────────────────────────\n\n");
             if self.summary.critical_count > 0 {
                 output.push_str(&format!(
