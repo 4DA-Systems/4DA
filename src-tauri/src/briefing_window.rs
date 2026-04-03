@@ -249,12 +249,14 @@ pub async fn briefing_item_clicked(app: AppHandle, item_id: Option<i64>) {
 ///
 /// Opens the URL in the system browser via tauri-plugin-opener.
 #[tauri::command]
-pub async fn briefing_open_url(url: String) {
+pub async fn briefing_open_url(url: String) -> crate::error::Result<()> {
+    crate::utils::validate_safe_url(&url)?;
     if let Err(e) = tauri_plugin_opener::open_url(&url, None::<&str>) {
         warn!(target: "4da::briefing", error = %e, url = %url, "Failed to open URL");
     } else {
         info!(target: "4da::briefing", url = %url, "Opened briefing URL in browser");
     }
+    Ok(())
 }
 
 #[cfg(test)]

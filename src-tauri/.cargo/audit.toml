@@ -1,0 +1,9 @@
+# Cargo audit advisory ignore list
+# Only add entries with clear justification — every ignore weakens the audit.
+
+[advisories]
+ignore = [
+    # atk@0.18.2 (RUSTSEC-2024-0413) — GTK3 bindings unmaintained, Linux only.
+    # Will be resolved when Tauri migrates to GTK4. Not exploitable.
+    "RUSTSEC-2024-0413",
+]

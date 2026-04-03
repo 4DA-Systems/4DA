@@ -1856,7 +1856,6 @@ export type {
   ContentTranslationResult,
   ContentTranslationSettings,
   TranslationCacheStats,
-  TranslationConfig,
   DigestConfig,
   ListeningPort,
   HttpProbeRequest,

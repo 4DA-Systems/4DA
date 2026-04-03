@@ -35,8 +35,9 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 axum = { version = "0.8", features = ["tokio"] }
 tower-http = { version = "0.6", features = ["cors"] }
 
-# URL encoding
+# URL encoding / parsing
 urlencoding = "2"
+url = "2"
 
 # Error handling
 thiserror = "2"
@@ -95,7 +96,7 @@ ocrs = { version = "0.12", optional = true }     # Pure Rust OCR engine
 rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
 zip = { version = "0.6", optional = true }        # ZIP archive extraction
-tar = { version = "0.4", optional = true }        # TAR archive extraction
+tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
 
 # Semantic version parsing (CVE version range matching)
@@ -114,6 +115,8 @@ tauri-plugin-deep-link = "2.4.7"
 
 # SSO cryptographic verification (enterprise feature)
 jsonwebtoken = { version = "9", optional = true }
+# SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) — no fix available as of 2026-04.
+# Only compiled when enterprise feature is enabled (SSO crypto). Monitor: https://rustsec.org/advisories/RUSTSEC-2023-0071
 rsa = { version = "0.9", features = ["sha2"], optional = true }
 pkcs8 = { version = "0.10", features = ["pem"], optional = true }
 x509-cert = { version = "0.2", optional = true }
