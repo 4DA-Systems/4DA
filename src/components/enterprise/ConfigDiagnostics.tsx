@@ -34,97 +34,97 @@ export function ConfigDiagnostics() {
     };
 
     // 1. License check
-    setChecks([...results, { name: 'License', status: 'running', message: 'Checking...' }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.license', 'License'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
     try {
       const isPaid = tier !== 'free';
-      addCheck('License', isPaid ? 'pass' : 'warn',
-        isPaid ? `Active: ${tier} tier` : 'Free tier — team features require Signal+ tier'
+      addCheck(t('enterprise.diagnostics.check.license', 'License'), isPaid ? 'pass' : 'warn',
+        isPaid ? t('enterprise.diagnostics.licenseActive', { defaultValue: 'Active: {{tier}} tier', tier }) : t('enterprise.diagnostics.licenseFree', 'Free tier — team features require Signal+ tier')
       );
     } catch {
-      addCheck('License', 'fail', 'Could not verify license status');
+      addCheck(t('enterprise.diagnostics.check.license', 'License'), 'fail', t('enterprise.diagnostics.licenseFail', 'Could not verify license status'));
     }
 
     // 2. AI Provider check
-    setChecks([...results, { name: 'AI Provider', status: 'running', message: 'Checking...' }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.aiProvider', 'AI Provider'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
     try {
       await cmd('test_llm_connection');
-      addCheck('AI Provider', 'pass', 'LLM connection successful');
+      addCheck(t('enterprise.diagnostics.check.aiProvider', 'AI Provider'), 'pass', t('enterprise.diagnostics.llmOk', 'LLM connection successful'));
     } catch {
-      addCheck('AI Provider', 'warn', 'LLM not configured or unreachable — offline mode active');
+      addCheck(t('enterprise.diagnostics.check.aiProvider', 'AI Provider'), 'warn', t('enterprise.diagnostics.llmWarn', 'LLM not configured or unreachable — offline mode active'));
     }
 
     // 3. Embedding check
-    setChecks([...results, { name: 'Embeddings', status: 'running', message: 'Checking...' }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.embeddings', 'Embeddings'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
     try {
       const ollamaStatus = await cmd('check_ollama_status', { baseUrl: null }).catch(() => null);
       if (ollamaStatus && ollamaStatus.operational) {
-        addCheck('Embeddings', 'pass', 'Ollama running — local embeddings active');
+        addCheck(t('enterprise.diagnostics.check.embeddings', 'Embeddings'), 'pass', t('enterprise.diagnostics.ollamaOk', 'Ollama running — local embeddings active'));
       } else {
-        addCheck('Embeddings', 'warn', 'Ollama not detected — using zero-vector fallback');
+        addCheck(t('enterprise.diagnostics.check.embeddings', 'Embeddings'), 'warn', t('enterprise.diagnostics.ollamaWarn', 'Ollama not detected — using zero-vector fallback'));
       }
     } catch {
-      addCheck('Embeddings', 'warn', 'Embedding check failed');
+      addCheck(t('enterprise.diagnostics.check.embeddings', 'Embeddings'), 'warn', t('enterprise.diagnostics.embeddingFail', 'Embedding check failed'));
     }
 
     // 4. Database check (use source health as proxy for DB connectivity)
-    setChecks([...results, { name: 'Database', status: 'running', message: 'Checking...' }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.database', 'Database'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
     try {
       // If we can query sources, the DB is working
       await cmd('get_source_health_status');
-      addCheck('Database', 'pass', 'SQLite connection OK');
+      addCheck(t('enterprise.diagnostics.check.database', 'Database'), 'pass', t('enterprise.diagnostics.dbOk', 'SQLite connection OK'));
     } catch {
-      addCheck('Database', 'fail', 'Database connection failed');
+      addCheck(t('enterprise.diagnostics.check.database', 'Database'), 'fail', t('enterprise.diagnostics.dbFail', 'Database connection failed'));
     }
 
     // 5. Source health check
-    setChecks([...results, { name: 'Sources', status: 'running', message: 'Checking...' }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.sources', 'Sources'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
     try {
       const sources = await cmd('get_source_health_status');
       const arr = sources;
       const healthy = arr.filter(s => s.status === 'healthy').length;
       const total = arr.length;
       if (total === 0) {
-        addCheck('Sources', 'warn', 'No sources configured');
+        addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'warn', t('enterprise.diagnostics.noSources', 'No sources configured'));
       } else if (healthy === total) {
-        addCheck('Sources', 'pass', `All ${total} sources healthy`);
+        addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'pass', t('enterprise.diagnostics.allHealthy', { defaultValue: 'All {{total}} sources healthy', total }));
       } else {
-        addCheck('Sources', 'warn', `${healthy}/${total} sources healthy`);
+        addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'warn', t('enterprise.diagnostics.someHealthy', { defaultValue: '{{healthy}}/{{total}} sources healthy', healthy, total }));
       }
     } catch {
-      addCheck('Sources', 'warn', 'Could not check source health');
+      addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'warn', t('enterprise.diagnostics.sourceCheckFail', 'Could not check source health'));
     }
 
     // 6. Team relay check
-    setChecks([...results, { name: 'Team Relay', status: 'running', message: 'Checking...' }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.relay', 'Team Relay'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
     if (teamStatus?.enabled) {
       if (teamStatus.connected) {
-        addCheck('Team Relay', 'pass',
-          `Connected — ${teamStatus.member_count} members, ${teamStatus.pending_outbound} pending`
+        addCheck(t('enterprise.diagnostics.check.relay', 'Team Relay'), 'pass',
+          t('enterprise.diagnostics.relayConnected', { defaultValue: 'Connected — {{members}} members, {{pending}} pending', members: teamStatus.member_count, pending: teamStatus.pending_outbound })
         );
       } else {
-        addCheck('Team Relay', 'warn', 'Team configured but relay disconnected');
+        addCheck(t('enterprise.diagnostics.check.relay', 'Team Relay'), 'warn', t('enterprise.diagnostics.relayDisconnected', 'Team configured but relay disconnected'));
       }
     } else {
-      addCheck('Team Relay', 'pass', 'Not configured (single-user mode)');
+      addCheck(t('enterprise.diagnostics.check.relay', 'Team Relay'), 'pass', t('enterprise.diagnostics.relaySingleUser', 'Not configured (single-user mode)'));
     }
 
     // 7. Webhook check (enterprise only)
     if (tier === 'enterprise') {
-      setChecks([...results, { name: 'Webhooks', status: 'running', message: 'Checking...' }]);
+      setChecks([...results, { name: t('enterprise.diagnostics.check.webhooks', 'Webhooks'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
       try {
         const webhooks = await cmd('list_webhooks_cmd');
         const wh = webhooks;
         const active = wh.filter(w => w.active).length;
         const failed = wh.filter(w => w.failure_count >= 5).length;
         if (wh.length === 0) {
-          addCheck('Webhooks', 'pass', 'No webhooks configured');
+          addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'pass', t('enterprise.diagnostics.noWebhooks', 'No webhooks configured'));
         } else if (failed > 0) {
-          addCheck('Webhooks', 'warn', `${active} active, ${failed} with circuit breaker open`);
+          addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'warn', t('enterprise.diagnostics.webhooksDegraded', { defaultValue: '{{active}} active, {{failed}} with circuit breaker open', active, failed }));
         } else {
-          addCheck('Webhooks', 'pass', `${active} active webhooks`);
+          addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'pass', t('enterprise.diagnostics.webhooksOk', { defaultValue: '{{active}} active webhooks', active }));
         }
       } catch {
-        addCheck('Webhooks', 'warn', 'Could not check webhook status');
+        addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'warn', t('enterprise.diagnostics.webhookCheckFail', 'Could not check webhook status'));
       }
     }
 
@@ -160,13 +160,13 @@ export function ConfigDiagnostics() {
       {checks.length > 0 && !running && (
         <div className="flex items-center gap-3">
           {passCount > 0 && (
-            <span className="text-[10px] text-success">{passCount} passed</span>
+            <span className="text-[10px] text-success">{passCount} {t('enterprise.diagnostics.passed', 'passed')}</span>
           )}
           {warnCount > 0 && (
-            <span className="text-[10px] text-[var(--color-accent-action)]">{warnCount} warnings</span>
+            <span className="text-[10px] text-[var(--color-accent-action)]">{warnCount} {t('enterprise.diagnostics.warnings', 'warnings')}</span>
           )}
           {failCount > 0 && (
-            <span className="text-[10px] text-error">{failCount} failed</span>
+            <span className="text-[10px] text-error">{failCount} {t('enterprise.diagnostics.failed', 'failed')}</span>
           )}
         </div>
       )}
