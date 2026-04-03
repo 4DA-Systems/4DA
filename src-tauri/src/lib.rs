@@ -22,6 +22,7 @@ pub(crate) use types::{GenericSourceItem, ANALYSIS_TIMEOUT_SECS};
 mod commands;
 mod embeddings;
 mod events;
+pub(crate) mod reembed;
 pub mod state;
 mod utils;
 
@@ -540,6 +541,8 @@ pub fn run() {
             settings_commands::remove_exclusion,
             settings_commands::record_interaction,
             settings_commands::get_context_stats,
+            // Embedding model management
+            reembed::get_embedding_model_info,
             // Monitoring
             monitoring_commands::get_monitoring_status,
             monitoring_commands::set_monitoring_enabled,

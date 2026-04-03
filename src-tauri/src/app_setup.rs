@@ -240,6 +240,20 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Validate license integrity (reset tier if no key present)
     crate::settings::validate_license_on_startup();
 
+    // Check if embedding model has changed — trigger background re-embed if needed
+    if let Ok(db) = get_database() {
+        let needs_reembed = {
+            let conn = db.conn.lock();
+            crate::reembed::check_embedding_model_changed(&conn)
+        };
+        if needs_reembed {
+            info!(target: "4da::startup", "Embedding model changed — launching background re-embed");
+            tauri::async_runtime::spawn(async {
+                crate::reembed::reembed_all_items().await;
+            });
+        }
+    }
+
     // Start background scheduler
     let app_handle = app.handle().clone();
     monitoring::start_scheduler(app_handle.clone(), monitoring_state.clone());

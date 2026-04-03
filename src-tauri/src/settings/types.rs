@@ -26,6 +26,14 @@ pub struct LLMProvider {
     /// OpenAI API key specifically for embeddings (used when provider is not OpenAI)
     #[serde(default)]
     pub openai_api_key: String,
+    /// Embedding model for semantic search. Default: "nomic-embed-text".
+    /// "nomic-embed-text-v2-moe" recommended for multilingual content.
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+}
+
+fn default_embedding_model() -> String {
+    "nomic-embed-text".to_string()
 }
 
 impl std::fmt::Debug for LLMProvider {
@@ -50,6 +58,7 @@ impl std::fmt::Debug for LLMProvider {
                     "[REDACTED]"
                 },
             )
+            .field("embedding_model", &self.embedding_model)
             .finish()
     }
 }
@@ -69,6 +78,7 @@ impl Default for LLMProvider {
             model: String::new(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: default_embedding_model(),
         }
     }
 }
@@ -684,6 +694,71 @@ impl Settings {
         if self.serendipity.budget_percent > 100 {
             tracing::warn!(target: "4da::settings", field = "serendipity.budget_percent", old = self.serendipity.budget_percent, new = 100, "Clamped invalid value");
             self.serendipity.budget_percent = 100;
+        }
+
+        // llm.base_url must be a valid URL with http(s) scheme and a host.
+        // Only localhost/127.0.0.1 are permitted over plain HTTP; all remote
+        // servers must use HTTPS.
+        if let Some(ref raw) = self.llm.base_url {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                self.llm.base_url = None;
+            } else {
+                match url::Url::parse(trimmed) {
+                    Ok(parsed) => {
+                        let scheme = parsed.scheme();
+                        let host = parsed.host_str().unwrap_or("");
+
+                        if scheme != "http" && scheme != "https" {
+                            tracing::warn!(
+                                target: "4da::settings",
+                                field = "llm.base_url",
+                                value = trimmed,
+                                "Rejected base_url with invalid scheme (must be http or https)"
+                            );
+                            self.llm.base_url = None;
+                        } else if host.is_empty() {
+                            tracing::warn!(
+                                target: "4da::settings",
+                                field = "llm.base_url",
+                                value = trimmed,
+                                "Rejected base_url with empty host"
+                            );
+                            self.llm.base_url = None;
+                        } else if scheme == "http"
+                            && host != "localhost"
+                            && host != "127.0.0.1"
+                            && host != "::1"
+                            && host != "[::1]"
+                        {
+                            tracing::warn!(
+                                target: "4da::settings",
+                                field = "llm.base_url",
+                                value = trimmed,
+                                "Rejected non-HTTPS base_url for remote server (only localhost allowed over HTTP)"
+                            );
+                            self.llm.base_url = None;
+                        } else if scheme == "http" {
+                            tracing::warn!(
+                                target: "4da::settings",
+                                field = "llm.base_url",
+                                value = trimmed,
+                                "base_url uses HTTP — acceptable for local Ollama but not for remote servers"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            target: "4da::settings",
+                            field = "llm.base_url",
+                            value = trimmed,
+                            error = %e,
+                            "Rejected base_url: failed to parse as URL"
+                        );
+                        self.llm.base_url = None;
+                    }
+                }
+            }
         }
     }
 }

@@ -61,7 +61,7 @@ export async function startHttpServer(
     if (origin) {
       try {
         const url = new URL(origin);
-        if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+        if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1" && url.hostname !== "::1" && url.hostname !== "[::1]") {
           res.writeHead(403, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "Forbidden: DNS rebinding protection" }));
           return;

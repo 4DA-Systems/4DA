@@ -266,14 +266,15 @@ pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app
         })
         .unwrap_or_default();
 
-    let has_embedding = models.iter().any(|m| m.starts_with("nomic-embed-text"));
+    let embed_model = crate::reembed::get_embedding_model();
+    let has_embedding = models.iter().any(|m| m.starts_with(&embed_model));
     let has_llm = models
         .iter()
         .any(|m| m.starts_with(llm_model) || m.contains(llm_model));
 
     let mut need_pull: Vec<String> = Vec::new();
     if !has_embedding {
-        need_pull.push("nomic-embed-text".to_string());
+        need_pull.push(embed_model);
     }
     if !has_llm {
         need_pull.push(llm_model.to_string());

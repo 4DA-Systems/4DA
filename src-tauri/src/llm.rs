@@ -768,6 +768,7 @@ mod tests {
             model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
 
@@ -787,6 +788,7 @@ mod tests {
             model: "llama3".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
 
@@ -806,6 +808,7 @@ mod tests {
             model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -822,6 +825,7 @@ mod tests {
             model: "gpt-4o-mini".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -838,6 +842,7 @@ mod tests {
             model: "llama3".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -854,6 +859,7 @@ mod tests {
             model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -870,6 +876,7 @@ mod tests {
             model: "some-model".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         assert!(
@@ -890,6 +897,7 @@ mod tests {
             model: "whatever".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         let cost = client.estimate_cost_cents(100_000, 10_000);
@@ -904,6 +912,7 @@ mod tests {
             model: "claude-sonnet-4-6".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         let cost = client.estimate_cost_cents(0, 0);
@@ -918,6 +927,7 @@ mod tests {
             model: "gpt-4o-mini".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         // gpt-4o-mini is the cheapest OpenAI model

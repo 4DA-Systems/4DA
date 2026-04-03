@@ -11,7 +11,7 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
         .timeout(std::time::Duration::from_secs(90))
-        .user_agent("4DA/1.0")
+        .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .build()
         .unwrap_or_else(|e| {
             tracing::warn!("Failed to build HTTP client: {e}, using default");
@@ -334,8 +334,10 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
         return Ok(vec![]);
     }
 
+    let embedding_model = crate::reembed::get_embedding_model();
+
     let batch_body = serde_json::json!({
-        "model": "nomic-embed-text",
+        "model": embedding_model,
         "input": texts,
     });
 
@@ -387,7 +389,10 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             if status.as_u16() == 404 || body.contains("not found") {
-                return Err("Embedding model 'nomic-embed-text' not found in Ollama. Run: ollama pull nomic-embed-text".into());
+                return Err(format!(
+                    "Embedding model '{}' not found in Ollama. Run: ollama pull {}",
+                    embedding_model, embedding_model
+                ).into());
             }
             // Fall through to single-item fallback for other errors (old Ollama version)
             embed_texts_ollama_single(texts, base).await
@@ -412,10 +417,11 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
 /// Fallback: embed one text at a time using the older /api/embeddings endpoint
 async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<Vec<f32>>> {
     let mut all_embeddings = Vec::with_capacity(texts.len());
+    let embedding_model = crate::reembed::get_embedding_model();
 
     for text in texts {
         let single_body = serde_json::json!({
-            "model": "nomic-embed-text",
+            "model": &embedding_model,
             "prompt": text,
         });
 
@@ -434,7 +440,8 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
                     "Ollama embedding timed out. The model may still be loading — try again.".to_string()
                 } else {
                     format!(
-                        "Ollama embedding request failed: {e}. Make sure Ollama is running with 'nomic-embed-text' (run: ollama pull nomic-embed-text)"
+                        "Ollama embedding request failed: {e}. Make sure Ollama is running with '{}' (run: ollama pull {})",
+                        embedding_model, embedding_model
                     )
                 }
             })?;
@@ -443,9 +450,10 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             if status.as_u16() == 404 || body.contains("not found") {
-                return Err(
-                    "Embedding model 'nomic-embed-text' not found. Run: ollama pull nomic-embed-text".into()
-                );
+                return Err(format!(
+                    "Embedding model '{}' not found. Run: ollama pull {}",
+                    embedding_model, embedding_model
+                ).into());
             }
             return Err(format!("Ollama embedding error ({status}): {body}").into());
         }
@@ -458,7 +466,7 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
         let raw = json["embedding"]
             .as_array()
             .ok_or_else(|| -> crate::error::FourDaError {
-                "Invalid Ollama response: missing 'embedding' array. Is nomic-embed-text installed?"
+                "Invalid Ollama response: missing 'embedding' array. Is the embedding model installed?"
                     .into()
             })?
             .iter()
