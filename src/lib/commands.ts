@@ -383,6 +383,8 @@ interface CommandMap {
   get_content_translation_settings: { params: Record<string, never>; result: ContentTranslationSettings };
   get_translation_cache_stats: { params: Record<string, never>; result: TranslationCacheStats };
   purge_translation_cache: { params: Record<string, never>; result: number };
+  get_translation_config: { params: Record<string, never>; result: TranslationConfig };
+  set_translation_config: { params: { config: TranslationConfig }; result: null };
 
   // -- STREETS Localization --
   get_regional_data: { params: Record<string, never>; result: RegionalData };
@@ -1205,6 +1207,13 @@ interface TranslationCacheStats {
   total_lookups: number;
 }
 
+export interface TranslationConfig {
+  provider: string;
+  api_key: string;
+  auto_translate: boolean;
+  translate_descriptions: boolean;
+}
+
 interface DigestConfig {
   enabled: boolean;
   schedule: string;
@@ -1847,6 +1856,7 @@ export type {
   ContentTranslationResult,
   ContentTranslationSettings,
   TranslationCacheStats,
+  TranslationConfig,
   DigestConfig,
   ListeningPort,
   HttpProbeRequest,
