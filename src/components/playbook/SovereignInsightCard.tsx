@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { InsightBlock, DataPoint } from '../../types/personalization';
 import { VisualizationRenderer } from './VisualizationRenderer';
 
@@ -8,12 +9,27 @@ interface Props {
 
 export function SovereignInsightCard({ block }: Props) {
   const [showSources, setShowSources] = useState(false);
+  const { getTranslated, requestTranslation } = useTranslatedContent();
+
+  useEffect(() => {
+    const items: { id: string; text: string }[] = [];
+    if (block.content.type === 'prose') {
+      items.push({ id: `insight-text-${block.block_id}`, text: block.content.text });
+    } else {
+      items.push({ id: `insight-title-${block.block_id}`, text: block.content.title });
+      block.content.data_points.forEach((dp, i) => {
+        items.push({ id: `insight-dp-label-${block.block_id}-${i}`, text: dp.label });
+        if (dp.context) items.push({ id: `insight-dp-ctx-${block.block_id}-${i}`, text: dp.context });
+      });
+    }
+    if (items.length > 0) requestTranslation(items);
+  }, [block, requestTranslation]);
 
   if (block.content.type === 'prose') {
     return (
       <div className="border border-accent-gold/20 rounded-xl bg-bg-secondary p-5 my-4">
         <p className="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
-          {block.content.text}
+          {getTranslated(`insight-text-${block.block_id}`, block.content.text)}
         </p>
         <SourceLabels labels={block.source_labels} show={showSources} onToggle={() => setShowSources(!showSources)} />
       </div>
@@ -26,14 +42,14 @@ export function SovereignInsightCard({ block }: Props) {
     <div className="border border-accent-gold/20 rounded-xl bg-bg-secondary overflow-hidden my-4">
       {/* Header */}
       <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-white">{card.title}</h4>
+        <h4 className="text-sm font-semibold text-white">{getTranslated(`insight-title-${block.block_id}`, card.title)}</h4>
         <ConfidenceBar confidence={block.confidence} />
       </div>
 
       {/* Data Points */}
       <div className="px-5 py-4 space-y-2.5">
         {card.data_points.map((dp, i) => (
-          <DataPointRow key={i} point={dp} />
+          <DataPointRow key={i} point={dp} blockId={block.block_id} index={i} getTranslated={getTranslated} />
         ))}
       </div>
 
@@ -50,16 +66,21 @@ export function SovereignInsightCard({ block }: Props) {
   );
 }
 
-function DataPointRow({ point }: { point: DataPoint }) {
+function DataPointRow({ point, blockId, index, getTranslated }: {
+  point: DataPoint;
+  blockId: string;
+  index: number;
+  getTranslated: (id: string, original: string) => string;
+}) {
   return (
     <div className={`flex items-start justify-between gap-4 ${point.highlight ? 'text-white' : 'text-text-secondary'}`}>
-      <span className="text-xs text-text-muted flex-shrink-0 w-32">{point.label}</span>
+      <span className="text-xs text-text-muted flex-shrink-0 w-32">{getTranslated(`insight-dp-label-${blockId}-${index}`, point.label)}</span>
       <div className="flex-1 text-end">
         <span className={`text-sm ${point.highlight ? 'text-accent-gold font-medium' : ''}`}>
           {point.value}
         </span>
         {point.context && (
-          <p className="text-[10px] text-text-muted mt-0.5">{point.context}</p>
+          <p className="text-[10px] text-text-muted mt-0.5">{getTranslated(`insight-dp-ctx-${blockId}-${index}`, point.context)}</p>
         )}
       </div>
     </div>

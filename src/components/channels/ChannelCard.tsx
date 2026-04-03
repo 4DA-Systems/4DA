@@ -1,5 +1,6 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { ChannelSummary } from '../../types/channels';
 
 interface Props {
@@ -10,6 +11,13 @@ interface Props {
 
 export const ChannelCard = memo(function ChannelCard({ channel, active, onClick }: Props) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
+
+  useEffect(() => {
+    const items = [{ id: `ch-title-${channel.id}`, text: channel.title }];
+    if (channel.description) items.push({ id: `ch-desc-${channel.id}`, text: channel.description });
+    requestTranslation(items);
+  }, [channel.id, channel.title, channel.description, requestTranslation]);
 
   const freshnessConfig = {
     fresh: { dot: 'bg-green-500', label: t('channels.freshness.fresh') },
@@ -41,7 +49,7 @@ export const ChannelCard = memo(function ChannelCard({ channel, active, onClick 
             active ? 'text-white' : 'text-text-secondary'
           }`}
         >
-          {channel.title}
+          {getTranslated(`ch-title-${channel.id}`, channel.title)}
         </h3>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <div className={`w-1.5 h-1.5 rounded-full ${freshness.dot}`} />
@@ -51,7 +59,7 @@ export const ChannelCard = memo(function ChannelCard({ channel, active, onClick 
         </div>
       </div>
       <p className="text-xs text-text-muted mt-1 line-clamp-2">
-        {channel.description}
+        {getTranslated(`ch-desc-${channel.id}`, channel.description)}
       </p>
       <div className="flex items-center gap-3 mt-2">
         <span className="text-[10px] text-text-muted">
