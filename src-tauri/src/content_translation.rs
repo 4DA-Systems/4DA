@@ -144,20 +144,33 @@ const DO_NOT_TRANSLATE: &[&str] = &[
 
 /// Check if ingest translation budget allows more characters.
 /// Resets daily. Returns false if budget exhausted.
+/// Uses compare_exchange for race-safe budget acquisition.
 pub fn check_ingest_budget(chars: usize) -> bool {
     use chrono::Datelike;
     let today = chrono::Utc::now().ordinal() as usize;
     let stored_day = DAILY_INGEST_RESET_DAY.load(Ordering::Relaxed);
     if today != stored_day {
-        DAILY_INGEST_CHARS_USED.store(0, Ordering::Relaxed);
-        DAILY_INGEST_RESET_DAY.store(today, Ordering::Relaxed);
+        // Race-safe: only one thread resets
+        if DAILY_INGEST_RESET_DAY
+            .compare_exchange(stored_day, today, Ordering::SeqCst, Ordering::Relaxed)
+            .is_ok()
+        {
+            DAILY_INGEST_CHARS_USED.store(0, Ordering::SeqCst);
+        }
     }
-    let current = DAILY_INGEST_CHARS_USED.load(Ordering::Relaxed);
-    if current + chars > DAILY_INGEST_BUDGET_CHARS {
-        return false;
+    // Atomic compare-exchange loop for race-safe budget acquisition
+    loop {
+        let current = DAILY_INGEST_CHARS_USED.load(Ordering::Relaxed);
+        if current + chars > DAILY_INGEST_BUDGET_CHARS {
+            return false;
+        }
+        if DAILY_INGEST_CHARS_USED
+            .compare_exchange(current, current + chars, Ordering::SeqCst, Ordering::Relaxed)
+            .is_ok()
+        {
+            return true;
+        }
     }
-    DAILY_INGEST_CHARS_USED.fetch_add(chars, Ordering::Relaxed);
-    true
 }
 
 // ============================================================================
@@ -724,15 +737,20 @@ async fn translate_with_fallback(
 }
 
 /// Truncate text to MAX_CONTENT_LENGTH for translation.
+/// Uses char-boundary-safe slicing to prevent panics on multi-byte UTF-8 (CJK, Arabic, etc.)
 fn truncate_text(text: &str) -> &str {
     if text.len() <= MAX_CONTENT_LENGTH {
         text
     } else {
-        // Find a safe truncation point (word boundary)
-        let truncated = &text[..MAX_CONTENT_LENGTH];
+        // Find a safe char boundary (multi-byte UTF-8 characters may span the cut point)
+        let mut end = MAX_CONTENT_LENGTH;
+        while end > 0 && !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        let truncated = &text[..end];
         match truncated.rfind(' ') {
-            Some(pos) => &truncated[..pos],
-            None => truncated,
+            Some(pos) if pos > 0 => &truncated[..pos],
+            _ => truncated,
         }
     }
 }
