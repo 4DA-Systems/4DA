@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 43;
+        const TARGET_VERSION: i64 = 45;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1264,6 +1264,25 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_source_items_created_at ON source_items(created_at);",
                         )?;
                         info!(target: "4da::db", "Created performance indexes for feedback and source_items");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 45 {
+                Self::run_versioned_migration(
+                    &conn,
+                    44,
+                    45,
+                    "Phase 45: app_meta table for embedding model tracking",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS app_meta (
+                                key TEXT PRIMARY KEY,
+                                value TEXT NOT NULL
+                            );",
+                        )?;
+                        info!(target: "4da::db", "Created app_meta table for embedding model tracking");
                         Ok(())
                     },
                 )?;

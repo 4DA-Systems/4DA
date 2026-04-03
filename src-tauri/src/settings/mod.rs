@@ -328,6 +328,7 @@ mod tests {
                 model: "claude-haiku-4-5-20251001".to_string(),
                 base_url: None,
                 openai_api_key: String::new(),
+                embedding_model: String::new(),
             })
             .expect("save provider");
 
@@ -388,6 +389,7 @@ mod tests {
             model: "gpt-4o".to_string(),
             base_url: Some("https://custom.openai.com".to_string()),
             openai_api_key: "sk-embed".to_string(),
+            embedding_model: "nomic-embed-text-v2-moe".to_string(),
         };
         let json = serde_json::to_string(&provider).expect("serialize");
         let deserialized: LLMProvider = serde_json::from_str(&json).expect("deserialize");
