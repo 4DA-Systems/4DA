@@ -427,6 +427,56 @@ pub(crate) fn default_source_resilience(
     std::collections::HashMap::new()
 }
 
+/// Dedicated translation provider configuration.
+/// Separate from the main LLM to allow cheaper, purpose-built translation APIs.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct TranslationConfig {
+    /// Translation provider: "auto" | "deepl" | "google" | "azure" | "ollama" | "llm"
+    /// "auto" tries dedicated API first, falls back to LLM
+    pub provider: String,
+    /// API key for the dedicated translation provider
+    pub api_key: String,
+    /// Auto-translate feed content titles at ingest time
+    pub auto_translate: bool,
+    /// Also translate descriptions (not just titles) — more API usage
+    pub translate_descriptions: bool,
+}
+
+impl std::fmt::Debug for TranslationConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TranslationConfig")
+            .field("provider", &self.provider)
+            .field(
+                "api_key",
+                &if self.api_key.is_empty() {
+                    "(empty)"
+                } else {
+                    "[REDACTED]"
+                },
+            )
+            .field("auto_translate", &self.auto_translate)
+            .field("translate_descriptions", &self.translate_descriptions)
+            .finish()
+    }
+}
+
+impl Drop for TranslationConfig {
+    fn drop(&mut self) {
+        self.api_key.zeroize();
+    }
+}
+
+impl Default for TranslationConfig {
+    fn default() -> Self {
+        Self {
+            provider: "auto".to_string(),
+            api_key: String::new(),
+            auto_translate: true,
+            translate_descriptions: false,
+        }
+    }
+}
+
 /// Locale configuration for regional content
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LocaleConfig {
@@ -541,6 +591,9 @@ pub struct Settings {
     /// Locale configuration for regional content
     #[serde(default)]
     pub locale: LocaleConfig,
+    /// Dedicated translation provider configuration (DeepL, Google, Azure)
+    #[serde(default)]
+    pub translation: TranslationConfig,
     /// Community intelligence configuration (opt-in anonymous pattern sharing)
     #[serde(default)]
     pub community_intelligence: Option<CommunityIntelligenceConfig>,
@@ -580,6 +633,7 @@ impl std::fmt::Debug for Settings {
             .field("github_languages", &self.github_languages)
             .field("license", &self.license)
             .field("locale", &self.locale)
+            .field("translation", &self.translation)
             .field(
                 "community_intelligence",
                 &self.community_intelligence.is_some(),
@@ -662,6 +716,7 @@ impl Default for Settings {
             source_resilience: default_source_resilience(),
             rate_budgets: default_rate_budgets(),
             locale: LocaleConfig::default(),
+            translation: TranslationConfig::default(),
             community_intelligence: None,
             team_relay: None,
         }

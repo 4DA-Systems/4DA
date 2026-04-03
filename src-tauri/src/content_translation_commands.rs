@@ -101,3 +101,22 @@ pub fn get_translation_cache_stats() -> Result<CacheStats> {
 pub fn purge_translation_cache() -> Result<usize> {
     content_translation::purge_expired_cache()
 }
+
+/// Get the dedicated translation provider configuration.
+#[tauri::command]
+pub fn get_translation_config() -> Result<crate::settings::types::TranslationConfig> {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    Ok(guard.get().translation.clone())
+}
+
+/// Update the dedicated translation provider configuration.
+#[tauri::command]
+pub fn set_translation_config(
+    config: crate::settings::types::TranslationConfig,
+) -> Result<()> {
+    let manager = crate::get_settings_manager();
+    let mut guard = manager.lock();
+    guard.get_mut().translation = config;
+    guard.save()
+}

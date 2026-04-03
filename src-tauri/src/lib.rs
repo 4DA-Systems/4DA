@@ -297,6 +297,7 @@ mod webhooks;
 
 mod content_translation;
 mod content_translation_commands;
+mod translation_providers;
 mod telemetry;
 mod toolkit_intelligence;
 mod translation_commands;
@@ -760,6 +761,8 @@ pub fn run() {
             content_translation_commands::get_content_translation_settings,
             content_translation_commands::get_translation_cache_stats,
             content_translation_commands::purge_translation_cache,
+            content_translation_commands::get_translation_config,
+            content_translation_commands::set_translation_config,
             // GAME Engine
             game_commands::get_game_state,
             game_commands::get_achievements,
