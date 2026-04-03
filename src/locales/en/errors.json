@@ -27,5 +27,21 @@
   "module.unknown": "Unknown module: {{id}}",
   "module.fileNotFound": "Module file not found: {{path}}",
   "translation.noLlm": "LLM not configured — set up your API key in Settings to enable content translation",
-  "translation.sourceIsEnglish": "English is the source language — no translation needed"
+  "translation.sourceIsEnglish": "English is the source language — no translation needed",
+
+  "errorMsg.network": "Network request failed. Check your internet connection.",
+  "errorMsg.timeout": "Request timed out. Try again in a moment.",
+  "errorMsg.auth": "Authentication failed. Check your API key in Settings.",
+  "errorMsg.rateLimit": "Rate limit reached. Please wait a moment and try again.",
+  "errorMsg.ollamaNotRunning": "Ollama is not running. Start Ollama or set an API key in Settings.",
+  "errorMsg.embedding": "Embedding service unavailable. Check that Ollama is running.",
+  "errorMsg.connectionRefused": "Network request failed. Check your internet connection.",
+  "errorMsg.database": "Database error. Try restarting the app.",
+  "errorMsg.permission": "Permission denied. Check file permissions.",
+  "errorMsg.parse": "Data format error. Try again or restart the app.",
+  "errorMsg.alreadyRunning": "Already in progress. Please wait for it to complete.",
+  "errorMsg.fileNotFound": "File not found. It may have been moved or deleted.",
+  "errorMsg.ipc": "App communication error. Please restart the app.",
+  "errorMsg.git": "Git operation failed. Check the repository path.",
+  "errorMsg.fallback": "Something went wrong. Please try again."
 }
