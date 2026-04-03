@@ -6,7 +6,7 @@
 
 use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::db::embedding_to_blob;
 use crate::error::{Result, ResultExt};
@@ -603,6 +603,10 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     crate::settings::require_signal_feature("natural_language_query")?;
     let is_pro = crate::settings::is_signal();
 
+    // Detect query language for analytics and keyword translation
+    let query_lang = crate::language_detect::detect_language(&query_text);
+    debug!(target: "4da::search", lang = %query_lang, "Search query language detected");
+
     // 1. Parse intent locally
     let parsed = parse_query_local(&query_text);
     let intent = classify_intent(&query_text).to_string();
@@ -619,10 +623,37 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     let stack_context = build_stack_context(&conn, &parsed.keywords);
 
     // 3. Execute text search
-    let text_results = execute_text_search(&conn, &parsed, 30)?;
+    // For non-English queries, translate keywords to English for keyword matching.
+    // Most indexed content titles/descriptions are in English, so keyword LIKE
+    // matching needs English terms. Translation is best-effort -- on failure we
+    // fall back to the original query which may still partially match.
+    let text_search_parsed = if query_lang != "en" {
+        let request = crate::content_translation::TranslationRequest {
+            id: "search_query".to_string(),
+            text: query_text.clone(),
+            source_lang: query_lang.clone(),
+        };
+        let result = crate::content_translation::translate_content(&request, "en").await;
+        if result.provider != "none" {
+            debug!(
+                target: "4da::search",
+                original = %query_text,
+                translated = %result.translated,
+                "Translated search query for keyword matching"
+            );
+            parse_query_local(&result.translated)
+        } else {
+            parsed.clone()
+        }
+    } else {
+        parsed.clone()
+    };
+    let text_results = execute_text_search(&conn, &text_search_parsed, 30)?;
     drop(conn);
 
     // 4. Execute vector search
+    // Multilingual embeddings handle cross-lingual matching natively.
+    // A Japanese query will match relevant English content without translation.
     let vector_results = match execute_vector_search(&parsed, 20).await {
         Ok(results) => results,
         Err(e) => {
@@ -700,6 +731,15 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     };
 
     let execution_ms = start.elapsed().as_millis() as u64;
+
+    info!(
+        target: "4da::search",
+        query_lang = %query_lang,
+        results = items.len(),
+        total = total_count,
+        ms = execution_ms,
+        "Search completed"
+    );
 
     Ok(QueryResult {
         query: query_text,
