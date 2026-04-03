@@ -27,6 +27,7 @@ mod tests {
             model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: FAKE_OPENAI_EMBED_KEY.to_string(),
+            embedding_model: String::new(),
         };
         s.x_api_key = FAKE_X_BEARER.to_string();
         s.license = LicenseConfig {
@@ -418,6 +419,7 @@ mod tests {
             model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
         let client = LLMClient::new(provider);
         let cost = client.estimate_cost_cents(10_000, 1_000);
