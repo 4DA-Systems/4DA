@@ -297,6 +297,21 @@ body {
   unicode-bidi: isolate;
 }
 
+/* Arabic/Persian/Urdu script — optimized font stack and spacing */
+:lang(ar), :lang(fa), :lang(ur) {
+  font-family: 'Segoe UI', 'Tahoma', 'Geeza Pro', 'Arabic Typesetting', system-ui, sans-serif;
+  line-height: 1.8;
+  letter-spacing: 0; /* Never add letter-spacing to Arabic — breaks ligatures */
+}
+
+/* Content titles respect source text direction regardless of UI language.
+   A Japanese title in an Arabic UI, or an Arabic title in an English UI,
+   each flows in the correct direction based on its own Unicode characters. */
+.item-title,
+.result-title {
+  unicode-bidi: plaintext;
+}
+
 /* Accessibility: Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
