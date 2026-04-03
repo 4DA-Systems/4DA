@@ -34,6 +34,10 @@ pub(crate) fn initialize_pre_tauri() {
         )
         .init();
 
+    // Install crash guard BEFORE any secrets are loaded — zeroizes sensitive
+    // memory in the panic hook so crash dumps don't leak API keys.
+    crate::crash_guard::install();
+
     info!(target: "4da::startup", "========================================");
     info!(target: "4da::startup", "4DA Home - Personalized Intelligence");
     info!(target: "4da::startup", "All signal. No feed.");

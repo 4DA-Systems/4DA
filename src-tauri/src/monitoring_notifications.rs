@@ -88,7 +88,7 @@ pub fn complete_scheduled_check<R: Runtime>(
                         priority: "critical".to_string(),
                         signal_type: Some("security_alert".to_string()),
                         title: title.clone(),
-                        action: Some("Open 4DA for details".to_string()),
+                        action: Some(crate::i18n::t("ui:notify.openForDetails", &flood_lang, &[])),
                         source: None,
                         matched_deps: vec![],
                         count: Some(total_security),
@@ -101,7 +101,11 @@ pub fn complete_scheduled_check<R: Runtime>(
                     },
                 );
             } else {
-                let native_title = format!("4DA — {total_security} Security Alerts Detected");
+                let native_title = crate::i18n::t(
+                    "ui:notify.securityAlertsDetected",
+                    &flood_lang,
+                    &[("count", &total_security.to_string())],
+                );
                 if let Err(e) = app
                     .notification()
                     .builder()
@@ -417,9 +421,17 @@ pub fn send_chain_prediction_notification<R: Runtime>(
 
     // Native OS notification fallback
     let title = match phase {
-        "escalating" => format!("4DA — {chain_name} Escalating"),
-        "peak" => format!("4DA — {chain_name} at Peak"),
-        _ => format!("4DA — {chain_name} Signal Chain"),
+        "escalating" => crate::i18n::t(
+            "ui:notify.chainEscalating",
+            &chain_lang,
+            &[("chain", chain_name)],
+        ),
+        "peak" => crate::i18n::t("ui:notify.chainPeak", &chain_lang, &[("chain", chain_name)]),
+        _ => crate::i18n::t(
+            "ui:notify.chainSignal",
+            &chain_lang,
+            &[("chain", chain_name)],
+        ),
     };
 
     if let Err(e) = app

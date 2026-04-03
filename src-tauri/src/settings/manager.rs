@@ -171,13 +171,15 @@ impl SettingsManager {
             match keystore::migrate_from_plaintext(&settings) {
                 Ok(report) => {
                     if !report.migrated.is_empty() {
-                        // Clear SECRET keys from the JSON file (keep in-memory copy).
-                        // license_key is intentionally kept on disk — it's a product
-                        // activation code, not a security secret.
+                        // Clear all secret keys from the JSON file (keep in-memory copy).
+                        // Keys are stored in the platform keychain and hydrated on load.
                         let mut clean_settings = settings.clone();
                         clean_settings.llm.api_key = String::new();
                         clean_settings.llm.openai_api_key = String::new();
                         clean_settings.x_api_key = String::new();
+                        if report.migrated.contains(&"license_key".to_string()) {
+                            clean_settings.license.license_key = String::new();
+                        }
 
                         if let Some(parent) = settings_path.parent() {
                             let _ = fs::create_dir_all(parent);
@@ -251,12 +253,7 @@ impl SettingsManager {
         // Clone settings and clear SECRET fields that are safely in the keychain.
         // Only strip a key from disk if it's verified in the keychain -- otherwise
         // keep the plaintext version so the app still works without a keychain.
-        //
-        // NOTE: license_key is ALWAYS persisted to disk. Unlike API keys (which
-        // grant access to external services and are genuine secrets), the license
-        // key is a product activation code with no security risk from being on
-        // disk. Stripping it caused license loss when the platform keychain was
-        // unreliable (Windows Credential Manager intermittent failures).
+        // On load, keys are hydrated from keychain back into memory.
         let mut disk_settings = self.settings.clone();
         if keystore::has_secret("llm_api_key") {
             disk_settings.llm.api_key = String::new();
@@ -267,15 +264,19 @@ impl SettingsManager {
         if keystore::has_secret("x_api_key") {
             disk_settings.x_api_key = String::new();
         }
-        // license_key intentionally NOT stripped — always persisted to disk
+        if keystore::has_secret("license_key") {
+            disk_settings.license.license_key = String::new();
+        }
 
         // License tier invariant: if a valid self-signed key is present, the tier
         // written to disk MUST match the key's embedded tier. This single guard
         // makes tier corruption structurally impossible — no code path, present or
         // future, can persist a wrong tier. The check is cheap (no I/O, no network).
-        if disk_settings.license.license_key.starts_with("4DA-") {
+        // Uses the in-memory key (self.settings) since disk_settings may have it
+        // stripped for keychain-migrated users.
+        if self.settings.license.license_key.starts_with("4DA-") {
             if let Ok(payload) =
-                crate::settings::verify_license_key(&disk_settings.license.license_key)
+                crate::settings::verify_license_key(&self.settings.license.license_key)
             {
                 let expected_tier = match payload.tier.as_str() {
                     "signal" | "team" | "enterprise" => payload.tier.clone(),

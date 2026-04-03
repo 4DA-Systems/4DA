@@ -51,8 +51,10 @@ mod tests {
 
         // Active trial
         let license = LicenseConfig {
+            tier: license.tier.clone(),
+            license_key: license.license_key.clone(),
+            activated_at: license.activated_at.clone(),
             trial_started_at: Some(chrono::Utc::now().to_rfc3339()),
-            ..license
         };
         assert!(is_trial_active(&license));
         let status = get_trial_status(&license);
@@ -62,8 +64,10 @@ mod tests {
         // Expired trial (must exceed TRIAL_DURATION_DAYS which is 45)
         let expired = chrono::Utc::now() - chrono::Duration::days(46);
         let license = LicenseConfig {
+            tier: license.tier.clone(),
+            license_key: license.license_key.clone(),
+            activated_at: license.activated_at.clone(),
             trial_started_at: Some(expired.to_rfc3339()),
-            ..license
         };
         assert!(!is_trial_active(&license));
         let status = get_trial_status(&license);
@@ -85,14 +89,18 @@ mod tests {
 
         let signal = LicenseConfig {
             tier: "signal".to_string(),
-            ..free.clone()
+            license_key: free.license_key.clone(),
+            activated_at: free.activated_at.clone(),
+            trial_started_at: free.trial_started_at.clone(),
         };
         assert!(is_signal_feature_available("get_attention_report", &signal));
 
         // Legacy "pro" tier should still work
         let legacy_pro = LicenseConfig {
             tier: "pro".to_string(),
-            ..free.clone()
+            license_key: free.license_key.clone(),
+            activated_at: free.activated_at.clone(),
+            trial_started_at: free.trial_started_at.clone(),
         };
         assert!(is_signal_feature_available(
             "get_attention_report",

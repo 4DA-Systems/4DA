@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { useAppStore } from '../../store';
 
 function formatRelativeTime(iso: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
@@ -15,6 +16,7 @@ function formatRelativeTime(iso: string, t: (key: string, opts?: Record<string, 
 
 export function OrgDashboard() {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const organization = useAppStore(s => s.organization);
   const orgTeams = useAppStore(s => s.orgTeams);
   const orgAnalytics = useAppStore(s => s.orgAnalytics);
@@ -32,6 +34,12 @@ export function OrgDashboard() {
     loadCrossTeamSignals();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (crossTeamSignals?.length) {
+      requestTranslation(crossTeamSignals.map(sig => ({ id: `sig-${sig.correlation_id}`, text: sig.recommendation ?? '' })));
+    }
+  }, [crossTeamSignals, requestTranslation]);
 
   if (orgLoading && !organization) {
     return (
@@ -156,7 +164,7 @@ export function OrgDashboard() {
                 <p className="text-[10px] text-text-muted">
                   {t('enterprise.org.affectsTeams', 'Affects')} {sig.teams_affected.length} {t('enterprise.org.teams', 'teams')}
                 </p>
-                <p className="text-[10px] text-text-secondary mt-1">{sig.recommendation}</p>
+                <p className="text-[10px] text-text-secondary mt-1">{getTranslated(`sig-${sig.correlation_id}`, sig.recommendation ?? '')}</p>
               </div>
             ))}
           </div>
