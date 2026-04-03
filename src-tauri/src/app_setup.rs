@@ -295,8 +295,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             // Payload is a JSON array of URL strings
             if let Ok(url_list) = serde_json::from_str::<Vec<String>>(&format!("[{urls}]")) {
                 for url in url_list {
-                    info!(target: "4da::deeplink", url = %url, "Deep-link received");
-                    let _ = deep_link_handle.emit("deep-link-activate", url);
+                    if crate::utils::validate_deep_link_url(&url) {
+                        info!(target: "4da::deeplink", url = %url, "Deep-link received");
+                        let _ = deep_link_handle.emit("deep-link-activate", url);
+                    } else {
+                        warn!(target: "4da::security", url = %url, "Rejected invalid deep-link URL");
+                    }
                 }
             }
         }
