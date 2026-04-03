@@ -1286,6 +1286,26 @@ impl Database {
                 )?;
             }
 
+            // Phase 46: app_meta table for embedding model tracking
+            if current_version < 46 {
+                Self::run_versioned_migration(
+                    &conn,
+                    45,
+                    46,
+                    "Phase 46: app_meta table for embedding model tracking",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS app_meta (
+                                key TEXT PRIMARY KEY,
+                                value TEXT NOT NULL
+                            );",
+                        )?;
+                        info!(target: "4da::db", "Created app_meta table for embedding model tracking");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }

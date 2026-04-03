@@ -53,6 +53,26 @@ impl SettingsManager {
         let settings_path = data_dir.join("settings.json");
         let usage_path = data_dir.join("usage.json");
 
+        // Reject symlinks in data path to prevent symlink attacks
+        if settings_path.exists() {
+            let meta = fs::symlink_metadata(&settings_path);
+            if let Ok(m) = meta {
+                if m.file_type().is_symlink() {
+                    warn!(
+                        target: "4da::security",
+                        path = %settings_path.display(),
+                        "Rejected symlink in data directory — using defaults"
+                    );
+                    return Self {
+                        settings: Settings::default(),
+                        usage: UsageStats::default(),
+                        settings_path,
+                        usage_path,
+                    };
+                }
+            }
+        }
+
         let mut settings = if settings_path.exists() {
             let load_result = fs::read_to_string(&settings_path)
                 .ok()

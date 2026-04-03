@@ -146,12 +146,15 @@ pub async fn set_llm_provider(
         }
     }
 
+    // Preserve the existing embedding model setting when updating LLM provider
+    let existing_embedding_model = guard.get().llm.embedding_model.clone();
     let llm_provider = LLMProvider {
         provider,
         api_key,
         model,
         base_url,
         openai_api_key: openai_api_key.unwrap_or_default(),
+        embedding_model: existing_embedding_model,
     };
 
     guard.set_llm_provider(llm_provider)?;

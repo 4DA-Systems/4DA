@@ -24,7 +24,7 @@ use std::time::Duration;
 /// general-purpose requests where the default 30s timeout is appropriate.
 pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
-        .user_agent("4DA/1.0")
+        .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
         .build()
@@ -38,7 +38,7 @@ pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 /// Tight timeouts prevent blocking on unresponsive services.
 pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
-        .user_agent("4DA/1.0")
+        .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(15))
         .build()

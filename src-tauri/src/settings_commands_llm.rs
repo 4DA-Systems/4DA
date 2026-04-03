@@ -157,7 +157,10 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
     if !model_found && !available_models.is_empty() {
         let model_list = available_models
             .iter()
-            .filter(|m| !m.starts_with("nomic-embed-text"))
+            .filter(|m| {
+                let embed_model = crate::reembed::get_embedding_model();
+                !m.starts_with("nomic-embed-text") && !m.starts_with(&embed_model)
+            })
             .cloned()
             .collect::<Vec<_>>()
             .join(", ");

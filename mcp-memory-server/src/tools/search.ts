@@ -10,10 +10,23 @@ function handleSearchMemory(
 ): ToolResponse {
   const { query, limit = 20 } = args as { query: string; limit?: number };
 
+  // Sanitize: cap query length and reject empty input
+  const sanitizedQuery = (query || "").slice(0, 1000);
+  if (!sanitizedQuery.trim()) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: "No results found.",
+        },
+      ],
+    };
+  }
+
   try {
     const results = ctx.db
       .prepare(`SELECT * FROM memory_fts WHERE memory_fts MATCH ? LIMIT ?`)
-      .all(query, limit);
+      .all(sanitizedQuery, limit);
 
     return {
       content: [

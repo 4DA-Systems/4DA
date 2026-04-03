@@ -228,7 +228,10 @@ export function executeDecisionMemory(
       try {
         const aweBin = findAweBinary();
         if (aweBin) {
-          const query = `${params.subject}: ${params.decision}`;
+          // Sanitize inputs before passing to external process
+          const safeSubject = (params.subject || "").slice(0, 500).replace(/\0/g, '');
+          const safeDecision = (params.decision || "").slice(0, 2000).replace(/\0/g, '');
+          const query = `${safeSubject}: ${safeDecision}`;
           const domain = mapDecisionTypeToDomain(params.decision_type || "tech_choice");
           const child = execFile(aweBin, [
             "transmute", query,
