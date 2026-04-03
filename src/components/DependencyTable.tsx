@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // ============================================================================
 // Types
@@ -44,10 +45,11 @@ export const ECOSYSTEM_COLORS: Record<string, string> = {
 // ============================================================================
 
 export function SeverityBadge({ severity }: { severity: string }) {
+  const { t } = useTranslation();
   const sev = (severity as Severity) in SEVERITY_COLORS ? severity as Severity : 'low';
   return (
     <span className={`text-xs px-2 py-0.5 rounded border font-medium ${SEVERITY_COLORS[sev]}`}>
-      {severity}
+      {t(`deps.severity.${severity}`, severity)}
     </span>
   );
 }
@@ -100,16 +102,17 @@ interface DependencyTableProps {
 }
 
 const DependencyTable = memo(function DependencyTable({ projectName, loading, deps }: DependencyTableProps) {
+  const { t } = useTranslation();
   return (
     <div>
       <h4 className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-        {projectName} Dependencies
+        {projectName} {t('deps.dependencies', 'Dependencies')}
       </h4>
       {loading ? (
         <div className="h-32 bg-bg-tertiary rounded-lg animate-pulse" />
       ) : deps.length === 0 ? (
         <div className="bg-bg-primary rounded-lg border border-border/50 p-4">
-          <p className="text-xs text-text-muted">No dependencies found for this project.</p>
+          <p className="text-xs text-text-muted">{t('deps.noDeps', 'No dependencies found for this project.')}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-lg border border-border">

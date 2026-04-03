@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { cmd } from '../../lib/commands';
 import { reportError } from '../../lib/error-reporter';
 
@@ -27,6 +28,7 @@ interface StandingQueriesProps {
 
 export function StandingQueries({ isPro }: StandingQueriesProps) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const [watches, setWatches] = useState<StandingQuery[]>([]);
   const [suggestions, setSuggestions] = useState<StandingQuerySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -59,6 +61,19 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
     loadWatches();
     loadSuggestions();
   }, [loadWatches, loadSuggestions]);
+
+  // Request translations for dynamic content
+  useEffect(() => {
+    const items: { id: string; text: string }[] = [];
+    suggestions.forEach(s => {
+      items.push({ id: `sq-topic-${s.topic}`, text: s.topic });
+      if (s.reason) items.push({ id: `sq-reason-${s.topic}`, text: s.reason });
+    });
+    watches.forEach(w => {
+      items.push({ id: `sq-watch-${w.id}`, text: w.query_text });
+    });
+    if (items.length > 0) requestTranslation(items);
+  }, [suggestions, watches, requestTranslation]);
 
   const handleDelete = async (id: number) => {
     try {
@@ -105,10 +120,10 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
                 {suggestion.query_type}
               </span>
               <span className="text-sm text-text-secondary flex-1 truncate">
-                {suggestion.topic}
+                {getTranslated(`sq-topic-${suggestion.topic}`, suggestion.topic)}
               </span>
               <span className="text-[10px] text-text-muted hidden group-hover:inline truncate max-w-[140px]">
-                {suggestion.reason}
+                {getTranslated(`sq-reason-${suggestion.topic}`, suggestion.reason)}
               </span>
               <button
                 onClick={() => handleWatchSuggestion(suggestion)}
@@ -146,7 +161,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           key={watch.id}
           className="flex items-center gap-2 px-3 py-2 bg-bg-secondary rounded-lg border border-border group"
         >
-          <span className="text-sm text-text-secondary flex-1 truncate">{watch.query_text}</span>
+          <span className="text-sm text-text-secondary flex-1 truncate">{getTranslated(`sq-watch-${watch.id}`, watch.query_text)}</span>
           <span className="text-xs text-text-muted">{watch.total_matches}</span>
           {watch.new_matches > 0 && (
             <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-cyan-500/20 text-cyan-400 font-medium">
