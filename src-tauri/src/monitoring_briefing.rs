@@ -315,31 +315,55 @@ fn build_notification_summary(briefing: &BriefingNotification) -> String {
 
     if !briefing.escalating_chains.is_empty() {
         let n = briefing.escalating_chains.len();
-        parts.push(format!("{n} escalating chain{}", if n != 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{n} escalating chain{}",
+            if n != 1 { "s" } else { "" }
+        ));
     }
 
-    let critical = briefing.items.iter()
-        .filter(|i| i.signal_priority.as_deref() == Some("critical")).count();
-    let alert = briefing.items.iter()
-        .filter(|i| i.signal_priority.as_deref() == Some("alert")).count();
+    let critical = briefing
+        .items
+        .iter()
+        .filter(|i| i.signal_priority.as_deref() == Some("critical"))
+        .count();
+    let alert = briefing
+        .items
+        .iter()
+        .filter(|i| i.signal_priority.as_deref() == Some("alert"))
+        .count();
     if critical > 0 {
-        parts.push(format!("{critical} critical signal{}", if critical != 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{critical} critical signal{}",
+            if critical != 1 { "s" } else { "" }
+        ));
     }
     if alert > 0 {
-        parts.push(format!("{alert} alert{}", if alert != 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{alert} alert{}",
+            if alert != 1 { "s" } else { "" }
+        ));
     }
     if briefing.total_relevant > 0 {
         let n = briefing.total_relevant;
-        parts.push(format!("{n} relevant item{}", if n != 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{n} relevant item{}",
+            if n != 1 { "s" } else { "" }
+        ));
     }
     if !briefing.knowledge_gaps.is_empty() {
         let n = briefing.knowledge_gaps.len();
         parts.push(format!("{n} blind spot{}", if n != 1 { "s" } else { "" }));
     }
-    let principles = briefing.wisdom_signals.iter()
-        .filter(|s| s.signal_type == "principle").count();
+    let principles = briefing
+        .wisdom_signals
+        .iter()
+        .filter(|s| s.signal_type == "principle")
+        .count();
     if principles > 0 {
-        parts.push(format!("{principles} wisdom signal{}", if principles != 1 { "s" } else { "" }));
+        parts.push(format!(
+            "{principles} wisdom signal{}",
+            if principles != 1 { "s" } else { "" }
+        ));
     }
 
     if parts.is_empty() {
@@ -702,54 +726,94 @@ pub(crate) async fn synthesize_morning_briefing(
         let tech = if ace_ctx.detected_tech.is_empty() {
             "Not configured".to_string()
         } else {
-            ace_ctx.detected_tech.iter().take(15).cloned().collect::<Vec<_>>().join(", ")
+            ace_ctx
+                .detected_tech
+                .iter()
+                .take(15)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
         };
         let topics = if ace_ctx.active_topics.is_empty() {
             "General development".to_string()
         } else {
-            ace_ctx.active_topics.iter().take(10).cloned().collect::<Vec<_>>().join(", ")
+            ace_ctx
+                .active_topics
+                .iter()
+                .take(10)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
         };
         (tech, topics)
     };
 
-    let items_text = briefing.items.iter().enumerate().map(|(i, item)| {
-        let tag = item.signal_priority.as_deref()
-            .map(|p| format!("[{}] ", p.to_uppercase()))
-            .unwrap_or_default();
-        let desc = item.description.as_deref().unwrap_or("");
-        let deps = if item.matched_deps.is_empty() {
-            String::new()
-        } else {
-            format!(" (affects: {})", item.matched_deps.join(", "))
-        };
-        format!("{}. {}{} — {}{}", i + 1, tag, item.title, desc, deps)
-    }).collect::<Vec<_>>().join("\n");
+    let items_text = briefing
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, item)| {
+            let tag = item
+                .signal_priority
+                .as_deref()
+                .map(|p| format!("[{}] ", p.to_uppercase()))
+                .unwrap_or_default();
+            let desc = item.description.as_deref().unwrap_or("");
+            let deps = if item.matched_deps.is_empty() {
+                String::new()
+            } else {
+                format!(" (affects: {})", item.matched_deps.join(", "))
+            };
+            format!("{}. {}{} — {}{}", i + 1, tag, item.title, desc, deps)
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
     let chains_text = if briefing.escalating_chains.is_empty() {
         String::new()
     } else {
-        let c = briefing.escalating_chains.iter().map(|c| {
-            format!("- {} ({}, {} signals): {}", c.name, c.phase, c.link_count, c.action)
-        }).collect::<Vec<_>>().join("\n");
+        let c = briefing
+            .escalating_chains
+            .iter()
+            .map(|c| {
+                format!(
+                    "- {} ({}, {} signals): {}",
+                    c.name, c.phase, c.link_count, c.action
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         format!("\nEscalating chains:\n{c}\n")
     };
 
     let gaps_text = if briefing.knowledge_gaps.is_empty() {
         String::new()
     } else {
-        let g = briefing.knowledge_gaps.iter().map(|g| {
-            format!("- {}: {}d silent", g.topic, g.days_since_last)
-        }).collect::<Vec<_>>().join("\n");
+        let g = briefing
+            .knowledge_gaps
+            .iter()
+            .map(|g| format!("- {}: {}d silent", g.topic, g.days_since_last))
+            .collect::<Vec<_>>()
+            .join("\n");
         format!("\nBlind spots:\n{g}\n")
     };
 
     let wisdom_text = if briefing.wisdom_signals.is_empty() {
         String::new()
     } else {
-        let w = briefing.wisdom_signals.iter().map(|w| {
-            let label = if w.signal_type == "anti-pattern" { "AVOID" } else { "PRINCIPLE" };
-            format!("- [{}] ({:.0}%) {}", label, w.confidence * 100.0, w.text)
-        }).collect::<Vec<_>>().join("\n");
+        let w = briefing
+            .wisdom_signals
+            .iter()
+            .map(|w| {
+                let label = if w.signal_type == "anti-pattern" {
+                    "AVOID"
+                } else {
+                    "PRINCIPLE"
+                };
+                format!("- [{}] ({:.0}%) {}", label, w.confidence * 100.0, w.text)
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         format!("\nAWE Wisdom:\n{w}\n")
     };
 
@@ -793,9 +857,13 @@ Rules:
         "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\n\
          {count} signals:\n{items}\n{chains}{gaps}{wisdom}\n\
          Synthesize my morning intelligence briefing.",
-        tech = tech_summary, topics = topics_summary,
-        count = briefing.items.len(), items = items_text,
-        chains = chains_text, gaps = gaps_text, wisdom = wisdom_text,
+        tech = tech_summary,
+        topics = topics_summary,
+        count = briefing.items.len(),
+        items = items_text,
+        chains = chains_text,
+        gaps = gaps_text,
+        wisdom = wisdom_text,
     );
 
     let llm_client = crate::llm::LLMClient::new(llm_settings);

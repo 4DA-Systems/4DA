@@ -112,9 +112,7 @@ pub fn get_translation_config() -> Result<crate::settings::types::TranslationCon
 
 /// Update the dedicated translation provider configuration.
 #[tauri::command]
-pub fn set_translation_config(
-    config: crate::settings::types::TranslationConfig,
-) -> Result<()> {
+pub fn set_translation_config(config: crate::settings::types::TranslationConfig) -> Result<()> {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
     guard.get_mut().translation = config;

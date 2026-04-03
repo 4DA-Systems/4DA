@@ -52,7 +52,10 @@ pub async fn translate_via_deepl(
         return Err(format!("DeepL API error {status}: {body}").into());
     }
 
-    let data: serde_json::Value = response.json().await.context("DeepL response parse failed")?;
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .context("DeepL response parse failed")?;
     let mut results = HashMap::new();
 
     if let Some(translations) = data.get("translations").and_then(|t| t.as_array()) {
@@ -117,8 +120,10 @@ pub async fn translate_via_azure(
         return Err(format!("Azure Translator error {status}: {body_text}").into());
     }
 
-    let data: Vec<serde_json::Value> =
-        response.json().await.context("Azure response parse failed")?;
+    let data: Vec<serde_json::Value> = response
+        .json()
+        .await
+        .context("Azure response parse failed")?;
     let mut results = HashMap::new();
 
     for (i, item) in data.iter().enumerate() {
@@ -150,9 +155,7 @@ pub async fn translate_via_google(
         return Ok(HashMap::new());
     }
 
-    let url = format!(
-        "https://translation.googleapis.com/language/translate/v2?key={api_key}"
-    );
+    let url = format!("https://translation.googleapis.com/language/translate/v2?key={api_key}");
 
     let texts: Vec<&str> = items.iter().map(|(_, text)| *text).collect();
 
@@ -176,8 +179,10 @@ pub async fn translate_via_google(
         return Err(format!("Google Translate error {status}: {body_text}").into());
     }
 
-    let data: serde_json::Value =
-        response.json().await.context("Google response parse failed")?;
+    let data: serde_json::Value = response
+        .json()
+        .await
+        .context("Google response parse failed")?;
     let mut results = HashMap::new();
 
     if let Some(translations) = data
@@ -315,13 +320,7 @@ mod tests {
             body.get("q").and_then(|q| q.as_array()).map(|a| a.len()),
             Some(2)
         );
-        assert_eq!(
-            body.get("target").and_then(|t| t.as_str()),
-            Some("de")
-        );
-        assert_eq!(
-            body.get("format").and_then(|f| f.as_str()),
-            Some("text")
-        );
+        assert_eq!(body.get("target").and_then(|t| t.as_str()), Some("de"));
+        assert_eq!(body.get("format").and_then(|f| f.as_str()), Some("text"));
     }
 }

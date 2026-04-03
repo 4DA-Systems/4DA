@@ -24,11 +24,19 @@ fn relative_time(iso: &str) -> String {
             return crate::i18n::t("ui:health.justNow", &lang, &[]);
         }
         if mins < 60 {
-            return crate::i18n::t("ui:health.minutesAgo", &lang, &[("count", &mins.to_string())]);
+            return crate::i18n::t(
+                "ui:health.minutesAgo",
+                &lang,
+                &[("count", &mins.to_string())],
+            );
         }
         let hours = diff.num_hours();
         if hours < 24 {
-            return crate::i18n::t("ui:health.hoursAgo", &lang, &[("count", &hours.to_string())]);
+            return crate::i18n::t(
+                "ui:health.hoursAgo",
+                &lang,
+                &[("count", &hours.to_string())],
+            );
         }
         let days = diff.num_days();
         return crate::i18n::t("ui:health.daysAgo", &lang, &[("count", &days.to_string())]);
@@ -103,7 +111,11 @@ pub async fn reset_source_circuit_breaker(source_type: String) -> Result<String>
     .map_err(FourDaError::Db)?;
     tracing::info!(target: "4da::sources", source = %source_type, "Circuit breaker manually reset");
     let lang = crate::i18n::get_user_language();
-    Ok(crate::i18n::t("ui:health.circuitReset", &lang, &[("source", &source_type)]))
+    Ok(crate::i18n::t(
+        "ui:health.circuitReset",
+        &lang,
+        &[("source", &source_type)],
+    ))
 }
 
 // ============================================================================

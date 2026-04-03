@@ -216,10 +216,7 @@ mod tests {
     #[test]
     fn test_en_translations_load() {
         // Verify English locale files load and flat dotted keys resolve correctly
-        assert_eq!(
-            t("signals:type.securityAlert", "en", &[]),
-            "Security Alert"
-        );
+        assert_eq!(t("signals:type.securityAlert", "en", &[]), "Security Alert");
         assert_eq!(t("ui:app.title", "en", &[]), "4DA");
     }
 

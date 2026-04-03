@@ -99,14 +99,14 @@ zip = { version = "0.6", optional = true }        # ZIP archive extraction
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
 
+# Language detection (fast, zero-dependency)
+whichlang = "0.1"
+
 # Semantic version parsing (CVE version range matching)
 semver = "1"
 
 # System startup (launch at login)
 tauri-plugin-autostart = "2"
-
-# Language detection (fast, zero-dependency trigram model — 16 languages)
-whichlang = "0.1"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }

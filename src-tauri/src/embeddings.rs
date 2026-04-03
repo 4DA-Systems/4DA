@@ -392,7 +392,8 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
                 return Err(format!(
                     "Embedding model '{}' not found in Ollama. Run: ollama pull {}",
                     embedding_model, embedding_model
-                ).into());
+                )
+                .into());
             }
             // Fall through to single-item fallback for other errors (old Ollama version)
             embed_texts_ollama_single(texts, base).await
@@ -453,7 +454,8 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
                 return Err(format!(
                     "Embedding model '{}' not found. Run: ollama pull {}",
                     embedding_model, embedding_model
-                ).into());
+                )
+                .into());
             }
             return Err(format!("Ollama embedding error ({status}): {body}").into());
         }
