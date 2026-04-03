@@ -2,7 +2,7 @@
 //! embedding generation, deduplication, validation.
 
 use tauri::AppHandle;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::db::Database;
 use crate::error::Result;
@@ -425,6 +425,41 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 (st, sid, url, title, content, detected_lang)
             })
             .collect();
+
+        // Pre-translate titles for non-English users (warms translation cache)
+        let user_lang = crate::i18n::get_user_language();
+        if user_lang != "en" {
+            let translation_requests: Vec<crate::content_translation::TranslationRequest> =
+                new_items_to_embed
+                    .iter()
+                    .filter(|(_, _, _, _, _, detected)| detected != &user_lang)
+                    .map(|(_, sid, _, title, _, _)| {
+                        crate::content_translation::TranslationRequest {
+                            id: sid.clone(),
+                            text: title.clone(),
+                            source_lang: "en".to_string(),
+                        }
+                    })
+                    .collect();
+
+            if !translation_requests.is_empty() {
+                let total_chars: usize =
+                    translation_requests.iter().map(|r| r.text.len()).sum();
+                if crate::content_translation::check_ingest_budget(total_chars) {
+                    debug!(target: "4da::cache", count = translation_requests.len(), lang = %user_lang, "Pre-translating titles at ingest");
+                    let results = crate::content_translation::translate_content_batch(
+                        &translation_requests,
+                        &user_lang,
+                    )
+                    .await;
+                    let translated =
+                        results.iter().filter(|r| r.provider != "none").count();
+                    info!(target: "4da::cache", translated, total = translation_requests.len(), lang = %user_lang, "Ingest translation complete");
+                } else {
+                    debug!(target: "4da::cache", "Ingest translation budget exhausted - skipping until tomorrow");
+                }
+            }
+        }
 
         let texts: Vec<String> = new_items_to_embed
             .iter()
