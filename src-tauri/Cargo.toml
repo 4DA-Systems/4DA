@@ -104,6 +104,9 @@ semver = "1"
 # System startup (launch at login)
 tauri-plugin-autostart = "2"
 
+# Language detection (fast, zero-dependency trigram model — 16 languages)
+whichlang = "0.1"
+
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }

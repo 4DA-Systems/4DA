@@ -61,7 +61,8 @@ pub struct FeedbackTopicSummary {
 // ============================================================================
 
 impl Database {
-    /// Store or update a source item (also updates vec0 index)
+    /// Store or update a source item (also updates vec0 index).
+    /// Language is auto-detected from title text via `whichlang`.
     pub fn upsert_source_item(
         &self,
         source_type: &str,
@@ -74,6 +75,7 @@ impl Database {
         let conn = self.conn.lock();
         let content_hash = hash_content_parts(&[title, content]);
         let embedding_blob = embedding_to_blob(embedding);
+        let detected_lang = crate::language_detect::detect_language(title);
 
         let existing_id: Option<i64> = conn
             .query_row(
@@ -86,8 +88,8 @@ impl Database {
         let tx = conn.unchecked_transaction()?;
         if let Some(id) = existing_id {
             tx.execute(
-                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, last_seen = datetime('now') WHERE id = ?6",
-                params![url, title, content, content_hash, embedding_blob, id],
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, detected_lang = ?6, last_seen = datetime('now') WHERE id = ?7",
+                params![url, title, content, content_hash, embedding_blob, detected_lang, id],
             )?;
             tx.execute(
                 "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
@@ -97,9 +99,9 @@ impl Database {
             Ok(id)
         } else {
             tx.execute(
-                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
-                params![source_type, source_id, url, title, content, content_hash, embedding_blob],
+                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, detected_lang, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
+                params![source_type, source_id, url, title, content, content_hash, embedding_blob, detected_lang],
             )?;
             let id = tx.last_insert_rowid();
             tx.execute(
@@ -111,11 +113,12 @@ impl Database {
         }
     }
 
-    /// Batch upsert source items in a transaction (much faster than individual calls)
+    /// Batch upsert source items in a transaction (much faster than individual calls).
+    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang).
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
-        items: &[(String, String, Option<String>, String, String, Vec<f32>)],
+        items: &[(String, String, Option<String>, String, String, Vec<f32>, String)],
     ) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         let mut count = 0;
@@ -125,18 +128,18 @@ impl Database {
                 "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
             )?;
             let mut update_stmt = tx.prepare_cached(
-                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, last_seen = datetime('now') WHERE id = ?6",
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, detected_lang = ?6, last_seen = datetime('now') WHERE id = ?7",
             )?;
             let mut update_vec_stmt =
                 tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
             let mut insert_stmt = tx.prepare_cached(
-                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
+                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, detected_lang, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
 
-            for (source_type, source_id, url, title, content, embedding) in items {
+            for (source_type, source_id, url, title, content, embedding, detected_lang) in items {
                 let content_hash = hash_content_parts(&[title, content]);
                 let embedding_blob = embedding_to_blob(embedding);
 
@@ -151,6 +154,7 @@ impl Database {
                         content,
                         content_hash,
                         embedding_blob,
+                        detected_lang,
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
@@ -162,7 +166,8 @@ impl Database {
                         title,
                         content,
                         content_hash,
-                        embedding_blob
+                        embedding_blob,
+                        detected_lang
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;
@@ -293,7 +298,7 @@ impl Database {
     ) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
              FROM source_items
              WHERE source_type = ?1 AND source_id = ?2
              AND (embedding_status IS NULL OR embedding_status = 'complete')"
@@ -312,6 +317,7 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 
@@ -359,7 +365,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
              FROM source_items
              WHERE source_type = ?1
              ORDER BY last_seen DESC
@@ -379,6 +385,7 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 
@@ -413,7 +420,7 @@ impl Database {
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
              FROM source_items
              WHERE last_seen >= ?1
              ORDER BY last_seen DESC
@@ -433,6 +440,7 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 
@@ -470,7 +478,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
              FROM source_items
              WHERE last_seen > ?1
              ORDER BY last_seen DESC
@@ -490,6 +498,7 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 

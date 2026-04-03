@@ -15,20 +15,22 @@ mod tests {
     fn stress_bulk_insert_1000_items() {
         let db = test_db();
 
-        let items: Vec<(String, String, Option<String>, String, String, Vec<f32>)> = (0..1000)
-            .map(|i| {
-                let source_id = format!("bulk_{}", i);
-                let emb = seed_embedding(&format!("stress:{}", i));
-                (
-                    "stress_test".to_string(),
-                    source_id.clone(),
-                    Some(format!("https://example.com/{}", i)),
-                    format!("Bulk Item {}", i),
-                    format!("Content for stress test item number {}", i),
-                    emb,
-                )
-            })
-            .collect();
+        let items: Vec<(String, String, Option<String>, String, String, Vec<f32>, String)> =
+            (0..1000)
+                .map(|i| {
+                    let source_id = format!("bulk_{}", i);
+                    let emb = seed_embedding(&format!("stress:{}", i));
+                    (
+                        "stress_test".to_string(),
+                        source_id.clone(),
+                        Some(format!("https://example.com/{}", i)),
+                        format!("Bulk Item {}", i),
+                        format!("Content for stress test item number {}", i),
+                        emb,
+                        "en".to_string(),
+                    )
+                })
+                .collect();
 
         let count = db.batch_upsert_source_items(&items).unwrap();
         assert_eq!(count, 1000, "batch_upsert should process all 1000 items");
