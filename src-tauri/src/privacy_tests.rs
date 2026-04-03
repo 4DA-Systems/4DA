@@ -30,6 +30,7 @@ mod tests {
             model: "claude-haiku-4-5-20251001".to_string(),
             base_url: None,
             openai_api_key: FAKE_OPENAI_EMBED_KEY.to_string(),
+            embedding_model: String::new(),
         };
         s.x_api_key = FAKE_X_BEARER.to_string();
         s.license = LicenseConfig {
@@ -285,6 +286,7 @@ mod tests {
             model: "test".to_string(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: String::new(),
         };
 
         let _client = LLMClient::new(provider);

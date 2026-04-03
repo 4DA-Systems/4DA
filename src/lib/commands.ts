@@ -384,6 +384,9 @@ interface CommandMap {
   get_translation_cache_stats: { params: Record<string, never>; result: TranslationCacheStats };
   purge_translation_cache: { params: Record<string, never>; result: number };
 
+  // -- Embedding Model --
+  get_embedding_model_info: { params: Record<string, never>; result: { model: string; reembed_in_progress: boolean; multilingual_model: string } };
+
   // -- STREETS Localization --
   get_regional_data: { params: Record<string, never>; result: RegionalData };
   calculate_electricity_cost: { params: { watts: number; hoursPerDay: number }; result: ElectricityCostResult };
@@ -1802,6 +1805,7 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'translate_content',
   'translate_content_batch',
   'translate_playbook_module',
+  'get_embedding_model_info',
 ]);
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {

@@ -435,6 +435,7 @@ where
         model: "llama3".to_string(),
         base_url: Some("http://localhost:11434".to_string()),
         openai_api_key: String::new(),
+        embedding_model: crate::reembed::DEFAULT_EMBEDDING_MODEL.to_string(),
     };
 
     warn!(
