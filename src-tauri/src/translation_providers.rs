@@ -6,7 +6,26 @@
 
 use crate::error::{Result, ResultExt};
 use std::collections::HashMap;
+use std::time::Duration;
 use tracing::warn;
+
+/// Shared HTTP client with timeouts for translation API calls.
+fn translation_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .context("Failed to build translation HTTP client")
+}
+
+/// Truncate error body to prevent leaking sensitive API response data.
+fn safe_error_body(body: &str) -> &str {
+    if body.len() > 200 {
+        &body[..200]
+    } else {
+        body
+    }
+}
 
 // ============================================================================
 // DeepL Translation Provider
@@ -32,7 +51,7 @@ pub async fn translate_via_deepl(
     // DeepL uses uppercase 2-letter codes, with some exceptions
     let deepl_lang = map_deepl_lang(target_lang);
 
-    let client = reqwest::Client::new();
+    let client = translation_client()?;
     let mut form: Vec<(&str, String)> = vec![("target_lang", deepl_lang)];
     for (_id, text) in items {
         form.push(("text", (*text).to_string()));
@@ -49,7 +68,7 @@ pub async fn translate_via_deepl(
     if !response.status().is_success() {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("DeepL API error {status}: {body}").into());
+        return Err(format!("DeepL API error {status}: {}", safe_error_body(&body)).into());
     }
 
     let data: serde_json::Value = response
@@ -95,18 +114,17 @@ pub async fn translate_via_azure(
         return Ok(HashMap::new());
     }
 
-    let url = format!(
-        "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&to={target_lang}"
-    );
+    let url = "https://api.cognitive.microsofttranslator.com/translate";
 
     let body: Vec<serde_json::Value> = items
         .iter()
         .map(|(_, text)| serde_json::json!({ "Text": text }))
         .collect();
 
-    let client = reqwest::Client::new();
+    let client = translation_client()?;
     let response = client
-        .post(&url)
+        .post(url)
+        .query(&[("api-version", "3.0"), ("to", target_lang)])
         .header("Ocp-Apim-Subscription-Key", api_key)
         .header("Content-Type", "application/json")
         .json(&body)
@@ -117,7 +135,7 @@ pub async fn translate_via_azure(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_default();
-        return Err(format!("Azure Translator error {status}: {body_text}").into());
+        return Err(format!("Azure Translator error {status}: {}", safe_error_body(&body_text)).into());
     }
 
     let data: Vec<serde_json::Value> = response
@@ -155,7 +173,7 @@ pub async fn translate_via_google(
         return Ok(HashMap::new());
     }
 
-    let url = format!("https://translation.googleapis.com/language/translate/v2?key={api_key}");
+    let url = "https://translation.googleapis.com/language/translate/v2";
 
     let texts: Vec<&str> = items.iter().map(|(_, text)| *text).collect();
 
@@ -165,9 +183,10 @@ pub async fn translate_via_google(
         "format": "text"
     });
 
-    let client = reqwest::Client::new();
+    let client = translation_client()?;
     let response = client
-        .post(&url)
+        .post(url)
+        .header("x-goog-api-key", api_key)
         .json(&body)
         .send()
         .await
@@ -176,7 +195,7 @@ pub async fn translate_via_google(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_default();
-        return Err(format!("Google Translate error {status}: {body_text}").into());
+        return Err(format!("Google Translate error {status}: {}", safe_error_body(&body_text)).into());
     }
 
     let data: serde_json::Value = response
