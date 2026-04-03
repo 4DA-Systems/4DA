@@ -181,7 +181,7 @@ fn maybe_revalidate_license() {
             target: "4da::license",
             "Re-hydrated license key during periodic check — persisting to disk"
         );
-        guard.get_mut().license.license_key = license.license_key;
+        guard.get_mut().license.license_key = license.license_key.clone();
         if let Err(e) = guard.save() {
             warn!(
                 target: "4da::license",
@@ -255,7 +255,7 @@ pub fn validate_license_on_startup() {
             target: "4da::license",
             "Re-hydrated license key into in-memory settings at startup — persisting to disk"
         );
-        guard.get_mut().license.license_key = license.license_key;
+        guard.get_mut().license.license_key = license.license_key.clone();
         if let Err(e) = guard.save() {
             warn!(
                 target: "4da::license",
