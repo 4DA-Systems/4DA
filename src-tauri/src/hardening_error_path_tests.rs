@@ -122,6 +122,7 @@ mod tests {
                 model: "model".to_string(),
                 base_url: None,
                 openai_api_key: String::new(),
+                embedding_model: String::new(),
             };
             let client = LLMClient::new(provider);
             // is_configured returns false for unknown providers
@@ -140,6 +141,7 @@ mod tests {
                 model: "claude-haiku-4-5-20251001".to_string(),
                 base_url: None,
                 openai_api_key: String::new(),
+                embedding_model: String::new(),
             };
             let client = LLMClient::new(provider);
             assert!(
@@ -157,6 +159,7 @@ mod tests {
                 model: "gpt-4o-mini".to_string(),
                 base_url: None,
                 openai_api_key: String::new(),
+                embedding_model: String::new(),
             };
             let client = LLMClient::new(provider);
             assert!(
@@ -251,6 +254,7 @@ mod tests {
                     model: "test-model".to_string(),
                     base_url: None,
                     openai_api_key: String::new(),
+                    embedding_model: String::new(),
                 };
                 let client = LLMClient::new(provider);
                 let cost = client.estimate_cost_cents(0, 0);

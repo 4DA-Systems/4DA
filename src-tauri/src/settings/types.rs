@@ -26,6 +26,14 @@ pub struct LLMProvider {
     /// OpenAI API key specifically for embeddings (used when provider is not OpenAI)
     #[serde(default)]
     pub openai_api_key: String,
+    /// Embedding model for semantic search. Default: "nomic-embed-text".
+    /// "nomic-embed-text-v2-moe" recommended for multilingual content.
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+}
+
+fn default_embedding_model() -> String {
+    "nomic-embed-text".to_string()
 }
 
 impl std::fmt::Debug for LLMProvider {
@@ -50,6 +58,7 @@ impl std::fmt::Debug for LLMProvider {
                     "[REDACTED]"
                 },
             )
+            .field("embedding_model", &self.embedding_model)
             .finish()
     }
 }
@@ -69,6 +78,7 @@ impl Default for LLMProvider {
             model: String::new(),
             base_url: None,
             openai_api_key: String::new(),
+            embedding_model: default_embedding_model(),
         }
     }
 }
