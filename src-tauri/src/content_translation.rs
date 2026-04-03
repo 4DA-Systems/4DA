@@ -16,11 +16,19 @@ use crate::llm;
 use crate::state::get_database;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{debug, info, warn};
 
 /// Maximum characters to translate in a single item.
 /// Prevents runaway LLM costs on very long content.
 const MAX_CONTENT_LENGTH: usize = 2000;
+
+/// Daily character budget for ingest-time translation.
+/// Prevents runaway API costs. On-demand translation still works when budget exhausted.
+const DAILY_INGEST_BUDGET_CHARS: usize = 200_000;
+
+static DAILY_INGEST_CHARS_USED: AtomicUsize = AtomicUsize::new(0);
+static DAILY_INGEST_RESET_DAY: AtomicUsize = AtomicUsize::new(0);
 
 /// Maximum items in a single batch translation request.
 const MAX_BATCH_SIZE: usize = 20;
@@ -133,6 +141,24 @@ const DO_NOT_TRANSLATE: &[&str] = &[
     "MUSE",
     "STREETS",
 ];
+
+/// Check if ingest translation budget allows more characters.
+/// Resets daily. Returns false if budget exhausted.
+pub fn check_ingest_budget(chars: usize) -> bool {
+    use chrono::Datelike;
+    let today = chrono::Utc::now().ordinal() as usize;
+    let stored_day = DAILY_INGEST_RESET_DAY.load(Ordering::Relaxed);
+    if today != stored_day {
+        DAILY_INGEST_CHARS_USED.store(0, Ordering::Relaxed);
+        DAILY_INGEST_RESET_DAY.store(today, Ordering::Relaxed);
+    }
+    let current = DAILY_INGEST_CHARS_USED.load(Ordering::Relaxed);
+    if current + chars > DAILY_INGEST_BUDGET_CHARS {
+        return false;
+    }
+    DAILY_INGEST_CHARS_USED.fetch_add(chars, Ordering::Relaxed);
+    true
+}
 
 // ============================================================================
 // Types
@@ -780,5 +806,18 @@ mod tests {
         assert!(!DO_NOT_TRANSLATE.is_empty());
         assert!(DO_NOT_TRANSLATE.contains(&"React"));
         assert!(DO_NOT_TRANSLATE.contains(&"4DA"));
+    }
+
+    #[test]
+    fn test_ingest_budget_allows_small_requests() {
+        // Reset by simulating a new day (ordinal changes)
+        // Small requests should always be allowed within budget
+        assert!(check_ingest_budget(100));
+    }
+
+    #[test]
+    fn test_daily_budget_constant_is_reasonable() {
+        // 200k chars = ~40k titles at 5 words avg = covers heavy usage
+        assert_eq!(DAILY_INGEST_BUDGET_CHARS, 200_000);
     }
 }
