@@ -1,4 +1,5 @@
-import { memo } from 'react';
+import { memo, useEffect } from 'react';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { renderMarkdown } from '../../utils/playbook-markdown';
 import type { PersonalizedLesson } from '../../types/personalization';
 import { SovereignInsightCard } from './SovereignInsightCard';
@@ -48,6 +49,17 @@ const PlaybookLessonList = memo(function PlaybookLessonList({
   personalizedLessons,
   onLessonToggle,
 }: PlaybookLessonListProps) {
+  const { getTranslated, requestTranslation } = useTranslatedContent();
+
+  useEffect(() => {
+    if (lessons.length > 0) {
+      requestTranslation(lessons.map((lesson, idx) => ({
+        id: `lesson-${moduleId}-${idx}`,
+        text: lesson.title,
+      })));
+    }
+  }, [lessons, moduleId, requestTranslation]);
+
   return (
     <>
       {lessons.map((lesson, idx) => {
@@ -101,7 +113,7 @@ const PlaybookLessonList = memo(function PlaybookLessonList({
                 )}
               </button>
               <h3 className={`text-sm font-medium flex-1 ${isCompleted ? 'text-text-secondary' : 'text-white'}`}>
-                {lesson.title}
+                {getTranslated(`lesson-${moduleId}-${idx}`, lesson.title)}
               </h3>
               {personalized && <PersonalizationDepthIndicator depth={personalized.depth} />}
             </div>

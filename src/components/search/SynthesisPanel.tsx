@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { trackEvent } from '../../hooks/use-telemetry';
 
 export interface SynthesisSource {
@@ -61,11 +62,22 @@ function parseCitations(
 
 export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRetry }: SynthesisPanelProps) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
 
   // Track when synthesis loading begins
   useEffect(() => {
     if (loading) trackEvent('synthesis_triggered');
   }, [loading]);
+
+  // Request translations for source titles
+  useEffect(() => {
+    if (synthesis?.sources?.length) {
+      requestTranslation(synthesis.sources.map(s => ({
+        id: `synth-src-${s.index}`,
+        text: s.title,
+      })));
+    }
+  }, [synthesis?.sources, requestTranslation]);
 
   if (!isPro) return null;
   if (!loading && !synthesis) return null;
@@ -146,10 +158,10 @@ export function SynthesisPanel({ isPro, synthesis, loading, streamingText, onRet
                         rel="noopener noreferrer"
                         className="text-text-secondary hover:text-cyan-400 transition-colors truncate"
                       >
-                        {source.title}
+                        {getTranslated(`synth-src-${source.index}`, source.title)}
                       </a>
                     ) : (
-                      <span className="text-text-muted truncate">{source.title}</span>
+                      <span className="text-text-muted truncate">{getTranslated(`synth-src-${source.index}`, source.title)}</span>
                     )}
                   </div>
                 ))}

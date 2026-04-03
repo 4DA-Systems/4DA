@@ -147,7 +147,7 @@ export function AdminHealthDashboard() {
           <div className="flex items-center gap-2 mt-1">
             <div className={`w-2 h-2 rounded-full ${diagnostics?.embedding_operational ? 'bg-success' : 'bg-[var(--color-accent-action)]'}`} />
             <span className="text-xs text-white">
-              {diagnostics?.embedding_model || 'Not configured'}
+              {diagnostics?.embedding_model || t('enterprise.health.notConfigured', 'Not configured')}
             </span>
           </div>
           <p className="text-[10px] text-text-muted mt-1">
@@ -197,10 +197,10 @@ export function AdminHealthDashboard() {
           </h4>
           <div className="grid grid-cols-4 gap-2">
             {[
-              { label: 'Active Seats', value: orgAnalytics.active_seats, color: 'text-white' },
-              { label: 'Signals/Period', value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
-              { label: 'Resolved', value: orgAnalytics.signals_resolved, color: 'text-success' },
-              { label: 'Decisions', value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
+              { label: t('enterprise.health.activeSeats', 'Active Seats'), value: orgAnalytics.active_seats, color: 'text-white' },
+              { label: t('enterprise.health.signalsPeriod', 'Signals/Period'), value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
+              { label: t('enterprise.health.resolved', 'Resolved'), value: orgAnalytics.signals_resolved, color: 'text-success' },
+              { label: t('enterprise.health.decisions', 'Decisions'), value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
             ].map(m => (
               <div key={m.label} className="bg-bg-primary rounded p-2 border border-border/50 text-center">
                 <p className="text-[10px] text-text-muted">{m.label}</p>
@@ -223,3 +223,4 @@ function formatRelativeTime(iso: string): string {
   if (hrs < 24) return `${hrs}h`;
   return `${Math.floor(hrs / 24)}d`;
 }
+// Note: relative time abbreviations (m, h, d) are universally understood; full i18n deferred

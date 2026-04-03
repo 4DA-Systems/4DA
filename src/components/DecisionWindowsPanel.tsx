@@ -1,5 +1,6 @@
 import { useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
 import { registerGameComponent } from '../lib/game-components';
 import type { DecisionWindow } from '../types/autophagy';
@@ -11,17 +12,17 @@ const WINDOW_TYPE_CONFIG: Record<string, { label: string; color: string; border:
   knowledge: { label: 'Knowledge', color: 'text-purple-400', border: 'border-purple-500/30', bg: 'bg-purple-500/10' },
 };
 
-function getTimeRemaining(expiresAt: string | null): string | null {
+function getTimeRemaining(expiresAt: string | null, t: (key: string, opts?: Record<string, unknown>) => string): string | null {
   if (!expiresAt) return null;
   const now = Date.now();
   const exp = new Date(expiresAt).getTime();
   const diff = exp - now;
-  if (diff <= 0) return 'Expired';
+  if (diff <= 0) return t('decisions.expired', { defaultValue: 'Expired' });
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ${hours % 24}h left`;
-  if (hours > 0) return `${hours}h left`;
-  return `${Math.floor(diff / (1000 * 60))}m left`;
+  if (days > 0) return t('decisions.timeLeftDaysHours', { defaultValue: '{{days}}d {{hours}}h left', days, hours: hours % 24 });
+  if (hours > 0) return t('decisions.timeLeftHours', { defaultValue: '{{hours}}h left', hours });
+  return t('decisions.timeLeftMinutes', { defaultValue: '{{minutes}}m left', minutes: Math.floor(diff / (1000 * 60)) });
 }
 
 function UrgencyBar({ urgency }: { urgency: number }) {
@@ -50,8 +51,9 @@ const WindowCard = memo(function WindowCard({
   index?: number;
 }) {
   const { t } = useTranslation();
+  const { getTranslated } = useTranslatedContent();
   const config = (WINDOW_TYPE_CONFIG[window.window_type] ?? WINDOW_TYPE_CONFIG.knowledge)!;
-  const timeLeft = getTimeRemaining(window.expires_at);
+  const timeLeft = getTimeRemaining(window.expires_at, t);
 
   return (
     <div
@@ -81,9 +83,9 @@ const WindowCard = memo(function WindowCard({
           </div>
         )}
       </div>
-      <h4 className="text-sm text-white font-medium mb-1 truncate">{window.title}</h4>
+      <h4 className="text-sm text-white font-medium mb-1 truncate">{getTranslated(`dw-title-${window.id}`, window.title)}</h4>
       {window.description && (
-        <p className="text-xs text-text-secondary mb-2 line-clamp-2">{window.description}</p>
+        <p className="text-xs text-text-secondary mb-2 line-clamp-2">{getTranslated(`dw-desc-${window.id}`, window.description)}</p>
       )}
       {window.dependency && (
         <div className="text-[10px] text-text-muted mb-2">
@@ -111,6 +113,7 @@ const WindowCard = memo(function WindowCard({
 
 export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
   const { t } = useTranslation();
+  const { requestTranslation } = useTranslatedContent();
   const windows = useAppStore(s => s.decisionWindows);
   const loading = useAppStore(s => s.decisionWindowsLoading);
   const loadWindows = useAppStore(s => s.loadDecisionWindows);
@@ -127,6 +130,17 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
     () => (windows ?? []).filter(w => w.status === 'open').sort((a, b) => b.urgency - a.urgency),
     [windows],
   );
+
+  // Request translations for decision window content
+  useEffect(() => {
+    if (openWindows.length > 0) {
+      requestTranslation(openWindows.flatMap(w => {
+        const items = [{ id: `dw-title-${w.id}`, text: w.title }];
+        if (w.description) items.push({ id: `dw-desc-${w.id}`, text: w.description });
+        return items;
+      }));
+    }
+  }, [openWindows, requestTranslation]);
 
   if (loading && openWindows.length === 0) return null;
   if (openWindows.length === 0) return (

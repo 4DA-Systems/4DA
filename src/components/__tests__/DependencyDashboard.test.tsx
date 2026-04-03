@@ -119,7 +119,7 @@ describe('DependencyDashboard', () => {
       expect(screen.getByText('vulns.activeAlerts')).toBeInTheDocument();
     });
     await waitFor(() => {
-      expect(screen.getByText('critical')).toBeInTheDocument();
+      expect(screen.getByText('deps.severity.critical')).toBeInTheDocument();
     });
   });
 });

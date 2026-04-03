@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 import { useAppStore } from '../../store';
 import { useShallow } from 'zustand/react/shallow';
 import { renderMarkdown } from '../../utils/playbook-markdown';
@@ -10,6 +11,7 @@ import type { RenderProvenance } from '../../types/channels';
 
 export function ChannelContent() {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const {
     activeRender,
     activeProvenance,
@@ -32,6 +34,13 @@ export function ChannelContent() {
   const renderChannel = useAppStore((s) => s.renderChannel);
 
   const activeChannel = channels.find((c) => c.id === activeChannelId);
+
+  // Request translation for active channel title
+  useEffect(() => {
+    if (activeChannel?.title) {
+      requestTranslation([{ id: `ch-title-${activeChannel.id}`, text: activeChannel.title }]);
+    }
+  }, [activeChannel?.id, activeChannel?.title, requestTranslation]);
 
   // Empty state: no channel selected
   if (!activeChannelId) {
@@ -88,7 +97,7 @@ export function ChannelContent() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <h2 className="text-lg font-semibold text-white">
-            {activeChannel?.title}
+            {activeChannel ? getTranslated(`ch-title-${activeChannel.id}`, activeChannel.title) : ''}
           </h2>
           <span className="px-2 py-0.5 text-[10px] font-mono text-cyan-400 bg-cyan-500/10 rounded">
             v{activeRender.version}

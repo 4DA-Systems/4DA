@@ -2,15 +2,15 @@ import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('time.justNow', { defaultValue: 'just now' });
+  if (mins < 60) return t('time.minutesAgo', { defaultValue: '{{count}}m ago', count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return t('time.hoursAgo', { defaultValue: '{{count}}h ago', count: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return t('time.daysAgo', { defaultValue: '{{count}}d ago', count: days });
 }
 
 export function OrgDashboard() {
@@ -121,7 +121,7 @@ export function OrgDashboard() {
                   </span>
                   {team.last_active && (
                     <span className="text-[10px] text-text-muted" title={team.last_active}>
-                      {formatRelativeTime(team.last_active)}
+                      {formatRelativeTime(team.last_active, t)}
                     </span>
                   )}
                 </div>
@@ -176,9 +176,9 @@ export function OrgDashboard() {
                 className="flex items-center gap-3 px-3 py-1.5 text-[10px]"
               >
                 <span className="text-text-muted font-mono w-20 truncate">{activity.team_id.slice(0, 8)}</span>
-                <span className="text-text-secondary">{activity.active_members} members</span>
-                <span className="text-accent-gold">{activity.signals_this_period} signals</span>
-                <span className="text-[#818CF8]">{activity.decisions_this_period} decisions</span>
+                <span className="text-text-secondary">{activity.active_members} {t('enterprise.org.members', 'members')}</span>
+                <span className="text-accent-gold">{activity.signals_this_period} {t('enterprise.org.signalsLabel', 'signals')}</span>
+                <span className="text-[#818CF8]">{activity.decisions_this_period} {t('enterprise.org.decisionsLabel', 'decisions')}</span>
               </div>
             ))}
           </div>

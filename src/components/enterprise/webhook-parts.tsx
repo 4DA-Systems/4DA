@@ -29,18 +29,19 @@ export function relativeTime(iso: string | null): string {
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
 }
+// Note: relativeTime abbreviations are universally understood; full i18n deferred to avoid signature changes across call sites
 
-function statusConfig(webhook: Webhook): { dot: string; label: string; color: string } {
+function statusConfig(webhook: Webhook, t: (key: string, opts?: Record<string, unknown>) => string): { dot: string; label: string; color: string } {
   if (!webhook.active && webhook.failure_count >= CIRCUIT_BREAKER_THRESHOLD) {
-    return { dot: 'bg-red-500', label: 'Circuit Breaker Tripped', color: 'text-red-400' };
+    return { dot: 'bg-red-500', label: t('enterprise.webhooks.statusTripped', { defaultValue: 'Circuit Breaker Tripped' }), color: 'text-red-400' };
   }
   if (!webhook.active) {
-    return { dot: 'bg-gray-500', label: 'Disabled', color: 'text-text-muted' };
+    return { dot: 'bg-gray-500', label: t('enterprise.webhooks.statusDisabled', { defaultValue: 'Disabled' }), color: 'text-text-muted' };
   }
   if (webhook.failure_count > 0) {
-    return { dot: 'bg-orange-500', label: `Degraded \u2014 ${webhook.failure_count} failures`, color: 'text-orange-400' };
+    return { dot: 'bg-orange-500', label: t('enterprise.webhooks.statusDegraded', { defaultValue: 'Degraded \u2014 {{count}} failures', count: webhook.failure_count }), color: 'text-orange-400' };
   }
-  return { dot: 'bg-green-500', label: 'Active', color: 'text-green-400' };
+  return { dot: 'bg-green-500', label: t('enterprise.webhooks.statusActive', { defaultValue: 'Active' }), color: 'text-green-400' };
 }
 
 function deliveryStatusBadge(status: string): { bg: string; text: string } {
@@ -77,7 +78,7 @@ export function WebhookCard({
   onTest, onDeleteRequest, onDeleteConfirm, onDeleteCancel,
 }: WebhookCardProps) {
   const { t } = useTranslation();
-  const status = statusConfig(webhook);
+  const status = statusConfig(webhook, t);
   const isCircuitBroken = webhook.failure_count >= CIRCUIT_BREAKER_THRESHOLD;
 
   return (
