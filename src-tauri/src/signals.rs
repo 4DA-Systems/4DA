@@ -593,11 +593,9 @@ impl SignalClassifier {
                 &lang,
                 &[("title", &short_title)],
             ),
-            (SignalType::BreakingChange, Some(tech)) => crate::i18n::t(
-                "signals:action.breakingMigration",
-                &lang,
-                &[("tech", tech)],
-            ),
+            (SignalType::BreakingChange, Some(tech)) => {
+                crate::i18n::t("signals:action.breakingMigration", &lang, &[("tech", tech)])
+            }
             (SignalType::BreakingChange, None) => crate::i18n::t(
                 "signals:action.breakingReview",
                 &lang,

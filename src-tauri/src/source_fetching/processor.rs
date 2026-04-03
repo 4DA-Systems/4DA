@@ -443,8 +443,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     .collect();
 
             if !translation_requests.is_empty() {
-                let total_chars: usize =
-                    translation_requests.iter().map(|r| r.text.len()).sum();
+                let total_chars: usize = translation_requests.iter().map(|r| r.text.len()).sum();
                 if crate::content_translation::check_ingest_budget(total_chars) {
                     debug!(target: "4da::cache", count = translation_requests.len(), lang = %user_lang, "Pre-translating titles at ingest");
                     let results = crate::content_translation::translate_content_batch(
@@ -452,8 +451,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                         &user_lang,
                     )
                     .await;
-                    let translated =
-                        results.iter().filter(|r| r.provider != "none").count();
+                    let translated = results.iter().filter(|r| r.provider != "none").count();
                     info!(target: "4da::cache", translated, total = translation_requests.len(), lang = %user_lang, "Ingest translation complete");
                 } else {
                     debug!(target: "4da::cache", "Ingest translation budget exhausted - skipping until tomorrow");
@@ -483,8 +481,19 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     .zip(embeddings.into_iter())
                     .filter(|(_, embedding)| !embedding.iter().all(|&v| v == 0.0))
                     .map(
-                        |((source_type, source_id, url, title, content, detected_lang), embedding)| {
-                            (source_type, source_id, url, title, content, embedding, detected_lang)
+                        |(
+                            (source_type, source_id, url, title, content, detected_lang),
+                            embedding,
+                        )| {
+                            (
+                                source_type,
+                                source_id,
+                                url,
+                                title,
+                                content,
+                                embedding,
+                                detected_lang,
+                            )
                         },
                     )
                     .collect();

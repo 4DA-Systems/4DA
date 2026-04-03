@@ -97,7 +97,6 @@ mod context_commands;
 mod context_engine;
 mod data_export;
 pub mod db;
-mod desktop_pin;
 mod decision_advantage;
 mod decision_advantage_commands;
 mod decision_signals;
@@ -110,6 +109,7 @@ mod delegation;
 mod delegation;
 mod dependency_commands;
 mod dependency_health;
+mod desktop_pin;
 mod developer_dna;
 mod diagnostics;
 mod digest;
@@ -299,13 +299,13 @@ mod webhooks;
 
 mod content_translation;
 mod content_translation_commands;
-mod translation_providers;
 mod telemetry;
 mod toolkit_intelligence;
 mod translation_commands;
 #[cfg(test)]
 mod translation_commands_tests;
 mod translation_pipeline;
+mod translation_providers;
 
 /// Shared test utilities — compiled unconditionally so integration tests
 /// and benchmarks can access them via `fourda_lib::test_utils`.

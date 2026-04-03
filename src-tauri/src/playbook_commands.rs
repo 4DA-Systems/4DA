@@ -90,10 +90,19 @@ fn module_i18n(id: &str, lang: &str) -> (String, String) {
         "S" => ("ui:streets.sovereignSetup", "ui:streets.sovereignSetupDesc"),
         "T" => ("ui:streets.technicalMoats", "ui:streets.technicalMoatsDesc"),
         "R" => ("ui:streets.revenueEngines", "ui:streets.revenueEnginesDesc"),
-        "E1" => ("ui:streets.executionPlaybook", "ui:streets.executionPlaybookDesc"),
+        "E1" => (
+            "ui:streets.executionPlaybook",
+            "ui:streets.executionPlaybookDesc",
+        ),
         "E2" => ("ui:streets.evolvingEdge", "ui:streets.evolvingEdgeDesc"),
-        "T2" => ("ui:streets.tacticalAutomation", "ui:streets.tacticalAutomationDesc"),
-        "S2" => ("ui:streets.stackingStreams", "ui:streets.stackingStreamsDesc"),
+        "T2" => (
+            "ui:streets.tacticalAutomation",
+            "ui:streets.tacticalAutomationDesc",
+        ),
+        "S2" => (
+            "ui:streets.stackingStreams",
+            "ui:streets.stackingStreamsDesc",
+        ),
         _ => return (id.to_string(), String::new()),
     };
     (
@@ -195,8 +204,7 @@ fn is_lesson_heading(line: &str) -> bool {
         return false;
     }
     let after = &line[3..];
-    after.chars().any(|c| c.is_ascii_digit())
-        && (after.contains(':') || after.contains('\u{FF1A}'))
+    after.chars().any(|c| c.is_ascii_digit()) && (after.contains(':') || after.contains('\u{FF1A}'))
 }
 
 #[tauri::command]
@@ -236,16 +244,18 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>>
 pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<PlaybookContent> {
     let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
-    let filename = module_id_to_filename(&module_id).ok_or_else(|| {
-        crate::i18n::t("errors:module.unknown", &language, &[("id", &module_id)])
-    })?;
+    let filename = module_id_to_filename(&module_id)
+        .ok_or_else(|| crate::i18n::t("errors:module.unknown", &language, &[("id", &module_id)]))?;
     let path = content_dir.join(filename);
 
     if !path.exists() {
         let sanitized = sanitize_path(&path.to_string_lossy());
-        return Err(
-            crate::i18n::t("errors:module.fileNotFound", &language, &[("path", &sanitized)]).into(),
-        );
+        return Err(crate::i18n::t(
+            "errors:module.fileNotFound",
+            &language,
+            &[("path", &sanitized)],
+        )
+        .into());
     }
 
     let raw = fs::read_to_string(&path)?;
@@ -256,9 +266,7 @@ pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<P
     let (_, _title, _desc, is_free) = MODULE_DEFS
         .iter()
         .find(|(id, _, _, _)| *id == module_id.as_str())
-        .ok_or_else(|| {
-            crate::i18n::t("errors:module.unknown", &language, &[("id", &module_id)])
-        })?;
+        .ok_or_else(|| crate::i18n::t("errors:module.unknown", &language, &[("id", &module_id)]))?;
 
     let (translated_title, translated_desc) = module_i18n(&module_id, &language);
     Ok(PlaybookContent {
@@ -400,12 +408,15 @@ pub async fn translate_playbook_module(module_id: String, lang: String) -> Resul
     use crate::translation_pipeline;
 
     if lang == "en" {
-        return Ok(crate::i18n::t("errors:translation.sourceIsEnglish", &lang, &[]));
+        return Ok(crate::i18n::t(
+            "errors:translation.sourceIsEnglish",
+            &lang,
+            &[],
+        ));
     }
 
-    let filename = module_id_to_filename(&module_id).ok_or_else(|| {
-        crate::i18n::t("errors:module.unknown", &lang, &[("id", &module_id)])
-    })?;
+    let filename = module_id_to_filename(&module_id)
+        .ok_or_else(|| crate::i18n::t("errors:module.unknown", &lang, &[("id", &module_id)]))?;
 
     // Read English source
     let base_dir = get_content_dir();

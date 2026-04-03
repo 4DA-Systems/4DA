@@ -35,9 +35,7 @@ pub(crate) fn get_embedding_model() -> String {
 /// Check if the embedding model has changed since last run.
 /// Uses the `app_meta` table to persist the last-used model name.
 /// Returns `true` if re-embedding is needed (model changed).
-pub(crate) fn check_embedding_model_changed(
-    conn: &rusqlite::Connection,
-) -> bool {
+pub(crate) fn check_embedding_model_changed(conn: &rusqlite::Connection) -> bool {
     let current = get_embedding_model();
 
     let stored: String = conn
@@ -167,9 +165,7 @@ pub(crate) async fn reembed_all_items() {
     for (batch_idx, chunk) in items.chunks(32).enumerate() {
         let texts: Vec<String> = chunk
             .iter()
-            .map(|(_, title, content)| {
-                crate::build_embedding_text(title, content)
-            })
+            .map(|(_, title, content)| crate::build_embedding_text(title, content))
             .collect();
 
         match crate::embed_texts(&texts).await {
@@ -177,10 +173,8 @@ pub(crate) async fn reembed_all_items() {
                 let conn = db.conn.lock();
                 for (i, (id, _, _)) in chunk.iter().enumerate() {
                     if let Some(embedding) = embeddings.get(i) {
-                        let blob: Vec<u8> = embedding
-                            .iter()
-                            .flat_map(|f| f.to_le_bytes())
-                            .collect();
+                        let blob: Vec<u8> =
+                            embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
                         let result = conn.execute(
                             "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
                             rusqlite::params![blob, id],
@@ -239,10 +233,7 @@ mod tests {
         // When the settings have an empty embedding_model, we should get the default
         let model = get_embedding_model();
         // Should return a non-empty string (either user config or default)
-        assert!(
-            !model.is_empty(),
-            "Embedding model should never be empty"
-        );
+        assert!(!model.is_empty(), "Embedding model should never be empty");
         // On a fresh settings instance, should be the default
         assert_eq!(
             model, DEFAULT_EMBEDDING_MODEL,
@@ -266,10 +257,7 @@ mod tests {
 
         // First call on empty table should return false (no re-embed needed)
         let changed = check_embedding_model_changed(&conn);
-        assert!(
-            !changed,
-            "First run should not trigger re-embed"
-        );
+        assert!(!changed, "First run should not trigger re-embed");
 
         // Verify the model was stored
         let stored: String = conn
@@ -308,10 +296,7 @@ mod tests {
         .unwrap();
 
         let changed = check_embedding_model_changed(&conn);
-        assert!(
-            !changed,
-            "Same model should not trigger re-embed"
-        );
+        assert!(!changed, "Same model should not trigger re-embed");
     }
 
     // ========================================================================
@@ -336,10 +321,7 @@ mod tests {
         .unwrap();
 
         let changed = check_embedding_model_changed(&conn);
-        assert!(
-            changed,
-            "Different model should trigger re-embed"
-        );
+        assert!(changed, "Different model should trigger re-embed");
 
         // Verify the stored value was updated
         let stored: String = conn
@@ -364,10 +346,7 @@ mod tests {
         let info = get_embedding_model_info();
 
         // Model should be non-empty
-        assert!(
-            !info.model.is_empty(),
-            "Model name should not be empty"
-        );
+        assert!(!info.model.is_empty(), "Model name should not be empty");
 
         // Re-embed should not be in progress by default
         assert!(

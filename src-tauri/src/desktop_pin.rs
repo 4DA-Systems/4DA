@@ -81,7 +81,10 @@ fn pin_to_desktop_windows<R: Runtime>(window: &tauri::WebviewWindow<R>) {
         let result = SetWindowPos(
             hwnd,
             HWND_BOTTOM,
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
         if result == 0 {
@@ -118,7 +121,11 @@ fn pin_to_desktop_macos<R: Runtime>(window: &tauri::WebviewWindow<R>) {
     extern "C" {
         // objc_msgSend is the Objective-C message dispatch function.
         // We use it to call [nswindow setLevel:] and [nswindow setCollectionBehavior:]
-        fn objc_msgSend(obj: *mut std::ffi::c_void, sel: *mut std::ffi::c_void, ...) -> *mut std::ffi::c_void;
+        fn objc_msgSend(
+            obj: *mut std::ffi::c_void,
+            sel: *mut std::ffi::c_void,
+            ...
+        ) -> *mut std::ffi::c_void;
         fn sel_registerName(name: *const i8) -> *mut std::ffi::c_void;
     }
 

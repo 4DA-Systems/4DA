@@ -392,13 +392,19 @@ pub async fn get_awe_summary() -> Result<String> {
         for line in stdout.lines() {
             let trimmed = line.trim();
             if trimmed.contains("decisions tracked") || trimmed.contains("Decisions tracked") {
-                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                if let Some(num) = trimmed
+                    .split_whitespace()
+                    .find(|w| w.parse::<u64>().is_ok())
+                {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["decisions"] = serde_json::json!(n);
                     }
                 }
             } else if trimmed.contains("feedback") && trimmed.contains("recorded") {
-                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                if let Some(num) = trimmed
+                    .split_whitespace()
+                    .find(|w| w.parse::<u64>().is_ok())
+                {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["feedback_count"] = serde_json::json!(n);
                     }
@@ -410,7 +416,10 @@ pub async fn get_awe_summary() -> Result<String> {
                     }
                 }
             } else if trimmed.contains("principles") && trimmed.contains("Validated") {
-                if let Some(num) = trimmed.split_whitespace().find(|w| w.parse::<u64>().is_ok()) {
+                if let Some(num) = trimmed
+                    .split_whitespace()
+                    .find(|w| w.parse::<u64>().is_ok())
+                {
                     if let Ok(n) = num.parse::<u64>() {
                         summary["principles"] = serde_json::json!(n);
                     }
@@ -449,7 +458,8 @@ pub async fn get_awe_summary() -> Result<String> {
         }
         // Also extract principles count if calibration didn't provide it
         if summary["principles"] == 0 {
-            let principle_count = stdout.lines()
+            let principle_count = stdout
+                .lines()
                 .filter(|l| l.trim().starts_with('[') && l.contains(']'))
                 .filter(|l| {
                     l.split(']').nth(1).map_or(false, |t| {
@@ -777,8 +787,7 @@ pub(crate) async fn run_awe_async(
     args: &[&str],
     timeout_secs: u64,
 ) -> std::result::Result<std::process::Output, String> {
-    let awe_path = find_awe_binary()
-        .ok_or_else(|| "AWE binary not found".to_string())?;
+    let awe_path = find_awe_binary().ok_or_else(|| "AWE binary not found".to_string())?;
 
     let mut cmd = tokio::process::Command::new(&awe_path);
     cmd.args(args)
@@ -797,20 +806,23 @@ pub(crate) async fn run_awe_async(
                 cmd.env("OPENAI_API_KEY", &s.llm.api_key);
             }
             "ollama" => {
-                let model = if s.llm.model.is_empty() { "llama3.2".to_string() } else { s.llm.model.clone() };
+                let model = if s.llm.model.is_empty() {
+                    "llama3.2".to_string()
+                } else {
+                    s.llm.model.clone()
+                };
                 cmd.env("AWE_OLLAMA_MODEL", &model);
                 if let Some(ref url) = s.llm.base_url {
-                    if !url.is_empty() { cmd.env("AWE_OLLAMA_URL", url); }
+                    if !url.is_empty() {
+                        cmd.env("AWE_OLLAMA_URL", url);
+                    }
                 }
             }
             _ => {}
         }
     }
 
-    match tokio::time::timeout(
-        std::time::Duration::from_secs(timeout_secs),
-        cmd.output(),
-    ).await {
+    match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), cmd.output()).await {
         Ok(Ok(output)) => Ok(output),
         Ok(Err(e)) => Err(format!("AWE process error: {e}")),
         Err(_) => Err(format!("AWE timed out after {timeout_secs}s")),
