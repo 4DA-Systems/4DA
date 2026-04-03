@@ -22,5 +22,10 @@
   "error.module.notFound": "Module not found: {{id}}",
   "error.file.readFailed": "Failed to read file: {{path}}",
   "error.sun.notFound": "Sun '{{id}}' not found",
-  "error.sun.executionFailed": "Sun execution failed: {{message}}"
+  "error.sun.executionFailed": "Sun execution failed: {{message}}",
+  "briefing.empty": "No items found. Run an analysis first.",
+  "module.unknown": "Unknown module: {{id}}",
+  "module.fileNotFound": "Module file not found: {{path}}",
+  "translation.noLlm": "LLM not configured — set up your API key in Settings to enable content translation",
+  "translation.sourceIsEnglish": "English is the source language — no translation needed"
 }
