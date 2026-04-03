@@ -73,6 +73,10 @@ pub enum FourDaError {
     /// Generic internal error (catch-all, bridges legacy `Result<_, String>`)
     #[error("{0}")]
     Internal(String),
+
+    /// Input validation errors (URL, path, or data format rejection)
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 // Tauri v2: commands returning Result<T, E> require E: Serialize
@@ -327,6 +331,15 @@ impl FourDaError {
                     "Wait a moment for 4DA to finish starting up.".into(),
                     "If this persists, restart the application.".into(),
                 ],
+                severity: ErrorSeverity::Warning,
+            },
+
+            // Validation errors (input rejection)
+            FourDaError::Validation(msg) => UserError {
+                code: "E6001",
+                title: "Invalid input".into(),
+                detail: truncate_error_msg(msg, 150),
+                remediation: vec!["Check the input and try again.".into()],
                 severity: ErrorSeverity::Warning,
             },
 

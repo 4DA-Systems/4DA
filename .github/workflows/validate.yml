@@ -26,6 +26,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Security audit (npm)
+        run: pnpm audit --audit-level=high
+
       - name: Check file sizes
         run: node scripts/check-file-sizes.cjs --ci
 
