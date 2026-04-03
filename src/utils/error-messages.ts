@@ -10,97 +10,50 @@
 interface ErrorPattern {
   /** Regex or string to test against the raw error */
   test: RegExp;
-  /** User-friendly replacement message */
-  message: string;
+  /** i18n key for the user-friendly message (namespace: errors) */
+  key: string;
+  /** Fallback English message (used if i18n not loaded) */
+  fallback: string;
 }
 
 const ERROR_PATTERNS: ErrorPattern[] = [
-  // Network / connectivity
-  {
-    test: /failed to fetch|network error|reqwest/i,
-    message: 'Network request failed. Check your internet connection.',
-  },
-
-  // Timeout
-  {
-    test: /timeout|timed?\s*out|deadline.*exceeded/i,
-    message: 'Request timed out. Try again in a moment.',
-  },
-
-  // API keys / authentication
-  {
-    test: /api\s*key|unauthorized|401|403|invalid.*key/i,
-    message: 'Authentication failed. Check your API key in Settings.',
-  },
-
-  // Rate limiting
-  {
-    test: /rate\s*limit|429|too many requests/i,
-    message: 'Rate limit reached. Please wait a moment and try again.',
-  },
-
-  // Ollama not running (must come before general Ollama and network connection-refused)
-  {
-    test: /ollama.*not.*running|ollama.*connect|(?=.*connection refused)(?=.*ollama)|(?=.*ECONNREFUSED)(?=.*ollama)/i,
-    message: 'Ollama is not running. Start Ollama or set an API key in Settings.',
-  },
-
-  // Ollama / embedding (general)
-  {
-    test: /ollama|embedding.*fail|model.*not.*found/i,
-    message: 'Embedding service unavailable. Check that Ollama is running.',
-  },
-
-  // Network connection refused (after Ollama patterns to avoid catching Ollama errors)
-  {
-    test: /connection refused|ECONNREFUSED/i,
-    message: 'Network request failed. Check your internet connection.',
-  },
-
-  // Database
-  {
-    test: /sqlite|database.*locked|disk\s*i\/o|database.*error/i,
-    message: 'Database error. Try restarting the app.',
-  },
-
-  // File system permissions
-  {
-    test: /permission\s*denied|EACCES/i,
-    message: 'Permission denied. Check file permissions.',
-  },
-
-  // Serialization / parsing
-  {
-    test: /serde|deserialize|json.*error|parse.*error/i,
-    message: 'Data format error. Try again or restart the app.',
-  },
-
-  // Already running
-  {
-    test: /already running|already in progress/i,
-    message: 'Already in progress. Please wait for it to complete.',
-  },
-
-  // File not found (kept from original, useful catch-all)
-  {
-    test: /no such file|file not found|ENOENT|path.*not.*exist/i,
-    message: 'File not found. It may have been moved or deleted.',
-  },
-
-  // Tauri / IPC
-  {
-    test: /__TAURI__|invoke.*error|ipc.*error/i,
-    message: 'App communication error. Please restart the app.',
-  },
-
-  // Git operations
-  {
-    test: /git.*error|not a git repository/i,
-    message: 'Git operation failed. Check the repository path.',
-  },
+  { test: /failed to fetch|network error|reqwest/i, key: 'errors:errorMsg.network', fallback: 'Network request failed. Check your internet connection.' },
+  { test: /timeout|timed?\s*out|deadline.*exceeded/i, key: 'errors:errorMsg.timeout', fallback: 'Request timed out. Try again in a moment.' },
+  { test: /api\s*key|unauthorized|401|403|invalid.*key/i, key: 'errors:errorMsg.auth', fallback: 'Authentication failed. Check your API key in Settings.' },
+  { test: /rate\s*limit|429|too many requests/i, key: 'errors:errorMsg.rateLimit', fallback: 'Rate limit reached. Please wait a moment and try again.' },
+  { test: /ollama.*not.*running|ollama.*connect|(?=.*connection refused)(?=.*ollama)|(?=.*ECONNREFUSED)(?=.*ollama)/i, key: 'errors:errorMsg.ollamaNotRunning', fallback: 'Ollama is not running. Start Ollama or set an API key in Settings.' },
+  { test: /ollama|embedding.*fail|model.*not.*found/i, key: 'errors:errorMsg.embedding', fallback: 'Embedding service unavailable. Check that Ollama is running.' },
+  { test: /connection refused|ECONNREFUSED/i, key: 'errors:errorMsg.connectionRefused', fallback: 'Network request failed. Check your internet connection.' },
+  { test: /sqlite|database.*locked|disk\s*i\/o|database.*error/i, key: 'errors:errorMsg.database', fallback: 'Database error. Try restarting the app.' },
+  { test: /permission\s*denied|EACCES/i, key: 'errors:errorMsg.permission', fallback: 'Permission denied. Check file permissions.' },
+  { test: /serde|deserialize|json.*error|parse.*error/i, key: 'errors:errorMsg.parse', fallback: 'Data format error. Try again or restart the app.' },
+  { test: /already running|already in progress/i, key: 'errors:errorMsg.alreadyRunning', fallback: 'Already in progress. Please wait for it to complete.' },
+  { test: /no such file|file not found|ENOENT|path.*not.*exist/i, key: 'errors:errorMsg.fileNotFound', fallback: 'File not found. It may have been moved or deleted.' },
+  { test: /__TAURI__|invoke.*error|ipc.*error/i, key: 'errors:errorMsg.ipc', fallback: 'App communication error. Please restart the app.' },
+  { test: /git.*error|not a git repository/i, key: 'errors:errorMsg.git', fallback: 'Git operation failed. Check the repository path.' },
 ];
 
+const FALLBACK_KEY = 'errors:errorMsg.fallback';
 const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
+
+// Access i18n instance for translating error messages.
+// Uses the already-initialized singleton from ../i18n — no circular dep
+// because this module only reads from it at call time, never at import time.
+function t(key: string, fallback: string): string {
+  try {
+    // i18n singleton is already initialized by the time errors are shown
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const i18n = (window as unknown as Record<string, unknown>).__4da_i18n as
+      | { t: (k: string, opts?: Record<string, unknown>) => string; isInitialized: boolean }
+      | undefined;
+    if (i18n?.isInitialized) {
+      return i18n.t(key, { defaultValue: fallback }) || fallback;
+    }
+  } catch {
+    // i18n not available — use fallback
+  }
+  return fallback;
+}
 
 /**
  * Structured error from the 4DA backend (matches Rust UserError).
@@ -171,11 +124,11 @@ export function translateError(error: unknown): string {
 
   for (const pattern of ERROR_PATTERNS) {
     if (pattern.test.test(raw)) {
-      return pattern.message;
+      return t(pattern.key, pattern.fallback);
     }
   }
 
-  return FALLBACK_MESSAGE;
+  return t(FALLBACK_KEY, FALLBACK_MESSAGE);
 }
 
 /**
