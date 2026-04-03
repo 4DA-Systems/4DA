@@ -394,32 +394,27 @@ pub async fn translate_content(
         };
     }
 
-    // Try LLM translation
+    // Try dedicated provider first, then LLM fallback
     let items = vec![(request.id.as_str(), request.text.as_str())];
-    match translate_via_llm(&items, target_lang).await {
-        Ok(translations) => {
-            if let Some(translated) = translations.get(&request.id) {
-                // Cache the result
-                cache_translation(
-                    &hash,
-                    &request.source_lang,
-                    target_lang,
-                    &request.text,
-                    translated,
-                    "llm",
-                );
+    if let Some((translations, provider_name)) = translate_with_fallback(&items, target_lang).await
+    {
+        if let Some(translated) = translations.get(&request.id) {
+            cache_translation(
+                &hash,
+                &request.source_lang,
+                target_lang,
+                &request.text,
+                translated,
+                &provider_name,
+            );
 
-                return TranslationResult {
-                    id: request.id.clone(),
-                    original: request.text.clone(),
-                    translated: translated.clone(),
-                    from_cache: false,
-                    provider: "llm".to_string(),
-                };
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::i18n", error = %e, "Content translation failed");
+            return TranslationResult {
+                id: request.id.clone(),
+                original: request.text.clone(),
+                translated: translated.clone(),
+                from_cache: false,
+                provider: provider_name,
+            };
         }
     }
 
@@ -511,33 +506,28 @@ pub async fn translate_content_batch(
             .map(|(_, req, _)| (req.id.as_str(), req.text.as_str()))
             .collect();
 
-        match translate_via_llm(&items, target_lang).await {
-            Ok(translations) => {
-                for (idx, request, hash) in chunk {
-                    if let Some(translated) = translations.get(&request.id) {
-                        // Update the result
-                        results[*idx] = TranslationResult {
-                            id: request.id.clone(),
-                            original: request.text.clone(),
-                            translated: translated.clone(),
-                            from_cache: false,
-                            provider: "llm".to_string(),
-                        };
+        if let Some((translations, provider_name)) =
+            translate_with_fallback(&items, target_lang).await
+        {
+            for (idx, request, hash) in chunk {
+                if let Some(translated) = translations.get(&request.id) {
+                    results[*idx] = TranslationResult {
+                        id: request.id.clone(),
+                        original: request.text.clone(),
+                        translated: translated.clone(),
+                        from_cache: false,
+                        provider: provider_name.clone(),
+                    };
 
-                        // Cache the translation
-                        cache_translation(
-                            hash,
-                            &request.source_lang,
-                            target_lang,
-                            &request.text,
-                            translated,
-                            "llm",
-                        );
-                    }
+                    cache_translation(
+                        hash,
+                        &request.source_lang,
+                        target_lang,
+                        &request.text,
+                        translated,
+                        &provider_name,
+                    );
                 }
-            }
-            Err(e) => {
-                warn!(target: "4da::i18n", error = %e, "Batch translation failed");
             }
         }
     }
@@ -668,6 +658,44 @@ pub(crate) fn lang_display_name(code: &str) -> &str {
         "ms" => "Malay",
         "bn" => "Bengali",
         _ => code,
+    }
+}
+
+/// Detect which translation provider is active based on current settings.
+fn detect_active_provider() -> String {
+    let manager = crate::get_settings_manager();
+    let guard = manager.lock();
+    let tc = &guard.get().translation;
+    if !tc.api_key.is_empty()
+        && matches!(tc.provider.as_str(), "deepl" | "google" | "azure" | "auto")
+    {
+        tc.provider.clone()
+    } else {
+        "llm".to_string()
+    }
+}
+
+/// Try dedicated provider then LLM fallback. Returns (translations, provider_name) or None.
+async fn translate_with_fallback(
+    items: &[(&str, &str)],
+    target_lang: &str,
+) -> Option<(HashMap<String, String>, String)> {
+    use crate::translation_providers::ProviderResult;
+    match crate::translation_providers::try_dedicated_provider(items, target_lang).await {
+        Ok(ProviderResult::Ok(t)) => Some((t, detect_active_provider())),
+        Ok(ProviderResult::Fallback) | Ok(ProviderResult::UseLlm) => {
+            translate_via_llm(items, target_lang)
+                .await
+                .ok()
+                .map(|t| (t, "llm".to_string()))
+        }
+        Err(e) => {
+            warn!(target: "4da::i18n", error = %e, "Dedicated translation failed, trying LLM");
+            translate_via_llm(items, target_lang)
+                .await
+                .ok()
+                .map(|t| (t, "llm".to_string()))
+        }
     }
 }
 
