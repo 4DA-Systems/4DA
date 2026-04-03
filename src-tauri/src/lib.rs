@@ -142,6 +142,7 @@ mod indexed_documents_commands;
 mod intelligence_history;
 mod job_queue;
 mod knowledge_decay;
+mod language_detect;
 mod llm;
 mod llm_judge;
 mod llm_stream;
