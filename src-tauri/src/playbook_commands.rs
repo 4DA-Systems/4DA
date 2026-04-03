@@ -84,6 +84,24 @@ const MODULE_DEFS: &[(&str, &str, &str, bool)] = &[
     ),
 ];
 
+/// Return the translated (title, description) for a module ID.
+fn module_i18n(id: &str, lang: &str) -> (String, String) {
+    let (title_key, desc_key) = match id {
+        "S" => ("ui:streets.sovereignSetup", "ui:streets.sovereignSetupDesc"),
+        "T" => ("ui:streets.technicalMoats", "ui:streets.technicalMoatsDesc"),
+        "R" => ("ui:streets.revenueEngines", "ui:streets.revenueEnginesDesc"),
+        "E1" => ("ui:streets.executionPlaybook", "ui:streets.executionPlaybookDesc"),
+        "E2" => ("ui:streets.evolvingEdge", "ui:streets.evolvingEdgeDesc"),
+        "T2" => ("ui:streets.tacticalAutomation", "ui:streets.tacticalAutomationDesc"),
+        "S2" => ("ui:streets.stackingStreams", "ui:streets.stackingStreamsDesc"),
+        _ => return (id.to_string(), String::new()),
+    };
+    (
+        crate::i18n::t(title_key, lang, &[]),
+        crate::i18n::t(desc_key, lang, &[]),
+    )
+}
+
 pub(crate) fn module_id_to_filename(id: &str) -> Option<&'static str> {
     match id {
         "S" => Some("module-s-sovereign-setup.md"),
@@ -187,7 +205,7 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>>
     let content_dir = get_content_dir_for_lang(&language);
     let mut modules = Vec::new();
 
-    for (id, title, desc, is_free) in MODULE_DEFS {
+    for (id, _title, _desc, is_free) in MODULE_DEFS {
         let lesson_count = match module_id_to_filename(id) {
             Some(filename) => {
                 let path = content_dir.join(filename);
@@ -201,10 +219,11 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>>
             None => 0,
         };
 
+        let (translated_title, translated_desc) = module_i18n(id, &language);
         modules.push(PlaybookModule {
             id: id.to_string(),
-            title: title.to_string(),
-            description: desc.to_string(),
+            title: translated_title,
+            description: translated_desc,
             lesson_count,
             is_free: *is_free,
         });
@@ -217,16 +236,16 @@ pub fn get_playbook_modules(lang: Option<String>) -> Result<Vec<PlaybookModule>>
 pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<PlaybookContent> {
     let language = lang.unwrap_or_else(crate::i18n::get_user_language);
     let content_dir = get_content_dir_for_lang(&language);
-    let filename =
-        module_id_to_filename(&module_id).ok_or_else(|| format!("Unknown module: {module_id}"))?;
+    let filename = module_id_to_filename(&module_id).ok_or_else(|| {
+        crate::i18n::t("errors:module.unknown", &language, &[("id", &module_id)])
+    })?;
     let path = content_dir.join(filename);
 
     if !path.exists() {
-        return Err(format!(
-            "Module file not found: {}",
-            sanitize_path(&path.to_string_lossy())
-        )
-        .into());
+        let sanitized = sanitize_path(&path.to_string_lossy());
+        return Err(
+            crate::i18n::t("errors:module.fileNotFound", &language, &[("path", &sanitized)]).into(),
+        );
     }
 
     let raw = fs::read_to_string(&path)?;
@@ -234,15 +253,18 @@ pub fn get_playbook_content(module_id: String, lang: Option<String>) -> Result<P
     let lessons = parse_lessons(&raw);
 
     // Find module metadata
-    let (_, title, desc, is_free) = MODULE_DEFS
+    let (_, _title, _desc, is_free) = MODULE_DEFS
         .iter()
         .find(|(id, _, _, _)| *id == module_id.as_str())
-        .ok_or_else(|| format!("Unknown module: {module_id}"))?;
+        .ok_or_else(|| {
+            crate::i18n::t("errors:module.unknown", &language, &[("id", &module_id)])
+        })?;
 
+    let (translated_title, translated_desc) = module_i18n(&module_id, &language);
     Ok(PlaybookContent {
         module_id,
-        title: title.to_string(),
-        description: desc.to_string(),
+        title: translated_title,
+        description: translated_desc,
         lessons,
         is_free: *is_free,
     })
@@ -378,11 +400,12 @@ pub async fn translate_playbook_module(module_id: String, lang: String) -> Resul
     use crate::translation_pipeline;
 
     if lang == "en" {
-        return Ok("English is the source language — no translation needed".to_string());
+        return Ok(crate::i18n::t("errors:translation.sourceIsEnglish", &lang, &[]));
     }
 
-    let filename =
-        module_id_to_filename(&module_id).ok_or_else(|| format!("Unknown module: {module_id}"))?;
+    let filename = module_id_to_filename(&module_id).ok_or_else(|| {
+        crate::i18n::t("errors:module.unknown", &lang, &[("id", &module_id)])
+    })?;
 
     // Read English source
     let base_dir = get_content_dir();

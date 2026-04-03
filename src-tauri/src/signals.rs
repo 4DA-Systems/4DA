@@ -52,6 +52,19 @@ impl SignalType {
             SignalType::CompetitiveIntel => "Competitive Intel",
         }
     }
+
+    /// Translated label for user-facing display.
+    pub fn label_translated(&self, lang: &str) -> String {
+        let key = match self {
+            SignalType::SecurityAlert => "signals:type.securityAlert",
+            SignalType::BreakingChange => "signals:type.breakingChange",
+            SignalType::ToolDiscovery => "signals:type.toolDiscovery",
+            SignalType::TechTrend => "signals:type.techTrend",
+            SignalType::Learning => "signals:type.learning",
+            SignalType::CompetitiveIntel => "signals:type.competitiveIntel",
+        };
+        crate::i18n::t(key, lang, &[])
+    }
 }
 
 /// Signal priority tiers — corroboration-based graduation.
@@ -87,6 +100,17 @@ impl SignalPriority {
             SignalPriority::Watch => "watch",
         }
     }
+
+    /// Translated label for user-facing display.
+    pub fn label_translated(&self, lang: &str) -> String {
+        let key = match self {
+            SignalPriority::Critical => "signals:priority.critical",
+            SignalPriority::Alert => "signals:priority.alert",
+            SignalPriority::Advisory => "signals:priority.advisory",
+            SignalPriority::Watch => "signals:priority.watch",
+        };
+        crate::i18n::t(key, lang, &[])
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -104,6 +128,15 @@ impl SignalHorizon {
             SignalHorizon::Tactical => "tactical",
             SignalHorizon::Strategic => "strategic",
         }
+    }
+
+    /// Translated label for user-facing display.
+    pub fn label_translated(&self, lang: &str) -> String {
+        let key = match self {
+            SignalHorizon::Tactical => "signals:horizon.tactical",
+            SignalHorizon::Strategic => "signals:horizon.strategic",
+        };
+        crate::i18n::t(key, lang, &[])
     }
 }
 
@@ -547,43 +580,71 @@ impl SignalClassifier {
         title: &str,
         matched_tech: Option<&str>,
     ) -> String {
+        let lang = crate::i18n::get_user_language();
         let short_title: String = title.chars().take(60).collect();
         match (signal_type, matched_tech) {
-            (SignalType::SecurityAlert, Some(tech)) => {
-                format!("Review {short_title} - affects your {tech} stack")
-            }
-            (SignalType::SecurityAlert, None) => {
-                format!("Review security implications: {short_title}")
-            }
-            (SignalType::BreakingChange, Some(tech)) => {
-                format!("Check migration path - {tech} breaking change")
-            }
-            (SignalType::BreakingChange, None) => {
-                format!("Review breaking change: {short_title}")
-            }
-            (SignalType::ToolDiscovery, Some(tech)) => {
-                format!("Evaluate for your {tech} workflow: {short_title}")
-            }
-            (SignalType::ToolDiscovery, None) => {
-                format!("Evaluate new tool: {short_title}")
-            }
-            (SignalType::TechTrend, Some(tech)) => {
-                format!("Emerging trend: {tech} gaining traction — {short_title}")
-            }
-            (SignalType::TechTrend, None) => {
-                format!("Emerging trend: {short_title}")
-            }
-            (SignalType::Learning, Some(tech)) => {
-                format!("Learn - {tech} resource: {short_title}")
-            }
-            (SignalType::Learning, None) => {
-                format!("Learning resource: {short_title}")
-            }
-            (SignalType::CompetitiveIntel, Some(tech)) => {
-                format!("Competitive move in {tech} space: {short_title}")
-            }
+            (SignalType::SecurityAlert, Some(tech)) => crate::i18n::t(
+                "signals:action.securityReviewStack",
+                &lang,
+                &[("title", &short_title), ("tech", tech)],
+            ),
+            (SignalType::SecurityAlert, None) => crate::i18n::t(
+                "signals:action.securityReview",
+                &lang,
+                &[("title", &short_title)],
+            ),
+            (SignalType::BreakingChange, Some(tech)) => crate::i18n::t(
+                "signals:action.breakingMigration",
+                &lang,
+                &[("tech", tech)],
+            ),
+            (SignalType::BreakingChange, None) => crate::i18n::t(
+                "signals:action.breakingReview",
+                &lang,
+                &[("title", &short_title)],
+            ),
+            (SignalType::ToolDiscovery, Some(tech)) => crate::i18n::t(
+                "signals:action.toolEvaluateStack",
+                &lang,
+                &[("title", &short_title), ("tech", tech)],
+            ),
+            (SignalType::ToolDiscovery, None) => crate::i18n::t(
+                "signals:action.toolEvaluate",
+                &lang,
+                &[("title", &short_title)],
+            ),
+            (SignalType::TechTrend, Some(tech)) => crate::i18n::t(
+                "signals:action.trendStack",
+                &lang,
+                &[("title", &short_title), ("tech", tech)],
+            ),
+            (SignalType::TechTrend, None) => crate::i18n::t(
+                "signals:action.trendGeneral",
+                &lang,
+                &[("title", &short_title)],
+            ),
+            (SignalType::Learning, Some(tech)) => crate::i18n::t(
+                "signals:action.learnStack",
+                &lang,
+                &[("title", &short_title), ("tech", tech)],
+            ),
+            (SignalType::Learning, None) => crate::i18n::t(
+                "signals:action.learnGeneral",
+                &lang,
+                &[("title", &short_title)],
+            ),
+            (SignalType::CompetitiveIntel, Some(tech)) => crate::i18n::t(
+                "signals:action.intelStack",
+                &lang,
+                &[("title", &short_title), ("tech", tech)],
+            ),
             (SignalType::CompetitiveIntel, None) => {
-                format!("{}: {}", signal_type.label(), short_title)
+                let type_label = signal_type.label_translated(&lang);
+                crate::i18n::t(
+                    "signals:action.intelGeneral",
+                    &lang,
+                    &[("type", &type_label), ("title", &short_title)],
+                )
             }
         }
     }

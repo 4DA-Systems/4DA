@@ -10,48 +10,51 @@ pub struct SourceHealthStatus {
     pub status: String,
     pub last_success_relative: Option<String>,
     pub items_fetched: i64,
-    pub gap_message: Option<&'static str>,
+    pub gap_message: Option<String>,
 }
 
 fn relative_time(iso: &str) -> String {
+    let lang = crate::i18n::get_user_language();
     // Parse "YYYY-MM-DD HH:MM:SS" from SQLite datetime()
     let now = chrono::Utc::now().naive_utc();
     if let Ok(parsed) = chrono::NaiveDateTime::parse_from_str(iso, "%Y-%m-%d %H:%M:%S") {
         let diff = now - parsed;
         let mins = diff.num_minutes();
         if mins < 1 {
-            return "just now".to_string();
+            return crate::i18n::t("ui:health.justNow", &lang, &[]);
         }
         if mins < 60 {
-            return format!("{mins}m ago");
+            return crate::i18n::t("ui:health.minutesAgo", &lang, &[("count", &mins.to_string())]);
         }
         let hours = diff.num_hours();
         if hours < 24 {
-            return format!("{hours}h ago");
+            return crate::i18n::t("ui:health.hoursAgo", &lang, &[("count", &hours.to_string())]);
         }
         let days = diff.num_days();
-        return format!("{days}d ago");
+        return crate::i18n::t("ui:health.daysAgo", &lang, &[("count", &days.to_string())]);
     }
     iso.to_string()
 }
 
-fn gap_message(source: &str, status: &str) -> Option<&'static str> {
+fn gap_message(source: &str, status: &str) -> Option<String> {
     if status == "healthy" {
         return None;
     }
-    match source {
-        "hackernews" => Some("HN trends may be missed"),
-        "github" => Some("Trending repos not tracked"),
-        "reddit" => Some("Reddit discussions unavailable"),
-        "arxiv" => Some("Research papers not updating"),
-        "rss" => Some("RSS feeds offline"),
-        "twitter" => Some("X/Twitter feed unavailable"),
-        "youtube" => Some("YouTube content not tracked"),
-        "lobsters" => Some("Lobsters discussions offline"),
-        "devto" => Some("Dev.to articles not updating"),
-        "producthunt" => Some("Product Hunt launches missed"),
-        _ => Some("Source data unavailable"),
-    }
+    let lang = crate::i18n::get_user_language();
+    let key = match source {
+        "hackernews" => "ui:health.hnMissed",
+        "github" => "ui:health.githubMissed",
+        "reddit" => "ui:health.redditMissed",
+        "arxiv" => "ui:health.arxivMissed",
+        "rss" => "ui:health.rssMissed",
+        "twitter" => "ui:health.twitterMissed",
+        "youtube" => "ui:health.youtubeMissed",
+        "lobsters" => "ui:health.lobstersMissed",
+        "devto" => "ui:health.devtoMissed",
+        "producthunt" => "ui:health.phMissed",
+        _ => "ui:health.sourceMissed",
+    };
+    Some(crate::i18n::t(key, &lang, &[]))
 }
 
 #[tauri::command]
@@ -99,7 +102,8 @@ pub async fn reset_source_circuit_breaker(source_type: String) -> Result<String>
     )
     .map_err(FourDaError::Db)?;
     tracing::info!(target: "4da::sources", source = %source_type, "Circuit breaker manually reset");
-    Ok(format!("Circuit breaker reset for {source_type}"))
+    let lang = crate::i18n::get_user_language();
+    Ok(crate::i18n::t("ui:health.circuitReset", &lang, &[("source", &source_type)]))
 }
 
 // ============================================================================
@@ -133,47 +137,33 @@ mod tests {
 
     #[test]
     fn test_gap_message_unhealthy_returns_message() {
-        assert_eq!(
-            gap_message("hackernews", "degraded"),
-            Some("HN trends may be missed")
-        );
-        assert_eq!(
-            gap_message("github", "down"),
-            Some("Trending repos not tracked")
-        );
-        assert_eq!(
-            gap_message("reddit", "error"),
-            Some("Reddit discussions unavailable")
-        );
-        assert_eq!(
-            gap_message("arxiv", "failed"),
-            Some("Research papers not updating")
-        );
-        assert_eq!(gap_message("rss", "timeout"), Some("RSS feeds offline"));
-        assert_eq!(
-            gap_message("twitter", "rate_limited"),
-            Some("X/Twitter feed unavailable")
-        );
-        assert_eq!(
-            gap_message("youtube", "err"),
-            Some("YouTube content not tracked")
-        );
-        assert_eq!(
-            gap_message("lobsters", "err"),
-            Some("Lobsters discussions offline")
-        );
-        assert_eq!(
-            gap_message("devto", "err"),
-            Some("Dev.to articles not updating")
-        );
-        assert_eq!(
-            gap_message("producthunt", "err"),
-            Some("Product Hunt launches missed")
-        );
-        assert_eq!(
-            gap_message("unknown", "err"),
-            Some("Source data unavailable")
-        );
+        // gap_message now returns Option<String> via i18n; in test env (no locale
+        // files loaded) the t() function falls back to returning the key itself.
+        // We verify that unhealthy sources always return Some(non-empty).
+        let cases = [
+            ("hackernews", "degraded"),
+            ("github", "down"),
+            ("reddit", "error"),
+            ("arxiv", "failed"),
+            ("rss", "timeout"),
+            ("twitter", "rate_limited"),
+            ("youtube", "err"),
+            ("lobsters", "err"),
+            ("devto", "err"),
+            ("producthunt", "err"),
+            ("unknown", "err"),
+        ];
+        for (source, status) in &cases {
+            let msg = gap_message(source, status);
+            assert!(
+                msg.is_some(),
+                "Expected Some for source={source}, status={status}"
+            );
+            assert!(
+                !msg.as_ref().unwrap().is_empty(),
+                "Expected non-empty message for source={source}"
+            );
+        }
     }
 
     #[test]

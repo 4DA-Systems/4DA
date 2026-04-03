@@ -625,10 +625,8 @@ fn get_llm_client() -> Result<llm::LLMClient> {
     let guard = manager.lock();
     let provider = guard.get().llm.clone();
     if provider.api_key.is_empty() && provider.provider != "ollama" {
-        return Err(
-            "LLM not configured — set up your API key in Settings to enable content translation"
-                .into(),
-        );
+        let lang = crate::i18n::get_user_language();
+        return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
     }
     Ok(llm::LLMClient::new(provider))
 }
