@@ -118,7 +118,15 @@ impl Database {
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
-        items: &[(String, String, Option<String>, String, String, Vec<f32>, String)],
+        items: &[(
+            String,
+            String,
+            Option<String>,
+            String,
+            String,
+            Vec<f32>,
+            String,
+        )],
     ) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         let mut count = 0;
@@ -317,7 +325,9 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 
@@ -385,7 +395,9 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 
@@ -440,7 +452,9 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 
@@ -498,7 +512,9 @@ impl Database {
                 embedding: blob_to_embedding(&embedding_blob),
                 created_at: parse_datetime(row.get::<_, String>(8)?),
                 last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
             })
         })?;
 

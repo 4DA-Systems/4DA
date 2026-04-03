@@ -304,12 +304,8 @@ pub fn send_signal_notification<R: Runtime>(
     // Build the display title for the notification body
     let display_title = if let Some(ref action) = action_text {
         let label = match signal_type.as_deref() {
-            Some("security_alert") => {
-                crate::i18n::t("signals:type.securityAlert", &lang, &[])
-            }
-            Some("breaking_change") => {
-                crate::i18n::t("signals:type.breakingChange", &lang, &[])
-            }
+            Some("security_alert") => crate::i18n::t("signals:type.securityAlert", &lang, &[]),
+            Some("breaking_change") => crate::i18n::t("signals:type.breakingChange", &lang, &[]),
             _ => crate::i18n::t("signals:priority.alert", &lang, &[]),
         };
         format!("{label}: {action}")

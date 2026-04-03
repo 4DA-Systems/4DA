@@ -771,11 +771,8 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         {
                             Ok(synthesis) => {
                                 info!(target: "4da::briefing", "Morning brief synthesis ready");
-                                let _ = app_synth.emit_to(
-                                    "briefing",
-                                    "briefing-synthesis",
-                                    &synthesis,
-                                );
+                                let _ =
+                                    app_synth.emit_to("briefing", "briefing-synthesis", &synthesis);
                                 let _ = app_synth.emit(
                                     "morning-briefing-synthesis",
                                     serde_json::json!({ "synthesis": synthesis }),

@@ -57,10 +57,7 @@ mod tests {
 
     #[test]
     fn test_detect_english() {
-        assert_eq!(
-            detect_language("React hooks tutorial for beginners"),
-            "en"
-        );
+        assert_eq!(detect_language("React hooks tutorial for beginners"), "en");
     }
 
     #[test]
@@ -74,7 +71,9 @@ mod tests {
     #[test]
     fn test_detect_spanish() {
         assert_eq!(
-            detect_language("Este es un tutorial completo sobre programaci\u{00f3}n para principiantes"),
+            detect_language(
+                "Este es un tutorial completo sobre programaci\u{00f3}n para principiantes"
+            ),
             "es"
         );
     }

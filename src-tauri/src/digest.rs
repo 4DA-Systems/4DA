@@ -246,7 +246,10 @@ impl Digest {
             self.period_end.format("%Y-%m-%d %H:%M")
         ));
         let items_found_label = crate::i18n::t("ui:digest.itemsFound", &lang, &[]);
-        output.push_str(&format!("{items_found_label} {}\n", self.summary.total_items));
+        output.push_str(&format!(
+            "{items_found_label} {}\n",
+            self.summary.total_items
+        ));
         let avg_rel_label = crate::i18n::t("ui:digest.avgRelevance", &lang, &[]);
         output.push_str(&format!(
             "{avg_rel_label} {:.1}%\n",
