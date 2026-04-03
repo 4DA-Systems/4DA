@@ -60,10 +60,11 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
     };
 
     if items.is_empty() {
+        let lang = crate::i18n::get_user_language();
         return Ok(serde_json::json!({
             "success": true,
             "empty": true,
-            "message": "No items found. Run an analysis first."
+            "message": crate::i18n::t("errors:briefing.empty", &lang, &[])
         }));
     }
 
