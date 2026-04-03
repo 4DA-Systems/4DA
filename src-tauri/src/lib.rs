@@ -95,6 +95,7 @@ mod content_quality;
 mod content_sophistication;
 mod context_commands;
 mod context_engine;
+mod crash_guard;
 mod data_export;
 pub mod db;
 mod decision_advantage;

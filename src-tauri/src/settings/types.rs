@@ -311,6 +311,12 @@ impl std::fmt::Debug for LicenseConfig {
     }
 }
 
+impl Drop for LicenseConfig {
+    fn drop(&mut self) {
+        self.license_key.zeroize();
+    }
+}
+
 impl Default for LicenseConfig {
     fn default() -> Self {
         Self {
@@ -760,6 +766,13 @@ impl Settings {
                 }
             }
         }
+    }
+}
+
+impl Drop for Settings {
+    fn drop(&mut self) {
+        // x_api_key lives on Settings directly (not in a sub-struct with its own Drop)
+        self.x_api_key.zeroize();
     }
 }
 
