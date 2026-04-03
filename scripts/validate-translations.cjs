@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 
 const LOCALES_DIR = path.join(__dirname, '..', 'src', 'locales');
-const NAMESPACES = ['ui', 'errors', 'streets'];
+const NAMESPACES = ['ui', 'errors', 'streets', 'coach', 'signals'];
 
 // Terms that are legitimately the same across languages
 const BRAND_TERMS = new Set([
