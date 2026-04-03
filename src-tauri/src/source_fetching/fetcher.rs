@@ -545,6 +545,7 @@ pub(crate) async fn fetch_all_sources(
             let clean_content = crate::decode_html_entities(&item.content);
 
             let is_fallback = embedding.iter().all(|&v| v == 0.0);
+            let detected_lang = crate::language_detect::detect_language(&clean_title);
             if is_fallback {
                 // Store as pending for re-embedding on next analysis
                 pending_items.push((
@@ -563,6 +564,7 @@ pub(crate) async fn fetch_all_sources(
                     clean_title.clone(),
                     clean_content.clone(),
                     embedding.clone(),
+                    detected_lang,
                 ));
             }
             all_items.push((item, embedding));
@@ -1020,6 +1022,7 @@ pub(crate) async fn fetch_all_sources_deep(
             for ((item, _), embedding) in chunk.iter().cloned().zip(embeddings.into_iter()) {
                 let is_fallback = embedding.iter().all(|&v| v == 0.0);
                 if !is_fallback {
+                    let detected_lang = crate::language_detect::detect_language(&item.title);
                     items_to_insert.push((
                         item.source_type.clone(),
                         item.source_id.clone(),
@@ -1027,6 +1030,7 @@ pub(crate) async fn fetch_all_sources_deep(
                         item.title.clone(),
                         item.content.clone(),
                         embedding.clone(),
+                        detected_lang,
                     ));
                 }
                 all_items.push((item, embedding));

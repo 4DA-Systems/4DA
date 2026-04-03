@@ -566,6 +566,7 @@ mod tests {
             embedding: vec![],
             created_at: chrono::Utc::now(),
             last_seen: chrono::Utc::now(),
+            detected_lang: "en".to_string(),
         }
     }
 

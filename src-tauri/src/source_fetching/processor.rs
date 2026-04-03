@@ -417,9 +417,18 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             })
             .collect();
 
+        // Detect language from title text (before embedding)
+        let new_items_to_embed: Vec<_> = new_items_to_embed
+            .into_iter()
+            .map(|(st, sid, url, title, content)| {
+                let detected_lang = crate::language_detect::detect_language(&title);
+                (st, sid, url, title, content, detected_lang)
+            })
+            .collect();
+
         let texts: Vec<String> = new_items_to_embed
             .iter()
-            .map(|(_, _, _, title, content)| build_embedding_text(title, content))
+            .map(|(_, _, _, title, content, _)| build_embedding_text(title, content))
             .collect();
 
         match embed_texts(&texts).await {
@@ -433,13 +442,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     String,
                     String,
                     Vec<f32>,
+                    String,
                 )> = new_items_to_embed
                     .into_iter()
                     .zip(embeddings.into_iter())
                     .filter(|(_, embedding)| !embedding.iter().all(|&v| v == 0.0))
                     .map(
-                        |((source_type, source_id, url, title, content), embedding)| {
-                            (source_type, source_id, url, title, content, embedding)
+                        |((source_type, source_id, url, title, content, detected_lang), embedding)| {
+                            (source_type, source_id, url, title, content, embedding, detected_lang)
                         },
                     )
                     .collect();
