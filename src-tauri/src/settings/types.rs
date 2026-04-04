@@ -532,6 +532,42 @@ impl Default for LlmLimitsConfig {
     }
 }
 
+/// Network privacy settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkConfig {
+    /// Proxy URL (e.g., "socks5://127.0.0.1:9050" for Tor, "http://proxy:8080")
+    #[serde(default)]
+    pub proxy_url: Option<String>,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self { proxy_url: None }
+    }
+}
+
+/// Privacy settings for controlling data sent to cloud providers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrivacyConfig {
+    /// What content level to send to cloud LLM providers.
+    /// "full" = title + 2000 chars content (default)
+    /// "titles_only" = only titles, no content (95% less data to provider)
+    #[serde(default = "default_llm_content_level")]
+    pub llm_content_level: String,
+}
+
+fn default_llm_content_level() -> String {
+    "full".to_string()
+}
+
+impl Default for PrivacyConfig {
+    fn default() -> Self {
+        Self {
+            llm_content_level: default_llm_content_level(),
+        }
+    }
+}
+
 /// Main settings structure
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -616,6 +652,12 @@ pub struct Settings {
     /// Team relay configuration (encrypted metadata sync between team members)
     #[serde(default)]
     pub team_relay: Option<crate::team_sync_types::TeamRelayConfig>,
+    /// Network privacy settings (proxy/SOCKS5 support)
+    #[serde(default)]
+    pub network: NetworkConfig,
+    /// Privacy settings for controlling data sent to cloud providers
+    #[serde(default)]
+    pub privacy: PrivacyConfig,
 }
 
 impl std::fmt::Debug for Settings {
@@ -655,6 +697,8 @@ impl std::fmt::Debug for Settings {
                 &self.community_intelligence.is_some(),
             )
             .field("team_relay", &self.team_relay.is_some())
+            .field("network", &self.network)
+            .field("privacy", &self.privacy)
             .finish_non_exhaustive()
     }
 }
@@ -683,10 +727,31 @@ impl Settings {
             tracing::warn!(target: "4da::settings", field = "embedding_threshold", old, new = self.embedding_threshold, "Clamped invalid value");
         }
 
-        // monitoring.interval_minutes must be > 0
-        if self.monitoring.interval_minutes == 0 {
-            tracing::warn!(target: "4da::settings", field = "monitoring.interval_minutes", old = 0, new = 1, "Clamped invalid value");
-            self.monitoring.interval_minutes = 1;
+        // monitoring.interval_minutes must be in 1..=1440 (1 min to 24 hours)
+        {
+            let old = self.monitoring.interval_minutes;
+            self.monitoring.interval_minutes = old.clamp(1, 1440);
+            if self.monitoring.interval_minutes != old {
+                tracing::warn!(target: "4da::settings", field = "monitoring.interval_minutes", old, new = self.monitoring.interval_minutes, "Clamped invalid value");
+            }
+        }
+
+        // rerank.max_items_per_batch upper bound (prevent memory exhaustion)
+        {
+            let old = self.rerank.max_items_per_batch;
+            self.rerank.max_items_per_batch = old.clamp(1, 200);
+            if self.rerank.max_items_per_batch != old {
+                tracing::warn!(target: "4da::settings", field = "rerank.max_items_per_batch", old, new = self.rerank.max_items_per_batch, "Clamped invalid value");
+            }
+        }
+
+        // rate_budgets: clamp all requests_per_minute to 1..=120
+        for (source, budget) in self.rate_budgets.iter_mut() {
+            let old = budget.requests_per_minute;
+            budget.requests_per_minute = old.clamp(1, 120);
+            if budget.requests_per_minute != old {
+                tracing::warn!(target: "4da::settings", field = "rate_budget.requests_per_minute", source = %source, old, new = budget.requests_per_minute, "Clamped invalid value");
+            }
         }
 
         // context_dirs paths must be non-empty strings
@@ -807,6 +872,8 @@ impl Default for Settings {
             translation: TranslationConfig::default(),
             community_intelligence: None,
             team_relay: None,
+            network: NetworkConfig::default(),
+            privacy: PrivacyConfig::default(),
         }
     }
 }

@@ -173,6 +173,28 @@ jobs:
           cp "$BIN" "$NAME"
           gh release upload "$TAG" "$NAME" --clobber
 
+      - name: Generate Rust SBOM
+        if: matrix.label == 'Windows'
+        shell: bash
+        run: |
+          cargo install cargo-cyclonedx --quiet 2>/dev/null || true
+          cd src-tauri && cargo cyclonedx --format json --output-file ../sbom-rust.json 2>/dev/null || echo '{"note": "SBOM generation not available"}' > ../sbom-rust.json
+
+      - name: Generate npm SBOM
+        if: matrix.label == 'Windows'
+        shell: bash
+        run: |
+          npx @cyclonedx/cyclonedx-npm --output-file sbom-npm.json 2>/dev/null || echo '{"note": "SBOM generation not available"}' > sbom-npm.json
+
+      - name: Upload SBOMs
+        if: matrix.label == 'Windows'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" sbom-rust.json sbom-npm.json --clobber 2>/dev/null || true
+
   publish-release:
     name: Publish Release
     needs: [create-release, build-tauri]

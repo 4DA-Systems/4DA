@@ -233,10 +233,17 @@ export function executeDecisionMemory(
           const safeDecision = (params.decision || "").slice(0, 2000).replace(/\0/g, '');
           const query = `${safeSubject}: ${safeDecision}`;
           const domain = mapDecisionTypeToDomain(params.decision_type || "tech_choice");
+          // AWE bridge: persist decisions to Wisdom Graph for compounding
+          // Context file auto-assembled by AWE MCP server's buildContextFile()
+          const contextFile = process.platform === "win32"
+            ? `${process.env.APPDATA || ""}\\awe\\identity.json`
+            : `${process.env.HOME || ""}/.local/share/awe/identity.json`;
+          const contextArgs = existsSync(contextFile) ? ["--context_file", contextFile] : [];
           const child = execFile(aweBin, [
             "transmute", query,
             "--domain", domain,
-            "--json", "--no-persist",
+            "--json",
+            ...contextArgs,
           ], { timeout: 30_000 }, () => {
             // Callback required — ignore result (fire-and-forget)
           });
@@ -432,7 +439,7 @@ function mapDecisionTypeToDomain(type: string): string {
 }
 
 /** Find AWE binary — checks env var, platform defaults, then PATH fallback. */
-function findAweBinary(): string | null {
+export function findAweBinary(): string | null {
   // 1. Explicit env var takes priority
   const envPath = process.env.FOURDA_AWE_PATH || process.env.AWE_BIN;
   if (envPath && existsSync(envPath)) return envPath;

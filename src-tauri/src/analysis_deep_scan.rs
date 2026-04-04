@@ -22,6 +22,8 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 /// Fetches 300-500+ items from all sources using multiple endpoints
 #[tauri::command]
 pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
+    crate::ipc_rate_limit::check_rate_limit("run_deep_initial_scan", 5)?;
+
     // Check if already running
     {
         let state = get_analysis_state();
