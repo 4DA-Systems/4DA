@@ -89,6 +89,10 @@ pub struct BriefingNotification {
     /// LLM-synthesized intelligence narrative (populated async after initial delivery)
     #[serde(default)]
     pub synthesis: Option<String>,
+    /// AWE behavioral wisdom — personalized insight from 4DA's behavioral data
+    /// Populated async alongside synthesis by awe_synthesis::synthesize_daily_wisdom
+    #[serde(default)]
+    pub wisdom_synthesis: Option<String>,
 }
 
 // ============================================================================
@@ -268,6 +272,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         escalating_chains,
         wisdom_signals,
         synthesis: None,
+        wisdom_synthesis: None,
     })
 }
 
@@ -990,6 +995,7 @@ mod tests {
                 signal_type: "principle".to_string(),
             }],
             synthesis: None,
+            wisdom_synthesis: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
