@@ -130,15 +130,17 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
   }
 
   const ip = ctx.interaction_patterns;
+  const ic = ctx.instant_context;
   const topAffinities = ctx.topic_affinities.filter(a => a.affinity_score > 0.2).slice(0, 6);
   const rejectedTopics = ctx.topic_affinities.filter(a => a.affinity_score < -0.2).slice(0, 3);
-  const hasData = ip.total_interactions > 0 || topAffinities.length > 0;
+  // Always show if we have ANY data — instant context ensures cold-start richness
+  const hasData = ip.total_interactions > 0 || topAffinities.length > 0 || ic.total_source_items > 0;
 
   if (!hasData) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-6 text-center">
         <span className="text-accent-gold text-lg">{'\u25C7'}</span>
-        <p className="text-xs text-text-muted mt-2">{t('awe.momentum.noData', 'Start engaging with content to build your behavioral profile.')}</p>
+        <p className="text-xs text-text-muted mt-2">{t('awe.momentum.noData', 'Run your first analysis to start building intelligence.')}</p>
       </div>
     );
   }
@@ -187,15 +189,29 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
           </div>
         )}
 
-        {/* Stats row */}
+        {/* Stats row — adaptive: shows engagement when available, intelligence stats when cold */}
         <div className="grid grid-cols-3 gap-2">
-          <StatCell value={ip.total_interactions} label={t('awe.momentum.interactions', 'Interactions')} />
-          <VelocityIndicator velocity={ip.weekly_velocity} />
-          <StatCell
-            value={`${ip.saves}`}
-            label={t('awe.momentum.saved', 'Saved')}
-            color={ip.saves > 0 ? 'text-success' : undefined}
-          />
+          {ip.total_interactions > 0 ? (
+            <>
+              <StatCell value={ip.total_interactions} label={t('awe.momentum.interactions', 'Interactions')} />
+              <VelocityIndicator velocity={ip.weekly_velocity} />
+              <StatCell
+                value={`${ip.saves}`}
+                label={t('awe.momentum.saved', 'Saved')}
+                color={ip.saves > 0 ? 'text-success' : undefined}
+              />
+            </>
+          ) : (
+            <>
+              <StatCell value={ic.total_source_items} label={t('awe.momentum.itemsGathered', 'Items Gathered')} />
+              <StatCell value={ic.items_last_24h} label={t('awe.momentum.last24h', 'Last 24h')} />
+              <StatCell
+                value={ic.source_breakdown.length}
+                label={t('awe.momentum.activeSources', 'Active Sources')}
+                color="text-success"
+              />
+            </>
+          )}
         </div>
 
         {/* Topic affinities */}
@@ -228,14 +244,16 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
           </div>
         )}
 
-        {/* Source preferences */}
-        {ip.top_sources.length > 0 && (
+        {/* Source preferences — from interactions OR instant context */}
+        {(ip.top_sources.length > 0 || ic.source_breakdown.length > 0) && (
           <div>
             <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
-              {t('awe.momentum.topSources', 'Preferred Sources')}
+              {ip.top_sources.length > 0
+                ? t('awe.momentum.topSources', 'Preferred Sources')
+                : t('awe.momentum.activeSources', 'Active Sources')}
             </h5>
             <div className="flex flex-wrap gap-1.5">
-              {ip.top_sources.map(([name, count]) => (
+              {(ip.top_sources.length > 0 ? ip.top_sources : ic.source_breakdown).map(([name, count]) => (
                 <SourceBadge key={name} name={name} count={count} />
               ))}
             </div>
