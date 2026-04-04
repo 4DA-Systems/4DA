@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "Sollten wir von X zu Y migrieren?",
   "wisdom.subtitle": "Was entscheiden Sie? Gewinnen Sie Perspektive aus Ihrer Historie.",
   "wisdom.title": "Entscheidungsanalyse",
-  "wisdom.watchFor": "Beachten:"
+  "wisdom.watchFor": "Beachten:",
+  "briefing.header": "INTELLIGENCE-BRIEFING",
+  "briefing.escalating": "ESKALIEREND",
+  "briefing.wisdom": "WEISHEIT",
+  "briefing.signals": "SIGNALE",
+  "briefing.blind_spots": "BLINDE FLECKEN",
+  "briefing.tracking": "Tracking:",
+  "briefing.gap_days_suffix": "T seit letztem Signal",
+  "briefing.signals_today_suffix": " heute",
+  "briefing.empty_state": "Dein Stack ist ruhig. Nichts Neues."
 }

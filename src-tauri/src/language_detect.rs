@@ -15,11 +15,20 @@ use whichlang::detect_language as wl_detect;
 /// Returns "en" for text that doesn't match any supported language or is too
 /// short to detect reliably (< 10 non-whitespace characters).
 pub fn detect_language(text: &str) -> String {
-    if text.trim().len() < 10 {
+    let trimmed = text.trim();
+    if trimmed.len() < 10 {
         return "en".to_string(); // Too short to detect reliably
     }
 
-    let lang = wl_detect(text);
+    // ASCII-dominant text in dev context is overwhelmingly English.
+    // whichlang struggles with short technical English titles containing
+    // loanwords (e.g. "Homelab Diagram" → German, "Floci vs Ministack" → Swedish).
+    // Require non-ASCII chars for non-English classification of short text.
+    if trimmed.len() < 40 && trimmed.is_ascii() {
+        return "en".to_string();
+    }
+
+    let lang = wl_detect(trimmed);
     whichlang_to_bcp47(lang)
 }
 
@@ -82,6 +91,16 @@ mod tests {
     fn test_short_text_defaults_to_english() {
         assert_eq!(detect_language("React"), "en");
         assert_eq!(detect_language(""), "en");
+    }
+
+    #[test]
+    fn test_short_ascii_titles_default_to_english() {
+        // whichlang misclassifies these short ASCII titles as non-English
+        // but they're clearly English developer content
+        assert_eq!(detect_language("Homelab Diagram"), "en");
+        assert_eq!(detect_language("question about aws account"), "en");
+        assert_eq!(detect_language("Floci vs Ministack vs LocalStack"), "en");
+        assert_eq!(detect_language("simd-bp128 integer compression library"), "en");
     }
 
     #[test]

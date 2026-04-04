@@ -2528,5 +2528,14 @@
   "wisdom.placeholder": "Стоит ли нам мигрировать с X на Y?",
   "wisdom.subtitle": "Что вы решаете? Получите перспективу из вашей истории.",
   "wisdom.title": "Анализ решений",
-  "wisdom.watchFor": "Обратите внимание:"
+  "wisdom.watchFor": "Обратите внимание:",
+  "briefing.header": "РАЗВЕДЫВАТЕЛЬНАЯ СВОДКА",
+  "briefing.escalating": "ЭСКАЛАЦИЯ",
+  "briefing.wisdom": "МУДРОСТЬ",
+  "briefing.signals": "СИГНАЛЫ",
+  "briefing.blind_spots": "СЛЕПЫЕ ЗОНЫ",
+  "briefing.tracking": "Отслеживание:",
+  "briefing.gap_days_suffix": "д с последнего сигнала",
+  "briefing.signals_today_suffix": " сегодня",
+  "briefing.empty_state": "Ваш стек тих. Ничего нового."
 }

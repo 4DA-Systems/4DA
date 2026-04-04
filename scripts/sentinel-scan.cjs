@@ -147,7 +147,7 @@ function checkCompilation() {
     }
 
     // Fallback if no files parsed
-    if (domainExperts.size === 0) {
+    if (domainExperts.size === 0 && errors.length > 0) {
       addSignal(
         "compilation",
         "critical",
@@ -155,6 +155,16 @@ function checkCompilation() {
         "4da-rust-expert",
         `Rust compilation failed (${errors.length} error${errors.length !== 1 ? "s" : ""})`,
         errors.join("\n")
+      );
+    } else if (domainExperts.size === 0 && errors.length === 0) {
+      // Non-zero exit but no actual errors (e.g. warnings only) — not a failure
+      addSignal(
+        "compilation",
+        "warning",
+        "Rust Systems",
+        "",
+        "Rust compilation exited with warnings (0 errors)",
+        result.output.split("\n").filter((l) => /^warning/.test(l)).slice(0, 3).join("\n")
       );
     }
   } else {
