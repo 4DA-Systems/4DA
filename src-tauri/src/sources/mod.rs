@@ -177,6 +177,65 @@ impl std::fmt::Display for SourceError {
 
 impl std::error::Error for SourceError {}
 
+// ============================================================================
+// Source Manifest - Declarative metadata for scaling to 100+ sources
+// ============================================================================
+
+/// Category for grouping sources in the UI and filtering
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceCategory {
+    Security,
+    PackageRegistry,
+    News,
+    Social,
+    Research,
+    Community,
+    General,
+}
+
+impl SourceCategory {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Security => "Security",
+            Self::PackageRegistry => "Packages",
+            Self::News => "News",
+            Self::Social => "Social",
+            Self::Research => "Research",
+            Self::Community => "Community",
+            Self::General => "Other",
+        }
+    }
+}
+
+/// Declarative metadata for a source — category, default content type,
+/// display hints. Sources declare this once; the system uses it for
+/// classification, UI grouping, and registration without hardcoding.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceManifest {
+    pub category: SourceCategory,
+    /// Content type slug (e.g., "security_advisory", "release_notes", "discussion")
+    pub default_content_type: &'static str,
+    /// Scoring multiplier for this content type (e.g., 1.30 for security)
+    pub default_multiplier: f32,
+    /// Short display label (e.g., "HN", "CVE", "npm")
+    pub label: &'static str,
+    /// Color hint for UI badges (e.g., "orange", "red", "blue")
+    pub color_hint: &'static str,
+}
+
+impl Default for SourceManifest {
+    fn default() -> Self {
+        Self {
+            category: SourceCategory::General,
+            default_content_type: "discussion",
+            default_multiplier: 1.0,
+            label: "",
+            color_hint: "gray",
+        }
+    }
+}
+
 /// The trait that all information sources must implement
 #[async_trait]
 pub trait Source: Send + Sync {
@@ -211,6 +270,12 @@ pub trait Source: Send + Sync {
     ///
     /// This is called separately from fetch_items to allow parallel scraping.
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String>;
+
+    /// Declarative metadata — category, default content type, display hints.
+    /// Override this to declare your source's identity. Default: General/Discussion.
+    fn manifest(&self) -> SourceManifest {
+        SourceManifest::default()
+    }
 
     /// Check if enough time has passed since last fetch
     fn should_fetch(&self, last_fetch: Option<std::time::SystemTime>) -> bool {

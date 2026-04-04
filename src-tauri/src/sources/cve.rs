@@ -224,6 +224,16 @@ impl Source for CveSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::Security,
+            default_content_type: "security_advisory",
+            default_multiplier: 1.30,
+            label: "CVE",
+            color_hint: "red",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);

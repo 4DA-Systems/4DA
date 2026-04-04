@@ -126,6 +126,16 @@ impl Source for GitHubSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::News,
+            default_content_type: "release_notes",
+            default_multiplier: 1.15,
+            label: "GitHub",
+            color_hint: "gray",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);

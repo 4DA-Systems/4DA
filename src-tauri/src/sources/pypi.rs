@@ -226,6 +226,16 @@ impl Source for PypiSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::PackageRegistry,
+            default_content_type: "release_notes",
+            default_multiplier: 1.15,
+            label: "PyPI",
+            color_hint: "blue",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
