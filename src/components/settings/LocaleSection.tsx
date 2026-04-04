@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 import { TranslationEditor } from './TranslationEditor';
+import type { TranslationConfig } from '../../lib/commands';
 
 const COUNTRIES = [
   { code: 'US', name: 'United States', lang: 'en', currency: 'USD' },
@@ -52,6 +53,17 @@ const LANGUAGES = [
   { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629' },
 ];
 
+const TRANSLATION_PROVIDERS = [
+  { value: 'auto', labelKey: 'settings.translation.providerAuto' },
+  { value: 'deepl', labelKey: 'settings.translation.providerDeepL' },
+  { value: 'google', labelKey: 'settings.translation.providerGoogle' },
+  { value: 'azure', labelKey: 'settings.translation.providerAzure' },
+  { value: 'ollama', labelKey: 'settings.translation.providerOllama' },
+  { value: 'llm', labelKey: 'settings.translation.providerLLM' },
+] as const;
+
+const PROVIDERS_REQUIRING_KEY = new Set(['deepl', 'google', 'azure']);
+
 function getLanguageName(code: string): string {
   return LANGUAGES.find(l => l.code === code)?.name ?? code;
 }
@@ -63,6 +75,12 @@ export function LocaleSection() {
   const [currency, setCurrency] = useState('USD');
   const [loaded, setLoaded] = useState(false);
   const [translationCoverage, setTranslationCoverage] = useState<number | null>(null);
+  const [txConfig, setTxConfig] = useState<TranslationConfig>({
+    provider: 'auto', api_key: '', auto_translate: false, translate_descriptions: false,
+  });
+  const [embeddingInfo, setEmbeddingInfo] = useState<{
+    model: string; reembed_in_progress: boolean; multilingual_model: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +97,16 @@ export function LocaleSection() {
       setLoaded(true);
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    cmd('get_translation_config').then(setTxConfig).catch(() => {});
+    cmd('get_embedding_model_info').then(setEmbeddingInfo).catch(() => {});
+  }, []);
+
+  const saveTxConfig = useCallback(async (next: TranslationConfig) => {
+    setTxConfig(next);
+    try { await cmd('set_translation_config', { config: next }); } catch { /* non-critical */ }
   }, []);
 
   const saveLocale = useCallback(async (c: string, l: string, cur: string) => {
@@ -224,6 +252,102 @@ export function LocaleSection() {
                 <div className="mt-3">
                   <TranslationEditor language={language} />
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* Translation Provider config (only for non-English) */}
+          {language !== 'en' && (
+            <div className="pt-4 mt-4 border-t border-border space-y-3">
+              <h4 className="text-sm text-white font-medium">{t('settings.translation.title')}</h4>
+
+              <div>
+                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+                  {t('settings.translation.provider')}
+                </label>
+                <select
+                  value={txConfig.provider}
+                  onChange={(e) => saveTxConfig({ ...txConfig, provider: e.target.value })}
+                  className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+                >
+                  {TRANSLATION_PROVIDERS.map((p) => (
+                    <option key={p.value} value={p.value}>{t(p.labelKey)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {PROVIDERS_REQUIRING_KEY.has(txConfig.provider) && (
+                <div>
+                  <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+                    {t('settings.translation.apiKey')}
+                  </label>
+                  <input
+                    type="password"
+                    value={txConfig.api_key}
+                    onChange={(e) => setTxConfig({ ...txConfig, api_key: e.target.value })}
+                    onBlur={() => saveTxConfig(txConfig)}
+                    className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
+                    placeholder="sk-..."
+                  />
+                  <p className="text-[10px] text-text-muted mt-1">
+                    {t('settings.translation.apiKeyHelp')}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-white">{t('settings.translation.autoTranslate')}</span>
+                <button
+                  onClick={() => saveTxConfig({ ...txConfig, auto_translate: !txConfig.auto_translate })}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    txConfig.auto_translate ? 'bg-green-500/40' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                      txConfig.auto_translate ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-white">{t('settings.translation.translateDescriptions')}</span>
+                <button
+                  onClick={() => saveTxConfig({ ...txConfig, translate_descriptions: !txConfig.translate_descriptions })}
+                  className={`relative w-10 h-5 rounded-full transition-colors ${
+                    txConfig.translate_descriptions ? 'bg-green-500/40' : 'bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                      txConfig.translate_descriptions ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Embedding Model info (read-only) */}
+          {embeddingInfo && (
+            <div className="pt-4 mt-4 border-t border-border space-y-2">
+              <h4 className="text-sm text-white font-medium">{t('settings.translation.embedding')}</h4>
+              <p className="text-xs text-text-muted">
+                {t('settings.translation.embeddingCurrent', { model: embeddingInfo.model })}
+              </p>
+              {embeddingInfo.reembed_in_progress && (
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-xs text-orange-400">
+                    {t('settings.translation.embeddingReindexing')}
+                  </span>
+                </div>
+              )}
+              {language !== 'en' && embeddingInfo.multilingual_model && (
+                <p className="text-xs text-text-muted">
+                  {t('settings.translation.embeddingMultilingual', { model: embeddingInfo.multilingual_model })}
+                </p>
               )}
             </div>
           )}
