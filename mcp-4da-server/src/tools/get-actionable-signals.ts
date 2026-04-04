@@ -109,13 +109,27 @@ const SIGNAL_PATTERNS: Record<SignalType, SignalPattern> = {
 };
 
 const BASE_WEIGHTS: Record<SignalType, number> = {
-  security_alert: 4,
-  breaking_change: 3,
-  tool_discovery: 2,
-  tech_trend: 2,
+  security_alert: 2,
+  breaking_change: 2,
+  tool_discovery: 1,
+  tech_trend: 1,
   learning: 1,
-  competitive_intel: 2,
+  competitive_intel: 1,
 };
+
+// Word-boundary matching prevents "rce" matching inside "source", "xss" inside "success", etc.
+function hasWordBoundary(text: string, term: string): boolean {
+  let searchFrom = 0;
+  while (true) {
+    const pos = text.indexOf(term, searchFrom);
+    if (pos === -1) return false;
+    const beforeOk = pos === 0 || !/[a-zA-Z0-9]/.test(text[pos - 1]);
+    const afterIdx = pos + term.length;
+    const afterOk = afterIdx >= text.length || !/[a-zA-Z0-9]/.test(text[afterIdx]);
+    if (beforeOk && afterOk) return true;
+    searchFrom = pos + 1;
+  }
+}
 
 const PRIORITY_LABELS: Record<string, string> = {
   security_alert: "Security Alert",
@@ -174,9 +188,9 @@ function classify(
   // Track scores per signal type
   const typeScores: Record<string, { score: number; matched: string[] }> = {};
 
-  // Single pass through keyword map
+  // Single pass through keyword map (word-boundary matched to prevent false positives)
   for (const [keyword, entries] of KEYWORD_MAP.entries()) {
-    if (textLower.includes(keyword)) {
+    if (hasWordBoundary(textLower, keyword)) {
       for (const entry of entries) {
         if (!typeScores[entry.type]) {
           typeScores[entry.type] = { score: 0, matched: [] };
@@ -186,7 +200,7 @@ function classify(
         typeScores[entry.type].matched.push(keyword);
 
         // Boost if keyword is in title (only for non-boost words)
-        if (!entry.isBoost && titleLower.includes(keyword)) {
+        if (!entry.isBoost && hasWordBoundary(titleLower, keyword)) {
           typeScores[entry.type].score += entry.weight * 0.5;
         }
       }
