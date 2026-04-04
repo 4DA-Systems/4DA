@@ -56,6 +56,13 @@ process.stdin.on('end', () => {
       // 4. Prompt for AWE feedback on previous session's decisions
       const aweFeedback = getAweFeedbackPrompt();
       if (aweFeedback) messages.push(aweFeedback);
+
+      // 5. Push developer identity to AWE for personalized wisdom
+      pushIdentityToAwe();
+
+      // 6. Nudge triage if auto-detected candidates are waiting
+      const triageNudge = checkTriageCandidates();
+      if (triageNudge) messages.push(triageNudge);
     }
 
     if (messages.length > 0) {
@@ -238,6 +245,96 @@ function getAweFeedbackPrompt() {
   try { fs.writeFileSync(PENDING_FILE, JSON.stringify(pending, null, 2)); } catch (e) {}
 
   return msg;
+}
+
+/**
+ * Push developer identity to AWE for personalized wisdom.
+ * Reads from 4DA's database and writes identity.json to AWE's data dir.
+ * Non-blocking, best-effort — failures are silent.
+ */
+function pushIdentityToAwe() {
+  try {
+    const aweDataDir = path.join(process.env.APPDATA || '', 'awe');
+    const identityPath = path.join(aweDataDir, 'identity.json');
+
+    // Check freshness — only update if >1 hour old
+    if (fs.existsSync(identityPath)) {
+      const age = Date.now() - fs.statSync(identityPath).mtimeMs;
+      if (age < 3_600_000) return; // Fresh enough
+    }
+
+    // Read project stats from 4DA database
+    const dbPath = path.join(__dirname, '..', '..', 'data', '4da.db');
+    if (!fs.existsSync(dbPath)) return;
+
+    // Use sqlite3 CLI for a quick read (no native module dependency)
+    const projectCount = execSync(
+      `sqlite3 "${dbPath}" "SELECT COUNT(*) FROM projects;"`,
+      { encoding: 'utf8', timeout: 3000 }
+    ).trim();
+
+    const depCount = execSync(
+      `sqlite3 "${dbPath}" "SELECT COUNT(DISTINCT name) FROM dependencies;"`,
+      { encoding: 'utf8', timeout: 3000 }
+    ).trim();
+
+    const itemCount = execSync(
+      `sqlite3 "${dbPath}" "SELECT COUNT(*) FROM content_items;"`,
+      { encoding: 'utf8', timeout: 3000 }
+    ).trim();
+
+    const daysActive = execSync(
+      `sqlite3 "${dbPath}" "SELECT CAST((julianday('now') - julianday(MIN(created_at))) AS INTEGER) FROM content_items;"`,
+      { encoding: 'utf8', timeout: 3000 }
+    ).trim();
+
+    const identity = {
+      primary_stack: ['react', 'tauri', 'typescript'],
+      adjacent_tech: ['rust', 'sqlite-vec', 'tokio', 'serde'],
+      domain_concerns: ['privacy', 'local-first', 'performance', 'zero-config'],
+      identity_summary: 'Solo founder building privacy-first desktop intelligence app (4DA)',
+      project_count: parseInt(projectCount) || 0,
+      dependency_count: parseInt(depCount) || 0,
+      days_active: parseInt(daysActive) || 0,
+      items_processed: parseInt(itemCount) || 0,
+      knowledge_gaps: [],
+      blind_spots: [],
+    };
+
+    if (!fs.existsSync(aweDataDir)) fs.mkdirSync(aweDataDir, { recursive: true });
+    fs.writeFileSync(identityPath, JSON.stringify(identity, null, 2));
+  } catch (_) {
+    // Identity push is best-effort — never fail the hook
+  }
+}
+
+/**
+ * Check if auto-detected AWE decisions need triage.
+ * Returns a nudge message or null.
+ */
+function checkTriageCandidates() {
+  const AWE_BIN = 'D:\\runyourempire\\awe\\target\\release\\awe.exe';
+  try {
+    if (!fs.existsSync(AWE_BIN)) return null;
+    const output = execSync(`"${AWE_BIN}" triage --json --limit 5`, {
+      encoding: 'utf8',
+      timeout: 5000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    if (!output) return null;
+    const data = JSON.parse(output);
+    const count = data.total_unvalidated || (Array.isArray(data.candidates) ? data.candidates.length : 0);
+    if (count === 0) return null;
+
+    return (
+      `AWE TRIAGE — ${count} decision candidate(s) awaiting review` +
+      `\nRun awe_triage with action "list" to review, then "confirm" or "dismiss" each.` +
+      `\nOnly confirmed decisions feed principle extraction. Quality over quantity.`
+    );
+  } catch (_) {
+    return null;
+  }
 }
 
 function ensureDir(dir) {
