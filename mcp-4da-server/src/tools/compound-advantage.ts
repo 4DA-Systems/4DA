@@ -3,8 +3,59 @@
  *
  * Compound advantage score — measures how effectively you leverage
  * 4DA intelligence for time-sensitive decisions.
+ *
+ * Now integrates with AWE Wisdom Graph — derives a compound score from
+ * decision volume, feedback coverage, principle density, and validation ratio.
  */
 import type { FourDADatabase } from "../db.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import Database from "better-sqlite3";
+
+interface AweStats {
+  decisions: number;
+  feedback: number;
+  principles: number;
+  anti_patterns: number;
+  validated: number;
+}
+
+function getAweWisdomStats(): AweStats | null {
+  try {
+    const dbPath = process.platform === "win32"
+      ? join(homedir(), "AppData", "Roaming", "awe", "wisdom.db")
+      : join(homedir(), ".local", "share", "awe", "wisdom.db");
+
+    if (!existsSync(dbPath)) return null;
+
+    const db = new Database(dbPath, { readonly: true });
+    const count = (type: string) =>
+      (db.prepare("SELECT COUNT(*) as cnt FROM wisdom_elements WHERE element_type = ?").get(type) as { cnt: number })?.cnt ?? 0;
+
+    // Count validated decisions (HumanConfirmed or HumanEnriched in JSON data)
+    let validated = 0;
+    try {
+      validated = (db.prepare(
+        `SELECT COUNT(*) as cnt FROM wisdom_elements
+         WHERE element_type = 'decision'
+         AND (data LIKE '%HumanConfirmed%' OR data LIKE '%HumanEnriched%')`
+      ).get() as { cnt: number })?.cnt ?? 0;
+    } catch { /* validation_status may not exist in old data */ }
+
+    const stats = {
+      decisions: count("decision"),
+      feedback: count("feedback"),
+      principles: count("principle"),
+      anti_patterns: count("anti_pattern"),
+      validated,
+    };
+    db.close();
+    return stats;
+  } catch {
+    return null;
+  }
+}
 
 export interface CompoundAdvantageParams {
   period?: string;
@@ -77,14 +128,40 @@ export function executeCompoundAdvantage(db: FourDADatabase, params: CompoundAdv
     trend = "baseline";
   }
 
+  // AWE Wisdom Graph integration — derive compound score from decision quality data
+  const aweStats = getAweWisdomStats();
+  const aweComponents = aweStats ? {
+    decision_volume: Math.min((aweStats.decisions || 0) / 100, 1.0),
+    feedback_coverage: aweStats.decisions > 0
+      ? (aweStats.feedback || 0) / aweStats.decisions
+      : 0,
+    principle_density: Math.min((aweStats.principles || 0) / 10, 1.0),
+    validated_ratio: aweStats.decisions > 0
+      ? Math.min((aweStats.validated || 0) / Math.max(aweStats.decisions, 1), 1.0)
+      : 0,
+  } : null;
+
+  // Compute AWE-derived score (0-100) if no native score exists
+  const aweScore = aweComponents
+    ? Math.round(
+        ((aweComponents.decision_volume * 0.20) +
+         (aweComponents.feedback_coverage * 0.30) +
+         (aweComponents.principle_density * 0.25) +
+         (aweComponents.validated_ratio * 0.25)) * 100
+      )
+    : null;
+
+  const effectiveScore = latestScore?.score ?? aweScore;
+  const effectiveComponents = latestScore ? {
+    response_rate: latestScore.response_rate,
+    avg_lead_time_hours: latestScore.avg_lead_time_hours,
+    calibration_accuracy: latestScore.calibration_accuracy,
+  } : aweComponents;
+
   return {
-    score: latestScore?.score ?? null,
+    score: effectiveScore,
     period,
-    components: latestScore ? {
-      response_rate: latestScore.response_rate,
-      avg_lead_time_hours: latestScore.avg_lead_time_hours,
-      calibration_accuracy: latestScore.calibration_accuracy,
-    } : null,
+    components: effectiveComponents,
     trend: { direction: trend, delta: trendDelta, previous_score: previousScore?.score ?? null },
     decision_windows: {
       total_opened: total,
@@ -92,9 +169,10 @@ export function executeCompoundAdvantage(db: FourDADatabase, params: CompoundAdv
       total_expired: expired,
       action_rate: total > 0 ? Math.round((acted / total) * 100) : null,
     },
-    computed_at: latestScore?.computed_at ?? null,
-    summary: latestScore
-      ? `Compound advantage: ${latestScore.score}/100 (${trend}). ${acted}/${total} windows acted on.`
-      : "No compound advantage scores computed yet. Scores build as you interact with decision windows and intelligence feeds.",
+    awe_stats: aweStats,
+    computed_at: latestScore?.computed_at ?? (aweStats ? new Date().toISOString() : null),
+    summary: effectiveScore != null
+      ? `Compound advantage: ${effectiveScore}/100 (${trend}). ${aweStats ? `${aweStats.decisions} decisions, ${aweStats.principles} principles, ${aweStats.validated} validated.` : `${acted}/${total} windows acted on.`}`
+      : "No compound advantage data yet. Record decisions and provide feedback to build your score.",
   };
 }
