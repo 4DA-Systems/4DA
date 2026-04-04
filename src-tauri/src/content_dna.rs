@@ -24,6 +24,22 @@ pub enum ContentType {
 }
 
 impl ContentType {
+    pub fn from_slug(s: &str) -> Option<Self> {
+        match s {
+            "security_advisory" => Some(Self::SecurityAdvisory),
+            "release_notes" => Some(Self::ReleaseNotes),
+            "breaking_change" => Some(Self::BreakingChange),
+            "deep_dive" => Some(Self::DeepDive),
+            "tutorial" => Some(Self::Tutorial),
+            "show_and_tell" => Some(Self::ShowAndTell),
+            "question" => Some(Self::Question),
+            "help_request" => Some(Self::HelpRequest),
+            "hiring" => Some(Self::Hiring),
+            "discussion" => Some(Self::Discussion),
+            _ => None,
+        }
+    }
+
     pub fn slug(&self) -> &'static str {
         match self {
             ContentType::SecurityAdvisory => "security_advisory",
@@ -57,19 +73,45 @@ impl ContentType {
     }
 }
 
-/// Source-type-aware content classification. If the source type has a known
-/// default content type, that override takes precedence over regex classification.
+/// Source-type-aware content classification.
+///
+/// Reads the source's declared manifest (default_content_type + multiplier)
+/// instead of hardcoding match arms per source. New sources just need to
+/// declare their manifest — no changes to this function.
+///
+/// Package registries get an extra deprecated/yanked check that overrides
+/// ReleaseNotes → BreakingChange when the title indicates EOL/deprecation.
 pub fn classify_content_for_source(
     title: &str,
     content: &str,
     source_type: &str,
 ) -> (ContentType, f32) {
-    match source_type {
-        // Security feeds: ALWAYS SecurityAdvisory — highest boost, triggers critical fast-path
-        "cve" | "osv" => return (ContentType::SecurityAdvisory, 1.30),
+    // Build lookup from source manifests (cached after first call)
+    use std::sync::OnceLock;
+    static DEFAULTS: OnceLock<std::collections::HashMap<&'static str, (ContentType, f32, bool)>> =
+        OnceLock::new();
 
-        // Package registries: ReleaseNotes by default, BreakingChange if deprecated/yanked/EOL
-        "npm_registry" | "crates_io" | "pypi" | "go_modules" => {
+    let defaults = DEFAULTS.get_or_init(|| {
+        let mut map = std::collections::HashMap::new();
+        for source in crate::sources::build_all_sources() {
+            let m = source.manifest();
+            let ct =
+                ContentType::from_slug(m.default_content_type).unwrap_or(ContentType::Discussion);
+            let is_registry = matches!(m.category, crate::sources::SourceCategory::PackageRegistry);
+            // Only store if non-default (Discussion/1.0) or registry (needs deprecation check)
+            if ct != ContentType::Discussion || m.default_multiplier != 1.0 || is_registry {
+                map.insert(
+                    source.source_type(),
+                    (ct, m.default_multiplier, is_registry),
+                );
+            }
+        }
+        map
+    });
+
+    if let Some(&(ref ct, mult, is_registry)) = defaults.get(source_type) {
+        // Package registries: check for deprecated/yanked/EOL → BreakingChange override
+        if is_registry && *ct == ContentType::ReleaseNotes {
             let tl = title.to_lowercase();
             if tl.contains("deprecated")
                 || tl.contains("yanked")
@@ -81,24 +123,11 @@ pub fn classify_content_for_source(
             {
                 return (ContentType::BreakingChange, 1.25);
             }
-            return (ContentType::ReleaseNotes, 1.15);
         }
-
-        // AI/ML model releases — treated as release notes for new model versions
-        "huggingface" => return (ContentType::ReleaseNotes, 1.15),
-
-        // Research papers with code — deep technical content
-        "papers_with_code" => return (ContentType::DeepDive, 1.15),
-
-        // Stack Overflow: neutral multiplier — relevance comes from tag matching
-        // against user's stack, not from content type. Don't penalize SO questions
-        // since they're curated developer pain signals.
-        "stackoverflow" => return (ContentType::Discussion, 1.00),
-
-        // Bluesky: fall through to regex — posts can be anything
-        // (announcements, discussions, questions, show-and-tell)
-        _ => {}
+        return (ct.clone(), mult);
     }
+
+    // Unknown source — fall through to regex classifier
     classify_content(title, content)
 }
 
