@@ -6,25 +6,13 @@ use tracing::{debug, info, warn};
 
 use crate::db::Database;
 use crate::error::Result;
-use crate::sources::arxiv::ArxivSource;
-use crate::sources::devto::DevtoSource;
-use crate::sources::github::GitHubSource;
-use crate::sources::hackernews::HackerNewsSource;
-use crate::sources::lobsters::LobstersSource;
 use crate::sources::rate_limiter::rate_limiter;
-use crate::sources::reddit::RedditSource;
-use crate::sources::rss::RssSource;
-use crate::sources::twitter::TwitterSource;
-use crate::sources::youtube::YouTubeSource;
 use crate::{
     build_embedding_text, embed_texts, get_database, sources, void_signal_cache_filled,
     void_signal_fetch_progress, void_signal_fetching, GenericSourceItem,
 };
 
-use super::{
-    fetch_with_retry, load_github_languages_from_settings, load_rss_feeds_from_settings,
-    load_twitter_settings, load_youtube_channels_from_settings, AdapterFailureTracker,
-};
+use super::{fetch_with_retry, AdapterFailureTracker};
 
 /// Fill the cache with items from all sources (background operation)
 /// This is the "write" side of the cache-first architecture
@@ -36,368 +24,65 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
     void_signal_fetching(app);
 
     let db = get_database()?;
-    let rss_feeds = load_rss_feeds_from_settings();
-    let (twitter_handles, x_api_key) = load_twitter_settings();
-    let youtube_channels = load_youtube_channels_from_settings();
-
-    // Use deep fetch for comprehensive coverage
-    let hn_source = HackerNewsSource::new();
-    let arxiv_source = ArxivSource::new();
-    let reddit_source = RedditSource::new();
-    let github_source = GitHubSource::with_languages(load_github_languages_from_settings());
-    let rss_source = RssSource::with_feeds(rss_feeds);
-    let twitter_source = TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key);
-    let youtube_source = YouTubeSource::with_channels(youtube_channels);
-    let lobsters_source = LobstersSource::new();
-    let devto_source = DevtoSource::new();
-
     let mut total_cached = 0;
     let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String)> = Vec::new();
 
-    // Fetch from all sources in parallel (with per-source rate limiting + retry)
+    // Build ALL sources from the canonical factory (single source of truth)
+    let all_sources = crate::sources::build_all_sources();
+    let source_count = all_sources.len();
     let rl = rate_limiter();
     let cache_tracker = AdapterFailureTracker::new();
-    let (
-        hn_result,
-        arxiv_result,
-        reddit_result,
-        github_result,
-        rss_result,
-        twitter_result,
-        youtube_result,
-        lobsters_result,
-        devto_result,
-    ) = tokio::join!(
-        async {
-            rl.wait_for_rate_limit("hackernews").await;
-            fetch_with_retry("Hacker News", &cache_tracker, || {
-                hn_source.fetch_items_deep(50)
-            })
-            .await
-        },
-        async {
-            rl.wait_for_rate_limit("arxiv").await;
-            fetch_with_retry("arXiv", &cache_tracker, || {
-                arxiv_source.fetch_items_deep(50)
-            })
-            .await
-        },
-        async {
-            rl.wait_for_rate_limit("reddit").await;
-            fetch_with_retry("Reddit", &cache_tracker, || {
-                reddit_source.fetch_items_deep(50)
-            })
-            .await
-        },
-        async {
-            rl.wait_for_rate_limit("github").await;
-            fetch_with_retry("GitHub", &cache_tracker, || github_source.fetch_items()).await
-        },
-        async {
-            rl.wait_for_rate_limit("rss").await;
-            fetch_with_retry("RSS", &cache_tracker, || rss_source.fetch_items()).await
-        },
-        async {
-            rl.wait_for_rate_limit("twitter").await;
-            fetch_with_retry("Twitter", &cache_tracker, || {
-                twitter_source.fetch_items_deep(50)
-            })
-            .await
-        },
-        async {
-            rl.wait_for_rate_limit("youtube").await;
-            fetch_with_retry("YouTube", &cache_tracker, || youtube_source.fetch_items()).await
-        },
-        async {
-            rl.wait_for_rate_limit("lobsters").await;
-            fetch_with_retry("Lobsters", &cache_tracker, || {
-                lobsters_source.fetch_items_deep(50)
-            })
-            .await
-        },
-        async {
-            rl.wait_for_rate_limit("devto").await;
-            fetch_with_retry("Dev.to", &cache_tracker, || {
-                devto_source.fetch_items_deep(50)
-            })
-            .await
-        },
-    );
+
+    // Fetch from each source sequentially with rate limiting
+    // (previous tokio::join! approach required hardcoded variable names)
+    for (idx, source) in all_sources.into_iter().enumerate() {
+        let st = source.source_type();
+        let name = source.name();
+
+        // Skip disabled sources
+        if !db.is_source_enabled(st) {
+            continue;
+        }
+
+        rl.wait_for_rate_limit(st).await;
+
+        let result = fetch_with_retry(name, &cache_tracker, || source.fetch_items_deep(50)).await;
+
+        match result {
+            Ok(items) => {
+                info!(target: "4da::cache", source = st, count = items.len(), "Fetched {name} items");
+                for item in items {
+                    if db
+                        .get_source_item(st, &item.source_id)
+                        .ok()
+                        .flatten()
+                        .is_none()
+                    {
+                        new_items_to_embed.push((
+                            st.to_string(),
+                            item.source_id,
+                            item.url,
+                            item.title,
+                            item.content,
+                        ));
+                    } else {
+                        db.touch_source_item(st, &item.source_id).ok();
+                        total_cached += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                warn!(target: "4da::cache", source = st, error = %e, "Fetch failed after retries");
+            }
+        }
+
+        void_signal_fetch_progress(app, idx + 1, source_count);
+    }
 
     // Log persistent failures from cache fill
     for (name, count) in cache_tracker.persistent_failures() {
         warn!(target: "4da::cache", adapter = %name, consecutive_failures = count, "Persistent failure during cache fill");
     }
-
-    // Process HN results
-    match hn_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "hackernews", count = items.len(), "Fetched HN items");
-            for item in items {
-                if db
-                    .get_source_item("hackernews", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "hackernews".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("hackernews", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "hackernews", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 1, 9);
-
-    // Process arXiv results
-    match arxiv_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "arxiv", count = items.len(), "Fetched arXiv items");
-            for item in items {
-                if db
-                    .get_source_item("arxiv", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "arxiv".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("arxiv", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "arxiv", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 2, 9);
-
-    // Process Reddit results
-    match reddit_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "reddit", count = items.len(), "Fetched Reddit items");
-            for item in items {
-                if db
-                    .get_source_item("reddit", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "reddit".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("reddit", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "reddit", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 3, 9);
-
-    // Process GitHub results
-    match github_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "github", count = items.len(), "Fetched GitHub items");
-            for item in items {
-                if db
-                    .get_source_item("github", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "github".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("github", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "github", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 4, 9);
-
-    // Process RSS results
-    match rss_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "rss", count = items.len(), "Fetched RSS items");
-            for item in items {
-                if db
-                    .get_source_item("rss", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "rss".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("rss", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "rss", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 5, 9);
-
-    // Process Twitter results
-    match twitter_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "twitter", count = items.len(), "Fetched Twitter items");
-            for item in items {
-                if db
-                    .get_source_item("twitter", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "twitter".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("twitter", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "twitter", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 6, 9);
-
-    // Process YouTube results
-    match youtube_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "youtube", count = items.len(), "Fetched YouTube items");
-            for item in items {
-                if db
-                    .get_source_item("youtube", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "youtube".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("youtube", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "youtube", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 7, 9);
-
-    // Process Lobste.rs results
-    match lobsters_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "lobsters", count = items.len(), "Fetched Lobste.rs items");
-            for item in items {
-                if db
-                    .get_source_item("lobsters", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "lobsters".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("lobsters", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "lobsters", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 8, 9);
-
-    // Process Dev.to results
-    match devto_result {
-        Ok(items) => {
-            info!(target: "4da::cache", source = "devto", count = items.len(), "Fetched Dev.to items");
-            for item in items {
-                if db
-                    .get_source_item("devto", &item.source_id)
-                    .ok()
-                    .flatten()
-                    .is_none()
-                {
-                    new_items_to_embed.push((
-                        "devto".to_string(),
-                        item.source_id,
-                        item.url,
-                        item.title,
-                        item.content,
-                    ));
-                } else {
-                    db.touch_source_item("devto", &item.source_id).ok();
-                    total_cached += 1;
-                }
-            }
-        }
-        Err(e) => {
-            warn!(target: "4da::cache", source = "devto", error = %e, "Fetch failed after retries");
-        }
-    }
-    void_signal_fetch_progress(app, 9, 9);
 
     // Embed and cache new items
     if !new_items_to_embed.is_empty() {
