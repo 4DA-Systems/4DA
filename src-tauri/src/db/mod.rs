@@ -228,6 +228,43 @@ impl Database {
         Ok(())
     }
 
+    /// Check database file size and warn if approaching limits.
+    /// 2GB max prevents unbounded growth from malicious or prolific sources.
+    pub fn check_db_size(db_path: &std::path::Path) -> u64 {
+        const MAX_DB_SIZE: u64 = 2_147_483_648; // 2 GB
+        const WARN_DB_SIZE: u64 = 1_610_612_736; // 1.5 GB
+
+        match std::fs::metadata(db_path) {
+            Ok(meta) => {
+                let size = meta.len();
+                if size > MAX_DB_SIZE {
+                    tracing::error!(
+                        target: "4da::db",
+                        size_mb = size / 1_000_000,
+                        "Database exceeds 2GB limit — cleanup recommended"
+                    );
+                } else if size > WARN_DB_SIZE {
+                    tracing::warn!(
+                        target: "4da::db",
+                        size_mb = size / 1_000_000,
+                        "Database approaching 2GB limit"
+                    );
+                }
+                size
+            }
+            Err(_) => 0,
+        }
+    }
+
+    /// Log a security-relevant event to the audit table.
+    pub fn log_security_event(&self, event_type: &str, details: &str, severity: &str) {
+        let conn = self.conn.lock();
+        let _ = conn.execute(
+            "INSERT INTO security_audit_log (event_type, details, severity) VALUES (?1, ?2, ?3)",
+            rusqlite::params![event_type, details, severity],
+        );
+    }
+
     // ========================================================================
     // Context Operations
     // ========================================================================

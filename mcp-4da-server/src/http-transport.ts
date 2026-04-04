@@ -13,6 +13,7 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { extractAuthClaims, type TeamClaims } from "./auth.js";
 
 const DEFAULT_PORT = 4840;
 const DEFAULT_HOST = "127.0.0.1";
@@ -70,6 +71,23 @@ export async function startHttpServer(
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Forbidden: invalid Origin header" }));
         return;
+      }
+    }
+
+    // Auth check: if MCP_AUTH_REQUIRED env var is set, validate JWT
+    const authRequired = process.env.MCP_AUTH_REQUIRED === "true";
+    let claims: TeamClaims | null = null;
+
+    if (authRequired) {
+      // Allow unauthenticated health checks on root
+      const checkPath = new URL(req.url || "/", `http://${host}:${port}`).pathname;
+      if (checkPath !== "/") {
+        claims = extractAuthClaims(req);
+        if (!claims) {
+          res.writeHead(401, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Authentication required" }));
+          return;
+        }
       }
     }
 

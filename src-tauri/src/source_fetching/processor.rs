@@ -445,14 +445,20 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             if !translation_requests.is_empty() {
                 let total_chars: usize = translation_requests.iter().map(|r| r.text.len()).sum();
                 if crate::content_translation::check_ingest_budget(total_chars) {
-                    debug!(target: "4da::cache", count = translation_requests.len(), lang = %user_lang, "Pre-translating titles at ingest");
-                    let results = crate::content_translation::translate_content_batch(
-                        &translation_requests,
-                        &user_lang,
-                    )
-                    .await;
-                    let translated = results.iter().filter(|r| r.provider != "none").count();
-                    info!(target: "4da::cache", translated, total = translation_requests.len(), lang = %user_lang, "Ingest translation complete");
+                    let count = translation_requests.len();
+                    let lang = user_lang.clone();
+                    debug!(target: "4da::cache", count, lang = %lang, "Spawning background title translation");
+                    // Non-blocking: translation warms cache asynchronously.
+                    // Content displays immediately; next view hits warm cache.
+                    tokio::spawn(async move {
+                        let results = crate::content_translation::translate_content_batch(
+                            &translation_requests,
+                            &lang,
+                        )
+                        .await;
+                        let translated = results.iter().filter(|r| r.provider != "none").count();
+                        info!(target: "4da::cache", translated, total = count, lang = %lang, "Background ingest translation complete");
+                    });
                 } else {
                     debug!(target: "4da::cache", "Ingest translation budget exhausted - skipping until tomorrow");
                 }

@@ -28,6 +28,8 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 /// This is INSTANT because it doesn't fetch from APIs, just scores cached items
 #[tauri::command]
 pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
+    crate::ipc_rate_limit::check_rate_limit("run_cached_analysis", 5)?;
+
     // Atomic check-and-set: prevents TOCTOU race from double-clicks
     {
         get_analysis_abort().store(false, Ordering::SeqCst);

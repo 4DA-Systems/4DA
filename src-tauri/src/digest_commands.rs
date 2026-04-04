@@ -319,6 +319,8 @@ Rules:
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 #[tauri::command]
 pub async fn generate_ai_briefing(app: tauri::AppHandle) -> Result<serde_json::Value> {
+    crate::ipc_rate_limit::check_rate_limit("generate_ai_briefing", 10)?;
+
     // Improvement C: Gather unresolved anomalies for context injection
     let anomalies = {
         if let Ok(ace) = crate::get_ace_engine() {

@@ -63,6 +63,14 @@ impl SettingsManager {
                         path = %settings_path.display(),
                         "Rejected symlink in data directory — using defaults"
                     );
+                    // Log to security audit trail
+                    if let Ok(db) = crate::get_database() {
+                        db.log_security_event(
+                            "symlink_blocked",
+                            &settings_path.display().to_string(),
+                            "critical",
+                        );
+                    }
                     return Self {
                         settings: Settings::default(),
                         usage: UsageStats::default(),
