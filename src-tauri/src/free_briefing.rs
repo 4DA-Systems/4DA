@@ -12,6 +12,8 @@ use tracing::info;
 /// Template briefing (no LLM required)
 #[tauri::command]
 pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json::Value> {
+    crate::ipc_rate_limit::check_rate_limit("generate_free_briefing", 10)?;
+
     info!(target: "4da::briefing", "Generating free-tier briefing");
 
     // Try in-memory results first, fall back to DB

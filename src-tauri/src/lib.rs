@@ -141,7 +141,11 @@ mod health;
 mod health_commands;
 mod http_client;
 mod indexed_documents_commands;
+mod integrity;
 mod intelligence_history;
+#[allow(dead_code)] // Validation helpers — incrementally adopted by IPC commands
+mod ipc_guard;
+mod ipc_rate_limit;
 mod job_queue;
 mod knowledge_decay;
 pub(crate) mod language_detect;

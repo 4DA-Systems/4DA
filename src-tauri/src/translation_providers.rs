@@ -135,7 +135,11 @@ pub async fn translate_via_azure(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_default();
-        return Err(format!("Azure Translator error {status}: {}", safe_error_body(&body_text)).into());
+        return Err(format!(
+            "Azure Translator error {status}: {}",
+            safe_error_body(&body_text)
+        )
+        .into());
     }
 
     let data: Vec<serde_json::Value> = response
@@ -195,7 +199,11 @@ pub async fn translate_via_google(
     if !response.status().is_success() {
         let status = response.status();
         let body_text = response.text().await.unwrap_or_default();
-        return Err(format!("Google Translate error {status}: {}", safe_error_body(&body_text)).into());
+        return Err(format!(
+            "Google Translate error {status}: {}",
+            safe_error_body(&body_text)
+        )
+        .into());
     }
 
     let data: serde_json::Value = response

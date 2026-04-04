@@ -11,11 +11,14 @@
  * Filters everything for relevance to the described task and involved files.
  */
 
+import { execSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import type { FourDADatabase } from "../db.js";
 import { executeGetActionableSignals } from "./get-actionable-signals.js";
 import { executeSourceHealth } from "./source-health.js";
 import { executeSignalChains } from "./signal-chains.js";
 import { executeAgentSessionBrief } from "./agent-session-brief.js";
+import { findAweBinary } from "./decision-memory.js";
 
 // ============================================================================
 // Types
@@ -174,6 +177,62 @@ function getOpenDecisionWindows(db: FourDADatabase): WindowRow[] {
 }
 
 // ============================================================================
+// AWE Wisdom Engine
+// ============================================================================
+
+/**
+ * Retrieve AWE Wisdom Engine status and validated principles.
+ * Uses the AWE CLI binary — no direct database access, no new dependencies.
+ */
+function getAweWisdom(): string | null {
+  try {
+    const aweBin = findAweBinary();
+    if (!aweBin) return null;
+
+    // Quick existence check for the wisdom database
+    const dbPath = process.platform === "win32"
+      ? `${process.env.APPDATA || ""}\\awe\\wisdom.db`
+      : `${process.env.HOME || ""}/.local/share/awe/wisdom.db`;
+
+    if (!existsSync(dbPath)) return null;
+
+    let section = "AWE WISDOM ENGINE\n";
+
+    try {
+      const statusOutput = execSync(`"${aweBin}" status`, {
+        timeout: 5000,
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      if (statusOutput) section += statusOutput.trim() + "\n";
+    } catch {
+      // status command failed — continue without it
+    }
+
+    try {
+      const wisdomOutput = execSync(
+        `"${aweBin}" wisdom --domain software-engineering`,
+        {
+          timeout: 5000,
+          encoding: "utf-8",
+          stdio: ["ignore", "pipe", "ignore"],
+        },
+      );
+      if (wisdomOutput && wisdomOutput.includes("VALIDATED")) {
+        section += wisdomOutput.trim() + "\n";
+      }
+    } catch {
+      // wisdom command failed — continue without it
+    }
+
+    // Only return if we got something beyond the header
+    return section.length > "AWE WISDOM ENGINE\n".length ? section : null;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================================
 // Execute
 // ============================================================================
 
@@ -323,6 +382,20 @@ export function executeWhatShouldIKnow(
     relevantWisdom = relevantWisdom.slice(0, 10);
   } catch {
     // Brief unavailable — non-fatal
+  }
+
+  // ── 5b. AWE Wisdom Engine (validated principles, decision stats) ──────
+  try {
+    const aweWisdom = getAweWisdom();
+    if (aweWisdom) {
+      relevantWisdom.push({
+        type: "awe_wisdom",
+        subject: "AWE Wisdom Engine",
+        detail: aweWisdom,
+      });
+    }
+  } catch {
+    // AWE unavailable — non-fatal
   }
 
   // ── 6. Delegation Assessment ──────────────────────────────────────────

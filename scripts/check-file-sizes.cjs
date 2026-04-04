@@ -50,6 +50,7 @@ const EXCEPTIONS = {
   'src/components/NaturalLanguageSearch.test.tsx':          'NLS tests — 14 tests for search UI states and interactions',
   'src/components/playbook/PlaybookView.test.tsx':         'Playbook tests — 15 tests for module navigation and progress',
   'src/components/SettingsModal.test.tsx':                  'Settings tests — comprehensive modal and tab interaction tests',
+  'src/types/i18n-resources.d.ts':                         'Auto-generated i18n type declarations — regenerated via pnpm i18n:types',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];

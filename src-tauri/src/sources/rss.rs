@@ -14,6 +14,9 @@ const MAX_ITEMS_PER_FEED: usize = 200;
 /// Maximum content length per feed item (100KB)
 const MAX_ITEM_CONTENT_LEN: usize = 100_000;
 
+/// Maximum RSS response size (10MB) — prevents malicious feed flooding
+const MAX_RSS_RESPONSE: u64 = 10 * 1024 * 1024;
+
 // ============================================================================
 // RSS Feed Entry
 // ============================================================================
@@ -365,6 +368,19 @@ impl Source for RssSource {
                     if !response.status().is_success() {
                         warn!(url = feed_url, status = %response.status(), "Feed returned error status");
                         continue;
+                    }
+
+                    // Cap RSS response at 10MB to prevent malicious feed flooding
+                    if let Some(len) = response.content_length() {
+                        if len > MAX_RSS_RESPONSE {
+                            warn!(
+                                target: "4da::sources::rss",
+                                url = %feed_url,
+                                size = len,
+                                "RSS feed too large — skipping"
+                            );
+                            continue;
+                        }
                     }
 
                     match response.text().await {

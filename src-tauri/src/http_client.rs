@@ -48,6 +48,33 @@ pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         })
 });
 
+/// Create a reqwest client builder with optional proxy from settings.
+/// Call this when you need a client that respects the user's proxy config.
+pub(crate) fn client_builder_with_proxy() -> reqwest::ClientBuilder {
+    let mut builder =
+        reqwest::Client::builder().user_agent("Mozilla/5.0 (compatible; desktop-app)");
+
+    // Try to read proxy from settings
+    let manager = crate::get_settings_manager();
+    if let Some(guard) = manager.try_lock() {
+        if let Some(ref proxy_url) = guard.get().network.proxy_url {
+            if !proxy_url.trim().is_empty() {
+                match reqwest::Proxy::all(proxy_url) {
+                    Ok(proxy) => {
+                        tracing::info!(target: "4da::http", proxy = %proxy_url, "Proxy configured");
+                        builder = builder.proxy(proxy);
+                    }
+                    Err(e) => {
+                        tracing::warn!(target: "4da::http", error = %e, proxy = %proxy_url, "Invalid proxy URL — ignoring");
+                    }
+                }
+            }
+        }
+    }
+
+    builder
+}
+
 /// Shared client for team relay operations (sync, create, join).
 /// Uses team-specific user-agent for relay identification.
 #[allow(dead_code)]

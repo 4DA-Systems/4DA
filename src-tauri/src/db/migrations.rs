@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 46;
+        const TARGET_VERSION: i64 = 47;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1301,6 +1301,33 @@ impl Database {
                             );",
                         )?;
                         info!(target: "4da::db", "Created app_meta table for embedding model tracking");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 47: Security audit log for compliance and incident tracking
+            if current_version < 47 {
+                Self::run_versioned_migration(
+                    &conn,
+                    46,
+                    47,
+                    "Phase 47: Security audit log table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS security_audit_log (
+                                id INTEGER PRIMARY KEY,
+                                timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                                event_type TEXT NOT NULL,
+                                details TEXT,
+                                severity TEXT NOT NULL DEFAULT 'info'
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_security_audit_timestamp
+                                ON security_audit_log(timestamp);
+                            CREATE INDEX IF NOT EXISTS idx_security_audit_event
+                                ON security_audit_log(event_type);",
+                        )?;
+                        info!(target: "4da::db", "Created security_audit_log table");
                         Ok(())
                     },
                 )?;

@@ -832,11 +832,17 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 continue;
             }
 
-            // Check if enough time has passed since last check
+            // Check if enough time has passed since last check.
+            // Add 0-60s jitter to prevent predictable fetch timing (privacy hardening).
             let last = state.last_check.load(Ordering::Relaxed);
             let interval_secs = state.get_interval();
+            let jitter = (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .subsec_nanos()
+                % 60) as u64;
 
-            if now - last < interval_secs {
+            if now - last < interval_secs + jitter {
                 continue;
             }
 

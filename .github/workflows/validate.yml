@@ -41,6 +41,12 @@ jobs:
       - name: Validate IPC commands
         run: node scripts/validate-commands.cjs
 
+      - name: Validate translations (i18n coverage)
+        run: node scripts/validate-translations.cjs
+
+      - name: Generate i18n type declarations
+        run: pnpm run i18n:types
+
       - name: Run tests and verify count floor
         run: |
           set +e

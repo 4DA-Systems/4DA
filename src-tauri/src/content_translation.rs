@@ -165,7 +165,12 @@ pub fn check_ingest_budget(chars: usize) -> bool {
             return false;
         }
         if DAILY_INGEST_CHARS_USED
-            .compare_exchange(current, current + chars, Ordering::SeqCst, Ordering::Relaxed)
+            .compare_exchange(
+                current,
+                current + chars,
+                Ordering::SeqCst,
+                Ordering::Relaxed,
+            )
             .is_ok()
         {
             return true;

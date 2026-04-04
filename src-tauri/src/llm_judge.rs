@@ -49,13 +49,19 @@ impl RelevanceJudge {
 Output JSON array (one per article):
 [{"id": N, "score": N, "reason": "one sentence"}]"#;
 
+        let titles_only = crate::get_settings_manager()
+            .try_lock()
+            .map(|s| s.get().privacy.llm_content_level == "titles_only")
+            .unwrap_or(false);
+
         let items_text = items
             .iter()
             .enumerate()
             .map(|(i, (id, title, content))| {
-                let snippet = if content.len() > 2000 {
-                    let truncated: String = content.chars().take(2000).collect();
-                    truncated
+                let snippet = if titles_only {
+                    String::new() // Send no content to provider
+                } else if content.len() > 2000 {
+                    content.chars().take(2000).collect()
                 } else {
                     content.clone()
                 };
