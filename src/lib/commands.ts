@@ -449,6 +449,7 @@ interface CommandMap {
   get_error_telemetry: { params: { limit?: number }; result: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] };
   get_error_summary_cmd: { params: Record<string, never>; result: { total_errors: number; total_occurrences: number; by_category: { category: string; unique_errors: number; total_occurrences: number }[]; top_errors: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] } };
   clear_error_telemetry: { params: { days?: number }; result: number };
+  get_security_audit_log: { params: { limit?: number; event_filter?: string }; result: { entries: { id: number; timestamp: string; event_type: string; details: string; severity: string }[]; total: number } };
 
   // -- Scoring Validation --
   run_scoring_validation: { params: Record<string, never>; result: { timestamp: string; personas: { persona: string; precision_at_20: number; anti_topic_leaks: number; avg_score_relevant: number; avg_score_irrelevant: number; separation: number; top_20_titles: string[]; items_scored: number }[]; overall_precision: number; worst_persona: string; best_persona: string; separation_score: number; recommendations: string[]; total_items_in_db: number } };

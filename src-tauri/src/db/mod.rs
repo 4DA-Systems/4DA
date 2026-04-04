@@ -265,6 +265,44 @@ impl Database {
         );
     }
 
+    /// Query security audit log entries for compliance review.
+    pub fn get_security_audit_log(
+        &self,
+        limit: i64,
+        event_filter: Option<&str>,
+    ) -> Vec<(i64, String, String, String, String)> {
+        let conn = self.conn.lock();
+        let (sql, params): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = match event_filter {
+            Some(filter) => (
+                "SELECT id, timestamp, event_type, COALESCE(details, ''), severity \
+                 FROM security_audit_log WHERE event_type = ?1 \
+                 ORDER BY timestamp DESC LIMIT ?2",
+                vec![Box::new(filter.to_string()), Box::new(limit)],
+            ),
+            None => (
+                "SELECT id, timestamp, event_type, COALESCE(details, ''), severity \
+                 FROM security_audit_log ORDER BY timestamp DESC LIMIT ?1",
+                vec![Box::new(limit)],
+            ),
+        };
+        conn.prepare(sql)
+            .and_then(|mut stmt| {
+                let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+                    params.iter().map(|p| p.as_ref()).collect();
+                stmt.query_map(params_refs.as_slice(), |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, String>(3)?,
+                        row.get::<_, String>(4)?,
+                    ))
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            })
+            .unwrap_or_default()
+    }
+
     // ========================================================================
     // Context Operations
     // ========================================================================
