@@ -96,3 +96,53 @@ mod tests {
         ));
     }
 }
+
+/// Detect language using title with content fallback.
+/// If title is too short for reliable detection, tries content instead.
+pub fn detect_language_with_content(title: &str, content: &str) -> String {
+    let title_trimmed = title.trim();
+    if title_trimmed.len() >= 20 {
+        return detect_language(title_trimmed);
+    }
+
+    // Title too short — try content (take first 200 chars for speed)
+    let content_trimmed = content.trim();
+    if content_trimmed.len() >= 20 {
+        let sample: String = content_trimmed.chars().take(200).collect();
+        return detect_language(&sample);
+    }
+
+    // Both too short — try title anyway if it has at least 10 chars
+    if title_trimmed.len() >= 10 {
+        return detect_language(title_trimmed);
+    }
+
+    "en".to_string()
+}
+
+#[cfg(test)]
+mod content_fallback_tests {
+    use super::*;
+
+    #[test]
+    fn test_detect_with_content_fallback() {
+        assert_eq!(
+            detect_language_with_content(
+                "v2.0",
+                "Este es un tutorial completo sobre programaci\u{00f3}n para principiantes en espa\u{00f1}ol"
+            ),
+            "es"
+        );
+    }
+
+    #[test]
+    fn test_detect_with_content_long_title() {
+        assert_eq!(
+            detect_language_with_content(
+                "React hooks tutorial for beginners in web development",
+                "Este es contenido en espa\u{00f1}ol"
+            ),
+            "en"
+        );
+    }
+}

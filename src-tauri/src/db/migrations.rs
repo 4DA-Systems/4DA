@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 47;
+        const TARGET_VERSION: i64 = 48;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1328,6 +1328,25 @@ impl Database {
                                 ON security_audit_log(event_type);",
                         )?;
                         info!(target: "4da::db", "Created security_audit_log table");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 48: Score persistence + language index for briefing fallback
+            if current_version < 48 {
+                Self::run_versioned_migration(
+                    &conn,
+                    47,
+                    48,
+                    "Phase 48: relevance_score column + detected_lang index",
+                    |c| {
+                        c.execute_batch(
+                            "ALTER TABLE source_items ADD COLUMN relevance_score REAL DEFAULT NULL;
+                             CREATE INDEX IF NOT EXISTS idx_source_items_detected_lang ON source_items(detected_lang);
+                             CREATE INDEX IF NOT EXISTS idx_source_items_relevance_score ON source_items(relevance_score);",
+                        )?;
+                        info!(target: "4da::db", "Added relevance_score column and language/score indexes");
                         Ok(())
                     },
                 )?;

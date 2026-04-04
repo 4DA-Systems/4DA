@@ -330,7 +330,10 @@ async fn api_briefing(
         match crate::get_database() {
             Ok(db) => {
                 let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-                db.get_relevant_items_since(period_start, 0.1, 30)
+                {
+                    let user_lang = crate::i18n::get_user_language();
+                    db.get_relevant_items_since(period_start, 0.1, 30, &user_lang)
+                }
                     .map(|db_items| {
                         db_items
                             .into_iter()

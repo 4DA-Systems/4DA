@@ -16,6 +16,8 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
 
     info!(target: "4da::briefing", "Generating free-tier briefing");
 
+    let user_lang = crate::i18n::get_user_language();
+
     // Try in-memory results first, fall back to DB
     let items: Vec<(String, Option<String>, String, f64)> = {
         let state = get_analysis_state().lock();
@@ -23,6 +25,7 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
             results
                 .iter()
                 .filter(|r| r.relevant && !r.excluded)
+                .filter(|r| r.detected_lang == user_lang)
                 .take(30)
                 .map(|r| {
                     (
@@ -42,7 +45,7 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         // Fall back to database query
         let db = get_database()?;
         let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-        db.get_relevant_items_since(period_start, 0.1, 30)
+        db.get_relevant_items_since(period_start, 0.1, 30, &user_lang)
             .map(|db_items| {
                 db_items
                     .into_iter()
@@ -93,7 +96,8 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
                 })
                 .collect();
             let mut scounts: HashMap<String, usize> = HashMap::new();
-            for r in results.iter().filter(|r| r.relevant && !r.excluded) {
+            for r in results.iter().filter(|r| r.relevant && !r.excluded)
+                .filter(|r| r.detected_lang == user_lang) {
                 if let Some(ref priority) = r.signal_priority {
                     *scounts.entry(priority.clone()).or_insert(0) += 1;
                 }

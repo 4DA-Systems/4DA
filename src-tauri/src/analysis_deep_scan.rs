@@ -329,6 +329,7 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
                 source_type: &item.source_type,
                 embedding: item_embedding,
                 created_at: None,
+                detected_lang: "en",
             },
             &scoring_ctx,
             db,
@@ -562,6 +563,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
                 source_type: &item.source_type,
                 embedding: item_embedding,
                 created_at: None,
+                detected_lang: "en",
             },
             &scoring_ctx,
             db,
@@ -663,6 +665,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
                                                 decision_window_match: None,
                                                 decision_boost_applied: 0.0,
                                                 created_at: None,
+                                                detected_lang: stored.detected_lang.clone(),
                                             };
                                             info!(
                                                 target: "4da::analysis",

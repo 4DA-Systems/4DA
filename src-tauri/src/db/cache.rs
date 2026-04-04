@@ -99,46 +99,72 @@ impl Database {
     // Digest Operations
     // ========================================================================
 
-    /// Get recent source items since a given date, for digest generation
+    /// Get recent source items since a given date, for digest generation.
+    /// Filters by user language and minimum relevance score.
     pub fn get_relevant_items_since(
         &self,
         since: chrono::DateTime<chrono::Utc>,
-        _min_score: f64,
+        min_score: f64,
         limit: usize,
+        user_lang: &str,
     ) -> SqliteResult<Vec<DigestSourceItem>> {
         let conn = self.conn.lock();
 
         let mut stmt = conn.prepare(
-            "SELECT id, title, url, source_type, created_at, content
+            "SELECT id, title, url, source_type, created_at, content, relevance_score
              FROM source_items
              WHERE created_at >= ?1
-             ORDER BY created_at DESC
+               AND COALESCE(detected_lang, 'en') = ?3
+               AND COALESCE(relevance_score, 0.0) >= ?4
+             ORDER BY CASE WHEN relevance_score IS NULL THEN 1 ELSE 0 END,
+                      relevance_score DESC, created_at DESC
              LIMIT ?2",
         )?;
 
         let since_str = since.format("%Y-%m-%d %H:%M:%S").to_string();
 
-        let rows = stmt.query_map(params![since_str, limit as i64], |row| {
-            let content: String = row.get(5)?;
-            let topics: Vec<String> = content
-                .split_whitespace()
-                .filter(|w| w.len() > 4)
-                .take(5)
-                .map(str::to_lowercase)
-                .collect();
+        let rows = stmt.query_map(
+            params![since_str, limit as i64, user_lang, min_score],
+            |row| {
+                let content: String = row.get(5)?;
+                let topics: Vec<String> = content
+                    .split_whitespace()
+                    .filter(|w| w.len() > 4)
+                    .take(5)
+                    .map(str::to_lowercase)
+                    .collect();
 
-            Ok(DigestSourceItem {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                url: row.get(2)?,
-                source_type: row.get(3)?,
-                created_at: parse_datetime(row.get::<_, String>(4)?),
-                relevance_score: None,
-                topics,
-            })
-        })?;
+                Ok(DigestSourceItem {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    url: row.get(2)?,
+                    source_type: row.get(3)?,
+                    created_at: parse_datetime(row.get::<_, String>(4)?),
+                    relevance_score: row.get(6)?,
+                    topics,
+                })
+            },
+        )?;
 
         rows.collect()
+    }
+
+    /// Persist relevance scores from in-memory analysis back to the database.
+    /// Called after scoring completes so the DB fallback path has real scores.
+    pub fn persist_analysis_scores(&self, scores: &[(i64, f32)]) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt =
+                tx.prepare_cached("UPDATE source_items SET relevance_score = ?1 WHERE id = ?2")?;
+            for &(id, score) in scores {
+                stmt.execute(params![score as f64, id])?;
+                count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
     }
 
     // ========================================================================

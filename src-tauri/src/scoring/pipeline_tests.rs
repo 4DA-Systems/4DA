@@ -19,6 +19,7 @@ mod tests {
             source_type: "hackernews",
             embedding,
             created_at: None,
+            detected_lang: "en",
         }
     }
 
