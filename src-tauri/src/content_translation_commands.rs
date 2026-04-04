@@ -21,6 +21,8 @@ pub async fn translate_content(
     text: String,
     source_lang: Option<String>,
 ) -> Result<TranslationResult> {
+    let id = crate::ipc_guard::validate_length("id", &id, crate::ipc_guard::MAX_INPUT_LENGTH)?;
+    let text = crate::ipc_guard::validate_length("text", &text, crate::ipc_guard::MAX_CONTENT_LENGTH)?;
     let target_lang = i18n::get_user_language();
 
     let request = TranslationRequest {

@@ -124,6 +124,7 @@ pub async fn get_dependency_overview() -> Result<serde_json::Value> {
 /// Get dependencies for a specific project.
 #[tauri::command]
 pub async fn get_project_deps(project_path: String) -> Result<serde_json::Value> {
+    let project_path = crate::ipc_guard::validate_path_input("project_path", &project_path)?;
     let db = crate::get_database()?;
 
     let deps = db
