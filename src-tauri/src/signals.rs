@@ -23,7 +23,7 @@ impl SignalType {
         match self {
             SignalType::SecurityAlert => 2,
             SignalType::BreakingChange => 2,
-            SignalType::ToolDiscovery => 2,
+            SignalType::ToolDiscovery => 1,
             SignalType::TechTrend => 1,
             SignalType::Learning => 1,
             SignalType::CompetitiveIntel => 1,
@@ -166,9 +166,8 @@ pub struct SignalClassification {
 /// This keeps the classifier itself pure (no DB access).
 /// Corroboration context for priority gating.
 ///
-/// Default is permissive (source_count: 3) so existing callers that don't compute
-/// corroboration yet maintain backward-compatible behavior. Once the pipeline
-/// wires real corroboration queries, this default becomes irrelevant.
+/// Default is restrictive (source_count: 1) so single-source gate applies
+/// until real corroboration queries are wired. Prevents inflation to Critical.
 #[derive(Debug, Clone)]
 pub struct CorroborationContext {
     /// Number of distinct source types that have items about the same topic
@@ -183,7 +182,7 @@ pub struct CorroborationContext {
 impl Default for CorroborationContext {
     fn default() -> Self {
         Self {
-            source_count: 3, // Permissive default — allows Critical until real queries wired
+            source_count: 1, // Restrictive default — single-source gate applies
             dependency_match: false,
             chain_phase: None,
         }
@@ -402,13 +401,14 @@ impl SignalClassifier {
                 let mut matched_keywords: Vec<String> = Vec::new();
                 let mut score: f32 = 0.0;
 
-                // Match keywords
+                // Match keywords (word-boundary checked to prevent false positives
+                // like "source" triggering "rce" or "success" triggering "xss")
                 for &kw in &pattern.keywords {
-                    if text_lower.contains(kw) {
+                    if has_word_boundary(&text_lower, kw) {
                         score += pattern.weight;
                         matched_keywords.push(kw.to_string());
                         // Title match is worth more
-                        if title_lower.contains(kw) {
+                        if has_word_boundary(&title_lower, kw) {
                             score += pattern.weight * 0.5;
                         }
                     }
@@ -670,7 +670,8 @@ mod tests {
         );
         let c = result.expect("should classify as security alert");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
-        assert!(c.priority >= SignalPriority::Alert);
+        // Default corroboration (source_count: 1) caps at Advisory
+        assert!(c.priority <= SignalPriority::Advisory);
         assert!(c.confidence > 0.0);
         assert!(!c.triggers.is_empty());
         assert!(c.action.contains("sqlite"));
@@ -924,7 +925,7 @@ mod tests {
         // Security and breaking changes have weight 2
         assert_eq!(SignalType::SecurityAlert.base_weight(), 2);
         assert_eq!(SignalType::BreakingChange.base_weight(), 2);
-        assert_eq!(SignalType::ToolDiscovery.base_weight(), 2);
+        assert_eq!(SignalType::ToolDiscovery.base_weight(), 1);
         // Trends, learning, intel have weight 1
         assert_eq!(SignalType::TechTrend.base_weight(), 1);
         assert_eq!(SignalType::Learning.base_weight(), 1);
@@ -1056,5 +1057,100 @@ mod tests {
         if let Some(c) = result {
             assert_eq!(c.horizon, SignalHorizon::Strategic);
         }
+    }
+
+    // ====================================================================
+    // False positive prevention: word-boundary keyword matching
+    // ====================================================================
+
+    #[test]
+    fn test_rce_not_matched_in_source() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Open source code review tool for Python developers",
+            "A new open-source resource for reviewing Python code quality",
+            0.5,
+            &["python".to_string()],
+            &["python".to_string()],
+            &CorroborationContext::default(),
+        );
+        if let Some(c) = &result {
+            assert_ne!(c.signal_type, SignalType::SecurityAlert,
+                "\"source\"/\"resource\" must not trigger RCE detection, got triggers: {:?}", c.triggers);
+        }
+    }
+
+    #[test]
+    fn test_xss_not_matched_in_success() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "How to build a successful SaaS: best practices guide",
+            "Learn from the success stories of top SaaS founders",
+            0.5, &[], &[], &CorroborationContext::default(),
+        );
+        if let Some(c) = &result {
+            assert_ne!(c.signal_type, SignalType::SecurityAlert,
+                "\"success\" must not trigger XSS detection, got triggers: {:?}", c.triggers);
+        }
+    }
+
+    #[test]
+    fn test_cve_not_matched_in_coverage() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Improving test coverage with best practices",
+            "A guide to achieving better coverage in your projects",
+            0.5, &[], &[], &CorroborationContext::default(),
+        );
+        if let Some(c) = &result {
+            assert_ne!(c.signal_type, SignalType::SecurityAlert,
+                "\"coverage\" must not trigger CVE detection, got triggers: {:?}", c.triggers);
+        }
+    }
+
+    #[test]
+    fn test_patch_not_matched_in_dispatch() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "How Redux dispatch works: deep dive tutorial",
+            "Understanding Redux store dispatch and best practices",
+            0.5, &[], &[], &CorroborationContext::default(),
+        );
+        if let Some(c) = &result {
+            assert_ne!(c.signal_type, SignalType::SecurityAlert,
+                "\"dispatch\" must not trigger patch detection, got triggers: {:?}", c.triggers);
+        }
+    }
+
+    #[test]
+    fn test_real_rce_still_detected() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Critical RCE vulnerability in popular npm package",
+            "A remote code execution (RCE) flaw was discovered. CVE-2026-9999.",
+            0.9,
+            &["node".to_string()],
+            &["node".to_string()],
+            &CorroborationContext { source_count: 3, dependency_match: true, chain_phase: Some("escalating".to_string()) },
+        );
+        let c = result.expect("Real RCE should still be detected");
+        assert_eq!(c.signal_type, SignalType::SecurityAlert);
+    }
+
+    #[test]
+    fn test_restrictive_default_corroboration() {
+        let classifier = SignalClassifier::new();
+        let result = classifier.classify(
+            "Critical CVE-2026-5555 in SQLite: RCE exploit",
+            "A severe vulnerability allows remote code execution via malware backdoor",
+            0.9,
+            &["sqlite".to_string()],
+            &["sqlite".to_string()],
+            &CorroborationContext::default(),
+        );
+        let c = result.expect("Should still classify");
+        assert_eq!(c.signal_type, SignalType::SecurityAlert);
+        assert!(c.priority <= SignalPriority::Advisory,
+            "Default corroboration (1 source) should cap at Advisory, got {:?}", c.priority);
     }
 }
