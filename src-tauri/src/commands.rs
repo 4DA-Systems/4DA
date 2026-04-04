@@ -494,12 +494,17 @@ pub(crate) async fn get_sources() -> Result<Vec<serde_json::Value>> {
         .sources()
         .iter()
         .map(|s| {
+            let m = s.manifest();
             serde_json::json!({
                 "type": s.source_type(),
                 "name": s.name(),
                 "enabled": s.config().enabled,
                 "max_items": s.config().max_items,
-                "fetch_interval_secs": s.config().fetch_interval_secs
+                "fetch_interval_secs": s.config().fetch_interval_secs,
+                "category": m.category,
+                "label": if m.label.is_empty() { s.name() } else { m.label },
+                "color_hint": m.color_hint,
+                "default_content_type": m.default_content_type
             })
         })
         .collect();
