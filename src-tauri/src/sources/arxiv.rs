@@ -265,6 +265,16 @@ impl Source for ArxivSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::Research,
+            default_content_type: "deep_dive",
+            default_multiplier: 1.15,
+            label: "arXiv",
+            color_hint: "purple",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         self.fetch_for_categories(&self.categories, self.config.max_items)
             .await

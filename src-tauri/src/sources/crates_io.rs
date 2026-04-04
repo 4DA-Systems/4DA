@@ -324,6 +324,16 @@ impl Source for CratesIoSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::PackageRegistry,
+            default_content_type: "release_notes",
+            default_multiplier: 1.15,
+            label: "Crates",
+            color_hint: "orange",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);

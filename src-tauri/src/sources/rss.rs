@@ -340,6 +340,16 @@ impl Source for RssSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::News,
+            default_content_type: "discussion",
+            default_multiplier: 1.0,
+            label: "RSS",
+            color_hint: "amber",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
