@@ -103,6 +103,7 @@ pub(crate) async fn score_items_full(
                 source_type: &item.source_type,
                 embedding: &item.embedding,
                 created_at: Some(&item.created_at),
+                    detected_lang: &item.detected_lang,
             },
             &scoring_ctx,
             db,
@@ -269,6 +270,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
                 source_type: &item.source_type,
                 embedding: &item.embedding,
                 created_at: Some(&item.created_at),
+                    detected_lang: &item.detected_lang,
             },
             &scoring_ctx,
             db,
@@ -381,6 +383,22 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
                 warn!(target: "4da::scoring", error = %e, "Failed to persist necessity scores");
             } else {
                 info!(target: "4da::scoring", count = necessity_data.len(), "Necessity scores persisted to DB");
+            }
+        }
+    }
+
+    // Persist relevance scores to DB so the briefing fallback path has real data
+    {
+        let score_data: Vec<(i64, f32)> = new_results
+            .iter()
+            .filter(|r| r.top_score > 0.0)
+            .map(|r| (r.id as i64, r.top_score))
+            .collect();
+        if !score_data.is_empty() {
+            if let Err(e) = db.persist_analysis_scores(&score_data) {
+                warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
+            } else {
+                info!(target: "4da::scoring", count = score_data.len(), "Relevance scores persisted to DB");
             }
         }
     }

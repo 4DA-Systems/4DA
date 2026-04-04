@@ -286,6 +286,7 @@ pub(crate) fn run_probe_calibration(
             source_type: "hackernews",
             embedding: &zero_emb,
             created_at: None,
+            detected_lang: "en",
         };
         let result = score_item(&input, ctx, db, &opts, None);
         total += 1;
@@ -391,6 +392,7 @@ pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) 
         url: Some("https://probe.test"),
         embedding: &zero_emb,
         created_at: None,
+        detected_lang: "en",
     };
 
     let result = score_item(&input, ctx, db, &opts, None);

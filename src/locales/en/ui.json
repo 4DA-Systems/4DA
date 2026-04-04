@@ -2458,5 +2458,14 @@
   "streets.tacticalAutomation": "Tactical Automation",
   "streets.tacticalAutomationDesc": "Automate your income streams",
   "streets.stackingStreams": "Stacking Streams",
-  "streets.stackingStreamsDesc": "Combine engines for resilience"
+  "streets.stackingStreamsDesc": "Combine engines for resilience",
+  "briefing.header": "INTELLIGENCE BRIEFING",
+  "briefing.escalating": "ESCALATING",
+  "briefing.wisdom": "WISDOM",
+  "briefing.signals": "SIGNALS",
+  "briefing.blind_spots": "BLIND SPOTS",
+  "briefing.tracking": "Tracking:",
+  "briefing.gap_days_suffix": "d since last signal",
+  "briefing.signals_today_suffix": " today",
+  "briefing.empty_state": "Your stack is quiet. Nothing new."
 }

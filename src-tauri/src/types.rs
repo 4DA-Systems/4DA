@@ -230,6 +230,13 @@ pub struct SourceRelevance {
     /// When this item was first seen (ISO timestamp for age display)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
+    /// BCP-47 language code detected from content (e.g. "en", "es", "ja")
+    #[serde(default = "default_lang_en")]
+    pub detected_lang: String,
+}
+
+pub(crate) fn default_lang_en() -> String {
+    "en".to_string()
 }
 
 pub(crate) fn default_source_type() -> String {

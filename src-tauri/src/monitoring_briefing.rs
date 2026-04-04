@@ -66,6 +66,20 @@ pub struct WisdomSignal {
     pub signal_type: String, // "principle" or "anti-pattern"
 }
 
+/// Translated labels for the briefing window UI
+#[derive(Debug, Clone, Serialize)]
+pub struct BriefingLabels {
+    pub header: String,
+    pub escalating: String,
+    pub wisdom: String,
+    pub signals: String,
+    pub blind_spots: String,
+    pub tracking: String,
+    pub gap_days_suffix: String,
+    pub signals_today_suffix: String,
+    pub empty_state: String,
+}
+
 /// Morning briefing notification content.
 /// Enriched for center-screen briefing window with knowledge gaps, ongoing topics,
 /// and escalating signal chains.
@@ -93,6 +107,9 @@ pub struct BriefingNotification {
     /// Populated async alongside synthesis by awe_synthesis::synthesize_daily_wisdom
     #[serde(default)]
     pub wisdom_synthesis: Option<String>,
+    /// Translated labels for the briefing window (i18n)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub labels: Option<BriefingLabels>,
 }
 
 // ============================================================================
@@ -178,12 +195,16 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // Fire it. The already-fired-today check prevents double delivery.
 
     // 4. Get top relevant items from in-memory analysis state or DB
+    //    Language firewall: only show items matching user's language
+    let user_lang = crate::i18n::get_user_language();
     let items: Vec<BriefingItem> = {
         let analysis_state = crate::get_analysis_state().lock();
         if let Some(ref results) = analysis_state.results {
             results
                 .iter()
                 .filter(|r| r.relevant && !r.excluded)
+                .filter(|r| r.detected_lang == user_lang) // Language gate
+                .filter(|r| r.top_score >= 0.15) // Score gate — no 0% items
                 .take(8) // 8 items for center-screen briefing (was 5 for toast)
                 .map(|r| BriefingItem {
                     title: r.title.clone(),
@@ -198,10 +219,10 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 })
                 .collect()
         } else {
-            // Fall back to DB query for recent items
+            // Fall back to DB query — now reads real scores and filters by language
             if let Ok(db) = crate::get_database() {
                 let period_start = chrono::Utc::now() - chrono::Duration::hours(24);
-                db.get_relevant_items_since(period_start, 0.1, 8)
+                db.get_relevant_items_since(period_start, 0.15, 8, &user_lang)
                     .ok()
                     .map(|db_items| {
                         db_items
@@ -263,6 +284,9 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // 8. Recall AWE wisdom signals — validated principles and anti-patterns
     let wisdom_signals = recall_awe_wisdom();
 
+    // 9. Build translated labels for the briefing window
+    let labels = build_briefing_labels(&user_lang);
+
     Some(BriefingNotification {
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
@@ -273,7 +297,31 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         wisdom_signals,
         synthesis: None,
         wisdom_synthesis: None,
+        labels: Some(labels),
     })
+}
+
+/// Build translated labels for the briefing window.
+/// Uses the i18n system to translate UI strings, falling back to English defaults.
+fn build_briefing_labels(lang: &str) -> BriefingLabels {
+    // Helper: use i18n key if translated, otherwise use the English default.
+    // (t() returns the key itself when no translation exists — detect that.)
+    let tr = |key: &str, default: &str| -> String {
+        let result = crate::i18n::t(key, lang, &[]);
+        if result == key { default.to_string() } else { result }
+    };
+
+    BriefingLabels {
+        header: tr("ui:briefing.header", "INTELLIGENCE BRIEFING"),
+        escalating: tr("ui:briefing.escalating", "ESCALATING"),
+        wisdom: tr("ui:briefing.wisdom", "WISDOM"),
+        signals: tr("ui:briefing.signals", "SIGNALS"),
+        blind_spots: tr("ui:briefing.blind_spots", "BLIND SPOTS"),
+        tracking: tr("ui:briefing.tracking", "Tracking:"),
+        gap_days_suffix: tr("ui:briefing.gap_days_suffix", "d since last signal"),
+        signals_today_suffix: tr("ui:briefing.signals_today_suffix", " today"),
+        empty_state: tr("ui:briefing.empty_state", "Your stack is quiet. Nothing new."),
+    }
 }
 
 /// Send a morning briefing via the desktop-level briefing window and OS notification.
@@ -662,7 +710,10 @@ pub fn generate_briefing_text() -> String {
     let items = if items.is_empty() {
         if let Ok(db) = crate::get_database() {
             let period_start = chrono::Utc::now() - chrono::Duration::hours(24);
-            db.get_relevant_items_since(period_start, 0.1, 10)
+            {
+                let lang = crate::i18n::get_user_language();
+                db.get_relevant_items_since(period_start, 0.1, 10, &lang)
+            }
                 .ok()
                 .map(|db_items| {
                     db_items
@@ -996,6 +1047,7 @@ mod tests {
             }],
             synthesis: None,
             wisdom_synthesis: None,
+            labels: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);

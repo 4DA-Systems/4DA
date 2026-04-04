@@ -16,7 +16,7 @@
       <!-- Header -->
       <div class="briefing-header">
         <div class="header-left">
-          <span class="briefing-label">INTELLIGENCE BRIEFING</span>
+          <span class="briefing-label" id="label-header">INTELLIGENCE BRIEFING</span>
           <span id="briefing-date" class="briefing-date"></span>
         </div>
         <button id="dismiss-btn" class="dismiss-btn" aria-label="Dismiss briefing">&times;</button>
@@ -31,25 +31,25 @@
 
         <!-- Escalating chains -->
         <div id="chains-section" class="section chains-section" style="display:none">
-          <div class="section-label section-label--urgent">ESCALATING</div>
+          <div class="section-label section-label--urgent" id="label-escalating">ESCALATING</div>
           <div id="chains-list" class="chains-list"></div>
         </div>
 
         <!-- AWE Wisdom signals -->
         <div id="wisdom-section" class="section wisdom-section" style="display:none">
-          <div class="section-label section-label--wisdom">WISDOM</div>
+          <div class="section-label section-label--wisdom" id="label-wisdom">WISDOM</div>
           <div id="wisdom-list" class="wisdom-list"></div>
         </div>
 
         <!-- Top signals -->
         <div id="items-section" class="section items-section">
-          <div class="section-label">SIGNALS</div>
+          <div class="section-label" id="label-signals">SIGNALS</div>
           <div id="items-list" class="items-list"></div>
         </div>
 
         <!-- Knowledge gaps / blind spots -->
         <div id="gaps-section" class="section gaps-section" style="display:none">
-          <div class="section-label section-label--caution">BLIND SPOTS</div>
+          <div class="section-label section-label--caution" id="label-blindspots">BLIND SPOTS</div>
           <div id="gaps-list" class="gaps-list"></div>
         </div>
 

@@ -85,4 +85,8 @@ decision_boost_applied: number,
 /**
  * When this item was first seen (ISO timestamp for age display)
  */
-created_at: string | null, };
+created_at: string | null, 
+/**
+ * BCP-47 language code detected from content (e.g. "en", "es", "ja")
+ */
+detected_lang: string, };

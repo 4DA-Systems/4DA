@@ -121,6 +121,7 @@ fn validate_persona(
                 source_type,
                 embedding,
                 created_at: created_at.as_ref(),
+                detected_lang: "en",
             };
             let result = scoring::score_item(&input, ctx, db, &options, None);
             (

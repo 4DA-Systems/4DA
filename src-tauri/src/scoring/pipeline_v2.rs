@@ -892,6 +892,7 @@ pub(crate) fn score_item(
             decision_window_match: None,
             decision_boost_applied: 0.0,
             created_at: None,
+            detected_lang: input.detected_lang.to_string(),
         };
     }
 
@@ -1250,6 +1251,7 @@ pub(crate) fn score_item(
         }),
         decision_boost_applied: window_boost,
         created_at: None,
+        detected_lang: input.detected_lang.to_string(),
     }
 }
 

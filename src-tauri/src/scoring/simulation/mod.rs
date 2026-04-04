@@ -74,6 +74,7 @@ pub(super) fn sim_input<'a>(
         source_type: "hackernews",
         embedding,
         created_at: None,
+        detected_lang: "en",
     }
 }
 

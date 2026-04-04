@@ -42,6 +42,7 @@ pub(super) fn bench_input<'a>(
         source_type: "hackernews",
         embedding,
         created_at: None,
+        detected_lang: "en",
     }
 }
 

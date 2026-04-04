@@ -29,6 +29,12 @@ var openAppBtn = document.getElementById('open-app-btn');
 var dismissTimer = null;
 var isHovering = false;
 
+// i18n: translatable strings (populated from Rust payload, defaults to English)
+var gapDaysSuffix = 'd since last signal';
+var trackingLabel = 'Tracking:';
+var signalsTodaySuffix = ' today';
+var emptyStateText = 'Your stack is quiet. Nothing new.';
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -152,7 +158,7 @@ function buildGapsHtml(gaps) {
     var days = gap.days_since_last != null ? gap.days_since_last : '?';
     html += '<div class="gap-row">'
       + '<span class="gap-topic">' + topic + '</span>'
-      + '<span class="gap-days">' + days + 'd since last signal</span>'
+      + '<span class="gap-days">' + days + gapDaysSuffix + '</span>'
       + '</div>';
   }
   return html;
@@ -191,6 +197,25 @@ function renderBriefing(data) {
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
 
+  // i18n: apply translated labels from payload
+  if (data.labels) {
+    var labelMap = {
+      'label-header': data.labels.header,
+      'label-escalating': data.labels.escalating,
+      'label-wisdom': data.labels.wisdom,
+      'label-signals': data.labels.signals,
+      'label-blindspots': data.labels.blind_spots
+    };
+    for (var key in labelMap) {
+      var el = document.getElementById(key);
+      if (el && labelMap[key]) el.textContent = labelMap[key];
+    }
+    gapDaysSuffix = data.labels.gap_days_suffix || gapDaysSuffix;
+    trackingLabel = data.labels.tracking || trackingLabel;
+    signalsTodaySuffix = data.labels.signals_today_suffix || signalsTodaySuffix;
+    emptyStateText = data.labels.empty_state || emptyStateText;
+  }
+
   // Escalating chains
   if (data.escalating_chains && data.escalating_chains.length > 0) {
     chainsSection.style.display = '';
@@ -209,7 +234,7 @@ function renderBriefing(data) {
 
   // Signal items
   if (!data.items || data.items.length === 0) {
-    itemsList.innerHTML = '<div class="empty-state">Your stack is quiet. Nothing new.</div>';
+    itemsList.innerHTML = '<div class="empty-state">' + emptyStateText + '</div>';
   } else {
     var html = '';
     for (var i = 0; i < data.items.length; i++) {
@@ -230,14 +255,14 @@ function renderBriefing(data) {
   if (data.ongoing_topics && data.ongoing_topics.length > 0) {
     ongoingSection.style.display = '';
     var topics = data.ongoing_topics.map(function (t) { return escapeHtml(t); }).join(', ');
-    ongoingLine.innerHTML = '<span class="ongoing-label">Tracking:</span> ' + topics;
+    ongoingLine.innerHTML = '<span class="ongoing-label">' + trackingLabel + '</span> ' + topics;
   } else {
     ongoingSection.style.display = 'none';
   }
 
   // Footer
   if (data.total_relevant != null) {
-    totalCount.textContent = data.total_relevant + ' signal' + (data.total_relevant !== 1 ? 's' : '') + ' today';
+    totalCount.textContent = data.total_relevant + ' signal' + (data.total_relevant !== 1 ? 's' : '') + signalsTodaySuffix;
   } else {
     totalCount.textContent = '';
   }

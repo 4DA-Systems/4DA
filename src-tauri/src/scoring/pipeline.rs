@@ -101,6 +101,7 @@ pub(crate) struct ScoringInput<'a> {
     pub source_type: &'a str,
     pub embedding: &'a [f32],
     pub created_at: Option<&'a chrono::DateTime<chrono::Utc>>,
+    pub detected_lang: &'a str,
 }
 
 /// Options controlling which scoring stages are applied
@@ -153,8 +154,13 @@ pub(crate) fn score_item(
             decision_window_match: None,
             decision_boost_applied: 0.0,
             created_at: input.created_at.map(chrono::DateTime::to_rfc3339),
+            detected_lang: input.detected_lang.to_string(),
         };
     }
+
+    // Language gate: detect mismatch between content and user language
+    let user_lang = crate::i18n::get_user_language();
+    let lang_mismatch = !input.detected_lang.is_empty() && input.detected_lang != user_lang;
 
     // KNN context search — must check for real (non-zero) embeddings, not just non-empty.
     // Zero-vector fallback (when Ollama is unavailable) produces identical KNN distances
@@ -575,6 +581,13 @@ pub(crate) fn score_item(
         combined_score
     };
 
+    // Language mismatch cap: foreign content cannot exceed 0.05 (well below 0.35 threshold)
+    let combined_score = if lang_mismatch {
+        combined_score.min(0.05)
+    } else {
+        combined_score
+    };
+
     // Quality floor: must pass threshold AND either have N+ confirmed signals or strong score.
     // Bootstrap mode: relax signal requirement for new users (< 10 feedback interactions).
     // New users often have only 1 signal axis firing (interest OR dependency), and the
@@ -802,6 +815,7 @@ pub(crate) fn score_item(
         }),
         decision_boost_applied: window_boost,
         created_at: input.created_at.map(chrono::DateTime::to_rfc3339),
+        detected_lang: input.detected_lang.to_string(),
     }
 }
 
