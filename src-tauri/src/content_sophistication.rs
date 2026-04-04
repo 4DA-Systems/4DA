@@ -316,16 +316,16 @@ const MODERATE_TERMS: &[&str] = &[
     "parser",
     "generator",
     "daemon",
-    "server",
     "proxy",
     "gateway",
     "adapter",
     "driver",
-    "handler",
     "dispatcher",
     "orchestrat",
     "migration",
     "refactor",
+    "serialization",
+    "deserialization",
 ];
 
 const BEGINNER_TITLE_TERMS: &[&str] = &[
