@@ -1,115 +1,153 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { useEffect, useState, memo } from 'react';
+import { useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useGameComponent } from '../../hooks/use-game-component';
-// Types imported via store slice — AweBehavioralContext used structurally
 
 // ============================================================================
-// Sub-components
+// Sub-components — clean, human-readable, zero jargon
 // ============================================================================
 
-function VelocityIndicator({ velocity }: { velocity: number }) {
-  const label = velocity > 1.5 ? 'Accelerating' : velocity > 0.8 ? 'Steady' : velocity > 0 ? 'Slowing' : 'Starting';
-  const color = velocity > 1.5 ? 'text-success' : velocity > 0.8 ? 'text-text-secondary' : 'text-amber-400';
-  const arrow = velocity > 1.2 ? '\u2197' : velocity > 0.8 ? '\u2192' : '\u2198';
-
+function BigStat({ value, label, sub, color }: { value: string | number; label: string; sub?: string; color?: string }) {
   return (
     <div className="text-center">
-      <div className={`text-lg font-semibold tabular-nums ${color}`}>{arrow} {velocity.toFixed(1)}x</div>
-      <div className="text-[10px] text-text-muted uppercase tracking-wider">{label}</div>
+      <div className={`text-xl font-semibold tabular-nums ${color ?? 'text-white'}`}>{value}</div>
+      <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
+      {sub && <div className="text-[9px] text-text-muted/60 mt-0.5">{sub}</div>}
     </div>
   );
 }
 
-function StatCell({ value, label, color }: { value: string | number; label: string; color?: string }) {
+function InsightRow({ icon, text, color }: { icon: string; text: string; color?: string }) {
   return (
-    <div className="text-center">
-      <div className={`text-lg font-semibold tabular-nums ${color ?? 'text-white'}`}>{value}</div>
-      <div className="text-[10px] text-text-muted uppercase tracking-wider">{label}</div>
+    <div className="flex items-start gap-2 py-1.5">
+      <span className={`text-xs mt-0.5 flex-shrink-0 ${color ?? 'text-accent-gold/60'}`}>{icon}</span>
+      <p className="text-xs text-text-secondary leading-relaxed">{text}</p>
     </div>
   );
 }
 
-function AffinityBar({ topic, score }: { topic: string; score: number }) {
-  const pct = Math.abs(score) * 100;
-  const isPositive = score > 0;
+function SourceBar({ name, count, total }: { name: string; count: number; total: number }) {
+  const pct = total > 0 ? (count / total) * 100 : 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-text-secondary font-mono truncate w-20">{topic}</span>
+      <span className="text-[10px] text-text-secondary w-24 truncate capitalize">{name.replace('_', ' ')}</span>
       <div className="flex-1 h-1.5 bg-bg-primary rounded overflow-hidden">
-        <div
-          className={`h-full rounded ${isPositive ? 'bg-success' : 'bg-error'}`}
-          style={{ width: `${Math.min(100, pct)}%` }}
-        />
+        <div className="h-full rounded bg-accent-gold/60" style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
-      <span className="text-[9px] text-text-muted tabular-nums w-8 text-right">{Math.round(pct)}%</span>
+      <span className="text-[9px] text-text-muted tabular-nums w-12 text-right">{count}</span>
     </div>
   );
 }
 
-function SourceBadge({ name, count }: { name: string; count: number }) {
-  return (
-    <span className="text-[10px] text-text-secondary bg-bg-tertiary rounded px-2 py-0.5 tabular-nums">
-      {name} <span className="text-text-muted">{count}</span>
-    </span>
-  );
-}
+// ============================================================================
+// Intelligence Insights — computed from real data, no LLM needed
+// ============================================================================
 
-function CoverageBar({ coverage }: { coverage: number }) {
-  const pct = Math.min(100, Math.max(0, coverage));
-  const barColor = pct >= 50 ? 'bg-success' : pct >= 20 ? 'bg-accent-gold' : 'bg-amber-500';
+function computeInsights(ctx: ReturnType<typeof useAppStore.getState>['aweBehavioralContext']) {
+  if (!ctx) return [];
+  const insights: Array<{ icon: string; text: string; color?: string }> = [];
+  const ip = ctx.interaction_patterns;
+  const ic = ctx.instant_context;
 
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-text-muted uppercase tracking-wider">Feedback Coverage</span>
-        <span className="text-xs text-text-secondary tabular-nums">{pct.toFixed(1)}%</span>
-      </div>
-      <div className="h-1.5 bg-bg-primary rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
+  // Intelligence volume
+  if (ic.total_source_items > 1000) {
+    insights.push({
+      icon: '\u25C6',
+      text: `Monitoring ${ic.total_source_items.toLocaleString()} items across ${ic.source_breakdown.length} sources. ${ic.items_last_24h} new in the last 24 hours.`,
+    });
+  } else if (ic.total_source_items > 0) {
+    insights.push({
+      icon: '\u25C6',
+      text: `${ic.total_source_items} items gathered from ${ic.source_breakdown.length} sources. Intelligence is building — it compounds over time.`,
+    });
+  }
+
+  // Engagement quality
+  if (ip.total_interactions > 50 && ip.saves > 0) {
+    const saveRate = Math.round((ip.saves / ip.total_interactions) * 100);
+    insights.push({
+      icon: '\u25C6',
+      text: `You save ${saveRate}% of what you engage with. ${saveRate > 20 ? 'Highly selective — the system is learning your standards.' : 'Each save teaches the system what matters to you.'}`,
+    });
+  } else if (ip.total_interactions > 0 && ip.saves === 0) {
+    insights.push({
+      icon: '\u2192',
+      text: 'Save items you find valuable — this teaches the system your preferences and sharpens future results.',
+      color: 'text-amber-400/60',
+    });
+  }
+
+  // Velocity trend
+  if (ip.weekly_velocity > 1.5) {
+    insights.push({
+      icon: '\u2197',
+      text: `Engagement accelerating (${ip.weekly_velocity.toFixed(1)}x vs last week). You're in a discovery phase.`,
+      color: 'text-success/60',
+    });
+  } else if (ip.weekly_velocity < 0.5 && ip.total_interactions > 20) {
+    insights.push({
+      icon: '\u2198',
+      text: 'Engagement slowing. The system adapts — less noise, higher signal when you return.',
+      color: 'text-amber-400/60',
+    });
+  }
+
+  // Topic diversity
+  const strongTopics = ctx.topic_affinities.filter(a => a.affinity_score > 0.3);
+  if (strongTopics.length >= 3) {
+    const topNames = strongTopics.slice(0, 3).map(a => a.topic).join(', ');
+    insights.push({
+      icon: '\u25C6',
+      text: `Strongest interests: ${topNames}. Results are tuned to these areas.`,
+    });
+  }
+
+  // Source concentration warning
+  if (ic.source_breakdown.length > 0) {
+    const totalItems = ic.source_breakdown.reduce((sum, [, c]) => sum + c, 0);
+    const topSource = ic.source_breakdown[0];
+    if (topSource && totalItems > 0) {
+      const topPct = Math.round((topSource[1] / totalItems) * 100);
+      if (topPct > 60) {
+        insights.push({
+          icon: '\u26A0',
+          text: `${topPct}% of intelligence comes from ${topSource[0].replace('_', ' ')}. Diversifying sources reveals blind spots.`,
+          color: 'text-amber-400/60',
+        });
+      }
+    }
+  }
+
+  // Feedback guidance
+  if (ctx.feedback_stats.coverage_pct < 5 && ip.total_interactions > 0) {
+    insights.push({
+      icon: '\u2192',
+      text: 'Mark items as relevant or not relevant to calibrate the scoring engine. Even a few signals make a difference.',
+      color: 'text-text-muted',
+    });
+  }
+
+  return insights;
 }
 
 // ============================================================================
 // Main Component
 // ============================================================================
 
-/**
- * MomentumWisdomTrajectory — behavioral intelligence from real 4DA data.
- *
- * Shows engagement velocity, topic affinities, source preferences,
- * feedback coverage, and LLM-synthesized wisdom — all from 4DA's
- * actual behavioral tables, not AWE's isolated git-commit database.
- */
 export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory() {
   const { t } = useTranslation();
   const ctx = useAppStore(s => s.aweBehavioralContext);
-  const wisdomSynthesis = useAppStore(s => s.aweWisdomSynthesis);
   const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
-  const synthesizeWisdom = useAppStore(s => s.synthesizeWisdom);
-  const [synthRequested, setSynthRequested] = useState(false);
 
-  // GAME shader — must be called before any early returns (React hooks rule)
   const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-momentum-field');
 
   useEffect(() => {
     void loadBehavioralContext();
-    // Auto-synthesize wisdom if not already loaded
-    if (!wisdomSynthesis && !synthRequested) {
-      setSynthRequested(true);
-      void synthesizeWisdom();
-    }
-  }, [loadBehavioralContext, wisdomSynthesis, synthRequested, synthesizeWisdom]);
+  }, [loadBehavioralContext]);
 
-  // Update GAME shader based on real behavioral data
   useEffect(() => {
     const el = gameEl.current;
     if (el && ctx) {
@@ -119,40 +157,30 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
     }
   }, [ctx, gameEl]);
 
-  // No behavioral data yet
   if (!ctx) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-6 text-center">
         <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin mx-auto" />
-        <p className="text-xs text-text-muted mt-2">{t('awe.momentum.loading', 'Loading behavioral intelligence...')}</p>
+        <p className="text-xs text-text-muted mt-2">Loading intelligence...</p>
       </div>
     );
   }
 
   const ip = ctx.interaction_patterns;
   const ic = ctx.instant_context;
-  const topAffinities = ctx.topic_affinities.filter(a => a.affinity_score > 0.2).slice(0, 6);
-  const rejectedTopics = ctx.topic_affinities.filter(a => a.affinity_score < -0.2).slice(0, 3);
-  // Always show if we have ANY data — instant context ensures cold-start richness
-  const hasData = ip.total_interactions > 0 || topAffinities.length > 0 || ic.total_source_items > 0;
+  const insights = computeInsights(ctx);
 
-  if (!hasData) {
-    return (
-      <div className="bg-bg-secondary rounded-lg border border-border p-6 text-center">
-        <span className="text-accent-gold text-lg">{'\u25C7'}</span>
-        <p className="text-xs text-text-muted mt-2">{t('awe.momentum.noData', 'Run your first analysis to start building intelligence.')}</p>
-      </div>
-    );
-  }
+  // Source data — prefer interaction sources, fallback to instant context
+  const sources = ip.top_sources.length > 0 ? ip.top_sources : ic.source_breakdown;
+  const totalSourceItems = sources.reduce((sum, [, c]) => sum + c, 0);
 
-  const handleSynthesize = () => {
-    setSynthRequested(true);
-    void synthesizeWisdom();
-  };
+  // Strong affinities only (>30% and >10 exposures to avoid noise)
+  const affinities = ctx.topic_affinities
+    .filter(a => a.affinity_score > 0.3 && a.total_exposures >= 10)
+    .slice(0, 5);
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden relative">
-      {/* GAME atmosphere */}
       <div ref={gameRef} className="absolute inset-0 opacity-[0.06] pointer-events-none" aria-hidden="true" />
 
       {/* Header */}
@@ -160,156 +188,91 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
         <div className="flex items-center gap-2">
           <span className="text-accent-gold text-sm">{'\u25C7'}</span>
           <h4 className="text-[10px] text-accent-gold uppercase tracking-wider font-medium">
-            {t('awe.momentum.title', 'Wisdom Trajectory')}
+            {t('awe.momentum.title', 'Intelligence Profile')}
           </h4>
         </div>
-        {ip.weekly_velocity > 1.5 && (
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full text-success bg-success/15">
-            {t('awe.momentum.accelerating', 'Accelerating')}
-          </span>
-        )}
+        <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+          ic.data_level === 'rich' ? 'text-success bg-success/15' :
+          ic.data_level === 'warming' ? 'text-amber-400 bg-amber-400/15' :
+          'text-text-muted bg-text-muted/15'
+        }`}>
+          {ic.total_source_items.toLocaleString()} items
+        </span>
       </div>
 
       <div className="relative p-4 space-y-4">
-        {/* Wisdom synthesis voice */}
-        {wisdomSynthesis ? (
-          <div className="py-2 px-3 rounded bg-accent-gold/5 border border-accent-gold/15">
-            <p className="text-xs text-accent-gold/90 leading-relaxed">{wisdomSynthesis}</p>
-          </div>
-        ) : !synthRequested ? (
-          <button
-            onClick={handleSynthesize}
-            className="w-full py-2 px-3 rounded border border-accent-gold/20 text-[10px] text-accent-gold/70 hover:bg-accent-gold/5 transition-colors"
-          >
-            {t('awe.momentum.synthesize', 'Synthesize wisdom from your behavioral data')}
-          </button>
-        ) : (
-          <div className="py-2 px-3 rounded bg-bg-tertiary text-center">
-            <p className="text-[10px] text-text-muted">{t('awe.momentum.synthesizing', 'Synthesizing...')}</p>
+        {/* Key metrics — always visible, always meaningful */}
+        <div className="grid grid-cols-3 gap-3">
+          <BigStat
+            value={ic.total_source_items.toLocaleString()}
+            label="Gathered"
+            sub={ic.items_last_24h > 0 ? `+${ic.items_last_24h} today` : undefined}
+          />
+          <BigStat
+            value={sources.length}
+            label="Sources"
+            sub={sources.length > 0 ? sources[0]?.[0]?.replace('_', ' ') : undefined}
+          />
+          <BigStat
+            value={ip.total_interactions > 0
+              ? `${ip.total_interactions}`
+              : ctx.detected_tech.length > 0 ? `${ctx.detected_tech.length}` : '--'}
+            label={ip.total_interactions > 0 ? 'Engaged' : 'Tech Detected'}
+            color={ip.total_interactions > 0 ? 'text-success' : undefined}
+          />
+        </div>
+
+        {/* Computed insights — no LLM, no hallucination, just data */}
+        {insights.length > 0 && (
+          <div className="border-t border-border/30 pt-3">
+            {insights.map((insight, i) => (
+              <InsightRow key={i} icon={insight.icon} text={insight.text} color={insight.color} />
+            ))}
           </div>
         )}
 
-        {/* Stats row — adaptive: shows engagement when available, intelligence stats when cold */}
-        <div className="grid grid-cols-3 gap-2">
-          {ip.total_interactions > 0 ? (
-            <>
-              <StatCell value={ip.total_interactions} label={t('awe.momentum.interactions', 'Interactions')} />
-              <VelocityIndicator velocity={ip.weekly_velocity} />
-              <StatCell
-                value={`${ip.saves}`}
-                label={t('awe.momentum.saved', 'Saved')}
-                color={ip.saves > 0 ? 'text-success' : undefined}
-              />
-            </>
-          ) : (
-            <>
-              <StatCell value={ic.total_source_items} label={t('awe.momentum.itemsGathered', 'Items Gathered')} />
-              <StatCell value={ic.items_last_24h} label={t('awe.momentum.last24h', 'Last 24h')} />
-              <StatCell
-                value={ic.source_breakdown.length}
-                label={t('awe.momentum.activeSources', 'Active Sources')}
-                color="text-success"
-              />
-            </>
-          )}
-        </div>
-
-        {/* Topic affinities */}
-        {topAffinities.length > 0 && (
-          <div>
+        {/* Source distribution — visual, not jargon */}
+        {sources.length > 1 && (
+          <div className="border-t border-border/30 pt-3">
             <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
-              {t('awe.momentum.strongAffinities', 'Strongest Affinities')}
+              {t('awe.momentum.sourceDistribution', 'Where your intelligence comes from')}
             </h5>
             <div className="space-y-1.5">
-              {topAffinities.map(a => (
-                <AffinityBar key={a.topic} topic={a.topic} score={a.affinity_score} />
+              {sources.slice(0, 6).map(([name, count]) => (
+                <SourceBar key={name} name={name} count={count} total={totalSourceItems} />
               ))}
             </div>
           </div>
         )}
 
-        {/* Rejected topics */}
-        {rejectedTopics.length > 0 && (
-          <div>
-            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
-              {t('awe.momentum.rejected', 'Consistently Rejected')}
+        {/* Topic affinities — only show strong, validated ones */}
+        {affinities.length > 0 && (
+          <div className="border-t border-border/30 pt-3">
+            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
+              {t('awe.momentum.learned', 'What the system learned about you')}
             </h5>
             <div className="flex flex-wrap gap-1.5">
-              {rejectedTopics.map(a => (
-                <span key={a.topic} className="text-[10px] text-error/60 bg-error/5 rounded px-2 py-0.5 font-mono">
+              {affinities.map(a => (
+                <span key={a.topic} className="text-[10px] text-accent-gold/80 bg-accent-gold/8 border border-accent-gold/15 rounded-full px-2.5 py-0.5">
                   {a.topic}
+                  <span className="text-accent-gold/40 ml-1">{a.total_exposures}</span>
                 </span>
               ))}
             </div>
           </div>
         )}
 
-        {/* Source preferences — from interactions OR instant context */}
-        {(ip.top_sources.length > 0 || ic.source_breakdown.length > 0) && (
-          <div>
-            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
-              {ip.top_sources.length > 0
-                ? t('awe.momentum.topSources', 'Preferred Sources')
-                : t('awe.momentum.activeSources', 'Active Sources')}
-            </h5>
-            <div className="flex flex-wrap gap-1.5">
-              {(ip.top_sources.length > 0 ? ip.top_sources : ic.source_breakdown).map(([name, count]) => (
-                <SourceBadge key={name} name={name} count={count} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Feedback coverage */}
-        <CoverageBar coverage={ctx.feedback_stats.coverage_pct} />
-
-        {/* Advantage score */}
-        {ctx.advantage_trajectory.length > 0 && (
-          <div className="flex items-center justify-between pt-2 border-t border-border/30">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">
-              {t('awe.momentum.compoundAdvantage', 'Compound Advantage')}
+        {/* Compound advantage — only when meaningful */}
+        {ctx.advantage_trajectory.length > 0 && ctx.advantage_trajectory[0] != null && ctx.advantage_trajectory[0].score > 0 && (
+          <div className="flex items-center justify-between pt-3 border-t border-border/30">
+            <span className="text-[10px] text-text-muted">
+              {t('awe.momentum.advantage', 'Compound Advantage Score')}
             </span>
             <span className="text-sm font-semibold text-accent-gold tabular-nums">
-              {ctx.advantage_trajectory[0]?.score.toFixed(1)}
+              {ctx.advantage_trajectory[0].score.toFixed(1)}
             </span>
           </div>
         )}
-
-        {/* Calibration insights */}
-        {ctx.calibration_insights.length > 0 && (
-          <div className="pt-2 border-t border-border/30">
-            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
-              {t('awe.momentum.calibration', 'Calibration Insights')}
-            </h5>
-            <ul className="space-y-1">
-              {ctx.calibration_insights.slice(0, 3).map((c, i) => (
-                <li key={i} className="text-[10px] text-text-secondary flex items-start gap-1.5">
-                  <span className="text-accent-gold/40 mt-0.5">{'\u25C6'}</span>
-                  <span>
-                    <span className="text-text-muted font-mono">[{c.digest_type}]</span>{' '}
-                    {c.subject}
-                    <span className="text-text-muted ml-1">({Math.round(c.confidence * 100)}%, n={c.sample_size})</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Decision outcomes summary */}
-        {ctx.decision_outcomes.length > 0 && (() => {
-          const acted = ctx.decision_outcomes.filter(d => d.status === 'acted' || d.status === 'closed').length;
-          const open = ctx.decision_outcomes.filter(d => d.status === 'open').length;
-          const expired = ctx.decision_outcomes.filter(d => d.status === 'expired').length;
-          return (
-            <div className="flex items-center gap-4 pt-2 border-t border-border/30 text-[10px]">
-              <span className="text-text-muted uppercase tracking-wider">Decisions</span>
-              <span className="text-success tabular-nums">{acted} acted</span>
-              <span className="text-text-secondary tabular-nums">{open} open</span>
-              {expired > 0 && <span className="text-amber-400 tabular-nums">{expired} expired</span>}
-            </div>
-          );
-        })()}
       </div>
     </div>
   );
