@@ -223,9 +223,12 @@ function classify(
 
   if (!bestType) return null;
 
+  // Require at least 2 keyword matches — single keyword produces too many false positives
+  if (bestTriggers.length < 2) return null;
+
   // Compute priority
   let priorityScore = BASE_WEIGHTS[bestType];
-  const techMatch = detectedTech.find((t) => textLower.includes(t.toLowerCase()));
+  const techMatch = detectedTech.find((t) => hasWordBoundary(textLower, t.toLowerCase()));
   if (techMatch) priorityScore += 1;
   if (relevanceScore > 0.7) priorityScore += 1;
   priorityScore = Math.min(priorityScore, 4);

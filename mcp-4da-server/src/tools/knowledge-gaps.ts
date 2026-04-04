@@ -7,6 +7,12 @@
 import type { FourDADatabase } from "../db.js";
 import type { DependencyWithProjectRow, SourceItemBriefRow } from "../types.js";
 
+// Word-boundary matching prevents "cve" matching inside "achieve", "receiver", etc.
+function hasWordBoundary(text: string, term: string): boolean {
+  const regex = new RegExp(`\\b${term}\\b`, 'i');
+  return regex.test(text);
+}
+
 export interface KnowledgeGapsParams {
   min_severity?: string;
 }
@@ -72,9 +78,9 @@ export function executeKnowledgeGaps(
       // Check if any are security-related
       const hasSecurityMention = mentionedItems.some(
         (item) =>
-          item.title?.toLowerCase().includes("cve") ||
-          item.title?.toLowerCase().includes("security") ||
-          item.title?.toLowerCase().includes("vulnerability"),
+          hasWordBoundary(item.title || "", "cve") ||
+          hasWordBoundary(item.title || "", "security") ||
+          hasWordBoundary(item.title || "", "vulnerability"),
       );
 
       const severity = hasSecurityMention
