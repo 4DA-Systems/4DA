@@ -231,6 +231,69 @@ impl LLMClient {
         Ok(response)
     }
 
+    /// Complete a request for translation — bypasses daily token limits.
+    ///
+    /// Translation is infrastructure (ingest-time cache warming, on-demand display),
+    /// not user-initiated analysis. It must never be blocked by the daily budget.
+    /// Usage is still tracked for visibility but doesn't trigger the hard cutoff.
+    ///
+    /// Includes retry with backoff: 1 retry after 2s on transient failures.
+    pub async fn complete_for_translation(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+    ) -> Result<LLMResponse> {
+        // First attempt — NO limit check (translation is infrastructure)
+        let result = match self.provider.provider.as_str() {
+            "anthropic" => self.complete_anthropic(system, messages.clone()).await,
+            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
+            "ollama" => self.complete_ollama(system, messages.clone()).await,
+            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+        };
+
+        // Retry once on transient failure (with Ollama fallback)
+        let response = match result {
+            Ok(resp) => resp,
+            Err(ref err) if self.should_fallback_to_ollama(err) => {
+                debug!(
+                    target: "4da::i18n",
+                    provider = %self.provider.provider,
+                    error = %err,
+                    "Translation LLM failed, retrying with Ollama"
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                self.complete_ollama_fallback(system, messages).await?
+            }
+            Err(_err) => {
+                // Retry once after backoff
+                debug!(target: "4da::i18n", error = %_err, "Translation LLM failed, retrying after 2s");
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                match self.provider.provider.as_str() {
+                    "ollama" => self.complete_ollama(system, messages).await?,
+                    _ => self.complete_ollama_fallback(system, messages).await?,
+                }
+            }
+        };
+
+        // Record usage for visibility (no limit enforcement)
+        let total_tokens = response.input_tokens + response.output_tokens;
+        if total_tokens > 0 {
+            let _ = record_llm_tokens(total_tokens);
+            let cost_cents =
+                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
+            let _ = record_llm_cost(cost_cents);
+            record_ai_usage(
+                &self.provider.provider,
+                &self.provider.model,
+                "translation",
+                response.input_tokens,
+                response.output_tokens,
+            );
+        }
+
+        Ok(response)
+    }
+
     /// Determine whether a failed LLM call should fall back to Ollama.
     /// Only falls back when:
     /// - The current provider is NOT already Ollama
@@ -700,11 +763,7 @@ impl LLMClient {
         }
 
         let lang = crate::i18n::get_user_language();
-        parts.push(crate::i18n::t(
-            "errors:errorMsg.limitAdjust",
-            &lang,
-            &[],
-        ));
+        parts.push(crate::i18n::t("errors:errorMsg.limitAdjust", &lang, &[]));
         parts.join(". ")
     }
 
