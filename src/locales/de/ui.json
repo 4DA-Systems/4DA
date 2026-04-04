@@ -154,10 +154,10 @@
   "autophagy.noCycles": "Noch keine Autophagie-Zyklen. Läuft täglich während der Bereinigung.",
   "autophagy.recentCycles": "Letzte Zyklen",
   "autophagy.title": "Wie 4DA lernt",
-  "awe.briefing.antiPatterns": "Known Failure Patterns",
-  "awe.briefing.precedents": "Precedents",
-  "awe.briefing.principles": "Relevant Principles",
-  "awe.briefing.title": "Pattern Recognized",
+  "awe.briefing.antiPatterns": "Bekannte Fehlermuster",
+  "awe.briefing.precedents": "Präzedenzfälle",
+  "awe.briefing.principles": "Relevante Prinzipien",
+  "awe.briefing.title": "Muster erkannt",
   "awe.cardTitle": "AWE",
   "awe.console.calibration": "Calibration",
   "awe.console.calibrationUnavailable": "Calibration data unavailable",
@@ -2445,5 +2445,5 @@
   "briefing.tracking": "Tracking:",
   "briefing.gap_days_suffix": "T seit letztem Signal",
   "briefing.signals_today_suffix": " heute",
-  "briefing.empty_state": "Dein Stack ist ruhig. Nichts Neues."
+  "briefing.empty_state": "Ihr Stack ist ruhig. Nichts Neues."
 }

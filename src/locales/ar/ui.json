@@ -169,10 +169,10 @@
   "autophagy.noCycles": "لا توجد دورات التهام ذاتي بعد. تعمل يومياً أثناء التنظيف.",
   "autophagy.recentCycles": "الدورات الأخيرة",
   "autophagy.title": "كيف يتعلم 4DA",
-  "awe.briefing.antiPatterns": "Known Failure Patterns",
-  "awe.briefing.precedents": "Precedents",
-  "awe.briefing.principles": "Relevant Principles",
-  "awe.briefing.title": "Pattern Recognized",
+  "awe.briefing.antiPatterns": "أنماط الفشل المعروفة",
+  "awe.briefing.precedents": "سوابق",
+  "awe.briefing.principles": "المبادئ ذات الصلة",
+  "awe.briefing.title": "تم التعرف على نمط",
   "awe.cardTitle": "AWE",
   "awe.console.calibration": "Calibration",
   "awe.console.calibrationUnavailable": "Calibration data unavailable",
@@ -2599,7 +2599,7 @@
   "briefing.signals": "إشارات",
   "briefing.blind_spots": "نقاط عمياء",
   "briefing.tracking": "تتبع:",
-  "briefing.gap_days_suffix": "ي منذ آخر إشارة",
+  "briefing.gap_days_suffix": "يوم منذ آخر إشارة",
   "briefing.signals_today_suffix": " اليوم",
   "briefing.empty_state": "المكدس الخاص بك هادئ. لا جديد."
 }
