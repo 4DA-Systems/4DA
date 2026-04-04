@@ -43,6 +43,15 @@ pub async fn translate_content(
 pub async fn translate_content_batch(
     items: Vec<TranslationRequest>,
 ) -> Result<Vec<TranslationResult>> {
+    // Cap batch size to prevent memory exhaustion
+    if items.len() > 100 {
+        return Err(crate::error::FourDaError::Validation(
+            "Translation batch exceeds maximum of 100 items".to_string(),
+        ));
+    }
+    for item in &items {
+        crate::ipc_guard::validate_length("batch_item.text", &item.text, crate::ipc_guard::MAX_CONTENT_LENGTH)?;
+    }
     let target_lang = i18n::get_user_language();
 
     if target_lang == "en" {
