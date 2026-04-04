@@ -166,6 +166,21 @@ impl LLMClient {
             );
         }
 
+        // Privacy disclosure check for cloud providers
+        if !matches!(self.provider.provider.as_str(), "ollama") {
+            let disclosure_accepted = crate::get_settings_manager()
+                .try_lock()
+                .map(|g| g.get().privacy.cloud_llm_disclosure_accepted)
+                .unwrap_or(false);
+            if !disclosure_accepted {
+                warn!(
+                    target: "4da::privacy",
+                    provider = %self.provider.provider,
+                    "Cloud LLM in use without privacy disclosure acceptance"
+                );
+            }
+        }
+
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
             "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
