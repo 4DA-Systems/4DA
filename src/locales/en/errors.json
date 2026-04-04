@@ -43,5 +43,6 @@
   "errorMsg.fileNotFound": "File not found. It may have been moved or deleted.",
   "errorMsg.ipc": "App communication error. Please restart the app.",
   "errorMsg.git": "Git operation failed. Check the repository path.",
-  "errorMsg.fallback": "Something went wrong. Please try again."
+  "errorMsg.fallback": "Something went wrong. Please try again.",
+  "errorMsg.limitAdjust": "Adjust in Settings > Intelligence, or wait until midnight reset."
 }

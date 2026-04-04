@@ -131,8 +131,8 @@ impl Default for RerankConfig {
             enabled: true,
             max_items_per_batch: 48,
             min_embedding_score: 0.20,
-            daily_token_limit: 500_000, // generous for Ollama (free) and cloud
-            daily_cost_limit_cents: 100, // $1.00/day default limit
+            daily_token_limit: 2_000_000, // 2M — accommodates analysis + translation
+            daily_cost_limit_cents: 500, // $5.00/day — generous for cloud, irrelevant for Ollama
         }
     }
 }
@@ -526,8 +526,8 @@ pub struct LlmLimitsConfig {
 impl Default for LlmLimitsConfig {
     fn default() -> Self {
         Self {
-            daily_token_limit: 500_000, // generous default — protects against runaway usage
-            daily_cost_limit_cents: 200, // $2.00/day default limit
+            daily_token_limit: 2_000_000, // 2M tokens — accommodates analysis + briefing + translation
+            daily_cost_limit_cents: 500, // $5.00/day — generous for cloud, irrelevant for Ollama
         }
     }
 }
