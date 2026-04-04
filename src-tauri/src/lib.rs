@@ -144,7 +144,6 @@ mod http_client;
 mod indexed_documents_commands;
 mod integrity;
 mod intelligence_history;
-#[allow(dead_code)] // Validation helpers — incrementally adopted by IPC commands
 mod ipc_guard;
 mod ipc_rate_limit;
 mod job_queue;
@@ -521,6 +520,8 @@ pub fn run() {
             settings_commands::detect_environment,
             settings_commands::import_env_key,
             settings_commands::validate_api_key,
+            settings_commands::get_privacy_config,
+            settings_commands::set_privacy_config,
             calibration_commands::run_calibration,
             // Taste Test Calibration
             taste_test_commands::taste_test_start,

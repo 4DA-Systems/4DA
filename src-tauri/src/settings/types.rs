@@ -554,6 +554,10 @@ pub struct PrivacyConfig {
     /// "titles_only" = only titles, no content (95% less data to provider)
     #[serde(default = "default_llm_content_level")]
     pub llm_content_level: String,
+    /// Whether the user has acknowledged the cloud LLM data sharing disclosure.
+    /// Must be true before cloud providers (Anthropic/OpenAI) can be used.
+    #[serde(default)]
+    pub cloud_llm_disclosure_accepted: bool,
 }
 
 fn default_llm_content_level() -> String {
@@ -564,6 +568,7 @@ impl Default for PrivacyConfig {
     fn default() -> Self {
         Self {
             llm_content_level: default_llm_content_level(),
+            cloud_llm_disclosure_accepted: false,
         }
     }
 }
