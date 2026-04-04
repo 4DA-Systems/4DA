@@ -196,8 +196,9 @@ fn is_security(title: &str, content_start: &str) -> bool {
         "privilege escalation",
     ];
 
-    // Title contains security terms
-    if security_terms.iter().any(|t| title.contains(t)) {
+    // Title contains security terms (word-boundary matched to prevent
+    // "rce" matching inside "source"/"resource" etc.)
+    if security_terms.iter().any(|t| crate::scoring::has_word_boundary_match(title, t)) {
         return true;
     }
 
