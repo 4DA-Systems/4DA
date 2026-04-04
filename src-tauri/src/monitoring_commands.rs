@@ -472,6 +472,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
         wisdom_signals: vec![],
         synthesis: None,
         wisdom_synthesis: None,
+        labels: None,
     };
 
     crate::briefing_window::show_briefing(&app, &preview);

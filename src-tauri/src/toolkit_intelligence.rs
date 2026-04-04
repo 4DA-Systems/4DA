@@ -165,6 +165,7 @@ pub async fn toolkit_score_sandbox(
         source_type: &src_type,
         embedding: &empty_embedding,
         created_at: None,
+        detected_lang: "en",
     };
 
     let options = crate::scoring::ScoringOptions {

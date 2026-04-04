@@ -106,7 +106,8 @@ pub(crate) async fn generate_briefing_internal(
     let items = if mem_items.is_empty() {
         let db = get_database()?;
         let period_start = Utc::now() - Duration::hours(72);
-        db.get_relevant_items_since(period_start, 0.1, 30)
+        let user_lang = crate::i18n::get_user_language();
+        db.get_relevant_items_since(period_start, 0.1, 30, &user_lang)
             .context("Failed to fetch items")?
     } else {
         mem_items

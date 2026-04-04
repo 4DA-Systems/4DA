@@ -28,6 +28,7 @@ mod tests {
             similar_count: 0,
             similar_titles: vec![],
             serendipity: false,
+            detected_lang: "en".to_string(),
             streets_engine: None,
             decision_window_match: None,
             decision_boost_applied: 0.0,

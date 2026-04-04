@@ -530,6 +530,7 @@ fn source_type_does_not_affect_core_score_determinism() {
             source_type: "hackernews",
             embedding: &emb,
             created_at: None,
+            detected_lang: "en",
         };
         score_item(&input, &ctx, &db, &opts, None)
     };
@@ -543,6 +544,7 @@ fn source_type_does_not_affect_core_score_determinism() {
             source_type: "reddit",
             embedding: &emb,
             created_at: None,
+            detected_lang: "en",
         };
         score_item(&input, &ctx, &db, &opts, None)
     };

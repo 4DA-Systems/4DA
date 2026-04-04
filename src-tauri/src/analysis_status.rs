@@ -70,6 +70,20 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 drop(guard);
 
                 // Downstream operations all take &[SourceRelevance] — use references
+                // Persist relevance scores to DB for briefing fallback path
+                if let Ok(db) = get_database() {
+                    let score_data: Vec<(i64, f32)> = results
+                        .iter()
+                        .filter(|r| r.top_score > 0.0)
+                        .map(|r| (r.id as i64, r.top_score))
+                        .collect();
+                    if !score_data.is_empty() {
+                        if let Err(e) = db.persist_analysis_scores(&score_data) {
+                            tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
+                        }
+                    }
+                }
+
                 if let Err(e) = app.emit("analysis-complete", &results) {
                     tracing::warn!("Failed to emit 'analysis-complete': {e}");
                 }
@@ -347,6 +361,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
                     source_type: &item.source_type,
                     embedding: &item.embedding,
                     created_at: Some(&item.created_at),
+                    detected_lang: &item.detected_lang,
                 },
                 &scoring_ctx,
                 db,

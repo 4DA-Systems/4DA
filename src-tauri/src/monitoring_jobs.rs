@@ -159,7 +159,8 @@ pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
             _ => now - chrono::Duration::hours(24),
         };
 
-        match db.get_relevant_items_since(period_start, 0.3, 20) {
+        let user_lang = crate::i18n::get_user_language();
+        match db.get_relevant_items_since(period_start, 0.3, 20, &user_lang) {
             Ok(items) if !items.is_empty() => {
                 // Update last_sent timestamp
                 {
@@ -306,7 +307,8 @@ async fn maybe_send_digest_email<R: Runtime>(_app: &AppHandle<R>) {
             _ => now - chrono::Duration::hours(24),
         };
 
-        match db.get_relevant_items_since(period_start, 0.3, 20) {
+        let user_lang = crate::i18n::get_user_language();
+        match db.get_relevant_items_since(period_start, 0.3, 20, &user_lang) {
             Ok(items) if !items.is_empty() => {
                 let digest_items: Vec<crate::digest::DigestItem> = items
                     .iter()
