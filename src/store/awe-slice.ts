@@ -6,6 +6,7 @@ import type {
   AwePendingDecision,
   AweGrowthTrajectory,
   AweWisdomWell,
+  AweBehavioralContext,
 } from '../types/awe';
 
 // ============================================================================
@@ -18,6 +19,8 @@ export interface AweSlice {
   awePendingDecisions: AwePendingDecision[];
   aweGrowthTrajectory: AweGrowthTrajectory | null;
   aweWisdomWell: AweWisdomWell | null;
+  aweBehavioralContext: AweBehavioralContext | null;
+  aweWisdomSynthesis: string | null;
   aweLoading: boolean;
   aweLastSync: string | null;
 
@@ -26,6 +29,8 @@ export interface AweSlice {
   loadAwePendingDecisions: (limit?: number) => Promise<void>;
   loadAweGrowthTrajectory: () => Promise<void>;
   loadAweWisdomWell: () => Promise<void>;
+  loadBehavioralContext: () => Promise<void>;
+  synthesizeWisdom: () => Promise<void>;
   submitAweBatchFeedback: (feedbacks: Array<{ decision_id: string; outcome: string; details: string }>) => Promise<void>;
   runAweAutoFeedback: () => Promise<void>;
 }
@@ -42,6 +47,8 @@ export const createAweSlice: StateCreator<
   awePendingDecisions: [],
   aweGrowthTrajectory: null,
   aweWisdomWell: null,
+  aweBehavioralContext: null,
+  aweWisdomSynthesis: null,
   aweLoading: false,
   aweLastSync: null,
 
@@ -112,6 +119,28 @@ export const createAweSlice: StateCreator<
       set({ aweWisdomWell: parsed });
     } catch {
       // Silent
+    } finally {
+      set({ aweLoading: false });
+    }
+  },
+
+  loadBehavioralContext: async () => {
+    try {
+      const raw = await cmd('get_behavioral_context');
+      const parsed: AweBehavioralContext = JSON.parse(raw);
+      set({ aweBehavioralContext: parsed });
+    } catch {
+      // Silent — behavioral context is enrichment, never blocks UI
+    }
+  },
+
+  synthesizeWisdom: async () => {
+    set({ aweLoading: true });
+    try {
+      const wisdom = await cmd('synthesize_wisdom');
+      set({ aweWisdomSynthesis: wisdom });
+    } catch {
+      // Silent — synthesis requires LLM, may not be available
     } finally {
       set({ aweLoading: false });
     }

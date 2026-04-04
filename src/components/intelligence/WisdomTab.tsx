@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { WisdomPanel } from '../WisdomPanel';
-import type { AweWellItem, AwePendingDecision } from '../../types/awe';
+import type { AweWellItem, AwePendingDecision, AweBehavioralContext } from '../../types/awe';
 
 // ============================================================================
 // Constants
@@ -156,6 +156,83 @@ function FeedbackQueueItem({
   );
 }
 
+function BehavioralInsights({ ctx }: { ctx: AweBehavioralContext }) {
+  const ip = ctx.interaction_patterns;
+  const velocity = ip.weekly_velocity > 1.5 ? 'Accelerating' : ip.weekly_velocity > 0.8 ? 'Steady' : ip.weekly_velocity > 0 ? 'Declining' : 'Starting';
+  const velocityColor = ip.weekly_velocity > 1.5 ? 'text-success' : ip.weekly_velocity > 0.8 ? 'text-text-secondary' : 'text-amber-400';
+
+  return (
+    <div className="space-y-3">
+      {/* Interaction Stats */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-bg-tertiary rounded px-2 py-1.5 text-center">
+          <div className="text-sm font-semibold text-white tabular-nums">{ip.total_interactions}</div>
+          <div className="text-[9px] text-text-muted">Interactions</div>
+        </div>
+        <div className="bg-bg-tertiary rounded px-2 py-1.5 text-center">
+          <div className="text-sm font-semibold text-white tabular-nums">{ip.saves}</div>
+          <div className="text-[9px] text-text-muted">Saves</div>
+        </div>
+        <div className="bg-bg-tertiary rounded px-2 py-1.5 text-center">
+          <div className={`text-sm font-semibold tabular-nums ${velocityColor}`}>{velocity}</div>
+          <div className="text-[9px] text-text-muted">Velocity ({ip.weekly_velocity.toFixed(1)}x)</div>
+        </div>
+      </div>
+
+      {/* Top Affinities */}
+      {ctx.topic_affinities.length > 0 && (
+        <div>
+          <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Topic Affinities</div>
+          <div className="space-y-1">
+            {ctx.topic_affinities.slice(0, 8).map(t => (
+              <div key={t.topic} className="flex items-center gap-2">
+                <span className="text-[10px] text-text-secondary truncate flex-1 font-mono">{t.topic}</span>
+                <div className="w-16 h-1.5 bg-bg-primary rounded overflow-hidden">
+                  <div
+                    className={`h-full rounded ${t.affinity_score > 0 ? 'bg-success' : 'bg-error'}`}
+                    style={{ width: `${Math.abs(t.affinity_score) * 100}%` }}
+                  />
+                </div>
+                <span className="text-[9px] text-text-muted tabular-nums w-8 text-right">
+                  {Math.round(t.affinity_score * 100)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Top Sources */}
+      {ip.top_sources.length > 0 && (
+        <div>
+          <div className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">Top Sources</div>
+          <div className="flex flex-wrap gap-1.5">
+            {ip.top_sources.map(([source, count]) => (
+              <span key={source} className="text-[10px] text-text-secondary bg-bg-tertiary rounded px-2 py-0.5">
+                {source}: {count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Coverage */}
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-text-muted">Feedback Coverage</span>
+        <span className="text-text-secondary tabular-nums">{ctx.feedback_stats.coverage_pct.toFixed(1)}%</span>
+      </div>
+
+      {/* Advantage Score */}
+      {ctx.advantage_trajectory.length > 0 && (
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-text-muted">Compound Advantage</span>
+          <span className="text-accent-gold tabular-nums">{ctx.advantage_trajectory[0]?.score.toFixed(1)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -172,7 +249,8 @@ export const WisdomTab = memo(function WisdomTab() {
 
   // Section open state
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    transmutation: true,
+    behavioral: true,
+    transmutation: false,
     well: false,
     calibration: false,
     feedback: false,
@@ -182,16 +260,20 @@ export const WisdomTab = memo(function WisdomTab() {
   const aweSummary = useAppStore(s => s.aweSummary);
   const aweWisdomWell = useAppStore(s => s.aweWisdomWell);
   const awePendingDecisions = useAppStore(s => s.awePendingDecisions);
+  const aweBehavioralContext = useAppStore(s => s.aweBehavioralContext);
+  const aweWisdomSynthesis = useAppStore(s => s.aweWisdomSynthesis);
   const loadAweSummary = useAppStore(s => s.loadAweSummary);
   const loadAweWisdomWell = useAppStore(s => s.loadAweWisdomWell);
   const loadAwePendingDecisions = useAppStore(s => s.loadAwePendingDecisions);
+  const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
   const submitAweBatchFeedback = useAppStore(s => s.submitAweBatchFeedback);
 
   useEffect(() => {
     void loadAweSummary();
     void loadAweWisdomWell();
     void loadAwePendingDecisions();
-  }, [loadAweSummary, loadAweWisdomWell, loadAwePendingDecisions]);
+    void loadBehavioralContext();
+  }, [loadAweSummary, loadAweWisdomWell, loadAwePendingDecisions, loadBehavioralContext]);
 
   const toggle = useCallback((section: string) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -216,6 +298,26 @@ export const WisdomTab = memo(function WisdomTab() {
 
   return (
     <div className="divide-y divide-border/30">
+      {/* AWE Wisdom Synthesis Voice */}
+      {aweWisdomSynthesis && (
+        <div className="px-4 py-3 bg-accent-gold/5 border-b border-accent-gold/20">
+          <p className="text-xs text-accent-gold/90 leading-relaxed">{aweWisdomSynthesis}</p>
+        </div>
+      )}
+
+      {/* Section 0: Behavioral Intelligence (real 4DA data) */}
+      <SectionToggle
+        title={t('awe.console.behavioral', 'Behavioral Intelligence')}
+        open={!!openSections.behavioral}
+        onToggle={() => toggle('behavioral')}
+      >
+        {aweBehavioralContext ? (
+          <BehavioralInsights ctx={aweBehavioralContext} />
+        ) : (
+          <p className="text-xs text-text-muted italic">{t('awe.console.behavioralLoading', 'Loading behavioral data...')}</p>
+        )}
+      </SectionToggle>
+
       {/* Section 1: Transmutation */}
       <SectionToggle
         title={t('awe.console.transmutation')}

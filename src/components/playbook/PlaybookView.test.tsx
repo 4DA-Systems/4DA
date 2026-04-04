@@ -60,6 +60,8 @@ function makeDefaultStore(): Record<string, unknown> {
     awePendingDecisions: [],
     aweGrowthTrajectory: null,
     aweWisdomWell: null,
+    aweBehavioralContext: null,
+    aweWisdomSynthesis: null,
     aweLoading: false,
     aweLastSync: null,
     loadAweSummary: vi.fn(),
@@ -67,6 +69,8 @@ function makeDefaultStore(): Record<string, unknown> {
     loadAwePendingDecisions: vi.fn(),
     loadAweGrowthTrajectory: vi.fn(),
     loadAweWisdomWell: vi.fn(),
+    loadBehavioralContext: vi.fn(),
+    synthesizeWisdom: vi.fn(),
     submitAweBatchFeedback: vi.fn(),
     runAweAutoFeedback: vi.fn(),
   };
