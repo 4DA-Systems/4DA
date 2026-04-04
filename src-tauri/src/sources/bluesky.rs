@@ -16,8 +16,15 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 #[derive(Debug, Deserialize)]
 struct BskySearchResponse {
     posts: Option<Vec<BskyPost>>,
+    // getFeed returns {feed: [{post: BskyPost}]}
+    feed: Option<Vec<BskyFeedItem>>,
     #[allow(dead_code)]
     cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BskyFeedItem {
+    post: BskyPost,
 }
 
 #[derive(Debug, Deserialize)]
@@ -115,12 +122,11 @@ impl BlueskySource {
         }
     }
 
-    /// Fetch posts for a single search query
-    async fn fetch_query(&self, query: &str) -> SourceResult<Vec<SourceItem>> {
-        let url = format!(
-            "https://public.api.bsky.app/xrpc/app.bsky.feed.searchPosts?q={}&limit=20&sort=top",
-            urlencoding::encode(query)
-        );
+    /// Fetch posts from Bluesky's "What's Hot" feed generator.
+    /// The search API requires auth, so we use the public feed endpoint instead.
+    async fn fetch_query(&self, _query: &str) -> SourceResult<Vec<SourceItem>> {
+        // Use the "What's Hot" feed generator which is public and doesn't need auth
+        let url = "https://public.api.bsky.app/xrpc/app.bsky.feed.getFeed?feed=at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/whats-hot&limit=25".to_string();
 
         let response = self
             .client
@@ -152,7 +158,12 @@ impl BlueskySource {
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
 
-        let posts = bsky_resp.posts.unwrap_or_default();
+        // Handle both search (posts field) and feed (feed field) response formats
+        let posts: Vec<BskyPost> = if let Some(feed_items) = bsky_resp.feed {
+            feed_items.into_iter().map(|fi| fi.post).collect()
+        } else {
+            bsky_resp.posts.unwrap_or_default()
+        };
 
         let items: Vec<SourceItem> = posts
             .into_iter()
