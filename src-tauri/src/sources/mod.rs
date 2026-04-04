@@ -209,8 +209,9 @@ impl SourceCategory {
 }
 
 /// Declarative metadata for a source — category, default content type,
-/// display hints. Sources declare this once; the system uses it for
-/// classification, UI grouping, and registration without hardcoding.
+/// display hints, and quality gate configuration. Sources declare this
+/// once; the system uses it for classification, UI grouping, quality
+/// filtering, and registration without hardcoding.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceManifest {
     pub category: SourceCategory,
@@ -222,6 +223,12 @@ pub struct SourceManifest {
     pub label: &'static str,
     /// Color hint for UI badges (e.g., "orange", "red", "blue")
     pub color_hint: &'static str,
+    /// Minimum title word count to pass quality gate (filters IDs/hashes)
+    pub min_title_words: u8,
+    /// Whether items must be in the user's language to pass
+    pub require_user_language: bool,
+    /// Whether items need developer-relevance keywords to pass
+    pub require_dev_relevance: bool,
 }
 
 impl Default for SourceManifest {
@@ -232,8 +239,109 @@ impl Default for SourceManifest {
             default_multiplier: 1.0,
             label: "",
             color_hint: "gray",
+            min_title_words: 3,
+            require_user_language: false,
+            require_dev_relevance: false,
         }
     }
+}
+
+// ============================================================================
+// Source Quality Gate — algorithmic pre-scoring filter
+// ============================================================================
+
+/// Algorithmic quality gate that runs AFTER fetch but BEFORE items enter
+/// the scoring pipeline. Uses the source's manifest to determine thresholds.
+/// Returns only items that pass all quality checks.
+pub fn apply_source_quality_gate(
+    items: Vec<SourceItem>,
+    manifest: &SourceManifest,
+) -> Vec<SourceItem> {
+    let user_lang = crate::i18n::get_user_language();
+
+    items
+        .into_iter()
+        .filter(|item| {
+            // Gate 1: Minimum title word count (filters raw IDs, hashes, codes)
+            let word_count = item
+                .title
+                .split_whitespace()
+                .filter(|w| w.len() >= 2)
+                .count();
+            if word_count < manifest.min_title_words as usize {
+                return false;
+            }
+
+            // Gate 2: Language filter (if source produces mixed-language content)
+            if manifest.require_user_language {
+                let detected = crate::language_detect::detect_language_with_content(
+                    &item.title,
+                    &item.content,
+                );
+                if detected != user_lang && detected != "en" {
+                    return false;
+                }
+            }
+
+            // Gate 3: Developer relevance (for general-audience sources like social feeds)
+            if manifest.require_dev_relevance {
+                let text = format!(
+                    "{} {}",
+                    item.title,
+                    &item.content[..item.content.len().min(200)]
+                )
+                .to_lowercase();
+                let dev_terms = [
+                    "code",
+                    "dev",
+                    "api",
+                    "bug",
+                    "rust",
+                    "python",
+                    "javascript",
+                    "typescript",
+                    "react",
+                    "node",
+                    "docker",
+                    "kubernetes",
+                    "git",
+                    "deploy",
+                    "database",
+                    "server",
+                    "frontend",
+                    "backend",
+                    "cli",
+                    "open source",
+                    "release",
+                    "update",
+                    "security",
+                    "vulnerability",
+                    "package",
+                    "library",
+                    "framework",
+                    "algorithm",
+                    "machine learning",
+                    "ai",
+                    "llm",
+                    "model",
+                    "gpu",
+                    "compiler",
+                    "linux",
+                    "programming",
+                    "software",
+                    "engineer",
+                    "startup",
+                    "saas",
+                    "tech",
+                ];
+                if !dev_terms.iter().any(|t| text.contains(t)) {
+                    return false;
+                }
+            }
+
+            true
+        })
+        .collect()
 }
 
 /// The trait that all information sources must implement

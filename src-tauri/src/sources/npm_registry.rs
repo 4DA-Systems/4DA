@@ -231,6 +231,9 @@ impl Source for NpmRegistrySource {
             default_multiplier: 1.15,
             label: "npm",
             color_hint: "red",
+            min_title_words: 3,
+            require_user_language: false,
+            require_dev_relevance: false,
         }
     }
 

@@ -49,8 +49,12 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
         let result = fetch_with_retry(name, &cache_tracker, || source.fetch_items_deep(50)).await;
 
         match result {
-            Ok(items) => {
-                info!(target: "4da::cache", source = st, count = items.len(), "Fetched {name} items");
+            Ok(raw_items) => {
+                // Apply algorithmic quality gate before caching
+                let manifest = source.manifest();
+                let items = sources::apply_source_quality_gate(raw_items, &manifest);
+                let filtered = items.len();
+                info!(target: "4da::cache", source = st, fetched = filtered, "Fetched {name} items (quality-gated)");
                 for item in items {
                     if db
                         .get_source_item(st, &item.source_id)

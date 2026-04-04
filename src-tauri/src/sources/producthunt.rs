@@ -176,6 +176,9 @@ impl Source for ProductHuntSource {
             default_multiplier: 0.85,
             label: "PH",
             color_hint: "orange",
+            min_title_words: 3,
+            require_user_language: false,
+            require_dev_relevance: false,
         }
     }
 

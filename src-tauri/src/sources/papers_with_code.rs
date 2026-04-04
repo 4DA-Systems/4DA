@@ -99,6 +99,9 @@ impl Source for PapersWithCodeSource {
             default_multiplier: 1.15,
             label: "PwC",
             color_hint: "indigo",
+            min_title_words: 3,
+            require_user_language: false,
+            require_dev_relevance: false,
         }
     }
 
