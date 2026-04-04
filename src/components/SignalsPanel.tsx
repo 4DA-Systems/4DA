@@ -1,6 +1,8 @@
 import { useState, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../types';
+import { useLicense } from '../hooks/use-license';
+import { SignalUpgradeCTA } from './SignalUpgradeCTA';
 
 // ============================================================================
 // Types
@@ -62,6 +64,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const [expanded, setExpanded] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
+  const { isPro } = useLicense();
 
   const { signals, filtered, typeCounts, priorityCounts } = useMemo(() => {
     const signals: SignalItem[] = results
@@ -147,7 +150,53 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
         </div>
       </button>
 
-      {expanded && (
+      {/* Free tier: category overview + upgrade prompt */}
+      {expanded && !isPro && (
+        <div className="p-4 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(typeCounts).map(([type, count]) => {
+              const config = SIGNAL_CONFIG[type];
+              return (
+                <span key={type} className="px-2.5 py-1 text-[11px] rounded-lg border bg-bg-tertiary text-text-muted border-border flex items-center gap-1.5">
+                  <span>{config?.icon ?? '?'}</span>
+                  <span>{SIGNAL_LABELS[type] ?? type}</span>
+                  <span className="text-[10px] opacity-60">{count}</span>
+                </span>
+              );
+            })}
+            <span className="self-center text-border">|</span>
+            {['critical', 'alert', 'advisory'].map((p) => {
+              const count = priorityCounts[p] || 0;
+              if (count === 0) return null;
+              const config = PRIORITY_CONFIG[p]!;
+              return (
+                <span key={p} className="px-2 py-1 text-[10px] rounded-lg border bg-bg-tertiary text-text-muted border-border flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
+                  <span>{config.label}</span>
+                  <span className="opacity-60">{count}</span>
+                </span>
+              );
+            })}
+          </div>
+          <div className="text-center py-2 space-y-3">
+            <p className="text-sm text-text-secondary">
+              {t('signals.freeTeaser', {
+                count: signals.length,
+                defaultValue: 'Signal intelligence classified {{count}} actionable items with priorities and tactical advice.',
+              })}
+            </p>
+            <p className="text-xs text-text-muted">
+              {t('signals.freeSubtext', {
+                defaultValue: 'Unlock to see which signals need your attention and what action to take.',
+              })}
+            </p>
+            <SignalUpgradeCTA compact />
+          </div>
+        </div>
+      )}
+
+      {/* Pro tier: full interactive filters + signal items */}
+      {expanded && isPro && (
         <div className="p-4">
           {/* Filters */}
           <div className="flex flex-wrap gap-2 mb-4">
