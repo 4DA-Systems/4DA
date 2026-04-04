@@ -133,14 +133,24 @@ mod tests {
 
     #[test]
     fn test_is_database_encrypted_plaintext() {
-        // Create a temp database (plaintext) with unique name to avoid conflicts
+        // Create a temp database (plaintext) with a fully unique name to avoid
+        // conflicts when tests run in parallel within the same process.
+        let unique_id = format!(
+            "{}_{:?}_{}",
+            std::process::id(),
+            std::thread::current().id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
         let dir = std::env::temp_dir().join("4da_test_enc");
         std::fs::create_dir_all(&dir).ok();
-        let path = dir.join(format!("test_plain_{}.db", std::process::id()));
+        let path = dir.join(format!("test_plain_{unique_id}.db"));
         // Clean up from any prior run
         std::fs::remove_file(&path).ok();
         let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch("CREATE TABLE IF NOT EXISTS test (id INTEGER);")
+        conn.execute_batch("CREATE TABLE enc_test (id INTEGER);")
             .unwrap();
         drop(conn);
 
