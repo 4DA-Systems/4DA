@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "XからYに移行すべきでしょうか？",
   "wisdom.subtitle": "何を決めていますか？履歴から洞察を得ましょう。",
   "wisdom.title": "意思決定分析",
-  "wisdom.watchFor": "注意点："
+  "wisdom.watchFor": "注意点：",
+  "briefing.header": "インテリジェンスブリーフィング",
+  "briefing.escalating": "エスカレーション中",
+  "briefing.wisdom": "ウィズダム",
+  "briefing.signals": "シグナル",
+  "briefing.blind_spots": "ブラインドスポット",
+  "briefing.tracking": "トラッキング:",
+  "briefing.gap_days_suffix": "日間シグナルなし",
+  "briefing.signals_today_suffix": " 本日",
+  "briefing.empty_state": "スタックは静かです。新着はありません。"
 }

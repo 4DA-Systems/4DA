@@ -40,6 +40,8 @@ pub struct BehavioralContext {
     pub detected_tech: Vec<String>,
     /// Active working topics
     pub active_topics: Vec<String>,
+    /// Instant context from ACE + source_items (always populated, even cold start)
+    pub instant_context: InstantContext,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -102,6 +104,26 @@ pub struct FeedbackStats {
     pub items_with_feedback: i64,
     pub coverage_pct: f64,
     pub positive_ratio: f64,
+}
+
+/// Instant context — seeded from ACE + source_items when behavioral data is thin.
+/// Ensures Momentum is rich from day one, even before user has interacted.
+#[derive(Debug, Clone, Serialize)]
+pub struct InstantContext {
+    /// Total items in the database (intelligence gathered)
+    pub total_source_items: i64,
+    /// Items from the last 24 hours
+    pub items_last_24h: i64,
+    /// Top source types by count
+    pub source_breakdown: Vec<(String, i64)>,
+    /// ACE-detected project count
+    pub project_count: i64,
+    /// ACE-detected dependency count
+    pub dependency_count: i64,
+    /// Most recent item timestamp
+    pub latest_item_at: Option<String>,
+    /// Data richness level: "cold" (< 10 items), "warming" (10-100), "rich" (100+)
+    pub data_level: String,
 }
 
 // ============================================================================

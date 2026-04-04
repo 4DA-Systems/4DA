@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "我们应该从X迁移到Y吗？",
   "wisdom.subtitle": "您在做什么决定？从历史记录中获取洞察。",
   "wisdom.title": "决策分析",
-  "wisdom.watchFor": "注意事项："
+  "wisdom.watchFor": "注意事项：",
+  "briefing.header": "情报简报",
+  "briefing.escalating": "升级中",
+  "briefing.wisdom": "智慧",
+  "briefing.signals": "信号",
+  "briefing.blind_spots": "盲区",
+  "briefing.tracking": "追踪:",
+  "briefing.gap_days_suffix": "天无信号",
+  "briefing.signals_today_suffix": " 今日",
+  "briefing.empty_state": "技术栈平静。没有新内容。"
 }

@@ -2592,5 +2592,14 @@
   "wisdom.placeholder": "هل يجب أن ننتقل من X إلى Y؟",
   "wisdom.subtitle": "ماذا تقرر؟ احصل على منظور من سجلك.",
   "wisdom.title": "تحليل القرارات",
-  "wisdom.watchFor": "انتبه لـ:"
+  "wisdom.watchFor": "انتبه لـ:",
+  "briefing.header": "تقرير الاستخبارات",
+  "briefing.escalating": "تصعيد",
+  "briefing.wisdom": "حكمة",
+  "briefing.signals": "إشارات",
+  "briefing.blind_spots": "نقاط عمياء",
+  "briefing.tracking": "تتبع:",
+  "briefing.gap_days_suffix": "ي منذ آخر إشارة",
+  "briefing.signals_today_suffix": " اليوم",
+  "briefing.empty_state": "المكدس الخاص بك هادئ. لا جديد."
 }

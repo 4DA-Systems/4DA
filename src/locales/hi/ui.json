@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "क्या हमें X से Y पर माइग्रेट करना चाहिए?",
   "wisdom.subtitle": "आप क्या तय कर रहे हैं? अपने इतिहास से दृष्टिकोण प्राप्त करें।",
   "wisdom.title": "निर्णय विश्लेषण",
-  "wisdom.watchFor": "ध्यान रखें:"
+  "wisdom.watchFor": "ध्यान रखें:",
+  "briefing.header": "इंटेलिजेंस ब्रीफिंग",
+  "briefing.escalating": "बढ़ रहा है",
+  "briefing.wisdom": "ज्ञान",
+  "briefing.signals": "सिग्नल",
+  "briefing.blind_spots": "ब्लाइंड स्पॉट",
+  "briefing.tracking": "ट्रैकिंग:",
+  "briefing.gap_days_suffix": "दिन पिछले सिग्नल से",
+  "briefing.signals_today_suffix": " आज",
+  "briefing.empty_state": "आपका स्टैक शांत है। कुछ नया नहीं।"
 }

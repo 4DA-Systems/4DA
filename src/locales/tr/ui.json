@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "X'ten Y'ye geçiş yapmalı mıyız?",
   "wisdom.subtitle": "Ne hakkında karar veriyorsunuz? Geçmişinizden bakış açısı kazanın.",
   "wisdom.title": "Karar Analizi",
-  "wisdom.watchFor": "Dikkat edilecekler:"
+  "wisdom.watchFor": "Dikkat edilecekler:",
+  "briefing.header": "ISTIHBARAT BRIFING",
+  "briefing.escalating": "TIRMANIYOR",
+  "briefing.wisdom": "BILGELIK",
+  "briefing.signals": "SINYALLER",
+  "briefing.blind_spots": "KÖR NOKTALAR",
+  "briefing.tracking": "Takip:",
+  "briefing.gap_days_suffix": "g sinyal yok",
+  "briefing.signals_today_suffix": " bugün",
+  "briefing.empty_state": "Stack'iniz sessiz. Yeni bir şey yok."
 }
