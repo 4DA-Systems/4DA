@@ -85,7 +85,7 @@ Then it scores every piece of incoming content against 5 independent signal axes
 | **Interest** | Alignment with your declared and learned topics |
 | **ACE** | Real-time signals from your Git commits and file edits |
 | **Dependency** | Direct matches against your installed packages |
-| **Feedback** | Save/dismiss signals boost or suppress future scores |
+| **Learned** | Save/dismiss signals boost or suppress future scores |
 
 An item needs **2+ independent signals** to pass the confirmation gate. Everything else gets rejected. Typical rejection rate: **99%+**.
 
@@ -192,7 +192,7 @@ Your Codebase                    External Sources
 - **Topic engagement**: where your attention goes
 - **Blind spots**: gaps between what you use and what you track
 
-Shareable as markdown.
+Exportable as markdown, SVG, or shareable card.
 
 ## MCP Integration
 
@@ -294,7 +294,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 |------|----------|------------|
 | **daily.dev** | Personalizes by engagement (what you click) | Optimizes for curiosity, not project relevance. Click on one ZFS article, get storage content for weeks. |
 | **Feedly** | Aggregates by subscription (what feeds you add) | Solves aggregation, not relevance. 100+ feeds = a different firehose. AI features locked behind $156/yr. |
-| **Pocket** | Saves what you manually bookmark | Shut down July 2025. Cloud-dependent tools can disappear. |
+| **Pocket** | Saves what you manually bookmark | Read-it-later, not intelligence. Cloud-dependent — Mozilla killed the team in 2023. |
 | **TLDR / newsletters** | Someone else curates for "developers" broadly | One person's bias. "Developers" includes React engineers, ML researchers, and game devs — one newsletter fits none. |
 | **4DA** | Scores against your actual codebase (Cargo.toml, package.json, Git) | Requires a local codebase to scan. That's the point. |
 
