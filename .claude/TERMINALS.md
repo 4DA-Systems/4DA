@@ -18,7 +18,8 @@
 -->
 
 ### T1 — Morning brief 7-layer fix (score persistence + language firewall)
-- **Status**: working
+- **Status**: committing
+- **Commit Lock**: HELD
 - **Since**: 2026-04-05T15:15:00Z
 - **Files**:
   - src-tauri/src/types.rs
