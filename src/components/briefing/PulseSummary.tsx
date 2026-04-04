@@ -132,11 +132,9 @@ export const PulseSummary = memo(function PulseSummary({
           </p>
           {aweWisdomSynthesis ? (
             <p className="text-[11px] text-accent-gold/80 mt-1 leading-relaxed line-clamp-3">{aweWisdomSynthesis}</p>
-          ) : aweSummary?.available === true && aweSummary.decisions > 0 ? (
+          ) : aweSummary?.available === true && aweSummary.principles > 0 ? (
             <p className="text-[11px] text-accent-gold/70 mt-0.5">
-              {aweSummary.feedback_coverage >= 70
-                ? t('awe.pulse.compounding', { decisions: aweSummary.decisions, principles: aweSummary.principles })
-                : t('awe.pulse.learning', { decisions: aweSummary.decisions, coverage: aweSummary.feedback_coverage })}
+              {t('awe.pulse.compounding', { decisions: aweSummary.decisions, principles: aweSummary.principles })}
             </p>
           ) : null}
         </div>

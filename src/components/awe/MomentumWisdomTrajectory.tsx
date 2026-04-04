@@ -102,7 +102,12 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
 
   useEffect(() => {
     void loadBehavioralContext();
-  }, [loadBehavioralContext]);
+    // Auto-synthesize wisdom if not already loaded
+    if (!wisdomSynthesis && !synthRequested) {
+      setSynthRequested(true);
+      void synthesizeWisdom();
+    }
+  }, [loadBehavioralContext, wisdomSynthesis, synthRequested, synthesizeWisdom]);
 
   // Update GAME shader based on real behavioral data
   useEffect(() => {
