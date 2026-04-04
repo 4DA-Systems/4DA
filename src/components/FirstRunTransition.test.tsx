@@ -83,6 +83,29 @@ vi.mock('../store', () => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Source metadata mock — backend not available in tests
+// ---------------------------------------------------------------------------
+vi.mock('../config/sources', () => ({
+  getSourceLabel: (id: string) => {
+    const labels: Record<string, string> = {
+      hackernews: 'HN', reddit: 'Reddit', github: 'GitHub',
+    };
+    return labels[id] ?? id;
+  },
+  getSourceColorClass: () => 'bg-gray-500/20 text-gray-400',
+  getSourceFullName: (id: string) => {
+    const names: Record<string, string> = {
+      hackernews: 'Hacker News', reddit: 'Reddit', github: 'GitHub',
+    };
+    return names[id] ?? id;
+  },
+  getSourceCategory: () => 'general',
+  loadSourceMeta: vi.fn(),
+  ALL_SOURCE_IDS: new Set(),
+  getSourcesByCategory: () => new Map(),
+}));
+
+// ---------------------------------------------------------------------------
 // Component under test
 // ---------------------------------------------------------------------------
 import { FirstRunTransition } from './FirstRunTransition';

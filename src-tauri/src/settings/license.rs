@@ -207,7 +207,7 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     "export_developer_dna_markdown",
     "export_developer_dna_svg",
     "export_developer_dna_card",
-    "natural_language_query",
+    // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
     "get_semantic_shifts",
     "get_decision_signals",
     "synthesize_search",
