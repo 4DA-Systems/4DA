@@ -24,12 +24,13 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
     crate::ipc_rate_limit::check_rate_limit("run_deep_initial_scan", 5)?;
 
-    // Check if already running
+    // If already running, silently succeed — user sees progress, not failure
     {
         let state = get_analysis_state();
         let guard = state.lock();
         if guard.running {
-            return Err("Analysis already running".into());
+            info!(target: "4da::analysis", "Deep scan skipped — analysis already in progress");
+            return Ok(());
         }
     }
 
