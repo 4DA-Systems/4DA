@@ -57,6 +57,5 @@ Check the current state of these files before doing anything:
 - Fonts: Inter (UI), JetBrains Mono (code)
 
 ## Pricing Reference
-- **4DA:** Free (10 sources + scoring) | Signal $12/mo or $99/yr
-- **STREETS:** Free Module S | Core $149 | Pro $29/mo or $249/yr | Cohort $499
-- **Bundle:** "Developer Independence Stack" $199 (4DA annual + STREETS Core)
+- **4DA:** Free (20+ sources + scoring + AI briefings via BYOK) | Signal $12/mo or $99/yr
+- **STREETS:** Free (all 7 modules included in 4DA)

@@ -238,6 +238,9 @@ impl Source for BlueskySource {
             default_multiplier: 1.0,
             label: "Bsky",
             color_hint: "blue",
+            min_title_words: 4,
+            require_user_language: true,
+            require_dev_relevance: true, // "What's Hot" is general audience — must filter
         }
     }
 
