@@ -198,7 +198,10 @@ fn is_security(title: &str, content_start: &str) -> bool {
 
     // Title contains security terms (word-boundary matched to prevent
     // "rce" matching inside "source"/"resource" etc.)
-    if security_terms.iter().any(|t| crate::scoring::has_word_boundary_match(title, t)) {
+    if security_terms
+        .iter()
+        .any(|t| crate::scoring::has_word_boundary_match(title, t))
+    {
         return true;
     }
 

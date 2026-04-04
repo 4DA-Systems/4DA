@@ -22,7 +22,8 @@ pub async fn translate_content(
     source_lang: Option<String>,
 ) -> Result<TranslationResult> {
     let id = crate::ipc_guard::validate_length("id", &id, crate::ipc_guard::MAX_INPUT_LENGTH)?;
-    let text = crate::ipc_guard::validate_length("text", &text, crate::ipc_guard::MAX_CONTENT_LENGTH)?;
+    let text =
+        crate::ipc_guard::validate_length("text", &text, crate::ipc_guard::MAX_CONTENT_LENGTH)?;
     let target_lang = i18n::get_user_language();
 
     let request = TranslationRequest {
@@ -50,7 +51,11 @@ pub async fn translate_content_batch(
         ));
     }
     for item in &items {
-        crate::ipc_guard::validate_length("batch_item.text", &item.text, crate::ipc_guard::MAX_CONTENT_LENGTH)?;
+        crate::ipc_guard::validate_length(
+            "batch_item.text",
+            &item.text,
+            crate::ipc_guard::MAX_CONTENT_LENGTH,
+        )?;
     }
     let target_lang = i18n::get_user_language();
 

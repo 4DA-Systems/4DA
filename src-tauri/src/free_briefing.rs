@@ -96,8 +96,11 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
                 })
                 .collect();
             let mut scounts: HashMap<String, usize> = HashMap::new();
-            for r in results.iter().filter(|r| r.relevant && !r.excluded)
-                .filter(|r| r.detected_lang == user_lang) {
+            for r in results
+                .iter()
+                .filter(|r| r.relevant && !r.excluded)
+                .filter(|r| r.detected_lang == user_lang)
+            {
                 if let Some(ref priority) = r.signal_priority {
                     *scounts.entry(priority.clone()).or_insert(0) += 1;
                 }

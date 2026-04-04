@@ -140,7 +140,9 @@ impl Database {
                 ) {
                     Ok(reader) => {
                         // Apply encryption key to read connections too
-                        if let Err(e) = encryption::apply_key_to_connection(&reader, db_key.as_deref()) {
+                        if let Err(e) =
+                            encryption::apply_key_to_connection(&reader, db_key.as_deref())
+                        {
                             tracing::warn!(target: "4da::db", pool = i, error = %e, "Failed to apply encryption key to reader");
                         }
                         reader

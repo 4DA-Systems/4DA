@@ -308,7 +308,11 @@ fn build_briefing_labels(lang: &str) -> BriefingLabels {
     // (t() returns the key itself when no translation exists — detect that.)
     let tr = |key: &str, default: &str| -> String {
         let result = crate::i18n::t(key, lang, &[]);
-        if result == key { default.to_string() } else { result }
+        if result == key {
+            default.to_string()
+        } else {
+            result
+        }
     };
 
     BriefingLabels {
@@ -320,7 +324,10 @@ fn build_briefing_labels(lang: &str) -> BriefingLabels {
         tracking: tr("ui:briefing.tracking", "Tracking:"),
         gap_days_suffix: tr("ui:briefing.gap_days_suffix", "d since last signal"),
         signals_today_suffix: tr("ui:briefing.signals_today_suffix", " today"),
-        empty_state: tr("ui:briefing.empty_state", "Your stack is quiet. Nothing new."),
+        empty_state: tr(
+            "ui:briefing.empty_state",
+            "Your stack is quiet. Nothing new.",
+        ),
     }
 }
 
@@ -714,21 +721,21 @@ pub fn generate_briefing_text() -> String {
                 let lang = crate::i18n::get_user_language();
                 db.get_relevant_items_since(period_start, 0.1, 10, &lang)
             }
-                .ok()
-                .map(|db_items| {
-                    db_items
-                        .into_iter()
-                        .map(|i| {
-                            (
-                                i.title,
-                                i.source_type,
-                                i.relevance_score.unwrap_or(0.0) as f32,
-                                None::<String>,
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default()
+            .ok()
+            .map(|db_items| {
+                db_items
+                    .into_iter()
+                    .map(|i| {
+                        (
+                            i.title,
+                            i.source_type,
+                            i.relevance_score.unwrap_or(0.0) as f32,
+                            None::<String>,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
         } else {
             vec![]
         }

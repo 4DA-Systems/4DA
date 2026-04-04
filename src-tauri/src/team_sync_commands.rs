@@ -426,7 +426,11 @@ struct RelayJoinResponse {
 #[tauri::command]
 pub async fn create_team(relay_url: String, display_name: String) -> Result<serde_json::Value> {
     let relay_url = crate::ipc_guard::validate_url_input("relay_url", &relay_url)?;
-    let display_name = crate::ipc_guard::validate_length("display_name", &display_name, crate::ipc_guard::MAX_INPUT_LENGTH)?;
+    let display_name = crate::ipc_guard::validate_length(
+        "display_name",
+        &display_name,
+        crate::ipc_guard::MAX_INPUT_LENGTH,
+    )?;
     // Generate cryptographic material
     let crypto = TeamCrypto::generate();
     let team_key = TeamCrypto::generate_team_key();
@@ -639,8 +643,16 @@ pub async fn join_team_via_invite(
     display_name: String,
 ) -> Result<serde_json::Value> {
     let relay_url = crate::ipc_guard::validate_url_input("relay_url", &relay_url)?;
-    let invite_code = crate::ipc_guard::validate_length("invite_code", &invite_code, crate::ipc_guard::MAX_INPUT_LENGTH)?;
-    let display_name = crate::ipc_guard::validate_length("display_name", &display_name, crate::ipc_guard::MAX_INPUT_LENGTH)?;
+    let invite_code = crate::ipc_guard::validate_length(
+        "invite_code",
+        &invite_code,
+        crate::ipc_guard::MAX_INPUT_LENGTH,
+    )?;
+    let display_name = crate::ipc_guard::validate_length(
+        "display_name",
+        &display_name,
+        crate::ipc_guard::MAX_INPUT_LENGTH,
+    )?;
     // Generate our cryptographic identity
     let crypto = TeamCrypto::generate();
     let client_id = uuid::Uuid::new_v4().to_string();

@@ -18,7 +18,11 @@ pub async fn list_plugins() -> Result<Vec<PluginManifest>> {
 /// and executes the named plugin binary.
 #[tauri::command]
 pub async fn fetch_plugin_items(plugin_name: String) -> Result<Vec<PluginItem>> {
-    let plugin_name = crate::ipc_guard::validate_length("plugin_name", &plugin_name, crate::ipc_guard::MAX_INPUT_LENGTH)?;
+    let plugin_name = crate::ipc_guard::validate_length(
+        "plugin_name",
+        &plugin_name,
+        crate::ipc_guard::MAX_INPUT_LENGTH,
+    )?;
     crate::ipc_guard::validate_no_null_bytes("plugin_name", &plugin_name)?;
     let plugins = loader::discover_plugins();
     let manifest = plugins
