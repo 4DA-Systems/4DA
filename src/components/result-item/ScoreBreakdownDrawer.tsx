@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { useLicense } from '../../hooks/use-license';
+import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import type { ScoreBreakdown, SourceRelevance } from '../../types';
 import { extractFactors, FACTOR_DESCRIPTIONS } from './score-breakdown/factor-utils';
 import { FactorGroup } from './score-breakdown/FactorGroup';
@@ -29,6 +31,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
   comparePool,
 }: ScoreBreakdownDrawerProps) {
   const { t } = useTranslation();
+  const { isPro } = useLicense();
   const addToast = useAppStore(s => s.addToast);
   const [selectedCompareId, setSelectedCompareId] = useState<number | null>(null);
   const [feedbackCount, setFeedbackCount] = useState(0);
@@ -91,7 +94,20 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         </button>
       </div>
 
-      <div className="px-4 py-3 space-y-4 max-h-[50vh] overflow-y-auto">
+      {/* Free tier: show score + upgrade prompt */}
+      {!isPro && (
+        <div className="px-4 py-5 space-y-3 text-center">
+          <p className="text-sm text-text-secondary">
+            {t('scoreDrawer.freeTeaser', {
+              defaultValue: 'Score Autopsy reveals why this item scored {{score}}% — which signals confirmed, what boosted or reduced the score, and how your learned preferences shaped the result.',
+              score: Math.round(finalScore * 100),
+            })}
+          </p>
+          <SignalUpgradeCTA compact />
+        </div>
+      )}
+
+      {isPro && <div className="px-4 py-3 space-y-4 max-h-[50vh] overflow-y-auto">
         {/* Confirmation Gate with Signal Strengths */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] text-text-muted uppercase tracking-wider">
@@ -219,7 +235,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             </div>
           ) : null}
         </div>
-      </div>
+      </div>}
     </div>
   );
 });

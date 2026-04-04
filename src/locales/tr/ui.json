@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "Bir öğe seçin...",
   "scoreDrawer.signals": "Sinyaller",
   "scoreDrawer.title": "Puan Dökümü",
+  "scoreDrawer.freeTeaser": "Skor Otopsisi bu öğenin neden {{score}}% aldığını ortaya koyar — hangi sinyaller doğrulandı, neyin skoru artırdığını veya azalttığını ve öğrenilmiş tercihlerinizin sonucu nasıl şekillendirdiğini gösterir.",
   "scoreDrawer.toggle": "Puan dökümünü değiştir",
   "scoreDrawer.whatReduced": "Neyi azalttı",
   "scoreDrawer.whyMatched": "Neden eşleşti",

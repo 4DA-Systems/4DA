@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "Selecione um item...",
   "scoreDrawer.signals": "Sinais",
   "scoreDrawer.title": "Detalhamento de pontuação",
+  "scoreDrawer.freeTeaser": "Score Autopsy revela por que este item recebeu {{score}}% — quais sinais foram confirmados, o que elevou ou reduziu a pontuação e como suas preferências aprendidas moldaram o resultado.",
   "scoreDrawer.toggle": "Alternar detalhamento de pontuação",
   "scoreDrawer.whatReduced": "O que reduziu",
   "scoreDrawer.whyMatched": "Por que correspondeu",

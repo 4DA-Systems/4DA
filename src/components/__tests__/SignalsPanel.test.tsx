@@ -13,8 +13,21 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+let mockIsPro = true;
 vi.mock('../../hooks/use-license', () => ({
-  useLicense: () => ({ isPro: true, trialStatus: null, expired: false, daysRemaining: 30 }),
+  useLicense: () => ({ isPro: mockIsPro, trialStatus: null, expired: false, daysRemaining: 30 }),
+}));
+
+vi.mock('../../store', () => ({
+  useAppStore: Object.assign(
+    vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
+      const mockState: Record<string, unknown> = {
+        startTrial: vi.fn(),
+      };
+      return selector(mockState);
+    }),
+    { getState: () => ({}) },
+  ),
 }));
 
 // ---------------------------------------------------------------------------
@@ -36,6 +49,7 @@ function makeSignalItem(overrides = {}) {
 describe('SignalsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsPro = true;
   });
 
   it('renders without crash with empty results', () => {
@@ -293,5 +307,86 @@ describe('SignalsPanel', () => {
     );
 
     expect(screen.getByText(/signals\.similar/)).toBeInTheDocument();
+  });
+});
+
+// =============================================================================
+// Free Tier Behavior
+// =============================================================================
+describe('SignalsPanel (free tier)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsPro = false;
+  });
+
+  it('does not render signal action items when isPro is false', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, signal_action: 'Patch this vulnerability' }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText('Patch this vulnerability')).not.toBeInTheDocument();
+  });
+
+  it('shows upgrade CTA text when isPro is false', () => {
+    render(
+      <SignalsPanel
+        results={[makeSignalItem({ id: 1 })]}
+      />,
+    );
+    expect(screen.getByText('pro.upgrade')).toBeInTheDocument();
+  });
+
+  it('shows free teaser text when isPro is false', () => {
+    render(
+      <SignalsPanel
+        results={[makeSignalItem({ id: 1 })]}
+      />,
+    );
+    expect(screen.getByText(/signals\.freeTeaser/)).toBeInTheDocument();
+  });
+
+  it('shows category pills as read-only spans (not buttons) in free tier', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, signal_type: 'security_alert' }),
+          makeSignalItem({ id: 2, signal_type: 'tech_trend', signal_priority: 'advisory', signal_action: 'Watch trend' }),
+        ]}
+      />,
+    );
+    // Category labels should be visible
+    expect(screen.getAllByText('Security').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Trends').length).toBeGreaterThanOrEqual(1);
+
+    // They should be rendered as spans, not filter buttons
+    const securityEls = screen.getAllByText('Security');
+    const isInsideButton = securityEls.some((el) => el.closest('button[class*="rounded-lg"]'));
+    expect(isInsideButton).toBe(false);
+  });
+
+  it('still renders the panel header and allows collapse in free tier', () => {
+    render(
+      <SignalsPanel
+        results={[makeSignalItem({ id: 1, signal_action: 'Some action' })]}
+      />,
+    );
+
+    // Header is visible
+    expect(screen.getByText('signals.title')).toBeInTheDocument();
+
+    // Collapse should hide the teaser content
+    fireEvent.click(screen.getByLabelText('signals.title'));
+    expect(screen.queryByText(/signals\.freeTeaser/)).not.toBeInTheDocument();
+    expect(screen.queryByText('pro.upgrade')).not.toBeInTheDocument();
+  });
+
+  it('shows empty state normally when no signals exist in free tier', () => {
+    render(<SignalsPanel results={[]} />);
+    expect(screen.getByText('signals.noSignals')).toBeInTheDocument();
+    // No upgrade CTA for empty state
+    expect(screen.queryByText('pro.upgrade')).not.toBeInTheDocument();
   });
 });

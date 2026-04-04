@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "Element auswählen...",
   "scoreDrawer.signals": "Signale",
   "scoreDrawer.title": "Bewertungsaufschlüsselung",
+  "scoreDrawer.freeTeaser": "Score Autopsy zeigt, warum dieses Element {{score}}% erreicht hat — welche Signale bestätigt wurden, was den Score erhöht oder gesenkt hat und wie Ihre erlernten Präferenzen das Ergebnis beeinflusst haben.",
   "scoreDrawer.toggle": "Bewertungsaufschlüsselung umschalten",
   "scoreDrawer.whatReduced": "Was es reduziert hat",
   "scoreDrawer.whyMatched": "Warum es gepasst hat",

@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "항목 선택...",
   "scoreDrawer.signals": "시그널",
   "scoreDrawer.title": "점수 분석",
+  "scoreDrawer.freeTeaser": "스코어 분석은 이 항목이 {{score}}%를 받은 이유를 보여줍니다 — 어떤 신호가 확인되었는지, 무엇이 점수를 올리거나 낮추었는지, 학습된 선호도가 결과를 어떻게 형성했는지 확인하세요.",
   "scoreDrawer.toggle": "점수 분석 전환",
   "scoreDrawer.whatReduced": "감점 요인",
   "scoreDrawer.whyMatched": "매치 이유",

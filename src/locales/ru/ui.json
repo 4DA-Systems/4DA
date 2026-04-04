@@ -1622,6 +1622,7 @@
   "scoreDrawer.selectItem": "Выберите элемент...",
   "scoreDrawer.signals": "Сигналы",
   "scoreDrawer.title": "Разбор оценки",
+  "scoreDrawer.freeTeaser": "Анализ оценки показывает, почему этот элемент получил {{score}}% — какие сигналы подтвердились, что повысило или снизило оценку и как ваши выученные предпочтения повлияли на результат.",
   "scoreDrawer.toggle": "Переключить разбор оценки",
   "scoreDrawer.whatReduced": "Что снизило оценку",
   "scoreDrawer.whyMatched": "Почему совпало",

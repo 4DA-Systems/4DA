@@ -2076,6 +2076,7 @@
   "scoreTooltip.highQuality": "High quality content",
   "scoreTooltip.novelContent": "Novel content",
   "scoreTooltip.serendipity": "Serendipity pick",
+  "scoreDrawer.freeTeaser": "Score Autopsy reveals why this item scored {{score}}% — which signals confirmed, what boosted or reduced the score, and how your learned preferences shaped the result.",
   "scoreDrawer.toggle": "Toggle score breakdown",
   "scoreDrawer.title": "Score Breakdown",
   "scoreDrawer.signals": "Signals",

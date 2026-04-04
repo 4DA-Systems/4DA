@@ -36,6 +36,11 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (fn: unknown) => fn,
 }));
 
+let mockIsPro = true;
+vi.mock('../../hooks/use-license', () => ({
+  useLicense: () => ({ isPro: mockIsPro, trialStatus: null, expired: false, daysRemaining: 30 }),
+}));
+
 // ---------------------------------------------------------------------------
 // Component under test
 // ---------------------------------------------------------------------------
@@ -80,6 +85,7 @@ const defaultProps = {
 describe('ScoreBreakdownDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsPro = true;
   });
 
   // =========================================================================
@@ -232,5 +238,60 @@ describe('ScoreBreakdownDrawer', () => {
     // Check the formatted values — score format renders as percentage
     expect(screen.getByText('60%')).toBeInTheDocument();
     expect(screen.getByText('90%')).toBeInTheDocument();
+  });
+});
+
+// =============================================================================
+// Free Tier Behavior
+// =============================================================================
+describe('ScoreBreakdownDrawer (free tier)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsPro = false;
+  });
+
+  it('shows the score percentage even on free tier', () => {
+    render(<ScoreBreakdownDrawer {...defaultProps} finalScore={0.72} />);
+    expect(screen.getByText('72%')).toBeInTheDocument();
+  });
+
+  it('shows free teaser text when isPro is false', () => {
+    render(<ScoreBreakdownDrawer {...defaultProps} />);
+    expect(screen.getByText(/scoreDrawer\.freeTeaser/)).toBeInTheDocument();
+  });
+
+  it('shows upgrade CTA when isPro is false', () => {
+    render(<ScoreBreakdownDrawer {...defaultProps} />);
+    expect(screen.getByText('pro.upgrade')).toBeInTheDocument();
+  });
+
+  it('does not show signal badges on free tier', () => {
+    render(<ScoreBreakdownDrawer {...defaultProps} />);
+    expect(screen.queryByText('3/5')).not.toBeInTheDocument();
+  });
+
+  it('does not show boost factors on free tier', () => {
+    render(<ScoreBreakdownDrawer {...defaultProps} />);
+    expect(screen.queryByText('scoreDrawer.factor.context')).not.toBeInTheDocument();
+    expect(screen.queryByText('scoreDrawer.factor.interest')).not.toBeInTheDocument();
+  });
+
+  it('does not show comparison dropdown on free tier', () => {
+    const pool: SourceRelevance[] = [
+      makePoolItem({ id: 10, title: 'Item A' }),
+      makePoolItem({ id: 20, title: 'Item B' }),
+    ];
+    render(
+      <ScoreBreakdownDrawer {...defaultProps} comparePool={pool} />,
+    );
+    expect(screen.queryByText('scoreDrawer.selectItem')).not.toBeInTheDocument();
+  });
+
+  it('close button still works on free tier', () => {
+    const onClose = vi.fn();
+    render(<ScoreBreakdownDrawer {...defaultProps} onClose={onClose} />);
+    const closeBtn = screen.getByLabelText('Close score breakdown');
+    fireEvent.click(closeBtn);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

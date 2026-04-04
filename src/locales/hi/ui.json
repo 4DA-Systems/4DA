@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "एक आइटम चुनें...",
   "scoreDrawer.signals": "सिग्नल",
   "scoreDrawer.title": "स्कोर विश्लेषण",
+  "scoreDrawer.freeTeaser": "स्कोर ऑटोप्सी बताता है कि इस आइटम को {{score}}% क्यों मिला — कौन से सिग्नल पुष्ट हुए, किसने स्कोर बढ़ाया या घटाया, और आपकी सीखी हुई प्राथमिकताओं ने परिणाम को कैसे आकार दिया।",
   "scoreDrawer.toggle": "स्कोर विश्लेषण टॉगल करें",
   "scoreDrawer.whatReduced": "क्या कम हुआ",
   "scoreDrawer.whyMatched": "मेल क्यों खाया",
