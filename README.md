@@ -42,25 +42,25 @@ Or build from source — see [Quick Start](#quick-start).
 ## See It In Action
 
 <p align="center">
-  <img src="assets/demo-feed.gif" alt="Scored feed with color-coded signals, knowledge gaps, and relevance tags" width="800" />
+  <img src="site/screenshots/feed-signals.png" alt="Scored feed with signal classification, knowledge gaps, and relevance tags" width="800" />
   <br />
   <em>Scored feed — every item earns its place through 5-axis relevance scoring</em>
 </p>
 
 <p align="center">
-  <img src="assets/demo-briefing.gif" alt="Intelligence Briefing with AI-generated daily summary and curated top picks" width="800" />
+  <img src="site/screenshots/intelligence-briefing.png" alt="Intelligence Briefing with AI-generated daily summary and curated top picks" width="800" />
   <br />
   <em>Intelligence Briefing — AI-generated daily summary with curated top picks</em>
 </p>
 
 <p align="center">
-  <img src="assets/demo-search-autopsy.gif" alt="Natural language search with Score Autopsy showing full 5-axis breakdown" width="800" />
+  <img src="site/screenshots/score-autopsy.png" alt="Score Autopsy showing full 5-axis breakdown" width="800" />
   <br />
-  <em>Search + Score Autopsy — see exactly why an item scored the way it did</em>
+  <em>Score Autopsy — see exactly why an item scored the way it did</em>
 </p>
 
 <p align="center">
-  <img src="assets/demo-insights.gif" alt="Tech Radar visualization and Decision Memory" width="800" />
+  <img src="site/screenshots/insights-tech-radar.png" alt="Tech Radar visualization and Decision Memory" width="800" />
   <br />
   <em>Tech Radar, Decision Memory, and Developer DNA — your full tech identity</em>
 </p>
@@ -101,10 +101,11 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 - Intent scoring: recent Git/file activity influences what surfaces
 - Knowledge gap detection: finds blind spots in your dependency understanding
 
-**Sources** — 10 adapters, all running locally
-- GitHub, YouTube, Hacker News, Reddit, arXiv
-- Product Hunt, Twitter/X, Dev.to, Lobsters
-- Custom RSS feeds
+**Sources** — 20+ adapters, all running locally
+- Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow
+- Lobsters, DEV.to, Product Hunt, Twitter/X, Bluesky, Hugging Face
+- Papers with Code, crates.io, npm, PyPI, Go modules
+- CVE/OSV vulnerability databases, custom RSS feeds
 
 **Analysis**
 - Signal chains: tracks evolving stories across sources
@@ -302,10 +303,10 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (33 tools), CLI
+- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server (33 tools), CLI
 
-**Signal** — $12/month or $99/year. BYOK — you bring your own API key.
-- Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection
+**Signal** — $12/month or $99/year. Compound intelligence that gets smarter every day.
+- Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
 
 ## License
 
