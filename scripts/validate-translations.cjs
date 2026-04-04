@@ -126,6 +126,15 @@ for (const ns of NAMESPACES) {
   }
 }
 
+const summaryMode = process.argv.includes('--summary');
+
+if (summaryMode) {
+  // One-line summary for pre-commit hook
+  const status = totalErrors > 0 ? 'FAIL' : 'OK';
+  console.log(`i18n: ${status} — ${languages.length + 1} langs, ${totalErrors} errors, ${totalWarnings} warnings`);
+  process.exit(totalErrors > 0 ? 1 : 0);
+}
+
 console.log('');
 console.log('='.repeat(60));
 console.log(`Results: ${totalErrors} errors, ${totalWarnings} warnings`);

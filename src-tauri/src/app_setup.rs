@@ -38,6 +38,10 @@ pub(crate) fn initialize_pre_tauri() {
     // memory in the panic hook so crash dumps don't leak API keys.
     crate::crash_guard::install();
 
+    // Verify binary integrity (code signature, size sanity, permissions).
+    // Runs after crash guard so any panics are handled. Logs only — never blocks.
+    crate::integrity::verify_integrity();
+
     info!(target: "4da::startup", "========================================");
     info!(target: "4da::startup", "4DA Home - Personalized Intelligence");
     info!(target: "4da::startup", "All signal. No feed.");
@@ -318,6 +322,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         let _ = deep_link_handle.emit("deep-link-activate", url);
                     } else {
                         warn!(target: "4da::security", url = %url, "Rejected invalid deep-link URL");
+                        if let Ok(db) = crate::get_database() {
+                            db.log_security_event("deeplink_blocked", &url, "warning");
+                        }
                     }
                 }
             }

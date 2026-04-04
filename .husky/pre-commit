@@ -96,6 +96,14 @@ if [ -n "$STAGED_TS" ]; then
     }
 fi
 
+# Translation coverage check (non-blocking — shows summary, doesn't fail)
+# Detects missing keys, variable mismatches, orphaned namespaces
+STAGED_LOCALE=$(git diff --cached --name-only --diff-filter=ACM | grep -E 'locales/.*\.json$' || true)
+if [ -n "$STAGED_LOCALE" ]; then
+    echo "Checking translation coverage..."
+    node scripts/validate-translations.cjs --summary 2>/dev/null || true
+fi
+
 # Secret scanning — comprehensive, nukeproof detection
 # Blocks commits containing real API keys, tokens, private keys, PII, and credentials
 echo "Scanning for secrets..."

@@ -33,6 +33,10 @@ pub(crate) fn validate_safe_url(url: &str) -> Result<()> {
                     scheme = %scheme,
                     "Blocked URL with disallowed scheme"
                 );
+                // Log to security audit trail
+                if let Ok(db) = crate::get_database() {
+                    db.log_security_event("url_blocked", &format!("scheme: {scheme}"), "warning");
+                }
                 Err(FourDaError::Validation(format!(
                     "URL scheme '{scheme}' is not allowed — only http, https, and mailto links can be opened"
                 )))
