@@ -361,19 +361,21 @@ fn check_database_size(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
             });
         }
     }
-    // Also check WAL file size
+    // WAL checkpoint: run immediately if large, don't bother the user about it.
+    // Users should never see infrastructure maintenance warnings.
     let wal_path = data_dir.join("4da.db-wal");
     if let Ok(meta) = std::fs::metadata(&wal_path) {
         let size_mb = meta.len() / (1024 * 1024);
         if size_mb > 100 {
-            issues.push(HealthIssue {
-                component: "database",
-                severity: HealthSeverity::Warning,
-                message: format!(
-                    "Database WAL file is {}MB. A checkpoint will run automatically.",
-                    size_mb
-                ),
-            });
+            tracing::info!(
+                target: "4da::health",
+                size_mb,
+                "Large WAL file detected — running immediate checkpoint"
+            );
+            // Run checkpoint now instead of showing a warning
+            if let Ok(conn) = crate::open_db_connection() {
+                let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
+            }
         }
     }
 }

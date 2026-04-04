@@ -30,13 +30,15 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
     crate::ipc_rate_limit::check_rate_limit("run_cached_analysis", 5)?;
 
-    // Atomic check-and-set: prevents TOCTOU race from double-clicks
+    // Atomic check-and-set: prevents TOCTOU race from double-clicks.
+    // If already running, return Ok (not error) — the user sees progress, not a failure.
     {
         get_analysis_abort().store(false, Ordering::SeqCst);
         let state = get_analysis_state();
         let mut guard = state.lock();
         if guard.running {
-            return Err("Analysis already running".into());
+            info!(target: "4da::analysis", "Analysis already in progress — skipping duplicate request");
+            return Ok(());
         }
         guard.running = true;
         guard.completed = false;

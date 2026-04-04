@@ -260,6 +260,23 @@ export function useAnalysis(
     loadContextFiles();
   }, [loadContextFiles]);
 
+  // Hydrate from backend cache — catches results from analysis that ran before mount
+  useEffect(() => {
+    const store = useAppStore.getState();
+    if (store.appState.relevanceResults.length > 0) return; // Already have results
+    cmd('get_analysis_status').then((status) => {
+      const s = status as { results?: SourceRelevance[]; completed?: boolean };
+      if (s.results && s.results.length > 0) {
+        useAppStore.getState().setAppStateFull((prev) => ({
+          ...prev,
+          relevanceResults: s.results!,
+          analysisComplete: true,
+          loading: false,
+        }));
+      }
+    }).catch(() => { /* Silent — analysis may not have run yet */ });
+  }, []);
+
   const setStatus = useCallback((status: string) => {
     useAppStore.getState().setAppState({ status });
   }, []);
