@@ -8,6 +8,7 @@ mod channels;
 #[cfg(test)]
 mod concurrency_tests;
 mod dependencies;
+pub(crate) mod encryption;
 mod history;
 mod migrations;
 mod sources;
@@ -105,6 +106,13 @@ impl Database {
 
         let conn = Connection::open(db_path)?;
 
+        // Apply database encryption key if available.
+        // When SQLCipher is enabled, this must be the first statement after open.
+        let db_key = encryption::get_or_create_db_key();
+        if let Err(e) = encryption::apply_key_to_connection(&conn, db_key.as_deref()) {
+            tracing::warn!(target: "4da::db", error = %e, "Failed to apply encryption key — continuing unencrypted");
+        }
+
         conn.execute_batch(
             "
             PRAGMA foreign_keys = ON;
@@ -131,6 +139,10 @@ impl Database {
                         | rusqlite::OpenFlags::SQLITE_OPEN_URI,
                 ) {
                     Ok(reader) => {
+                        // Apply encryption key to read connections too
+                        if let Err(e) = encryption::apply_key_to_connection(&reader, db_key.as_deref()) {
+                            tracing::warn!(target: "4da::db", pool = i, error = %e, "Failed to apply encryption key to reader");
+                        }
                         reader
                             .execute_batch(
                                 "PRAGMA busy_timeout = 5000;

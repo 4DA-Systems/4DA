@@ -301,6 +301,53 @@ pub async fn validate_api_key(
     Ok(serde_json::to_value(result).unwrap_or_default())
 }
 
+// ============================================================================
+// Privacy Disclosure Commands
+// ============================================================================
+
+/// Get the current privacy configuration (content level, disclosure status).
+#[tauri::command]
+pub async fn get_privacy_config() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let settings = guard.get();
+    Ok(serde_json::json!({
+        "llm_content_level": settings.privacy.llm_content_level,
+        "proxy_url": settings.network.proxy_url,
+        "cloud_llm_disclosure_accepted": settings.privacy.cloud_llm_disclosure_accepted,
+    }))
+}
+
+/// Update privacy settings (content level and/or disclosure acceptance).
+#[tauri::command]
+pub async fn set_privacy_config(
+    llm_content_level: Option<String>,
+    cloud_llm_disclosure_accepted: Option<bool>,
+) -> Result<()> {
+    if let Some(ref level) = llm_content_level {
+        validate_input_length(level, "llm_content_level", 20)?;
+    }
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    if let Some(level) = llm_content_level {
+        if matches!(level.as_str(), "full" | "titles_only") {
+            guard.get_mut().privacy.llm_content_level = level;
+        } else {
+            return Err(crate::error::FourDaError::Validation(
+                "llm_content_level must be 'full' or 'titles_only'".into(),
+            ));
+        }
+    }
+    if let Some(accepted) = cloud_llm_disclosure_accepted {
+        guard.get_mut().privacy.cloud_llm_disclosure_accepted = accepted;
+    }
+    guard.save().map_err(|e| {
+        crate::error::FourDaError::Config(format!("Failed to save privacy config: {e}"))
+    })?;
+    info!(target: "4da::settings", "Privacy config updated");
+    Ok(())
+}
+
 // --- Sibling modules ---
 
 #[path = "settings_commands_llm.rs"]
