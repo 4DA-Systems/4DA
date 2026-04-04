@@ -150,6 +150,19 @@ impl SettingsManager {
             }
         }
 
+        // Bump token limits from old defaults to accommodate translation workload.
+        // Users who explicitly set lower limits won't be affected (only exact old defaults bumped).
+        if settings.llm_limits.daily_token_limit == 500_000 {
+            info!(target: "4da::settings", "Bumping daily token limit 500k → 2M (translation workload)");
+            settings.llm_limits.daily_token_limit = 2_000_000;
+        }
+        if settings.llm_limits.daily_cost_limit_cents == 200 {
+            settings.llm_limits.daily_cost_limit_cents = 500;
+        }
+        if settings.rerank.daily_token_limit == 500_000 {
+            settings.rerank.daily_token_limit = 2_000_000;
+        }
+
         // Validate settings, clamping any out-of-range values
         settings.validate();
 
