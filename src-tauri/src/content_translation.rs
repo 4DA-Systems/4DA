@@ -328,7 +328,7 @@ async fn translate_via_llm(
         for (id, text) in items {
             let truncated = truncate_text(text);
             let response = client
-                .complete(
+                .complete_for_translation(
                     &system,
                     vec![llm::Message {
                         role: "user".to_string(),
@@ -366,7 +366,7 @@ async fn translate_via_llm(
         );
 
         let response = client
-            .complete(
+            .complete_for_translation(
                 &system,
                 vec![llm::Message {
                     role: "user".to_string(),
