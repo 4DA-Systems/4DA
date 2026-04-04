@@ -66,8 +66,10 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
   const { t } = useTranslation();
   const aweSummary = useAppStore(s => s.aweSummary);
   const aweGrowthTrajectory = useAppStore(s => s.aweGrowthTrajectory);
+  const aweBehavioralContext = useAppStore(s => s.aweBehavioralContext);
   const loadAweSummary = useAppStore(s => s.loadAweSummary);
   const loadAweGrowthTrajectory = useAppStore(s => s.loadAweGrowthTrajectory);
+  const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
 
   // GAME shader — must be called before any early returns (React hooks rule)
   const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-score-fingerprint');
@@ -75,7 +77,8 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
   useEffect(() => {
     void loadAweSummary();
     void loadAweGrowthTrajectory();
-  }, [loadAweSummary, loadAweGrowthTrajectory]);
+    void loadBehavioralContext();
+  }, [loadAweSummary, loadAweGrowthTrajectory, loadBehavioralContext]);
 
   const traj = aweGrowthTrajectory;
   const decisions = traj?.decisions ?? 0;
@@ -146,6 +149,30 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
                 principles: potentialPrinciples,
               })}
             </p>
+          </div>
+        )}
+
+        {/* Behavioral enrichment — engagement velocity + top affinities */}
+        {aweBehavioralContext && (
+          <div className="space-y-2 pt-2 border-t border-border/30">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-text-muted uppercase tracking-wider">Engagement</span>
+              <span className="text-text-secondary tabular-nums">
+                {aweBehavioralContext.interaction_patterns.total_interactions} interactions
+                {aweBehavioralContext.interaction_patterns.weekly_velocity > 1.2 && (
+                  <span className="text-success ml-1">{'\u2191'}</span>
+                )}
+              </span>
+            </div>
+            {aweBehavioralContext.topic_affinities.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {aweBehavioralContext.topic_affinities.slice(0, 5).filter(a => a.affinity_score > 0.3).map(a => (
+                  <span key={a.topic} className="text-[9px] text-accent-gold/70 bg-accent-gold/5 rounded px-1.5 py-0.5 font-mono">
+                    {a.topic}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
