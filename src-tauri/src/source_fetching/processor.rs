@@ -421,7 +421,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
             .map(|(st, sid, url, title, content)| {
-                let detected_lang = crate::language_detect::detect_language_with_content(&title, &content);
+                let detected_lang =
+                    crate::language_detect::detect_language_with_content(&title, &content);
                 (st, sid, url, title, content, detected_lang)
             })
             .collect();

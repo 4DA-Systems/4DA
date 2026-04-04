@@ -551,10 +551,8 @@ pub async fn get_security_audit_log(
     event_filter: Option<String>,
 ) -> Result<serde_json::Value> {
     let db = crate::get_database()?;
-    let entries = db.get_security_audit_log(
-        limit.unwrap_or(100).min(1000),
-        event_filter.as_deref(),
-    );
+    let entries =
+        db.get_security_audit_log(limit.unwrap_or(100).min(1000), event_filter.as_deref());
     Ok(serde_json::json!({
         "entries": entries.iter().map(|(id, ts, event, details, severity)| {
             serde_json::json!({

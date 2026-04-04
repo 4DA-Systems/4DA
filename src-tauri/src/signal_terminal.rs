@@ -334,20 +334,20 @@ async fn api_briefing(
                     let user_lang = crate::i18n::get_user_language();
                     db.get_relevant_items_since(period_start, 0.1, 30, &user_lang)
                 }
-                    .map(|db_items| {
-                        db_items
-                            .into_iter()
-                            .map(|i| {
-                                (
-                                    i.title,
-                                    i.url,
-                                    i.source_type,
-                                    i.relevance_score.unwrap_or(0.0),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .unwrap_or_default()
+                .map(|db_items| {
+                    db_items
+                        .into_iter()
+                        .map(|i| {
+                            (
+                                i.title,
+                                i.url,
+                                i.source_type,
+                                i.relevance_score.unwrap_or(0.0),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
             }
             Err(_) => vec![],
         }

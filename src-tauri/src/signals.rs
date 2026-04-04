@@ -1075,8 +1075,12 @@ mod tests {
             &CorroborationContext::default(),
         );
         if let Some(c) = &result {
-            assert_ne!(c.signal_type, SignalType::SecurityAlert,
-                "\"source\"/\"resource\" must not trigger RCE detection, got triggers: {:?}", c.triggers);
+            assert_ne!(
+                c.signal_type,
+                SignalType::SecurityAlert,
+                "\"source\"/\"resource\" must not trigger RCE detection, got triggers: {:?}",
+                c.triggers
+            );
         }
     }
 
@@ -1086,11 +1090,18 @@ mod tests {
         let result = classifier.classify(
             "How to build a successful SaaS: best practices guide",
             "Learn from the success stories of top SaaS founders",
-            0.5, &[], &[], &CorroborationContext::default(),
+            0.5,
+            &[],
+            &[],
+            &CorroborationContext::default(),
         );
         if let Some(c) = &result {
-            assert_ne!(c.signal_type, SignalType::SecurityAlert,
-                "\"success\" must not trigger XSS detection, got triggers: {:?}", c.triggers);
+            assert_ne!(
+                c.signal_type,
+                SignalType::SecurityAlert,
+                "\"success\" must not trigger XSS detection, got triggers: {:?}",
+                c.triggers
+            );
         }
     }
 
@@ -1100,11 +1111,18 @@ mod tests {
         let result = classifier.classify(
             "Improving test coverage with best practices",
             "A guide to achieving better coverage in your projects",
-            0.5, &[], &[], &CorroborationContext::default(),
+            0.5,
+            &[],
+            &[],
+            &CorroborationContext::default(),
         );
         if let Some(c) = &result {
-            assert_ne!(c.signal_type, SignalType::SecurityAlert,
-                "\"coverage\" must not trigger CVE detection, got triggers: {:?}", c.triggers);
+            assert_ne!(
+                c.signal_type,
+                SignalType::SecurityAlert,
+                "\"coverage\" must not trigger CVE detection, got triggers: {:?}",
+                c.triggers
+            );
         }
     }
 
@@ -1114,11 +1132,18 @@ mod tests {
         let result = classifier.classify(
             "How Redux dispatch works: deep dive tutorial",
             "Understanding Redux store dispatch and best practices",
-            0.5, &[], &[], &CorroborationContext::default(),
+            0.5,
+            &[],
+            &[],
+            &CorroborationContext::default(),
         );
         if let Some(c) = &result {
-            assert_ne!(c.signal_type, SignalType::SecurityAlert,
-                "\"dispatch\" must not trigger patch detection, got triggers: {:?}", c.triggers);
+            assert_ne!(
+                c.signal_type,
+                SignalType::SecurityAlert,
+                "\"dispatch\" must not trigger patch detection, got triggers: {:?}",
+                c.triggers
+            );
         }
     }
 
@@ -1131,7 +1156,11 @@ mod tests {
             0.9,
             &["node".to_string()],
             &["node".to_string()],
-            &CorroborationContext { source_count: 3, dependency_match: true, chain_phase: Some("escalating".to_string()) },
+            &CorroborationContext {
+                source_count: 3,
+                dependency_match: true,
+                chain_phase: Some("escalating".to_string()),
+            },
         );
         let c = result.expect("Real RCE should still be detected");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
@@ -1150,7 +1179,10 @@ mod tests {
         );
         let c = result.expect("Should still classify");
         assert_eq!(c.signal_type, SignalType::SecurityAlert);
-        assert!(c.priority <= SignalPriority::Advisory,
-            "Default corroboration (1 source) should cap at Advisory, got {:?}", c.priority);
+        assert!(
+            c.priority <= SignalPriority::Advisory,
+            "Default corroboration (1 source) should cap at Advisory, got {:?}",
+            c.priority
+        );
     }
 }

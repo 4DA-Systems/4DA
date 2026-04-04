@@ -133,8 +133,7 @@ pub struct InstantContext {
 /// Query all relevant 4DA behavioral data tables and assemble a BehavioralContext.
 /// This is the core bridge function — everything feeds from here.
 pub fn build_behavioral_context() -> Result<BehavioralContext> {
-    let conn = crate::open_db_connection()
-        .map_err(|e| format!("Failed to open DB: {e}"))?;
+    let conn = crate::open_db_connection().map_err(|e| format!("Failed to open DB: {e}"))?;
 
     let topic_affinities = query_topic_affinities(&conn);
     let calibration_insights = query_calibration_insights(&conn);
@@ -282,10 +281,7 @@ fn query_interaction_patterns(conn: &rusqlite::Connection) -> InteractionPattern
     ) {
         patterns.top_sources = stmt
             .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                ))
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })
             .map(|rows| rows.filter_map(|r| r.ok()).collect())
             .unwrap_or_default();
@@ -424,9 +420,7 @@ fn query_instant_context(conn: &rusqlite::Connection, detected_tech: &[String]) 
     }
 
     // ACE project count (from detected projects table if exists)
-    if let Ok(mut stmt) = conn.prepare(
-        "SELECT COUNT(DISTINCT topic) FROM topic_affinities",
-    ) {
+    if let Ok(mut stmt) = conn.prepare("SELECT COUNT(DISTINCT topic) FROM topic_affinities") {
         if let Ok(count) = stmt.query_row([], |row| row.get::<_, i64>(0)) {
             ctx.project_count = count;
         }
@@ -510,7 +504,13 @@ fn build_identity_summary(ctx: &BehavioralContext) -> String {
     let tech = if ctx.detected_tech.is_empty() {
         "Developer".to_string()
     } else {
-        let top = ctx.detected_tech.iter().take(3).cloned().collect::<Vec<_>>().join("/");
+        let top = ctx
+            .detected_tech
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("/");
         format!("{top} developer")
     };
 
@@ -529,7 +529,9 @@ fn build_identity_summary(ctx: &BehavioralContext) -> String {
 fn compute_days_active(ctx: &BehavioralContext) -> u32 {
     // Estimate from earliest decision window or interaction
     if let Some(earliest) = ctx.decision_outcomes.last() {
-        if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(&earliest.opened_at, "%Y-%m-%d %H:%M:%S") {
+        if let Ok(dt) =
+            chrono::NaiveDateTime::parse_from_str(&earliest.opened_at, "%Y-%m-%d %H:%M:%S")
+        {
             let now = chrono::Utc::now().naive_utc();
             return (now - dt).num_days().max(1) as u32;
         }
@@ -543,9 +545,7 @@ fn compute_days_active(ctx: &BehavioralContext) -> u32 {
 
 /// Synthesize personalized daily wisdom from behavioral context.
 /// This is the core AWE synthesis — produces natural language wisdom grounded in real data.
-pub async fn synthesize_daily_wisdom(
-    ctx: &BehavioralContext,
-) -> Result<String> {
+pub async fn synthesize_daily_wisdom(ctx: &BehavioralContext) -> Result<String> {
     let llm_settings = {
         let settings = crate::get_settings_manager().lock();
         settings.get().llm.clone()
@@ -632,7 +632,9 @@ pub async fn synthesize_signal_context(
         .decision_outcomes
         .iter()
         .filter(|d| {
-            topics.iter().any(|t| d.title.to_lowercase().contains(&t.to_lowercase()))
+            topics
+                .iter()
+                .any(|t| d.title.to_lowercase().contains(&t.to_lowercase()))
         })
         .collect();
 
@@ -708,11 +710,23 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
 
     // Tech identity
     if !ctx.detected_tech.is_empty() {
-        let tech = ctx.detected_tech.iter().take(10).cloned().collect::<Vec<_>>().join(", ");
+        let tech = ctx
+            .detected_tech
+            .iter()
+            .take(10)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
         parts.push(format!("Tech stack: {tech}"));
     }
     if !ctx.active_topics.is_empty() {
-        let topics = ctx.active_topics.iter().take(8).cloned().collect::<Vec<_>>().join(", ");
+        let topics = ctx
+            .active_topics
+            .iter()
+            .take(8)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
         parts.push(format!("Active topics: {topics}"));
     }
 
@@ -723,7 +737,14 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
             .iter()
             .filter(|t| t.affinity_score > 0.3)
             .take(8)
-            .map(|t| format!("{} ({:.0}%, {} signals)", t.topic, t.affinity_score * 100.0, t.total_exposures))
+            .map(|t| {
+                format!(
+                    "{} ({:.0}%, {} signals)",
+                    t.topic,
+                    t.affinity_score * 100.0,
+                    t.total_exposures
+                )
+            })
             .collect();
         if !positive.is_empty() {
             parts.push(format!("Strong affinities: {}", positive.join(", ")));
@@ -747,7 +768,15 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
             .calibration_insights
             .iter()
             .take(5)
-            .map(|c| format!("[{}] {} — confidence {:.0}% (n={})", c.digest_type, c.subject, c.confidence * 100.0, c.sample_size))
+            .map(|c| {
+                format!(
+                    "[{}] {} — confidence {:.0}% (n={})",
+                    c.digest_type,
+                    c.subject,
+                    c.confidence * 100.0,
+                    c.sample_size
+                )
+            })
             .collect();
         parts.push(format!("Calibration insights:\n{}", insights.join("\n")));
     }
@@ -811,7 +840,10 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
         let latest = &ctx.advantage_trajectory[0];
         parts.push(format!(
             "Compound advantage: {:.1} (acted: {}, expired: {}, calibration: {:.0}%)",
-            latest.score, latest.windows_acted, latest.windows_expired, latest.calibration_accuracy * 100.0,
+            latest.score,
+            latest.windows_acted,
+            latest.windows_expired,
+            latest.calibration_accuracy * 100.0,
         ));
     }
 
@@ -831,7 +863,9 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
         ic.total_source_items, ic.items_last_24h, ic.data_level,
     ));
     if !ic.source_breakdown.is_empty() {
-        let sources: Vec<String> = ic.source_breakdown.iter()
+        let sources: Vec<String> = ic
+            .source_breakdown
+            .iter()
             .map(|(s, c)| format!("{s}: {c}"))
             .collect();
         parts.push(format!("Source coverage: {}", sources.join(", ")));
@@ -849,12 +883,10 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
 pub fn write_context_file(ctx: &BehavioralContext) -> Result<std::path::PathBuf> {
     let json = build_developer_context_json(ctx)?;
     let dir = std::env::temp_dir().join("4da-awe");
-    std::fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create temp dir: {e}"))?;
 
     let path = dir.join("developer_context.json");
-    std::fs::write(&path, &json)
-        .map_err(|e| format!("Failed to write context file: {e}"))?;
+    std::fs::write(&path, &json).map_err(|e| format!("Failed to write context file: {e}"))?;
 
     info!(
         target: "4da::awe_synthesis",

@@ -100,7 +100,10 @@ mod tests {
         assert_eq!(detect_language("Homelab Diagram"), "en");
         assert_eq!(detect_language("question about aws account"), "en");
         assert_eq!(detect_language("Floci vs Ministack vs LocalStack"), "en");
-        assert_eq!(detect_language("simd-bp128 integer compression library"), "en");
+        assert_eq!(
+            detect_language("simd-bp128 integer compression library"),
+            "en"
+        );
     }
 
     #[test]

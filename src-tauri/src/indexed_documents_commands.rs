@@ -124,7 +124,8 @@ pub async fn get_indexed_stats() -> Result<serde_json::Value> {
 /// Search document chunks by text content (LIKE query).
 #[tauri::command]
 pub async fn search_documents(query: String, limit: i64) -> Result<serde_json::Value> {
-    let query = crate::ipc_guard::validate_length("query", &query, crate::ipc_guard::MAX_INPUT_LENGTH)?;
+    let query =
+        crate::ipc_guard::validate_length("query", &query, crate::ipc_guard::MAX_INPUT_LENGTH)?;
     let conn = open_db_connection()?;
     let search_pattern = format!("%{query}%");
 
