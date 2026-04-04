@@ -201,23 +201,24 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
       </div>
 
       <div className="relative p-4 space-y-4">
-        {/* Key metrics — always visible, always meaningful */}
+        {/* Key metrics — every number has context */}
         <div className="grid grid-cols-3 gap-3">
           <BigStat
             value={ic.total_source_items.toLocaleString()}
-            label="Gathered"
-            sub={ic.items_last_24h > 0 ? `+${ic.items_last_24h} today` : undefined}
+            label="Items Monitored"
+            sub={ic.items_last_24h > 0 ? `+${ic.items_last_24h} new today` : 'from all sources'}
           />
           <BigStat
             value={sources.length}
-            label="Sources"
-            sub={sources.length > 0 ? sources[0]?.[0]?.replace('_', ' ') : undefined}
+            label={sources.length === 1 ? 'Source Active' : 'Sources Active'}
+            sub={sources.length >= 5 ? 'Good diversity' : sources.length >= 3 ? 'Growing' : 'Add more in settings'}
           />
           <BigStat
-            value={ip.total_interactions > 0
-              ? `${ip.total_interactions}`
-              : ctx.detected_tech.length > 0 ? `${ctx.detected_tech.length}` : '--'}
-            label={ip.total_interactions > 0 ? 'Engaged' : 'Tech Detected'}
+            value={ip.total_interactions > 0 ? ip.total_interactions : '--'}
+            label="Your Actions"
+            sub={ip.total_interactions > 0
+              ? `${ip.saves} saved, ${ip.dismissals} dismissed`
+              : 'Click, save, or dismiss items'}
             color={ip.total_interactions > 0 ? 'text-success' : undefined}
           />
         </div>
@@ -231,12 +232,15 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
           </div>
         )}
 
-        {/* Source distribution — visual, not jargon */}
-        {sources.length > 1 && (
+        {/* Source distribution */}
+        {sources.length > 0 && (
           <div className="border-t border-border/30 pt-3">
-            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
-              {t('awe.momentum.sourceDistribution', 'Where your intelligence comes from')}
+            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
+              Where your intelligence comes from
             </h5>
+            <p className="text-[9px] text-text-muted/60 mb-2">
+              4DA scans these sources automatically. A balanced mix reduces blind spots.
+            </p>
             <div className="space-y-1.5">
               {sources.slice(0, 6).map(([name, count]) => (
                 <SourceBar key={name} name={name} count={count} total={totalSourceItems} />
@@ -248,9 +252,12 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
         {/* Topic affinities — only show strong, validated ones */}
         {affinities.length > 0 && (
           <div className="border-t border-border/30 pt-3">
-            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-2">
-              {t('awe.momentum.learned', 'What the system learned about you')}
+            <h5 className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
+              Topics you engage with most
             </h5>
+            <p className="text-[9px] text-text-muted/60 mb-2">
+              Learned from your saves, clicks, and dismissals. Numbers show total exposures.
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {affinities.map(a => (
                 <span key={a.topic} className="text-[10px] text-accent-gold/80 bg-accent-gold/8 border border-accent-gold/15 rounded-full px-2.5 py-0.5">
@@ -262,17 +269,28 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
           </div>
         )}
 
-        {/* Compound advantage — only when meaningful */}
-        {ctx.advantage_trajectory.length > 0 && ctx.advantage_trajectory[0] != null && ctx.advantage_trajectory[0].score > 0 && (
-          <div className="flex items-center justify-between pt-3 border-t border-border/30">
-            <span className="text-[10px] text-text-muted">
-              {t('awe.momentum.advantage', 'Compound Advantage Score')}
-            </span>
-            <span className="text-sm font-semibold text-accent-gold tabular-nums">
-              {ctx.advantage_trajectory[0].score.toFixed(1)}
-            </span>
-          </div>
-        )}
+        {/* Compound advantage — with explanation */}
+        {ctx.advantage_trajectory.length > 0 && ctx.advantage_trajectory[0] != null && ctx.advantage_trajectory[0].score > 0 && (() => {
+          const score = ctx.advantage_trajectory[0]!.score;
+          const level = score >= 70 ? 'Excellent' : score >= 40 ? 'Building' : score >= 20 ? 'Early' : 'Starting';
+          const levelColor = score >= 70 ? 'text-success' : score >= 40 ? 'text-accent-gold' : 'text-text-secondary';
+          return (
+            <div className="pt-3 border-t border-border/30 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-text-muted uppercase tracking-wider">
+                  Advantage Score
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] ${levelColor}`}>{level}</span>
+                  <span className="text-sm font-semibold text-accent-gold tabular-nums">{score.toFixed(0)}</span>
+                </div>
+              </div>
+              <p className="text-[10px] text-text-muted/70 leading-relaxed">
+                Measures how early you see important signals compared to acting on them. Higher means 4DA is surfacing relevant intelligence before you need it.
+              </p>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
