@@ -1912,7 +1912,7 @@
   "settings.team.joined": "Vous avez rejoint l'équipe avec succès",
   "settings.team.lastSync": "Synchronisé",
   "settings.team.leaveTeam": "Quitter l'équipe",
-  "settings.team.leftTeam": "Vous avez quitté l'équipe",
+  "settings.team.leftTeam": "A quitté l'équipe",
   "settings.team.loading": "Chargement de l'état de l'équipe...",
   "settings.team.member": "membre",
   "settings.team.memberDesc": "Les membres peuvent voir les signaux partagés, participer aux décisions et partager leur DNA.",
