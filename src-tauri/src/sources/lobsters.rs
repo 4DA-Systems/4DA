@@ -162,6 +162,9 @@ impl Source for LobstersSource {
             default_multiplier: 1.0,
             label: "Lobsters",
             color_hint: "red",
+            min_title_words: 3,
+            require_user_language: false,
+            require_dev_relevance: false,
         }
     }
 

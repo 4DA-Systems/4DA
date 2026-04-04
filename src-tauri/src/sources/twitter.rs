@@ -401,6 +401,9 @@ impl Source for TwitterSource {
             default_multiplier: 1.0,
             label: "Twitter",
             color_hint: "sky",
+            min_title_words: 2,
+            require_user_language: true,
+            require_dev_relevance: false,
         }
     }
 

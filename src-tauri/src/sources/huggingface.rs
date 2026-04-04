@@ -103,7 +103,18 @@ impl HuggingFaceSource {
             .into_iter()
             .filter_map(|model| {
                 let model_id = model.resolved_id()?.to_string();
-                let title = format!("HF: {model_id}");
+                // Build a descriptive title: "HF: org/model — task (Xk downloads)"
+                let task_suffix = model
+                    .pipeline_tag
+                    .as_deref()
+                    .map(|t| format!(" — {t}"))
+                    .unwrap_or_default();
+                let dl_suffix = model
+                    .downloads
+                    .filter(|&d| d > 1000)
+                    .map(|d| format!(" ({:.0}k downloads)", d as f64 / 1000.0))
+                    .unwrap_or_default();
+                let title = format!("HF: {model_id}{task_suffix}{dl_suffix}");
                 let url = format!("https://huggingface.co/{model_id}");
 
                 // Build content from available fields
@@ -187,6 +198,9 @@ impl Source for HuggingFaceSource {
             default_multiplier: 1.15,
             label: "HF",
             color_hint: "yellow",
+            min_title_words: 2, // Model IDs like "meta-llama/Llama-3" are OK (2 parts after split)
+            require_user_language: false,
+            require_dev_relevance: false, // All HF models are dev-relevant by nature
         }
     }
 
