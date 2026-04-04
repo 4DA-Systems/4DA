@@ -220,6 +220,16 @@ impl Source for BlueskySource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::Social,
+            default_content_type: "discussion",
+            default_multiplier: 1.0,
+            label: "Bsky",
+            color_hint: "blue",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);

@@ -169,6 +169,16 @@ impl Source for ProductHuntSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::News,
+            default_content_type: "show_and_tell",
+            default_multiplier: 0.85,
+            label: "PH",
+            color_hint: "orange",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);

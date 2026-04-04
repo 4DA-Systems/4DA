@@ -221,6 +221,16 @@ impl Source for RedditSource {
         self.config = config;
     }
 
+    fn manifest(&self) -> super::SourceManifest {
+        super::SourceManifest {
+            category: super::SourceCategory::Community,
+            default_content_type: "discussion",
+            default_multiplier: 1.0,
+            label: "Reddit",
+            color_hint: "blue",
+        }
+    }
+
     async fn fetch_items(&self) -> SourceResult<Vec<SourceItem>> {
         self.fetch_from_subreddits(&self.subreddits, self.config.max_items)
             .await
