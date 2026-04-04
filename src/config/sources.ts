@@ -1,73 +1,84 @@
-/** Canonical source registry — single source of truth for all source metadata. */
+/** Source metadata — loaded from backend at startup, cached locally. */
 
-export type SourceId =
-  | 'hackernews'
-  | 'arxiv'
-  | 'reddit'
-  | 'github'
-  | 'rss'
-  | 'youtube'
-  | 'twitter'
-  | 'producthunt'
-  | 'lobsters'
-  | 'devto'
-  | 'cve'
-  | 'osv'
-  | 'npm_registry'
-  | 'pypi'
-  | 'crates_io'
-  | 'huggingface'
-  | 'stackoverflow'
-  | 'bluesky'
-  | 'papers_with_code'
-  | 'go_modules';
+import { cmd } from '../lib/commands';
 
 interface SourceMeta {
-  /** Short display label (e.g. "HN") */
   label: string;
-  /** Full display name (e.g. "Hacker News") */
   fullName: string;
-  /** Tailwind color classes for badges */
   colorClass: string;
+  category: string;
 }
 
-const SOURCES: Record<SourceId, SourceMeta> = {
-  hackernews: { label: 'HN', fullName: 'Hacker News', colorClass: 'bg-orange-500/20 text-orange-400' },
-  arxiv: { label: 'arXiv', fullName: 'arXiv', colorClass: 'bg-purple-500/20 text-purple-400' },
-  reddit: { label: 'Reddit', fullName: 'Reddit', colorClass: 'bg-blue-500/20 text-blue-400' },
-  github: { label: 'GitHub', fullName: 'GitHub', colorClass: 'bg-gray-300/20 text-gray-300' },
-  rss: { label: 'RSS', fullName: 'RSS', colorClass: 'bg-amber-500/20 text-amber-400' },
-  youtube: { label: 'YouTube', fullName: 'YouTube', colorClass: 'bg-red-500/20 text-red-400' },
-  twitter: { label: 'Twitter', fullName: 'Twitter/X', colorClass: 'bg-sky-500/20 text-sky-400' },
-  producthunt: { label: 'PH', fullName: 'Product Hunt', colorClass: 'bg-orange-600/20 text-orange-300' },
-  lobsters: { label: 'Lobsters', fullName: 'Lobsters', colorClass: 'bg-red-600/20 text-red-400' },
-  devto: { label: 'Dev.to', fullName: 'Dev.to', colorClass: 'bg-green-500/20 text-green-400' },
-  cve: { label: 'CVE', fullName: 'Security Advisories', colorClass: 'bg-red-600/20 text-red-400' },
-  osv: { label: 'OSV', fullName: 'OSV Vulnerabilities', colorClass: 'bg-red-500/20 text-red-300' },
-  npm_registry: { label: 'npm', fullName: 'npm Registry', colorClass: 'bg-red-700/20 text-red-300' },
-  pypi: { label: 'PyPI', fullName: 'Python Package Index', colorClass: 'bg-blue-600/20 text-blue-300' },
-  crates_io: { label: 'Crates', fullName: 'crates.io', colorClass: 'bg-orange-700/20 text-orange-300' },
-  huggingface: { label: 'HF', fullName: 'Hugging Face', colorClass: 'bg-yellow-500/20 text-yellow-400' },
-  stackoverflow: { label: 'SO', fullName: 'Stack Overflow', colorClass: 'bg-orange-500/20 text-orange-300' },
-  bluesky: { label: 'Bsky', fullName: 'Bluesky', colorClass: 'bg-blue-400/20 text-blue-300' },
-  papers_with_code: { label: 'PwC', fullName: 'Papers with Code', colorClass: 'bg-indigo-500/20 text-indigo-300' },
-  go_modules: { label: 'Go', fullName: 'Go Modules', colorClass: 'bg-cyan-500/20 text-cyan-300' },
+const DEFAULT_COLOR = 'bg-gray-500/20 text-gray-400';
+
+const COLOR_MAP: Record<string, string> = {
+  orange: 'bg-orange-500/20 text-orange-400',
+  purple: 'bg-purple-500/20 text-purple-400',
+  blue: 'bg-blue-500/20 text-blue-400',
+  red: 'bg-red-500/20 text-red-400',
+  green: 'bg-green-500/20 text-green-400',
+  gray: 'bg-gray-500/20 text-gray-400',
+  cyan: 'bg-cyan-500/20 text-cyan-300',
+  yellow: 'bg-yellow-500/20 text-yellow-400',
+  indigo: 'bg-indigo-500/20 text-indigo-300',
+  amber: 'bg-amber-500/20 text-amber-400',
+  sky: 'bg-sky-500/20 text-sky-400',
 };
 
-/** All valid source IDs */
-export const ALL_SOURCE_IDS = new Set<SourceId>(Object.keys(SOURCES) as SourceId[]);
+// Cache populated from backend
+let sourcesCache = new Map<string, SourceMeta>();
+let allIds = new Set<string>();
 
-/** Get short label for a source (e.g. "HN"). Falls back to raw id. */
+/** Load source metadata from the Rust backend. Call once at startup. */
+export async function loadSourceMeta(): Promise<void> {
+  try {
+    const sources: Array<{
+      type: string;
+      name: string;
+      category: string;
+      label: string;
+      color_hint: string;
+    }> = await cmd('get_sources');
+    sourcesCache.clear();
+    allIds.clear();
+    for (const s of sources) {
+      sourcesCache.set(s.type, {
+        label: s.label,
+        fullName: s.name,
+        colorClass: COLOR_MAP[s.color_hint] ?? DEFAULT_COLOR,
+        category: s.category,
+      });
+      allIds.add(s.type);
+    }
+  } catch {
+    // Backend not ready yet — use empty cache, will retry
+  }
+}
+
+// Keep backward-compatible exports
+export const ALL_SOURCE_IDS = allIds;
 export function getSourceLabel(id: string): string {
-  return (SOURCES as Record<string, SourceMeta>)[id]?.label ?? id;
+  return sourcesCache.get(id)?.label ?? id;
 }
-
-/** Get full name for a source (e.g. "Hacker News"). Falls back to raw id. */
 export function getSourceFullName(id: string): string {
-  return (SOURCES as Record<string, SourceMeta>)[id]?.fullName ?? id;
+  return sourcesCache.get(id)?.fullName ?? id;
 }
-
-/** Get Tailwind color classes for a source badge. Falls back to gray. */
 export function getSourceColorClass(id: string): string {
-  return (SOURCES as Record<string, SourceMeta>)[id]?.colorClass ?? 'bg-gray-500/20 text-gray-400';
+  return sourcesCache.get(id)?.colorClass ?? DEFAULT_COLOR;
+}
+export function getSourceCategory(id: string): string {
+  return sourcesCache.get(id)?.category ?? 'general';
+}
+export function getSourcesByCategory(): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const [id, meta] of sourcesCache) {
+    const cat = meta.category;
+    const list = groups.get(cat) ?? [];
+    list.push(id);
+    groups.set(cat, list);
+  }
+  return groups;
+}
+export function isSourcesLoaded(): boolean {
+  return sourcesCache.size > 0;
 }

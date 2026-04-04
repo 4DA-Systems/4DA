@@ -55,6 +55,7 @@ import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
+import { loadSourceMeta } from './config/sources';
 function App() {
   const { t } = useTranslation();
   const { zoom, showIndicator } = useUiZoom();
@@ -192,6 +193,10 @@ function App() {
   // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
   useEffect(() => {
     trackEvent('app_launch');
+    // Load source metadata from backend (populates dynamic source registry + resets filters)
+    loadSourceMeta().then(() => {
+      useAppStore.getState().resetSourceFilters();
+    });
     loadPersistedBriefing();
     loadSourceHealth();
     loadLicense();

@@ -7,7 +7,8 @@ import { SmartEmptyState } from './SmartEmptyState';
 import { ContextPanel } from './context-panel';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { getStageLabel } from '../utils/score';
-import { getSourceLabel, ALL_SOURCE_IDS } from '../config/sources';
+import { ALL_SOURCE_IDS } from '../config/sources';
+import { SourceCategoryFilter } from './SourceCategoryFilter';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
 import { registerGameComponent } from '../lib/game-components';
@@ -91,10 +92,6 @@ export function ResultsView({
     () => new Set(state.relevanceResults.map(r => r.source_type || 'hackernews')),
     [state.relevanceResults],
   );
-  const uniqueSources = useMemo(
-    () => [...ALL_SOURCE_IDS].sort((a, b) => getSourceLabel(a).localeCompare(getSourceLabel(b))),
-    [],
-  );
 
   return (
     <div className="space-y-6">
@@ -168,30 +165,13 @@ export function ResultsView({
                 )}
               </div>
 
-              {/* Source Filters */}
-              <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg flex-wrap" role="group" aria-label="Source filters">
-                <span className="text-xs text-text-muted">{t('results.sources')}</span>
-                {uniqueSources.map(id => {
-                    const hasResults = sourcesWithResults.has(id);
-                    return (
-                      <button
-                        key={id}
-                        onClick={() => { toggleSourceFilter(id); }}
-                        aria-pressed={sourceFilters.has(id)}
-                        aria-label={`Filter ${getSourceLabel(id)} source`}
-                        className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                          sourceFilters.has(id)
-                            ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                            : hasResults
-                            ? 'text-text-muted hover:text-text-secondary'
-                            : 'text-text-muted/40 hover:text-text-muted'
-                        }`}
-                      >
-                        {getSourceLabel(id)}
-                      </button>
-                    );
-                  })}
-              </div>
+              {/* Source Filters — grouped by category */}
+              <SourceCategoryFilter
+                sourceFilters={sourceFilters}
+                sourcesWithResults={sourcesWithResults}
+                onToggle={toggleSourceFilter}
+                onReset={resetSourceFilters}
+              />
 
               {/* Sort */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
@@ -346,7 +326,7 @@ export function ResultsView({
                     {t('results.showAll')}
                   </button>
                 )}
-                {sourceFilters.size < uniqueSources.length && (
+                {sourceFilters.size < ALL_SOURCE_IDS.size && (
                   <button
                     onClick={() => resetSourceFilters()}
                     className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
@@ -354,7 +334,7 @@ export function ResultsView({
                     {t('results.clearSourceFilters')}
                   </button>
                 )}
-                {!showOnlyRelevant && sourceFilters.size === uniqueSources.length && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
+                {!showOnlyRelevant && sourceFilters.size === ALL_SOURCE_IDS.size && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
               </div>
               {state.nearMisses && state.nearMisses.length > 0 && (
                 <div className="mt-8 mx-auto max-w-lg">
