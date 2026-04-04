@@ -359,8 +359,8 @@ impl Default for SourceRegistry {
 /// line here. Everything else (registry, DB, frontend) follows automatically.
 pub fn build_all_sources() -> Vec<Box<dyn Source>> {
     use crate::source_fetching::{
-        load_github_languages_from_settings, load_rss_feeds_from_settings,
-        load_twitter_settings, load_youtube_channels_from_settings,
+        load_github_languages_from_settings, load_rss_feeds_from_settings, load_twitter_settings,
+        load_youtube_channels_from_settings,
     };
 
     let rss_feeds = load_rss_feeds_from_settings();
