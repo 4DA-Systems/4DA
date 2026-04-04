@@ -538,3 +538,33 @@ pub async fn clear_error_telemetry(days: Option<u32>) -> Result<u64> {
     let conn = crate::open_db_connection()?;
     clear_old_errors(&conn, days.unwrap_or(30))
 }
+
+// ============================================================================
+// Security Audit Log (EU CRA Compliance)
+// ============================================================================
+
+/// Returns recent security audit log entries for compliance review.
+/// Events include: url_blocked, symlink_blocked, deeplink_blocked, integrity_warning, binary_rejected.
+#[tauri::command]
+pub async fn get_security_audit_log(
+    limit: Option<i64>,
+    event_filter: Option<String>,
+) -> Result<serde_json::Value> {
+    let db = crate::get_database()?;
+    let entries = db.get_security_audit_log(
+        limit.unwrap_or(100).min(1000),
+        event_filter.as_deref(),
+    );
+    Ok(serde_json::json!({
+        "entries": entries.iter().map(|(id, ts, event, details, severity)| {
+            serde_json::json!({
+                "id": id,
+                "timestamp": ts,
+                "event_type": event,
+                "details": details,
+                "severity": severity,
+            })
+        }).collect::<Vec<_>>(),
+        "total": entries.len(),
+    }))
+}

@@ -825,6 +825,7 @@ pub fn run() {
             telemetry::get_error_telemetry,
             telemetry::get_error_summary_cmd,
             telemetry::clear_error_telemetry,
+            telemetry::get_security_audit_log,
             // Team Sync (AD-023)
             team_sync_commands::get_team_sync_status,
             team_sync_commands::get_team_members,
