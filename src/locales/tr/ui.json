@@ -1609,7 +1609,7 @@
   "search.noLlm": "AI sentezi için LLM sağlayıcı yapılandırın",
   "search.noResults": "Sonuç bulunamadı",
   "search.placeholder": "İçeriğiniz hakkında bir şey sorun...",
-  "search.proIntelligence": "İstihbarat derinliği",
+  "search.proIntelligence": "Analiz derinliği",
   "search.query": "Sorgu",
   "search.queryType": "{{intent}} sorgusu",
   "search.relatedDecisions": "İlgili Kararlar",

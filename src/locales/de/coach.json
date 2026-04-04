@@ -27,5 +27,6 @@
   "coach.compoundGrowth": "Deine Intelligenz wächst täglich — {{count}} Signale analysiert",
   "coach.gettingStarted": "Lass uns loslegen",
   "coach.addSourceTip": "Füge deine erste Quelle hinzu, um Signale zu empfangen",
-  "coach.exploreSettings": "Erkunde die Einstellungen, um dein Erlebnis anzupassen"
+  "coach.exploreSettings": "Erkunde die Einstellungen, um dein Erlebnis anzupassen",
+  "coach.engine.primaryEngine": "Primäre Engine"
 }

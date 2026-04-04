@@ -120,7 +120,7 @@
   "analysis.digestGenerated": "Digest erstellt: {{count}} Elemente",
   "analysis.failed": "Analyse fehlgeschlagen: {{message}}",
   "analysis.keyboardTriggered": "Analyse gestartet",
-  "analysis.keywordOnly": "Stichwort-Modus aktiv. Fügen Sie einen API-Schlüssel für bessere Ergebnisse hinzu.",
+  "analysis.keywordOnly": "Nur Stichwort-Modus aktiv (geringere Genauigkeit). Konfigurieren Sie einen AI-Anbieter oder installieren Sie Ollama in den Einstellungen für semantisches Matching.",
   "analysis.morningBriefingReady": "Nachrichtenübersicht: {{count}} Elemente",
   "analysis.networkError": "Netzwerkfehler – überprüfen Sie Ihre Verbindung",
   "analysis.newRelevant": "{{count}} neue relevante Elemente gefunden",
