@@ -21,6 +21,7 @@ const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
 const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
+const CategoryChapterView = lazy(() => import('./CategoryChapterView').then(m => ({ default: m.CategoryChapterView })));
 
 interface ViewRouterProps {
   newItemIds: Set<number>;
@@ -101,6 +102,10 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'calibrate' ? (
         <ViewErrorBoundary viewName="System">
           <CalibrationView />
+        </ViewErrorBoundary>
+      ) : activeView === 'chapters' ? (
+        <ViewErrorBoundary viewName="Chapters">
+          <CategoryChapterView />
         </ViewErrorBoundary>
       ) : (
         <ViewErrorBoundary viewName="Results">
