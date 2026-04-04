@@ -10,7 +10,7 @@
 
 **All signal. No feed.**
 
-4DA is a developer intelligence system that scores content from 10 sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
+4DA is a developer intelligence system that scores content from 20+ sources against your actual codebase using 5-axis relevance scoring. An item needs 2+ independent signals to survive. Everything else is rejected. Typical rejection rate: **99%+**.
 
 Privacy-first. Runs locally. Zero telemetry. BYOK. ~15MB download.
 
@@ -159,7 +159,7 @@ Your Codebase                    External Sources
      │                                │
      ▼                                ▼
 ┌─────────────┐              ┌──────────────┐
-│     ACE     │              │  10 Source    │
+│     ACE     │              │  20+ Source    │
 │  Scanner +  │              │  Adapters     │
 │  Git Watch  │              │  (background) │
 └──────┬──────┘              └──────┬───────┘
@@ -302,7 +302,7 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 10 sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (33 tools), CLI
+- All 20+ sources, full 5-axis scoring engine, confirmation gate, feedback-driven scoring, STREETS Playbook (all 7 modules), MCP server (33 tools), CLI
 
 **Signal** — $12/month or $99/year. BYOK — you bring your own API key.
 - Everything in Free, plus: AI daily briefings, Developer DNA profiling, Score Autopsy, intelligence panels, signal chain analysis, knowledge gap detection

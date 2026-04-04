@@ -1,6 +1,6 @@
 ---
 title: "4DA -- All signal. No feed. Developer intelligence scored against your codebase."
-description: "4DA scores content from 10 sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. Most content is rejected."
+description: "4DA scores content from 20+ sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. Most content is rejected."
 permalink: "/index.html"
 ---
 {% extends "base.njk" %}
@@ -11,7 +11,7 @@ permalink: "/index.html"
 
   <!-- Open Graph -->
   <meta property="og:title" content="4DA -- All signal. No feed.">
-  <meta property="og:description" content="Developer intelligence that scores content from 10 sources against your actual codebase. Privacy-first. Runs 100% locally. Free tier with full scoring engine.">
+  <meta property="og:description" content="Developer intelligence that scores content from 20+ sources against your actual codebase. Privacy-first. Runs 100% locally. Free tier with full scoring engine.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai">
   <meta property="og:image" content="https://4da.ai/og-image.png">
@@ -20,7 +20,7 @@ permalink: "/index.html"
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="4DA -- All signal. No feed.">
-  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 10 sources. Aggressive noise rejection. Privacy-first. Free.">
+  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 20+ sources. Aggressive noise rejection. Privacy-first. Free.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <!-- Structured Data -->
@@ -31,10 +31,10 @@ permalink: "/index.html"
     "name": "4DA",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
-    "description": "Privacy-first developer intelligence. Scores content from 10 sources against your codebase using 5-axis relevance scoring.",
+    "description": "Privacy-first developer intelligence. Scores content from 20+ sources against your codebase using 5-axis relevance scoring.",
     "offers": [
-      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free -- all 10 sources, full scoring engine, STREETS Playbook (7 modules)" },
-      { "@type": "Offer", "price": "12", "priceCurrency": "USD", "description": "Signal -- Developer DNA, Signal Chains, Knowledge Gaps, Natural Language Search" }
+      { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free -- all 20+ sources, full scoring engine, AI briefings (BYOK), STREETS Playbook (7 modules)" },
+      { "@type": "Offer", "price": "12", "priceCurrency": "USD", "description": "Signal -- compound intelligence: Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Attention Analytics" }
     ]
   }
   </script>
@@ -878,7 +878,7 @@ permalink: "/index.html"
       <div class="hero-label">Developer Intelligence</div>
       <h1>All signal.<br><span>No feed.</span></h1>
       <p>Your codebase decides what's relevant. Everything else is rejected.</p>
-      <p style="font-size:15px; color:var(--text-muted); max-width:520px; margin:8px auto 48px;">GitHub, YouTube, Hacker News, Reddit, arXiv, and 5 more sources &mdash; scored on 5 axes against your actual stack. 2+ signals required to pass.</p>
+      <p style="font-size:15px; color:var(--text-muted); max-width:520px; margin:8px auto 48px;">Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow, Lobsters, Bluesky, and 12+ more &mdash; scored on 5 axes against your actual stack. 2+ signals required to pass.</p>
       <div class="hero-buttons">
         <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="hero-download">Download for Free</a>
         <a href="https://www.npmjs.com/package/@4da/mcp-server" class="btn btn-secondary"><span class="mono">npx</span> MCP Server</a>
@@ -905,9 +905,9 @@ permalink: "/index.html"
     <div class="container">
       <div class="traction-badges">
         <span class="traction-badge"><strong>Rust</strong> + Tauri 2.0</span>
-        <span class="traction-badge"><strong>10</strong> Sources</span>
+        <span class="traction-badge"><strong>20+</strong> Sources</span>
         <span class="traction-badge"><strong>5-Axis</strong> Scoring</span>
-        <span class="traction-badge"><strong>31</strong> MCP Tools</span>
+        <span class="traction-badge"><strong>33</strong> MCP Tools</span>
         <span class="traction-badge"><strong>~15MB</strong> Binary</span>
       </div>
       <div class="traction-principles">
@@ -943,57 +943,45 @@ permalink: "/index.html"
       </div>
       <div class="gallery-grid">
         <div class="gallery-item visible" data-category="feed">
-          <video autoplay loop muted playsinline preload="none" poster="media/posters/demo-feed-poster.png">
-            <source src="media/demo-feed.webm" type="video/webm" />
-          </video>
+          <img src="screenshots/feed-signals.png" alt="4DA scored feed with relevance signals" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
             <span class="caption-tag">Feed</span>
-            <p>Scored feed with urgent signals, knowledge gaps, and color-coded relevance tags. Every item earns its place.</p>
+            <p>Scored feed with signal classification, knowledge gaps, and color-coded relevance. Every item earns its place.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="intelligence">
-          <video autoplay loop muted playsinline preload="none" poster="media/posters/demo-briefing-poster.png">
-            <source src="media/demo-briefing.webm" type="video/webm" />
-          </video>
+          <img src="screenshots/intelligence-briefing.png" alt="4DA AI intelligence briefing" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
             <span class="caption-tag">Briefing</span>
             <p>AI-generated daily briefing with actionable insights and curated top picks from all sources.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="intelligence">
-          <video autoplay loop muted playsinline preload="none" poster="media/posters/demo-search-autopsy-poster.png">
-            <source src="media/demo-search-autopsy.webm" type="video/webm" />
-          </video>
+          <img src="screenshots/score-autopsy.png" alt="4DA score autopsy with 5-axis breakdown" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Search + Autopsy</span>
-            <p>Natural language search with Score Autopsy — full 5-axis breakdown of why an item scored the way it did.</p>
+            <span class="caption-tag">Score Autopsy</span>
+            <p>Full 5-axis breakdown of why an item scored the way it did. Signal confirmation, boosts, and penalties.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="insights">
-          <video autoplay loop muted playsinline preload="none" poster="media/posters/demo-insights-poster.png">
-            <source src="media/demo-insights.webm" type="video/webm" />
-          </video>
+          <img src="screenshots/insights-tech-radar.png" alt="4DA tech radar and insights" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
             <span class="caption-tag">Insights</span>
-            <p>Tech Radar tracking 244 technologies plus Decision Memory for architectural choices across sessions.</p>
+            <p>Tech Radar tracking technologies across your stack. Decision Memory for architectural choices.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="feed">
-          <video autoplay loop muted playsinline preload="none" poster="media/posters/demo-knowledge-gaps-poster.png">
-            <source src="media/demo-knowledge-gaps.webm" type="video/webm" />
-          </video>
+          <img src="screenshots/knowledge-gaps.png" alt="4DA knowledge gap detection" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Gaps</span>
+            <span class="caption-tag">Knowledge Gaps</span>
             <p>Knowledge gap detection finds blind spots between what you use and what you track.</p>
           </div>
         </div>
         <div class="gallery-item visible" data-category="settings">
-          <video autoplay loop muted playsinline preload="none" poster="media/posters/demo-developer-dna-poster.png">
-            <source src="media/demo-developer-dna.webm" type="video/webm" />
-          </video>
+          <img src="screenshots/settings-profile-developer-dna.png" alt="4DA Developer DNA profile" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">DNA</span>
-            <p>Developer DNA auto-discovers your tech identity from your codebase. Primary stack, dependencies, activity heatmap.</p>
+            <span class="caption-tag">Developer DNA</span>
+            <p>Developer DNA auto-discovers your tech identity from your codebase. Primary stack, dependencies, expertise map.</p>
           </div>
         </div>
       </div>
@@ -1161,7 +1149,7 @@ permalink: "/index.html"
           <div class="pricing-price">$0 <span>forever</span></div>
           <div class="pricing-note">No credit card. No account. No expiration.</div>
           <ul class="pricing-features">
-            <li>All 10 content sources</li>
+            <li>All 20+ content sources</li>
             <li>Full 5-axis scoring engine</li>
             <li>AI daily briefings + weekly digest</li>
             <li>Multi-signal confirmation gate</li>
@@ -1180,13 +1168,14 @@ permalink: "/index.html"
           <div class="pricing-note">Or $99/year. BYOK -- you bring your own API key.</div>
           <ul class="pricing-features">
             <li>Everything in Free, plus:</li>
+            <li>Signal tab intelligence (Key Signals + analytics)</li>
+            <li>Score Autopsy (5-axis breakdown)</li>
             <li>Developer DNA profiling</li>
             <li>Signal chain analysis</li>
             <li>Knowledge gap detection</li>
             <li>Semantic shift tracking</li>
-            <li>Natural language search</li>
-            <li>Project health monitoring</li>
             <li>Attention analytics</li>
+            <li>Standing queries</li>
             <li>Priority support</li>
           </ul>
           <a href="/signal#pricing" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:24px; border-color:var(--accent); color:var(--accent);">Subscribe to Signal</a>
@@ -1243,7 +1232,7 @@ npx <span class="string">@4da/mcp-server</span>
       <div class="trust-grid">
         <div class="trust-card">
           <h3>Free means free</h3>
-          <p>No credit card. No account. No expiration. The full scoring engine with all 10 sources and the complete STREETS Playbook, forever. Signal features include a 45-day trial.</p>
+          <p>No credit card. No account. No expiration. The full scoring engine with all 20+ sources, AI briefings via your own API key, and the complete STREETS Playbook, forever. Signal features include a 45-day trial.</p>
         </div>
         <div class="trust-card">
           <h3>Source available</h3>
@@ -1283,7 +1272,7 @@ npx <span class="string">@4da/mcp-server</span>
         </details>
         <details>
           <summary>What happens if I never pay?</summary>
-          <div class="faq-answer">Nothing changes. The free tier includes all 10 sources, the full 5-axis scoring engine, behavior learning, the MCP server with 33 tools, the complete STREETS Playbook (all 7 modules), and the CLI. The free tier never expires. Signal features include a 45-day trial so you can evaluate before subscribing. Most individual developers will never need Signal.</div>
+          <div class="faq-answer">Nothing changes. The free tier includes all 20+ sources, the full 5-axis scoring engine, AI daily briefings (BYOK), behavior learning, the MCP server with 33 tools, the complete STREETS Playbook (all 7 modules), and the CLI. The free tier never expires. Signal features include a 45-day trial so you can evaluate before subscribing. Most individual developers will never need Signal.</div>
         </details>
         <details>
           <summary>What's the confirmation gate?</summary>
@@ -1439,22 +1428,6 @@ npx <span class="string">@4da/mcp-server</span>
           });
         });
       });
-    })();
-
-    // Lazy play/pause videos when visible
-    (function() {
-      var videos = document.querySelectorAll('.gallery-item video');
-      if (!videos.length || !('IntersectionObserver' in window)) return;
-      var observer = new IntersectionObserver(function(entries) {
-        entries.forEach(function(entry) {
-          if (entry.isIntersecting) {
-            entry.target.play().catch(function() {});
-          } else {
-            entry.target.pause();
-          }
-        });
-      }, { threshold: 0.3 });
-      videos.forEach(function(v) { observer.observe(v); });
     })();
 
     // Hamburger menu toggle
