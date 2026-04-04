@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "アイテムを選択...",
   "scoreDrawer.signals": "シグナル",
   "scoreDrawer.title": "スコア内訳",
+  "scoreDrawer.freeTeaser": "スコア分析は、このアイテムが{{score}}%を獲得した理由を明らかにします — どのシグナルが確認され、何がスコアを上下させ、学習済みの好みがどのように結果を形成したかを示します。",
   "scoreDrawer.toggle": "スコア内訳を切替",
   "scoreDrawer.whatReduced": "減点要因",
   "scoreDrawer.whyMatched": "マッチした理由",

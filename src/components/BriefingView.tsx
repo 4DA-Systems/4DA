@@ -108,19 +108,6 @@ export const BriefingView = memo(function BriefingView() {
           <div className="bg-bg-secondary rounded-lg border border-border">
             <div className="px-5 pt-5 pb-3 border-b border-border">
               <h2 className="text-[9px] font-semibold tracking-[0.12em] text-text-muted uppercase">{t('briefing.intelligenceBriefing')}</h2>
-              {freeBriefing.signal_priorities && Object.keys(freeBriefing.signal_priorities).length > 0 && (
-                <div className="flex gap-3 mt-2">
-                  {(freeBriefing.signal_priorities.critical ?? 0) > 0 && (
-                    <span className="text-[10px] font-mono text-red-400">{freeBriefing.signal_priorities.critical} {t('briefing.priorityCritical')}</span>
-                  )}
-                  {(freeBriefing.signal_priorities.alert ?? 0) > 0 && (
-                    <span className="text-[10px] font-mono text-orange-400">{freeBriefing.signal_priorities.alert} {t('briefing.priorityAlert')}</span>
-                  )}
-                  {(freeBriefing.signal_priorities.advisory ?? 0) > 0 && (
-                    <span className="text-[10px] font-mono text-amber-400">{freeBriefing.signal_priorities.advisory} {t('briefing.priorityAdvisory')}</span>
-                  )}
-                </div>
-              )}
             </div>
             <div className="p-5 space-y-4">
               {morningBriefSynthesis && (
@@ -150,9 +137,7 @@ export const BriefingView = memo(function BriefingView() {
                 <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">{t('briefing.sectionSignals')}</h3>
                 <div className="space-y-1">
                   {freeBriefing.top_items?.map((item, i) => {
-                    const pc = item.signal_priority === 'critical' ? 'bg-red-500'
-                      : item.signal_priority === 'alert' ? 'bg-orange-500'
-                      : item.signal_priority === 'advisory' ? 'bg-amber-500' : 'bg-blue-500';
+                    const pc = 'bg-text-muted';
                     return (
                       <div key={i} className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-white/[0.02] transition-colors">
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${pc}`} />

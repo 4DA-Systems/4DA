@@ -1564,6 +1564,7 @@
   "scoreDrawer.selectItem": "选择一个项目...",
   "scoreDrawer.signals": "信号",
   "scoreDrawer.title": "评分明细",
+  "scoreDrawer.freeTeaser": "分数剖析揭示了这个项目为何获得 {{score}}% — 哪些信号被确认，什么提升或降低了分数，以及您的学习偏好如何塑造了结果。",
   "scoreDrawer.toggle": "切换评分明细",
   "scoreDrawer.whatReduced": "减分因素",
   "scoreDrawer.whyMatched": "匹配原因",

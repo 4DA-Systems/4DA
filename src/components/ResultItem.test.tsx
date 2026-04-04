@@ -20,6 +20,41 @@ vi.mock('./ArticleReader', () => ({
   ArticleReader: () => <div data-testid="article-reader" />,
 }));
 
+vi.mock('../config/sources', () => ({
+  getSourceLabel: (id: string) => {
+    const labels: Record<string, string> = {
+      hackernews: 'HN',
+      reddit: 'Reddit',
+      github: 'GitHub',
+      producthunt: 'PH',
+      arxiv: 'arXiv',
+      rss: 'RSS',
+      devto: 'DEV',
+      youtube: 'YT',
+      twitter: 'X',
+      bluesky: 'Bluesky',
+      huggingface: 'HF',
+      osv: 'OSV',
+    };
+    return labels[id] ?? id;
+  },
+  getSourceColorClass: () => 'bg-gray-500/20 text-gray-400',
+  getSourceFullName: (id: string) => {
+    const names: Record<string, string> = {
+      hackernews: 'Hacker News',
+      reddit: 'Reddit',
+      github: 'GitHub',
+      producthunt: 'Product Hunt',
+      arxiv: 'arXiv',
+    };
+    return names[id] ?? id;
+  },
+  getSourceCategory: () => 'general',
+  loadSourceMeta: vi.fn(),
+  ALL_SOURCE_IDS: new Set(['hackernews', 'reddit', 'github', 'producthunt', 'arxiv']),
+  getSourcesByCategory: () => new Map(),
+}));
+
 function makeItem(overrides: Partial<SourceRelevance> = {}): SourceRelevance {
   return {
     id: 1,
