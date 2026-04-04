@@ -2,6 +2,20 @@
 
 ## Core Features
 
+### Natively Multilingual
+
+4DA supports 13 languages with full UI translation, content translation, and cross-lingual intelligence.
+
+- **13 languages:** English, Arabic, German, Spanish, French, Hindi, Italian, Japanese, Korean, Portuguese (BR), Russian, Turkish, Chinese
+- **Content translation:** Feed titles, descriptions, and briefings translated automatically
+- **Cross-lingual search:** Search in your language, find relevant content in any language
+- **Native briefings:** Your daily briefing is generated in your language, not translated from English
+- **RTL support:** Full right-to-left layout for Arabic
+- **Privacy-first:** Default translation uses local Ollama. Optional: DeepL, Azure, Google Cloud APIs for speed
+- **Zero configuration:** System language auto-detected on first launch
+
+See **[Multilingual Guide](MULTILINGUAL.md)** for details.
+
 ### Autonomous Context Engine (ACE)
 
 ACE is the intelligence layer at the core of the 4DA framework, understanding your work without manual configuration.

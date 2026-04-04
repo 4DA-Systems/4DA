@@ -10,7 +10,7 @@
 - **AI briefings** (Free) — AI-generated daily and weekly intelligence summaries
 - **Score Autopsy & intelligence panels** (Signal) — full scoring transparency, knowledge gaps, signal chains
 - **33 MCP tools** — deep integration with Claude Code, Cursor, and GitHub Copilot
-- **Full i18n support** — internationalized interface out of the box
+- **Natively multilingual** — 13 languages, content translation, cross-lingual search, native briefings. [Setup guide](MULTILINGUAL.md)
 
 ## Download
 

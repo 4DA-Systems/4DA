@@ -48,6 +48,55 @@ Settings are stored in:
 - Fully local operation
 - Requires Ollama installed and running
 
+## Translation
+
+Content translation can use dedicated APIs for faster, higher-quality results:
+
+```json
+{
+  "translation": {
+    "provider": "auto",
+    "api_key": "",
+    "auto_translate": true,
+    "translate_descriptions": false
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `provider` | string | `"auto"` | `"auto"`, `"deepl"`, `"google"`, `"azure"`, `"ollama"`, `"llm"` |
+| `api_key` | string | `""` | API key for DeepL, Google, or Azure |
+| `auto_translate` | bool | `true` | Translate feed titles at ingest time |
+| `translate_descriptions` | bool | `false` | Also translate descriptions (higher API usage) |
+
+**Free tier quotas:**
+- Azure Translator: 2M chars/month (recommended)
+- DeepL: 500k chars/month
+- Google Cloud Translation: 500k chars/month
+
+See **[Multilingual Guide](MULTILINGUAL.md)** for provider setup instructions.
+
+## Locale
+
+```json
+{
+  "locale": {
+    "country": "US",
+    "language": "en",
+    "currency": "USD"
+  }
+}
+```
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `country` | string | `"US"` | ISO 3166-1 country code |
+| `language` | string | `"en"` | BCP-47 language tag (e.g., `"ja"`, `"de"`, `"pt-BR"`) |
+| `currency` | string | `"USD"` | ISO 4217 currency code |
+
+Supported languages: en, ar, de, es, fr, hi, it, ja, ko, pt-BR, ru, tr, zh.
+
 ## Analysis Settings
 
 ```json
