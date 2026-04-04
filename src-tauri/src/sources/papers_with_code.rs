@@ -109,10 +109,9 @@ impl Source for PapersWithCodeSource {
 
         info!("Fetching Papers with Code latest papers");
 
-        let url = format!(
-            "https://paperswithcode.com/api/v1/papers/?ordering=-published&items_per_page={}",
-            self.config.max_items
-        );
+        // Papers with Code API now redirects to HuggingFace.
+        // Use HuggingFace daily papers endpoint directly.
+        let url = "https://huggingface.co/api/daily_papers".to_string();
 
         let response = self
             .client
@@ -140,12 +139,58 @@ impl Source for PapersWithCodeSource {
             )));
         }
 
-        let pwc_response: PwcResponse = response
-            .json()
+        // Try HuggingFace daily_papers format first (flat array of {paper: {...}})
+        // Fall back to original PwC format ({results: [...]})
+        let body = response
+            .text()
             .await
             .map_err(|e| SourceError::Parse(e.to_string()))?;
 
-        let papers = pwc_response.results.unwrap_or_default();
+        let papers: Vec<PwcPaper> =
+            if let Ok(daily_papers) = serde_json::from_str::<Vec<serde_json::Value>>(&body) {
+                daily_papers
+                    .into_iter()
+                    .filter_map(|dp| {
+                        let paper = dp.get("paper")?;
+                        Some(PwcPaper {
+                            id: paper.get("id").and_then(|v| v.as_str()).map(String::from),
+                            title: paper
+                                .get("title")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                            abstract_text: paper
+                                .get("summary")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                            url_abs: paper
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .map(|id| format!("https://huggingface.co/papers/{id}")),
+                            url_pdf: None,
+                            published: paper
+                                .get("publishedAt")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
+                            authors: paper.get("authors").and_then(|v| v.as_array()).map(|a| {
+                                a.iter()
+                                    .filter_map(|author| {
+                                        author
+                                            .get("name")
+                                            .and_then(|n| n.as_str())
+                                            .map(String::from)
+                                    })
+                                    .collect()
+                            }),
+                            tasks: None,
+                            repositories: None,
+                        })
+                    })
+                    .collect()
+            } else if let Ok(pwc_response) = serde_json::from_str::<PwcResponse>(&body) {
+                pwc_response.results.unwrap_or_default()
+            } else {
+                Vec::new()
+            };
 
         let items: Vec<SourceItem> = papers
             .into_iter()

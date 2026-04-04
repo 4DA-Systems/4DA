@@ -133,66 +133,115 @@ impl OsvSource {
         }
     }
 
-    /// Fetch recent vulnerabilities for a single ecosystem.
+    /// Fetch vulnerabilities for popular packages in an ecosystem.
     ///
-    /// The OSV API allows querying by ecosystem alone (no package name required),
-    /// which returns recently-published vulns for that entire ecosystem.
+    /// The OSV API requires a package name — cannot query by ecosystem alone.
+    /// Uses well-known packages per ecosystem, augmented by ACE deps when available.
     async fn fetch_ecosystem_vulns(&self, ecosystem: &str) -> SourceResult<Vec<OsvVulnerability>> {
-        let body = OsvQueryRequest {
-            package: Some(OsvPackage {
-                name: String::new(),
-                ecosystem: ecosystem.to_string(),
-            }),
-            version: None,
+        // Get packages to check: ACE deps first, then popular defaults
+        let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem(ecosystem);
+        let default_packages: Vec<&str> = match ecosystem {
+            "npm" => vec!["express", "react", "next", "lodash", "axios", "webpack"],
+            "crates.io" => vec!["serde", "tokio", "reqwest", "axum", "clap", "anyhow"],
+            "PyPI" => vec![
+                "django", "flask", "requests", "numpy", "fastapi", "pydantic",
+            ],
+            "Go" => vec![
+                "golang.org/x/net",
+                "golang.org/x/crypto",
+                "github.com/gin-gonic/gin",
+            ],
+            "Maven" => vec![
+                "org.apache.logging.log4j:log4j-core",
+                "com.google.guava:guava",
+            ],
+            _ => vec![],
+        };
+        let packages: Vec<String> = if ace_packages.is_empty() {
+            default_packages.iter().map(|s| s.to_string()).collect()
+        } else {
+            ace_packages.into_iter().take(10).collect()
         };
 
-        let response = self
-            .client
-            .post("https://api.osv.dev/v1/query")
-            .json(&body)
-            .header("User-Agent", "4DA-Developer-OS/1.0")
-            .send()
-            .await
-            .map_err(|e| SourceError::Network(e.to_string()))?;
+        let mut all_vulns = Vec::new();
+        for pkg_name in &packages {
+            let body = OsvQueryRequest {
+                package: Some(OsvPackage {
+                    name: pkg_name.clone(),
+                    ecosystem: ecosystem.to_string(),
+                }),
+                version: None,
+            };
 
-        let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "OSV API rate limited (HTTP 429)".to_string(),
-            ));
-        }
-        if status == reqwest::StatusCode::FORBIDDEN {
-            return Err(SourceError::Forbidden(
-                "OSV API forbidden (HTTP 403)".to_string(),
-            ));
-        }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "OSV API error: HTTP {}",
-                status.as_u16()
-            )));
+            let response = match self
+                .client
+                .post("https://api.osv.dev/v1/query")
+                .json(&body)
+                .header("User-Agent", "4DA-Developer-OS/1.0")
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(target: "4da::sources", package = %pkg_name, error = %e, "OSV: network error");
+                    continue;
+                }
+            };
+
+            let status = response.status();
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                break; // Stop querying this ecosystem
+            }
+            if !status.is_success() {
+                continue; // Skip this package
+            }
+
+            if let Ok(result) = response.json::<OsvQueryResponse>().await {
+                all_vulns.extend(result.vulns.unwrap_or_default());
+            }
+
+            // Rate limit between per-package queries
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         }
 
-        let result: OsvQueryResponse = response
-            .json()
-            .await
-            .map_err(|e| SourceError::Parse(e.to_string()))?;
-
-        Ok(result.vulns.unwrap_or_default())
+        Ok(all_vulns)
     }
 
     /// Fetch vulnerabilities across multiple ecosystems using the batch endpoint.
     async fn fetch_batch_vulns(&self, ecosystems: &[&str]) -> SourceResult<Vec<OsvVulnerability>> {
-        let queries: Vec<OsvQueryRequest> = ecosystems
-            .iter()
-            .map(|eco| OsvQueryRequest {
-                package: Some(OsvPackage {
-                    name: String::new(),
-                    ecosystem: eco.to_string(),
-                }),
-                version: None,
-            })
-            .collect();
+        // Build queries with actual package names per ecosystem
+        let mut queries = Vec::new();
+        for eco in ecosystems {
+            let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem(eco);
+            let pkgs: Vec<String> = if ace_packages.is_empty() {
+                match *eco {
+                    "npm" => vec!["express", "react", "lodash"]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                    "crates.io" => vec!["serde", "tokio", "reqwest"]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                    "PyPI" => vec!["django", "flask", "requests"]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                    _ => continue,
+                }
+            } else {
+                ace_packages.into_iter().take(5).collect()
+            };
+            for pkg in pkgs {
+                queries.push(OsvQueryRequest {
+                    package: Some(OsvPackage {
+                        name: pkg,
+                        ecosystem: eco.to_string(),
+                    }),
+                    version: None,
+                });
+            }
+        }
 
         let body = OsvBatchRequest { queries };
 
