@@ -299,8 +299,6 @@ pub(crate) const ADVANCED_TERMS: &[&str] = &[
     "vacuum",
     "compaction",
     "tombstone",
-    "deserialization",
-    "serialization",
 ];
 
 const MODERATE_TERMS: &[&str] = &[
