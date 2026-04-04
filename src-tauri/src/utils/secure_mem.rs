@@ -28,8 +28,7 @@ pub(crate) fn lock_memory(data: &[u8]) -> bool {
     {
         // SAFETY: mlock is safe to call on any valid memory region.
         // It pins the pages in physical RAM until munlock or process exit.
-        let result =
-            unsafe { libc::mlock(data.as_ptr() as *const libc::c_void, data.len()) };
+        let result = unsafe { libc::mlock(data.as_ptr() as *const libc::c_void, data.len()) };
         if result != 0 {
             tracing::warn!(
                 target: "4da::security",

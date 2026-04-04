@@ -137,10 +137,11 @@ pub async fn record_awe_interaction_feedback(
 /// Used by the Briefing page to annotate signals with historical context.
 #[tauri::command]
 pub async fn get_awe_pattern_match(query: String, domain: String) -> Result<String> {
-    let query = crate::ipc_guard::validate_length("query", &query, crate::ipc_guard::MAX_INPUT_LENGTH)
-        .map_err(|e| e.to_string())?;
-    let domain = crate::ipc_guard::validate_length("domain", &domain, 200)
-        .map_err(|e| e.to_string())?;
+    let query =
+        crate::ipc_guard::validate_length("query", &query, crate::ipc_guard::MAX_INPUT_LENGTH)
+            .map_err(|e| e.to_string())?;
+    let domain =
+        crate::ipc_guard::validate_length("domain", &domain, 200).map_err(|e| e.to_string())?;
     if query.trim().is_empty() {
         return Ok(serde_json::json!({
             "precedents": [],
@@ -200,8 +201,8 @@ pub async fn get_awe_pattern_match(query: String, domain: String) -> Result<Stri
 /// Used by the Results page to show decision backlinks on items.
 #[tauri::command]
 pub async fn get_awe_decision_history(domain: String, limit: usize) -> Result<String> {
-    let domain = crate::ipc_guard::validate_length("domain", &domain, 200)
-        .map_err(|e| e.to_string())?;
+    let domain =
+        crate::ipc_guard::validate_length("domain", &domain, 200).map_err(|e| e.to_string())?;
     let limit_str = limit.to_string();
     let result = run_awe(
         &["history", "-d", &domain, "--limit", &limit_str, "--json"],
