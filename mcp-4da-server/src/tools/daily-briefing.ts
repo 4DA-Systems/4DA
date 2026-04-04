@@ -238,6 +238,20 @@ export async function executeDailyBriefing(
   return result;
 }
 
+// Word-boundary matching prevents "ai" matching "obtain", "git" matching "digital", etc.
+function hasWordBoundary(text: string, term: string): boolean {
+  let searchFrom = 0;
+  while (true) {
+    const pos = text.indexOf(term, searchFrom);
+    if (pos === -1) return false;
+    const beforeOk = pos === 0 || !/[a-zA-Z0-9]/.test(text[pos - 1]);
+    const afterIdx = pos + term.length;
+    const afterOk = afterIdx >= text.length || !/[a-zA-Z0-9]/.test(text[afterIdx]);
+    if (beforeOk && afterOk) return true;
+    searchFrom = pos + 1;
+  }
+}
+
 function extractThemes(
   items: { title: string; content: string; relevance_score: number; url: string | null }[],
   context: { interests: { topic: string }[]; tech_stack: string[] }
@@ -263,7 +277,7 @@ function extractThemes(
 
   for (const pattern of themePatterns) {
     const matchingItems = itemsWithText.filter(item =>
-      pattern.keywords.some(kw => item.textLower.includes(kw))
+      pattern.keywords.some(kw => hasWordBoundary(item.textLower, kw))
     );
 
     if (matchingItems.length > 0) {
