@@ -8,14 +8,15 @@ Everything you need to configure 4DA, fix common issues, and get the most out of
 
 1. [First Launch](#first-launch)
 2. [AI Provider Setup](#ai-provider-setup)
-3. [Your Profile & Tech Stack](#your-profile--tech-stack)
-4. [Content Sources](#content-sources)
-5. [Context Discovery (ACE)](#context-discovery-ace)
-6. [Intelligence System](#intelligence-system)
-7. [License Activation](#license-activation)
-8. [STREETS Playbook](#streets-playbook)
-9. [Keyboard Shortcuts](#keyboard-shortcuts)
-10. [Troubleshooting](#troubleshooting)
+3. [Language & Translation](#language--translation)
+4. [Your Profile & Tech Stack](#your-profile--tech-stack)
+5. [Content Sources](#content-sources)
+6. [Context Discovery (ACE)](#context-discovery-ace)
+7. [Intelligence System](#intelligence-system)
+8. [License Activation](#license-activation)
+9. [STREETS Playbook](#streets-playbook)
+10. [Keyboard Shortcuts](#keyboard-shortcuts)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -103,6 +104,24 @@ Re-ranking uses AI to improve the order of your results beyond basic scoring.
 - Set **Max Items per Batch** (default: 15)
 - Set **Min Score** threshold (default: 0.25)
 - Set daily token and cost limits to control spending
+
+---
+
+## Language & Translation
+
+4DA supports 13 languages natively. Your system language is auto-detected during first launch.
+
+**Change language:** Settings > General > Locale > Language
+
+**Set up content translation:** For faster, higher-quality translation of feed content, configure a dedicated translation API. Azure Translator gives you 2M characters/month free:
+
+1. Create a free Azure Translator resource at [portal.azure.com](https://portal.azure.com)
+2. Copy the API key
+3. In 4DA: Settings > General > Locale > Content Translation > Azure Translator > paste key
+
+Without a dedicated API, translations use your local Ollama model (free, private, slightly slower).
+
+For the complete multilingual guide including all provider setup instructions, platform notes, and troubleshooting, see **[Multilingual Guide](MULTILINGUAL.md)**.
 
 ---
 
