@@ -94,13 +94,13 @@ pub(crate) async fn fetch_all_sources(
     let sources: Vec<Box<dyn Source>> = crate::sources::build_all_sources()
         .into_iter()
         .filter(|source| {
-            let enabled = db.is_source_enabled(source.source_type());
+            let st = source.source_type();
+            let enabled = db.is_source_enabled(st);
             if !enabled {
-                info!(target: "4da::sources", source = source_type, "Skipping disabled source");
+                info!(target: "4da::sources", source = st, "Skipping disabled source");
             }
             enabled
         })
-        .map(|(_, source)| source)
         .collect();
 
     info!(target: "4da::sources", count = sources.len(), "Fetching from enabled sources");
