@@ -19,6 +19,7 @@ use crate::error::Result;
 /// - Decision details if decision_ref is present
 #[tauri::command]
 pub async fn get_radar_entry_detail(name: String) -> Result<serde_json::Value> {
+    let name = crate::ipc_guard::validate_length("name", &name, crate::ipc_guard::MAX_INPUT_LENGTH)?;
     let conn = crate::open_db_connection()?;
     let radar = crate::tech_radar::compute_radar(&conn)?;
     let entry = radar
