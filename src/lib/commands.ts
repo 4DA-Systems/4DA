@@ -111,6 +111,11 @@ interface CommandMap {
   run_awe_purge: { params: { dryRun: boolean }; result: string };
   get_awe_candidates: { params: { domain: string }; result: string };
   record_awe_interaction_feedback: { params: { itemTitle: string; interaction: string; sourceType: string }; result: string };
+  // AWE Synthesis (behavioral data bridge)
+  get_behavioral_context: { params: Record<string, never>; result: string };
+  synthesize_wisdom: { params: Record<string, never>; result: string };
+  synthesize_topic_context: { params: { topics: string[] }; result: string };
+  refresh_awe_context: { params: Record<string, never>; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 

@@ -76,6 +76,7 @@ mod autophagy;
 mod autophagy_commands;
 mod autophagy_pulse;
 mod awe_commands;
+mod awe_synthesis;
 mod briefing_window;
 mod calibration_commands;
 mod calibration_probes;
@@ -580,6 +581,11 @@ pub fn run() {
             awe_commands::run_awe_purge,
             awe_commands::get_awe_candidates,
             awe_commands::record_awe_interaction_feedback,
+            // AWE Synthesis (behavioral data bridge)
+            awe_synthesis::get_behavioral_context,
+            awe_synthesis::synthesize_wisdom,
+            awe_synthesis::synthesize_topic_context,
+            awe_synthesis::refresh_awe_context,
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,

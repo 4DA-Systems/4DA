@@ -785,6 +785,35 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     });
                 }
 
+                // AWE behavioral wisdom synthesis — personalized daily insight
+                {
+                    let app_wisdom = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        match crate::awe_synthesis::build_behavioral_context() {
+                            Ok(ctx) => {
+                                // Write context file for AWE CLI
+                                let _ = crate::awe_synthesis::write_context_file(&ctx);
+                                // Synthesize wisdom via LLM
+                                match crate::awe_synthesis::synthesize_daily_wisdom(&ctx).await {
+                                    Ok(wisdom) => {
+                                        info!(target: "4da::awe_synthesis", "Daily wisdom synthesis ready");
+                                        let _ = app_wisdom.emit(
+                                            "awe-wisdom-synthesis",
+                                            serde_json::json!({ "wisdom": wisdom }),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        info!(target: "4da::awe_synthesis", reason = %e, "Wisdom synthesis skipped");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::awe_synthesis", error = %e, "Failed to build behavioral context");
+                            }
+                        }
+                    });
+                }
+
                 // AWE daily jobs — piggyback on morning briefing trigger (once per day)
                 // 1. Sync AWE wisdom into context for PASIFA scoring
                 tauri::async_runtime::spawn(async {
