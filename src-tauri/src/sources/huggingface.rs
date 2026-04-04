@@ -197,7 +197,7 @@ impl Source for HuggingFaceSource {
 
         info!("Fetching Hugging Face trending models");
 
-        let trending_url = format!("{HF_API_BASE}?sort=trending&limit=15");
+        let trending_url = format!("{HF_API_BASE}?sort=likes&direction=-1&limit=15");
         let items = self.fetch_models(&trending_url, 15).await?;
 
         info!(items = items.len(), "Fetched Hugging Face trending models");
@@ -211,7 +211,7 @@ impl Source for HuggingFaceSource {
 
         info!("Deep fetching Hugging Face (trending + recently updated)");
 
-        let trending_url = format!("{HF_API_BASE}?sort=trending&limit=15");
+        let trending_url = format!("{HF_API_BASE}?sort=likes&direction=-1&limit=15");
         let trending_result = self.fetch_models(&trending_url, 15).await;
 
         // 2-second delay between requests to be polite
