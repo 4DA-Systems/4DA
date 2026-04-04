@@ -686,6 +686,10 @@ interface SourceInfo {
   enabled: boolean;
   max_items: number;
   fetch_interval_secs: number;
+  category: string;
+  label: string;
+  color_hint: string;
+  default_content_type: string;
 }
 
 /** Electricity cost calculation result (mirrors Rust calculate_electricity_cost JSON) */

@@ -21,6 +21,7 @@ export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = 
     });
   },
 
+  // Re-read ALL_SOURCE_IDS at call time (it's populated dynamically by loadSourceMeta)
   resetSourceFilters: () => set({ sourceFilters: new Set(ALL_SOURCE_IDS) }),
 
   setSortBy: (sort) => set({ sortBy: sort }),
