@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "Devrait-on migrer de X vers Y ?",
   "wisdom.subtitle": "Que décidez-vous ? Obtenez une perspective basée sur votre historique.",
   "wisdom.title": "Analyse décisionnelle",
-  "wisdom.watchFor": "À surveiller :"
+  "wisdom.watchFor": "À surveiller :",
+  "briefing.header": "BRIEFING INTELLIGENCE",
+  "briefing.escalating": "EN ESCALADE",
+  "briefing.wisdom": "SAGESSE",
+  "briefing.signals": "SIGNAUX",
+  "briefing.blind_spots": "ANGLES MORTS",
+  "briefing.tracking": "Suivi :",
+  "briefing.gap_days_suffix": "j sans signal",
+  "briefing.signals_today_suffix": " aujourd'hui",
+  "briefing.empty_state": "Votre stack est calme. Rien de nouveau."
 }

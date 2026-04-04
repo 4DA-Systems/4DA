@@ -2436,5 +2436,14 @@
   "wisdom.placeholder": "X에서 Y로 마이그레이션해야 할까요?",
   "wisdom.subtitle": "무엇을 결정하고 있나요? 이력에서 관점을 얻으세요.",
   "wisdom.title": "의사결정 분석",
-  "wisdom.watchFor": "주의 사항:"
+  "wisdom.watchFor": "주의 사항:",
+  "briefing.header": "인텔리전스 브리핑",
+  "briefing.escalating": "에스컬레이팅",
+  "briefing.wisdom": "위즈덤",
+  "briefing.signals": "시그널",
+  "briefing.blind_spots": "블라인드 스팟",
+  "briefing.tracking": "추적:",
+  "briefing.gap_days_suffix": "일 이후 시그널 없음",
+  "briefing.signals_today_suffix": " 오늘",
+  "briefing.empty_state": "스택이 조용합니다. 새로운 소식이 없습니다."
 }

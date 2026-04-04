@@ -19,9 +19,9 @@ pub struct SophisticationScore {
 /// Compute content sophistication and return an audience-aware multiplier.
 ///
 /// Multiplier range: [0.60, 1.15]
-/// - Advanced content + senior audience: 1.15 (boost)
-/// - Moderate content: 1.00 (neutral)
-/// - Beginner content + senior audience: 0.60 (strong penalty)
+/// - Advanced content (>= 0.5 sophistication) + senior audience: 1.15 (boost)
+/// - Moderate content (0.3..0.5): 1.00 (neutral)
+/// - Beginner content (< 0.3) + senior audience: 0.60 (strong penalty)
 ///
 /// `detected_tech_count` is the number of ACE-detected technologies (from ACEContext).
 pub fn compute_sophistication(
@@ -48,7 +48,7 @@ pub fn compute_sophistication(
 }
 
 fn compute_multiplier(sophistication: f32, is_senior: bool) -> f32 {
-    if sophistication > 0.7 {
+    if sophistication >= 0.5 {
         if is_senior {
             1.15
         } else {
@@ -74,6 +74,10 @@ fn assess_title_complexity(title: &str) -> f32 {
     // Advanced technical terms (high-signal terms only)
     let advanced_hits = count_term_hits(&lower, ADVANCED_TERMS);
     score += (advanced_hits as f32 * 0.20).min(0.50);
+
+    // Moderate technical terms (intermediate-signal — indicate non-beginner content)
+    let moderate_hits = count_term_hits(&lower, MODERATE_TERMS);
+    score += (moderate_hits as f32 * 0.10).min(0.25);
 
     // Compound/hyphenated terms indicate technical depth
     let hyphen_count = title.matches('-').count();
@@ -295,6 +299,35 @@ pub(crate) const ADVANCED_TERMS: &[&str] = &[
     "vacuum",
     "compaction",
     "tombstone",
+    "deserialization",
+    "serialization",
+];
+
+const MODERATE_TERMS: &[&str] = &[
+    "plugin",
+    "system",
+    "engine",
+    "compiler",
+    "runtime",
+    "framework",
+    "middleware",
+    "pipeline",
+    "scheduler",
+    "resolver",
+    "renderer",
+    "parser",
+    "generator",
+    "daemon",
+    "server",
+    "proxy",
+    "gateway",
+    "adapter",
+    "driver",
+    "handler",
+    "dispatcher",
+    "orchestrat",
+    "migration",
+    "refactor",
 ];
 
 const BEGINNER_TITLE_TERMS: &[&str] = &[
