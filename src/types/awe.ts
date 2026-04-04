@@ -143,6 +143,17 @@ export interface AweBehavioralContext {
   feedback_stats: AweFeedbackStats;
   detected_tech: string[];
   active_topics: string[];
+  instant_context: AweInstantContext;
+}
+
+export interface AweInstantContext {
+  total_source_items: number;
+  items_last_24h: number;
+  source_breakdown: [string, number][];
+  project_count: number;
+  dependency_count: number;
+  latest_item_at: string | null;
+  data_level: 'cold' | 'warming' | 'rich';
 }
 
 export interface AweTopicSignal {

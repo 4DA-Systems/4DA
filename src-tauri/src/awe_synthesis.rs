@@ -144,6 +144,7 @@ pub fn build_behavioral_context() -> Result<BehavioralContext> {
     let feedback_stats = query_feedback_stats(&conn);
 
     let (detected_tech, active_topics) = get_ace_summary();
+    let instant_context = query_instant_context(&conn, &detected_tech);
 
     Ok(BehavioralContext {
         topic_affinities,
@@ -154,6 +155,7 @@ pub fn build_behavioral_context() -> Result<BehavioralContext> {
         feedback_stats,
         detected_tech,
         active_topics,
+        instant_context,
     })
 }
 
@@ -375,6 +377,71 @@ fn query_feedback_stats(conn: &rusqlite::Connection) -> FeedbackStats {
 fn get_ace_summary() -> (Vec<String>, Vec<String>) {
     let ace_ctx = crate::scoring::get_ace_context();
     (ace_ctx.detected_tech.clone(), ace_ctx.active_topics.clone())
+}
+
+/// Query instant context from source_items + ACE — always returns data, even cold start.
+fn query_instant_context(conn: &rusqlite::Connection, detected_tech: &[String]) -> InstantContext {
+    let mut ctx = InstantContext {
+        total_source_items: 0,
+        items_last_24h: 0,
+        source_breakdown: Vec::new(),
+        project_count: 0,
+        dependency_count: detected_tech.len() as i64,
+        latest_item_at: None,
+        data_level: "cold".to_string(),
+    };
+
+    // Total items + recent items
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT
+            (SELECT COUNT(*) FROM source_items),
+            (SELECT COUNT(*) FROM source_items WHERE created_at > datetime('now', '-1 day')),
+            (SELECT MAX(created_at) FROM source_items)",
+    ) {
+        if let Ok(row) = stmt.query_row([], |row| {
+            Ok((
+                row.get::<_, i64>(0).unwrap_or(0),
+                row.get::<_, i64>(1).unwrap_or(0),
+                row.get::<_, Option<String>>(2).unwrap_or(None),
+            ))
+        }) {
+            ctx.total_source_items = row.0;
+            ctx.items_last_24h = row.1;
+            ctx.latest_item_at = row.2;
+        }
+    }
+
+    // Source breakdown
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT source_type, COUNT(*) FROM source_items GROUP BY source_type ORDER BY COUNT(*) DESC LIMIT 8",
+    ) {
+        ctx.source_breakdown = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map(|rows| rows.filter_map(|r| r.ok()).collect())
+            .unwrap_or_default();
+    }
+
+    // ACE project count (from detected projects table if exists)
+    if let Ok(mut stmt) = conn.prepare(
+        "SELECT COUNT(DISTINCT topic) FROM topic_affinities",
+    ) {
+        if let Ok(count) = stmt.query_row([], |row| row.get::<_, i64>(0)) {
+            ctx.project_count = count;
+        }
+    }
+
+    // Data level classification
+    ctx.data_level = if ctx.total_source_items < 10 {
+        "cold".to_string()
+    } else if ctx.total_source_items < 100 {
+        "warming".to_string()
+    } else {
+        "rich".to_string()
+    };
+
+    ctx
 }
 
 // ============================================================================
@@ -757,6 +824,19 @@ fn format_behavioral_summary(ctx: &BehavioralContext) -> String {
         ctx.feedback_stats.positive_ratio * 100.0,
     ));
 
+    // Instant context — always available, fills gaps when behavioral data is thin
+    let ic = &ctx.instant_context;
+    parts.push(format!(
+        "Intelligence gathered: {} items total, {} in last 24h, data level: {}",
+        ic.total_source_items, ic.items_last_24h, ic.data_level,
+    ));
+    if !ic.source_breakdown.is_empty() {
+        let sources: Vec<String> = ic.source_breakdown.iter()
+            .map(|(s, c)| format!("{s}: {c}"))
+            .collect();
+        parts.push(format!("Source coverage: {}", sources.join(", ")));
+    }
+
     parts.join("\n")
 }
 
@@ -852,6 +932,15 @@ mod tests {
             },
             detected_tech: vec![],
             active_topics: vec![],
+            instant_context: InstantContext {
+                total_source_items: 0,
+                items_last_24h: 0,
+                source_breakdown: vec![],
+                project_count: 0,
+                dependency_count: 0,
+                latest_item_at: None,
+                data_level: "cold".to_string(),
+            },
         };
 
         let summary = format_behavioral_summary(&ctx);
@@ -922,6 +1011,15 @@ mod tests {
             },
             detected_tech: vec!["rust".into(), "typescript".into(), "react".into()],
             active_topics: vec!["tauri".into(), "wgsl-shaders".into()],
+            instant_context: InstantContext {
+                total_source_items: 1200,
+                items_last_24h: 42,
+                source_breakdown: vec![("hackernews".into(), 500), ("reddit".into(), 300)],
+                project_count: 3,
+                dependency_count: 45,
+                latest_item_at: Some("2026-04-01 12:00:00".into()),
+                data_level: "rich".to_string(),
+            },
         };
 
         let summary = format_behavioral_summary(&ctx);
@@ -966,6 +1064,15 @@ mod tests {
             },
             detected_tech: vec!["rust".into(), "typescript".into()],
             active_topics: vec![],
+            instant_context: InstantContext {
+                total_source_items: 500,
+                items_last_24h: 10,
+                source_breakdown: vec![],
+                project_count: 1,
+                dependency_count: 2,
+                latest_item_at: None,
+                data_level: "rich".to_string(),
+            },
         };
 
         let json = build_developer_context_json(&ctx).unwrap();
@@ -999,6 +1106,15 @@ mod tests {
             },
             detected_tech: vec![],
             active_topics: vec![],
+            instant_context: InstantContext {
+                total_source_items: 0,
+                items_last_24h: 0,
+                source_breakdown: vec![],
+                project_count: 0,
+                dependency_count: 0,
+                latest_item_at: None,
+                data_level: "cold".to_string(),
+            },
         };
 
         // Empty tech
