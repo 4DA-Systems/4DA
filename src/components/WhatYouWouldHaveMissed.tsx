@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
+import { useLicense } from '../hooks/use-license';
+import { SignalUpgradeCTA } from './SignalUpgradeCTA';
 
 /**
  * "What You Would Have Missed" — the most persuasive feature in 4DA.
@@ -92,6 +94,8 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
     })),
   );
 
+  const { isPro } = useLicense();
+
   const insight = useMemo(() => {
     if (!analysisComplete || results.length === 0) return null;
 
@@ -113,6 +117,40 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
 
   // Only show when there's a compelling story (enough rejection + a critical save)
   if (relevant.length === 0 || parseFloat(rejectionRate) < 80) return null;
+
+  // Free tier: compelling teaser without full analytics
+  if (!isPro) {
+    return (
+      <div className="mb-5 bg-bg-secondary border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-accent-gold" />
+            <span className="text-xs font-medium text-accent-gold">
+              {t('missed.title', { defaultValue: 'What you would have missed' })}
+            </span>
+          </div>
+          <span className="text-[10px] text-text-muted">
+            {t('missed.scanned', { count: totalScanned, defaultValue: '{{count}} items scanned' })}
+          </span>
+        </div>
+        <div className="px-4 py-5 space-y-3">
+          <p className="text-sm text-text-secondary text-center">
+            {t('missed.freeTeaser', {
+              rejected,
+              relevant: relevant.length,
+              defaultValue: '4DA filtered {{rejected}} items to surface {{relevant}} signals that matter to you.',
+            })}
+          </p>
+          <p className="text-xs text-text-muted text-center">
+            {t('missed.freeSubtext', {
+              defaultValue: 'Unlock full analytics — see exactly what was buried and why it matters.',
+            })}
+          </p>
+          <SignalUpgradeCTA compact />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mb-5 bg-bg-secondary border border-border rounded-xl overflow-hidden">

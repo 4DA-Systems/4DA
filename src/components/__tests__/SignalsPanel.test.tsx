@@ -13,6 +13,10 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+vi.mock('../../hooks/use-license', () => ({
+  useLicense: () => ({ isPro: true, trialStatus: null, expired: false, daysRemaining: 30 }),
+}));
+
 // ---------------------------------------------------------------------------
 // Component under test
 // ---------------------------------------------------------------------------
