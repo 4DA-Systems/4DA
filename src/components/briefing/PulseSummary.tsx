@@ -118,6 +118,7 @@ export const PulseSummary = memo(function PulseSummary({
 
   // AWE voice — subtle wisdom line beneath the pulse
   const aweSummary = useAppStore(s => s.aweSummary);
+  const aweWisdomSynthesis = useAppStore(s => s.aweWisdomSynthesis);
   const loadAweSummary = useAppStore(s => s.loadAweSummary);
   useEffect(() => { if (!aweSummary) void loadAweSummary(); }, [aweSummary, loadAweSummary]);
 
@@ -129,13 +130,15 @@ export const PulseSummary = memo(function PulseSummary({
           <p className={`text-sm leading-relaxed ${moodColor}`}>
             {summary}
           </p>
-          {aweSummary?.available === true && aweSummary.decisions > 0 && (
+          {aweWisdomSynthesis ? (
+            <p className="text-[11px] text-accent-gold/80 mt-1 leading-relaxed line-clamp-3">{aweWisdomSynthesis}</p>
+          ) : aweSummary?.available === true && aweSummary.decisions > 0 ? (
             <p className="text-[11px] text-accent-gold/70 mt-0.5">
               {aweSummary.feedback_coverage >= 70
                 ? t('awe.pulse.compounding', { decisions: aweSummary.decisions, principles: aweSummary.principles })
                 : t('awe.pulse.learning', { decisions: aweSummary.decisions, coverage: aweSummary.feedback_coverage })}
             </p>
-          )}
+          ) : null}
         </div>
         {briefing.lastGenerated && (
           <div className="flex-shrink-0 ms-auto">
