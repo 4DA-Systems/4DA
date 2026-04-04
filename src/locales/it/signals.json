@@ -8,7 +8,7 @@
   "priority.critical": "critico",
   "priority.alert": "allerta",
   "priority.advisory": "avviso",
-  "priority.watch": "osservare",
+  "priority.watch": "monitoraggio",
   "horizon.tactical": "tattico",
   "horizon.strategic": "strategico",
   "action.securityReviewStack": "Verifica {{title}} — interessa il tuo stack {{tech}}",
