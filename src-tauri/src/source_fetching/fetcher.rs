@@ -89,90 +89,12 @@ pub(crate) async fn fetch_all_sources(
         crate::capabilities::report_restored(crate::capabilities::Capability::SourceFetching);
     }
 
-    // Create sources directly (avoid holding MutexGuard across await)
-    // Filter by enabled status from DB (Phase 2: source enable/disable enforcement)
-    let rss_feeds = load_rss_feeds_from_settings();
-    let (twitter_handles, x_api_key) = load_twitter_settings();
-    let youtube_channels = load_youtube_channels_from_settings();
-
-    let all_sources: Vec<(&str, Box<dyn Source>)> = vec![
-        (
-            "hackernews",
-            Box::new(HackerNewsSource::new()) as Box<dyn Source>,
-        ),
-        ("arxiv", Box::new(ArxivSource::new())),
-        ("reddit", Box::new(RedditSource::new())),
-        (
-            "github",
-            Box::new(GitHubSource::with_languages(
-                load_github_languages_from_settings(),
-            )),
-        ),
-        ("rss", Box::new(RssSource::with_feeds(rss_feeds))),
-        (
-            "twitter",
-            Box::new(TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key)),
-        ),
-        (
-            "youtube",
-            Box::new(YouTubeSource::with_channels(youtube_channels)),
-        ),
-        (
-            "lobsters",
-            Box::new(LobstersSource::new()) as Box<dyn Source>,
-        ),
-        ("devto", Box::new(DevtoSource::new()) as Box<dyn Source>),
-        (
-            "producthunt",
-            Box::new(crate::sources::producthunt::ProductHuntSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "cve",
-            Box::new(crate::sources::cve::CveSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "osv",
-            Box::new(crate::sources::osv::OsvSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "npm_registry",
-            Box::new(crate::sources::npm_registry::NpmRegistrySource::new()) as Box<dyn Source>,
-        ),
-        (
-            "pypi",
-            Box::new(crate::sources::pypi::PypiSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "crates_io",
-            Box::new(crate::sources::crates_io::CratesIoSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "huggingface",
-            Box::new(crate::sources::huggingface::HuggingFaceSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "stackoverflow",
-            Box::new(crate::sources::stackoverflow::StackOverflowSource::new()) as Box<dyn Source>,
-        ),
-        (
-            "bluesky",
-            Box::new(crate::sources::bluesky::BlueskySource::new()) as Box<dyn Source>,
-        ),
-        (
-            "papers_with_code",
-            Box::new(crate::sources::papers_with_code::PapersWithCodeSource::new())
-                as Box<dyn Source>,
-        ),
-        (
-            "go_modules",
-            Box::new(crate::sources::go_modules::GoModulesSource::new()) as Box<dyn Source>,
-        ),
-    ];
-
-    let sources: Vec<Box<dyn Source>> = all_sources
+    // Build all sources from the canonical factory (single source of truth)
+    // Filter by enabled status from DB
+    let sources: Vec<Box<dyn Source>> = crate::sources::build_all_sources()
         .into_iter()
-        .filter(|(source_type, _)| {
-            let enabled = db.is_source_enabled(source_type);
+        .filter(|source| {
+            let enabled = db.is_source_enabled(source.source_type());
             if !enabled {
                 info!(target: "4da::sources", source = source_type, "Skipping disabled source");
             }

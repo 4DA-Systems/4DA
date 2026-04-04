@@ -351,6 +351,54 @@ impl Default for SourceRegistry {
 }
 
 // ============================================================================
+// Canonical Source Factory — THE ONLY place sources are instantiated
+// ============================================================================
+
+/// Build all source adapters. This is the single source of truth for
+/// source instantiation. Adding a new source: create the file, add one
+/// line here. Everything else (registry, DB, frontend) follows automatically.
+pub fn build_all_sources() -> Vec<Box<dyn Source>> {
+    use crate::source_fetching::{
+        load_github_languages_from_settings, load_rss_feeds_from_settings,
+        load_twitter_settings, load_youtube_channels_from_settings,
+    };
+
+    let rss_feeds = load_rss_feeds_from_settings();
+    let (twitter_handles, x_api_key) = load_twitter_settings();
+    let youtube_channels = load_youtube_channels_from_settings();
+    let github_languages = load_github_languages_from_settings();
+
+    vec![
+        // News
+        Box::new(hackernews::HackerNewsSource::new()),
+        Box::new(github::GitHubSource::with_languages(github_languages)),
+        Box::new(rss::RssSource::with_feeds(rss_feeds)),
+        Box::new(youtube::YouTubeSource::with_channels(youtube_channels)),
+        Box::new(producthunt::ProductHuntSource::new()),
+        // Research
+        Box::new(arxiv::ArxivSource::new()),
+        Box::new(huggingface::HuggingFaceSource::new()),
+        Box::new(papers_with_code::PapersWithCodeSource::new()),
+        // Community
+        Box::new(reddit::RedditSource::new()),
+        Box::new(lobsters::LobstersSource::new()),
+        Box::new(devto::DevtoSource::new()),
+        Box::new(stackoverflow::StackOverflowSource::new()),
+        // Social
+        Box::new(twitter::TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key)),
+        Box::new(bluesky::BlueskySource::new()),
+        // Security
+        Box::new(cve::CveSource::new()),
+        Box::new(osv::OsvSource::new()),
+        // Package Registries (ACE-integrated)
+        Box::new(npm_registry::NpmRegistrySource::new()),
+        Box::new(pypi::PypiSource::new()),
+        Box::new(crates_io::CratesIoSource::new()),
+        Box::new(go_modules::GoModulesSource::new()),
+    ]
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 

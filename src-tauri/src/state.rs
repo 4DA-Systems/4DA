@@ -261,16 +261,11 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
         };
 
         // Register all sources at startup (enables source enable/disable enforcement)
-        db.register_source("hackernews", "Hacker News").ok();
-        db.register_source("arxiv", "arXiv").ok();
-        db.register_source("reddit", "Reddit").ok();
-        db.register_source("github", "GitHub").ok();
-        db.register_source("rss", "RSS").ok();
-        db.register_source("youtube", "YouTube").ok();
-        db.register_source("twitter", "Twitter").ok();
-        db.register_source("lobsters", "Lobsters").ok();
-        db.register_source("devto", "Dev.to").ok();
-        db.register_source("producthunt", "Product Hunt").ok();
+        // Register ALL sources in DB for enable/disable control.
+        // Uses build_all_sources() so new sources get DB rows automatically.
+        for source in crate::sources::build_all_sources() {
+            db.register_source(source.source_type(), source.name()).ok();
+        }
 
         info!(target: "4da::db", "Database ready");
         Ok(Arc::new(db))
@@ -357,58 +352,11 @@ pub(crate) fn get_source_registry() -> &'static Mutex<SourceRegistry> {
         info!(target: "4da::sources", "Initializing source registry");
         let mut registry = SourceRegistry::new();
 
-        // Register default sources
-        registry.register(Box::new(HackerNewsSource::new()));
-        registry.register(Box::new(ArxivSource::new()));
-        registry.register(Box::new(RedditSource::new()));
-        registry.register(Box::new(GitHubSource::with_languages(
-            load_github_languages_from_settings(),
-        )));
-        registry.register(Box::new(ProductHuntSource::new()));
-
-        // Register RSS source (feeds loaded from settings)
-        let rss_feeds = load_rss_feeds_from_settings();
-        registry.register(Box::new(RssSource::with_feeds(rss_feeds)));
-
-        // Register Twitter/X source (X API v2 with Bearer Token)
-        let (twitter_handles, x_api_key) = load_twitter_settings();
-        registry.register(Box::new(
-            TwitterSource::with_handles(twitter_handles).with_api_key(x_api_key),
-        ));
-
-        // Register YouTube source (free RSS feeds, no API key needed)
-        let youtube_channels = load_youtube_channels_from_settings();
-        registry.register(Box::new(YouTubeSource::with_channels(youtube_channels)));
-
-        // Register remaining original sources
-        registry.register(Box::new(crate::sources::lobsters::LobstersSource::new()));
-        registry.register(Box::new(crate::sources::devto::DevtoSource::new()));
-
-        // Security intelligence sources
-        registry.register(Box::new(crate::sources::cve::CveSource::new()));
-        registry.register(Box::new(crate::sources::osv::OsvSource::new()));
-
-        // Package registry sources (ACE-integrated — monitors user's actual deps)
-        registry.register(Box::new(
-            crate::sources::npm_registry::NpmRegistrySource::new(),
-        ));
-        registry.register(Box::new(crate::sources::pypi::PypiSource::new()));
-        registry.register(Box::new(crate::sources::crates_io::CratesIoSource::new()));
-        registry.register(Box::new(crate::sources::go_modules::GoModulesSource::new()));
-
-        // AI/ML + Research
-        registry.register(Box::new(
-            crate::sources::huggingface::HuggingFaceSource::new(),
-        ));
-        registry.register(Box::new(
-            crate::sources::papers_with_code::PapersWithCodeSource::new(),
-        ));
-
-        // Community + Social
-        registry.register(Box::new(
-            crate::sources::stackoverflow::StackOverflowSource::new(),
-        ));
-        registry.register(Box::new(crate::sources::bluesky::BlueskySource::new()));
+        // Single source of truth: build_all_sources() is THE ONLY place
+        // sources are instantiated. Adding a new source = one line there.
+        for source in crate::sources::build_all_sources() {
+            registry.register(source);
+        }
 
         info!(target: "4da::sources", count = registry.count(), "Source registry ready");
         Mutex::new(registry)
