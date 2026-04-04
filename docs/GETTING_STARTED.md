@@ -50,7 +50,15 @@ This guide will walk you through setting up 4DA for the first time.
 - Run `ollama pull llama3.2` to download a model
 - No API key needed - 4DA will detect Ollama automatically
 
-### 2. Add Context Directories
+### 2. Choose Your Language
+
+4DA auto-detects your system language. To change it or set up content translation:
+
+- **Change language:** Settings > General > Locale > Language (13 languages available)
+- **Content translation:** For automatic translation of feed content, configure a free translation API — see the **[Multilingual Guide](MULTILINGUAL.md)**
+- **Quick setup:** Azure Translator gives 2M free characters/month — [portal.azure.com](https://portal.azure.com) > Create "Translator" resource > copy API key > paste in Settings
+
+### 3. Add Context Directories
 
 Tell 4DA where your projects and work files are:
 
