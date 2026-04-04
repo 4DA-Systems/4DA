@@ -129,3 +129,72 @@ export interface AweAutoFeedbackResult {
   outcomes_inferred: number;
   repos_scanned: number;
 }
+
+// ---------------------------------------------------------------------------
+// Behavioral Context (AWE Synthesis Bridge)
+// ---------------------------------------------------------------------------
+
+export interface AweBehavioralContext {
+  topic_affinities: AweTopicSignal[];
+  calibration_insights: AweCalibrationInsight[];
+  decision_outcomes: AweDecisionOutcome[];
+  interaction_patterns: AweInteractionPatterns;
+  advantage_trajectory: AweAdvantagePoint[];
+  feedback_stats: AweFeedbackStats;
+  detected_tech: string[];
+  active_topics: string[];
+}
+
+export interface AweTopicSignal {
+  topic: string;
+  affinity_score: number;
+  confidence: number;
+  positive_signals: number;
+  negative_signals: number;
+  total_exposures: number;
+}
+
+export interface AweCalibrationInsight {
+  digest_type: string;
+  subject: string;
+  data: string;
+  confidence: number;
+  sample_size: number;
+  created_at: string;
+}
+
+export interface AweDecisionOutcome {
+  title: string;
+  window_type: string;
+  status: string;
+  outcome: string | null;
+  urgency: number;
+  relevance: number;
+  lead_time_hours: number | null;
+  opened_at: string;
+}
+
+export interface AweInteractionPatterns {
+  total_interactions: number;
+  saves: number;
+  dismissals: number;
+  clicks: number;
+  avg_signal_strength: number;
+  top_sources: [string, number][];
+  weekly_velocity: number;
+}
+
+export interface AweAdvantagePoint {
+  period: string;
+  score: number;
+  windows_acted: number;
+  windows_expired: number;
+  calibration_accuracy: number;
+}
+
+export interface AweFeedbackStats {
+  total_items: number;
+  items_with_feedback: number;
+  coverage_pct: number;
+  positive_ratio: number;
+}
