@@ -159,6 +159,11 @@ vi.mock('../utils/score', () => ({
 vi.mock('../config/sources', () => ({
   getSourceLabel: (s: string) => s,
   getSourceFullName: (s: string) => s,
+  getSourceColorClass: () => 'bg-gray-500/20 text-gray-400',
+  getSourceCategory: () => 'general',
+  getSourcesByCategory: () => new Map([['general', ['hackernews']]]),
+  isSourcesLoaded: () => true,
+  loadSourceMeta: () => Promise.resolve(),
   ALL_SOURCE_IDS: new Set(['hackernews']),
 }));
 
@@ -296,7 +301,7 @@ describe('ResultsView', () => {
   // =========================================================================
   it('source filter group is accessible', () => {
     render(<ResultsView {...defaultProps} />);
-    expect(screen.getByRole('group', { name: 'Source filters' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Source category filters' })).toBeInTheDocument();
   });
 
   // =========================================================================

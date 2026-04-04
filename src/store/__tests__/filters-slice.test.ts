@@ -1,9 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useAppStore } from '../index';
 
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
+
+// Mock dynamic source metadata — provide a pre-populated ALL_SOURCE_IDS set
+vi.mock('../../config/sources', () => {
+  const ids = new Set(['hackernews', 'arxiv', 'reddit', 'github', 'rss', 'youtube', 'twitter', 'producthunt', 'lobsters', 'devto', 'cve', 'osv', 'npm_registry', 'pypi', 'crates_io', 'huggingface', 'stackoverflow', 'bluesky', 'papers_with_code', 'go_modules']);
+  return {
+    ALL_SOURCE_IDS: ids,
+    getSourceLabel: (s: string) => s,
+    getSourceFullName: (s: string) => s,
+    getSourceColorClass: () => 'bg-gray-500/20 text-gray-400',
+    getSourceCategory: () => 'general',
+    getSourcesByCategory: () => new Map([['general', [...ids]]]),
+    isSourcesLoaded: () => true,
+    loadSourceMeta: () => Promise.resolve(),
+  };
+});
+
+import { useAppStore } from '../index';
 
 const initialState = useAppStore.getState();
 
