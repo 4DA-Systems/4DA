@@ -699,7 +699,12 @@ impl LLMClient {
             parts.push("Daily LLM limit reached".to_string());
         }
 
-        parts.push("Adjust in Settings > Intelligence, or wait until midnight reset.".to_string());
+        let lang = crate::i18n::get_user_language();
+        parts.push(crate::i18n::t(
+            "errors:errorMsg.limitAdjust",
+            &lang,
+            &[],
+        ));
         parts.join(". ")
     }
 
