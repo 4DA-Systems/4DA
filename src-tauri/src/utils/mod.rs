@@ -6,6 +6,8 @@
 
 mod path;
 mod scraping;
+#[allow(unsafe_code)] // Intentional: FFI calls to OS memory-locking APIs (mlock / VirtualLock)
+pub(crate) mod secure_mem;
 mod text;
 mod topics;
 mod url;
@@ -14,6 +16,7 @@ mod vector;
 // Re-export everything so existing `use crate::utils::X` imports continue to work
 pub(crate) use path::sanitize_path;
 pub(crate) use scraping::scrape_article_content;
+pub(crate) use secure_mem::lock_memory;
 #[allow(unused_imports)] // Used by scraping submodule via super::text::MAX_CONTENT_LENGTH
 pub(crate) use text::MAX_CONTENT_LENGTH;
 pub(crate) use text::{
