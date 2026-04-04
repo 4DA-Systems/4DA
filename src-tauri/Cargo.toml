@@ -61,10 +61,12 @@ once_cell = "1"
 parking_lot = "0.12"
 
 # Database (sqlite + vector search)
+# Default: "bundled" (plaintext SQLite). For encrypted databases:
+#   1. Install Strawberry Perl: choco install strawberryperl
+#   2. Change to: features = ["bundled-sqlcipher-vendored-openssl"]
+# The encryption key management (db/encryption.rs) is already wired and will
+# activate automatically when SQLCipher is enabled. sqlite-vec is compatible.
 rusqlite = { version = "0.32", features = ["bundled"] }
-# To enable database encryption: change "bundled" to "bundled-sqlcipher"
-# Requires testing sqlite-vec compatibility first.
-# rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }
 sqlite-vec = "0.1"
 zerocopy = { version = "0.8", features = ["derive"] }
 
