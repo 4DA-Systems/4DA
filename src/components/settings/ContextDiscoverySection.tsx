@@ -51,7 +51,7 @@ export function ContextDiscoverySection({
           onClick={runAutoDiscovery}
           disabled={isScanning}
           aria-label={isScanning ? t('settings.context.discovering') : t('settings.context.autoDiscover')}
-          className="w-full px-4 py-3 text-sm bg-gradient-to-r from-orange-500/20 to-orange-600/10 text-orange-400 border border-orange-500/30 rounded-lg hover:from-orange-500/30 hover:to-orange-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          className="w-full px-4 py-2 text-sm bg-gradient-to-r from-orange-500/20 to-orange-600/10 text-orange-400 border border-orange-500/30 rounded-lg hover:from-orange-500/30 hover:to-orange-600/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
         >
           {isScanning ? t('settings.context.discovering') : t('settings.context.autoDiscover')}
         </button>
@@ -77,10 +77,10 @@ export function ContextDiscoverySection({
 
         <div className="space-y-2">
           {scanDirectories.length === 0 ? (
-            <p className="text-sm text-text-muted text-center py-3">{t('settings.context.noDirs')}</p>
+            <p className="text-sm text-text-muted text-center py-2">{t('settings.context.noDirs')}</p>
           ) : (
             <>
-              <div className="text-xs text-text-muted mb-2">{t('settings.context.configuredDirs', { count: scanDirectories.length })}</div>
+              <div className="text-xs text-text-muted mb-1.5">{t('settings.context.configuredDirs', { count: scanDirectories.length })}</div>
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {scanDirectories.map((dir) => (
                   <div key={dir} className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg border border-border group">
@@ -117,7 +117,7 @@ export function ContextDiscoverySection({
             </div>
             {discoveredContext.tech.length > 0 && (
               <div>
-                <div className="text-xs text-text-secondary mb-2">{t('settings.context.techStack')}</div>
+                <div className="text-xs text-text-secondary mb-1.5">{t('settings.context.techStack')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {discoveredContext.tech.slice(0, 10).map((tech) => (
                     <span
@@ -136,7 +136,7 @@ export function ContextDiscoverySection({
             )}
             {discoveredContext.topics.length > 0 && (
               <div>
-                <div className="text-xs text-text-secondary mb-2">{t('settings.context.topics')}</div>
+                <div className="text-xs text-text-secondary mb-1.5">{t('settings.context.topics')}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {discoveredContext.topics.slice(0, 8).map((topic) => (
                     <span

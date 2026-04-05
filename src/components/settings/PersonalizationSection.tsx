@@ -56,8 +56,8 @@ export function PersonalizationSection() {
 
   const undeclaredSuggestions = suggestedInterests.filter(s => !s.already_declared);
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div className="flex items-start gap-3 mb-4">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+      <div className="flex items-start gap-3 mb-3">
         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-blue-400">&#x1f3af;</span>
         </div>
@@ -70,10 +70,10 @@ export function PersonalizationSection() {
       </div>
 
       {userContext ? (
-        <div className="space-y-5">
+        <div className="space-y-3">
           {/* Role */}
           <div>
-            <label className="text-xs text-text-secondary block mb-2">{t('settings.personalization.role')}</label>
+            <label className="text-xs text-text-secondary block mb-1.5">{t('settings.personalization.role')}</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -94,7 +94,7 @@ export function PersonalizationSection() {
 
           {/* Tech Stack */}
           <div>
-            <label className="text-xs text-text-secondary block mb-2">{t('settings.personalization.techStack')}</label>
+            <label className="text-xs text-text-secondary block mb-1.5">{t('settings.personalization.techStack')}</label>
             <div className="flex gap-2 mb-3">
               <input
                 type="text"
@@ -136,7 +136,7 @@ export function PersonalizationSection() {
 
           {/* Interests */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1.5">
               <label className="text-xs text-text-secondary">{t('settings.personalization.interests')}</label>
               <span className="px-1.5 py-0.5 text-[10px] bg-green-500/20 text-green-400 rounded">{userContext.interests.length}</span>
             </div>
@@ -184,8 +184,8 @@ export function PersonalizationSection() {
           {/* Suggested Interests */}
           {undeclaredSuggestions.length > 0 && (
             <div>
-              <h4 className="text-xs text-text-secondary font-medium mb-2">{t('settings.personalization.suggestedInterests')}</h4>
-              <p className="text-[10px] text-text-muted mb-2">
+              <h4 className="text-xs text-text-secondary font-medium mb-1.5">{t('settings.personalization.suggestedInterests')}</h4>
+              <p className="text-[10px] text-text-muted mb-1.5">
                 {t('settings.personalization.suggestedDescription')}
               </p>
               <div className="space-y-1">
@@ -219,7 +219,7 @@ export function PersonalizationSection() {
 
           {/* Exclusions */}
           <div>
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-1.5">
               <label className="text-xs text-text-secondary">{t('settings.personalization.exclusions')}</label>
               <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded">{userContext.exclusions.length}</span>
             </div>

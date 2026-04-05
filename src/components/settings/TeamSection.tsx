@@ -281,7 +281,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
       {/* IN TEAM — show status, members, preferences, admin actions       */}
       {/* ================================================================ */}
       {isInTeam && !teamLoading && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Status bar */}
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5">
@@ -313,7 +313,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
           {/* Member list */}
           {teamMembers.length > 0 && (
             <div>
-              <h4 className="text-[10px] text-text-muted uppercase tracking-wide mb-2">
+              <h4 className="text-[10px] text-text-muted uppercase tracking-wide mb-1.5">
                 {t('settings.team.memberList', 'Members')}
               </h4>
               <div className="space-y-1" role="list" aria-label={t('settings.team.memberList', 'Members')}>
@@ -343,7 +343,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
 
           {/* Sharing preferences */}
           <div>
-            <h4 className="text-[10px] text-text-muted uppercase tracking-wide mb-2">
+            <h4 className="text-[10px] text-text-muted uppercase tracking-wide mb-1.5">
               {t('settings.team.sharing', 'Sharing Preferences')}
             </h4>
             <div className="space-y-2">
