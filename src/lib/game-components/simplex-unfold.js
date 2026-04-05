@@ -50,8 +50,8 @@ fn dist_seg(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
     return length(pa - ba * t);
 }
 
-// Target vertex positions for each dimensional phase (5 vertices x 5 phases)
-fn target(v: u32, ph: u32) -> vec2<f32> {
+// Vertex positions for each dimensional phase (5 vertices x 5 phases)
+fn vtx_pos(v: u32, ph: u32) -> vec2<f32> {
     // Phase 0: point — all at origin
     if (ph == 0u) { return vec2<f32>(0.0, 0.0); }
 
@@ -114,7 +114,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Compute vertex positions via lerp between phase states
     var pos: array<vec2<f32>, 5>;
     for (var i = 0u; i < 5u; i++) {
-        pos[i] = mix(target(i, ph_lo), target(i, ph_hi), blend);
+        pos[i] = mix(vtx_pos(i, ph_lo), vtx_pos(i, ph_hi), blend);
     }
 
     // 4D rotation perturbation at phase >= 3.5 (pentachoron comes alive)
@@ -239,7 +239,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let hot = vec3<f32>(1.0, 0.95, 0.85);
     let color = base_color * total + hot * max(total - 0.5, 0.0) * 0.6;
 
-    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    let alpha = clamp(total * 1.5, 0.0, 1.0);
+    return vec4<f32>(clamp(color * alpha, vec3<f32>(0.0), vec3<f32>(1.0)), alpha);
 }
 `;
 const GLSL_V = `#version 300 es
@@ -404,7 +405,8 @@ void main(){
     vec3 hot = vec3(1.0, 0.95, 0.85);
     vec3 color = base_color * total + hot * max(total - 0.5, 0.0) * 0.6;
 
-    fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    float alpha = clamp(total * 1.5, 0.0, 1.0);
+    fragColor = vec4(clamp(color * alpha, 0.0, 1.0), alpha);
 }
 `;
 const UNIFORMS = [
