@@ -152,14 +152,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Vertex dots — prominent at corners, subtle at junction
     let vtx_w = 0.042;
     let vtx_aa = fwidth(min_vd);
-    let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vz
-            + exp(-min_vd * 28.0) * 0.55 * min_vz;
+    let vtx_g = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vz
+              + exp(-min_vd * 28.0) * 0.55 * min_vz;
 
     // Junction vertex (E) gets a special glow — the heart of the "4"
     let junc_dist = length(uv - p[4]);
     let junc_glow = exp(-junc_dist * 22.0) * 0.3;
 
-    let total = (core + halo + vtx + junc_glow) * u.glow_intensity;
+    let total = (core + halo + vtx_g + junc_glow) * u.glow_intensity;
 
     // Depth-aware gold coloring
     let bright_gold = vec3<f32>(0.92, 0.78, 0.35);
