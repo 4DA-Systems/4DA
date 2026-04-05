@@ -1,6 +1,6 @@
 // GAME Component: logo-mark — hand-crafted 4DA brand mark.
-// Pentachoron (4D simplex) rendered at logo grade: thick edges, strong glow,
-// slow regal rotation, ambient center warmth. Optimized for 48–128px display.
+// The numeral "4" rendered as a gold wireframe with gentle 3D rotation,
+// depth-aware coloring, and vertex glow. Optimized for 48–128px display.
 (function(){
 const WGSL_V = `struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
@@ -31,7 +31,6 @@ const WGSL_F = `struct Uniforms {
     mouse: vec2<f32>,
     rotation_speed: f32,
     glow_intensity: f32,
-    w_rotation: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -41,30 +40,18 @@ struct VertexOutput {
     @location(0) uv: vec2<f32>,
 };
 
-// 4D rotations
-fn rot_xw(p: vec4<f32>, a: f32) -> vec4<f32> {
+fn rot3_y(p: vec3<f32>, a: f32) -> vec3<f32> {
     let c = cos(a); let s = sin(a);
-    return vec4<f32>(c * p.x + s * p.w, p.y, p.z, -s * p.x + c * p.w);
+    return vec3<f32>(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
 }
 
-fn rot_zw(p: vec4<f32>, a: f32) -> vec4<f32> {
+fn rot3_x(p: vec3<f32>, a: f32) -> vec3<f32> {
     let c = cos(a); let s = sin(a);
-    return vec4<f32>(p.x, p.y, c * p.z + s * p.w, -s * p.z + c * p.w);
-}
-
-fn rot_yz(p: vec4<f32>, a: f32) -> vec4<f32> {
-    let c = cos(a); let s = sin(a);
-    return vec4<f32>(p.x, c * p.y - s * p.z, s * p.y + c * p.z, p.w);
-}
-
-fn proj4(p: vec4<f32>, breath: f32) -> vec3<f32> {
-    let d = 2.5 + breath;
-    let s = d / (d - p.w);
-    return p.xyz * s;
+    return vec3<f32>(p.x, c * p.y - s * p.z, s * p.y + c * p.z);
 }
 
 fn proj3(p: vec3<f32>) -> vec2<f32> {
-    let d = 4.0;
+    let d = 3.5;
     let s = d / (d - p.z);
     return p.xy * s;
 }
@@ -82,126 +69,111 @@ fn dist_seg(p: vec2<f32>, a: vec2<f32>, b: vec2<f32>) -> f32 {
 fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let aspect = u.resolution.x / u.resolution.y;
     let uv = (input.uv * 2.0 - 1.0) * vec2<f32>(aspect, 1.0);
-    let time = fract(u.time / 300.0) * 300.0; // 5-minute wrap for ultra-slow drift
+    let time = fract(u.time / 300.0) * 300.0;
     let spd = u.rotation_speed;
-    let wspd = u.w_rotation;
 
-    // Audio reactivity (subtle for logo)
-    let audio_scale = 1.0 + u.audio_bass * 0.04 + u.audio_beat * 0.02;
-    let audio_rot = 1.0 + u.audio_energy * 0.2;
+    // Audio reactivity
+    let audio_pulse = 1.0 + u.audio_bass * 0.04 + u.audio_beat * 0.03;
+    let audio_rot = 1.0 + u.audio_energy * 0.3;
 
-    // Breathing — subtle ±3% scale pulse
-    let breath_scale = 1.0 + sin(time * 0.5) * 0.03;
-    let breath_proj = sin(time * 0.35) * 0.08;
+    // "4" numeral vertices in 3D (z varies for depth)
+    // Clean geometric "4": diagonal + crossbar + vertical
+    //     A
+    //    /|
+    //   / |
+    //  C--E--D
+    //     |
+    //     B
+    var vtx: array<vec3<f32>, 5>;
+    vtx[0] = vec3<f32>( 0.08,  0.40, 0.02);  // A: top of vertical
+    vtx[1] = vec3<f32>( 0.08, -0.38, -0.02); // B: bottom of vertical
+    vtx[2] = vec3<f32>(-0.30, -0.02, 0.03);  // C: left of crossbar
+    vtx[3] = vec3<f32>( 0.28, -0.02, -0.01); // D: right of crossbar
+    vtx[4] = vec3<f32>( 0.08, -0.02, 0.0);   // E: junction
 
-    // Regular pentachoron vertices on 4D unit sphere
-    let q = 0.559;
-    let sc = 0.50 * audio_scale * breath_scale;
-    var v: array<vec4<f32>, 5>;
-    v[0] = vec4<f32>( q,  q,  q, -0.25) * sc;
-    v[1] = vec4<f32>( q, -q, -q, -0.25) * sc;
-    v[2] = vec4<f32>(-q,  q, -q, -0.25) * sc;
-    v[3] = vec4<f32>(-q, -q,  q, -0.25) * sc;
-    v[4] = vec4<f32>(0.0, 0.0, 0.0, 1.0) * sc;
-
-    // Fixed offset for a photogenic starting angle + very slow drift
-    let mx = (u.mouse.x - 0.5) * 0.25;
-    let my = (u.mouse.y - 0.5) * 0.25;
-    let awspd = wspd * audio_rot;
-    let aspd = spd * audio_rot;
+    // Scale with audio + breathing
+    let breath = 1.0 + sin(time * 0.4) * 0.02;
+    let sc = 0.85 * audio_pulse * breath;
     for (var i = 0u; i < 5u; i++) {
-        v[i] = rot_xw(v[i], time * awspd + 0.4 + mx);
-        v[i] = rot_zw(v[i], time * awspd * 0.618 + 0.7 + my);
-        v[i] = rot_yz(v[i], time * aspd * 0.382 + 0.3);
+        vtx[i] = vtx[i] * sc;
     }
 
-    // Double projection: 4D -> 3D -> 2D with w-depth tracking
+    // Gentle 3D rotation — the "4" slowly tilts in space
+    let mx = (u.mouse.x - 0.5) * 0.3;
+    let my = (u.mouse.y - 0.5) * 0.3;
+    let ry = sin(time * spd * 0.7) * 0.18 + mx; // ~10° Y wobble
+    let rx = sin(time * spd * 0.5 + 0.7) * 0.12 + my; // ~7° X tilt
+    for (var i = 0u; i < 5u; i++) {
+        vtx[i] = rot3_y(vtx[i], ry * audio_rot);
+        vtx[i] = rot3_x(vtx[i], rx * audio_rot);
+    }
+
+    // Project 3D → 2D with perspective
     var p: array<vec2<f32>, 5>;
-    var wdepth: array<f32, 5>;
+    var zdepth: array<f32, 5>;
     for (var i = 0u; i < 5u; i++) {
-        let p3 = proj4(v[i], breath_proj);
-        p[i] = proj3(p3);
-        wdepth[i] = 0.2 + 0.8 * (v[i].w + sc) / (2.0 * sc);
+        p[i] = proj3(vtx[i]);
+        zdepth[i] = 0.4 + 0.6 * (vtx[i].z + 0.15) / 0.30;
     }
 
-    // 10 edges (complete graph K5)
-    let d01 = dist_seg(uv, p[0], p[1]);
-    let d02 = dist_seg(uv, p[0], p[2]);
-    let d03 = dist_seg(uv, p[0], p[3]);
-    let d04 = dist_seg(uv, p[0], p[4]);
-    let d12 = dist_seg(uv, p[1], p[2]);
-    let d13 = dist_seg(uv, p[1], p[3]);
-    let d14 = dist_seg(uv, p[1], p[4]);
-    let d23 = dist_seg(uv, p[2], p[3]);
-    let d24 = dist_seg(uv, p[2], p[4]);
-    let d34 = dist_seg(uv, p[3], p[4]);
-    var min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
-    min_d = min(min_d, min(d24, d34));
+    // 4 edges defining the "4":
+    // Edge 0: C → A (diagonal stroke)
+    // Edge 1: C → D (horizontal crossbar) via C→E and E→D
+    // Edge 2: A → B (vertical stroke)
+    // Split crossbar through junction for cleaner intersection
+    let d_ca = dist_seg(uv, p[2], p[0]); // diagonal: C→A
+    let d_ce = dist_seg(uv, p[2], p[4]); // crossbar left: C→E
+    let d_ed = dist_seg(uv, p[4], p[3]); // crossbar right: E→D
+    let d_ab = dist_seg(uv, p[0], p[1]); // vertical: A→B
 
-    // W-depth weighted halo — 4D-near edges glow bright, 4D-far edges dim
-    let hk = 15.0;
-    var halo_sum = exp(-d01 * hk) * (wdepth[0] + wdepth[1]) * 0.5
-                 + exp(-d02 * hk) * (wdepth[0] + wdepth[2]) * 0.5
-                 + exp(-d03 * hk) * (wdepth[0] + wdepth[3]) * 0.5
-                 + exp(-d04 * hk) * (wdepth[0] + wdepth[4]) * 0.5
-                 + exp(-d12 * hk) * (wdepth[1] + wdepth[2]) * 0.5
-                 + exp(-d13 * hk) * (wdepth[1] + wdepth[3]) * 0.5
-                 + exp(-d14 * hk) * (wdepth[1] + wdepth[4]) * 0.5
-                 + exp(-d23 * hk) * (wdepth[2] + wdepth[3]) * 0.5
-                 + exp(-d24 * hk) * (wdepth[2] + wdepth[4]) * 0.5
-                 + exp(-d34 * hk) * (wdepth[3] + wdepth[4]) * 0.5;
+    let min_d = min(min(d_ca, d_ce), min(d_ed, d_ab));
 
-    // Nearest vertex + track which vertex is closest
+    // Depth-weighted halo per edge
+    let hk = 16.0;
+    var halo_sum = exp(-d_ca * hk) * (zdepth[2] + zdepth[0]) * 0.5
+                 + exp(-d_ce * hk) * (zdepth[2] + zdepth[4]) * 0.5
+                 + exp(-d_ed * hk) * (zdepth[4] + zdepth[3]) * 0.5
+                 + exp(-d_ab * hk) * (zdepth[0] + zdepth[1]) * 0.5;
+
+    // Nearest vertex
     var min_vd = length(uv - p[0]);
-    var min_vw = wdepth[0];
-    var nearest_idx = 0u;
+    var min_vz = zdepth[0];
     for (var i = 1u; i < 5u; i++) {
         let vd = length(uv - p[i]);
-        if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; nearest_idx = i; }
+        if (vd < min_vd) { min_vd = vd; min_vz = zdepth[i]; }
     }
 
-    // Crisp edges with 4D depth modulation
-    let edge_w = 0.028 + 0.016 * min_vw;
+    // Crisp edge core with anti-aliasing
+    let edge_w = 0.030 + 0.014 * min_vz;
     let aa = fwidth(min_d);
-    let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.9 * min_vw;
-    let halo = halo_sum * 0.28;
+    let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.95 * min_vz;
+    let halo = halo_sum * 0.25;
 
-    // Vertex dots — the 5th vertex (4D apex) gets a pulsing accent
-    let vtx_w = 0.045;
+    // Vertex dots — prominent at corners, subtle at junction
+    let vtx_w = 0.042;
     let vtx_aa = fwidth(min_vd);
-    let vtx_base = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-                 + exp(-min_vd * 30.0) * 0.6 * min_vw;
+    let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vz
+            + exp(-min_vd * 28.0) * 0.55 * min_vz;
 
-    // 4D apex vertex (index 4) gets a subtle pulse — the dimensional bridge
-    let apex_dist = length(uv - p[4]);
-    let apex_pulse = sin(time * 1.2) * 0.3 + 0.7; // oscillate 0.4–1.0
-    let apex_glow = exp(-apex_dist * 25.0) * 0.4 * apex_pulse * wdepth[4];
-    let vtx = vtx_base + apex_glow;
+    // Junction vertex (E) gets a special glow — the heart of the "4"
+    let junc_dist = length(uv - p[4]);
+    let junc_glow = exp(-junc_dist * 22.0) * 0.3;
 
-    // Subtle center warmth
-    var centroid = vec2<f32>(0.0);
-    for (var i = 0u; i < 5u; i++) {
-        centroid += p[i];
-    }
-    centroid *= 0.2;
-    let center_dist = length(uv - centroid);
-    let ambient = exp(-center_dist * 8.0) * 0.05;
+    let total = (core + halo + vtx + junc_glow) * u.glow_intensity;
 
-    let total = (core + halo + vtx + ambient) * u.glow_intensity;
+    // Depth-aware gold coloring
+    let bright_gold = vec3<f32>(0.92, 0.78, 0.35);
+    let deep_gold = vec3<f32>(0.65, 0.50, 0.15);
+    let base_color = mix(deep_gold, bright_gold, min_vz);
 
-    // 4D depth-aware coloring: near-w = bright gold-white, far-w = deep amber
-    let bright_gold = vec3<f32>(0.92, 0.78, 0.35); // near in 4D
-    let deep_amber = vec3<f32>(0.55, 0.38, 0.10);  // far in 4D
-    let base_gold = mix(deep_amber, bright_gold, min_vw);
-
-    // Apex vertex vicinity gets a cooler white-gold accent
-    let apex_influence = exp(-apex_dist * 12.0) * apex_pulse;
-    let apex_tint = vec3<f32>(0.95, 0.92, 0.80); // white-gold
-    let final_gold = mix(base_gold, apex_tint, apex_influence * 0.4);
+    // Junction gets warmer tint
+    let junc_influence = exp(-junc_dist * 10.0);
+    let junc_tint = vec3<f32>(1.0, 0.90, 0.65);
+    let final_color = mix(base_color, junc_tint, junc_influence * 0.3);
 
     let hot = vec3<f32>(1.0, 0.97, 0.90);
-    let color = clamp(final_gold * total + hot * max(total - 0.45, 0.0) * 0.7, vec3<f32>(0.0), vec3<f32>(1.0));
-    let alpha = clamp(total * 1.5, 0.0, 1.0);
+    let color = clamp(final_color * total + hot * max(total - 0.5, 0.0) * 0.6, vec3<f32>(0.0), vec3<f32>(1.0));
+    let alpha = clamp(total * 1.6, 0.0, 1.0);
     return vec4<f32>(color * alpha, alpha);
 }
 `;
@@ -231,34 +203,22 @@ uniform vec2 u_resolution;
 uniform vec2 u_mouse;
 uniform float u_p_rotation_speed;
 uniform float u_p_glow_intensity;
-uniform float u_p_w_rotation;
 
 in vec2 v_uv;
 out vec4 fragColor;
 
-vec4 rot_xw(vec4 p, float a){
+vec3 rot3_y(vec3 p, float a){
     float c = cos(a), s = sin(a);
-    return vec4(c*p.x + s*p.w, p.y, p.z, -s*p.x + c*p.w);
+    return vec3(c*p.x + s*p.z, p.y, -s*p.x + c*p.z);
 }
 
-vec4 rot_zw(vec4 p, float a){
+vec3 rot3_x(vec3 p, float a){
     float c = cos(a), s = sin(a);
-    return vec4(p.x, p.y, c*p.z + s*p.w, -s*p.z + c*p.w);
-}
-
-vec4 rot_yz(vec4 p, float a){
-    float c = cos(a), s = sin(a);
-    return vec4(p.x, c*p.y - s*p.z, s*p.y + c*p.z, p.w);
-}
-
-vec3 proj4b(vec4 p, float breath){
-    float d = 2.5 + breath;
-    float s = d / (d - p.w);
-    return p.xyz * s;
+    return vec3(p.x, c*p.y - s*p.z, s*p.y + c*p.z);
 }
 
 vec2 proj3(vec3 p){
-    float d = 4.0;
+    float d = 3.5;
     float s = d / (d - p.z);
     return p.xy * s;
 }
@@ -276,115 +236,86 @@ void main(){
     vec2 uv = (v_uv * 2.0 - 1.0) * vec2(aspect, 1.0);
     float time = fract(u_time / 300.0) * 300.0;
     float spd = u_p_rotation_speed;
-    float wspd = u_p_w_rotation;
 
-    float audio_scale = 1.0 + u_audio_bass * 0.04 + u_audio_beat * 0.02;
-    float audio_rot = 1.0 + u_audio_energy * 0.2;
-    float breath_scale = 1.0 + sin(time * 0.5) * 0.03;
-    float breath_proj = sin(time * 0.35) * 0.08;
+    float audio_pulse = 1.0 + u_audio_bass * 0.04 + u_audio_beat * 0.03;
+    float audio_rot = 1.0 + u_audio_energy * 0.3;
 
-    float q = 0.559;
-    float sc = 0.50 * audio_scale * breath_scale;
-    vec4 v[5];
-    v[0] = vec4( q,  q,  q, -0.25) * sc;
-    v[1] = vec4( q, -q, -q, -0.25) * sc;
-    v[2] = vec4(-q,  q, -q, -0.25) * sc;
-    v[3] = vec4(-q, -q,  q, -0.25) * sc;
-    v[4] = vec4(0.0, 0.0, 0.0, 1.0) * sc;
+    vec3 vtx[5];
+    vtx[0] = vec3( 0.08,  0.40, 0.02);
+    vtx[1] = vec3( 0.08, -0.38, -0.02);
+    vtx[2] = vec3(-0.30, -0.02, 0.03);
+    vtx[3] = vec3( 0.28, -0.02, -0.01);
+    vtx[4] = vec3( 0.08, -0.02, 0.0);
 
-    float mx = (u_mouse.x - 0.5) * 0.25;
-    float my = (u_mouse.y - 0.5) * 0.25;
-    float awspd = wspd * audio_rot;
-    float aspd = spd * audio_rot;
+    float breath = 1.0 + sin(time * 0.4) * 0.02;
+    float sc = 0.85 * audio_pulse * breath;
+    for (int i = 0; i < 5; i++) vtx[i] *= sc;
+
+    float mx = (u_mouse.x - 0.5) * 0.3;
+    float my = (u_mouse.y - 0.5) * 0.3;
+    float ry = sin(time * spd * 0.7) * 0.18 + mx;
+    float rx = sin(time * spd * 0.5 + 0.7) * 0.12 + my;
     for (int i = 0; i < 5; i++){
-        v[i] = rot_xw(v[i], time * awspd + 0.4 + mx);
-        v[i] = rot_zw(v[i], time * awspd * 0.618 + 0.7 + my);
-        v[i] = rot_yz(v[i], time * aspd * 0.382 + 0.3);
+        vtx[i] = rot3_y(vtx[i], ry * audio_rot);
+        vtx[i] = rot3_x(vtx[i], rx * audio_rot);
     }
 
-    float breath = breath_proj;
-    vec2 p[5];
-    float wdepth[5];
+    vec2 p[5]; float zdepth[5];
     for (int i = 0; i < 5; i++){
-        vec3 p3 = proj4b(v[i], breath);
-        p[i] = proj3(p3);
-        wdepth[i] = 0.2 + 0.8 * (v[i].w + sc) / (2.0 * sc);
+        p[i] = proj3(vtx[i]);
+        zdepth[i] = 0.4 + 0.6 * (vtx[i].z + 0.15) / 0.30;
     }
 
-    float d01 = dist_seg(uv, p[0], p[1]);
-    float d02 = dist_seg(uv, p[0], p[2]);
-    float d03 = dist_seg(uv, p[0], p[3]);
-    float d04 = dist_seg(uv, p[0], p[4]);
-    float d12 = dist_seg(uv, p[1], p[2]);
-    float d13 = dist_seg(uv, p[1], p[3]);
-    float d14 = dist_seg(uv, p[1], p[4]);
-    float d23 = dist_seg(uv, p[2], p[3]);
-    float d24 = dist_seg(uv, p[2], p[4]);
-    float d34 = dist_seg(uv, p[3], p[4]);
-    float min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
-    min_d = min(min_d, min(d24, d34));
+    float d_ca = dist_seg(uv, p[2], p[0]);
+    float d_ce = dist_seg(uv, p[2], p[4]);
+    float d_ed = dist_seg(uv, p[4], p[3]);
+    float d_ab = dist_seg(uv, p[0], p[1]);
+    float min_d = min(min(d_ca, d_ce), min(d_ed, d_ab));
 
-    float hk = 15.0;
-    float halo_sum = exp(-d01*hk) * (wdepth[0]+wdepth[1])*0.5
-                   + exp(-d02*hk) * (wdepth[0]+wdepth[2])*0.5
-                   + exp(-d03*hk) * (wdepth[0]+wdepth[3])*0.5
-                   + exp(-d04*hk) * (wdepth[0]+wdepth[4])*0.5
-                   + exp(-d12*hk) * (wdepth[1]+wdepth[2])*0.5
-                   + exp(-d13*hk) * (wdepth[1]+wdepth[3])*0.5
-                   + exp(-d14*hk) * (wdepth[1]+wdepth[4])*0.5
-                   + exp(-d23*hk) * (wdepth[2]+wdepth[3])*0.5
-                   + exp(-d24*hk) * (wdepth[2]+wdepth[4])*0.5
-                   + exp(-d34*hk) * (wdepth[3]+wdepth[4])*0.5;
+    float hk = 16.0;
+    float halo_sum = exp(-d_ca*hk) * (zdepth[2]+zdepth[0])*0.5
+                   + exp(-d_ce*hk) * (zdepth[2]+zdepth[4])*0.5
+                   + exp(-d_ed*hk) * (zdepth[4]+zdepth[3])*0.5
+                   + exp(-d_ab*hk) * (zdepth[0]+zdepth[1])*0.5;
 
     float min_vd = length(uv - p[0]);
-    float min_vw = wdepth[0];
+    float min_vz = zdepth[0];
     for (int i = 1; i < 5; i++){
         float vd = length(uv - p[i]);
-        if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
+        if (vd < min_vd) { min_vd = vd; min_vz = zdepth[i]; }
     }
 
-    float edge_w = 0.028 + 0.016 * min_vw;
+    float edge_w = 0.030 + 0.014 * min_vz;
     float aa = fwidth(min_d);
-    float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.9 * min_vw;
-    float halo = halo_sum * 0.28;
-    float vtx_w = 0.045;
+    float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.95 * min_vz;
+    float halo = halo_sum * 0.25;
+    float vtx_w = 0.042;
     float vtx_aa = fwidth(min_vd);
-    float vtx_base = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-                   + exp(-min_vd * 30.0) * 0.6 * min_vw;
+    float vtx_g = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vz
+                + exp(-min_vd * 28.0) * 0.55 * min_vz;
 
-    // 4D apex vertex pulse
-    float apex_dist = length(uv - p[4]);
-    float apex_pulse = sin(time * 1.2) * 0.3 + 0.7;
-    float apex_glow = exp(-apex_dist * 25.0) * 0.4 * apex_pulse * wdepth[4];
-    float vtx = vtx_base + apex_glow;
+    float junc_dist = length(uv - p[4]);
+    float junc_glow = exp(-junc_dist * 22.0) * 0.3;
 
-    vec2 centroid = vec2(0.0);
-    for (int i = 0; i < 5; i++) centroid += p[i];
-    centroid *= 0.2;
-    float center_dist = length(uv - centroid);
-    float ambient = exp(-center_dist * 8.0) * 0.05;
+    float total = (core + halo + vtx_g + junc_glow) * u_p_glow_intensity;
 
-    float total = (core + halo + vtx + ambient) * u_p_glow_intensity;
-
-    // 4D depth-aware coloring
     vec3 bright_gold = vec3(0.92, 0.78, 0.35);
-    vec3 deep_amber = vec3(0.55, 0.38, 0.10);
-    vec3 base_gold = mix(deep_amber, bright_gold, min_vw);
+    vec3 deep_gold = vec3(0.65, 0.50, 0.15);
+    vec3 base_color = mix(deep_gold, bright_gold, min_vz);
 
-    float apex_influence = exp(-apex_dist * 12.0) * apex_pulse;
-    vec3 apex_tint = vec3(0.95, 0.92, 0.80);
-    vec3 final_gold = mix(base_gold, apex_tint, apex_influence * 0.4);
+    float junc_influence = exp(-junc_dist * 10.0);
+    vec3 junc_tint = vec3(1.0, 0.90, 0.65);
+    vec3 final_color = mix(base_color, junc_tint, junc_influence * 0.3);
 
     vec3 hot = vec3(1.0, 0.97, 0.90);
-    vec3 color = clamp(final_gold * total + hot * max(total - 0.45, 0.0) * 0.7, 0.0, 1.0);
-    float alpha = clamp(total * 1.5, 0.0, 1.0);
+    vec3 color = clamp(final_color * total + hot * max(total - 0.5, 0.0) * 0.6, 0.0, 1.0);
+    float alpha = clamp(total * 1.6, 0.0, 1.0);
     fragColor = vec4(color * alpha, alpha);
 }
 `;
 const UNIFORMS = [
   { name: 'rotation_speed', default: 0.10 },
   { name: 'glow_intensity', default: 1.2 },
-  { name: 'w_rotation', default: 0.12 },
 ];
 
 class GameRenderer {
@@ -426,7 +357,6 @@ class GameRenderer {
       const vMod = this.device.createShaderModule({ code: this.wgslVertex });
       const fMod = this.device.createShaderModule({ code: this.wgslFragment });
 
-      // Verify shader compilation
       const [vInfo, fInfo] = await Promise.all([vMod.getCompilationInfo(), fMod.getCompilationInfo()]);
       const hasError = [...vInfo.messages, ...fInfo.messages].some(m => m.type === 'error');
       if (hasError) {
@@ -501,7 +431,6 @@ class GameRenderer {
     this.device.queue.writeBuffer(this.uniformBuffer, 0, data);
 
     const encoder = this.device.createCommandEncoder();
-
     const mainPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: this.ctx.getCurrentTexture().createView(),
@@ -547,11 +476,9 @@ class GameRendererGL {
     const gl = this.canvas.getContext('webgl2');
     if (!gl) return false;
     this.gl = gl;
-
     const vs = this._compile(gl.VERTEX_SHADER, this.glslVertex);
     const fs = this._compile(gl.FRAGMENT_SHADER, this.glslFragment);
     if (!vs || !fs) return false;
-
     this.program = gl.createProgram();
     gl.attachShader(this.program, vs);
     gl.attachShader(this.program, fs);
@@ -561,7 +488,6 @@ class GameRendererGL {
       return false;
     }
     gl.useProgram(this.program);
-
     this.locs = {
       time: gl.getUniformLocation(this.program, 'u_time'),
       bass: gl.getUniformLocation(this.program, 'u_audio_bass'),
@@ -611,7 +537,6 @@ class GameRendererGL {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
-
     gl.uniform1f(this.locs.time, t);
     gl.uniform1f(this.locs.bass, this.audioData.bass);
     gl.uniform1f(this.locs.mid, this.audioData.mid);
