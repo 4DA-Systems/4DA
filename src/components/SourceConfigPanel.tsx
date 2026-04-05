@@ -168,7 +168,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
   const totalSources = rssFeeds.length + youtubeChannels.length + twitterHandles.length;
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <button
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
@@ -192,11 +192,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
       </button>
 
       {expanded && (
-        <div className="mt-4 space-y-5">
+        <div className="mt-3 space-y-3">
           {/* RSS Feeds */}
           <div>
-            <label className="text-xs text-text-secondary block mb-2">{t('sources.rss.label')}</label>
-            <div className="flex gap-2 mb-2">
+            <label className="text-xs text-text-secondary block mb-1.5">{t('sources.rss.label')}</label>
+            <div className="flex gap-2 mb-1.5">
               <input
                 type="text"
                 value={newRssFeed}
@@ -239,11 +239,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
           {/* YouTube Channels */}
           <div>
-            <label className="text-xs text-text-secondary block mb-2">
+            <label className="text-xs text-text-secondary block mb-1.5">
               {t('sources.youtube.label')}
               <span className="text-text-muted ms-1">{t('sources.youtube.noKeyNeeded')}</span>
             </label>
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-1.5">
               <input
                 type="text"
                 value={newYoutubeChannel}
@@ -286,11 +286,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
           {/* GitHub Languages */}
           <div>
-            <label className="text-xs text-text-secondary block mb-2">
+            <label className="text-xs text-text-secondary block mb-1.5">
               {t('sources.github.label')}
               <span className="text-text-muted ms-1">{t('sources.github.trendingFilter')}</span>
             </label>
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-1.5">
               <input
                 type="text"
                 value={newGithubLanguage}
@@ -327,7 +327,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
           {/* Twitter/X */}
           <div>
-            <label className="text-xs text-text-secondary block mb-2">
+            <label className="text-xs text-text-secondary block mb-1.5">
               {t('sources.twitter.label')}
               {hasXApiKey ? (
                 <span className="text-green-400 ms-1">{t('sources.twitter.keySet')}</span>
@@ -335,7 +335,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 <span className="text-yellow-400 ms-1">{t('sources.twitter.needsKey')}</span>
               )}
             </label>
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-1.5">
               <input
                 type="text"
                 value={newTwitterHandle}

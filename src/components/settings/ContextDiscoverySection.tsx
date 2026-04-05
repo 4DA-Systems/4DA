@@ -30,8 +30,8 @@ export function ContextDiscoverySection({
 }: ContextDiscoverySectionProps) {
   const { t } = useTranslation();
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div className="flex items-start gap-3 mb-4">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+      <div className="flex items-start gap-3 mb-3">
         <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-orange-400">&#x1f50d;</span>
         </div>
@@ -46,7 +46,7 @@ export function ContextDiscoverySection({
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
         <button
           onClick={runAutoDiscovery}
           disabled={isScanning}
