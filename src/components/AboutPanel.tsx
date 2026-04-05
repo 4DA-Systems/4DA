@@ -1,36 +1,38 @@
-import { useEffect, useRef, lazy, Suspense } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { registerGameComponent, type GameComponentTag } from '../lib/game-components';
 
 /** Imperatively mount a GAME custom element after registration completes. */
 function GameElement({ tag, size }: { tag: GameComponentTag; size: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const elRef = useRef<HTMLElement | null>(null);
+  const [ready, setReady] = useState(false);
 
+  // Step 1: register the custom element class
   useEffect(() => {
     let cancelled = false;
-    const container = ref.current;
-    if (container === null) return;
-
     void registerGameComponent(tag).then(() => {
-      if (cancelled || elRef.current !== null) return;
-      const el = document.createElement(tag);
-      el.style.width = `${size}px`;
-      el.style.height = `${size}px`;
-      el.style.display = 'block';
-      container.appendChild(el);
-      elRef.current = el;
+      if (!cancelled) setReady(true);
     });
+    return () => { cancelled = true; };
+  }, [tag]);
+
+  // Step 2: once registered, create the DOM element
+  useEffect(() => {
+    const container = ref.current;
+    if (!ready || container === null) return;
+    // Guard against double-creation
+    if (container.querySelector(tag) !== null) return;
+
+    const el = document.createElement(tag);
+    el.style.width = '100%';
+    el.style.height = '100%';
+    el.style.display = 'block';
+    container.appendChild(el);
 
     return () => {
-      cancelled = true;
-      const el = elRef.current;
-      if (el !== null && container.contains(el)) {
-        container.removeChild(el);
-      }
-      elRef.current = null;
+      if (container.contains(el)) container.removeChild(el);
     };
-  }, [tag, size]);
+  }, [ready, tag]);
 
   return <div ref={ref} style={{ width: size, height: size }} />;
 }
