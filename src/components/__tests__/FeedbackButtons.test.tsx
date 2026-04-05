@@ -187,21 +187,21 @@ describe('FeedbackButtons', () => {
       />,
     );
     // Save, Dismiss, and Not Relevant buttons should be disabled.
-    // Open Link button remains enabled (it uses Tauri opener, not a feedback action).
+    // Open Link and Share buttons remain enabled (not feedback actions).
     const allButtons = screen.getAllByRole('button');
+    const alwaysEnabled = new Set(['feedback.openLink', 'action.share']);
     const feedbackButtons = allButtons.filter(
-      (btn) => btn.textContent !== 'feedback.openLink',
+      (btn) => !alwaysEnabled.has(btn.textContent ?? ''),
     );
     feedbackButtons.forEach((btn) => {
       expect(btn).toBeDisabled();
     });
-    // Open Link should still be enabled
-    const openLink = allButtons.find(
-      (btn) => btn.textContent === 'feedback.openLink',
-    );
-    if (openLink) {
-      expect(openLink).not.toBeDisabled();
-    }
+    // Open Link and Share should still be enabled
+    allButtons
+      .filter((btn) => alwaysEnabled.has(btn.textContent ?? ''))
+      .forEach((btn) => {
+        expect(btn).not.toBeDisabled();
+      });
   });
 
   it('does not call onRecordInteraction when buttons are disabled', () => {
