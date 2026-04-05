@@ -78,9 +78,12 @@ export function ChannelsView() {
   // Empty state
   if (channels.length === 0) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex flex-col items-center justify-center h-64 gap-3">
         <p className="text-sm text-text-muted">
           {t('channels.noChannels')}
+        </p>
+        <p className="text-xs text-text-muted max-w-xs text-center">
+          {t('channels.noChannelsHint', 'Channels are generated automatically from your analysis results. Run an analysis to discover content channels.')}
         </p>
       </div>
     );
