@@ -2,6 +2,7 @@ import { memo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { isSafeUrl } from '../../utils/sanitize-html';
+import { useAppStore } from '../../store';
 
 interface FeedbackButtonsProps {
   item: SourceRelevance;
@@ -47,6 +48,17 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     setDismissFlash(true);
     onRecordInteraction(item.id, 'dismiss', item);
   }, [item, onRecordInteraction]);
+
+  const handleShare = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const scorePercent = Math.round((item.top_score ?? 0) * 100);
+    const text = `${item.title} — Scored ${scorePercent}% by 4DA (https://4da.ai)`;
+    navigator.clipboard.writeText(text).then(() => {
+      useAppStore.getState().addToast('success', t('feedback.shareCopied'));
+    }).catch(() => {
+      // Clipboard write failed silently
+    });
+  }, [item.title, item.top_score, t]);
 
   return (
     <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions', { defaultValue: 'Feedback actions' })}>
@@ -127,6 +139,12 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         }`}
       >
         {feedback === 'mark_irrelevant' ? `\u2298 ${t('feedback.marked')}` : t('feedback.notRelevant')}
+      </button>
+      <button
+        onClick={handleShare}
+        className="px-2.5 py-1 text-xs rounded font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+      >
+        {t('action.share', 'Share')}
       </button>
     </div>
   );

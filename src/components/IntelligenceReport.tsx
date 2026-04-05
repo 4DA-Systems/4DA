@@ -1,6 +1,7 @@
 import { memo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { useAppStore } from '../store';
 import { formatLocalMonthYear } from '../utils/format-date';
 
 // ============================================================================
@@ -168,9 +169,14 @@ function mapReportToIntelligenceData(report: IntelligenceReportRaw, t: (key: str
   };
 }
 
-async function fetchIntelligenceData(t: (key: string) => string): Promise<IntelligenceData> {
+interface FetchResult {
+  data: IntelligenceData;
+  raw: IntelligenceReportRaw;
+}
+
+async function fetchIntelligenceData(t: (key: string) => string): Promise<FetchResult> {
   const report = await cmd('get_intelligence_report', { period: undefined }) as IntelligenceReportRaw;
-  return mapReportToIntelligenceData(report, t);
+  return { data: mapReportToIntelligenceData(report, t), raw: report };
 }
 
 // ============================================================================
@@ -179,7 +185,9 @@ async function fetchIntelligenceData(t: (key: string) => string): Promise<Intell
 
 const IntelligenceReportCard = memo(function IntelligenceReportCard() {
   const { t } = useTranslation();
+  const addToast = useAppStore(s => s.addToast);
   const [data, setData] = useState<IntelligenceData | null>(null);
+  const [rawReport, setRawReport] = useState<IntelligenceReportRaw | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -187,13 +195,37 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
     setLoading(true);
     setError(false);
     fetchIntelligenceData(t)
-      .then(setData)
+      .then(result => {
+        setData(result.data);
+        setRawReport(result.raw);
+      })
       .catch(() => {
         setData(null);
+        setRawReport(null);
         setError(true);
       })
       .finally(() => setLoading(false));
   }, [t]);
+
+  const handleShare = useCallback(() => {
+    if (!rawReport) return;
+    const text = [
+      'My 4DA Intelligence Report',
+      '',
+      `${rawReport.topics_tracked} topics tracked`,
+      `${rawReport.noise_rejection_pct.toFixed(1)}% noise rejected`,
+      `${rawReport.time_saved_hours.toFixed(1)}h estimated time saved`,
+      `${rawReport.security_alerts} security alerts caught`,
+      '',
+      'All signal. No feed.',
+      'https://4da.ai',
+    ].join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      addToast('success', t('report.shareCopied'));
+    }).catch(() => {
+      // Clipboard write failed silently
+    });
+  }, [rawReport, addToast, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -303,9 +335,17 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
           <span className="text-xs text-text-muted/50">
             {t('report.basedOn', { items: formatNumber(data.items_processed) })}
           </span>
-          <span className="text-xs text-text-muted/50">
-            {t('report.updatedToday')}
-          </span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleShare}
+              className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+            >
+              {t('report.shareReport')}
+            </button>
+            <span className="text-xs text-text-muted/50">
+              {t('report.updatedToday')}
+            </span>
+          </div>
         </div>
       </div>
     </div>
