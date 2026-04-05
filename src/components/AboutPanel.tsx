@@ -1,17 +1,45 @@
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { registerGameComponent } from '../lib/game-components';
+import { registerGameComponent, type GameComponentTag } from '../lib/game-components';
+
+/** Imperatively mount a GAME custom element after registration completes. */
+function GameElement({ tag, size }: { tag: GameComponentTag; size: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const elRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const container = ref.current;
+    if (container === null) return;
+
+    void registerGameComponent(tag).then(() => {
+      if (cancelled || elRef.current !== null) return;
+      const el = document.createElement(tag);
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+      el.style.display = 'block';
+      container.appendChild(el);
+      elRef.current = el;
+    });
+
+    return () => {
+      cancelled = true;
+      const el = elRef.current;
+      if (el !== null && container.contains(el)) {
+        container.removeChild(el);
+      }
+      elRef.current = null;
+    };
+  }, [tag, size]);
+
+  return <div ref={ref} style={{ width: size, height: size }} />;
+}
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
 const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').then(m => ({ default: m.ConfigDiagnostics })));
 
 export function AboutPanel() {
   const { t } = useTranslation();
-
-  useEffect(() => {
-    registerGameComponent('game-simplex-unfold');
-    registerGameComponent('game-pentachoron');
-  }, []);
 
   return (
     <div className="space-y-8">
@@ -22,7 +50,7 @@ export function AboutPanel() {
           role="img"
           aria-label={t('about.logoAlt')}
         >
-          <game-simplex-unfold style={{ width: '112px', height: '112px', display: 'block' }} />
+          <GameElement tag="game-simplex-unfold" size={112} />
         </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
@@ -82,7 +110,7 @@ export function AboutPanel() {
                 role="img"
                 aria-label={t('about.collaborative')}
               >
-                <game-pentachoron style={{ width: '44px', height: '44px', display: 'block' }} />
+                <GameElement tag="game-pentachoron" size={44} />
               </div>
               <div className="w-4 h-px bg-gray-600" />
             </div>
