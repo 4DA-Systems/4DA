@@ -30,7 +30,7 @@ var searchMemory=JSON.parse(localStorage.getItem('4da_search_memory')||'[]');
 var COMMANDS=['help','signals','briefing','score','search','radar','decisions','dna','gaps',
   'status','clear','ambient','theme','whoami','uptime','matrix','fortune','neofetch','ping','token',
   'more','diff','watch','copy','alias','unalias','sources','save','queue','read','simulate','shell',
-  'memory','open','learn','ignore','timeline','compare','focus','export'];
+  'memory','open','learn','ignore','timeline','compare','focus','export','crucible'];
 var tabMatches=[],tabIdx=-1,tabPrefix='';
 
 /* ── Command descriptions for help and palette ── */
@@ -73,7 +73,8 @@ var CMD_HELP={
   'timeline':'Signal arrival over 7 days',
   'compare':'Head-to-head tech comparison',
   'focus':'Toggle focus mode (critical only)',
-  'export':'Export as Markdown to clipboard'
+  'export':'Export as Markdown to clipboard',
+  'crucible':'Stress-test an idea through Crucible (crucible <idea or signal #>)'
 };
 
 /* ── Theme system ── */
@@ -669,6 +670,8 @@ function execSingle(raw){
     case'compare':cmdCompare(arg);break;
     case'focus':cmdFocus(arg);break;
     case'export':cmdExport(arg);break;
+    /* Crucible — Adversarial Ideation Engine */
+    case'crucible':cmdCrucible(arg);break;
     default:
       /* Phase 3.1: Try natural language interpretation */
       var nlp=tryNaturalLanguage(raw);
@@ -733,11 +736,87 @@ function cmdHelp(){
   showTiming();
 }
 
+/* ── Crucible Quick-Scan Cache ── */
+var crucibleCache={};  /* keyed by signal title hash */
+var crucibleScanning=false;
+
+function crucibleHash(s){return s.replace(/[^a-zA-Z0-9]/g,'').substring(0,40)}
+
+function crucibleBadge(scan){
+  if(!scan)return '';
+  var b=scan.badge||'';
+  var icon,cls;
+  if(b==='contradicted'){icon='\u2717';cls='r'}
+  else if(b==='risky'){icon='\u26A0';cls='r'}
+  else if(b==='contested'){icon='\u26A0';cls='g'}
+  else if(b==='safe'){icon='\u2713';cls='gr'}
+  else{icon='\u00B7';cls='d'}
+  var label=scan.contradicted>0?scan.contradicted+' contradicted':
+            scan.unvalidated>0?scan.unvalidated+' unvalidated':
+            scan.contested>0?scan.contested+' contested':
+            scan.validated+' validated';
+  return ' <span class="'+cls+'" title="'+esc(scan.summary||'')+'">'+icon+' '+label+'</span>';
+}
+
+/* Sources that contain IDEAS worth scanning (skip CVEs, package updates, etc.) */
+var CRUCIBLE_IDEA_SOURCES=['hackernews','reddit','devto','producthunt','lobsters','stackoverflow','bluesky','twitter'];
+
+/* Persist cache across page reloads */
+try{crucibleCache=JSON.parse(localStorage.getItem('4da_crucible_cache')||'{}');}catch(e){crucibleCache={}}
+function saveCrucibleCache(){
+  try{localStorage.setItem('4da_crucible_cache',JSON.stringify(crucibleCache))}catch(e){}
+}
+
+/* Auto-scan top idea-type signals through Crucible in background */
+function crucibleAutoScan(signals){
+  if(crucibleScanning||!signals||signals.length===0)return;
+  /* Filter: only idea-type sources, skip already cached, limit to 10 */
+  var toScan=signals.filter(function(s){
+    if(crucibleCache[crucibleHash(s.title)])return false;
+    if(s.source&&CRUCIBLE_IDEA_SOURCES.indexOf(s.source.toLowerCase())<0)return false;
+    return true;
+  }).slice(0,10);
+  if(toScan.length===0)return;
+  crucibleScanning=true;
+  var items=toScan.map(function(s,i){
+    return {id:'s'+i,text:s.title+(s.explanation?' \u2014 '+s.explanation:'')};
+  });
+  fetch(CRUCIBLE_URL+'/api/batch-scan',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({items:items})
+  }).then(function(r){return r.json()}).then(function(results){
+    results.forEach(function(r,i){
+      if(r.status==='ok'&&toScan[i]){
+        crucibleCache[crucibleHash(toScan[i].title)]=r.scan;
+      }
+    });
+    crucibleScanning=false;
+    saveCrucibleCache();
+  }).catch(function(){crucibleScanning=false});
+}
+
+/* On-demand single quick-scan for 'open' when not cached */
+function crucibleSingleScan(signal,callback){
+  var text=signal.title+(signal.explanation?' \u2014 '+signal.explanation:'');
+  fetch(CRUCIBLE_URL+'/api/quick-scan',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({idea:text})
+  }).then(function(r){return r.json()}).then(function(scan){
+    crucibleCache[crucibleHash(signal.title)]=scan;
+    saveCrucibleCache();
+    if(callback)callback(scan);
+  }).catch(function(){});
+}
+
 /* ── Phase 1.5: Signal renderer for pagination ── */
 function renderSignal(s){
   var scr=Math.round((s.score_raw||0)*100);
   var title=s.url?link(s.url,s.title):esc(s.title);
   var prio=s.signal_priority||'low';
+  var scan=crucibleCache[crucibleHash(s.title)];
+  var badge=crucibleBadge(scan);
 
   if(prio==='critical'||prio==='high'){
     var cardDiv=document.createElement('div');
@@ -748,12 +827,12 @@ function renderSignal(s){
     if(s.source)meta.push(s.source);
     if(s.signal_action)meta.push('Act: '+s.signal_action);
     cardDiv.innerHTML=
-      '<div class="sc-title">'+icon+' '+title+' <span class="g">['+scr+'%]</span></div>'+
+      '<div class="sc-title">'+icon+' '+title+' <span class="g">['+scr+'%]</span>'+badge+'</div>'+
       (meta.length?'<div class="sc-meta">'+esc(meta.join(' \u00B7 '))+'</div>':'')+
       '<div class="sc-bar">'+bar(s.score_raw||0,20)+'</div>';
     out.appendChild(cardDiv);scroll();
   } else {
-    wh('\u25C7 <span class="g">['+scr+']</span> '+title);
+    wh('\u25C7 <span class="g">['+scr+']</span> '+title+badge);
     var meta2=[];
     if(s.signal_type)meta2.push(s.signal_type);if(s.signal_priority)meta2.push(s.signal_priority);
     if(s.source)meta2.push(s.source);if(s.signal_action)meta2.push('Act: '+s.signal_action);
@@ -771,6 +850,9 @@ function cmdSignals(arg){
 
     /* Cache for save command */
     cachedSignals=d.signals;
+
+    /* Crucible: auto-scan signals in background */
+    crucibleAutoScan(d.signals);
 
     /* Phase 2.3: Apply filters */
     var flags=parseFlags(arg);
@@ -1710,7 +1792,41 @@ function cmdOpen(arg){
   } else {
     w('No URL for this signal.','r');
   }
+  /* Show Crucible quick-scan if available, or fetch on-demand */
+  var scan=crucibleCache[crucibleHash(signal.title)];
+  if(scan){
+    renderQuickScan(scan,idx);
+  } else if(CRUCIBLE_IDEA_SOURCES.indexOf((signal.source||'').toLowerCase())>=0){
+    wh('<span class="d">  Scanning via Crucible...</span>');
+    crucibleSingleScan(signal,function(s){
+      rmLast();
+      renderQuickScan(s,idx);
+    });
+  }
   showTiming();
+}
+
+function renderQuickScan(scan,idx){
+  w('');
+  wsep('CRUCIBLE QUICK SCAN');
+  var vBadge=scan.validated>0?'<span class="gr">'+scan.validated+' validated</span>':'';
+  var cBadge=scan.contested>0?'<span class="g">'+scan.contested+' contested</span>':'';
+  var uBadge=scan.unvalidated>0?'<span class="c">'+scan.unvalidated+' unvalidated</span>':'';
+  var xBadge=scan.contradicted>0?'<span class="r">'+scan.contradicted+' contradicted</span>':'';
+  wh('  Assumptions: '+[vBadge,cBadge,uBadge,xBadge].filter(Boolean).join(' \u2502 '));
+  if(scan.top_risk)wh('  <span class="r">\u26A0 Risk:</span> '+esc(scan.top_risk));
+  if(scan.competitors&&scan.competitors.length>0)wh('  <span class="m">Competitors:</span> '+esc(scan.competitors.join(', ')));
+  w('');
+  (scan.assumptions||[]).forEach(function(a){
+    var icon={'validated':'\u2713','contested':'?','unvalidated':'\u2014','contradicted':'\u2717'}[a.status]||'?';
+    var cls={'validated':'gr','contested':'g','unvalidated':'c','contradicted':'r'}[a.status]||'d';
+    var crit=a.criticality==='existential'?'<span class="r">[EXISTENTIAL]</span>':
+             a.criticality==='medium'?'<span class="g">[MEDIUM]</span>':'<span class="d">[LOW]</span>';
+    wh('  <span class="'+cls+'">'+icon+'</span> '+crit+' '+esc(a.statement));
+    wh('    <span class="d">'+esc(a.reason)+'</span>');
+  });
+  w('');
+  whint('type crucible '+(idx+1)+' for full stress test (90 sec)');
 }
 
 function cmdLearn(arg){
@@ -2056,4 +2172,114 @@ if('Notification' in window && Notification.permission==='default'){
 
 setInterval(refreshStatus,30000);
 inp.focus();
+
+/* ── Crucible — Adversarial Ideation Engine Integration ── */
+var CRUCIBLE_URL='http://localhost:3001';
+function cmdCrucible(arg){
+  var ideaText;
+  if(!arg){
+    /* No argument — use last opened signal */
+    if(cachedSignals&&cachedSignals.length>0){
+      var s=cachedSignals[0];
+      ideaText=s.title+(s.explanation?' — '+s.explanation:'');
+      wh('<span class="d">Using top signal: '+esc(ideaText.substring(0,80))+'...</span>');
+    } else {
+      w('Usage: crucible <idea text>  OR  crucible <signal #>','r');
+      w('  crucible An app that uses AI to match freelancers by workstyle','d');
+      w('  crucible 3   (stress-test signal #3)','d');
+      return;
+    }
+  } else if(/^\d+$/.test(arg.trim())){
+    /* Numeric — reference a signal */
+    var idx=parseInt(arg.trim())-1;
+    if(!cachedSignals||idx<0||idx>=cachedSignals.length){
+      w('Signal #'+arg.trim()+' not found. Run "signals" first.','r');
+      return;
+    }
+    var sig=cachedSignals[idx];
+    ideaText=sig.title+(sig.explanation?' — '+sig.explanation:'');
+    wh('<span class="d">Evaluating signal #'+(idx+1)+': '+esc(sig.title.substring(0,70))+'</span>');
+  } else {
+    ideaText=arg;
+  }
+  w('');
+  wsep('CRUCIBLE STRESS TEST');
+  wh('<span class="d">Sending to Crucible for adversarial evaluation...</span>');
+  wh('<span class="d">This takes 60\u201390 seconds. Running 25+ specialized AI agents.</span>');
+  w('');
+  var steps=['Parsing idea...','Gathering evidence...','Scoring 9 dimensions...','Adversarial testing (5 lenses)...','Validating assumptions...','Synthesizing report...'];
+  var stepEls=[];
+  steps.forEach(function(s,i){
+    var d=document.createElement('div');
+    d.className='out-line';
+    d.innerHTML='<span class="d">  '+(i+1)+'. '+s+'</span>';
+    d.id='crucible-step-'+i;
+    out.appendChild(d);
+    stepEls.push(d);
+  });
+  scroll();
+  /* Animate steps */
+  var stepTimer=0;
+  var delays=[0,3000,8000,20000,50000,70000];
+  delays.forEach(function(delay,i){
+    setTimeout(function(){
+      if(stepEls[i])stepEls[i].innerHTML='<span class="g">  '+(i+1)+'. '+steps[i]+'</span>';
+      if(i>0&&stepEls[i-1])stepEls[i-1].innerHTML='<span class="gr">  \u2713 '+steps[i-1]+'</span>';
+    },delay);
+  });
+  cmdStartTime=performance.now();
+  fetch(CRUCIBLE_URL+'/api/evaluate',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({idea:ideaText})
+  }).then(function(r){
+    if(!r.ok) throw new Error('Crucible returned '+r.status);
+    return r.json();
+  }).then(function(data){
+    /* Clear step indicators */
+    stepEls.forEach(function(el){el.remove()});
+    w('');
+    /* Render the report */
+    var lines=data.report.split('\n');
+    lines.forEach(function(line){
+      if(line.match(/^={3,}/))wh('<span class="g">'+esc(line)+'</span>');
+      else if(line.match(/^-{3,}/))wh('<span class="d">'+esc(line)+'</span>');
+      else if(line.match(/VALIDATED|CONTESTED|UNVALIDATED|CONTRADICTED/)){
+        var highlighted=esc(line)
+          .replace(/VALIDATED/g,'<span class="gr">VALIDATED</span>')
+          .replace(/CONTRADICTED/g,'<span class="r">CONTRADICTED</span>')
+          .replace(/UNVALIDATED/g,'<span class="c">UNVALIDATED</span>')
+          .replace(/CONTESTED/g,'<span class="g">CONTESTED</span>');
+        wh(highlighted);
+      }
+      else if(line.match(/\[CRITICAL\]/))wh('<span class="r">'+esc(line)+'</span>');
+      else if(line.match(/\[HIGH\]/))wh('<span class="r">'+esc(line)+'</span>');
+      else if(line.match(/\[OK\]/))wh('<span class="gr">'+esc(line)+'</span>');
+      else if(line.match(/\[XX\]/))wh('<span class="r">'+esc(line)+'</span>');
+      else if(line.match(/\[\?\?\]/))wh('<span class="g">'+esc(line)+'</span>');
+      else if(line.match(/\[--\]/))wh('<span class="c">'+esc(line)+'</span>');
+      else if(line.match(/COMPOSITE SCORE/))wh('<span class="g">'+esc(line)+'</span>');
+      else if(line.match(/CRUCIBLE|STRESS TEST|VERDICT/))wh('<span class="g">'+esc(line)+'</span>');
+      else if(line.match(/METHODOLOGY/))wh('<span class="m">'+esc(line)+'</span>');
+      else if(line.trim().startsWith('+'))wh('<span class="gr">'+esc(line)+'</span>');
+      else if(line.trim().startsWith('-')&&!line.match(/^-{3,}/))wh('<span class="r">'+esc(line)+'</span>');
+      else w(line);
+    });
+    w('');
+    wh('<span class="d">Score: '+data.composite_score.toFixed(1)+'/10 | Confidence: '+Math.round(data.composite_confidence*100)+'% | ID: '+data.id+'</span>');
+    showTiming();
+    lastOutput=data.report;
+  }).catch(function(e){
+    stepEls.forEach(function(el){el.remove()});
+    w('');
+    if(e.message&&e.message.match(/fetch|network|connect/i)){
+      w('Crucible server not running.','r');
+      w('Start it with: crucible serve --port 3001','d');
+      w('  (from D:\\crucible)','d');
+    } else {
+      w('Crucible error: '+e.message,'r');
+    }
+  });
+}
+
 })();
