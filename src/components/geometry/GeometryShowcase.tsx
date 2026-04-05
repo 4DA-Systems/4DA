@@ -115,36 +115,33 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const cellSize = isExpanded ? 280 : 180;
   return (
     <button
       onClick={onToggle}
-      className={`bg-bg-tertiary/40 border rounded-xl p-3 text-start transition-all hover:bg-bg-tertiary/60 ${
-        isExpanded ? 'border-accent-gold/40' : 'border-border/50'
+      className={`bg-bg-tertiary/40 border rounded-xl p-2 text-start transition-all hover:bg-bg-tertiary/60 ${
+        isExpanded ? 'border-accent-gold/40 col-span-2' : 'border-border/50'
       }`}
     >
-      {/* Geometry hero — centered, large */}
+      {/* Geometry — fills card width */}
       <div className="flex justify-center">
         <div
-          className="rounded-lg overflow-hidden"
+          className="rounded-lg overflow-hidden aspect-square w-full max-w-[180px]"
           role="img"
           aria-label={geo.name}
         >
-          <GameElementCell tag={geo.tag} size={cellSize} />
+          <GameElementCell tag={geo.tag} size={isExpanded ? 240 : 180} />
         </div>
       </div>
-      {/* Compact label bar */}
-      <div className="flex items-baseline justify-between mt-2">
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm font-medium text-white">{geo.name}</span>
-          <span className="text-[10px] text-accent-gold font-medium">{geo.role}</span>
-        </div>
-        <span className="text-[10px] text-text-muted">
+      {/* Label */}
+      <div className="text-center mt-1.5">
+        <span className="text-xs font-medium text-white">{geo.name}</span>
+        <span className="text-[9px] text-accent-gold font-medium ml-1.5">{geo.role}</span>
+        <div className="text-[9px] text-text-muted">
           {geo.dimension}{' \u00B7 '}{geo.vertices}{'v \u00B7 '}{geo.edges}{'e'}
-        </span>
+        </div>
       </div>
       {isExpanded && (
-        <div className="mt-2">
+        <div className="mt-2 text-start">
           <p className="text-xs text-text-secondary leading-relaxed">
             {geo.description}
           </p>
@@ -192,7 +189,7 @@ export function GeometryShowcase() {
         {t('about.geometrySubtitle', { defaultValue: '4DA\u2019s core invariants map to Platonic geometry. Each claim below is verifiable against the referenced source files.' })}
       </p>
 
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {FOUNDATIONS.map(geo => (
           <GeometryCard
             key={geo.tag}
@@ -215,7 +212,7 @@ export function GeometryShowcase() {
       </button>
 
       {showFamily && (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-2 gap-2">
           {FAMILY.map(geo => (
             <GeometryCard
               key={geo.tag}
