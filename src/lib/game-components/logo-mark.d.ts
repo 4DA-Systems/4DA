@@ -19,11 +19,11 @@ interface GameLogoMarkElement extends HTMLElement {
   setParam(name: string, value: number): void;
   setAudioData(data: GameAudioData): void;
   setAudioSource(bridge: GameAudioBridge): void;
-  /** Default: 0.08 */
+  /** Default: 0.10 */
   rotation_speed: number;
-  /** Default: 1.3 */
+  /** Default: 1.2 */
   glow_intensity: number;
-  /** Default: 0.05 */
+  /** Default: 0.12 */
   w_rotation: number;
 }
 
