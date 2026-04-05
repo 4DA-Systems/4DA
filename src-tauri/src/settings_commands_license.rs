@@ -126,7 +126,7 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     settings.license.tier = effective_tier.clone();
     settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
     // Clear trial state on paid activation — prevents double-trial exploit
-    // (user could otherwise downgrade and get another 45-day trial)
+    // (user could otherwise downgrade and get another 14-day trial)
     settings.license.trial_started_at = None;
     guard.save()?;
 
