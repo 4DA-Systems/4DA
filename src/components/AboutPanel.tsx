@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 // Static imports — custom elements are defined at module load time,
 // BEFORE React renders. No async, no race conditions, no effects needed.
-import '../lib/game-components/simplex-unfold.js';
+import '../lib/game-components/logo-mark.js';
 import '../lib/game-components/pentachoron.js';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
@@ -14,14 +14,14 @@ export function AboutPanel() {
 
   return (
     <div className="space-y-8">
-      {/* Logo + Identity — Simplex unfold as living brand mark */}
+      {/* Logo + Identity — Pentachoron as living brand mark */}
       <div className="flex flex-col items-center text-center">
         <div
           className="w-28 h-28 mb-4 rounded-2xl overflow-hidden shadow-lg shadow-orange-500/20 border border-border/30"
           role="img"
           aria-label={t('about.logoAlt')}
         >
-          <game-simplex-unfold style={{ width: '112px', height: '112px', display: 'block' }} />
+          <game-logo-mark style={{ width: '112px', height: '112px', display: 'block' }} />
         </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
