@@ -8,13 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Highlights
 
-4DA (4 Dimensional Autonomy) is a privacy-first desktop app that surfaces developer-relevant content from the internet — scored against your actual codebase, running entirely on your machine. No telemetry, no cloud dependency, no configuration required. See useful content within 60 seconds of first launch.
+4DA (4 Dimensional Autonomy) is a privacy-first desktop app that surfaces developer-relevant content from the internet — scored against your actual codebase, running entirely on your machine. No telemetry, no cloud dependency, no user accounts. First useful results in under 3 minutes after a quick onboarding (pick your stack, add an API key or use Ollama).
 
 ### Features
 
 **Intelligence & Scoring**
 - 5-axis relevance scoring (PASIFA) evaluates content against your actual codebase and tech stack
-- 10 built-in sources: Hacker News, Reddit, arXiv, GitHub Trending, Product Hunt, RSS, YouTube, Twitter/X, DevTo, and Lobsters
+- 20 built-in sources: Hacker News, Reddit, arXiv, GitHub, Product Hunt, RSS, YouTube, Twitter/X, DevTo, Lobsters, Stack Overflow, Bluesky, Hugging Face, Papers with Code, CVE, OSV, npm Registry, PyPI, crates.io, and Go Modules
 - Taste Test calibration: 15-card interactive session tunes scoring to your preferences
 - Developer DNA: auto-detected tech stack profiles your development identity across graduated tiers
 - Temporal clustering groups related articles across sources and time
