@@ -203,10 +203,7 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     "get_signal_chains",
     "get_signal_chains_predicted",
     "get_project_health",
-    "get_developer_dna",
-    "export_developer_dna_markdown",
-    "export_developer_dna_svg",
-    "export_developer_dna_card",
+    // Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards
     // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
     "get_semantic_shifts",
     "get_decision_signals",

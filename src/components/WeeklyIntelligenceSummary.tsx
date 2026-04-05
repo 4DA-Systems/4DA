@@ -84,6 +84,26 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
     try { localStorage.setItem(STORAGE_KEY, String(Date.now())); } catch { /* ignore */ }
   };
 
+  const handleShare = () => {
+    if (!data) return;
+    const lines = [
+      'My 4DA Weekly Intelligence Summary',
+      '',
+      `${data.itemsAnalyzed} items analyzed`,
+      `${data.totalCycles} learning cycles`,
+      `${data.calibrationAccuracy}% accuracy`,
+    ];
+    if (data.newTopics.length > 0) {
+      lines.push(`Top topics: ${data.newTopics.join(', ')}`);
+    }
+    lines.push('', 'All signal. No feed.', 'https://4da.ai');
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      addToast('success', t('report.weeklyShareCopied'));
+    }).catch(() => {
+      // Clipboard write failed silently
+    });
+  };
+
   const addInterest = async (topic: string) => {
     try {
       await cmd('add_interest', { topic });
@@ -120,12 +140,20 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
             {t('weekly.title', 'Weekly Intelligence Summary')}
           </span>
         </div>
-        <button
-          onClick={dismiss}
-          className="text-xs text-text-muted hover:text-text-secondary transition-colors"
-        >
-          {t('action.dismiss', 'Dismiss')}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleShare}
+            className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+          >
+            {t('report.shareReport')}
+          </button>
+          <button
+            onClick={dismiss}
+            className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+          >
+            {t('action.dismiss', 'Dismiss')}
+          </button>
+        </div>
       </div>
 
       <div className="px-4 pb-3 space-y-3">
