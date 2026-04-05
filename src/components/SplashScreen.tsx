@@ -38,7 +38,7 @@ const stageExplanations: Record<InitStage, string> = {
 
 const stageOrder: InitStage[] = ['starting', 'database', 'embeddings', 'context', 'sources', 'ready'];
 
-export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashScreenProps) {
+export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScreenProps) {
   const { t } = useTranslation();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -226,15 +226,9 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 1500 }: SplashSc
         />
       </div>
 
-      {/* Estimated time hint */}
+      {/* Spacer — no time estimate (progress bar and stages are sufficient context) */}
       {stage !== 'ready' && !error && (
-        <p style={{
-          fontSize: '0.6875rem',
-          color: '#6B7280',
-          marginBottom: '0.75rem',
-        }}>
-          {t('splash.estimatedTime', 'Usually takes 10–30 seconds')}
-        </p>
+        <div style={{ height: '0.75rem' }} />
       )}
 
       {/* Status message */}
