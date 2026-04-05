@@ -115,7 +115,7 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const cellSize = isExpanded ? 120 : 64;
+  const cellSize = isExpanded ? 160 : 96;
   return (
     <button
       onClick={onToggle}
@@ -181,9 +181,6 @@ export function GeometryShowcase() {
     setShowFamily(prev => !prev);
   };
 
-  const foundationExpanded = expanded !== null && FOUNDATIONS.some(g => g.tag === expanded);
-  const familyExpanded = expanded !== null && FAMILY.some(g => g.tag === expanded);
-
   return (
     <div className="space-y-4">
       <h4 className="text-sm font-medium text-accent-gold tracking-wide uppercase">
@@ -193,7 +190,7 @@ export function GeometryShowcase() {
         {t('about.geometrySubtitle', { defaultValue: '4DA\u2019s core invariants map to Platonic geometry. Each claim below is verifiable against the referenced source files.' })}
       </p>
 
-      <div className={`grid ${foundationExpanded ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+      <div className="grid grid-cols-1 gap-3">
         {FOUNDATIONS.map(geo => (
           <GeometryCard
             key={geo.tag}
@@ -216,7 +213,7 @@ export function GeometryShowcase() {
       </button>
 
       {showFamily && (
-        <div className={`grid ${familyExpanded ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+        <div className="grid grid-cols-1 gap-3">
           {FAMILY.map(geo => (
             <GeometryCard
               key={geo.tag}
