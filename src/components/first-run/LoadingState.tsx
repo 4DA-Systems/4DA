@@ -195,8 +195,16 @@ export function LoadingState({
           <VoidEngine size={80} />
         </div>
         <h2 className="text-xl font-medium text-white mb-2">
-          {t('firstRun.discoveringStack', 'Discovering your stack...')}
+          {t('firstRun.preparingIntelligence', 'Preparing your intelligence feed')}
         </h2>
+        <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-border text-start">
+          <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-2">
+            {t('firstRun.scanning', 'Scanning')}
+          </p>
+          <p className="text-xs text-text-secondary leading-relaxed">
+            {t('firstRun.scanningDescription', '20 sources including Hacker News, GitHub, Reddit, arXiv, CVE databases, and package registries — scored against your interests and tech stack.')}
+          </p>
+        </div>
         <p className="text-xs text-text-muted animate-pulse">
           {t('firstRun.startingAnalysis', 'Starting content analysis...')}
         </p>
