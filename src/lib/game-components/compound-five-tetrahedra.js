@@ -193,7 +193,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         color_acc += tint * total + hot * max(total - 0.5, 0.0) * 0.5;
     }
 
-    return vec4<f32>(clamp(color_acc, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    let acc_max = max(max(color_acc.x, color_acc.y), color_acc.z);
+    let alpha = clamp(acc_max * 1.5, 0.0, 1.0);
+    return vec4<f32>(clamp(color_acc * alpha, vec3<f32>(0.0), vec3<f32>(1.0)), alpha);
 }
 `;
 const GLSL_V = `#version 300 es
@@ -368,7 +370,9 @@ void main(){
         color_acc += tint * total + hot * max(total - 0.5, 0.0) * 0.5;
     }
 
-    fragColor = vec4(clamp(color_acc, 0.0, 1.0), 1.0);
+    float acc_max = max(max(color_acc.x, color_acc.y), color_acc.z);
+    float alpha = clamp(acc_max * 1.5, 0.0, 1.0);
+    fragColor = vec4(clamp(color_acc * alpha, 0.0, 1.0), alpha);
 }
 `;
 const UNIFORMS = [

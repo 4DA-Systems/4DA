@@ -179,7 +179,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let gold = vec3<f32>(0.831, 0.686, 0.216);
     let hot = vec3<f32>(1.0, 0.95, 0.85);
     let color = gold * total + hot * max(total - 0.5, 0.0) * 0.5;
-    return vec4<f32>(clamp(color, vec3<f32>(0.0), vec3<f32>(1.0)), 1.0);
+    let alpha = clamp(total * 1.5, 0.0, 1.0);
+    return vec4<f32>(clamp(color * alpha, vec3<f32>(0.0), vec3<f32>(1.0)), alpha);
 }
 `;
 const GLSL_V = `#version 300 es
@@ -324,7 +325,8 @@ void main(){
     vec3 gold = vec3(0.831, 0.686, 0.216);
     vec3 hot = vec3(1.0, 0.95, 0.85);
     vec3 color = gold * total + hot * max(total - 0.5, 0.0) * 0.5;
-    fragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    float alpha = clamp(total * 1.5, 0.0, 1.0);
+    fragColor = vec4(clamp(color * alpha, 0.0, 1.0), alpha);
 }
 `;
 const UNIFORMS = [
