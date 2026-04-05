@@ -1,0 +1,51 @@
+# Winget manifest for 4DA
+# Submit to: https://github.com/microsoft/winget-pkgs
+#
+# After first GitHub release with NSIS installer:
+# 1. Get the .exe URL from GitHub releases
+# 2. Calculate sha256: certutil -hashfile 4DA-Home_1.0.0_x64-setup.exe SHA256
+# 3. Update InstallerUrl and InstallerSha256 below
+# 4. Use wingetcreate to generate and submit PR:
+#    wingetcreate new --urls https://github.com/runyourempire/4DA/releases/download/v1.0.0/4DA-Home_1.0.0_x64-setup.exe
+#
+# Users install with: winget install 4DA.4DAHome
+
+PackageIdentifier: 4DA.4DAHome
+PackageVersion: 1.0.0
+PackageName: 4DA Home
+Publisher: 4DA Systems Pty Ltd
+PublisherUrl: https://4da.ai
+PublisherSupportUrl: https://github.com/runyourempire/4DA/issues
+PrivacyUrl: https://4da.ai/privacy
+Author: 4DA Systems Pty Ltd
+PackageUrl: https://4da.ai
+License: FSL-1.1-Apache-2.0
+LicenseUrl: https://github.com/runyourempire/4DA/blob/main/LICENSE
+Copyright: Copyright (c) 2025-2026 4DA Systems Pty Ltd
+ShortDescription: Privacy-first developer intelligence — scores content against your codebase
+Description: >-
+  4DA scores developer content from 20+ sources (Hacker News, GitHub, Reddit,
+  arXiv, CVE databases, package registries, and more) against your actual
+  codebase using 5-axis relevance scoring. Zero telemetry. Zero tracking.
+  Runs 100% locally. BYOK for AI providers or use Ollama for fully offline
+  operation. Free tier includes full scoring engine and all sources.
+Tags:
+  - developer-tools
+  - productivity
+  - privacy
+  - content-curation
+  - rust
+  - tauri
+  - intelligence
+  - local-first
+Moniker: 4da
+Installers:
+  - Architecture: x64
+    InstallerType: nsis
+    InstallerUrl: https://github.com/runyourempire/4DA/releases/download/v1.0.0/4DA-Home_1.0.0_x64-setup.exe
+    InstallerSha256: REPLACE_WITH_SHA256
+    InstallerSwitches:
+      Silent: /S
+      SilentWithProgress: /S
+ManifestType: singleton
+ManifestVersion: 1.6.0
