@@ -11,8 +11,8 @@ export function UsageStatsSection({ settings, provider }: UsageStatsSectionProps
   const { t } = useTranslation();
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div className="flex items-center gap-3 mb-4">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+      <div className="flex items-center gap-3 mb-3">
         <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
           <span>&#x1f4c8;</span>
         </div>
@@ -21,7 +21,7 @@ export function UsageStatsSection({ settings, provider }: UsageStatsSectionProps
           <p className="text-xs text-text-muted">{t('settings.ai.usageDescription')}</p>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3">
         <div className="bg-bg-secondary rounded-lg p-3 text-center">
           <p className="text-xl font-semibold text-white">{settings.usage.tokens_today.toLocaleString()}</p>
           <p className="text-xs text-text-muted">{t('settings.ai.tokens')}</p>

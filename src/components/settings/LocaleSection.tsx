@@ -152,8 +152,8 @@ export function LocaleSection() {
   const [showEditor, setShowEditor] = useState(false);
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div className="flex items-start gap-3 mb-4">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+      <div className="flex items-start gap-3 mb-3">
         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
           <span className="text-blue-400">&#x1f310;</span>
         </div>

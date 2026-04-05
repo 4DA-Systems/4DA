@@ -136,8 +136,8 @@ export function AIProviderSection({
   return (
     <>
       {/* LLM Provider Section */}
-      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-        <div className="flex items-center gap-3 mb-4">
+      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+        <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
             <span>&#x1f916;</span>
           </div>
@@ -147,7 +147,7 @@ export function AIProviderSection({
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Environment key import banner */}
           {envDetection && (envDetection.has_anthropic_env || envDetection.has_openai_env) && (
             <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg space-y-2">
@@ -174,7 +174,7 @@ export function AIProviderSection({
           )}
 
           <div>
-            <label htmlFor="ai-provider-select" className="text-xs text-text-muted block mb-2">{t('settings.ai.provider')}</label>
+            <label htmlFor="ai-provider-select" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.provider')}</label>
             <select
               id="ai-provider-select"
               value={settingsForm.provider}
@@ -200,7 +200,7 @@ export function AIProviderSection({
                 }));
                 setValidation({ status: 'idle', message: '', models: [] });
               }}
-              className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+              className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
               <option value="local">{t('settings.ai.builtInLocal')}</option>
               <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
@@ -221,7 +221,7 @@ export function AIProviderSection({
 
           {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local' && (
             <div>
-              <label htmlFor="ai-api-key" className="text-xs text-text-muted block mb-2">{t('settings.ai.apiKey')}</label>
+              <label htmlFor="ai-api-key" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.apiKey')}</label>
               <input
                 id="ai-api-key"
                 type="password"
@@ -236,7 +236,7 @@ export function AIProviderSection({
                   );
                 }}
                 placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
               {/* Real-time validation feedback */}
               {validation.status === 'checking' && (
@@ -259,12 +259,12 @@ export function AIProviderSection({
 
           {settingsForm.provider !== 'local' && settingsForm.provider !== 'openai-compatible' && (
             <div>
-              <label htmlFor="ai-model-select" className="text-xs text-text-muted block mb-2">{t('settings.ai.model')}</label>
+              <label htmlFor="ai-model-select" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.model')}</label>
               <select
                 id="ai-model-select"
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
               >
                 {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
                   ? ollamaModels
@@ -309,42 +309,42 @@ export function AIProviderSection({
 
           {settingsForm.provider === 'openai-compatible' && (
             <div>
-              <label htmlFor="ai-model-name" className="text-xs text-text-muted block mb-2">{t('settings.ai.modelName')}</label>
+              <label htmlFor="ai-model-name" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.modelName')}</label>
               <input
                 id="ai-model-name"
                 type="text"
                 value={settingsForm.model}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
                 placeholder={t('settings.ai.modelNamePlaceholder')}
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
 
           {settingsForm.provider === 'ollama' && (
             <div>
-              <label htmlFor="ai-base-url" className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
+              <label htmlFor="ai-base-url" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.baseUrl')}</label>
               <input
                 id="ai-base-url"
                 type="text"
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
                 placeholder="http://localhost:11434"
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
             </div>
           )}
 
           {settingsForm.provider === 'openai-compatible' && (
             <div>
-              <label htmlFor="ai-base-url" className="text-xs text-text-muted block mb-2">{t('settings.ai.baseUrl')}</label>
+              <label htmlFor="ai-base-url" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.baseUrl')}</label>
               <input
                 id="ai-base-url"
                 type="text"
                 value={settingsForm.baseUrl}
                 onChange={(e) => setSettingsForm((f) => ({ ...f, baseUrl: e.target.value }))}
                 placeholder="https://api.groq.com/openai/v1"
-                className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
               />
               <div className="mt-2">
                 <p className="text-[10px] text-text-muted mb-1.5">{t('settings.ai.popularEndpoints')}</p>

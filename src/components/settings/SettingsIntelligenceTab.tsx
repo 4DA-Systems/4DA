@@ -41,7 +41,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
 
   return (
     <div id="tabpanel-intelligence" role="tabpanel">
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PanelErrorBoundary name="AI Provider">
           <AIProviderSection
             settings={settings}
@@ -60,14 +60,14 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
           <button
             onClick={saveSettings}
             aria-label={t('settings.ai.saveConfiguration')}
-            className="flex-1 px-4 py-3 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20"
+            className="flex-1 px-4 py-2.5 text-sm bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20"
           >
             {t('settings.ai.saveConfiguration')}
           </button>
           <button
             onClick={testConnection}
             aria-label={t('settings.testConnection')}
-            className="px-6 py-3 text-sm bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
+            className="px-6 py-2.5 text-sm bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
           >
             {t('settings.testConnection')}
           </button>
