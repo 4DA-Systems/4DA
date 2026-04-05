@@ -115,44 +115,46 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const cellSize = isExpanded ? 160 : 96;
+  const cellSize = isExpanded ? 200 : 128;
   return (
     <button
       onClick={onToggle}
-      className={`bg-bg-tertiary/40 border rounded-xl p-3 text-start transition-all hover:bg-bg-tertiary/60 ${
+      className={`bg-bg-tertiary/40 border rounded-xl p-4 text-start transition-all hover:bg-bg-tertiary/60 ${
         isExpanded ? 'border-accent-gold/40' : 'border-border/50'
       }`}
     >
-      <div className="flex items-start gap-3">
+      {/* Geometry centered, full width */}
+      <div className="flex justify-center mb-3">
         <div
-          className="rounded-lg overflow-hidden border border-border/20 flex-shrink-0"
+          className="rounded-lg overflow-hidden border border-border/20"
           role="img"
           aria-label={geo.name}
         >
           <GameElementCell tag={geo.tag} size={cellSize} />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="text-xs font-medium text-white">{geo.name}</span>
-            <span className="text-[9px] text-accent-gold font-medium">{geo.role}</span>
-          </div>
-          <span className="text-[10px] text-text-muted block">
-            {geo.dimension}{' \u00B7 '}{geo.vertices}{'v \u00B7 '}{geo.edges}{'e'}
-          </span>
-          {isExpanded && (
-            <>
-              <p className="text-xs text-text-secondary leading-relaxed mt-2">
-                {geo.description}
-              </p>
-              {geo.verify != null && geo.verify !== '' && (
-                <p className="text-[10px] text-text-muted/70 mt-1.5 font-mono">
-                  {'verify: '}{geo.verify}
-                </p>
-              )}
-            </>
+      </div>
+      {/* Label bar */}
+      <div className="flex items-baseline justify-between">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-medium text-white">{geo.name}</span>
+          <span className="text-[10px] text-accent-gold font-medium">{geo.role}</span>
+        </div>
+        <span className="text-[10px] text-text-muted">
+          {geo.dimension}{' \u00B7 '}{geo.vertices}{'v \u00B7 '}{geo.edges}{'e'}
+        </span>
+      </div>
+      {isExpanded && (
+        <div className="mt-2">
+          <p className="text-xs text-text-secondary leading-relaxed">
+            {geo.description}
+          </p>
+          {geo.verify != null && geo.verify !== '' && (
+            <p className="text-[10px] text-text-muted/70 mt-1.5 font-mono">
+              {'verify: '}{geo.verify}
+            </p>
           )}
         </div>
-      </div>
+      )}
     </button>
   );
 }
