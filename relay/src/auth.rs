@@ -8,6 +8,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::RelayError;
 
+/// Read the JWT secret from the environment.
+/// Returns an error instead of panicking so callers can produce proper HTTP responses.
+fn jwt_secret() -> Result<String, RelayError> {
+    std::env::var("JWT_SECRET")
+        .map_err(|_| RelayError::Internal("JWT_SECRET environment variable not set".to_string()))
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TeamClaims {
     pub team_id: String,
@@ -37,8 +44,7 @@ where
             .strip_prefix("Bearer ")
             .ok_or_else(|| RelayError::Auth("Invalid Authorization format".to_string()))?;
 
-        let jwt_secret = std::env::var("JWT_SECRET")
-            .expect("FATAL: JWT_SECRET environment variable must be set");
+        let jwt_secret = jwt_secret()?;
 
         let token_data = decode::<TeamClaims>(
             token,
@@ -53,8 +59,7 @@ where
 
 /// Issue a JWT for a team member.
 pub fn issue_token(team_id: &str, client_id: &str, role: &str) -> Result<String, RelayError> {
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .expect("FATAL: JWT_SECRET environment variable must be set");
+    let jwt_secret = jwt_secret()?;
 
     let claims = TeamClaims {
         team_id: team_id.to_string(),

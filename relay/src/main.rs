@@ -46,6 +46,12 @@ async fn main() {
         )
         .init();
 
+    // Validate required environment variables before starting
+    if std::env::var("JWT_SECRET").is_err() {
+        eprintln!("FATAL: JWT_SECRET environment variable must be set");
+        std::process::exit(1);
+    }
+
     // Database
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "sqlite:relay.db?mode=rwc".to_string());
@@ -93,9 +99,16 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .layer(
             CorsLayer::new()
+                // Tauri WebView sends different Origin headers per platform:
+                // - macOS/Linux: tauri://localhost or https://tauri.localhost
+                // - Windows: http://tauri.localhost
+                // - Dev mode: http://localhost:4444
                 .allow_origin([
                     "tauri://localhost".parse().expect("valid origin"),
                     "https://tauri.localhost".parse().expect("valid origin"),
+                    "http://tauri.localhost".parse().expect("valid origin"),
+                    "http://localhost".parse().expect("valid origin"),
+                    "http://localhost:4444".parse().expect("valid origin"),
                 ])
                 .allow_methods([
                     axum::http::Method::GET,

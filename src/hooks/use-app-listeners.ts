@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import type { ToastType } from '../store/types';
-import { cmd, CommandTimeoutError } from '../lib/commands';
+import { cmd } from '../lib/commands';
 
 interface AppListenersConfig {
   addToast: (type: ToastType, message: string) => void;
@@ -84,11 +84,13 @@ export function useAppListeners({
   }, [setShowFramework, setShowComparison]);
 
   // Global IPC timeout handler — surface timeout errors as toasts instead of silent failures
+  // Uses .name check instead of instanceof to survive Vite code-splitting/minification
   useEffect(() => {
     const handler = (event: PromiseRejectionEvent) => {
-      if (event.reason instanceof CommandTimeoutError) {
+      if (event.reason?.name === 'CommandTimeoutError') {
         event.preventDefault();
-        addToast('error', `Operation timed out: ${event.reason.command}. Please try again.`);
+        const command = event.reason?.command ?? 'unknown';
+        addToast('error', `Operation timed out: ${command}. Please try again.`);
       }
     };
     window.addEventListener('unhandledrejection', handler);
