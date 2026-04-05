@@ -138,8 +138,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
     min_d = min(min_d, min(d24, d34));
 
-    // Depth-weighted halo — logo grade: wider, warmer
-    let hk = 10.0; // softer falloff than standard pentachoron (18.0)
+    // Depth-weighted halo — crisp with subtle warmth
+    let hk = 15.0;
     var halo_sum = exp(-d01 * hk) * (wdepth[0] + wdepth[1]) * 0.5
                  + exp(-d02 * hk) * (wdepth[0] + wdepth[2]) * 0.5
                  + exp(-d03 * hk) * (wdepth[0] + wdepth[3]) * 0.5
@@ -159,33 +159,33 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
     }
 
-    // Logo-grade edge rendering: thick, anti-aliased, depth-aware
-    let edge_w = 0.040 + 0.025 * min_vw; // ~2x thicker than standard pentachoron
+    // Crisp edge rendering: sharp core with controlled glow
+    let edge_w = 0.028 + 0.016 * min_vw;
     let aa = fwidth(min_d);
     let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.9 * min_vw;
-    let halo = halo_sum * 0.35; // stronger halo than standard (0.25)
+    let halo = halo_sum * 0.28;
 
-    // Logo-grade vertex glow: larger dots, wider halo
-    let vtx_w = 0.055; // ~1.4x standard (0.040)
+    // Precise vertex dots with tight glow
+    let vtx_w = 0.045;
     let vtx_aa = fwidth(min_vd);
     let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-            + exp(-min_vd * 20.0) * 0.8 * min_vw; // wider, softer glow
+            + exp(-min_vd * 30.0) * 0.6 * min_vw;
 
-    // Ambient center warmth — soft golden aura at shape centroid
+    // Subtle center warmth — hint, not haze
     var centroid = vec2<f32>(0.0);
     for (var i = 0u; i < 5u; i++) {
         centroid += p[i];
     }
     centroid *= 0.2;
     let center_dist = length(uv - centroid);
-    let ambient = exp(-center_dist * 5.0) * 0.12;
+    let ambient = exp(-center_dist * 8.0) * 0.05;
 
     let total = (core + halo + vtx + ambient) * u.glow_intensity;
 
-    // 4DA gold palette with premium bloom
+    // 4DA gold with white-hot bloom at bright points
     let gold = vec3<f32>(0.831, 0.686, 0.216);
     let hot = vec3<f32>(1.0, 0.95, 0.85);
-    let color = clamp(gold * total + hot * max(total - 0.4, 0.0) * 0.8, vec3<f32>(0.0), vec3<f32>(1.0));
+    let color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, vec3<f32>(0.0), vec3<f32>(1.0));
     let alpha = clamp(total * 1.5, 0.0, 1.0);
     return vec4<f32>(color * alpha, alpha);
 }
@@ -309,7 +309,7 @@ void main(){
     float min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
     min_d = min(min_d, min(d24, d34));
 
-    float hk = 10.0;
+    float hk = 15.0;
     float halo_sum = exp(-d01*hk) * (wdepth[0]+wdepth[1])*0.5
                    + exp(-d02*hk) * (wdepth[0]+wdepth[2])*0.5
                    + exp(-d03*hk) * (wdepth[0]+wdepth[3])*0.5
@@ -328,33 +328,33 @@ void main(){
         if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
     }
 
-    float edge_w = 0.040 + 0.025 * min_vw;
+    float edge_w = 0.028 + 0.016 * min_vw;
     float aa = fwidth(min_d);
     float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.9 * min_vw;
-    float halo = halo_sum * 0.35;
-    float vtx_w = 0.055;
+    float halo = halo_sum * 0.28;
+    float vtx_w = 0.045;
     float vtx_aa = fwidth(min_vd);
     float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-              + exp(-min_vd * 20.0) * 0.8 * min_vw;
+              + exp(-min_vd * 30.0) * 0.6 * min_vw;
 
     vec2 centroid = vec2(0.0);
     for (int i = 0; i < 5; i++) centroid += p[i];
     centroid *= 0.2;
     float center_dist = length(uv - centroid);
-    float ambient = exp(-center_dist * 5.0) * 0.12;
+    float ambient = exp(-center_dist * 8.0) * 0.05;
 
     float total = (core + halo + vtx + ambient) * u_p_glow_intensity;
 
     vec3 gold = vec3(0.831, 0.686, 0.216);
     vec3 hot = vec3(1.0, 0.95, 0.85);
-    vec3 color = clamp(gold * total + hot * max(total - 0.4, 0.0) * 0.8, 0.0, 1.0);
+    vec3 color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, 0.0, 1.0);
     float alpha = clamp(total * 1.5, 0.0, 1.0);
     fragColor = vec4(color * alpha, alpha);
 }
 `;
 const UNIFORMS = [
   { name: 'rotation_speed', default: 0.08 },
-  { name: 'glow_intensity', default: 1.3 },
+  { name: 'glow_intensity', default: 1.2 },
   { name: 'w_rotation', default: 0.05 },
 ];
 
