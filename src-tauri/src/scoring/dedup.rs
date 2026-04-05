@@ -110,7 +110,7 @@ fn jaccard_word_similarity(a: &str, b: &str) -> f32 {
 }
 
 /// Fuzzy title deduplication: catches near-duplicates that URL/exact-title dedup miss.
-/// Uses Jaccard word similarity on normalized titles. Items with >= 0.75 word overlap
+/// Uses Jaccard word similarity on normalized titles. Items with >= 0.65 word overlap
 /// are considered duplicates — the higher-scoring item survives.
 /// This catches cross-posted content and minor title variations.
 pub(crate) fn fuzzy_dedup_results(results: &mut Vec<SourceRelevance>) {
@@ -138,7 +138,7 @@ pub(crate) fn fuzzy_dedup_results(results: &mut Vec<SourceRelevance>) {
                 continue;
             }
             let similarity = jaccard_word_similarity(&normalized[i], &normalized[j]);
-            if similarity >= 0.75 {
+            if similarity >= 0.65 {
                 // j scored lower (results sorted desc) — mark for removal
                 remove_indices.insert(j);
             }
@@ -157,7 +157,7 @@ pub(crate) fn fuzzy_dedup_results(results: &mut Vec<SourceRelevance>) {
                 continue;
             }
             let sim = jaccard_word_similarity(&normalized[i], &normalized[removed_idx]);
-            if sim >= 0.75 {
+            if sim >= 0.65 {
                 results[i].similar_count += 1;
                 results[i].similar_titles.push(removed_title);
                 break;

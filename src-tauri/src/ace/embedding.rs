@@ -403,8 +403,20 @@ fn f32_vec_to_bytes(vec: &[f32]) -> Vec<u8> {
     vec.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
-/// Convert bytes back to f32 vector
+/// Convert bytes back to f32 vector.
+/// Returns empty vec on invalid input instead of producing corrupt results.
 fn bytes_to_f32_vec(bytes: &[u8]) -> Vec<f32> {
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+    if bytes.len() % 4 != 0 {
+        tracing::warn!(
+            target: "4da::ace",
+            "bytes_to_f32_vec: byte slice length {} is not divisible by 4, returning empty",
+            bytes.len()
+        );
+        return Vec::new();
+    }
     bytes
         .chunks_exact(4)
         .map(|chunk| {

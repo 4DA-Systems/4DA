@@ -517,13 +517,36 @@ pub(crate) fn hash_content_parts(parts: &[&str]) -> String {
     hex::encode(hasher.finalize())
 }
 
-/// Convert f32 embedding to blob for storage
+/// Expected embedding dimension (MiniLM / text-embedding-3-small)
+pub(crate) const EMBEDDING_DIM: usize = 384;
+
+/// Convert f32 embedding to blob for storage.
+/// Validates dimension before conversion — rejects wrong-sized vectors.
 pub(crate) fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
+    if !embedding.is_empty() && embedding.len() != EMBEDDING_DIM {
+        tracing::warn!(
+            target: "4da::db",
+            "Embedding dimension mismatch: expected {} but got {} — storing anyway",
+            EMBEDDING_DIM, embedding.len()
+        );
+    }
     embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
-/// Convert blob back to f32 embedding
+/// Convert blob back to f32 embedding.
+/// Returns empty vec on invalid blobs instead of panicking.
 pub(crate) fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
+    if blob.is_empty() {
+        return Vec::new();
+    }
+    if blob.len() % 4 != 0 {
+        tracing::warn!(
+            target: "4da::db",
+            "Invalid embedding blob size: {} bytes (not divisible by 4) — returning empty",
+            blob.len()
+        );
+        return Vec::new();
+    }
     blob.chunks_exact(4)
         .map(|chunk| {
             let arr: [u8; 4] = chunk.try_into().unwrap_or([0u8; 4]);

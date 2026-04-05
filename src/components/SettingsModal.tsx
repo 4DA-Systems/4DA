@@ -154,7 +154,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[calc(100vh-4rem)] overflow-y-auto shadow-2xl">
         {/* Sticky Header + Tab Bar */}
         <div className="sticky top-0 bg-bg-secondary z-10">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">

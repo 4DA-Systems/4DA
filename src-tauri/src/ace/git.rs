@@ -14,6 +14,47 @@ use std::process::Command;
 use crate::error::{Result, ResultExt};
 use crate::utils::sanitize_path;
 
+/// Max time to wait for a git subprocess (30 seconds).
+const GIT_TIMEOUT_SECS: u64 = 30;
+
+/// Run a git command with a timeout to prevent indefinite hangs.
+fn run_git_with_timeout(args: &[&str], repo_path: &Path) -> Result<std::process::Output> {
+    use std::process::Stdio;
+
+    let mut child = Command::new("git")
+        .args(args)
+        .current_dir(repo_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .context("Failed to spawn git process")?;
+
+    // Poll for completion with timeout
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_secs(GIT_TIMEOUT_SECS);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
+                // Process finished — collect output
+                return child.wait_with_output().context("Failed to read git output");
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "Git command timed out after {}s: git {}",
+                        GIT_TIMEOUT_SECS,
+                        args.join(" ")
+                    ).into());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(e) => return Err(format!("Failed to wait on git process: {e}").into()),
+        }
+    }
+}
+
 /// Git analyzer configuration
 #[derive(Debug, Clone)]
 pub struct GitConfig {
@@ -246,11 +287,7 @@ impl GitAnalyzer {
             args.push("--no-merges");
         }
 
-        let output = Command::new("git")
-            .args(&args)
-            .current_dir(repo_path)
-            .output()
-            .context("Failed to run git log")?;
+        let output = run_git_with_timeout(&args, repo_path)?;
 
         if !output.status.success() {
             return Err(format!(
@@ -306,11 +343,7 @@ impl GitAnalyzer {
 
     /// Get branch information
     fn get_branches(&self, repo_path: &Path) -> Result<Vec<BranchInfo>> {
-        let output = Command::new("git")
-            .args(["branch", "-v", "--no-color"])
-            .current_dir(repo_path)
-            .output()
-            .context("Failed to run git branch")?;
+        let output = run_git_with_timeout(&["branch", "-v", "--no-color"], repo_path)?;
 
         if !output.status.success() {
             return Err(format!(

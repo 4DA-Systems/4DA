@@ -138,16 +138,16 @@ export function ResultsView({
 
           {/* Filter Bar */}
           {state.analysisComplete && (
-            <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-border" role="toolbar" aria-label="Filter and sort controls">
+            <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 pt-3 border-t border-border" role="toolbar" aria-label="Filter and sort controls">
               {/* Search */}
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('results.searchPlaceholder')}
                   aria-label="Search results by keyword"
-                  className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg ps-8 pe-3 py-1.5 w-48 border border-transparent focus:border-border focus:outline-none transition-all"
+                  className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg ps-8 pe-3 py-1.5 w-full sm:w-48 border border-transparent focus:border-border focus:outline-none transition-all"
                 />
                 <svg className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
