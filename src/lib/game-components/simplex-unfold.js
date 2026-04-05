@@ -153,82 +153,82 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     if (ea01 > 0.01) {
         let d = dist_seg(uv, pos[0], pos[1]);
         min_d = min(min_d, d / ea01);
-        edge_halo += exp(-d * 18.0) * ea01;
+        edge_halo += exp(-d * 12.0) * ea01;
     }
     // Edge 0-2 (born at phase 2)
     let ea02 = min(v_alpha[0], v_alpha[2]);
     if (ea02 > 0.01) {
         let d = dist_seg(uv, pos[0], pos[2]);
         min_d = min(min_d, d / ea02);
-        edge_halo += exp(-d * 18.0) * ea02;
+        edge_halo += exp(-d * 12.0) * ea02;
     }
     // Edge 1-2 (born at phase 2)
     let ea12 = min(v_alpha[1], v_alpha[2]);
     if (ea12 > 0.01) {
         let d = dist_seg(uv, pos[1], pos[2]);
         min_d = min(min_d, d / ea12);
-        edge_halo += exp(-d * 18.0) * ea12;
+        edge_halo += exp(-d * 12.0) * ea12;
     }
     // Edge 0-3 (born at phase 3)
     let ea03 = min(v_alpha[0], v_alpha[3]);
     if (ea03 > 0.01) {
         let d = dist_seg(uv, pos[0], pos[3]);
         min_d = min(min_d, d / ea03);
-        edge_halo += exp(-d * 18.0) * ea03;
+        edge_halo += exp(-d * 12.0) * ea03;
     }
     // Edge 1-3 (born at phase 3)
     let ea13 = min(v_alpha[1], v_alpha[3]);
     if (ea13 > 0.01) {
         let d = dist_seg(uv, pos[1], pos[3]);
         min_d = min(min_d, d / ea13);
-        edge_halo += exp(-d * 18.0) * ea13;
+        edge_halo += exp(-d * 12.0) * ea13;
     }
     // Edge 2-3 (born at phase 3)
     let ea23 = min(v_alpha[2], v_alpha[3]);
     if (ea23 > 0.01) {
         let d = dist_seg(uv, pos[2], pos[3]);
         min_d = min(min_d, d / ea23);
-        edge_halo += exp(-d * 18.0) * ea23;
+        edge_halo += exp(-d * 12.0) * ea23;
     }
     // Edge 0-4 (born at phase 4)
     let ea04 = min(v_alpha[0], v_alpha[4]);
     if (ea04 > 0.01) {
         let d = dist_seg(uv, pos[0], pos[4]);
         min_d = min(min_d, d / ea04);
-        edge_halo += exp(-d * 18.0) * ea04;
+        edge_halo += exp(-d * 12.0) * ea04;
     }
     // Edge 1-4 (born at phase 4)
     let ea14 = min(v_alpha[1], v_alpha[4]);
     if (ea14 > 0.01) {
         let d = dist_seg(uv, pos[1], pos[4]);
         min_d = min(min_d, d / ea14);
-        edge_halo += exp(-d * 18.0) * ea14;
+        edge_halo += exp(-d * 12.0) * ea14;
     }
     // Edge 2-4 (born at phase 4)
     let ea24 = min(v_alpha[2], v_alpha[4]);
     if (ea24 > 0.01) {
         let d = dist_seg(uv, pos[2], pos[4]);
         min_d = min(min_d, d / ea24);
-        edge_halo += exp(-d * 18.0) * ea24;
+        edge_halo += exp(-d * 12.0) * ea24;
     }
     // Edge 3-4 (born at phase 4)
     let ea34 = min(v_alpha[3], v_alpha[4]);
     if (ea34 > 0.01) {
         let d = dist_seg(uv, pos[3], pos[4]);
         min_d = min(min_d, d / ea34);
-        edge_halo += exp(-d * 18.0) * ea34;
+        edge_halo += exp(-d * 12.0) * ea34;
     }
 
     // Vertex glow (weighted by visibility)
     var vtx_glow = 0.0;
     for (var i = 0u; i < 5u; i++) {
         let vd = length(uv - pos[i]);
-        vtx_glow += exp(-vd * 65.0) * v_alpha[i] * 1.3;
+        vtx_glow += exp(-vd * 40.0) * v_alpha[i] * 1.6;
     }
 
     // Composite glow
-    let core = exp(-min_d * 100.0) * 0.8;
-    let halo = edge_halo * 0.08;
+    let core = exp(-min_d * 60.0) * 0.95;
+    let halo = edge_halo * 0.16;
     let total = (core + halo + vtx_glow) * u.glow_intensity;
 
     // Dimension-aware color: subtle shift as dimensions increase
@@ -390,11 +390,11 @@ void main(){
     float vtx_glow = 0.0;
     for (int i = 0; i < 5; i++){
         float vd = length(uv - pos[i]);
-        vtx_glow += exp(-vd * 65.0) * v_alpha[i] * 1.3;
+        vtx_glow += exp(-vd * 40.0) * v_alpha[i] * 1.6;
     }
 
-    float core = exp(-min_d * 100.0) * 0.8;
-    float halo = edge_halo * 0.08;
+    float core = exp(-min_d * 60.0) * 0.95;
+    float halo = edge_halo * 0.16;
     float total = (core + halo + vtx_glow) * u_p_glow_intensity;
 
     float dim_t = phase / 4.0;

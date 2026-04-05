@@ -170,9 +170,9 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Glow layers — depth-aware
-    let core = exp(-min_d * 90.0) * 0.75;
-    let halo = exp(-min_d * 16.0) * 0.15;
-    let vtx = exp(-min_vd * 55.0) * 1.1 * min_vdf;
+    let core = exp(-min_d * 55.0) * 0.9;
+    let halo = exp(-min_d * 10.0) * 0.25;
+    let vtx = exp(-min_vd * 35.0) * 1.4 * min_vdf;
     let total = (core + halo + vtx) * u.glow_intensity;
 
     // Gold color with white-hot bloom
@@ -316,9 +316,9 @@ void main(){
         if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
     }
 
-    float core = exp(-min_d * 90.0) * 0.75;
-    float halo = exp(-min_d * 16.0) * 0.15;
-    float vtx = exp(-min_vd * 55.0) * 1.1 * min_vdf;
+    float core = exp(-min_d * 55.0) * 0.9;
+    float halo = exp(-min_d * 10.0) * 0.25;
+    float vtx = exp(-min_vd * 35.0) * 1.4 * min_vdf;
     float total = (core + halo + vtx) * u_p_glow_intensity;
 
     vec3 gold = vec3(0.831, 0.686, 0.216);

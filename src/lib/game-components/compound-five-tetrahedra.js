@@ -177,12 +177,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
 
         // Anti-aliased edge core
-        let edge_w = 0.004 + 0.002 * min_vdf;
+        let edge_w = 0.010 + 0.005 * min_vdf;
         let aa = fwidth(min_d);
         let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.85 * min_vdf;
-        let halo = halo_sum * 0.09;
+        let halo = halo_sum * 0.18;
         // Vertex dots
-        let vtx_w = 0.010;
+        let vtx_w = 0.020;
         let vtx_aa = fwidth(min_vd);
         let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
                 + exp(-min_vd * 45.0) * 0.5 * min_vdf;
@@ -354,11 +354,11 @@ void main(){
             if (vd < min_vd) { min_vd = vd; min_vdf = df[b + vi]; }
         }
 
-        float edge_w = 0.004 + 0.002 * min_vdf;
+        float edge_w = 0.010 + 0.005 * min_vdf;
         float aa = fwidth(min_d);
         float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.85 * min_vdf;
-        float halo = halo_sum * 0.09;
-        float vtx_w = 0.010;
+        float halo = halo_sum * 0.18;
+        float vtx_w = 0.020;
         float vtx_aa = fwidth(min_vd);
         float vtx_g = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
                     + exp(-min_vd * 45.0) * 0.5 * min_vdf;
