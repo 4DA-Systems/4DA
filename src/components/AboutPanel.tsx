@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAppStore } from '../store';
 
 // Static imports — custom elements are defined at module load time,
 // BEFORE React renders. No async, no race conditions, no effects needed.
@@ -11,6 +12,7 @@ const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').th
 
 export function AboutPanel() {
   const { t } = useTranslation();
+  const setShowSettings = useAppStore(s => s.setShowSettings);
 
   return (
     <div className="space-y-8">
@@ -178,6 +180,7 @@ export function AboutPanel() {
         <div className="flex gap-2">
           <button
             onClick={() => {
+              setShowSettings(false);
               window.dispatchEvent(new Event('4da:show-framework'));
             }}
             className="flex-1 px-3 py-2 text-xs font-medium text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all"
@@ -186,6 +189,7 @@ export function AboutPanel() {
           </button>
           <button
             onClick={() => {
+              setShowSettings(false);
               window.dispatchEvent(new Event('4da:show-comparison'));
             }}
             className="flex-1 px-3 py-2 text-xs font-medium text-text-secondary bg-bg-secondary border border-border rounded-lg hover:bg-bg-tertiary transition-all"
