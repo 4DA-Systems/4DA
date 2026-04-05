@@ -131,8 +131,8 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   // Document detail view
   if (selectedDoc) {
     return (
-      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-        <div className="flex items-center gap-3 mb-4">
+      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+        <div className="flex items-center gap-3 mb-3">
           <button
             onClick={() => setSelectedDoc(null)}
             className="text-sm text-text-secondary hover:text-white transition-colors"
@@ -144,7 +144,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
           </h3>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <div className="p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="text-xs text-text-muted">{t('documents.type')}</div>
             <div className="text-sm text-white font-medium">{selectedDoc.document.file_type.toUpperCase()}</div>
@@ -188,7 +188,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   }
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <div
         className="flex items-center justify-between cursor-pointer"
         onClick={() => {
@@ -214,7 +214,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       </div>
 
       {expanded && (
-        <div className="mt-4 space-y-4">
+        <div className="mt-3 space-y-3">
           {/* Stats summary */}
           {stats && stats.total_documents > 0 && (
             <div className="flex flex-wrap gap-2">
