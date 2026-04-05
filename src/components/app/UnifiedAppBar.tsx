@@ -84,7 +84,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
     <div className="mb-3">
       {/* Main bar */}
       <div
-        className="flex items-center gap-3 px-4 h-16 bg-bg-primary border-b border-border"
+        className="flex flex-wrap items-center gap-3 px-4 min-h-[4rem] py-2 bg-bg-primary border-b border-border"
         role="banner"
         aria-label={t('app.title')}
       >

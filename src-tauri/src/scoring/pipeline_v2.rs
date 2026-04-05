@@ -343,7 +343,7 @@ fn compute_relevance(
         (cal.context_score * (1.0 + cal.semantic_boost)).clamp(0.0, 1.0)
     } else {
         // Neither
-        (cal.semantic_boost * 2.0).clamp(0.0, 1.0)
+        (cal.semantic_boost * 1.5).clamp(0.0, 1.0)
     }
 }
 

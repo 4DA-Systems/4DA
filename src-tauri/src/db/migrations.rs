@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 48;
+        const TARGET_VERSION: i64 = 49;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1347,6 +1347,47 @@ impl Database {
                              CREATE INDEX IF NOT EXISTS idx_source_items_relevance_score ON source_items(relevance_score);",
                         )?;
                         info!(target: "4da::db", "Added relevance_score column and language/score indexes");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 49: Add ON DELETE CASCADE triggers for orphan prevention
+            // SQLite doesn't support ALTER CONSTRAINT, so we use triggers instead.
+            if current_version < 49 {
+                Self::run_versioned_migration(
+                    &conn,
+                    48,
+                    49,
+                    "Phase 49: cascade delete triggers for orphan prevention",
+                    |c| {
+                        c.execute_batch(
+                            "-- Cascade deletes from source_items to dependent tables
+                             CREATE TRIGGER IF NOT EXISTS trg_source_items_cascade_delete
+                             AFTER DELETE ON source_items
+                             BEGIN
+                                 DELETE FROM feedback WHERE source_item_id = OLD.id;
+                                 DELETE FROM item_necessity WHERE source_item_id = OLD.id;
+                                 DELETE FROM channel_source_matches WHERE source_item_id = OLD.id;
+                                 DELETE FROM content_analyses WHERE source_item_id = OLD.id;
+                             END;
+
+                             -- Cascade deletes from channels to dependent tables
+                             CREATE TRIGGER IF NOT EXISTS trg_channels_cascade_delete
+                             AFTER DELETE ON channels
+                             BEGIN
+                                 DELETE FROM channel_renders WHERE channel_id = OLD.id;
+                                 DELETE FROM channel_source_matches WHERE channel_id = OLD.id;
+                             END;
+
+                             -- Cascade deletes from channel_renders to provenance
+                             CREATE TRIGGER IF NOT EXISTS trg_channel_renders_cascade_delete
+                             AFTER DELETE ON channel_renders
+                             BEGIN
+                                 DELETE FROM channel_provenance WHERE render_id = OLD.id;
+                             END;",
+                        )?;
+                        info!(target: "4da::db", "Added cascade delete triggers for orphan prevention");
                         Ok(())
                     },
                 )?;

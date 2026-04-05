@@ -93,9 +93,21 @@ async fn main() {
         .layer(TraceLayer::new_for_http())
         .layer(
             CorsLayer::new()
-                .allow_origin(tower_http::cors::Any)
-                .allow_methods(tower_http::cors::Any)
-                .allow_headers(tower_http::cors::Any),
+                .allow_origin([
+                    "tauri://localhost".parse().expect("valid origin"),
+                    "https://tauri.localhost".parse().expect("valid origin"),
+                ])
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::DELETE,
+                    axum::http::Method::PATCH,
+                    axum::http::Method::OPTIONS,
+                ])
+                .allow_headers([
+                    axum::http::header::AUTHORIZATION,
+                    axum::http::header::CONTENT_TYPE,
+                ]),
         )
         .layer(rate_layer)
         .with_state(pool);

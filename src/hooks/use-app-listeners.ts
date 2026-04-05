@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import type { ToastType } from '../store/types';
-import { cmd } from '../lib/commands';
+import { cmd, CommandTimeoutError } from '../lib/commands';
 
 interface AppListenersConfig {
   addToast: (type: ToastType, message: string) => void;
@@ -82,6 +82,18 @@ export function useAppListeners({
       window.removeEventListener('4da:show-comparison', comparisonHandler);
     };
   }, [setShowFramework, setShowComparison]);
+
+  // Global IPC timeout handler — surface timeout errors as toasts instead of silent failures
+  useEffect(() => {
+    const handler = (event: PromiseRejectionEvent) => {
+      if (event.reason instanceof CommandTimeoutError) {
+        event.preventDefault();
+        addToast('error', `Operation timed out: ${event.reason.command}. Please try again.`);
+      }
+    };
+    window.addEventListener('unhandledrejection', handler);
+    return () => window.removeEventListener('unhandledrejection', handler);
+  }, [addToast]);
 
   // On mount: load cached results from previous session, or auto-analyze
   useEffect(() => {

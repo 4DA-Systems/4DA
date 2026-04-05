@@ -19,8 +19,20 @@ pub fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
     embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
-/// Convert blob from SQLite to embedding vector
+/// Convert blob from SQLite to embedding vector.
+/// Returns empty vec on invalid blobs instead of panicking.
 pub fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
+    if blob.is_empty() {
+        return Vec::new();
+    }
+    if blob.len() % 4 != 0 {
+        tracing::warn!(
+            target: "4da::ace",
+            "blob_to_embedding: blob length {} is not divisible by 4, returning empty",
+            blob.len()
+        );
+        return Vec::new();
+    }
     blob.chunks_exact(4)
         .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
         .collect()

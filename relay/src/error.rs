@@ -30,9 +30,15 @@ impl IntoResponse for RelayError {
         let (status, body) = match &self {
             Self::Auth(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             Self::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            Self::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::Database(msg) => {
+                tracing::error!(target: "relay", "Database error: {msg}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal database error".to_string())
+            }
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            Self::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+            Self::Internal(msg) => {
+                tracing::error!(target: "relay", "Internal error: {msg}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+            }
         };
 
         let json = serde_json::json!({ "error": body });

@@ -14,9 +14,11 @@ use zip::ZipArchive;
 
 /// Security limits for archive extraction
 const MAX_DEPTH: u32 = 3;
-const MAX_EXTRACTED_SIZE: u64 = 100 * 1024 * 1024; // 100MB
+const MAX_EXTRACTED_SIZE: u64 = 100 * 1024 * 1024; // 100MB total
 const MAX_FILE_COUNT: usize = 1000;
 const MAX_SINGLE_FILE_SIZE: u64 = 10 * 1024 * 1024; // 10MB per file
+const MAX_COMPRESSED_SIZE: u64 = 50 * 1024 * 1024; // 50MB compressed input
+const MAX_COMPRESSION_RATIO: u64 = 100; // Abort if ratio > 100:1 (decompression bomb)
 
 pub struct ArchiveExtractor;
 
@@ -27,6 +29,18 @@ impl ArchiveExtractor {
 
     /// Extract a ZIP archive
     fn extract_zip(&self, path: &Path) -> Result<ExtractedDocument> {
+        // Check compressed file size to prevent decompression bombs
+        let compressed_size = std::fs::metadata(path)
+            .map(|m| m.len())
+            .unwrap_or(0);
+        if compressed_size > MAX_COMPRESSED_SIZE {
+            return Err(anyhow::anyhow!(
+                "Archive too large: {}MB exceeds {}MB limit",
+                compressed_size / (1024 * 1024),
+                MAX_COMPRESSED_SIZE / (1024 * 1024)
+            ));
+        }
+
         let file = File::open(path).context("Failed to open ZIP")?;
         let mut archive = ZipArchive::new(file).context("Failed to read ZIP archive")?;
 
@@ -61,13 +75,22 @@ impl ArchiveExtractor {
                 continue;
             }
 
-            // Check size
+            // Check size + decompression bomb ratio
             let size = file.size();
             if size > MAX_SINGLE_FILE_SIZE {
                 continue;
             }
             if total_size + size > MAX_EXTRACTED_SIZE {
                 break;
+            }
+            let compressed = file.compressed_size();
+            if compressed > 0 && size / compressed > MAX_COMPRESSION_RATIO {
+                tracing::warn!(
+                    target: "4da::extract",
+                    "Skipping suspicious entry '{}': compression ratio {}:1 exceeds limit",
+                    name.display(), size / compressed
+                );
+                continue;
             }
 
             // Read content

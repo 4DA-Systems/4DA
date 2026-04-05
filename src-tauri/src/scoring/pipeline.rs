@@ -249,7 +249,7 @@ pub(crate) fn score_item(
     } else if ctx.cached_context_count > 0 {
         (context_score + semantic_boost).min(1.0)
     } else {
-        (semantic_boost * 2.0).min(1.0)
+        (semantic_boost * 1.5).min(1.0)
     };
 
     // Dependency contribution: dep_match_score weighted into base score

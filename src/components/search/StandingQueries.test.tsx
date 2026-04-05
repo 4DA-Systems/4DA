@@ -173,7 +173,7 @@ describe('StandingQueries', () => {
     expect(screen.getByText('topic')).toBeInTheDocument();
     expect(screen.getByText('dependency')).toBeInTheDocument();
     // Watch buttons
-    expect(screen.getAllByText('search.watch')).toHaveLength(2);
+    expect(screen.getAllByText('search.watch')).toHaveLength(3); // 2 suggestions + 1 custom input
   });
 
   it('does not show suggestions section when no suggestions', async () => {

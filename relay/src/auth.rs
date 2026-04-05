@@ -37,8 +37,8 @@ where
             .strip_prefix("Bearer ")
             .ok_or_else(|| RelayError::Auth("Invalid Authorization format".to_string()))?;
 
-        let jwt_secret =
-            std::env::var("JWT_SECRET").unwrap_or_else(|_| "4da-relay-dev-secret".to_string());
+        let jwt_secret = std::env::var("JWT_SECRET")
+            .expect("FATAL: JWT_SECRET environment variable must be set");
 
         let token_data = decode::<TeamClaims>(
             token,
@@ -53,8 +53,8 @@ where
 
 /// Issue a JWT for a team member.
 pub fn issue_token(team_id: &str, client_id: &str, role: &str) -> Result<String, RelayError> {
-    let jwt_secret =
-        std::env::var("JWT_SECRET").unwrap_or_else(|_| "4da-relay-dev-secret".to_string());
+    let jwt_secret = std::env::var("JWT_SECRET")
+        .expect("FATAL: JWT_SECRET environment variable must be set");
 
     let claims = TeamClaims {
         team_id: team_id.to_string(),

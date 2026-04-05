@@ -300,7 +300,7 @@ function App() {
         )}
       </ViewErrorBoundary>
 
-      <div className={`min-h-screen bg-bg-primary text-white p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
+      <div className={`min-h-screen bg-bg-primary text-white p-3 md:p-6 ${showSplash || showOnboarding ? 'hidden' : 'opacity-100 transition-opacity duration-300'}`}>
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-orange-500 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium"

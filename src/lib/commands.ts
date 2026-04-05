@@ -1803,7 +1803,7 @@ export function cmd<K extends keyof CommandMap>(
   params?: CommandMap[K]['params'],
 ): Promise<CommandMap[K]['result']> {
   const timeoutMs = LONG_RUNNING_COMMANDS.has(command) ? LONG_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
-  return withTimeout(invoke<CommandMap[K]['result']>(command, params ?? {}), timeoutMs);
+  return withTimeout(invoke<CommandMap[K]['result']>(command, params ?? {}), timeoutMs, command);
 }
 
 // ============================================================================
@@ -1829,15 +1829,24 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'get_embedding_model_info',
 ]);
 
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+class CommandTimeoutError extends Error {
+  constructor(public readonly command: string, ms: number) {
+    super(`Command '${command}' timed out after ${ms / 1000}s`);
+    this.name = 'CommandTimeoutError';
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, command?: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`Command timed out after ${ms / 1000}s`)), ms);
+      timer = setTimeout(() => reject(new CommandTimeoutError(command ?? 'unknown', ms)), ms);
     }),
   ]).finally(() => clearTimeout(timer));
 }
+
+export { CommandTimeoutError };
 
 // ============================================================================
 // Re-export types used by command consumers
