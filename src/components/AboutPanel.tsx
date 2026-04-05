@@ -1,42 +1,62 @@
 import { useEffect, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { registerGameComponent, type GameComponentTag } from '../lib/game-components';
-
-/** Imperatively mount a GAME custom element after registration completes. */
-function GameElement({ tag, size }: { tag: GameComponentTag; size: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const activeRef = useRef(false);
-
-  useEffect(() => {
-    activeRef.current = true;
-    const container = containerRef.current;
-    if (container === null) return;
-
-    void registerGameComponent(tag).then(() => {
-      if (!activeRef.current || container.children.length > 0) return;
-      const el = document.createElement(tag);
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      container.appendChild(el);
-    });
-
-    return () => {
-      activeRef.current = false;
-      while (container.firstChild != null) {
-        container.removeChild(container.firstChild);
-      }
-    };
-  }, [tag]);
-
-  return <div ref={containerRef} style={{ width: size, height: size }} />;
-}
+import { registerGameComponent } from '../lib/game-components';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
 const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').then(m => ({ default: m.ConfigDiagnostics })));
 
 export function AboutPanel() {
   const { t } = useTranslation();
+
+  // Logo: simplex-unfold — exact PentachoronMark pattern (proven working)
+  const logoContainerRef = useRef<HTMLDivElement>(null);
+  const logoElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    registerGameComponent('game-simplex-unfold').then(() => {
+      if (cancelled || !logoContainerRef.current) return;
+      const el = document.createElement('game-simplex-unfold');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      logoContainerRef.current.appendChild(el);
+      logoElementRef.current = el;
+    }).catch(() => { /* silent */ });
+    const container = logoContainerRef.current;
+    return () => {
+      cancelled = true;
+      if (logoElementRef.current != null && container?.contains(logoElementRef.current) === true) {
+        container.removeChild(logoElementRef.current);
+      }
+      logoElementRef.current = null;
+    };
+  }, []);
+
+  // Bridge: pentachoron — exact PentachoronMark pattern (proven working)
+  const bridgeContainerRef = useRef<HTMLDivElement>(null);
+  const bridgeElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    registerGameComponent('game-pentachoron').then(() => {
+      if (cancelled || !bridgeContainerRef.current) return;
+      const el = document.createElement('game-pentachoron');
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      bridgeContainerRef.current.appendChild(el);
+      bridgeElementRef.current = el;
+    }).catch(() => { /* silent */ });
+    const container = bridgeContainerRef.current;
+    return () => {
+      cancelled = true;
+      if (bridgeElementRef.current != null && container?.contains(bridgeElementRef.current) === true) {
+        container.removeChild(bridgeElementRef.current);
+      }
+      bridgeElementRef.current = null;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -47,7 +67,7 @@ export function AboutPanel() {
           role="img"
           aria-label={t('about.logoAlt')}
         >
-          <GameElement tag="game-simplex-unfold" size={112} />
+          <div ref={logoContainerRef} style={{ width: 112, height: 112 }} />
         </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
@@ -107,7 +127,7 @@ export function AboutPanel() {
                 role="img"
                 aria-label={t('about.collaborative')}
               >
-                <GameElement tag="game-pentachoron" size={44} />
+                <div ref={bridgeContainerRef} style={{ width: 44, height: 44 }} />
               </div>
               <div className="w-4 h-px bg-gray-600" />
             </div>

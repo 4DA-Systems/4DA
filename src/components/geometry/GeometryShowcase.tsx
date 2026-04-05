@@ -36,7 +36,7 @@ const FOUNDATIONS: GeometryEntry[] = [
     name: 'Simplex Unfold',
     vertices: 5, edges: 10, dimension: '0D\u20264D',
     role: 'Emergence',
-    description: 'The 4DA mark. Each dimension adds one vertex fully connected to all before it — minimum structure, maximum volume at every scale. Point, line, triangle, tetrahedron, pentachoron. This is what the product does: simple inputs compound into intelligence.',
+    description: 'The simplex progression: each dimension adds one vertex fully connected to all before it. Point, line, triangle, tetrahedron, pentachoron — minimum structure, maximum volume at every scale. Five phases animate the journey from 0D to 4D.',
   },
 ];
 
