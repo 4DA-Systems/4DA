@@ -115,13 +115,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         v[i] = rot_yz(v[i], time * aspd * 0.382 + 0.3);
     }
 
-    // Double projection: 4D -> 3D -> 2D
+    // Double projection: 4D -> 3D -> 2D with w-depth tracking
     var p: array<vec2<f32>, 5>;
     var wdepth: array<f32, 5>;
     for (var i = 0u; i < 5u; i++) {
         let p3 = proj4(v[i], breath_proj);
         p[i] = proj3(p3);
-        wdepth[i] = 0.3 + 0.7 * (v[i].w + sc) / (2.0 * sc);
+        wdepth[i] = 0.2 + 0.8 * (v[i].w + sc) / (2.0 * sc);
     }
 
     // 10 edges (complete graph K5)
@@ -138,7 +138,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
     min_d = min(min_d, min(d24, d34));
 
-    // Depth-weighted halo — crisp with subtle warmth
+    // W-depth weighted halo — 4D-near edges glow bright, 4D-far edges dim
     let hk = 15.0;
     var halo_sum = exp(-d01 * hk) * (wdepth[0] + wdepth[1]) * 0.5
                  + exp(-d02 * hk) * (wdepth[0] + wdepth[2]) * 0.5
@@ -151,27 +151,34 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                  + exp(-d24 * hk) * (wdepth[2] + wdepth[4]) * 0.5
                  + exp(-d34 * hk) * (wdepth[3] + wdepth[4]) * 0.5;
 
-    // Nearest vertex
+    // Nearest vertex + track which vertex is closest
     var min_vd = length(uv - p[0]);
     var min_vw = wdepth[0];
+    var nearest_idx = 0u;
     for (var i = 1u; i < 5u; i++) {
         let vd = length(uv - p[i]);
-        if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
+        if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; nearest_idx = i; }
     }
 
-    // Crisp edge rendering: sharp core with controlled glow
+    // Crisp edges with 4D depth modulation
     let edge_w = 0.028 + 0.016 * min_vw;
     let aa = fwidth(min_d);
     let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.9 * min_vw;
     let halo = halo_sum * 0.28;
 
-    // Precise vertex dots with tight glow
+    // Vertex dots — the 5th vertex (4D apex) gets a pulsing accent
     let vtx_w = 0.045;
     let vtx_aa = fwidth(min_vd);
-    let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-            + exp(-min_vd * 30.0) * 0.6 * min_vw;
+    let vtx_base = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
+                 + exp(-min_vd * 30.0) * 0.6 * min_vw;
 
-    // Subtle center warmth — hint, not haze
+    // 4D apex vertex (index 4) gets a subtle pulse — the dimensional bridge
+    let apex_dist = length(uv - p[4]);
+    let apex_pulse = sin(time * 1.2) * 0.3 + 0.7; // oscillate 0.4–1.0
+    let apex_glow = exp(-apex_dist * 25.0) * 0.4 * apex_pulse * wdepth[4];
+    let vtx = vtx_base + apex_glow;
+
+    // Subtle center warmth
     var centroid = vec2<f32>(0.0);
     for (var i = 0u; i < 5u; i++) {
         centroid += p[i];
@@ -182,10 +189,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
     let total = (core + halo + vtx + ambient) * u.glow_intensity;
 
-    // 4DA gold with white-hot bloom at bright points
-    let gold = vec3<f32>(0.831, 0.686, 0.216);
-    let hot = vec3<f32>(1.0, 0.95, 0.85);
-    let color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, vec3<f32>(0.0), vec3<f32>(1.0));
+    // 4D depth-aware coloring: near-w = bright gold-white, far-w = deep amber
+    let bright_gold = vec3<f32>(0.92, 0.78, 0.35); // near in 4D
+    let deep_amber = vec3<f32>(0.55, 0.38, 0.10);  // far in 4D
+    let base_gold = mix(deep_amber, bright_gold, min_vw);
+
+    // Apex vertex vicinity gets a cooler white-gold accent
+    let apex_influence = exp(-apex_dist * 12.0) * apex_pulse;
+    let apex_tint = vec3<f32>(0.95, 0.92, 0.80); // white-gold
+    let final_gold = mix(base_gold, apex_tint, apex_influence * 0.4);
+
+    let hot = vec3<f32>(1.0, 0.97, 0.90);
+    let color = clamp(final_gold * total + hot * max(total - 0.45, 0.0) * 0.7, vec3<f32>(0.0), vec3<f32>(1.0));
     let alpha = clamp(total * 1.5, 0.0, 1.0);
     return vec4<f32>(color * alpha, alpha);
 }
@@ -293,7 +308,7 @@ void main(){
     for (int i = 0; i < 5; i++){
         vec3 p3 = proj4b(v[i], breath);
         p[i] = proj3(p3);
-        wdepth[i] = 0.3 + 0.7 * (v[i].w + sc) / (2.0 * sc);
+        wdepth[i] = 0.2 + 0.8 * (v[i].w + sc) / (2.0 * sc);
     }
 
     float d01 = dist_seg(uv, p[0], p[1]);
@@ -334,8 +349,14 @@ void main(){
     float halo = halo_sum * 0.28;
     float vtx_w = 0.045;
     float vtx_aa = fwidth(min_vd);
-    float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-              + exp(-min_vd * 30.0) * 0.6 * min_vw;
+    float vtx_base = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
+                   + exp(-min_vd * 30.0) * 0.6 * min_vw;
+
+    // 4D apex vertex pulse
+    float apex_dist = length(uv - p[4]);
+    float apex_pulse = sin(time * 1.2) * 0.3 + 0.7;
+    float apex_glow = exp(-apex_dist * 25.0) * 0.4 * apex_pulse * wdepth[4];
+    float vtx = vtx_base + apex_glow;
 
     vec2 centroid = vec2(0.0);
     for (int i = 0; i < 5; i++) centroid += p[i];
@@ -345,17 +366,25 @@ void main(){
 
     float total = (core + halo + vtx + ambient) * u_p_glow_intensity;
 
-    vec3 gold = vec3(0.831, 0.686, 0.216);
-    vec3 hot = vec3(1.0, 0.95, 0.85);
-    vec3 color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, 0.0, 1.0);
+    // 4D depth-aware coloring
+    vec3 bright_gold = vec3(0.92, 0.78, 0.35);
+    vec3 deep_amber = vec3(0.55, 0.38, 0.10);
+    vec3 base_gold = mix(deep_amber, bright_gold, min_vw);
+
+    float apex_influence = exp(-apex_dist * 12.0) * apex_pulse;
+    vec3 apex_tint = vec3(0.95, 0.92, 0.80);
+    vec3 final_gold = mix(base_gold, apex_tint, apex_influence * 0.4);
+
+    vec3 hot = vec3(1.0, 0.97, 0.90);
+    vec3 color = clamp(final_gold * total + hot * max(total - 0.45, 0.0) * 0.7, 0.0, 1.0);
     float alpha = clamp(total * 1.5, 0.0, 1.0);
     fragColor = vec4(color * alpha, alpha);
 }
 `;
 const UNIFORMS = [
-  { name: 'rotation_speed', default: 0.08 },
+  { name: 'rotation_speed', default: 0.10 },
   { name: 'glow_intensity', default: 1.2 },
-  { name: 'w_rotation', default: 0.05 },
+  { name: 'w_rotation', default: 0.12 },
 ];
 
 class GameRenderer {
