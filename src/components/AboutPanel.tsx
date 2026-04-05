@@ -1,62 +1,16 @@
-import { useEffect, useRef, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { registerGameComponent } from '../lib/game-components';
+
+// Static imports — custom elements are defined at module load time,
+// BEFORE React renders. No async, no race conditions, no effects needed.
+import '../lib/game-components/simplex-unfold.js';
+import '../lib/game-components/pentachoron.js';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
 const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').then(m => ({ default: m.ConfigDiagnostics })));
 
 export function AboutPanel() {
   const { t } = useTranslation();
-
-  // Logo: simplex-unfold — exact PentachoronMark pattern (proven working)
-  const logoContainerRef = useRef<HTMLDivElement>(null);
-  const logoElementRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    registerGameComponent('game-simplex-unfold').then(() => {
-      if (cancelled || !logoContainerRef.current) return;
-      const el = document.createElement('game-simplex-unfold');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      logoContainerRef.current.appendChild(el);
-      logoElementRef.current = el;
-    }).catch(() => { /* silent */ });
-    const container = logoContainerRef.current;
-    return () => {
-      cancelled = true;
-      if (logoElementRef.current != null && container?.contains(logoElementRef.current) === true) {
-        container.removeChild(logoElementRef.current);
-      }
-      logoElementRef.current = null;
-    };
-  }, []);
-
-  // Bridge: pentachoron — exact PentachoronMark pattern (proven working)
-  const bridgeContainerRef = useRef<HTMLDivElement>(null);
-  const bridgeElementRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    registerGameComponent('game-pentachoron').then(() => {
-      if (cancelled || !bridgeContainerRef.current) return;
-      const el = document.createElement('game-pentachoron');
-      el.style.width = '100%';
-      el.style.height = '100%';
-      el.style.display = 'block';
-      bridgeContainerRef.current.appendChild(el);
-      bridgeElementRef.current = el;
-    }).catch(() => { /* silent */ });
-    const container = bridgeContainerRef.current;
-    return () => {
-      cancelled = true;
-      if (bridgeElementRef.current != null && container?.contains(bridgeElementRef.current) === true) {
-        container.removeChild(bridgeElementRef.current);
-      }
-      bridgeElementRef.current = null;
-    };
-  }, []);
 
   return (
     <div className="space-y-8">
@@ -67,7 +21,7 @@ export function AboutPanel() {
           role="img"
           aria-label={t('about.logoAlt')}
         >
-          <div ref={logoContainerRef} style={{ width: 112, height: 112 }} />
+          <game-simplex-unfold style={{ width: '112px', height: '112px', display: 'block' }} />
         </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
@@ -127,7 +81,7 @@ export function AboutPanel() {
                 role="img"
                 aria-label={t('about.collaborative')}
               >
-                <div ref={bridgeContainerRef} style={{ width: 44, height: 44 }} />
+                <game-pentachoron style={{ width: '44px', height: '44px', display: 'block' }} />
               </div>
               <div className="w-4 h-px bg-gray-600" />
             </div>
