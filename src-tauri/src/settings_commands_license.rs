@@ -700,13 +700,49 @@ pub async fn get_context_stats() -> Result<serde_json::Value> {
     }))
 }
 
-/// Get a Signal value report summarizing pipeline impact.
-/// FUTURE: aggregate real data from analysis history once Signal analytics are built.
+/// Get a Signal value report summarizing pipeline impact from real analysis data.
 #[tauri::command]
 pub async fn get_pro_value_report() -> Result<serde_json::Value> {
+    let conn = crate::state::open_db_connection()?;
+
+    let total_scored: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(total_scored), 0) FROM accuracy_history",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let total_relevant: i64 = conn
+        .query_row(
+            "SELECT COALESCE(SUM(total_relevant), 0) FROM accuracy_history",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let noise_rejected = (total_scored - total_relevant).max(0) as u32;
+    let time_saved = crate::accuracy::estimate_time_saved(noise_rejected);
+
+    let knowledge_gaps: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM digested_intelligence WHERE digest_type = 'knowledge_gap'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let decisions: i64 = conn
+        .query_row("SELECT COUNT(*) FROM decision_windows", [], |row| row.get(0))
+        .unwrap_or(0);
+
     Ok(serde_json::json!({
-        "total_saved_hours": 0.0,
-        "total_signals_processed": 0,
+        "total_saved_hours": time_saved,
+        "total_signals_processed": total_scored,
+        "signals_detected": total_relevant,
+        "knowledge_gaps_caught": knowledge_gaps,
+        "decisions_recorded": decisions,
+        "estimated_hours_saved": time_saved,
         "top_discoveries": [],
         "period_days": 30
     }))
