@@ -1,26 +1,59 @@
 /**
  * HTML sanitization and URL validation utilities.
  * Used for LLM-generated content, external article snippets, and user-provided URLs.
+ *
+ * Uses DOMPurify (industry standard) instead of regex — immune to SVG, iframe,
+ * HTML5 mutation XSS, and encoding tricks that bypass pattern matching.
  */
+
+import DOMPurify from 'dompurify';
+
+/** Tags considered safe for rendered content. */
+const ALLOWED_TAGS = [
+  'p',
+  'br',
+  'a',
+  'strong',
+  'em',
+  'ul',
+  'ol',
+  'li',
+  'code',
+  'pre',
+  'blockquote',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'span',
+  'div',
+  'img',
+];
+
+/** Attributes considered safe on allowed tags. */
+const ALLOWED_ATTR = ['href', 'src', 'alt', 'title', 'class', 'id'];
+
+/**
+ * Protocols allowed in href and src attributes.
+ * Blocks javascript:, data:, blob:, vbscript:, and everything else.
+ */
+const ALLOWED_URI_REGEXP = /^(?:https?|mailto):/i;
 
 /**
  * Strip dangerous HTML while preserving safe formatting tags.
- * Removes script tags, event handlers, iframes, and dangerous URI schemes.
+ * Removes scripts, event handlers, iframes, embeds, objects, forms,
+ * dangerous URI schemes, and any tag/attribute not on the allowlist.
  */
 export function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/\son\w+\s*=\s*[^\s>]*/gi, '')
-    .replace(/<iframe\b[^>]*>.*?<\/iframe>/gi, '')
-    .replace(/<iframe\b[^>]*>/gi, '')
-    .replace(/<object\b[^>]*>.*?<\/object>/gi, '')
-    .replace(/<object\b[^>]*>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<form\b[^>]*>.*?<\/form>/gi, '')
-    .replace(/<form\b[^>]*>/gi, '')
-    .replace(/javascript\s*:/gi, 'blocked:')
-    .replace(/data\s*:/gi, 'blocked:');
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+    ALLOWED_URI_REGEXP,
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+  });
 }
 
 /**

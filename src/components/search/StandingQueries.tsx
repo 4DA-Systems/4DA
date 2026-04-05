@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import { cmd } from '../../lib/commands';
@@ -33,6 +33,9 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
   const [suggestions, setSuggestions] = useState<StandingQuerySuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [creatingSuggestion, setCreatingSuggestion] = useState<string | null>(null);
+  const [customQuery, setCustomQuery] = useState('');
+  const [creatingCustom, setCreatingCustom] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const loadWatches = useCallback(async () => {
     if (!isPro) return;
@@ -102,6 +105,31 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
     setSuggestions((prev) => prev.filter((s) => s.topic !== topic));
   };
 
+  const handleCreateCustom = async () => {
+    const text = customQuery.trim();
+    if (!text) return;
+    setCreatingCustom(true);
+    try {
+      await cmd('create_standing_query', { queryText: text });
+      setCustomQuery('');
+      await loadWatches();
+      inputRef.current?.focus();
+    } catch (err) {
+      reportError('StandingQueries.createCustom', err);
+    } finally {
+      setCreatingCustom(false);
+    }
+  };
+
+  // Poll for new matches every 60 seconds
+  useEffect(() => {
+    if (!isPro) return;
+    const interval = setInterval(() => {
+      loadWatches();
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, [isPro, loadWatches]);
+
   if (!isPro) return null;
 
   return (
@@ -147,6 +175,26 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
       <h4 className="text-xs text-text-secondary uppercase tracking-wider font-medium">
         {t('search.myWatches')}
       </h4>
+
+      <div className="flex items-center gap-2">
+        <input
+          ref={inputRef}
+          type="text"
+          value={customQuery}
+          onChange={(e) => setCustomQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCustom(); }}
+          placeholder={t('search.watchPlaceholder', 'Watch a topic...')}
+          disabled={creatingCustom}
+          className="flex-1 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-white/20 disabled:opacity-50"
+        />
+        <button
+          onClick={handleCreateCustom}
+          disabled={creatingCustom || !customQuery.trim()}
+          className="px-3 py-1.5 text-xs rounded-lg bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
+        >
+          {creatingCustom ? '...' : t('search.watch', 'Watch')}
+        </button>
+      </div>
 
       {loading && (
         <div className="text-xs text-text-muted">{t('action.loading')}</div>
