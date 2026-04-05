@@ -114,12 +114,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let min_d = min(min(min(d01, d02), min(d03, d12)), min(d13, d23));
 
     // Depth-weighted halo — each edge glows proportional to avg vertex depth
-    var halo_sum = exp(-d01 * 20.0) * (df[0] + df[1]) * 0.5
-                 + exp(-d02 * 20.0) * (df[0] + df[2]) * 0.5
-                 + exp(-d03 * 20.0) * (df[0] + df[3]) * 0.5
-                 + exp(-d12 * 20.0) * (df[1] + df[2]) * 0.5
-                 + exp(-d13 * 20.0) * (df[1] + df[3]) * 0.5
-                 + exp(-d23 * 20.0) * (df[2] + df[3]) * 0.5;
+    var halo_sum = exp(-d01 * 14.0) * (df[0] + df[1]) * 0.5
+                 + exp(-d02 * 14.0) * (df[0] + df[2]) * 0.5
+                 + exp(-d03 * 14.0) * (df[0] + df[3]) * 0.5
+                 + exp(-d12 * 14.0) * (df[1] + df[2]) * 0.5
+                 + exp(-d13 * 14.0) * (df[1] + df[3]) * 0.5
+                 + exp(-d23 * 14.0) * (df[2] + df[3]) * 0.5;
 
     // Nearest vertex distance + depth
     var min_vd = length(uv - p[0]);
@@ -130,15 +130,15 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // Anti-aliased edge core (fwidth smoothstep) + depth halo + vertex glow
-    let edge_w = 0.009 + 0.005 * min_vdf; // edge width varies with depth
+    let edge_w = 0.018 + 0.010 * min_vdf; // edge width varies with depth
     let aa = fwidth(min_d);
     let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.85 * min_vdf;
-    let halo = halo_sum * 0.12;
+    let halo = halo_sum * 0.22;
     // Anti-aliased vertex dots
-    let vtx_w = 0.020;
+    let vtx_w = 0.035;
     let vtx_aa = fwidth(min_vd);
     let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
-            + exp(-min_vd * 40.0) * 0.6 * min_vdf; // soft halo around vertex
+            + exp(-min_vd * 30.0) * 0.8 * min_vdf; // soft halo around vertex
     let total = (core + halo + vtx) * u.glow_intensity;
 
     // Gold color with white-hot bloom at bright points
@@ -242,12 +242,12 @@ void main(){
     float d23 = dist_seg(uv, p[2], p[3]);
     float min_d = min(min(min(d01, d02), min(d03, d12)), min(d13, d23));
 
-    float halo_sum = exp(-d01 * 20.0) * (df[0] + df[1]) * 0.5
-                   + exp(-d02 * 20.0) * (df[0] + df[2]) * 0.5
-                   + exp(-d03 * 20.0) * (df[0] + df[3]) * 0.5
-                   + exp(-d12 * 20.0) * (df[1] + df[2]) * 0.5
-                   + exp(-d13 * 20.0) * (df[1] + df[3]) * 0.5
-                   + exp(-d23 * 20.0) * (df[2] + df[3]) * 0.5;
+    float halo_sum = exp(-d01 * 14.0) * (df[0] + df[1]) * 0.5
+                   + exp(-d02 * 14.0) * (df[0] + df[2]) * 0.5
+                   + exp(-d03 * 14.0) * (df[0] + df[3]) * 0.5
+                   + exp(-d12 * 14.0) * (df[1] + df[2]) * 0.5
+                   + exp(-d13 * 14.0) * (df[1] + df[3]) * 0.5
+                   + exp(-d23 * 14.0) * (df[2] + df[3]) * 0.5;
 
     float min_vd = length(uv - p[0]);
     float min_vdf = df[0];
@@ -256,14 +256,14 @@ void main(){
         if (vd < min_vd) { min_vd = vd; min_vdf = df[i]; }
     }
 
-    float edge_w = 0.009 + 0.005 * min_vdf;
+    float edge_w = 0.018 + 0.010 * min_vdf;
     float aa = fwidth(min_d);
     float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.85 * min_vdf;
-    float halo = halo_sum * 0.12;
-    float vtx_w = 0.020;
+    float halo = halo_sum * 0.22;
+    float vtx_w = 0.035;
     float vtx_aa = fwidth(min_vd);
     float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vdf
-              + exp(-min_vd * 40.0) * 0.6 * min_vdf;
+              + exp(-min_vd * 30.0) * 0.8 * min_vdf;
     float total = (core + halo + vtx) * u_p_glow_intensity;
 
     vec3 gold = vec3(0.831, 0.686, 0.216);
