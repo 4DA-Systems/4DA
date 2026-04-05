@@ -166,18 +166,21 @@ impl LLMClient {
             );
         }
 
-        // Privacy disclosure check for cloud providers
+        // Privacy gate: block cloud LLM calls until user accepts data disclosure.
+        // Critical for "privacy first" credibility — user must explicitly consent
+        // before any content is sent to external AI providers.
         if !matches!(self.provider.provider.as_str(), "ollama") {
             let disclosure_accepted = crate::get_settings_manager()
                 .try_lock()
                 .map(|g| g.get().privacy.cloud_llm_disclosure_accepted)
                 .unwrap_or(false);
             if !disclosure_accepted {
-                warn!(
-                    target: "4da::privacy",
-                    provider = %self.provider.provider,
-                    "Cloud LLM in use without privacy disclosure acceptance"
-                );
+                return Err(crate::error::FourDaError::Config(
+                    "Cloud AI provider requires privacy disclosure acceptance. \
+                     Go to Settings > Intelligence and accept the data disclosure \
+                     before using cloud providers. Use Ollama for fully local processing."
+                        .to_string(),
+                ));
             }
         }
 

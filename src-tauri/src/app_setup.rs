@@ -759,13 +759,21 @@ fn build_signal_summary(results: &[crate::SourceRelevance]) -> Option<monitoring
 /// This is the core of ACE AUTONOMY -- the system discovers context without manual configuration.
 fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
     // Check if auto-discovery is needed (first run with no context dirs)
-    let needs_discovery = {
+    let (needs_discovery, onboarding_done) = {
         let settings = get_settings_manager().lock();
-        settings.needs_auto_discovery()
+        (
+            settings.needs_auto_discovery(),
+            settings.get().onboarding_complete,
+        )
     };
 
-    if needs_discovery {
-        info!(target: "4da::startup", "First run detected - running AUTONOMOUS context discovery");
+    // Privacy: do NOT auto-scan directories before the user completes onboarding.
+    // The user should explicitly add project directories during onboarding.
+    // Auto-discovery only runs for returning users who have no context dirs configured.
+    if needs_discovery && !onboarding_done {
+        info!(target: "4da::startup", "First run — deferring ACE discovery until onboarding completes");
+    } else if needs_discovery {
+        info!(target: "4da::startup", "Post-onboarding run with no context dirs — running discovery");
         let _ = app_handle.emit(
             "ace-discovery-started",
             "Discovering your development context...",
