@@ -23,8 +23,6 @@ interface GameLogoMarkElement extends HTMLElement {
   rotation_speed: number;
   /** Default: 1.2 */
   glow_intensity: number;
-  /** Default: 0.12 */
-  w_rotation: number;
 }
 
 declare global {
