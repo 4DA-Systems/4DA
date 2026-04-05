@@ -59,10 +59,10 @@ mod tests {
         assert!(is_trial_active(&license));
         let status = get_trial_status(&license);
         assert!(status.active);
-        assert!(status.days_remaining >= 29);
+        assert!(status.days_remaining >= 13);
 
-        // Expired trial (must exceed TRIAL_DURATION_DAYS which is 45)
-        let expired = chrono::Utc::now() - chrono::Duration::days(46);
+        // Expired trial (must exceed TRIAL_DURATION_DAYS which is 14)
+        let expired = chrono::Utc::now() - chrono::Duration::days(15);
         let license = LicenseConfig {
             tier: license.tier.clone(),
             license_key: license.license_key.clone(),
