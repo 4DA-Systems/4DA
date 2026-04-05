@@ -611,15 +611,18 @@ class LogoMark extends HTMLElement {
       const dx = this._renderer.mouseX - this._prevMouseX;
       this._prevMouseX = this._renderer.mouseX;
       if (Math.abs(dx) > 0.001) {
-        this._angularVel += dx * 2.0; // flick strength (dialled back)
+        this._angularVel += dx * 2.0;
       }
 
       // Friction decay
       this._angularVel *= this._friction;
 
-      // Ambient minimum — never fully stops
-      if (Math.abs(this._angularVel) < this._minSpin) {
-        this._angularVel = this._angularVel >= 0 ? this._minSpin : -this._minSpin;
+      // When nearly stopped, snap back to nearest "home" angle (0°)
+      // Uses a spring force toward the nearest multiple of 2π
+      if (Math.abs(this._angularVel) < 0.01) {
+        const nearest = Math.round(this._angle / (Math.PI * 2)) * Math.PI * 2;
+        const spring = (nearest - this._angle) * 0.03; // gentle spring
+        this._angularVel += spring;
       }
 
       // Accumulate angle and pass to shader
