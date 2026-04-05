@@ -85,11 +85,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     //     |
     //     B
     var vtx: array<vec3<f32>, 5>;
-    vtx[0] = vec3<f32>( 0.08,  0.40, 0.02);  // A: top of vertical
-    vtx[1] = vec3<f32>( 0.08, -0.38, -0.02); // B: bottom of vertical
-    vtx[2] = vec3<f32>(-0.30, -0.02, 0.03);  // C: left of crossbar
-    vtx[3] = vec3<f32>( 0.28, -0.02, -0.01); // D: right of crossbar
-    vtx[4] = vec3<f32>( 0.08, -0.02, 0.0);   // E: junction
+    vtx[0] = vec3<f32>( 0.07,  0.39, 0.0);  // A: top of vertical
+    vtx[1] = vec3<f32>( 0.07, -0.39, 0.0);  // B: bottom of vertical
+    vtx[2] = vec3<f32>(-0.29, -0.03, 0.0);  // C: left of crossbar
+    vtx[3] = vec3<f32>( 0.29, -0.03, 0.0);  // D: right of crossbar
+    vtx[4] = vec3<f32>( 0.07, -0.03, 0.0);  // E: junction
 
     // Scale with audio + breathing
     let breath = 1.0 + sin(time * 0.4) * 0.02;
@@ -241,11 +241,11 @@ void main(){
     float audio_rot = 1.0 + u_audio_energy * 0.3;
 
     vec3 vtx[5];
-    vtx[0] = vec3( 0.08,  0.40, 0.02);
-    vtx[1] = vec3( 0.08, -0.38, -0.02);
-    vtx[2] = vec3(-0.30, -0.02, 0.03);
-    vtx[3] = vec3( 0.28, -0.02, -0.01);
-    vtx[4] = vec3( 0.08, -0.02, 0.0);
+    vtx[0] = vec3( 0.07,  0.39, 0.0);
+    vtx[1] = vec3( 0.07, -0.39, 0.0);
+    vtx[2] = vec3(-0.29, -0.03, 0.0);
+    vtx[3] = vec3( 0.29, -0.03, 0.0);
+    vtx[4] = vec3( 0.07, -0.03, 0.0);
 
     float breath = 1.0 + sin(time * 0.4) * 0.02;
     float sc = 0.85 * audio_pulse * breath;
