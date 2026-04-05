@@ -98,11 +98,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         vtx[i] = vtx[i] * sc;
     }
 
-    // Mouse-driven 3D rotation + continuous Y-spin
-    let mx = (u.mouse.x - 0.5) * 2.5; // mouse adds rotation boost
-    let my = (u.mouse.y - 0.5) * -1.2; // mouse tilts X-axis
-    let spin = time * spd * 0.8; // continuous Y-axis spin
-    let drift_x = sin(time * spd * 0.5 + 0.7) * 0.08;
+    // Continuous Y-spin + mouse interaction
+    let mx = (u.mouse.x - 0.5) * 3.0;
+    let my = (u.mouse.y - 0.5) * -1.5;
+    let spin = time * spd * 6.0; // full turn every ~7s at default speed
+    let drift_x = sin(time * spd * 3.0 + 0.7) * 0.10;
     let ry = spin + mx;
     let rx = my + drift_x;
     for (var i = 0u; i < 5u; i++) {
@@ -253,10 +253,10 @@ void main(){
     float sc = 0.85 * audio_pulse * breath;
     for (int i = 0; i < 5; i++) vtx[i] *= sc;
 
-    float mx = (u_mouse.x - 0.5) * 2.5;
-    float my = (u_mouse.y - 0.5) * -1.2;
-    float spin = time * spd * 0.8;
-    float drift_x = sin(time * spd * 0.5 + 0.7) * 0.08;
+    float mx = (u_mouse.x - 0.5) * 3.0;
+    float my = (u_mouse.y - 0.5) * -1.5;
+    float spin = time * spd * 6.0;
+    float drift_x = sin(time * spd * 3.0 + 0.7) * 0.10;
     float ry = spin + mx;
     float rx = my + drift_x;
     for (int i = 0; i < 5; i++){
@@ -427,8 +427,8 @@ class GameRenderer {
     data[4] = this.audioData.energy;
     data[5] = this.audioData.beat;
     data[6] = w; data[7] = h;
-    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.07;
-    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.07;
+    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.14;
+    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.14;
     data[8] = this._smx; data[9] = this._smy;
     let i = 10;
     for (const u of this.uniformDefs) data[i++] = this.userParams[u.name] ?? u.default;
@@ -548,8 +548,8 @@ class GameRendererGL {
     gl.uniform1f(this.locs.energy, this.audioData.energy);
     gl.uniform1f(this.locs.beat, this.audioData.beat);
     gl.uniform2f(this.locs.resolution, this.canvas.width, this.canvas.height);
-    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.07;
-    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.07;
+    this._smx = (this._smx ?? 0.5) + (this.mouseX - (this._smx ?? 0.5)) * 0.14;
+    this._smy = (this._smy ?? 0.5) + (this.mouseY - (this._smy ?? 0.5)) * 0.14;
     gl.uniform2f(this.locs.mouse, this._smx, this._smy);
     for (const u of this.uniformDefs) {
       gl.uniform1f(this.paramLocs[u.name], this.userParams[u.name] ?? u.default);
