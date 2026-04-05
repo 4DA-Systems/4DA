@@ -1,40 +1,35 @@
-import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { useEffect, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { registerGameComponent, type GameComponentTag } from '../lib/game-components';
 
 /** Imperatively mount a GAME custom element after registration completes. */
 function GameElement({ tag, size }: { tag: GameComponentTag; size: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef(false);
 
-  // Step 1: register the custom element class
   useEffect(() => {
-    let cancelled = false;
+    activeRef.current = true;
+    const container = containerRef.current;
+    if (container === null) return;
+
     void registerGameComponent(tag).then(() => {
-      if (!cancelled) setReady(true);
+      if (!activeRef.current || container.children.length > 0) return;
+      const el = document.createElement(tag);
+      el.style.width = '100%';
+      el.style.height = '100%';
+      el.style.display = 'block';
+      container.appendChild(el);
     });
-    return () => { cancelled = true; };
-  }, [tag]);
-
-  // Step 2: once registered, create the DOM element
-  useEffect(() => {
-    const container = ref.current;
-    if (!ready || container === null) return;
-    // Guard against double-creation
-    if (container.querySelector(tag) !== null) return;
-
-    const el = document.createElement(tag);
-    el.style.width = '100%';
-    el.style.height = '100%';
-    el.style.display = 'block';
-    container.appendChild(el);
 
     return () => {
-      if (container.contains(el)) container.removeChild(el);
+      activeRef.current = false;
+      while (container.firstChild != null) {
+        container.removeChild(container.firstChild);
+      }
     };
-  }, [ready, tag]);
+  }, [tag]);
 
-  return <div ref={ref} style={{ width: size, height: size }} />;
+  return <div ref={containerRef} style={{ width: size, height: size }} />;
 }
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
