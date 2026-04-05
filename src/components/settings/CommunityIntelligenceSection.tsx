@@ -55,9 +55,9 @@ export function CommunityIntelligenceSection() {
   if (!status) return null;
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       {/* Header */}
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-3 mb-2">
         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
           <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -76,8 +76,8 @@ export function CommunityIntelligenceSection() {
       </div>
 
       {/* Upfront education — always visible */}
-      <div className="mb-4 p-3 bg-bg-secondary rounded-lg border border-border">
-        <p className="text-[11px] text-text-muted leading-relaxed mb-3">
+      <div className="mb-3 p-2.5 bg-bg-secondary rounded-lg border border-border">
+        <p className="text-[11px] text-text-muted leading-relaxed mb-2">
           {t('settings.community.explanation',
             'When enabled, 4DA periodically shares anonymous statistical patterns — like how scoring weights perform across different tech profiles. This helps improve accuracy for everyone. No content ever leaves your machine.')}
         </p>

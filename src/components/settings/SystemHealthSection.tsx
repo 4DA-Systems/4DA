@@ -92,7 +92,7 @@ export function SystemHealthSection() {
 
   if (loading) {
     return (
-      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <div className="text-xs text-text-muted">Loading system health...</div>
       </div>
     );
@@ -106,9 +106,9 @@ export function SystemHealthSection() {
     overallState === 'partial' ? 'text-yellow-400' : 'text-red-400';
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-green-400">

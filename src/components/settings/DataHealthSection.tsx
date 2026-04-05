@@ -136,7 +136,7 @@ export function DataHealthSection() {
 
   if (loading) {
     return (
-      <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <div className="text-xs text-text-muted">{t('settings.dataHealth.loading', 'Loading data health...')}</div>
       </div>
     );
@@ -147,9 +147,9 @@ export function DataHealthSection() {
   const { stats } = health;
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-orange-400">

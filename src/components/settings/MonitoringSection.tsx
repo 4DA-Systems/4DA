@@ -204,8 +204,8 @@ export function MonitoringSection({
 }: MonitoringSectionProps) {
   const { t } = useTranslation();
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
-      <div className="flex items-center gap-3 mb-4">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+      <div className="flex items-center gap-3 mb-3">
         <div className="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
           <span>&#x1f504;</span>
         </div>
@@ -216,7 +216,7 @@ export function MonitoringSection({
       </div>
 
       {monitoring ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex items-center justify-between p-3 bg-bg-secondary rounded-lg border border-border">
             <div className="flex items-center gap-2">
               {monitoring.enabled ? (
@@ -247,6 +247,8 @@ export function MonitoringSection({
             </button>
           </div>
 
+          {/* Schedule & Notifications */}
+          <div className="border-t border-border/50 pt-3" />
           <div className="flex items-center gap-3">
             <label className="text-sm text-text-secondary">{t('settings.monitoring.every')}</label>
             <input
@@ -295,11 +297,15 @@ export function MonitoringSection({
             </select>
           </div>
 
+          {/* Behavior */}
+          <div className="border-t border-border/50 pt-3" />
           <MorningBriefingSection />
 
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
           <LaunchAtStartupToggle />
 
+          {/* Status */}
+          <div className="border-t border-border/50 pt-3" />
           <div className="flex items-center justify-between text-xs text-text-muted px-1">
             <span>{t('settings.monitoring.totalChecks', { count: monitoring.total_checks })}</span>
             {monitoring.last_check_ago && (

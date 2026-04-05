@@ -8,7 +8,7 @@ export const ShowAllViewsToggle = memo(function ShowAllViewsToggle() {
   const setShowAllViews = useAppStore(s => s.setShowAllViews);
 
   return (
-    <div className="bg-bg-tertiary rounded-lg p-5 border border-border">
+    <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <div className="flex items-center justify-between">
         <div>
           <span className="text-white text-sm font-medium">{t('settings.display.showAllViews')}</span>

@@ -33,7 +33,7 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
 }: SettingsGeneralTabProps) {
   return (
     <div id="tabpanel-general" role="tabpanel">
-      <div className="space-y-6">
+      <div className="space-y-4">
         <PanelErrorBoundary name="Language">
           <LocaleSection />
         </PanelErrorBoundary>
