@@ -567,10 +567,10 @@ class LogoMark extends HTMLElement {
     this._resizeObserver = null;
     // Physics state — office chair inertia
     this._angle = 0;
-    this._angularVel = 0.12; // initial spin burst
+    this._angularVel = 0.04; // gentle initial spin
     this._prevMouseX = 0.5;
-    this._friction = 0.988; // damping per frame (~0.5 after 60 frames)
-    this._minSpin = 0.004; // ambient minimum so it never fully stops
+    this._friction = 0.975; // stronger damping — settles in ~2s
+    this._minSpin = 0.002; // very slow ambient drift
   }
 
   connectedCallback() {
@@ -611,7 +611,7 @@ class LogoMark extends HTMLElement {
       const dx = this._renderer.mouseX - this._prevMouseX;
       this._prevMouseX = this._renderer.mouseX;
       if (Math.abs(dx) > 0.001) {
-        this._angularVel += dx * 4.0; // flick strength
+        this._angularVel += dx * 2.0; // flick strength (dialled back)
       }
 
       // Friction decay
