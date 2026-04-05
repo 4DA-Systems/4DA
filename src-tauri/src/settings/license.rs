@@ -320,9 +320,9 @@ pub fn require_signal_feature(feature: &str) -> Result<()> {
 
 /// Trial duration in days. Reverse trial: auto-starts on first launch,
 /// giving users enough time for compound intelligence effects to demonstrate value.
-const TRIAL_DURATION_DAYS: i64 = 45;
+const TRIAL_DURATION_DAYS: i64 = 14;
 
-/// Check if the free trial is still active (45 days from trial_started_at)
+/// Check if the free trial is still active (14 days from trial_started_at)
 pub fn is_trial_active(license: &LicenseConfig) -> bool {
     if is_paid_tier(license.tier.as_str()) {
         return false; // Not on trial, has a real license

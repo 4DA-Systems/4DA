@@ -46,7 +46,7 @@ If any of these do not reflect your expected tier, see Troubleshooting below.
 
 ## Trial
 
-4DA offers a **45-day free trial** of Signal features. No license key is needed to start the trial.
+4DA offers a **14-day free trial** of Signal features. No license key is needed to start the trial.
 
 - The trial activates automatically when you first launch the app.
 - All Signal features are available during the trial period.

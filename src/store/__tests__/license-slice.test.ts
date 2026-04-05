@@ -171,7 +171,7 @@ describe('license-slice', () => {
   // ---------------------------------------------------------------------------
   describe('startTrial', () => {
     it('starts trial and updates status', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce({ success: true, days_remaining: 45 });
+      vi.mocked(invoke).mockResolvedValueOnce({ success: true, days_remaining: 14 });
 
       const result = await useAppStore.getState().startTrial();
 
@@ -179,7 +179,7 @@ describe('license-slice', () => {
       expect(result).toBe(true);
       expect(useAppStore.getState().trialStatus).not.toBeNull();
       expect(useAppStore.getState().trialStatus!.active).toBe(true);
-      expect(useAppStore.getState().trialStatus!.days_remaining).toBe(45);
+      expect(useAppStore.getState().trialStatus!.days_remaining).toBe(14);
     });
 
     it('returns false when trial start fails', async () => {
