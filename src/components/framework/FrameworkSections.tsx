@@ -111,7 +111,7 @@ export function PasifaSection() {
         {[
           { axis: 'Context', question: 'Does this relate to what I\'m working on right now?', source: 'Local project scanning, recent git activity' },
           { axis: 'Interest', question: 'Does this match my declared or inferred interests?', source: 'User-declared topics + learned affinities' },
-          { axis: 'ACE', question: 'Does my codebase use this technology?', source: 'Dependency analysis, file patterns, git history' },
+          { axis: 'ACE', question: 'Does this match my stack or active topics?', source: 'Dependency analysis, file patterns, git history, semantic signals' },
           { axis: 'Dependency', question: 'Is this about a library I actually depend on?', source: 'Package manifest analysis' },
           { axis: 'Learned', question: 'Has my past behaviour indicated this is valuable?', source: 'Feedback signals (saves, dismissals, time-on-content)' },
         ].map(({ axis, question, source }) => (
@@ -257,7 +257,7 @@ export function AosSection() {
       <Paragraph>
         A framework for measuring and maintaining system health autonomously.
       </Paragraph>
-      <SubHeading>Sovereignty Score (0-100)</SubHeading>
+      <SubHeading>Sovereignty Score (0-100) — Design Specification</SubHeading>
       <Card>
         <table className="w-full text-xs">
           <thead>
@@ -328,7 +328,7 @@ export function PrivacySection() {
             { layer: 'CSP', mechanism: 'Network requests restricted to a whitelist. No 4DA-owned endpoints.' },
             { layer: 'Keychain', mechanism: 'API keys in OS-level secure storage. Never plaintext on disk.' },
             { layer: 'Zero Telemetry', mechanism: 'No analytics, tracking, or error reporting. Verified by audit.' },
-            { layer: 'Secrets Scan', mechanism: '23+ patterns in pre-commit hooks prevent credential leaks.' },
+            { layer: 'Secrets Scan', mechanism: '26 patterns in pre-commit hooks prevent credential leaks.' },
             { layer: 'Local DB', mechanism: 'SQLite on your filesystem. No cloud sync unless explicitly enabled.' },
           ].map(({ layer, mechanism }) => (
             <div key={layer} className="flex items-start gap-3 py-1">
