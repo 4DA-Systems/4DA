@@ -98,11 +98,13 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         vtx[i] = vtx[i] * sc;
     }
 
-    // Gentle 3D rotation — the "4" slowly tilts in space
-    let mx = (u.mouse.x - 0.5) * 0.3;
-    let my = (u.mouse.y - 0.5) * 0.3;
-    let ry = sin(time * spd * 0.7) * 0.18 + mx; // ~10° Y wobble
-    let rx = sin(time * spd * 0.5 + 0.7) * 0.12 + my; // ~7° X tilt
+    // Mouse-driven 3D rotation + ambient drift
+    let mx = (u.mouse.x - 0.5) * 1.8; // strong mouse Y-rotation (~±50°)
+    let my = (u.mouse.y - 0.5) * -1.2; // strong mouse X-tilt (~±35°)
+    let drift_y = sin(time * spd * 0.7) * 0.12; // subtle ambient wobble
+    let drift_x = sin(time * spd * 0.5 + 0.7) * 0.08;
+    let ry = mx + drift_y;
+    let rx = my + drift_x;
     for (var i = 0u; i < 5u; i++) {
         vtx[i] = rot3_y(vtx[i], ry * audio_rot);
         vtx[i] = rot3_x(vtx[i], rx * audio_rot);
@@ -251,10 +253,12 @@ void main(){
     float sc = 0.85 * audio_pulse * breath;
     for (int i = 0; i < 5; i++) vtx[i] *= sc;
 
-    float mx = (u_mouse.x - 0.5) * 0.3;
-    float my = (u_mouse.y - 0.5) * 0.3;
-    float ry = sin(time * spd * 0.7) * 0.18 + mx;
-    float rx = sin(time * spd * 0.5 + 0.7) * 0.12 + my;
+    float mx = (u_mouse.x - 0.5) * 1.8;
+    float my = (u_mouse.y - 0.5) * -1.2;
+    float drift_y = sin(time * spd * 0.7) * 0.12;
+    float drift_x = sin(time * spd * 0.5 + 0.7) * 0.08;
+    float ry = mx + drift_y;
+    float rx = my + drift_x;
     for (int i = 0; i < 5; i++){
         vtx[i] = rot3_y(vtx[i], ry * audio_rot);
         vtx[i] = rot3_x(vtx[i], rx * audio_rot);
