@@ -115,26 +115,26 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const cellSize = isExpanded ? 200 : 128;
+  const cellSize = isExpanded ? 280 : 180;
   return (
     <button
       onClick={onToggle}
-      className={`bg-bg-tertiary/40 border rounded-xl p-4 text-start transition-all hover:bg-bg-tertiary/60 ${
+      className={`bg-bg-tertiary/40 border rounded-xl p-3 text-start transition-all hover:bg-bg-tertiary/60 ${
         isExpanded ? 'border-accent-gold/40' : 'border-border/50'
       }`}
     >
-      {/* Geometry centered, full width */}
-      <div className="flex justify-center mb-3">
+      {/* Geometry hero — centered, large */}
+      <div className="flex justify-center">
         <div
-          className="rounded-lg overflow-hidden border border-border/20"
+          className="rounded-lg overflow-hidden"
           role="img"
           aria-label={geo.name}
         >
           <GameElementCell tag={geo.tag} size={cellSize} />
         </div>
       </div>
-      {/* Label bar */}
-      <div className="flex items-baseline justify-between">
+      {/* Compact label bar */}
+      <div className="flex items-baseline justify-between mt-2">
         <div className="flex items-baseline gap-2">
           <span className="text-sm font-medium text-white">{geo.name}</span>
           <span className="text-[10px] text-accent-gold font-medium">{geo.role}</span>
