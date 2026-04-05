@@ -1,0 +1,51 @@
+# AUR PKGBUILD for 4DA
+# Submit to: https://aur.archlinux.org/
+#
+# After first release:
+# 1. Get AppImage URL from GitHub releases
+# 2. Update pkgver and sha256sums
+# 3. Test with: makepkg -si
+# 4. Push to AUR
+#
+# Users install with: yay -S 4da-bin
+
+pkgname=4da-bin
+pkgver=1.0.0
+pkgrel=1
+pkgdesc='Privacy-first developer intelligence — scores content against your codebase'
+arch=('x86_64')
+url='https://4da.ai'
+license=('custom:FSL-1.1-Apache-2.0')
+depends=('webkit2gtk-4.1' 'gtk3' 'libappindicator-gtk3')
+provides=('4da')
+conflicts=('4da')
+options=(!strip)
+source=("${pkgname}-${pkgver}.AppImage::https://github.com/runyourempire/4DA/releases/download/v${pkgver}/4DA-Home_${pkgver}_amd64.AppImage")
+sha256sums=('REPLACE_WITH_SHA256')
+
+prepare() {
+    chmod +x "${pkgname}-${pkgver}.AppImage"
+    "./${pkgname}-${pkgver}.AppImage" --appimage-extract
+}
+
+package() {
+    install -d "${pkgdir}/opt/4da"
+    cp -r squashfs-root/* "${pkgdir}/opt/4da/"
+
+    install -d "${pkgdir}/usr/bin"
+    ln -s /opt/4da/4da-home "${pkgdir}/usr/bin/4da"
+
+    install -Dm644 squashfs-root/4da-home.desktop "${pkgdir}/usr/share/applications/4da.desktop"
+
+    for size in 32 128 256 512; do
+        if [ -f "squashfs-root/icons/${size}x${size}.png" ]; then
+            install -Dm644 "squashfs-root/icons/${size}x${size}.png" \
+                "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/4da.png"
+        fi
+    done
+
+    install -Dm644 /dev/stdin "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE" <<'EOF'
+Functional Source License, Version 1.1, Apache 2.0 Future License
+See https://github.com/runyourempire/4DA/blob/main/LICENSE
+EOF
+}
