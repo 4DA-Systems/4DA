@@ -98,12 +98,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         vtx[i] = vtx[i] * sc;
     }
 
-    // Continuous Y-spin + mouse interaction
-    let mx = (u.mouse.x - 0.5) * 3.0;
+    // rotation_speed = accumulated angle from JS physics (inertia + friction)
     let my = (u.mouse.y - 0.5) * -1.5;
-    let spin = time * spd * 6.0; // full turn every ~7s at default speed
-    let drift_x = sin(time * spd * 3.0 + 0.7) * 0.10;
-    let ry = spin + mx;
+    let drift_x = sin(time * 0.3 + 0.7) * 0.10;
+    let ry = spd; // JS sets this to the physics-accumulated angle
     let rx = my + drift_x;
     for (var i = 0u; i < 5u; i++) {
         vtx[i] = rot3_y(vtx[i], ry * audio_rot);
@@ -253,11 +251,9 @@ void main(){
     float sc = 0.85 * audio_pulse * breath;
     for (int i = 0; i < 5; i++) vtx[i] *= sc;
 
-    float mx = (u_mouse.x - 0.5) * 3.0;
     float my = (u_mouse.y - 0.5) * -1.5;
-    float spin = time * spd * 6.0;
-    float drift_x = sin(time * spd * 3.0 + 0.7) * 0.10;
-    float ry = spin + mx;
+    float drift_x = sin(time * 0.3 + 0.7) * 0.10;
+    float ry = spd;
     float rx = my + drift_x;
     for (int i = 0; i < 5; i++){
         vtx[i] = rot3_y(vtx[i], ry * audio_rot);
@@ -569,6 +565,12 @@ class LogoMark extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._renderer = null;
     this._resizeObserver = null;
+    // Physics state — office chair inertia
+    this._angle = 0;
+    this._angularVel = 0.12; // initial spin burst
+    this._prevMouseX = 0.5;
+    this._friction = 0.988; // damping per frame (~0.5 after 60 frames)
+    this._minSpin = 0.004; // ambient minimum so it never fully stops
   }
 
   connectedCallback() {
@@ -602,6 +604,29 @@ class LogoMark extends HTMLElement {
         return;
       }
     }
+
+    // Hook physics into render loop
+    this._renderer._preRender = () => {
+      // Mouse velocity → angular impulse
+      const dx = this._renderer.mouseX - this._prevMouseX;
+      this._prevMouseX = this._renderer.mouseX;
+      if (Math.abs(dx) > 0.001) {
+        this._angularVel += dx * 4.0; // flick strength
+      }
+
+      // Friction decay
+      this._angularVel *= this._friction;
+
+      // Ambient minimum — never fully stops
+      if (Math.abs(this._angularVel) < this._minSpin) {
+        this._angularVel = this._angularVel >= 0 ? this._minSpin : -this._minSpin;
+      }
+
+      // Accumulate angle and pass to shader
+      this._angle += this._angularVel;
+      this._renderer.setParam('rotation_speed', this._angle);
+    };
+
     this._resize();
     this._renderer.start();
   }
