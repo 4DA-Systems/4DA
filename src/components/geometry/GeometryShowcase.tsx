@@ -55,31 +55,58 @@ const FAMILY: GeometryEntry[] = [
     name: 'Dodecahedron',
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Dual',
-    description: "The icosahedron\u2019s mathematical dual \u2014 same 30 edges, pentagons where triangles were. Every Platonic solid has a dual. 4DA\u2019s visual language honours the full family.",
+    description: 'The icosahedron\u2019s mathematical dual \u2014 same 30 edges, pentagons where triangles were. Every Platonic solid has a dual. 4DA\u2019s visual language honours the full family.',
   },
   {
     tag: 'game-compound-five-tetrahedra',
     name: 'Compound of Five',
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Bridge',
-    description: "Five interlocking tetrahedra whose vertices coincide with the dodecahedron\u2019s. The proof these solids aren\u2019t arbitrary \u2014 shared vertices, edges, and duality connect the entire Platonic family.",
+    description: 'Five interlocking tetrahedra whose vertices coincide with the dodecahedron\u2019s. The proof these solids aren\u2019t arbitrary \u2014 shared vertices, edges, and duality connect the entire Platonic family.',
   },
 ];
 
 function GameElementCell({ tag, size }: { tag: string; size: number }) {
   const ref = useRef<HTMLDivElement>(null);
+  const elRef = useRef<HTMLElement | null>(null);
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+
   useEffect(() => {
+    let cancelled = false;
     const container = ref.current;
-    if (!container || container.children.length > 0) return;
-    const el = document.createElement(tag);
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    el.style.display = 'block';
-    container.appendChild(el);
+    if (container === null) return;
+
+    void registerGameComponent(tag as GameComponentTag).then(() => {
+      if (cancelled) return;
+      if (elRef.current !== null) return;
+      const el = document.createElement(tag);
+      const s = sizeRef.current;
+      el.style.width = `${s}px`;
+      el.style.height = `${s}px`;
+      el.style.display = 'block';
+      container.appendChild(el);
+      elRef.current = el;
+    });
+
     return () => {
-      if (container.contains(el)) container.removeChild(el);
+      cancelled = true;
+      const el = elRef.current;
+      if (el !== null && container.contains(el)) {
+        container.removeChild(el);
+      }
+      elRef.current = null;
     };
   }, [tag, size]);
+
+  useEffect(() => {
+    const el = elRef.current;
+    if (el !== null) {
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+    }
+  }, [size]);
+
   return <div ref={ref} style={{ width: size, height: size }} />;
 }
 
@@ -110,16 +137,16 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
             <span className="text-[9px] text-accent-gold font-medium">{geo.role}</span>
           </div>
           <span className="text-[10px] text-text-muted block">
-            {geo.dimension} · {geo.vertices}v · {geo.edges}e
+            {geo.dimension}{' \u00B7 '}{geo.vertices}{'v \u00B7 '}{geo.edges}{'e'}
           </span>
           {isExpanded && (
             <>
               <p className="text-xs text-text-secondary leading-relaxed mt-2">
                 {geo.description}
               </p>
-              {geo.verify && (
+              {geo.verify != null && geo.verify !== '' && (
                 <p className="text-[10px] text-text-muted/70 mt-1.5 font-mono">
-                  verify: {geo.verify}
+                  {'verify: '}{geo.verify}
                 </p>
               )}
             </>
@@ -136,19 +163,19 @@ export function GeometryShowcase() {
   const [showFamily, setShowFamily] = useState(false);
 
   useEffect(() => {
-    FOUNDATIONS.forEach(g => registerGameComponent(g.tag));
+    void Promise.allSettled(FOUNDATIONS.map(g => registerGameComponent(g.tag)));
   }, []);
 
   useEffect(() => {
     if (showFamily) {
-      FAMILY.forEach(g => registerGameComponent(g.tag));
+      void Promise.allSettled(FAMILY.map(g => registerGameComponent(g.tag)));
     }
   }, [showFamily]);
 
   const toggle = (tag: string) => setExpanded(prev => prev === tag ? null : tag);
 
   const handleFamilyToggle = () => {
-    if (showFamily && expanded && FAMILY.some(g => g.tag === expanded)) {
+    if (showFamily && expanded !== null && FAMILY.some(g => g.tag === expanded)) {
       setExpanded(null);
     }
     setShowFamily(prev => !prev);
@@ -163,7 +190,7 @@ export function GeometryShowcase() {
         {t('about.geometryTitle', { defaultValue: 'Platonic Architecture' })}
       </h4>
       <p className="text-xs text-text-secondary leading-relaxed">
-        {t('about.geometrySubtitle', { defaultValue: "4DA\u2019s core invariants map to Platonic geometry. Each claim below is verifiable against the referenced source files." })}
+        {t('about.geometrySubtitle', { defaultValue: '4DA\u2019s core invariants map to Platonic geometry. Each claim below is verifiable against the referenced source files.' })}
       </p>
 
       <div className={`grid ${foundationExpanded ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
@@ -182,8 +209,10 @@ export function GeometryShowcase() {
         className="flex items-center gap-1.5 text-[10px] text-text-muted hover:text-text-secondary transition-colors uppercase tracking-wider"
       >
         <span className="text-[8px]">{showFamily ? '\u25BC' : '\u25B6'}</span>
-        {showFamily ? 'Hide geometric family' : 'Show geometric family'}
-        <span className="text-text-muted/50">{'\u00B7'} 3 more solids</span>
+        {showFamily
+          ? t('about.hideFamily', { defaultValue: 'Hide geometric family' })
+          : t('about.showFamily', { defaultValue: 'Show geometric family' })}
+        <span className="text-text-muted/50">{'\u00B7 '}{t('about.moreSolids', { defaultValue: '3 more solids' })}</span>
       </button>
 
       {showFamily && (
