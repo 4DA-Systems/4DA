@@ -52,7 +52,13 @@ pub(crate) fn get_ace_context() -> ACEContext {
         for t in topics.iter().filter(|t| t.weight >= 0.55) {
             let topic_lower = t.topic.to_lowercase();
             ctx.active_topics.push(topic_lower.clone());
-            ctx.topic_confidence.insert(topic_lower, t.confidence);
+            let conf = if t.confidence.is_finite() && t.confidence >= 0.0 && t.confidence <= 1.0 {
+                t.confidence
+            } else {
+                warn!(target: "4da::scoring", topic = %t.topic, raw = t.confidence, "Invalid ACE confidence — clamping to 0.5");
+                0.5
+            };
+            ctx.topic_confidence.insert(topic_lower, conf);
         }
     }
 
@@ -107,7 +113,13 @@ pub(crate) fn get_ace_context() -> ACEContext {
         {
             let topic_lower = a.topic.to_lowercase();
             ctx.anti_topics.push(topic_lower.clone());
-            ctx.anti_topic_confidence.insert(topic_lower, a.confidence);
+            let conf = if a.confidence.is_finite() && a.confidence >= 0.0 && a.confidence <= 1.0 {
+                a.confidence
+            } else {
+                warn!(target: "4da::scoring", topic = %a.topic, raw = a.confidence, "Invalid ACE anti-topic confidence — clamping to 0.5");
+                0.5
+            };
+            ctx.anti_topic_confidence.insert(topic_lower, conf);
         }
     }
 
@@ -117,9 +129,15 @@ pub(crate) fn get_ace_context() -> ACEContext {
         for aff in affinities {
             // Include affinities with enough data, regardless of sign
             if aff.total_exposures >= 3 && aff.affinity_score.abs() > 0.1 {
+                let conf = if aff.confidence.is_finite() && aff.confidence >= 0.0 && aff.confidence <= 1.0 {
+                    aff.confidence
+                } else {
+                    warn!(target: "4da::scoring", topic = %aff.topic, raw = aff.confidence, "Invalid ACE affinity confidence — clamping to 0.5");
+                    0.5
+                };
                 ctx.topic_affinities.insert(
                     aff.topic.to_lowercase(),
-                    (aff.affinity_score, aff.confidence),
+                    (aff.affinity_score, conf),
                 );
             }
         }

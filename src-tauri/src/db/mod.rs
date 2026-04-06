@@ -527,7 +527,7 @@ pub(crate) const EMBEDDING_DIM: usize = 384;
 /// Validates dimension before conversion — rejects wrong-sized vectors.
 pub(crate) fn embedding_to_blob(embedding: &[f32]) -> Vec<u8> {
     if !embedding.is_empty() && embedding.len() != EMBEDDING_DIM {
-        tracing::warn!(
+        tracing::error!(
             target: "4da::db",
             "Embedding dimension mismatch: expected {} but got {} — storing anyway",
             EMBEDDING_DIM, embedding.len()

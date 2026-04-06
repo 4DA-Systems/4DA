@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 49;
+        const TARGET_VERSION: i64 = 50;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1388,6 +1388,38 @@ impl Database {
                              END;",
                         )?;
                         info!(target: "4da::db", "Added cascade delete triggers for orphan prevention");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 50: Additional cascade triggers + FK join indexes (audit gaps)
+            if current_version < 50 {
+                Self::run_versioned_migration(
+                    &conn,
+                    49,
+                    50,
+                    "Phase 50: audit cascade triggers + FK join indexes",
+                    |c| {
+                        c.execute_batch(
+                            "-- Cascade delete triggers for gaps identified in audit
+                             CREATE TRIGGER IF NOT EXISTS trg_source_items_delete_dep_alerts
+                             AFTER DELETE ON source_items
+                             BEGIN
+                                 DELETE FROM dependency_alerts WHERE source_item_id = OLD.id;
+                             END;
+
+                             CREATE TRIGGER IF NOT EXISTS trg_webhooks_delete_deliveries
+                             AFTER DELETE ON webhooks
+                             BEGIN
+                                 DELETE FROM webhook_deliveries WHERE webhook_id = OLD.id;
+                             END;
+
+                             -- Performance indexes on frequently-joined FK columns
+                             CREATE INDEX IF NOT EXISTS idx_channel_renders_channel ON channel_renders(channel_id);
+                             CREATE INDEX IF NOT EXISTS idx_channel_provenance_render ON channel_provenance(render_id);",
+                        )?;
+                        info!(target: "4da::db", "Added audit cascade triggers and FK join indexes");
                         Ok(())
                     },
                 )?;

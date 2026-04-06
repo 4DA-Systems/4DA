@@ -113,7 +113,11 @@ impl OfficeExtractor {
         let sheet_names = workbook.sheet_names().clone();
         metadata.insert("sheet_count".to_string(), sheet_names.len().to_string());
 
-        for (idx, sheet_name) in sheet_names.iter().enumerate() {
+        if sheet_names.len() > 100 {
+            tracing::warn!(target: "4da::extractors", total = sheet_names.len(), "XLSX has >100 sheets — processing first 100 only");
+        }
+
+        for (idx, sheet_name) in sheet_names.iter().enumerate().take(100) {
             let mut sheet_text: Vec<String> = Vec::new();
             sheet_text.push(format!("=== Sheet: {sheet_name} ==="));
 

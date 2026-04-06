@@ -121,6 +121,12 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         }
       }
 
+      // Notify user if any backend feedback calls failed
+      const failCount = results.filter(r => r.status === 'rejected').length;
+      if (failCount > 0) {
+        get().addToast('warning', `${failCount} feedback action(s) failed to save`);
+      }
+
       // Track what was just learned for the visible learning loop
       const primaryTopic = topics[0] || null;
       if (primaryTopic) {

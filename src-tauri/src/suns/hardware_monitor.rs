@@ -10,7 +10,10 @@ pub fn execute() -> SunResult {
 
     #[cfg(target_os = "windows")]
     {
-        // Try PowerShell first (Windows 11+), fall back to wmic (Windows 10)
+        // Try PowerShell first (Windows 11+), fall back to wmic (Windows 10).
+        // All PowerShell calls below use .or_else(|_| run_cmd("wmic ...")) so
+        // hardware detection works even when PowerShell is unavailable or restricted.
+        debug!(target: "4da::suns", "Windows hardware detection: PowerShell primary, wmic fallback");
         let cpu_output = run_cmd("powershell -NoProfile -Command \"Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name\"")
             .or_else(|_| run_cmd("wmic cpu get name,numberofcores /format:list"));
         if let Ok(output) = cpu_output {

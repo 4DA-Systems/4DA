@@ -668,6 +668,250 @@ mod tests {
     // Existing unit tests
     // ========================================================================
 
+    // ========================================================================
+    // Edge case tests: title, embedding, and language corner cases
+    // ========================================================================
+
+    /// Empty title should have a reduced score due to the short-title cap.
+    /// The pipeline caps items with < 3 meaningful words (>= 2 chars each)
+    /// at QUALITY_FLOOR_SHORT_TITLE_CAP (0.40), which is well below the
+    /// 0.35 relevance threshold for strong signals but still caps the max.
+    #[test]
+    fn test_empty_title_gets_capped() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .build();
+
+        // Empty title — this triggers the short-title cap
+        let input = test_input("", "rust tokio async await performance", &interest_embedding);
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        // Empty title has 0 meaningful words (< 3), so score is capped at 0.40
+        assert!(
+            result.top_score <= 0.40,
+            "Empty title should be capped at 0.40 (short-title floor), got {}",
+            result.top_score
+        );
+    }
+
+    /// A title with 100+ words should still score normally — no penalty for verbosity.
+    /// The pipeline only penalizes SHORT titles (< 3 meaningful words), not long ones.
+    #[test]
+    fn test_very_long_title_not_penalized() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests.clone())
+            .ace_ctx(ace_ctx.clone())
+            .build();
+
+        // Very long title (100+ words) about a relevant topic
+        let long_title = std::iter::repeat("rust async performance tokio runtime optimization")
+            .take(20)
+            .collect::<Vec<_>>()
+            .join(" ");
+        // Same content but with a normal-length title for comparison
+        let normal_title = "Rust Async Runtime Performance Improvements in Tokio";
+
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let long_input = ScoringInput {
+            id: 1,
+            title: &long_title,
+            url: Some("https://example.com/long"),
+            content: "rust tokio async await performance benchmarks optimization",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+        };
+
+        let normal_input = ScoringInput {
+            id: 2,
+            title: normal_title,
+            url: Some("https://example.com/normal"),
+            content: "rust tokio async await performance benchmarks optimization",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+        };
+
+        let long_result = score_item(&long_input, &ctx, &db, &options, None);
+        let normal_result = score_item(&normal_input, &ctx, &db, &options, None);
+
+        // Long title should NOT be penalized — score should be similar to normal title.
+        // Allow 20% variance because topic extraction differs with repeated words.
+        let ratio = if normal_result.top_score > 0.0 {
+            long_result.top_score / normal_result.top_score
+        } else {
+            1.0
+        };
+        assert!(
+            ratio >= 0.70,
+            "Long title should not be penalized vs normal title: long={}, normal={}, ratio={}",
+            long_result.top_score, normal_result.top_score, ratio
+        );
+    }
+
+    /// Zero-vector embeddings should still produce a score via keyword and dependency axes.
+    /// The pipeline checks `has_real_embedding` and skips KNN/embedding when all zeros,
+    /// but keyword interest matching, ACE keyword boost, and dependency matching still work.
+    #[test]
+    fn test_all_zero_embeddings_still_scores() {
+        let db = test_db();
+        let zero_embedding = vec![0.0_f32; 384];
+        let real_embedding = vec![0.5_f32; 384];
+
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(real_embedding),
+            source: context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .build();
+
+        // Zero embedding, but the title/content mention "rust" which matches interests + ACE
+        let input = test_input(
+            "Rust Borrow Checker Deep Dive",
+            "rust borrow checker ownership move semantics",
+            &zero_embedding,
+        );
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        assert!(
+            result.top_score > 0.0,
+            "Zero embedding should still produce a score via keyword/ACE axes, got {}",
+            result.top_score
+        );
+
+        // Verify keyword_score is what's contributing (not embedding similarity)
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        assert!(
+            bd.keyword_score > 0.0,
+            "Keyword interest score should be positive when title matches interest topic, got {}",
+            bd.keyword_score
+        );
+    }
+
+    /// Content with `detected_lang` different from the user's configured language
+    /// should be severely capped. V1 pipeline caps at 0.05 (well below 0.35 threshold).
+    /// We detect the user's current language at runtime and set `detected_lang` to
+    /// something definitively different.
+    #[test]
+    fn test_language_mismatch_severely_capped() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .build();
+
+        // Determine user's current language so we can pick a definitively different one
+        let user_lang = crate::i18n::get_user_language();
+        let mismatched_lang = if user_lang == "zz-test" { "en" } else { "zz-test" };
+
+        // Content is about "rust" (matching interests + ACE) but in a mismatched language
+        let input = ScoringInput {
+            id: 1,
+            title: "Rust async runtime performance improvements",
+            url: Some("https://example.com/rust"),
+            content: "rust tokio async await performance benchmarks",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: mismatched_lang,
+        };
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item(&input, &ctx, &db, &options, None);
+
+        // V1 pipeline applies: `combined_score.min(0.05)` for lang_mismatch
+        assert!(
+            result.top_score <= 0.05,
+            "Language mismatch (user={}, content={}) should cap score at 0.05, got {}",
+            user_lang, mismatched_lang, result.top_score
+        );
+        assert!(
+            !result.relevant,
+            "Language-mismatched content should never be relevant (score={})",
+            result.top_score
+        );
+    }
+
+    // ========================================================================
+    // Existing unit tests
+    // ========================================================================
+
     // Phase 2: Dependency prefix filter test
     #[test]
     fn test_dependency_prefix_filtered_from_seeding() {

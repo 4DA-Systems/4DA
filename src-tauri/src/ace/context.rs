@@ -253,6 +253,11 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("");
+        if let Ok(meta) = std::fs::metadata(&change.path) {
+            if meta.len() > 10_000_000 {
+                continue; // Skip files > 10MB for topic extraction
+            }
+        }
         if let Ok(content) = std::fs::read_to_string(&change.path) {
             let rich_topics = super::watcher::extract_rich_topics(&content, ext);
             for (topic, confidence) in &rich_topics {
