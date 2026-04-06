@@ -36,5 +36,8 @@
   "streets.tierPlaybook": "Playbook (Gratis)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "Idioma de la lección",
+  "streets.translateModule": "Traducir a {{lang}}",
+  "streets.translating": "Traduciendo..."
 }
