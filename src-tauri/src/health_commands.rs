@@ -193,7 +193,9 @@ mod tests {
         assert!(
             result == just_now || result == one_min_ago,
             "Expected '{}' or '{}', got: {}",
-            just_now, one_min_ago, result
+            just_now,
+            one_min_ago,
+            result
         );
     }
 

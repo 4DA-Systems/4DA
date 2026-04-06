@@ -843,7 +843,11 @@ mod tests {
 
         if let Some(c) = result {
             let lang = crate::i18n::get_user_language();
-            let short_title: String = "Show HN: A new Python testing framework - blazing fast alternative to pytest".chars().take(60).collect();
+            let short_title: String =
+                "Show HN: A new Python testing framework - blazing fast alternative to pytest"
+                    .chars()
+                    .take(60)
+                    .collect();
 
             // Action text must NOT use the "toolEvaluateStack" template with python,
             // since python is only detected, not declared.

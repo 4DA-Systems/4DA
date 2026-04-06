@@ -663,26 +663,44 @@ mod tests {
     #[test]
     fn test_jaccard_identical_titles() {
         let sim = jaccard_word_similarity("rust async patterns", "rust async patterns");
-        assert!((sim - 1.0).abs() < f32::EPSILON, "Identical titles should score 1.0");
+        assert!(
+            (sim - 1.0).abs() < f32::EPSILON,
+            "Identical titles should score 1.0"
+        );
     }
 
     #[test]
     fn test_jaccard_completely_different() {
         let sim = jaccard_word_similarity("rust async patterns", "python data science");
-        assert!(sim < 0.1, "Completely different titles should score near 0.0, got {sim}");
+        assert!(
+            sim < 0.1,
+            "Completely different titles should score near 0.0, got {sim}"
+        );
     }
 
     #[test]
     fn test_jaccard_cross_post_caught_at_065() {
         // Near-duplicate: 4 of 5 words shared = Jaccard 0.67
-        let sim = jaccard_word_similarity("kubernetes pod networking deep dive", "kubernetes pod networking explained dive");
-        assert!(sim >= 0.65, "Cross-post variant should be caught at 0.65 threshold, got {sim}");
+        let sim = jaccard_word_similarity(
+            "kubernetes pod networking deep dive",
+            "kubernetes pod networking explained dive",
+        );
+        assert!(
+            sim >= 0.65,
+            "Cross-post variant should be caught at 0.65 threshold, got {sim}"
+        );
     }
 
     #[test]
     fn test_jaccard_different_topics_not_deduped() {
-        let sim = jaccard_word_similarity("rust error handling patterns", "rust async runtime comparison");
-        assert!(sim < 0.65, "Different Rust topics should not be deduped, got {sim}");
+        let sim = jaccard_word_similarity(
+            "rust error handling patterns",
+            "rust async runtime comparison",
+        );
+        assert!(
+            sim < 0.65,
+            "Different Rust topics should not be deduped, got {sim}"
+        );
     }
 
     #[test]
@@ -694,9 +712,19 @@ mod tests {
         ];
         fuzzy_dedup_results(&mut results);
         // First two are near-duplicates — second should be removed
-        let titles: Vec<&str> = results.iter().filter(|r| !r.excluded).map(|r| r.title.as_str()).collect();
-        assert!(titles.contains(&"Kubernetes pod networking deep dive"), "Higher-scored item should survive");
-        assert!(titles.contains(&"Rust async patterns guide"), "Unrelated item should survive");
+        let titles: Vec<&str> = results
+            .iter()
+            .filter(|r| !r.excluded)
+            .map(|r| r.title.as_str())
+            .collect();
+        assert!(
+            titles.contains(&"Kubernetes pod networking deep dive"),
+            "Higher-scored item should survive"
+        );
+        assert!(
+            titles.contains(&"Rust async patterns guide"),
+            "Unrelated item should survive"
+        );
     }
 
     #[test]
@@ -709,6 +737,9 @@ mod tests {
         let before_count = results.len();
         fuzzy_dedup_results(&mut results);
         let after_count = results.iter().filter(|r| !r.excluded).count();
-        assert_eq!(before_count, after_count, "Distinct items should all survive dedup");
+        assert_eq!(
+            before_count, after_count,
+            "Distinct items should all survive dedup"
+        );
     }
 }

@@ -427,9 +427,9 @@ pub(crate) fn score_item(
     // Releases of the user's primary languages/frameworks deserve a strong additive
     // boost. "Announcing Rust 1.94.0" should score 70%+, not 52%.
     let base_score = if novelty.is_release {
-        let is_primary_release = topics.iter().any(|t| {
-            ctx.domain_profile.primary_stack.contains(&t.to_lowercase())
-        });
+        let is_primary_release = topics
+            .iter()
+            .any(|t| ctx.domain_profile.primary_stack.contains(&t.to_lowercase()));
         if is_primary_release {
             (base_score + 0.15).min(1.0)
         } else {

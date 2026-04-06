@@ -513,7 +513,10 @@ mod tests {
         let original: Vec<f32> = vec![];
         let blob = embedding_to_blob(&original);
         let restored = blob_to_embedding(&blob);
-        assert!(restored.is_empty(), "Empty embedding should round-trip to empty");
+        assert!(
+            restored.is_empty(),
+            "Empty embedding should round-trip to empty"
+        );
     }
 
     #[test]
@@ -523,7 +526,10 @@ mod tests {
         let restored = blob_to_embedding(&blob);
         assert_eq!(original.len(), restored.len());
         for (a, b) in original.iter().zip(restored.iter()) {
-            assert!((a - b).abs() < f32::EPSILON, "Mismatch at value: {a} vs {b}");
+            assert!(
+                (a - b).abs() < f32::EPSILON,
+                "Mismatch at value: {a} vs {b}"
+            );
         }
     }
 
@@ -591,7 +597,11 @@ mod tests {
             .expect("add inferred");
 
         let interests = engine.get_interests().expect("get interests");
-        assert_eq!(interests.len(), 1, "Should still be one interest after UPSERT");
+        assert_eq!(
+            interests.len(),
+            1,
+            "Should still be one interest after UPSERT"
+        );
         // Last write wins — this is the current behavior
         assert_eq!(
             interests[0].source,
@@ -773,7 +783,10 @@ mod tests {
         engine.add_exclusion("spam").expect("add duplicate");
 
         let count = engine.exclusion_count().expect("count");
-        assert_eq!(count, 1, "Duplicate exclusion should be ignored via INSERT OR IGNORE");
+        assert_eq!(
+            count, 1,
+            "Duplicate exclusion should be ignored via INSERT OR IGNORE"
+        );
     }
 
     // ========================================================================
@@ -784,7 +797,9 @@ mod tests {
     fn test_static_identity_aggregates_all_layers() {
         let engine = test_engine();
 
-        engine.set_role(Some("Backend Developer")).expect("set role");
+        engine
+            .set_role(Some("Backend Developer"))
+            .expect("set role");
         engine.add_technology("rust").expect("add tech");
         engine.add_technology("typescript").expect("add tech");
         engine

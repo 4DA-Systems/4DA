@@ -916,7 +916,10 @@ mod tests {
         let lang = crate::i18n::get_user_language();
         let signals_label = crate::i18n::t("ui:digest.signals", &lang, &[]);
         let text = digest.to_text();
-        assert!(text.contains(&signals_label), "Text output should contain signals header");
+        assert!(
+            text.contains(&signals_label),
+            "Text output should contain signals header"
+        );
         assert!(text.contains("CRITICAL"));
         assert!(text.contains("Review CVE"));
 

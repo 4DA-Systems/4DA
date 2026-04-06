@@ -129,16 +129,17 @@ pub(crate) fn get_ace_context() -> ACEContext {
         for aff in affinities {
             // Include affinities with enough data, regardless of sign
             if aff.total_exposures >= 3 && aff.affinity_score.abs() > 0.1 {
-                let conf = if aff.confidence.is_finite() && aff.confidence >= 0.0 && aff.confidence <= 1.0 {
+                let conf = if aff.confidence.is_finite()
+                    && aff.confidence >= 0.0
+                    && aff.confidence <= 1.0
+                {
                     aff.confidence
                 } else {
                     warn!(target: "4da::scoring", topic = %aff.topic, raw = aff.confidence, "Invalid ACE affinity confidence — clamping to 0.5");
                     0.5
                 };
-                ctx.topic_affinities.insert(
-                    aff.topic.to_lowercase(),
-                    (aff.affinity_score, conf),
-                );
+                ctx.topic_affinities
+                    .insert(aff.topic.to_lowercase(), (aff.affinity_score, conf));
             }
         }
     }
@@ -237,7 +238,10 @@ mod tests {
         ctx.anti_topics.push("crypto".to_string());
         let topics = vec!["cryptocurrency".to_string()];
         let result = check_ace_exclusions(&topics, &ctx);
-        assert!(result.is_none(), "Substring 'crypto' should not match 'cryptocurrency'");
+        assert!(
+            result.is_none(),
+            "Substring 'crypto' should not match 'cryptocurrency'"
+        );
     }
 
     #[test]

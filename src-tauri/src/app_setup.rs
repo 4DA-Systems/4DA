@@ -382,8 +382,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
                 [],
             ) {
-                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: old temporal_events"); } }
-                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: temporal_events failed"); }
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old temporal_events");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: temporal_events failed");
+                }
             }
 
             // Purge file_signals older than 7 days
@@ -391,8 +398,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
                 [],
             ) {
-                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: old file_signals"); } }
-                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: file_signals failed"); }
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old file_signals");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: file_signals failed");
+                }
             }
 
             // Keep only the most recent 500 sun_runs
@@ -581,6 +595,220 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Initialize ACE with configured directories (runs async in background)
     initialize_ace_on_startup(app.handle().clone());
+
+    // ========================================================================
+    // Immediate Morning Briefing Check
+    // ========================================================================
+    // The scheduler ticks every 60 seconds, but we don't want the user to
+    // wait up to a minute for their morning briefing on cold boot / autostart.
+    // Fire an immediate check 3 seconds after startup (gives the briefing
+    // window time to pre-warm its JS listener). This runs the same logic as
+    // the scheduler tick: check → notify → synthesize → AWE daily jobs.
+    {
+        let briefing_handle = app_handle.clone();
+        let briefing_state = get_monitoring_state().clone();
+        tauri::async_runtime::spawn(async move {
+            // Short delay: let briefing window JS register its listener
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+            if let Some(briefing) =
+                crate::monitoring_notifications::check_morning_briefing(&briefing_state)
+            {
+                info!(target: "4da::startup",
+                    items = briefing.total_relevant,
+                    "Immediate morning briefing (cold boot catch-up)"
+                );
+                crate::monitoring_notifications::send_morning_briefing_notification(
+                    &briefing_handle,
+                    &briefing,
+                );
+                // Emit to frontend for in-app briefing card
+                let _ = briefing_handle.emit(
+                    "morning-briefing-ready",
+                    serde_json::json!({
+                        "title": briefing.title,
+                        "total_relevant": briefing.total_relevant,
+                        "items": briefing.items.iter().map(|i| serde_json::json!({
+                            "title": i.title,
+                            "source_type": i.source_type,
+                            "score": i.score,
+                            "signal_type": i.signal_type,
+                        })).collect::<Vec<_>>(),
+                    }),
+                );
+
+                // Async LLM synthesis — narrative intelligence brief
+                {
+                    let app_synth = briefing_handle.clone();
+                    let briefing_synth = briefing.clone();
+                    tauri::async_runtime::spawn(async move {
+                        match crate::monitoring_briefing::synthesize_morning_briefing(
+                            &briefing_synth,
+                        )
+                        .await
+                        {
+                            Ok(synthesis) => {
+                                info!(target: "4da::briefing", "Startup brief synthesis ready");
+                                let _ =
+                                    app_synth.emit_to("briefing", "briefing-synthesis", &synthesis);
+                                let _ = app_synth.emit(
+                                    "morning-briefing-synthesis",
+                                    serde_json::json!({ "synthesis": synthesis }),
+                                );
+                            }
+                            Err(e) => {
+                                info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
+                            }
+                        }
+                    });
+                }
+
+                // AWE behavioral wisdom synthesis
+                {
+                    let app_wisdom = briefing_handle.clone();
+                    tauri::async_runtime::spawn(async move {
+                        match crate::awe_synthesis::build_behavioral_context() {
+                            Ok(ctx) => {
+                                let _ = crate::awe_synthesis::write_context_file(&ctx);
+                                match crate::awe_synthesis::synthesize_daily_wisdom(&ctx).await {
+                                    Ok(wisdom) => {
+                                        info!(target: "4da::awe_synthesis", "Startup wisdom synthesis ready");
+                                        let _ = app_wisdom.emit(
+                                            "awe-wisdom-synthesis",
+                                            serde_json::json!({ "wisdom": wisdom }),
+                                        );
+                                    }
+                                    Err(e) => {
+                                        info!(target: "4da::awe_synthesis", reason = %e, "Wisdom synthesis skipped");
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::awe_synthesis", error = %e, "Behavioral context failed");
+                            }
+                        }
+                    });
+                }
+
+                // AWE daily jobs — wisdom sync + auto-feedback
+                tauri::async_runtime::spawn(async {
+                    if let Err(e) = crate::context_commands::sync_awe_wisdom().await {
+                        warn!(target: "4da::awe", error = %e, "Startup AWE wisdom sync failed");
+                    }
+                });
+                tauri::async_runtime::spawn(async {
+                    if let Err(e) = crate::awe_commands::run_awe_auto_feedback().await {
+                        warn!(target: "4da::awe", error = %e, "Startup AWE auto-feedback failed");
+                    }
+                });
+            }
+        });
+    }
+
+    // ========================================================================
+    // Frontend Readiness Gate
+    // ========================================================================
+    // The main window starts hidden (visible: false in tauri.conf.json).
+    //
+    // Problem: In dev mode, the Vite dev server may not be ready when the
+    // webview first navigates to devUrl, causing a "can't reach this page"
+    // error. The React SplashScreen never mounts, so there's no recovery.
+    //
+    // Solution (3-layer defense):
+    //  1. Window stays hidden until we KNOW the frontend loaded
+    //  2. Frontend emits "frontend-ready" on mount → Rust shows window
+    //  3. Dev-mode watchdog polls the dev server, force-reloads webview
+    //     once it responds, then shows window as fallback
+    //  4. Production: show window immediately (frontend is bundled)
+    //
+    // This guarantees the user never sees a broken error page on startup.
+    // ========================================================================
+
+    #[cfg(not(debug_assertions))]
+    {
+        // Production: frontend is bundled in the binary — always available.
+        // Show the window immediately; the SplashScreen provides visual
+        // feedback while backend initialization completes.
+        if let Some(w) = app_handle.get_webview_window("main") {
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        info!(target: "4da::startup", "Main window shown (production mode)");
+    }
+
+    #[cfg(debug_assertions)]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+
+        let shown = Arc::new(AtomicBool::new(false));
+
+        // Layer 1: Frontend signals readiness via event (happy path)
+        {
+            let show_handle = app_handle.clone();
+            let shown_event = shown.clone();
+            app.listen("frontend-ready", move |_| {
+                if !shown_event.swap(true, Ordering::SeqCst) {
+                    if let Some(w) = show_handle.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    info!(target: "4da::startup", "Main window shown (frontend-ready signal)");
+                }
+            });
+        }
+
+        // Layer 2: Dev server poll + webview navigate (recovery path)
+        //
+        // Why navigate() instead of eval("reload")?
+        // WebView2 error pages (edge://network-error/) block JS execution.
+        // Tauri's navigate() operates at the engine level — works regardless
+        // of what the webview is currently displaying.
+        {
+            let ready_handle = app_handle.clone();
+            let shown_poll = shown.clone();
+            tauri::async_runtime::spawn(async move {
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(2))
+                    .no_proxy()
+                    .build()
+                    .unwrap_or_default();
+
+                let dev_url =
+                    url::Url::parse("http://localhost:4444/").expect("hardcoded dev URL is valid");
+
+                // Poll dev server every 500ms for up to 30 seconds
+                for attempt in 1..=60u32 {
+                    if shown_poll.load(Ordering::SeqCst) {
+                        return; // frontend-ready already fired — nothing to do
+                    }
+                    if let Ok(r) = client.get(dev_url.as_str()).send().await {
+                        if r.status().is_success() {
+                            info!(target: "4da::startup", attempt, "Dev server ready — navigating webview");
+                            if let Some(w) = ready_handle.get_webview_window("main") {
+                                // Force-navigate at the engine level. This works
+                                // even when the webview shows an error page.
+                                let _ = w.navigate(dev_url.clone());
+                            }
+                            // Give the navigation up to 5s to trigger frontend-ready
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            break;
+                        }
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+
+                // Fallback: show window regardless (better than invisible forever)
+                if !shown_poll.swap(true, Ordering::SeqCst) {
+                    if let Some(w) = ready_handle.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    warn!(target: "4da::startup", "Main window shown (dev server poll fallback)");
+                }
+            });
+        }
+    }
 
     Ok(())
 }

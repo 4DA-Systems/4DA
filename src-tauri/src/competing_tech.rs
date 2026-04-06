@@ -17,8 +17,19 @@ const COMPETING_TECH: &[(&str, &[&str])] = &[
     ("angular", &["react", "vue", "svelte", "solid"]),
     ("svelte", &["react", "vue", "angular"]),
     // Backend frameworks — "React and Laravel" is not relevant if user doesn't use Laravel
-    ("rust", &["django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi"]),
-    ("axum", &["express", "fastify", "koa", "hapi", "django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi", "fiber"]),
+    (
+        "rust",
+        &[
+            "django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi",
+        ],
+    ),
+    (
+        "axum",
+        &[
+            "express", "fastify", "koa", "hapi", "django", "laravel", "rails", "spring", "flask",
+            "gin", "echo", "fastapi", "fiber",
+        ],
+    ),
     // Package managers
     ("pnpm", &["npm", "yarn"]),
     ("yarn", &["npm", "pnpm"]),
