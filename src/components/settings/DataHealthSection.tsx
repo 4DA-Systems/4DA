@@ -27,9 +27,9 @@ function HealthBadge({ status }: { status: string }) {
     needs_attention: 'bg-red-500/20 text-red-400 border-red-500/30',
   };
   const labels: Record<string, string> = {
-    healthy: t('settings.dataHealth.statusHealthy', 'Healthy'),
-    growing: t('settings.dataHealth.statusGrowing', 'Growing'),
-    needs_attention: t('settings.dataHealth.statusNeedsAttention', 'Needs attention'),
+    healthy: t('settings.dataHealth.statusHealthy'),
+    growing: t('settings.dataHealth.statusGrowing'),
+    needs_attention: t('settings.dataHealth.statusNeedsAttention'),
   };
   return (
     <span className={`px-2 py-0.5 text-xs rounded border ${colors[status] ?? colors.healthy}`}>
@@ -53,21 +53,21 @@ function CleanResultSummary({ result }: { result: MaintenanceResult }) {
     + result.deleted_windows + result.deleted_cycles + result.deleted_necessity + result.deleted_void;
 
   if (total === 0) {
-    return <p className="text-xs text-text-muted mt-2">{t('settings.dataHealth.alreadyClean', 'Database is already clean — nothing to remove.')}</p>;
+    return <p className="text-xs text-text-muted mt-2">{t('settings.dataHealth.alreadyClean')}</p>;
   }
 
   const lines: string[] = [];
-  if (result.deleted_items > 0) lines.push(t('settings.dataHealth.cleanItems', { count: result.deleted_items, defaultValue: '{{count}} old items' }));
-  if (result.deleted_feedback > 0) lines.push(t('settings.dataHealth.cleanFeedback', { count: result.deleted_feedback, defaultValue: '{{count}} feedback entries' }));
-  if (result.deleted_intelligence > 0) lines.push(t('settings.dataHealth.cleanCalibrations', { count: result.deleted_intelligence, defaultValue: '{{count}} superseded calibrations' }));
-  if (result.deleted_windows > 0) lines.push(t('settings.dataHealth.cleanWindows', { count: result.deleted_windows, defaultValue: '{{count}} expired decision windows' }));
-  if (result.deleted_cycles > 0) lines.push(t('settings.dataHealth.cleanCycles', { count: result.deleted_cycles, defaultValue: '{{count}} old autophagy cycles' }));
-  if (result.deleted_necessity > 0) lines.push(t('settings.dataHealth.cleanScores', { count: result.deleted_necessity, defaultValue: '{{count}} orphaned scores' }));
-  if (result.deleted_void > 0) lines.push(t('settings.dataHealth.cleanVoid', { count: result.deleted_void, defaultValue: '{{count}} void positions' }));
+  if (result.deleted_items > 0) lines.push(t('settings.dataHealth.cleanItems', { count: result.deleted_items }));
+  if (result.deleted_feedback > 0) lines.push(t('settings.dataHealth.cleanFeedback', { count: result.deleted_feedback }));
+  if (result.deleted_intelligence > 0) lines.push(t('settings.dataHealth.cleanCalibrations', { count: result.deleted_intelligence }));
+  if (result.deleted_windows > 0) lines.push(t('settings.dataHealth.cleanWindows', { count: result.deleted_windows }));
+  if (result.deleted_cycles > 0) lines.push(t('settings.dataHealth.cleanCycles', { count: result.deleted_cycles }));
+  if (result.deleted_necessity > 0) lines.push(t('settings.dataHealth.cleanScores', { count: result.deleted_necessity }));
+  if (result.deleted_void > 0) lines.push(t('settings.dataHealth.cleanVoid', { count: result.deleted_void }));
 
   return (
     <div className="mt-2 p-2 bg-green-500/10 border border-green-500/20 rounded text-xs text-green-400">
-      <p className="font-medium">{t('settings.dataHealth.cleanedRecords', { count: total })}{result.vacuumed ? ` + ${t('settings.dataHealth.compacted', 'database compacted')}` : ''}</p>
+      <p className="font-medium">{t('settings.dataHealth.cleanedRecords', { count: total })}{result.vacuumed ? ` + ${t('settings.dataHealth.compacted')}` : ''}</p>
       <p className="text-green-400/70 mt-0.5">{lines.join(', ')}</p>
     </div>
   );
@@ -137,7 +137,7 @@ export function DataHealthSection() {
   if (loading) {
     return (
       <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
-        <div className="text-xs text-text-muted">{t('settings.dataHealth.loading', 'Loading data health...')}</div>
+        <div className="text-xs text-text-muted">{t('settings.dataHealth.loading')}</div>
       </div>
     );
   }
@@ -158,10 +158,10 @@ export function DataHealthSection() {
           </div>
           <div>
             <h3 className="text-sm font-medium text-white">
-              {t('settings.dataHealth.title', 'Data Health')}
+              {t('settings.dataHealth.title')}
             </h3>
             <p className="text-xs text-text-muted">
-              {t('settings.dataHealth.description', 'Database size, retention, and cleanup')}
+              {t('settings.dataHealth.description')}
             </p>
           </div>
         </div>
@@ -179,21 +179,21 @@ export function DataHealthSection() {
       <div className="p-3 bg-bg-secondary rounded-lg border border-border mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-white">
-            {t('settings.dataHealth.databaseSize', 'Database size')}
+            {t('settings.dataHealth.databaseSize')}
           </span>
           <span className="text-sm font-mono text-white">{formatBytes(stats.db_size_bytes)}</span>
         </div>
         <div className="space-y-0.5">
-          <StatRow label={t('settings.dataHealth.contentItems', 'Content items')} value={formatCount(stats.source_items)} />
-          <StatRow label={t('settings.dataHealth.embeddings', 'Embeddings')} value={formatCount(stats.embeddings_count)} />
-          <StatRow label={t('settings.dataHealth.feedback', 'Feedback records')} value={formatCount(stats.feedback_count)} />
-          <StatRow label={t('settings.dataHealth.intelligence', 'Intelligence digests')} value={formatCount(stats.digested_intelligence)} />
-          <StatRow label={t('settings.dataHealth.decisionWindows', 'Decision windows')} value={formatCount(stats.decision_windows)} />
-          <StatRow label={t('settings.dataHealth.autophagyCycles', 'Autophagy cycles')} value={formatCount(stats.autophagy_cycles)} />
-          <StatRow label={t('settings.dataHealth.necessityScores', 'Necessity scores')} value={formatCount(stats.necessity_scores)} />
+          <StatRow label={t('settings.dataHealth.contentItems')} value={formatCount(stats.source_items)} />
+          <StatRow label={t('settings.dataHealth.embeddings')} value={formatCount(stats.embeddings_count)} />
+          <StatRow label={t('settings.dataHealth.feedback')} value={formatCount(stats.feedback_count)} />
+          <StatRow label={t('settings.dataHealth.intelligence')} value={formatCount(stats.digested_intelligence)} />
+          <StatRow label={t('settings.dataHealth.decisionWindows')} value={formatCount(stats.decision_windows)} />
+          <StatRow label={t('settings.dataHealth.autophagyCycles')} value={formatCount(stats.autophagy_cycles)} />
+          <StatRow label={t('settings.dataHealth.necessityScores')} value={formatCount(stats.necessity_scores)} />
           {stats.oldest_item_date != null && stats.oldest_item_date !== '' && (
             <StatRow
-              label={t('settings.dataHealth.oldestItem', 'Oldest item')}
+              label={t('settings.dataHealth.oldestItem')}
               value={stats.oldest_item_date.split('T')[0] ?? stats.oldest_item_date}
               muted
             />
@@ -205,11 +205,11 @@ export function DataHealthSection() {
       <div className="p-3 bg-bg-secondary rounded-lg border border-border mb-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-white">
-            {t('settings.dataHealth.retention', 'Data retention')}
+            {t('settings.dataHealth.retention')}
           </span>
           <span className="text-xs text-text-secondary font-mono">
-            {retentionDays} {t('settings.dataHealth.days', 'days')}
-            {retentionSaving ? <span className="text-orange-400 ms-1">{t('settings.dataHealth.saving', 'saving...')}</span> : null}
+            {retentionDays} {t('settings.dataHealth.days')}
+            {retentionSaving ? <span className="text-orange-400 ms-1">{t('settings.dataHealth.saving')}</span> : null}
           </span>
         </div>
         <input
@@ -234,45 +234,43 @@ export function DataHealthSection() {
             <path d="M8 1a7 7 0 100 14A7 7 0 008 1zm0 12.5a5.5 5.5 0 110-11 5.5 5.5 0 010 11zM8 4v4.5l3 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span className="text-xs font-medium text-white">
-            {t('settings.dataHealth.maintenanceTitle', 'Routine maintenance')}
+            {t('settings.dataHealth.maintenanceTitle')}
           </span>
         </div>
 
         <p className="text-[11px] text-text-muted mb-3 leading-relaxed">
-          {t('settings.dataHealth.maintenanceDesc',
-            'Removes expired data that has already been processed and is no longer needed. Think of it as emptying the recycling bin — your intelligence stays, the clutter goes.')}
+          {t('settings.dataHealth.maintenanceDesc')}
         </p>
 
         {/* What happens — always visible */}
         <div className="grid grid-cols-2 gap-2 mb-3">
           <div className="p-2 rounded bg-bg-tertiary">
             <p className="text-[10px] text-green-400 font-medium mb-1">
-              {t('settings.dataHealth.preserved', 'Preserved')}
+              {t('settings.dataHealth.preserved')}
             </p>
             <ul className="text-[10px] text-text-muted space-y-0.5">
-              <li>{t('settings.dataHealth.preserveCalibrations', 'Active calibrations')}</li>
-              <li>{t('settings.dataHealth.preserveRecent', 'Recent content')}</li>
-              <li>{t('settings.dataHealth.preserveDecisions', 'Open decisions')}</li>
-              <li>{t('settings.dataHealth.preserveProfile', 'Your profile & interests')}</li>
+              <li>{t('settings.dataHealth.preserveCalibrations')}</li>
+              <li>{t('settings.dataHealth.preserveRecent')}</li>
+              <li>{t('settings.dataHealth.preserveDecisions')}</li>
+              <li>{t('settings.dataHealth.preserveProfile')}</li>
             </ul>
           </div>
           <div className="p-2 rounded bg-bg-tertiary">
             <p className="text-[10px] text-text-secondary font-medium mb-1">
-              {t('settings.dataHealth.removed', 'Cleaned up')}
+              {t('settings.dataHealth.removed')}
             </p>
             <ul className="text-[10px] text-text-muted space-y-0.5">
-              <li>{t('settings.dataHealth.removeOld', 'Expired content')}</li>
-              <li>{t('settings.dataHealth.removeOrphaned', 'Orphaned records')}</li>
-              <li>{t('settings.dataHealth.removeSuperseded', 'Superseded data')}</li>
-              <li>{t('settings.dataHealth.removeFragments', 'Database fragments')}</li>
+              <li>{t('settings.dataHealth.removeOld')}</li>
+              <li>{t('settings.dataHealth.removeOrphaned')}</li>
+              <li>{t('settings.dataHealth.removeSuperseded')}</li>
+              <li>{t('settings.dataHealth.removeFragments')}</li>
             </ul>
           </div>
         </div>
 
         {/* When to use hint */}
         <p className="text-[10px] text-text-muted mb-3 italic">
-          {t('settings.dataHealth.whenToUse',
-            'Recommended monthly, or when the database size indicator above shows "Growing" or "Needs attention".')}
+          {t('settings.dataHealth.whenToUse')}
         </p>
 
         {/* Action area */}
@@ -282,7 +280,7 @@ export function DataHealthSection() {
               onClick={() => { void handleDeepClean(); }}
               className="w-full px-4 py-2 text-xs bg-bg-tertiary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
             >
-              {t('settings.dataHealth.runMaintenance', 'Run maintenance now')}
+              {t('settings.dataHealth.runMaintenance')}
             </button>
           )}
 
@@ -290,7 +288,7 @@ export function DataHealthSection() {
             <div className="flex items-center justify-center gap-2 py-2">
               <div className="w-3 h-3 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
               <span className="text-xs text-orange-400">
-                {t('settings.dataHealth.cleaning', 'Cleaning database...')}
+                {t('settings.dataHealth.cleaning')}
               </span>
             </div>
           )}
@@ -302,7 +300,7 @@ export function DataHealthSection() {
                 onClick={() => { setCleanState('idle'); setCleanResult(null); }}
                 className="mt-2 text-xs text-text-muted hover:text-white transition-colors"
               >
-                {t('settings.dataHealth.dismiss', 'Dismiss')}
+                {t('settings.dataHealth.dismiss')}
               </button>
             </div>
           )}

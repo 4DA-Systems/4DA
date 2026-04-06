@@ -6,12 +6,12 @@ import { useAppStore } from '../../store';
 function formatRelativeTime(iso: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return t('time.justNow', { defaultValue: 'just now' });
-  if (mins < 60) return t('time.minutesAgo', { defaultValue: '{{count}}m ago', count: mins });
+  if (mins < 1) return t('time.justNow');
+  if (mins < 60) return t('time.minutesAgo', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return t('time.hoursAgo', { defaultValue: '{{count}}h ago', count: hrs });
+  if (hrs < 24) return t('time.hoursAgo', { count: hrs });
   const days = Math.floor(hrs / 24);
-  return t('time.daysAgo', { defaultValue: '{{count}}d ago', count: days });
+  return t('time.daysAgo', { count: days });
 }
 
 export function OrgDashboard() {
@@ -56,10 +56,10 @@ export function OrgDashboard() {
     return (
       <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <h3 className="text-sm font-medium text-white mb-2">
-          {t('enterprise.org.title', 'Organization')}
+          {t('enterprise.org.title')}
         </h3>
         <p className="text-xs text-text-muted">
-          {t('enterprise.org.notConfigured', 'No organization configured. Organization management is available on the Enterprise tier.')}
+          {t('enterprise.org.notConfigured')}
         </p>
       </div>
     );
@@ -74,7 +74,7 @@ export function OrgDashboard() {
             {organization.name}
           </h3>
           <span className="text-[10px] px-1.5 py-0.5 bg-success/15 text-success rounded font-medium">
-            {t('enterprise.org.enterprise', 'Enterprise')}
+            {t('enterprise.org.enterprise')}
           </span>
         </div>
         <button
@@ -82,7 +82,7 @@ export function OrgDashboard() {
           className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
           aria-label="Refresh organization data"
         >
-          {t('action.refresh', 'Refresh')}
+          {t('action.refresh')}
         </button>
       </div>
 
@@ -90,10 +90,10 @@ export function OrgDashboard() {
       {orgAnalytics && (
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: t('enterprise.org.teams', 'Teams'), value: orgAnalytics.total_seats, color: 'text-success' },
-            { label: t('enterprise.org.activeSeats', 'Active Seats'), value: orgAnalytics.active_seats, color: 'text-white' },
-            { label: t('enterprise.org.signalsMonth', 'Signals/Mo'), value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
-            { label: t('enterprise.org.decisionsMonth', 'Decisions/Mo'), value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
+            { label: t('enterprise.org.teams'), value: orgAnalytics.total_seats, color: 'text-success' },
+            { label: t('enterprise.org.activeSeats'), value: orgAnalytics.active_seats, color: 'text-white' },
+            { label: t('enterprise.org.signalsMonth'), value: orgAnalytics.signals_detected, color: 'text-accent-gold' },
+            { label: t('enterprise.org.decisionsMonth'), value: orgAnalytics.decisions_tracked, color: 'text-[#818CF8]' },
           ].map(stat => (
             <div key={stat.label} className="bg-bg-primary rounded-lg p-3 border border-border/50">
               <p className="text-[10px] text-text-muted">{stat.label}</p>
@@ -106,10 +106,10 @@ export function OrgDashboard() {
       {/* Team List */}
       <div>
         <h4 className="text-xs font-medium text-text-secondary mb-2">
-          {t('enterprise.org.teamList', 'Teams')} ({orgTeams.length})
+          {t('enterprise.org.teamList')} ({orgTeams.length})
         </h4>
         {orgTeams.length === 0 ? (
-          <p className="text-xs text-text-muted">{t('enterprise.org.noTeams', 'No teams in this organization.')}</p>
+          <p className="text-xs text-text-muted">{t('enterprise.org.noTeams')}</p>
         ) : (
           <div className="space-y-1.5">
             {orgTeams.map(team => (
@@ -125,7 +125,7 @@ export function OrgDashboard() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-[10px] text-text-muted">
-                    {team.member_count} {t('enterprise.org.members', 'members')}
+                    {team.member_count} {t('enterprise.org.members')}
                   </span>
                   {team.last_active && (
                     <span className="text-[10px] text-text-muted" title={team.last_active}>
@@ -143,7 +143,7 @@ export function OrgDashboard() {
       {crossTeamSignals.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-secondary mb-2">
-            {t('enterprise.org.crossTeamSignals', 'Cross-Team Signal Correlations')}
+            {t('enterprise.org.crossTeamSignals')}
           </h4>
           <div className="space-y-1.5">
             {crossTeamSignals.slice(0, 5).map(sig => (
@@ -162,7 +162,7 @@ export function OrgDashboard() {
                   </span>
                 </div>
                 <p className="text-[10px] text-text-muted">
-                  {t('enterprise.org.affectsTeams', 'Affects')} {sig.teams_affected.length} {t('enterprise.org.teams', 'teams')}
+                  {t('enterprise.org.affectsTeams')} {sig.teams_affected.length} {t('enterprise.org.teams')}
                 </p>
                 <p className="text-[10px] text-text-secondary mt-1">{getTranslated(`sig-${sig.correlation_id}`, sig.recommendation ?? '')}</p>
               </div>
@@ -175,7 +175,7 @@ export function OrgDashboard() {
       {orgAnalytics?.team_activity && orgAnalytics.team_activity.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-secondary mb-2">
-            {t('enterprise.org.activity', 'Team Activity')}
+            {t('enterprise.org.activity')}
           </h4>
           <div className="space-y-1">
             {orgAnalytics.team_activity.map(activity => (
@@ -184,9 +184,9 @@ export function OrgDashboard() {
                 className="flex items-center gap-3 px-3 py-1.5 text-[10px]"
               >
                 <span className="text-text-muted font-mono w-20 truncate">{activity.team_id.slice(0, 8)}</span>
-                <span className="text-text-secondary">{activity.active_members} {t('enterprise.org.members', 'members')}</span>
-                <span className="text-accent-gold">{activity.signals_this_period} {t('enterprise.org.signalsLabel', 'signals')}</span>
-                <span className="text-[#818CF8]">{activity.decisions_this_period} {t('enterprise.org.decisionsLabel', 'decisions')}</span>
+                <span className="text-text-secondary">{activity.active_members} {t('enterprise.org.members')}</span>
+                <span className="text-accent-gold">{activity.signals_this_period} {t('enterprise.org.signalsLabel')}</span>
+                <span className="text-[#818CF8]">{activity.decisions_this_period} {t('enterprise.org.decisionsLabel')}</span>
               </div>
             ))}
           </div>

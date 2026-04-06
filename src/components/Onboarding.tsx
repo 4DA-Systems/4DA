@@ -34,10 +34,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   const stepLabels: Record<Step, string> = {
     welcome: t('onboarding.stepLabel.welcome'),
-    taste: t('onboarding.stepLabel.taste', 'Taste Test'),
-    choice: t('onboarding.stepLabel.taste', 'Taste Test'),
+    taste: t('onboarding.stepLabel.taste'),
+    choice: t('onboarding.stepLabel.taste'),
     setup: t('onboarding.stepLabel.setup'),
-    calibrate: t('onboarding.stepLabel.calibrate', 'Calibrate'),
+    calibrate: t('onboarding.stepLabel.calibrate'),
   };
   const [step, setStep] = useState<Step>(getPersistedStep);
   const [isAnimating, setIsAnimating] = useState(true);
@@ -156,7 +156,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         <div className="absolute top-8 flex flex-col items-center gap-2">
           {/* Step X of Y text */}
           <p className="text-xs text-text-muted">
-            {t('onboarding.stepProgress', { current: displayIndex + 1, total: displaySteps.length, defaultValue: 'Step {{current}} of {{total}}' })}
+            {t('onboarding.stepProgress', { current: displayIndex + 1, total: displaySteps.length })}
           </p>
 
           {/* Step circles — only display steps, not the choice gate */}

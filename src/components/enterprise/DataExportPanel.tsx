@@ -11,13 +11,13 @@ interface ExportManifest {
 }
 
 const EXPORT_SECTION_KEYS = [
-  { key: 'profile', i18nKey: 'enterprise.export.section.profile', fallback: 'User Profile & Tech Stack', icon: '\u{1F464}' },
-  { key: 'decisions', i18nKey: 'enterprise.export.section.decisions', fallback: 'Decision Journal', icon: '\u{1F4DD}' },
-  { key: 'signals', i18nKey: 'enterprise.export.section.signals', fallback: 'Signal Chains', icon: '\u{1F4E1}' },
-  { key: 'sources', i18nKey: 'enterprise.export.section.sources', fallback: 'Source Configuration', icon: '\u{1F517}' },
-  { key: 'briefings', i18nKey: 'enterprise.export.section.briefings', fallback: 'Briefing History', icon: '\u{1F4C4}' },
-  { key: 'feedback', i18nKey: 'enterprise.export.section.feedback', fallback: 'Feedback & Engagement', icon: '\u{1F44D}' },
-  { key: 'learned', i18nKey: 'enterprise.export.section.learned', fallback: 'Learned Behavior', icon: '\u{1F9E0}' },
+  { key: 'profile', i18nKey: 'enterprise.export.section.profile', icon: '\u{1F464}' },
+  { key: 'decisions', i18nKey: 'enterprise.export.section.decisions', icon: '\u{1F4DD}' },
+  { key: 'signals', i18nKey: 'enterprise.export.section.signals', icon: '\u{1F4E1}' },
+  { key: 'sources', i18nKey: 'enterprise.export.section.sources', icon: '\u{1F517}' },
+  { key: 'briefings', i18nKey: 'enterprise.export.section.briefings', icon: '\u{1F4C4}' },
+  { key: 'feedback', i18nKey: 'enterprise.export.section.feedback', icon: '\u{1F44D}' },
+  { key: 'learned', i18nKey: 'enterprise.export.section.learned', icon: '\u{1F9E0}' },
 ];
 
 export function DataExportPanel() {
@@ -98,10 +98,10 @@ export function DataExportPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium text-white">
-            {t('enterprise.export.title', 'Data Export & Portability')}
+            {t('enterprise.export.title')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
-            {t('enterprise.export.description', 'Export your data for backup, compliance, or migration. No API keys are ever included.')}
+            {t('enterprise.export.description')}
           </p>
         </div>
       </div>
@@ -118,11 +118,11 @@ export function DataExportPanel() {
       {/* Section Selection */}
       <div>
         <h4 className="text-xs font-medium text-text-secondary mb-2">
-          {t('enterprise.export.sections', 'Export Sections')}
+          {t('enterprise.export.sections')}
         </h4>
         <div className="grid grid-cols-2 gap-1.5">
           {EXPORT_SECTION_KEYS.map(section => {
-            const label = t(section.i18nKey, section.fallback);
+            const label = t(section.i18nKey);
             return (
               <div
                 key={section.key}
@@ -141,7 +141,7 @@ export function DataExportPanel() {
                   onClick={() => handleExportSection(section.key)}
                   disabled={singleExporting === section.key}
                   className="text-[10px] text-text-muted hover:text-success transition-colors ms-2"
-                  title={t('enterprise.export.exportOnly', { defaultValue: 'Export {{label}} only', label })}
+                  title={t('enterprise.export.exportOnly', { label })}
                 >
                   {singleExporting === section.key ? '...' : '\u{2B07}'}
                 </button>
@@ -158,8 +158,8 @@ export function DataExportPanel() {
         className="w-full px-4 py-2.5 text-xs bg-success/15 text-success rounded-lg hover:bg-success/25 transition-colors disabled:opacity-50 font-medium"
       >
         {exporting
-          ? t('enterprise.export.exporting', 'Exporting...')
-          : t('enterprise.export.exportAll', `Export All Selected (${selectedSections.size} sections)`)
+          ? t('enterprise.export.exporting')
+          : t('enterprise.export.exportAll', { selectedSections: selectedSections.size })
         }
       </button>
 
@@ -167,7 +167,7 @@ export function DataExportPanel() {
       {exports.length > 0 && (
         <div>
           <h4 className="text-xs font-medium text-text-secondary mb-2">
-            {t('enterprise.export.previous', 'Previous Exports')}
+            {t('enterprise.export.previous')}
           </h4>
           <div className="space-y-1.5">
             {exports.map(exp => (
@@ -200,7 +200,7 @@ export function DataExportPanel() {
       {/* Privacy Note */}
       <div className="px-3 py-2 rounded-lg bg-bg-primary border border-border/50">
         <p className="text-[9px] text-text-muted leading-relaxed">
-          {t('enterprise.export.privacy', 'Exports never include API keys, passwords, tokens, or secrets. Source configurations are included without authentication credentials. All exports are stored locally in your data directory.')}
+          {t('enterprise.export.privacy')}
         </p>
       </div>
     </div>

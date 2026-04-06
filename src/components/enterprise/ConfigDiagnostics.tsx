@@ -34,97 +34,97 @@ export function ConfigDiagnostics() {
     };
 
     // 1. License check
-    setChecks([...results, { name: t('enterprise.diagnostics.check.license', 'License'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.license'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     try {
       const isPaid = tier !== 'free';
-      addCheck(t('enterprise.diagnostics.check.license', 'License'), isPaid ? 'pass' : 'warn',
-        isPaid ? t('enterprise.diagnostics.licenseActive', { defaultValue: 'Active: {{tier}} tier', tier }) : t('enterprise.diagnostics.licenseFree', 'Free tier — team features require Signal+ tier')
+      addCheck(t('enterprise.diagnostics.check.license'), isPaid ? 'pass' : 'warn',
+        isPaid ? t('enterprise.diagnostics.licenseActive', { tier }) : t('enterprise.diagnostics.licenseFree')
       );
     } catch {
-      addCheck(t('enterprise.diagnostics.check.license', 'License'), 'fail', t('enterprise.diagnostics.licenseFail', 'Could not verify license status'));
+      addCheck(t('enterprise.diagnostics.check.license'), 'fail', t('enterprise.diagnostics.licenseFail'));
     }
 
     // 2. AI Provider check
-    setChecks([...results, { name: t('enterprise.diagnostics.check.aiProvider', 'AI Provider'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.aiProvider'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     try {
       await cmd('test_llm_connection');
-      addCheck(t('enterprise.diagnostics.check.aiProvider', 'AI Provider'), 'pass', t('enterprise.diagnostics.llmOk', 'LLM connection successful'));
+      addCheck(t('enterprise.diagnostics.check.aiProvider'), 'pass', t('enterprise.diagnostics.llmOk'));
     } catch {
-      addCheck(t('enterprise.diagnostics.check.aiProvider', 'AI Provider'), 'warn', t('enterprise.diagnostics.llmWarn', 'LLM not configured or unreachable — offline mode active'));
+      addCheck(t('enterprise.diagnostics.check.aiProvider'), 'warn', t('enterprise.diagnostics.llmWarn'));
     }
 
     // 3. Embedding check
-    setChecks([...results, { name: t('enterprise.diagnostics.check.embeddings', 'Embeddings'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.embeddings'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     try {
       const ollamaStatus = await cmd('check_ollama_status', { baseUrl: null }).catch(() => null);
       if (ollamaStatus && ollamaStatus.operational) {
-        addCheck(t('enterprise.diagnostics.check.embeddings', 'Embeddings'), 'pass', t('enterprise.diagnostics.ollamaOk', 'Ollama running — local embeddings active'));
+        addCheck(t('enterprise.diagnostics.check.embeddings'), 'pass', t('enterprise.diagnostics.ollamaOk'));
       } else {
-        addCheck(t('enterprise.diagnostics.check.embeddings', 'Embeddings'), 'warn', t('enterprise.diagnostics.ollamaWarn', 'Ollama not detected — using zero-vector fallback'));
+        addCheck(t('enterprise.diagnostics.check.embeddings'), 'warn', t('enterprise.diagnostics.ollamaWarn'));
       }
     } catch {
-      addCheck(t('enterprise.diagnostics.check.embeddings', 'Embeddings'), 'warn', t('enterprise.diagnostics.embeddingFail', 'Embedding check failed'));
+      addCheck(t('enterprise.diagnostics.check.embeddings'), 'warn', t('enterprise.diagnostics.embeddingFail'));
     }
 
     // 4. Database check (use source health as proxy for DB connectivity)
-    setChecks([...results, { name: t('enterprise.diagnostics.check.database', 'Database'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.database'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     try {
       // If we can query sources, the DB is working
       await cmd('get_source_health_status');
-      addCheck(t('enterprise.diagnostics.check.database', 'Database'), 'pass', t('enterprise.diagnostics.dbOk', 'SQLite connection OK'));
+      addCheck(t('enterprise.diagnostics.check.database'), 'pass', t('enterprise.diagnostics.dbOk'));
     } catch {
-      addCheck(t('enterprise.diagnostics.check.database', 'Database'), 'fail', t('enterprise.diagnostics.dbFail', 'Database connection failed'));
+      addCheck(t('enterprise.diagnostics.check.database'), 'fail', t('enterprise.diagnostics.dbFail'));
     }
 
     // 5. Source health check
-    setChecks([...results, { name: t('enterprise.diagnostics.check.sources', 'Sources'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.sources'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     try {
       const sources = await cmd('get_source_health_status');
       const arr = sources;
       const healthy = arr.filter(s => s.status === 'healthy').length;
       const total = arr.length;
       if (total === 0) {
-        addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'warn', t('enterprise.diagnostics.noSources', 'No sources configured'));
+        addCheck(t('enterprise.diagnostics.check.sources'), 'warn', t('enterprise.diagnostics.noSources'));
       } else if (healthy === total) {
-        addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'pass', t('enterprise.diagnostics.allHealthy', { defaultValue: 'All {{total}} sources healthy', total }));
+        addCheck(t('enterprise.diagnostics.check.sources'), 'pass', t('enterprise.diagnostics.allHealthy', { total }));
       } else {
-        addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'warn', t('enterprise.diagnostics.someHealthy', { defaultValue: '{{healthy}}/{{total}} sources healthy', healthy, total }));
+        addCheck(t('enterprise.diagnostics.check.sources'), 'warn', t('enterprise.diagnostics.someHealthy', { healthy, total }));
       }
     } catch {
-      addCheck(t('enterprise.diagnostics.check.sources', 'Sources'), 'warn', t('enterprise.diagnostics.sourceCheckFail', 'Could not check source health'));
+      addCheck(t('enterprise.diagnostics.check.sources'), 'warn', t('enterprise.diagnostics.sourceCheckFail'));
     }
 
     // 6. Team relay check
-    setChecks([...results, { name: t('enterprise.diagnostics.check.relay', 'Team Relay'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+    setChecks([...results, { name: t('enterprise.diagnostics.check.relay'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     if (teamStatus?.enabled) {
       if (teamStatus.connected) {
-        addCheck(t('enterprise.diagnostics.check.relay', 'Team Relay'), 'pass',
-          t('enterprise.diagnostics.relayConnected', { defaultValue: 'Connected — {{members}} members, {{pending}} pending', members: teamStatus.member_count, pending: teamStatus.pending_outbound })
+        addCheck(t('enterprise.diagnostics.check.relay'), 'pass',
+          t('enterprise.diagnostics.relayConnected', { members: teamStatus.member_count, pending: teamStatus.pending_outbound })
         );
       } else {
-        addCheck(t('enterprise.diagnostics.check.relay', 'Team Relay'), 'warn', t('enterprise.diagnostics.relayDisconnected', 'Team configured but relay disconnected'));
+        addCheck(t('enterprise.diagnostics.check.relay'), 'warn', t('enterprise.diagnostics.relayDisconnected'));
       }
     } else {
-      addCheck(t('enterprise.diagnostics.check.relay', 'Team Relay'), 'pass', t('enterprise.diagnostics.relaySingleUser', 'Not configured (single-user mode)'));
+      addCheck(t('enterprise.diagnostics.check.relay'), 'pass', t('enterprise.diagnostics.relaySingleUser'));
     }
 
     // 7. Webhook check (enterprise only)
     if (tier === 'enterprise') {
-      setChecks([...results, { name: t('enterprise.diagnostics.check.webhooks', 'Webhooks'), status: 'running', message: t('enterprise.diagnostics.checking', 'Checking...') }]);
+      setChecks([...results, { name: t('enterprise.diagnostics.check.webhooks'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
       try {
         const webhooks = await cmd('list_webhooks_cmd');
         const wh = webhooks;
         const active = wh.filter(w => w.active).length;
         const failed = wh.filter(w => w.failure_count >= 5).length;
         if (wh.length === 0) {
-          addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'pass', t('enterprise.diagnostics.noWebhooks', 'No webhooks configured'));
+          addCheck(t('enterprise.diagnostics.check.webhooks'), 'pass', t('enterprise.diagnostics.noWebhooks'));
         } else if (failed > 0) {
-          addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'warn', t('enterprise.diagnostics.webhooksDegraded', { defaultValue: '{{active}} active, {{failed}} with circuit breaker open', active, failed }));
+          addCheck(t('enterprise.diagnostics.check.webhooks'), 'warn', t('enterprise.diagnostics.webhooksDegraded', { active, failed }));
         } else {
-          addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'pass', t('enterprise.diagnostics.webhooksOk', { defaultValue: '{{active}} active webhooks', active }));
+          addCheck(t('enterprise.diagnostics.check.webhooks'), 'pass', t('enterprise.diagnostics.webhooksOk', { active }));
         }
       } catch {
-        addCheck(t('enterprise.diagnostics.check.webhooks', 'Webhooks'), 'warn', t('enterprise.diagnostics.webhookCheckFail', 'Could not check webhook status'));
+        addCheck(t('enterprise.diagnostics.check.webhooks'), 'warn', t('enterprise.diagnostics.webhookCheckFail'));
       }
     }
 
@@ -141,10 +141,10 @@ export function ConfigDiagnostics() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium text-white">
-            {t('enterprise.diagnostics.title', 'Configuration Diagnostics')}
+            {t('enterprise.diagnostics.title')}
           </h3>
           <p className="text-[10px] text-text-muted mt-0.5">
-            {t('enterprise.diagnostics.description', 'Validate your setup and troubleshoot issues without contacting support.')}
+            {t('enterprise.diagnostics.description')}
           </p>
         </div>
         <button
@@ -152,7 +152,7 @@ export function ConfigDiagnostics() {
           disabled={running}
           className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
         >
-          {running ? t('enterprise.diagnostics.running', 'Running...') : t('enterprise.diagnostics.run', 'Run Diagnostics')}
+          {running ? t('enterprise.diagnostics.running') : t('enterprise.diagnostics.run')}
         </button>
       </div>
 
@@ -160,13 +160,13 @@ export function ConfigDiagnostics() {
       {checks.length > 0 && !running && (
         <div className="flex items-center gap-3">
           {passCount > 0 && (
-            <span className="text-[10px] text-success">{passCount} {t('enterprise.diagnostics.passed', 'passed')}</span>
+            <span className="text-[10px] text-success">{passCount} {t('enterprise.diagnostics.passed')}</span>
           )}
           {warnCount > 0 && (
-            <span className="text-[10px] text-[var(--color-accent-action)]">{warnCount} {t('enterprise.diagnostics.warnings', 'warnings')}</span>
+            <span className="text-[10px] text-[var(--color-accent-action)]">{warnCount} {t('enterprise.diagnostics.warnings')}</span>
           )}
           {failCount > 0 && (
-            <span className="text-[10px] text-error">{failCount} {t('enterprise.diagnostics.failed', 'failed')}</span>
+            <span className="text-[10px] text-error">{failCount} {t('enterprise.diagnostics.failed')}</span>
           )}
         </div>
       )}
@@ -196,7 +196,7 @@ export function ConfigDiagnostics() {
       {checks.length === 0 && (
         <div className="text-center py-6">
           <p className="text-xs text-text-muted">
-            {t('enterprise.diagnostics.empty', 'Click "Run Diagnostics" to validate your configuration.')}
+            {t('enterprise.diagnostics.empty')}
           </p>
         </div>
       )}
@@ -204,7 +204,7 @@ export function ConfigDiagnostics() {
       {/* Troubleshooting Tips */}
       <div>
         <h4 className="text-xs font-medium text-text-secondary mb-2">
-          {t('enterprise.diagnostics.tips', 'Quick Fixes')}
+          {t('enterprise.diagnostics.tips')}
         </h4>
         <div className="space-y-1.5 text-[10px] text-text-muted">
           <div className="flex items-start gap-2">
