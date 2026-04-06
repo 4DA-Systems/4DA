@@ -15,7 +15,6 @@ const Momentum = lazy(() => import('./Momentum').then(m => ({ default: m.Momentu
 const SovereignDeveloperProfile = lazy(() => import('./SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
 const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
-const ChannelsView = lazy(() => import('./channels/ChannelsView').then(m => ({ default: m.ChannelsView })));
 const CalibrationView = lazy(() => import('./CalibrationView').then(m => ({ default: m.CalibrationView })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
@@ -31,7 +30,6 @@ interface ViewRouterProps {
 const VIEW_LABEL_KEYS: Record<string, string> = {
   briefing: 'nav.briefing.label',
   results: 'nav.results',
-  channels: 'nav.channels',
   profile: 'nav.profile',
   insights: 'nav.insights',
   saved: 'nav.saved',
@@ -70,10 +68,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       {activeView === 'briefing' ? (
         <ViewErrorBoundary viewName="Briefing">
           <BriefingView />
-        </ViewErrorBoundary>
-      ) : activeView === 'channels' ? (
-        <ViewErrorBoundary viewName="Channels">
-          <ChannelsView />
         </ViewErrorBoundary>
       ) : activeView === 'profile' ? (
         <ViewErrorBoundary viewName="Profile">

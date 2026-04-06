@@ -113,7 +113,7 @@ export type EmbeddingStatus = 'active' | 'degraded' | 'unavailable';
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate' | 'console';
+  activeView: 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console';
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
@@ -124,7 +124,7 @@ export interface UiSlice {
   firstAnalysisDate: string | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'channels' | 'profile' | 'calibrate' | 'console') => void;
+  setActiveView: (view: 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console') => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;

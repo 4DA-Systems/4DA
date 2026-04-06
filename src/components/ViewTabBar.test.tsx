@@ -39,9 +39,9 @@ describe('ViewTabBar', () => {
     setMockState({});
     render(<ViewTabBar />);
     expect(screen.getByRole('tablist')).toBeInTheDocument();
-    // Tabs: briefing, chapters, results, playbook, channels, insights, saved, profile, console, toolkit, calibrate
+    // Tabs: briefing, chapters, results, playbook, insights, saved, profile, console, toolkit, calibrate
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(11);
+    expect(tabs.length).toBe(10);
   });
 
   it('marks the active view tab as selected', () => {
@@ -55,9 +55,9 @@ describe('ViewTabBar', () => {
     setMockState({});
     render(<ViewTabBar />);
 
-    const channelsTab = screen.getByText('nav.channels');
-    fireEvent.click(channelsTab);
-    expect(setActiveViewMock).toHaveBeenCalledWith('channels');
+    const insightsTab = screen.getByText('nav.insights');
+    fireEvent.click(insightsTab);
+    expect(setActiveViewMock).toHaveBeenCalledWith('insights');
   });
 
   it('shows only core tabs when viewTier is core and showAllViews is false', () => {
@@ -72,13 +72,13 @@ describe('ViewTabBar', () => {
     setMockState({ viewTier: 'explorer', showAllViews: false });
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    // explorer tier: briefing, chapters, results, playbook, channels, insights
-    expect(tabs.length).toBe(6);
+    // explorer tier: briefing, chapters, results, playbook, insights
+    expect(tabs.length).toBe(5);
   });
 
   it('shows badge indicator when results have items', () => {
     setMockState({
-      activeView: 'channels', // badge only shows when NOT on that view
+      activeView: 'saved', // badge only shows when NOT on that view
       appState: { relevanceResults: [{ id: 1 }] },
     });
     render(<ViewTabBar />);

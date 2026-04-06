@@ -5,14 +5,13 @@ import { useAppStore } from '../store';
 import { trackEvent } from '../hooks/use-telemetry';
 import type { ViewTier } from '../store/types';
 
-type ViewId = 'briefing' | 'chapters' | 'channels' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
+type ViewId = 'briefing' | 'chapters' | 'results' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
 
 const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'chapters', labelKey: 'nav.chapters', subtitleKey: 'nav.chapters.subtitle', activeColor: 'bg-indigo-500/20 text-indigo-400' },
   { id: 'results', labelKey: 'nav.results', subtitleKey: 'nav.results.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'playbook', labelKey: 'nav.playbook', subtitleKey: 'nav.playbook.subtitle', activeColor: 'bg-yellow-500/20 text-yellow-400' },
-  { id: 'channels', labelKey: 'nav.channels', subtitleKey: 'nav.channels.subtitle', activeColor: 'bg-cyan-500/20 text-cyan-400' },
   { id: 'insights', labelKey: 'nav.insights', subtitleKey: 'nav.insights.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
   { id: 'saved', labelKey: 'nav.saved', subtitleKey: 'nav.saved.subtitle', activeColor: 'bg-green-500/20 text-green-400' },
   { id: 'profile', labelKey: 'nav.profile', subtitleKey: 'nav.profile.subtitle', activeColor: 'bg-white/10 text-white' },
@@ -23,14 +22,13 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
 
 const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
   core: ['briefing', 'chapters', 'results', 'playbook'],
-  explorer: ['briefing', 'chapters', 'results', 'playbook', 'channels', 'insights'],
-  invested: ['briefing', 'chapters', 'results', 'playbook', 'channels', 'insights', 'saved', 'profile', 'console'],
-  power: ['briefing', 'chapters', 'results', 'playbook', 'channels', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+  explorer: ['briefing', 'chapters', 'results', 'playbook', 'insights'],
+  invested: ['briefing', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
+  power: ['briefing', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const BADGE_COLORS: Partial<Record<ViewId, string>> = {
   briefing: 'bg-orange-400',
-  channels: 'bg-cyan-400',
   results: 'bg-orange-400',
   profile: 'bg-amber-400',
   insights: 'bg-amber-400',
@@ -39,13 +37,12 @@ const BADGE_COLORS: Partial<Record<ViewId, string>> = {
 
 export const ViewTabBar = memo(function ViewTabBar() {
   const { t } = useTranslation();
-  const { activeView, resultsCount, windows, profilePct, channels, viewTier, showAllViews, savedCount, wisdomCount } = useAppStore(
+  const { activeView, resultsCount, windows, profilePct, viewTier, showAllViews, savedCount, wisdomCount } = useAppStore(
     useShallow((s) => ({
       activeView: s.activeView,
       resultsCount: s.appState.relevanceResults.length,
       windows: s.decisionWindows,
       profilePct: s.unifiedProfile?.completeness.overall_percentage,
-      channels: s.channels ?? [],
       viewTier: s.viewTier,
       showAllViews: s.showAllViews,
       savedCount: Object.values(s.feedbackGiven).filter(f => f === 'save').length,
@@ -59,12 +56,11 @@ export const ViewTabBar = memo(function ViewTabBar() {
     if (resultsCount > 0) b.results = true;
     if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
     if (profilePct != null && profilePct < 50) b.profile = true;
-    if (channels.some(ch => ch.freshness === 'fresh')) b.channels = true;
     // New notification badges with counts
     if (wisdomCount > 0) b.insights = wisdomCount;
     if (savedCount > 0) b.saved = savedCount;
     return b;
-  }, [resultsCount, windows, profilePct, channels, wisdomCount, savedCount]);
+  }, [resultsCount, windows, profilePct, wisdomCount, savedCount]);
 
   const visibleTabs = useMemo(() => {
     if (showAllViews) return TABS;
