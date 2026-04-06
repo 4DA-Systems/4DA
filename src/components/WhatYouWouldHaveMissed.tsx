@@ -126,11 +126,11 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-accent-gold" />
             <span className="text-xs font-medium text-accent-gold">
-              {t('missed.title', { defaultValue: 'What you would have missed' })}
+              {t('missed.title')}
             </span>
           </div>
           <span className="text-[10px] text-text-muted">
-            {t('missed.scanned', { count: totalScanned, defaultValue: '{{count}} items scanned' })}
+            {t('missed.scanned', { count: totalScanned })}
           </span>
         </div>
         <div className="px-4 py-5 space-y-3">
@@ -138,13 +138,10 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
             {t('missed.freeTeaser', {
               rejected,
               relevant: relevant.length,
-              defaultValue: '4DA filtered {{rejected}} items to surface {{relevant}} signals that matter to you.',
             })}
           </p>
           <p className="text-xs text-text-muted text-center">
-            {t('missed.freeSubtext', {
-              defaultValue: 'Unlock full analytics — see exactly what was buried and why it matters.',
-            })}
+            {t('missed.freeSubtext')}
           </p>
           <SignalUpgradeCTA compact />
         </div>
@@ -159,11 +156,11 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-accent-gold" />
           <span className="text-xs font-medium text-accent-gold">
-            {t('missed.title', { defaultValue: 'What you would have missed' })}
+            {t('missed.title')}
           </span>
         </div>
         <span className="text-[10px] text-text-muted">
-          {t('missed.scanned', { count: totalScanned, defaultValue: '{{count}} items scanned' })}
+          {t('missed.scanned', { count: totalScanned })}
         </span>
       </div>
 
@@ -174,21 +171,21 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
             <div>
               <div className="text-2xl font-bold font-mono text-white">{rejected}</div>
               <div className="text-[10px] text-text-muted">
-                {t('missed.noiseRejected', { defaultValue: 'noise rejected' })}
+                {t('missed.noiseRejected')}
               </div>
             </div>
             <div className="w-px h-8 bg-border/50" />
             <div>
               <div className="text-2xl font-bold font-mono text-success">{relevant.length}</div>
               <div className="text-[10px] text-text-muted">
-                {t('missed.signalSurfaced', { defaultValue: 'signal surfaced' })}
+                {t('missed.signalSurfaced')}
               </div>
             </div>
             <div className="w-px h-8 bg-border/50" />
             <div>
               <div className="text-2xl font-bold font-mono text-text-secondary">{timeSaved}</div>
               <div className="text-[10px] text-text-muted">
-                {t('missed.timeSaved', { defaultValue: 'time saved' })}
+                {t('missed.timeSaved')}
               </div>
             </div>
           </div>
@@ -197,7 +194,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
           <div className="ms-auto px-2.5 py-1 rounded-full bg-accent-gold/10 border border-accent-gold/20">
             <span className="text-xs font-mono font-medium text-accent-gold">{rejectionRate}%</span>
             <span className="text-[10px] text-text-muted ms-1">
-              {t('missed.filtered', { defaultValue: 'filtered' })}
+              {t('missed.filtered')}
             </span>
           </div>
         </div>
@@ -271,7 +268,6 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
         {/* The persuasion line */}
         <p className="text-[11px] text-text-muted text-center">
           {t('missed.persuasion', {
-            defaultValue: 'Without 4DA, this would have been buried in {{count}} other items.',
             count: rejected,
           })}
         </p>

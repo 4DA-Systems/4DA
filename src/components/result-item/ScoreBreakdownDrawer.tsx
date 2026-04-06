@@ -77,7 +77,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             {Math.round(finalScore * 100)}%
           </span>
           <span className="text-[10px] text-text-muted uppercase tracking-wider">
-            {t('scoreDrawer.title', 'Score Breakdown')}
+            {t('scoreDrawer.title')}
           </span>
           {feedbackCount > 0 && (
             <span className="text-[10px] text-green-400">
@@ -99,7 +99,6 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         <div className="px-4 py-5 space-y-3 text-center">
           <p className="text-sm text-text-secondary">
             {t('scoreDrawer.freeTeaser', {
-              defaultValue: 'Score Autopsy reveals why this item scored {{score}}% — which signals confirmed, what boosted or reduced the score, and how your learned preferences shaped the result.',
               score: Math.round(finalScore * 100),
             })}
           </p>
@@ -111,7 +110,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         {/* Confirmation Gate with Signal Strengths */}
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[10px] text-text-muted uppercase tracking-wider">
-            {t('scoreDrawer.signals', 'Signals')}
+            {t('scoreDrawer.signals')}
           </span>
           {(['context', 'interest', 'ace', 'learned', 'dependency'] as const).map(axis => {
             const confirmed = confirmedSignals.includes(axis);
@@ -155,7 +154,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         {/* Boost factors */}
         {boosts.length > 0 && (
           <FactorGroup
-            label={t('scoreDrawer.whyMatched', 'Why it matched')}
+            label={t('scoreDrawer.whyMatched')}
             factors={boosts}
             comparisons={compareFactors}
             itemId={itemId}
@@ -166,7 +165,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         {/* Penalty factors */}
         {penalties.length > 0 && (
           <FactorGroup
-            label={t('scoreDrawer.whatReduced', 'What reduced it')}
+            label={t('scoreDrawer.whatReduced')}
             factors={penalties}
             comparisons={compareFactors}
             itemId={itemId}
@@ -177,7 +176,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         {/* Neutral factors */}
         {neutrals.length > 0 && (
           <FactorGroup
-            label={t('scoreDrawer.neutral', 'Neutral')}
+            label={t('scoreDrawer.neutral')}
             factors={neutrals}
             comparisons={compareFactors}
             itemId={itemId}
@@ -191,7 +190,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             <div className="flex items-center justify-between">
               <div className="min-w-0">
                 <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
-                  {t('scoreDrawer.comparing', 'Comparing with')}
+                  {t('scoreDrawer.comparing')}
                 </p>
                 <p className="text-xs text-text-secondary truncate">{compareTitle}</p>
                 <p className="text-sm font-mono text-white mt-1">
@@ -214,14 +213,14 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
           ) : comparePool && comparePool.length > 1 ? (
             <div>
               <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
-                {t('scoreDrawer.compareWith', 'Compare with')}
+                {t('scoreDrawer.compareWith')}
               </p>
               <select
                 value=""
                 onChange={(e) => setSelectedCompareId(Number(e.target.value))}
                 className="w-full bg-bg-tertiary text-xs text-text-secondary rounded border border-border px-2 py-1.5 focus:border-white/30 focus:outline-none"
               >
-                <option value="" disabled>{t('scoreDrawer.selectItem', 'Select an item...')}</option>
+                <option value="" disabled>{t('scoreDrawer.selectItem')}</option>
                 {comparePool
                   .filter(i => i.id !== itemId && i.score_breakdown)
                   .slice(0, 20)
