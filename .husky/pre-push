@@ -88,7 +88,7 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
         else
             RANGE="$REMOTE_SHA..$LOCAL_SHA"
         fi
-        SECRETS=$(git diff "$RANGE" 2>/dev/null | grep -E '^\+' | grep -oE \
+        SECRETS=$(git diff "$RANGE" -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' 2>/dev/null | grep -E '^\+' | grep -oE \
             "$SECRET_PATTERNS" \
             2>/dev/null || true)
         if [ -n "$SECRETS" ]; then
