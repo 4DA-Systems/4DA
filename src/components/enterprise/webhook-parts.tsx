@@ -33,15 +33,15 @@ export function relativeTime(iso: string | null): string {
 
 function statusConfig(webhook: Webhook, t: (key: string, opts?: Record<string, unknown>) => string): { dot: string; label: string; color: string } {
   if (!webhook.active && webhook.failure_count >= CIRCUIT_BREAKER_THRESHOLD) {
-    return { dot: 'bg-red-500', label: t('enterprise.webhooks.statusTripped', { defaultValue: 'Circuit Breaker Tripped' }), color: 'text-red-400' };
+    return { dot: 'bg-red-500', label: t('enterprise.webhooks.statusTripped'), color: 'text-red-400' };
   }
   if (!webhook.active) {
-    return { dot: 'bg-gray-500', label: t('enterprise.webhooks.statusDisabled', { defaultValue: 'Disabled' }), color: 'text-text-muted' };
+    return { dot: 'bg-gray-500', label: t('enterprise.webhooks.statusDisabled'), color: 'text-text-muted' };
   }
   if (webhook.failure_count > 0) {
-    return { dot: 'bg-orange-500', label: t('enterprise.webhooks.statusDegraded', { defaultValue: 'Degraded \u2014 {{count}} failures', count: webhook.failure_count }), color: 'text-orange-400' };
+    return { dot: 'bg-orange-500', label: t('enterprise.webhooks.statusDegraded', { count: webhook.failure_count }), color: 'text-orange-400' };
   }
-  return { dot: 'bg-green-500', label: t('enterprise.webhooks.statusActive', { defaultValue: 'Active' }), color: 'text-green-400' };
+  return { dot: 'bg-green-500', label: t('enterprise.webhooks.statusActive'), color: 'text-green-400' };
 }
 
 function deliveryStatusBadge(status: string): { bg: string; text: string } {
@@ -87,14 +87,13 @@ export function WebhookCard({
       {isCircuitBroken && (
         <div className="px-4 py-2.5 bg-red-500/10 border-b border-red-500/30 flex items-center justify-between gap-3">
           <p className="text-xs text-red-400">
-            {t('enterprise.webhooks.circuitBroken',
-              'This webhook has been automatically disabled after 10 consecutive failures. Fix the endpoint and re-enable.')}
+            {t('enterprise.webhooks.circuitBroken')}
           </p>
           <button
             onClick={onTest}
             className="px-3 py-1 text-[11px] font-medium text-red-400 border border-red-500/30 rounded hover:bg-red-500/20 transition-colors flex-shrink-0"
           >
-            {t('enterprise.webhooks.reenable', 'Re-enable')}
+            {t('enterprise.webhooks.reenable')}
           </button>
         </div>
       )}
@@ -130,7 +129,7 @@ export function WebhookCard({
             <div className="flex items-center gap-3 text-[10px] text-text-muted">
               {webhook.last_fired_at && (
                 <span>
-                  {t('enterprise.webhooks.lastFired', 'Last fired')}: {relativeTime(webhook.last_fired_at)}
+                  {t('enterprise.webhooks.lastFired')}: {relativeTime(webhook.last_fired_at)}
                 </span>
               )}
               {webhook.last_status_code != null && (
@@ -139,7 +138,7 @@ export function WebhookCard({
                 </span>
               )}
               <span>
-                {t('enterprise.webhooks.created', 'Created')}: {relativeTime(webhook.created_at)}
+                {t('enterprise.webhooks.created')}: {relativeTime(webhook.created_at)}
               </span>
             </div>
           </div>
@@ -150,7 +149,7 @@ export function WebhookCard({
             <button
               onClick={onTest}
               disabled={testing}
-              aria-label={t('enterprise.webhooks.test', 'Test webhook')}
+              aria-label={t('enterprise.webhooks.test')}
               className={`px-2.5 py-1.5 text-[11px] rounded-lg border transition-all ${
                 testResult === true
                   ? 'bg-green-500/20 border-green-500/30 text-green-400'
@@ -160,26 +159,26 @@ export function WebhookCard({
               } disabled:opacity-50`}
             >
               {testing
-                ? t('enterprise.webhooks.testing', 'Testing...')
+                ? t('enterprise.webhooks.testing')
                 : testResult === true
-                  ? t('enterprise.webhooks.testPassed', 'Passed')
+                  ? t('enterprise.webhooks.testPassed')
                   : testResult === false
-                    ? t('enterprise.webhooks.testFailed', 'Failed')
-                    : t('enterprise.webhooks.test', 'Test')}
+                    ? t('enterprise.webhooks.testFailed')
+                    : t('enterprise.webhooks.test')}
             </button>
 
             {/* Deliveries */}
             <button
               onClick={onToggleDeliveries}
               aria-expanded={expanded}
-              aria-label={t('enterprise.webhooks.deliveries', 'View deliveries')}
+              aria-label={t('enterprise.webhooks.deliveries')}
               className={`px-2.5 py-1.5 text-[11px] rounded-lg border transition-all ${
                 expanded
                   ? 'bg-white/10 border-white/20 text-white'
                   : 'bg-bg-tertiary border-border text-text-secondary hover:text-white hover:border-[#3A3A3A]'
               }`}
             >
-              {t('enterprise.webhooks.deliveries', 'Deliveries')}
+              {t('enterprise.webhooks.deliveries')}
             </button>
 
             {/* Delete */}
@@ -189,22 +188,22 @@ export function WebhookCard({
                   onClick={onDeleteConfirm}
                   className="px-2.5 py-1.5 text-[11px] bg-red-500/20 border border-red-500/30 text-red-400 rounded-lg hover:bg-red-500/30 transition-all"
                 >
-                  {t('enterprise.webhooks.confirmDelete', 'Confirm')}
+                  {t('enterprise.webhooks.confirmDelete')}
                 </button>
                 <button
                   onClick={onDeleteCancel}
                   className="px-2.5 py-1.5 text-[11px] bg-bg-tertiary border border-border text-text-muted rounded-lg hover:text-white transition-all"
                 >
-                  {t('enterprise.webhooks.cancelDelete', 'No')}
+                  {t('enterprise.webhooks.cancelDelete')}
                 </button>
               </div>
             ) : (
               <button
                 onClick={onDeleteRequest}
-                aria-label={t('enterprise.webhooks.delete', 'Delete webhook')}
+                aria-label={t('enterprise.webhooks.delete')}
                 className="px-2.5 py-1.5 text-[11px] bg-bg-tertiary border border-border text-text-muted rounded-lg hover:text-red-400 hover:border-red-500/30 transition-all"
               >
-                {t('enterprise.webhooks.delete', 'Delete')}
+                {t('enterprise.webhooks.delete')}
               </button>
             )}
           </div>
@@ -230,7 +229,7 @@ function DeliveryTable({ deliveries }: { deliveries: WebhookDelivery[] }) {
     return (
       <div className="px-4 py-4 border-t border-border text-center">
         <p className="text-xs text-text-muted">
-          {t('enterprise.webhooks.noDeliveries', 'No deliveries recorded yet.')}
+          {t('enterprise.webhooks.noDeliveries')}
         </p>
       </div>
     );
@@ -242,19 +241,19 @@ function DeliveryTable({ deliveries }: { deliveries: WebhookDelivery[] }) {
         <thead>
           <tr className="border-b border-border bg-bg-tertiary/50">
             <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
-              {t('enterprise.webhooks.colTime', 'Time')}
+              {t('enterprise.webhooks.colTime')}
             </th>
             <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
-              {t('enterprise.webhooks.colEvent', 'Event')}
+              {t('enterprise.webhooks.colEvent')}
             </th>
             <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
-              {t('enterprise.webhooks.colStatus', 'Status')}
+              {t('enterprise.webhooks.colStatus')}
             </th>
             <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
-              {t('enterprise.webhooks.colHttpCode', 'HTTP')}
+              {t('enterprise.webhooks.colHttpCode')}
             </th>
             <th scope="col" className="text-start px-4 py-2 text-text-muted font-medium">
-              {t('enterprise.webhooks.colAttempts', 'Attempts')}
+              {t('enterprise.webhooks.colAttempts')}
             </th>
           </tr>
         </thead>

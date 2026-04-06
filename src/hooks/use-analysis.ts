@@ -190,7 +190,7 @@ export function useAnalysis(
           const { total_relevant } = event.payload;
           if (total_relevant > 0) {
             useAppStore.getState().setShowBriefing(true);
-            useAppStore.getState().addToast('info', i18n.t('analysis.morningBriefingReady', { count: total_relevant, defaultValue: `Intelligence briefing: ${total_relevant} items` }));
+            useAppStore.getState().addToast('info', i18n.t('analysis.morningBriefingReady', { count: total_relevant }));
           }
         }),
 

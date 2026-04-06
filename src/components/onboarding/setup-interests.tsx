@@ -92,7 +92,7 @@ export function SetupInterests({
               <button
                 key={suggestion}
                 onClick={() => onToggleInterest(suggestion)}
-                aria-label={t('onboarding.interests.addTopic', { topic: suggestion, defaultValue: `Add ${suggestion}` })}
+                aria-label={t('onboarding.interests.addTopic', { topic: suggestion })}
                 className="px-3 py-1.5 bg-bg-tertiary text-text-secondary rounded-full text-sm hover:bg-border hover:text-white transition-all"
               >
                 + {suggestion}

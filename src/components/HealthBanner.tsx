@@ -71,7 +71,7 @@ export function HealthBanner() {
           <span className={`text-xs font-medium ${hasErrors ? 'text-error' : 'text-accent-gold'}`}>
             {issues.length === 1
               ? issues[0]!.message
-              : t('health.issueCount', { count: issues.length, defaultValue: '{{count}} system issues detected' })
+              : t('health.issueCount', { count: issues.length })
             }
           </span>
           {issues.length > 1 && (
@@ -83,7 +83,7 @@ export function HealthBanner() {
         <button
           onClick={handleDismiss}
           className="text-text-muted hover:text-text-secondary text-xs px-1"
-          aria-label={t('action.dismiss', 'Dismiss')}
+          aria-label={t('action.dismiss')}
         >
           &#10005;
         </button>
@@ -107,7 +107,7 @@ export function HealthBanner() {
                         onClick={() => setShowSettings(true)}
                         className="ml-1 text-amber-400 hover:text-amber-300 underline transition-colors"
                       >
-                        {t('health.openSettings', 'Open Settings')}
+                        {t('health.openSettings')}
                       </button>
                     )}
                   </p>

@@ -28,7 +28,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       </div>
 
       <h2 className="text-xl font-medium text-white mb-2">
-        {t('firstRun.intelligenceTitle', "Here's what I found")}
+        {t('firstRun.intelligenceTitle')}
       </h2>
 
       {/* Scan stats */}
@@ -36,13 +36,13 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
         <div className="text-center">
           <span className="text-2xl font-bold text-white tabular-nums">{summary.projects_scanned}</span>
           <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
-            {t('firstRun.projects', 'projects')}
+            {t('firstRun.projects')}
           </p>
         </div>
         <div className="text-center">
           <span className="text-2xl font-bold text-white tabular-nums">{summary.total_dependencies}</span>
           <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
-            {t('firstRun.dependencies', 'dependencies')}
+            {t('firstRun.dependencies')}
           </p>
         </div>
       </div>
@@ -51,7 +51,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       {summary.primary_stack && (
         <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-border">
           <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5">
-            {t('firstRun.primaryStack', 'Primary stack')}
+            {t('firstRun.primaryStack')}
           </p>
           <p className="text-sm text-white font-medium">{summary.primary_stack}</p>
         </div>
@@ -72,12 +72,11 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
       {summary.key_packages.length > 0 && (
         <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-orange-500/10 text-start">
           <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-2">
-            {t('firstRun.watchingFor', "I'll watch for")}
+            {t('firstRun.watchingFor')}
           </p>
           <p className="text-xs text-text-secondary leading-relaxed">
             {t('firstRun.watchingDescription', {
               packages: summary.key_packages.slice(0, 5).join(', '),
-              defaultValue: `Security advisories, breaking changes, and updates for ${summary.key_packages.slice(0, 5).join(', ')}`,
             })}
           </p>
         </div>
@@ -85,7 +84,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
 
       {/* Loading indicator */}
       <p className="text-xs text-text-muted animate-pulse">
-        {t('firstRun.startingAnalysis', 'Starting content analysis...')}
+        {t('firstRun.startingAnalysis')}
       </p>
     </div>
   );
@@ -195,18 +194,18 @@ export function LoadingState({
           <VoidEngine size={80} />
         </div>
         <h2 className="text-xl font-medium text-white mb-2">
-          {t('firstRun.preparingIntelligence', 'Preparing your intelligence feed')}
+          {t('firstRun.preparingIntelligence')}
         </h2>
         <div className="mb-5 px-4 py-3 bg-bg-secondary rounded-lg border border-border text-start">
           <p className="text-[10px] text-orange-400 font-medium uppercase tracking-wider mb-2">
-            {t('firstRun.scanning', 'Scanning')}
+            {t('firstRun.scanning')}
           </p>
           <p className="text-xs text-text-secondary leading-relaxed">
-            {t('firstRun.scanningDescription', '20 sources including Hacker News, GitHub, Reddit, arXiv, CVE databases, and package registries — scored against your interests and tech stack.')}
+            {t('firstRun.scanningDescription')}
           </p>
         </div>
         <p className="text-xs text-text-muted animate-pulse">
-          {t('firstRun.startingAnalysis', 'Starting content analysis...')}
+          {t('firstRun.startingAnalysis')}
         </p>
       </div>
     );
@@ -239,14 +238,14 @@ export function LoadingState({
       {(phase === 'preparing' || phase === 'fetching' || phase === 'analyzing') && (
         <p className={`text-sm text-text-secondary mb-4${estimatedSeconds <= 0 ? ' animate-pulse' : ''}`} aria-live="polite">
           {estimatedSeconds <= 0
-            ? t('firstRun.estimatedTimeFinishing', 'Finishing up...')
+            ? t('firstRun.estimatedTimeFinishing')
             : estimatedSeconds < 30
-              ? t('firstRun.estimatedTimeAlmost', 'Almost there...')
+              ? t('firstRun.estimatedTimeAlmost')
               : estimatedSeconds < 60
-                ? t('firstRun.estimatedTimeLessThanMinute', '< 1 minute remaining')
+                ? t('firstRun.estimatedTimeLessThanMinute')
                 : estimatedSeconds <= 120
-                  ? t('firstRun.estimatedTimeOneToTwo', '~1-2 minutes remaining')
-                  : t('firstRun.estimatedTimeMinutes', { minutes: Math.ceil(estimatedSeconds / 60), defaultValue: '~{{minutes}} minutes remaining' })
+                  ? t('firstRun.estimatedTimeOneToTwo')
+                  : t('firstRun.estimatedTimeMinutes', { minutes: Math.ceil(estimatedSeconds / 60) })
           }
         </p>
       )}
@@ -312,7 +311,7 @@ export function LoadingState({
           onClick={onSkipAhead}
           className="mt-6 text-xs text-text-muted hover:text-white transition-colors"
         >
-          {t('firstRun.skipToResults', 'Skip to results')} &rarr;
+          {t('firstRun.skipToResults')} &rarr;
         </button>
       )}
     </div>

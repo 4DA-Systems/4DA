@@ -52,7 +52,7 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
         <div>
           <h2 className="text-lg font-semibold text-white">The 4DA Framework</h2>
           <p className="text-xs text-text-muted">
-            {t('about.frameworkSubtitle', { defaultValue: 'A Philosophy for Private Developer Intelligence' })}
+            {t('about.frameworkSubtitle')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -65,7 +65,7 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
           <button
             onClick={onClose}
             className="px-3 py-1.5 text-xs text-text-secondary hover:text-white border border-border rounded-lg hover:bg-bg-tertiary transition-all"
-            aria-label={t('action.close', { defaultValue: 'Close' })}
+            aria-label={t('action.close')}
           >
             Close
           </button>
