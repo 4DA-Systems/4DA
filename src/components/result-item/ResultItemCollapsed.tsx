@@ -48,7 +48,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         <button
           onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
           aria-expanded={showBreakdown}
-          aria-label={item.score_breakdown ? t('scoreDrawer.toggle', 'Toggle score breakdown') : undefined}
+          aria-label={item.score_breakdown ? `${t('scoreDrawer.toggle', 'Toggle score breakdown')}, score ${formatScore(item.top_score)}` : `Score: ${formatScore(item.top_score)}`}
           title={scoreTooltip}
           className={`flex-shrink-0 w-12 text-center py-0.5 rounded font-mono text-xs font-medium cursor-pointer transition-all ${getScoreColor(
             item.top_score,
@@ -80,6 +80,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
+              aria-label={`${displayTitle} (opens in new tab)`}
               className={`text-sm truncate block hover:underline decoration-gray-600 ${
                 item.relevant ? 'text-text-primary' : 'text-text-secondary'
               }`}

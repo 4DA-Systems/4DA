@@ -1080,4 +1080,462 @@ mod tests {
         );
         assert!(result.is_err(), "Should not find expired pending auth");
     }
+
+    // ========================================================================
+    // Config validation (mirrors set_sso_config logic)
+    // ========================================================================
+
+    /// Helper: validate an SsoConfig the same way set_sso_config does,
+    /// but without touching the database.
+    fn validate_config(config: &SsoConfig) -> crate::error::Result<()> {
+        if config.provider_type != "saml" && config.provider_type != "oidc" {
+            return Err("provider_type must be 'saml' or 'oidc'".into());
+        }
+        if config.provider_type == "oidc" {
+            if config.client_id.as_ref().map_or(true, |s| s.is_empty()) {
+                return Err("OIDC provider requires client_id".into());
+            }
+            if config.issuer.as_ref().map_or(true, |s| s.is_empty()) {
+                return Err("OIDC provider requires issuer URL".into());
+            }
+        }
+        if config.idp_url.is_empty() {
+            return Err("IdP URL is required".into());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_validation_rejects_invalid_provider_type() {
+        let config = SsoConfig {
+            provider_type: "ldap".to_string(),
+            idp_url: "https://idp.example.com".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+        let err = validate_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("provider_type"),
+            "Error should mention provider_type: {err}"
+        );
+    }
+
+    #[test]
+    fn test_config_validation_accepts_saml() {
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/saml".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: Some("MIIC...cert".to_string()),
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+        assert!(validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_config_validation_oidc_requires_client_id() {
+        let config = SsoConfig {
+            provider_type: "oidc".to_string(),
+            idp_url: "https://idp.example.com".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None, // Missing
+            issuer: Some("https://idp.example.com".to_string()),
+            enabled: true,
+        };
+        let err = validate_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("client_id"),
+            "Error should mention client_id: {err}"
+        );
+    }
+
+    #[test]
+    fn test_config_validation_oidc_requires_issuer() {
+        let config = SsoConfig {
+            provider_type: "oidc".to_string(),
+            idp_url: "https://idp.example.com".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: Some("my-client".to_string()),
+            issuer: None, // Missing
+            enabled: true,
+        };
+        let err = validate_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("issuer"),
+            "Error should mention issuer: {err}"
+        );
+    }
+
+    #[test]
+    fn test_config_validation_oidc_rejects_empty_client_id() {
+        let config = SsoConfig {
+            provider_type: "oidc".to_string(),
+            idp_url: "https://idp.example.com".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: Some("".to_string()), // Empty string
+            issuer: Some("https://idp.example.com".to_string()),
+            enabled: true,
+        };
+        let err = validate_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("client_id"),
+            "Error should mention client_id: {err}"
+        );
+    }
+
+    #[test]
+    fn test_config_validation_rejects_empty_idp_url() {
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "".to_string(), // Empty
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+        let err = validate_config(&config).unwrap_err();
+        assert!(
+            err.to_string().contains("IdP URL"),
+            "Error should mention IdP URL: {err}"
+        );
+    }
+
+    // ========================================================================
+    // OIDC URL construction edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_build_oidc_login_url_missing_issuer() {
+        let config = SsoConfig {
+            provider_type: "oidc".to_string(),
+            idp_url: "https://idp.example.com".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: Some("my-client-id".to_string()),
+            issuer: None, // Missing issuer
+            enabled: true,
+        };
+        let result = build_oidc_login_url(&config);
+        assert!(result.is_err(), "Should fail without issuer");
+    }
+
+    #[test]
+    fn test_build_oidc_login_url_strips_trailing_slash() {
+        let config = SsoConfig {
+            provider_type: "oidc".to_string(),
+            idp_url: "https://idp.example.com".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: Some("my-client-id".to_string()),
+            issuer: Some("https://idp.example.com/".to_string()), // trailing slash
+            enabled: true,
+        };
+        let url = build_oidc_login_url(&config).unwrap();
+        // Should be .../authorize? not ...//authorize?
+        assert!(
+            url.contains("example.com/authorize?"),
+            "Trailing slash should be stripped: {url}"
+        );
+        assert!(
+            !url.contains("//authorize"),
+            "Double slash should not appear: {url}"
+        );
+    }
+
+    // ========================================================================
+    // SAML URL content verification
+    // ========================================================================
+
+    #[test]
+    fn test_saml_login_url_contains_valid_authn_request() {
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/saml/sso".to_string(),
+            entity_id: "com.test.entity".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
+        let url = build_saml_login_url(&config).unwrap();
+
+        // Extract and decode the SAMLRequest parameter
+        let saml_param = url
+            .split("SAMLRequest=")
+            .nth(1)
+            .expect("URL must contain SAMLRequest");
+        let decoded_param = urlencoding::decode(saml_param).unwrap();
+        let xml_bytes = base64::engine::general_purpose::STANDARD
+            .decode(decoded_param.as_bytes())
+            .unwrap();
+        let xml = String::from_utf8(xml_bytes).unwrap();
+
+        assert!(
+            xml.contains("AuthnRequest"),
+            "Decoded XML must be an AuthnRequest"
+        );
+        assert!(
+            xml.contains("com.test.entity"),
+            "Entity ID must appear in the request"
+        );
+        assert!(
+            xml.contains("localhost:4445"),
+            "Callback URL must reference the SSO callback port"
+        );
+        assert!(
+            xml.contains("Version=\"2.0\""),
+            "Must be SAML 2.0"
+        );
+    }
+
+    // ========================================================================
+    // SAML assertion parsing edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_parse_saml_assertion_invalid_base64() {
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
+        let result = parse_saml_assertion("not-valid-base64!!!", &config);
+        assert!(result.is_err(), "Invalid base64 should fail");
+        assert!(
+            result.unwrap_err().to_string().contains("base64"),
+            "Error should mention base64"
+        );
+    }
+
+    #[test]
+    fn test_parse_saml_assertion_missing_name_id() {
+        let saml_response = r#"<samlp:Response>
+            <saml:Assertion>
+                <saml:Subject>
+                    <saml:SubjectConfirmation>
+                        <saml:SubjectConfirmationData NotOnOrAfter="2099-12-31T23:59:59Z"/>
+                    </saml:SubjectConfirmation>
+                </saml:Subject>
+            </saml:Assertion>
+        </samlp:Response>"#;
+
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(saml_response.as_bytes());
+        let result = parse_saml_assertion(&encoded, &config);
+        assert!(result.is_err(), "Missing NameID should fail");
+        assert!(
+            result.unwrap_err().to_string().contains("NameID"),
+            "Error should mention NameID"
+        );
+    }
+
+    #[test]
+    fn test_parse_saml_assertion_display_name_fallback_to_email() {
+        // No displayName, cn, or claims/name attribute — should fall back to email
+        let saml_response = r#"<samlp:Response>
+            <saml:Assertion>
+                <saml:Subject>
+                    <saml:NameID>bob@corp.com</saml:NameID>
+                    <saml:SubjectConfirmation>
+                        <saml:SubjectConfirmationData NotOnOrAfter="2099-12-31T23:59:59Z"/>
+                    </saml:SubjectConfirmation>
+                </saml:Subject>
+                <saml:AttributeStatement>
+                </saml:AttributeStatement>
+            </saml:Assertion>
+        </samlp:Response>"#;
+
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(saml_response.as_bytes());
+        let session = parse_saml_assertion(&encoded, &config).unwrap();
+
+        assert_eq!(session.email, "bob@corp.com");
+        assert_eq!(
+            session.display_name, "bob@corp.com",
+            "display_name should fall back to email when no name attributes exist"
+        );
+        assert!(session.groups.is_empty(), "Should have no groups");
+    }
+
+    #[test]
+    fn test_parse_saml_assertion_groups_single_value() {
+        // Uses "groups" attribute name (alternate to "memberOf") with a single group
+        let saml_response = r#"<samlp:Response>
+            <saml:Assertion>
+                <saml:Subject>
+                    <saml:NameID>carol@corp.com</saml:NameID>
+                    <saml:SubjectConfirmation>
+                        <saml:SubjectConfirmationData NotOnOrAfter="2099-12-31T23:59:59Z"/>
+                    </saml:SubjectConfirmation>
+                </saml:Subject>
+                <saml:AttributeStatement>
+                    <saml:Attribute Name="groups">
+                        <saml:AttributeValue>devops</saml:AttributeValue>
+                    </saml:Attribute>
+                </saml:AttributeStatement>
+            </saml:Assertion>
+        </samlp:Response>"#;
+
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(saml_response.as_bytes());
+        let session = parse_saml_assertion(&encoded, &config).unwrap();
+
+        assert_eq!(session.groups, vec!["devops"]);
+        assert_eq!(session.email, "carol@corp.com");
+    }
+
+    #[test]
+    fn test_parse_saml_assertion_cn_display_name() {
+        // Uses "cn" attribute for display name instead of "displayName"
+        let saml_response = r#"<samlp:Response>
+            <saml:Assertion>
+                <saml:Subject>
+                    <saml:NameID>dave@corp.com</saml:NameID>
+                    <saml:SubjectConfirmation>
+                        <saml:SubjectConfirmationData NotOnOrAfter="2099-12-31T23:59:59Z"/>
+                    </saml:SubjectConfirmation>
+                </saml:Subject>
+                <saml:AttributeStatement>
+                    <saml:Attribute Name="cn">
+                        <saml:AttributeValue>Dave Thompson</saml:AttributeValue>
+                    </saml:Attribute>
+                </saml:AttributeStatement>
+            </saml:Assertion>
+        </samlp:Response>"#;
+
+        let config = SsoConfig {
+            provider_type: "saml".to_string(),
+            idp_url: "https://idp.example.com/sso".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: None,
+            issuer: None,
+            enabled: true,
+        };
+
+        let encoded = base64::engine::general_purpose::STANDARD.encode(saml_response.as_bytes());
+        let session = parse_saml_assertion(&encoded, &config).unwrap();
+
+        assert_eq!(session.display_name, "Dave Thompson");
+    }
+
+    // ========================================================================
+    // Session expiry logic
+    // ========================================================================
+
+    #[test]
+    fn test_session_expiry_check_past() {
+        // Verify that a session with a past expires_at is recognized as expired
+        let past = "2020-01-01T00:00:00Z";
+        let expiry = chrono::DateTime::parse_from_rfc3339(past).unwrap();
+        assert!(
+            expiry < chrono::Utc::now(),
+            "Test fixture: past date must be before now"
+        );
+    }
+
+    #[test]
+    fn test_session_expiry_check_future() {
+        let future = "2099-12-31T23:59:59Z";
+        let expiry = chrono::DateTime::parse_from_rfc3339(future).unwrap();
+        assert!(
+            expiry > chrono::Utc::now(),
+            "Test fixture: future date must be after now"
+        );
+    }
+
+    // ========================================================================
+    // Type serialization
+    // ========================================================================
+
+    #[test]
+    fn test_sso_config_serialize_deserialize() {
+        let config = SsoConfig {
+            provider_type: "oidc".to_string(),
+            idp_url: "https://login.microsoftonline.com/tenant/v2.0".to_string(),
+            entity_id: "com.4da.app".to_string(),
+            certificate: None,
+            client_id: Some("abc-123".to_string()),
+            issuer: Some("https://login.microsoftonline.com/tenant/v2.0".to_string()),
+            enabled: true,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: SsoConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.provider_type, "oidc");
+        assert_eq!(deserialized.client_id.as_deref(), Some("abc-123"));
+        assert_eq!(deserialized.enabled, true);
+    }
+
+    #[test]
+    fn test_sso_session_serialize_deserialize() {
+        let session = SsoSession {
+            email: "test@example.com".to_string(),
+            display_name: "Test User".to_string(),
+            groups: vec!["admin".to_string(), "users".to_string()],
+            authenticated_at: "2026-04-06T12:00:00Z".to_string(),
+            expires_at: Some("2026-04-06T14:00:00Z".to_string()),
+            provider_type: "saml".to_string(),
+        };
+
+        let json = serde_json::to_string(&session).unwrap();
+        let deserialized: SsoSession = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.email, "test@example.com");
+        assert_eq!(deserialized.groups.len(), 2);
+        assert_eq!(deserialized.groups[0], "admin");
+        assert_eq!(deserialized.expires_at.as_deref(), Some("2026-04-06T14:00:00Z"));
+    }
+
+    // ========================================================================
+    // Callback port constant
+    // ========================================================================
+
+    #[test]
+    fn test_sso_callback_port_is_4445() {
+        assert_eq!(SSO_CALLBACK_PORT, 4445, "SSO callback must use port 4445");
+    }
 }

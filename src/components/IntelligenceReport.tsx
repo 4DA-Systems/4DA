@@ -46,12 +46,12 @@ interface IntelligenceReportRaw {
 
 function TrendArrow({ trend }: { trend: 'up' | 'down' | 'flat' }) {
   if (trend === 'up') {
-    return <span className="text-success text-xs font-medium">{'\u2191'}</span>;
+    return <span className="text-success text-xs font-medium" aria-hidden="true">{'\u2191'}</span>;
   }
   if (trend === 'down') {
-    return <span className="text-error text-xs font-medium">{'\u2193'}</span>;
+    return <span className="text-error text-xs font-medium" aria-hidden="true">{'\u2193'}</span>;
   }
-  return <span className="text-text-muted text-xs">{'\u2192'}</span>;
+  return <span className="text-text-muted text-xs" aria-hidden="true">{'\u2192'}</span>;
 }
 
 function MetricRow({ metric }: { metric: MetricData }) {
@@ -78,13 +78,13 @@ function MetricRow({ metric }: { metric: MetricData }) {
 
 function LoadingSkeleton() {
   return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
+    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden" role="status" aria-label="Loading intelligence report">
       <div className="px-5 py-4 border-b border-border">
-        <div className="h-4 bg-bg-tertiary rounded w-48 animate-pulse" />
-        <div className="h-3 bg-bg-tertiary rounded w-64 mt-2 animate-pulse" />
+        <div className="h-4 bg-bg-tertiary rounded w-48 animate-pulse" aria-hidden="true" />
+        <div className="h-3 bg-bg-tertiary rounded w-64 mt-2 animate-pulse" aria-hidden="true" />
       </div>
       <div className="p-5 space-y-4">
-        <div className="h-2 bg-bg-tertiary rounded-full animate-pulse" />
+        <div className="h-2 bg-bg-tertiary rounded-full animate-pulse" aria-hidden="true" />
         {[1, 2, 3, 4].map(i => (
           <div key={i} className="flex justify-between py-2">
             <div className="h-3 bg-bg-tertiary rounded w-24 animate-pulse" />
@@ -241,6 +241,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
           <p className="text-xs text-text-muted mb-3">{t('report.unableToLoad')}</p>
           <button
             onClick={loadData}
+            aria-label={t('action.retry')}
             className="text-xs px-3 py-1.5 rounded bg-bg-tertiary border border-border text-text-secondary hover:text-white transition-colors"
           >
             {t('action.retry')}
@@ -277,7 +278,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
         {/* Accuracy Progress Bar */}
         <div>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-text-muted">{t('report.accuracyImprovement')}</span>
+            <span className="text-xs text-text-muted" id="accuracy-label">{t('report.accuracyImprovement')}</span>
             <span className="text-xs text-white font-medium">{data.accuracy_pct}%</span>
           </div>
           <div
@@ -286,6 +287,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
             aria-valuenow={data.accuracy_pct}
             aria-valuemin={0}
             aria-valuemax={100}
+            aria-labelledby="accuracy-label"
           >
             <div
               className="h-full rounded-full bg-gradient-to-r from-accent-gold/60 to-accent-gold"
@@ -338,6 +340,7 @@ const IntelligenceReportCard = memo(function IntelligenceReportCard() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleShare}
+              aria-label={t('report.shareReport')}
               className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
             >
               {t('report.shareReport')}

@@ -21,7 +21,7 @@ export function OnboardingChoiceGate({
         isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'
       }`}
     >
-      <div className="text-4xl mb-4">&#x2728;</div>
+      <div className="text-4xl mb-4" aria-hidden="true">&#x2728;</div>
       <h2 className="text-2xl font-semibold text-white mb-2">
         {t('onboarding.choice.title', 'You\'re ready to go')}
       </h2>
@@ -78,12 +78,12 @@ export function OnboardingChoiceGate({
             </p>
 
             {/* Separator */}
-            <div className="flex items-center gap-3 w-full my-1">
-              <div className="flex-1 h-px bg-border" />
+            <div className="flex items-center gap-3 w-full my-1" role="separator">
+              <div className="flex-1 h-px bg-border" aria-hidden="true" />
               <span className="text-xs text-text-muted">
                 {t('onboarding.choice.or', 'or')}
               </span>
-              <div className="flex-1 h-px bg-border" />
+              <div className="flex-1 h-px bg-border" aria-hidden="true" />
             </div>
 
             <button
@@ -116,12 +116,12 @@ export function OnboardingChoiceGate({
             </p>
 
             {/* Separator */}
-            <div className="flex items-center gap-3 w-full my-1">
-              <div className="flex-1 h-px bg-border" />
+            <div className="flex items-center gap-3 w-full my-1" role="separator">
+              <div className="flex-1 h-px bg-border" aria-hidden="true" />
               <span className="text-xs text-text-muted">
                 {t('onboarding.choice.or', 'or')}
               </span>
-              <div className="flex-1 h-px bg-border" />
+              <div className="flex-1 h-px bg-border" aria-hidden="true" />
             </div>
 
             <button
@@ -140,7 +140,7 @@ export function OnboardingChoiceGate({
         )}
       </div>
 
-      <p className="text-[10px] text-text-muted mt-6">
+      <p className="text-[10px] text-text-muted mt-6" aria-live="polite">
         {t('onboarding.keyboardHint', 'Pro tip: Press R to analyze, / to search, ? for all shortcuts')}
       </p>
     </div>

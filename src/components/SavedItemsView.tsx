@@ -83,6 +83,7 @@ export function SavedItemsView() {
         <p className="text-sm text-red-400 mb-3">{error}</p>
         <button
           onClick={loadItems}
+          aria-label={t('action.retry')}
           className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
         >
           {t('action.retry')}
@@ -108,6 +109,7 @@ export function SavedItemsView() {
         <span className="text-xs text-text-muted">{t('saved.count', { count: items.length })}</span>
         <button
           onClick={loadItems}
+          aria-label={t('action.refresh')}
           className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
         >
           {t('action.refresh')}
@@ -145,6 +147,7 @@ export function SavedItemsView() {
                           href={item.url}
                           target="_blank"
                           rel="noopener noreferrer"
+                          aria-label={`${getTranslated(String(item.item_id), item.title)} (opens in new tab)`}
                           className="text-sm text-white hover:text-orange-400 hover:underline decoration-orange-400/50 font-medium transition-colors"
                         >
                           {getTranslated(String(item.item_id), item.title)}
