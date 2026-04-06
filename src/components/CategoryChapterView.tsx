@@ -6,38 +6,7 @@ import { getSourceLabel, getSourceColorClass, getSourcesByCategory, getSourceCat
 import type { SourceRelevance } from '../types/analysis';
 import { ResultItem } from './ResultItem';
 
-const CATEGORY_META: Record<string, { label: string; description: string; color: string }> = {
-  security: {
-    label: 'Security',
-    description: 'Vulnerabilities, advisories, and patches affecting your stack',
-    color: 'text-red-400',
-  },
-  package_registry: {
-    label: 'Dependencies',
-    description: 'New versions, deprecations, and breaking changes in your packages',
-    color: 'text-cyan-400',
-  },
-  news: {
-    label: 'News',
-    description: 'Industry news, releases, and trending discussions',
-    color: 'text-orange-400',
-  },
-  research: {
-    label: 'Research',
-    description: 'Papers, models, and technical deep dives',
-    color: 'text-purple-400',
-  },
-  community: {
-    label: 'Community',
-    description: 'Developer discussions, Q&A, and community signals',
-    color: 'text-green-400',
-  },
-  social: {
-    label: 'Social',
-    description: 'Developer discourse from social platforms',
-    color: 'text-blue-400',
-  },
-};
+interface CategoryMeta { label: string; description: string; color: string }
 
 const CATEGORY_ORDER = ['security', 'package_registry', 'news', 'research', 'community', 'social'];
 
@@ -50,6 +19,15 @@ export function CategoryChapterView() {
   const { t } = useTranslation();
   const [activeChapter, setActiveChapter] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
+
+  const categoryMeta = useMemo((): Record<string, CategoryMeta> => ({
+    security: { label: t('chapters.cat.security'), description: t('chapters.cat.securityDesc'), color: 'text-red-400' },
+    package_registry: { label: t('chapters.cat.dependencies'), description: t('chapters.cat.dependenciesDesc'), color: 'text-cyan-400' },
+    news: { label: t('chapters.cat.news'), description: t('chapters.cat.newsDesc'), color: 'text-orange-400' },
+    research: { label: t('chapters.cat.research'), description: t('chapters.cat.researchDesc'), color: 'text-purple-400' },
+    community: { label: t('chapters.cat.community'), description: t('chapters.cat.communityDesc'), color: 'text-green-400' },
+    social: { label: t('chapters.cat.social'), description: t('chapters.cat.socialDesc'), color: 'text-blue-400' },
+  }), [t]);
 
   const { relevanceResults, feedbackGiven } = useAppStore(
     useShallow(s => ({
@@ -94,16 +72,16 @@ export function CategoryChapterView() {
       <div className="px-6 py-4">
         <div className="mb-6">
           <h2 className="text-lg font-medium text-text-primary">
-            {t('chapters.title', 'Source Chapters')}
+            {t('chapters.title')}
           </h2>
           <p className="text-xs text-text-muted mt-1">
-            {t('chapters.subtitle', 'Browse content by category — each chapter groups related sources together')}
+            {t('chapters.subtitle')}
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           {CATEGORY_ORDER.map(cat => {
-            const meta = CATEGORY_META[cat];
+            const meta = categoryMeta[cat];
             if (meta == null) return null;
             const items = chapters.get(cat) ?? [];
             const relevantCount = items.filter(i => i.relevant).length;
@@ -153,7 +131,7 @@ export function CategoryChapterView() {
   }
 
   // Chapter detail — show items from selected category
-  const meta = CATEGORY_META[activeChapter];
+  const meta = categoryMeta[activeChapter];
   const items = chapters.get(activeChapter) ?? [];
   const sources = getSourcesByCategory().get(activeChapter) ?? [];
 
@@ -174,7 +152,7 @@ export function CategoryChapterView() {
             {meta?.label ?? activeChapter}
           </h2>
           <p className="text-[11px] text-text-muted">
-            {items.length} {t('chapters.items', 'items')} {t('chapters.from', 'from')} {sources.map(s => getSourceLabel(s)).join(', ')}
+            {t('chapters.itemCount', '{{count}} items from {{sources}}', { count: items.length, sources: sources.map(s => getSourceLabel(s)).join(', ') })}
           </p>
         </div>
       </div>
@@ -194,7 +172,7 @@ export function CategoryChapterView() {
       {/* Items cascade */}
       {items.length === 0 ? (
         <div className="text-center py-12 text-text-muted text-sm">
-          {t('chapters.empty', 'No items from these sources yet. They will appear after the next analysis cycle.')}
+          {t('chapters.empty')}
         </div>
       ) : (
         <div className="space-y-1">
@@ -210,7 +188,7 @@ export function CategoryChapterView() {
           ))}
           {items.length > 50 && (
             <p className="text-xs text-text-muted text-center py-2">
-              {t('chapters.showingFirst', 'Showing first 50 of {{total}} items', { total: items.length })}
+              {t('chapters.showingFirst', { total: items.length })}
             </p>
           )}
         </div>
