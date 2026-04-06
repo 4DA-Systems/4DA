@@ -52,9 +52,9 @@ pub(crate) fn best_interest_specificity_weight(
 
         if has_hit {
             let w = interest_specificity_weight(&interest.topic);
-            if !found_match || w < best_weight {
-                // Use the LOWEST specificity weight among matching interests
-                // (conservative: if a broad interest matches, penalize even if a specific one also matches)
+            if !found_match || w > best_weight {
+                // Use the HIGHEST specificity weight among matching interests
+                // (if a specific interest matches, credit it even if a broad one also matches)
                 best_weight = w;
                 found_match = true;
             }

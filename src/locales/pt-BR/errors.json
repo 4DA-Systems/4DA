@@ -33,6 +33,7 @@
   "errorMsg.fileNotFound": "Arquivo não encontrado. Pode ter sido movido ou excluído.",
   "errorMsg.git": "Operação Git falhou. Verifique o caminho do repositório.",
   "errorMsg.ipc": "Erro de comunicação do aplicativo. Reinicie o aplicativo.",
+  "errorMsg.limitAdjust": "Ajuste em Configurações > Inteligência, ou aguarde a redefinição à meia-noite.",
   "errorMsg.network": "Falha na requisição de rede. Verifique sua conexão com a internet.",
   "errorMsg.ollamaNotRunning": "Ollama não está rodando. Inicie o Ollama ou configure uma chave API em Configurações.",
   "errorMsg.parse": "Erro no formato dos dados. Tente novamente ou reinicie o aplicativo.",

@@ -229,12 +229,12 @@ interface CommandMap {
   generate_agent_brief: { params: { agentType?: string; since?: string }; result: AgentSessionBrief };
   get_delegation_score: { params: { subject: string }; result: DelegationScoreResult };
   get_all_delegation_scores: { params: Record<string, never>; result: DelegationScoreEntry[] };
-  promote_memory_to_decision: { params: { memoryId: number }; result: void };
+  promote_memory_to_decision: { params: { memoryId: number }; result: number };
 
   // -- Decision Advantage --
   get_decision_windows: { params: Record<string, never>; result: DecisionWindow[] };
-  act_on_decision_window: { params: { windowId: number; outcome: string | null }; result: void };
-  close_decision_window: { params: { windowId: number }; result: void };
+  act_on_decision_window: { params: { windowId: number; outcome: string | null }; result: string };
+  close_decision_window: { params: { windowId: number; outcome: string | null }; result: string };
   get_compound_advantage: { params: Record<string, never>; result: CompoundAdvantageScore };
   get_advantage_history: { params: { period?: string; limit?: number }; result: number[] };
 

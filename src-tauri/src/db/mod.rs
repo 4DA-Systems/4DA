@@ -405,8 +405,11 @@ impl Database {
     /// Clear all context chunks (for re-indexing)
     pub fn clear_contexts(&self) -> SqliteResult<usize> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM context_vec", [])?;
-        conn.execute("DELETE FROM context_chunks", [])
+        let tx = conn.unchecked_transaction()?;
+        tx.execute("DELETE FROM context_vec", [])?;
+        let count = tx.execute("DELETE FROM context_chunks", [])?;
+        tx.commit()?;
+        Ok(count)
     }
 
     /// Get context count

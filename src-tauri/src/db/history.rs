@@ -81,33 +81,34 @@ impl Database {
     /// Run database maintenance: cleanup old items, optimize, vacuum
     pub fn run_maintenance(&self, retention_days: i64) -> SqliteResult<MaintenanceResult> {
         let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
 
-        let deleted_items: usize = conn.execute(
+        let deleted_items: usize = tx.execute(
             "DELETE FROM source_items WHERE last_seen < datetime('now', ?1)",
             params![format!("-{} days", retention_days)],
         )?;
 
-        let deleted_feedback: usize = conn.execute(
+        let deleted_feedback: usize = tx.execute(
             "DELETE FROM feedback WHERE created_at < datetime('now', ?1)",
             params![format!("-{} days", retention_days * 2)],
         )?;
 
-        let deleted_void: usize = conn.execute("DELETE FROM void_positions", []).unwrap_or(0);
+        let deleted_void: usize = tx.execute("DELETE FROM void_positions", []).unwrap_or(0);
 
         // Clean superseded digested_intelligence older than 90 days
-        let deleted_intelligence: usize = conn.execute(
+        let deleted_intelligence: usize = tx.execute(
             "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-90 days')",
             [],
         ).unwrap_or(0);
 
         // Clean expired/closed decision_windows older than 60 days
-        let deleted_windows: usize = conn.execute(
+        let deleted_windows: usize = tx.execute(
             "DELETE FROM decision_windows WHERE status IN ('expired', 'closed') AND created_at < datetime('now', '-60 days')",
             [],
         ).unwrap_or(0);
 
         // Clean old autophagy_cycles older than 180 days (keep recent history)
-        let deleted_cycles: usize = conn
+        let deleted_cycles: usize = tx
             .execute(
                 "DELETE FROM autophagy_cycles WHERE created_at < datetime('now', '-180 days')",
                 [],
@@ -115,13 +116,13 @@ impl Database {
             .unwrap_or(0);
 
         // Clean orphaned necessity scores
-        let deleted_necessity: usize = conn.execute(
+        let deleted_necessity: usize = tx.execute(
             "DELETE FROM item_necessity WHERE source_item_id NOT IN (SELECT id FROM source_items)",
             [],
         ).unwrap_or(0);
 
         // Clean orphaned embeddings (belt-and-suspenders with cleanup_old_items)
-        let _ = conn.execute(
+        let _ = tx.execute(
             "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
             [],
         );
@@ -132,6 +133,9 @@ impl Database {
             "Deep clean: pruned unbounded tables"
         );
 
+        tx.commit()?;
+
+        // PRAGMA optimize and VACUUM run outside the transaction (VACUUM cannot be transactional)
         conn.execute_batch("PRAGMA optimize;")?;
         conn.execute_batch("VACUUM;")?;
 

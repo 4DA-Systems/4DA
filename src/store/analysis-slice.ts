@@ -38,7 +38,11 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
   },
 
   startAnalysis: async () => {
-    const { addToast } = get();
+    const { addToast, appState } = get();
+    if (appState.loading) {
+      addToast('info', 'Analysis already running');
+      return;
+    }
     set(state => ({
       appState: {
         ...state.appState,

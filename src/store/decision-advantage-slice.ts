@@ -53,7 +53,7 @@ export const createDecisionAdvantageSlice: StateCreator<
 
   closeWindow: async (windowId: number) => {
     try {
-      await cmd('close_decision_window', { windowId });
+      await cmd('close_decision_window', { windowId, outcome: null });
       get().loadDecisionWindows();
     } catch {
       // Silent
