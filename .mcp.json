@@ -2,26 +2,35 @@
   "mcpServers": {
     "memory": {
       "command": "node",
-      "args": ["./mcp-memory-server/dist/index.js"],
+      "args": [
+        "./mcp-memory-server/dist/index.js"
+      ],
       "env": {
         "MEMORY_DB_PATH": "./.claude/memory.db"
       }
     },
     "4da": {
       "command": "node",
-      "args": ["./mcp-4da-server/dist/index.js"],
+      "args": [
+        "./mcp-4da-server/dist/index.js"
+      ],
       "env": {
         "FOURDA_DB_PATH": "./data/4da.db"
       }
     },
     "awe": {
       "command": "node",
-      "args": ["D:\\runyourempire\\awe\\mcp-server\\dist\\index.js"],
-      "env": {}
+      "args": [
+        "D:\\runyourempire\\awe\\mcp-server\\dist\\index.js"
+      ],
+      "env": {},
+      "_comment": "AWE path is absolute — update for production or other machines. MCP JSON does not support env var interpolation."
     },
     "playwright": {
       "command": "npx",
-      "args": ["@playwright/mcp@latest"]
+      "args": [
+        "@playwright/mcp@latest"
+      ]
     }
   }
 }

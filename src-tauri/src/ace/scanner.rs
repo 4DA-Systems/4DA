@@ -157,6 +157,14 @@ impl ProjectScanner {
     ) -> Result<()> {
         // Bounds check: depth and total signals
         if depth > self.max_depth || signals.len() >= Self::MAX_SIGNALS {
+            if signals.len() >= Self::MAX_SIGNALS {
+                tracing::warn!(
+                    target: "4da::ace",
+                    limit = Self::MAX_SIGNALS,
+                    depth,
+                    "Project scan signal limit reached — large monorepos may have incomplete detection"
+                );
+            }
             return Ok(());
         }
 

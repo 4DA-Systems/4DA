@@ -1073,4 +1073,221 @@ mod tests {
         let text = "rate limit exceeded";
         assert_eq!(sanitize_api_error(text), text);
     }
+
+    // ========================================================================
+    // should_fallback_to_ollama — pure logic
+    // ========================================================================
+
+    /// Helper to build an LLMClient with a given provider name.
+    fn client_with_provider(provider_name: &str) -> LLMClient {
+        let provider = LLMProvider {
+            provider: provider_name.to_string(),
+            api_key: "test-key".to_string(),
+            model: "test-model".to_string(),
+            base_url: None,
+            openai_api_key: String::new(),
+            embedding_model: String::new(),
+        };
+        LLMClient::new(provider)
+    }
+
+    #[test]
+    fn test_fallback_never_triggers_for_ollama_provider() {
+        let client = client_with_provider("ollama");
+        // Even a generic network error should NOT trigger fallback when already on Ollama
+        let err = crate::error::FourDaError::Config("connection refused".to_string());
+        assert!(
+            !client.should_fallback_to_ollama(&err),
+            "Ollama provider must never fallback to itself"
+        );
+    }
+
+    #[test]
+    fn test_fallback_triggers_for_anthropic_on_network_error() {
+        let client = client_with_provider("anthropic");
+        let err = crate::error::FourDaError::Config("connection refused".to_string());
+        assert!(
+            client.should_fallback_to_ollama(&err),
+            "Anthropic network error should trigger Ollama fallback"
+        );
+    }
+
+    #[test]
+    fn test_fallback_triggers_for_openai_on_generic_error() {
+        let client = client_with_provider("openai");
+        let err = crate::error::FourDaError::Config("API error 500: internal server error".to_string());
+        assert!(
+            client.should_fallback_to_ollama(&err),
+            "OpenAI server error should trigger Ollama fallback"
+        );
+    }
+
+    #[test]
+    fn test_fallback_blocked_for_token_limit_error() {
+        let client = client_with_provider("anthropic");
+        let err = crate::error::FourDaError::Config("Daily token limit exceeded".to_string());
+        assert!(
+            !client.should_fallback_to_ollama(&err),
+            "Token limit error must NOT trigger fallback — user wants budget enforcement"
+        );
+    }
+
+    #[test]
+    fn test_fallback_blocked_for_cost_limit_error() {
+        let client = client_with_provider("openai");
+        let err = crate::error::FourDaError::Config("cost limit reached for today".to_string());
+        assert!(
+            !client.should_fallback_to_ollama(&err),
+            "Cost limit error must NOT trigger fallback"
+        );
+    }
+
+    #[test]
+    fn test_fallback_blocked_for_rate_limit_error() {
+        let client = client_with_provider("anthropic");
+        let err = crate::error::FourDaError::Config("rate limit exceeded, retry after 30s".to_string());
+        assert!(
+            !client.should_fallback_to_ollama(&err),
+            "Rate limit should NOT trigger fallback — it's a temporary condition"
+        );
+    }
+
+    #[test]
+    fn test_fallback_blocked_for_quota_error() {
+        let client = client_with_provider("openai");
+        let err = crate::error::FourDaError::Config("insufficient_quota: you have exceeded your plan".to_string());
+        assert!(
+            !client.should_fallback_to_ollama(&err),
+            "Quota/billing error must NOT trigger fallback"
+        );
+    }
+
+    #[test]
+    fn test_fallback_blocked_for_billing_error() {
+        let client = client_with_provider("anthropic");
+        let err = crate::error::FourDaError::Config("billing issue: payment method required".to_string());
+        assert!(
+            !client.should_fallback_to_ollama(&err),
+            "Billing error must NOT trigger fallback"
+        );
+    }
+
+    #[test]
+    fn test_fallback_triggers_for_openai_compatible_provider() {
+        let client = client_with_provider("openai-compatible");
+        let err = crate::error::FourDaError::Config("server returned 502".to_string());
+        assert!(
+            client.should_fallback_to_ollama(&err),
+            "openai-compatible provider should also fallback on errors"
+        );
+    }
+
+    // ========================================================================
+    // is_configured — openai-compatible provider
+    // ========================================================================
+
+    #[test]
+    fn test_is_configured_openai_compatible_needs_key() {
+        let provider = LLMProvider {
+            provider: "openai-compatible".to_string(),
+            api_key: String::new(),
+            model: "mistral-large".to_string(),
+            base_url: Some("https://api.mistral.ai/v1".to_string()),
+            openai_api_key: String::new(),
+            embedding_model: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(
+            !client.is_configured(),
+            "openai-compatible with empty key should not be configured"
+        );
+    }
+
+    #[test]
+    fn test_is_configured_openai_compatible_with_key() {
+        let provider = LLMProvider {
+            provider: "openai-compatible".to_string(),
+            api_key: "test-key-12345".to_string(),
+            model: "mistral-large".to_string(),
+            base_url: Some("https://api.mistral.ai/v1".to_string()),
+            openai_api_key: String::new(),
+            embedding_model: String::new(),
+        };
+        let client = LLMClient::new(provider);
+        assert!(
+            client.is_configured(),
+            "openai-compatible with API key should be configured"
+        );
+    }
+
+    // ========================================================================
+    // format_limit_error — pure formatting logic
+    // ========================================================================
+
+    #[test]
+    fn test_format_limit_error_token_exceeded() {
+        let msg = LLMClient::format_limit_error(150_000, 100_000, 0, 0);
+        assert!(
+            msg.contains("token limit exceeded"),
+            "Should mention token limit: {msg}"
+        );
+        assert!(
+            msg.contains("150000"),
+            "Should include actual usage: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_format_limit_error_cost_exceeded() {
+        let msg = LLMClient::format_limit_error(0, 0, 600, 500);
+        assert!(
+            msg.contains("cost limit exceeded"),
+            "Should mention cost limit: {msg}"
+        );
+        assert!(
+            msg.contains("$5.00"),
+            "Should format cost in dollars: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_format_limit_error_both_exceeded() {
+        let msg = LLMClient::format_limit_error(200_000, 100_000, 1200, 1000);
+        assert!(
+            msg.contains("token limit exceeded"),
+            "Should mention token limit: {msg}"
+        );
+        assert!(
+            msg.contains("cost limit exceeded"),
+            "Should also mention cost limit: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_format_limit_error_fallback_when_no_limits() {
+        // Edge case: called with limits that aren't actually exceeded
+        let msg = LLMClient::format_limit_error(50, 100, 10, 500);
+        // Neither condition triggers, so the fallback message should appear
+        assert!(
+            msg.contains("LLM limit reached"),
+            "Should produce fallback message when no specific limit matched: {msg}"
+        );
+    }
+
+    // ========================================================================
+    // sanitize_api_error — additional edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_sanitize_preserves_normal_error_message() {
+        let text = "Model overloaded, please retry in 30 seconds";
+        let result = sanitize_api_error(text);
+        assert_eq!(result, text, "Normal error messages should pass through unchanged");
+    }
+
+    #[test]
+    fn test_sanitize_handles_empty_string() {
+        let result = sanitize_api_error("");
+        assert_eq!(result, "", "Empty string should produce empty result");
+    }
 }
