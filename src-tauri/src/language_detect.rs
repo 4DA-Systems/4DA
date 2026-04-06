@@ -33,6 +33,7 @@ pub fn detect_language(text: &str) -> String {
 }
 
 /// Returns true if the text appears to be in the given target language.
+#[allow(dead_code)]
 pub fn is_target_language(text: &str, target_lang: &str) -> bool {
     detect_language(text) == target_lang
 }

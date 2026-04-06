@@ -73,6 +73,7 @@ struct OsvAffected {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct OsvRange {
     #[serde(rename = "type")]
     range_type: String,

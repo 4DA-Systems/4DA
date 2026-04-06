@@ -41,6 +41,7 @@ struct BskyPost {
     #[serde(rename = "repostCount")]
     repost_count: Option<u32>,
     #[serde(rename = "indexedAt")]
+    #[allow(dead_code)]
     indexed_at: Option<String>,
 }
 

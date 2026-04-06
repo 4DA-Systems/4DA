@@ -16,7 +16,6 @@ mod vector;
 // Re-export everything so existing `use crate::utils::X` imports continue to work
 pub(crate) use path::sanitize_path;
 pub(crate) use scraping::scrape_article_content;
-pub(crate) use secure_mem::lock_memory;
 #[allow(unused_imports)] // Used by scraping submodule via super::text::MAX_CONTENT_LENGTH
 pub(crate) use text::MAX_CONTENT_LENGTH;
 pub(crate) use text::{
