@@ -1,6 +1,6 @@
 //! ACE scanning commands: full scan, auto-discover, scan summary, and path helpers.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
@@ -9,6 +9,43 @@ use crate::error::Result;
 use crate::{get_ace_engine, get_ace_engine_mut, get_settings_manager};
 
 use super::index_discovered_readmes;
+
+/// Strip the Windows extended-length path prefix (`\\?\`) so that
+/// `Path::starts_with` comparisons work consistently.
+fn strip_extended_prefix(path: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let s = path.to_string_lossy();
+        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return PathBuf::from(stripped);
+        }
+    }
+    let _ = path;
+    path.to_path_buf()
+}
+
+/// Check if a path is a known system directory that should never be scanned.
+fn is_system_directory(path: &Path) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let lower = path.to_string_lossy().to_lowercase();
+        return lower.starts_with(r"c:\windows")
+            || lower.starts_with(r"c:\program files")
+            || lower.starts_with(r"c:\programdata")
+            || lower.starts_with(r"c:\$");
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let s = path.to_string_lossy();
+        return s.starts_with("/etc")
+            || s.starts_with("/usr")
+            || s.starts_with("/var")
+            || s.starts_with("/sys")
+            || s.starts_with("/proc")
+            || s.starts_with("/boot")
+            || s == "/";
+    }
+}
 
 /// Get default paths to scan for projects
 pub(crate) fn get_default_scan_paths() -> Vec<PathBuf> {
@@ -71,16 +108,21 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
             .collect()
     };
 
-    // Validate paths are within home directory
+    // Validate paths: reject non-existent and system directories.
+    // On Windows, std::fs::canonicalize adds \\?\ prefix which breaks
+    // Path::starts_with, so we strip it for all checks.
     let scan_paths: Vec<PathBuf> = scan_paths
         .into_iter()
         .filter(|path| {
+            if !path.exists() {
+                debug!(target: "ace", path = %path.display(), "Skipping non-existent path");
+                return false;
+            }
             let canonical = std::fs::canonicalize(path).unwrap_or_else(|_| path.clone());
-            if let Some(home) = dirs::home_dir() {
-                if !canonical.starts_with(&home) {
-                    warn!(target: "ace", path = %canonical.display(), "Rejected path outside home directory");
-                    return false;
-                }
+            let normalized = strip_extended_prefix(&canonical);
+            if is_system_directory(&normalized) {
+                warn!(target: "ace", path = %normalized.display(), "Rejected system directory");
+                return false;
             }
             true
         })

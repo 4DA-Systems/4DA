@@ -372,9 +372,9 @@ fn check_database_size(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
                 size_mb,
                 "Large WAL file detected — running immediate checkpoint"
             );
-            // Run checkpoint now instead of showing a warning
+            // TRUNCATE checkpoint — PASSIVE can't shrink a large WAL while readers are active
             if let Ok(conn) = crate::open_db_connection() {
-                let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
+                let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
             }
         }
     }
