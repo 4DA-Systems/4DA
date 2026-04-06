@@ -41,18 +41,15 @@ const CURRENCIES = [
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
+  { code: 'de', name: 'Deutsch' },
   { code: 'es', name: 'Espa\u00f1ol' },
   { code: 'fr', name: 'Fran\u00e7ais' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'pt-BR', name: 'Portugu\u00eas (BR)' },
-  { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
   { code: 'ja', name: '\u65e5\u672c\u8a9e' },
   { code: 'ko', name: '\ud55c\uad6d\uc5b4' },
-  { code: 'zh', name: '\u4e2d\u6587' },
+  { code: 'pt-BR', name: 'Portugu\u00eas (BR)' },
+  { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
   { code: 'tr', name: 'T\u00fcrk\u00e7e' },
-  { code: 'hi', name: '\u0939\u093f\u0928\u094d\u0926\u0940' },
-  { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629' },
+  { code: 'zh', name: '\u4e2d\u6587' },
 ];
 
 function getLanguageName(code: string): string {

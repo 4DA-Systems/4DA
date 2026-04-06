@@ -3,8 +3,10 @@ import { initReactI18next } from 'react-i18next';
 import resourcesToBackend from 'i18next-resources-to-backend';
 
 // Supported languages — must match locale directories in src/locales/
+// Ship 10 languages — ar/hi/it deferred (RTL untested / insufficient market demand)
+// Locale files preserved in repo for future activation.
 const SUPPORTED_LANGS = new Set([
-  'en', 'ar', 'de', 'es', 'fr', 'hi', 'it', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh',
+  'en', 'de', 'es', 'fr', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh',
 ]);
 
 // Detect saved language preference or system locale.

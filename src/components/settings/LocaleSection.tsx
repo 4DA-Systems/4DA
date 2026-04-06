@@ -39,18 +39,15 @@ const CURRENCIES = [
 
 const LANGUAGES = [
   { code: 'en', name: 'English' },
+  { code: 'de', name: 'Deutsch' },
   { code: 'es', name: 'Espa\u00f1ol' },
   { code: 'fr', name: 'Fran\u00e7ais' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'it', name: 'Italiano' },
-  { code: 'pt-BR', name: 'Portugu\u00eas (BR)' },
-  { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
   { code: 'ja', name: '\u65e5\u672c\u8a9e' },
   { code: 'ko', name: '\ud55c\uad6d\uc5b4' },
-  { code: 'zh', name: '\u4e2d\u6587' },
+  { code: 'pt-BR', name: 'Portugu\u00eas (BR)' },
+  { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
   { code: 'tr', name: 'T\u00fcrk\u00e7e' },
-  { code: 'hi', name: '\u0939\u093f\u0928\u094d\u0926\u0940' },
-  { code: 'ar', name: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629' },
+  { code: 'zh', name: '\u4e2d\u6587' },
 ];
 
 const TRANSLATION_PROVIDERS = [
@@ -236,6 +233,23 @@ export function LocaleSection() {
                 {translationCoverage}%
               </span>
             </div>
+          )}
+
+          {/* Translation feedback */}
+          {language !== 'en' && (
+            <p className="text-[10px] text-text-muted pt-1">
+              {t('settings.locale.feedbackHint')}{' '}
+              <button
+                onClick={() => {
+                  const lang = getLanguageName(language);
+                  const url = `https://github.com/runyourempire/4DA/issues/new?template=translation.yml&labels=i18n&title=${encodeURIComponent(`[i18n] ${lang}: Translation improvement`)}&language=${encodeURIComponent(lang)}&version=${encodeURIComponent(String(__APP_VERSION__))}`;
+                  import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url));
+                }}
+                className="text-accent-gold hover:text-[#C4A030] transition-colors underline underline-offset-2"
+              >
+                {t('settings.locale.feedbackLink')}
+              </button>
+            </p>
           )}
 
           {/* Translation Editor toggle (only for non-English) */}

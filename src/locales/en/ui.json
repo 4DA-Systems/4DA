@@ -92,6 +92,8 @@
   "settings.locale.language": "Language",
   "settings.locale.currency": "Currency",
   "settings.locale.priceInfo": "Prices in {{currency}}, content prioritized in {{language}}",
+  "settings.locale.feedbackHint": "Spot a translation issue?",
+  "settings.locale.feedbackLink": "Help us improve it",
   "settings.locale.detecting": "Detecting region...",
   "settings.translation.title": "Content Translation",
   "settings.translation.provider": "Translation Provider",
