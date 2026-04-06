@@ -91,7 +91,7 @@ pub(crate) fn get_open_windows(conn: &Connection) -> Vec<DecisionWindow> {
 }
 
 /// Get the decision journal: acted and closed windows, most recent first (up to 50).
-#[allow(dead_code)] // Reason: reserved for frontend command wiring
+#[allow(dead_code)] // Planned for decision journal frontend view (not yet wired)
 pub(crate) fn get_decision_journal(conn: &Connection) -> Vec<DecisionWindow> {
     let mut stmt = match conn.prepare(
         "SELECT id, window_type, title, description, urgency, relevance,

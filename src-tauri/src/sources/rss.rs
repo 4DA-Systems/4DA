@@ -463,7 +463,8 @@ impl Source for RssSource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         if !response.status().is_success() {
-            return Err(SourceError::Network(format!("HTTP {}", response.status())));
+            warn!(target: "4da::sources", url = %url, status = %response.status(), "Scrape failed — returning empty content");
+            return Ok(item.content.clone());
         }
 
         let html = response
