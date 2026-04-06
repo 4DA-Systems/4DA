@@ -890,13 +890,20 @@ impl Database {
                 scored_at TEXT NOT NULL DEFAULT (datetime('now'))
             )",
         )?;
-        let mut stmt = conn.prepare_cached(
-            "INSERT OR REPLACE INTO item_necessity (source_item_id, necessity_score, necessity_reason, necessity_category, necessity_urgency, scored_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
-        )?;
-        for (id, score, reason, category, urgency) in items {
-            stmt.execute(params![id, score, reason, category, urgency])?;
+        // Explicit transaction — without this, each execute() autocommits
+        // individually, causing 1000+ WAL writes for a typical scoring batch.
+        // A single transaction reduces I/O by ~99%.
+        let tx = conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare_cached(
+                "INSERT OR REPLACE INTO item_necessity (source_item_id, necessity_score, necessity_reason, necessity_category, necessity_urgency, scored_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+            )?;
+            for (id, score, reason, category, urgency) in items {
+                stmt.execute(params![id, score, reason, category, urgency])?;
+            }
         }
+        tx.commit()?;
         Ok(())
     }
 
