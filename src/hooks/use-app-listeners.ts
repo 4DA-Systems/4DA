@@ -121,7 +121,12 @@ export function useAppListeners({
 
         if (cancelled || useAppStore.getState().isFirstRun) return;
         const s = useAppStore.getState();
+        // Cooldown: don't auto-analyze if we did so recently (prevents hot-reload restart loops)
+        const lastAutoAnalysis = Number(window.sessionStorage.getItem('4da-last-auto-analysis') ?? '0');
+        const cooldownMs = 30_000; // 30 seconds between auto-analysis attempts
+        if (Date.now() - lastAutoAnalysis < cooldownMs) return;
         if (!s.isFirstRun && !s.showOnboarding) {
+          window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
           startAnalysis();
         }
       } catch {

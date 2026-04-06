@@ -36,14 +36,21 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   }, []);
 
   // Auto-start analysis after 3 seconds so new users aren't stuck (skip in browser mode)
+  // Cooldown prevents hot-reload restart loops from re-triggering analysis endlessly
   useEffect(() => {
     if (fired.current || isBrowserMode) {
+      setAutoStartPending(false);
+      return;
+    }
+    const lastAuto = Number(window.sessionStorage.getItem('4da-last-auto-analysis') ?? '0');
+    if (Date.now() - lastAuto < 30_000) {
       setAutoStartPending(false);
       return;
     }
     const timer = setTimeout(() => {
       fired.current = true;
       setAutoStartPending(false);
+      window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
       onAnalyze();
     }, 3000);
     return () => clearTimeout(timer);
