@@ -691,6 +691,29 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             }
                         }
 
+                        // Daily deep maintenance: clean superseded intelligence, temporal data, sun_runs
+                        match db.run_maintenance(max_age_days as i64) {
+                            Ok(result) => {
+                                let total_deleted = result.deleted_intelligence
+                                    + result.deleted_windows
+                                    + result.deleted_cycles
+                                    + result.deleted_necessity;
+                                if total_deleted > 0 {
+                                    info!(
+                                        target: "4da::monitor",
+                                        intelligence = result.deleted_intelligence,
+                                        windows = result.deleted_windows,
+                                        cycles = result.deleted_cycles,
+                                        necessity = result.deleted_necessity,
+                                        "Daily deep maintenance completed"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::monitor", error = %e, "Daily deep maintenance failed");
+                            }
+                        }
+
                         // Emit data health warning if DB is getting large
                         if let Ok(stats) = db.get_db_stats() {
                             let size_mb = stats.db_size_bytes as f64 / (1024.0 * 1024.0);
