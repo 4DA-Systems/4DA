@@ -111,8 +111,8 @@ export const Momentum = memo(function Momentum() {
   if (loading) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 flex flex-col items-center justify-center gap-2">
-        <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
-        <div className="text-xs text-text-muted">{t('momentum.loading')}</div>
+        <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" aria-hidden="true" />
+        <div className="text-xs text-text-muted" role="status">{t('momentum.loading')}</div>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export const Momentum = memo(function Momentum() {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-6" role="region" aria-label={t('momentum.title', 'Momentum')}>
         {/* Hero: Precision gauge row */}
         <MomentumHero advantage={advantage} history={history} entries={entries} gaps={gaps} />
 

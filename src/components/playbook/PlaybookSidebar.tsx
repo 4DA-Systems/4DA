@@ -44,6 +44,8 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
           <button
             key={modId}
             onClick={() => onModuleClick(modId)}
+            aria-current={isActive ? 'true' : undefined}
+            aria-label={t(`streets:streets.module.${modId}`)}
             className={`w-full text-start px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
               isActive
                 ? 'bg-accent-gold/15 border border-accent-gold/30'
@@ -78,6 +80,8 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
       {/* Templates */}
       <button
         onClick={onShowTemplates}
+        aria-current={showTemplates ? 'true' : undefined}
+        aria-label={t('playbook.templates')}
         className={`w-full text-start px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
           showTemplates
             ? 'bg-accent-gold/15 border border-accent-gold/30'

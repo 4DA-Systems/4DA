@@ -839,17 +839,31 @@ mod tests {
         );
 
         if let Some(c) = result {
-            // Action text must NOT say "Evaluate for your python workflow" since python is only detected, not declared.
-            // The title may naturally contain "Python" — that's fine. The bug was the personalized "your python workflow" text.
-            assert!(
-                !c.action.to_lowercase().contains("your python workflow"),
+            let lang = crate::i18n::get_user_language();
+            let short_title: String = "Show HN: A new Python testing framework - blazing fast alternative to pytest".chars().take(60).collect();
+
+            // Action text must NOT use the "toolEvaluateStack" template with python,
+            // since python is only detected, not declared.
+            let personalized_python = crate::i18n::t(
+                "signals:action.toolEvaluateStack",
+                &lang,
+                &[("tech", "python"), ("title", &short_title)],
+            );
+            assert_ne!(
+                c.action, personalized_python,
                 "Off-stack tech (python) should not produce personalized action text: {}",
                 c.action
             );
-            // Should get the generic form instead
-            assert!(
-                c.action.contains("Evaluate new tool:"),
-                "Should use generic action text, got: {}",
+
+            // Should get the generic "toolEvaluate" form (no tech parameter)
+            let expected_generic = crate::i18n::t(
+                "signals:action.toolEvaluate",
+                &lang,
+                &[("title", &short_title)],
+            );
+            assert_eq!(
+                c.action, expected_generic,
+                "Should use generic action text (toolEvaluate), got: {}",
                 c.action
             );
         }

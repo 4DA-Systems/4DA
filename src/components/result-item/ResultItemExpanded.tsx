@@ -62,6 +62,7 @@ export function ResultItemExpanded({
           <button
             onClick={onGenerateSummary}
             disabled={summaryLoading}
+            aria-label={summaryLoading ? t('briefing.generating') : `${t('results.generateAiSummary')} for ${item.title}`}
             className="text-[11px] px-2.5 py-1.5 rounded border border-cyan-500/20 text-cyan-400 hover:bg-cyan-500/10 transition-colors disabled:opacity-50"
           >
             {summaryLoading ? t('briefing.generating') : t('results.generateAiSummary')}
@@ -112,7 +113,7 @@ export function ResultItemExpanded({
             className="text-xs bg-bg-primary rounded p-2 border border-border/30"
           >
             <div className="flex items-center gap-2 mb-1">
-              <span className={`font-mono ${getScoreColor(match.similarity)}`}>
+              <span className={`font-mono ${getScoreColor(match.similarity)}`} aria-label={`Match score: ${formatScore(match.similarity)}`}>
                 {formatScore(match.similarity)}
               </span>
               <span className="text-text-muted">-&gt;</span>

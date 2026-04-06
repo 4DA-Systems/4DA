@@ -39,10 +39,11 @@ function SectionToggle({
     <div className="border-b border-border/30 last:border-b-0">
       <button
         onClick={onToggle}
+        aria-expanded={open}
         className="w-full flex items-center justify-between px-4 py-3 hover:bg-bg-tertiary/50 transition-colors"
       >
         <span className="text-xs font-medium text-text-primary">{title}</span>
-        <span className="text-text-muted text-xs">{open ? '\u25B2' : '\u25BC'}</span>
+        <span className="text-text-muted text-xs" aria-hidden="true">{open ? '\u25B2' : '\u25BC'}</span>
       </button>
       {open && <div className="px-4 pb-4">{children}</div>}
     </div>
@@ -141,12 +142,14 @@ function FeedbackQueueItem({
       <div className="flex gap-1 flex-shrink-0">
         <button
           onClick={onConfirm}
+          aria-label={`${t('awe.console.confirm')} ${decision.statement}`}
           className="text-[10px] px-2 py-0.5 rounded border border-success/30 text-success hover:bg-success/10 transition-colors"
         >
           {t('awe.console.confirm')}
         </button>
         <button
           onClick={onRefute}
+          aria-label={`${t('awe.console.refute')} ${decision.statement}`}
           className="text-[10px] px-2 py-0.5 rounded border border-error/30 text-error hover:bg-error/10 transition-colors"
         >
           {t('awe.console.refute')}
@@ -297,7 +300,7 @@ export const WisdomTab = memo(function WisdomTab() {
   }
 
   return (
-    <div className="divide-y divide-border/30">
+    <div className="divide-y divide-border/30" role="region" aria-label={t('awe.console.title', 'Wisdom Console')}>
       {/* AWE Wisdom Synthesis Voice */}
       {aweWisdomSynthesis && (
         <div className="px-4 py-3 bg-accent-gold/5 border-b border-accent-gold/20">

@@ -302,7 +302,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         display: 'flex',
         gap: '0.5rem',
         marginTop: '1.5rem',
-      }}>
+      }} aria-hidden="true">
         {stageOrder.slice(0, -1).map((s, i) => (
           <div
             key={s}

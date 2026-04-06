@@ -104,7 +104,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div ref={tetRef} className="w-12 h-12 rounded-lg overflow-hidden border border-border/20" />
+          <div ref={tetRef} className="w-12 h-12 rounded-lg overflow-hidden border border-border/20" aria-hidden="true" />
           <div>
             <h2 className="font-medium text-white text-sm">{t('decisions.title')}</h2>
             <p className="text-xs text-text-muted">
@@ -114,6 +114,8 @@ export const DecisionMemory = memo(function DecisionMemory() {
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
+          aria-expanded={showForm}
+          aria-label={showForm ? t('action.cancel') : t('decisions.record')}
           className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded hover:border-white/20 transition-colors"
         >
           {showForm ? t('action.cancel') : t('decisions.record')}
@@ -192,7 +194,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
       {/* Auto-detected tech notice */}
       {!decisionsLoading && decisions.some(d => d.decision_type === 'tech_choice' && d.rationale === 'Inferred from project setup') && (
         <div className="px-5 py-3 border-b border-border bg-amber-500/5 flex items-start gap-3">
-          <span className="text-amber-400 text-xs mt-0.5 flex-shrink-0">!</span>
+          <span className="text-amber-400 text-xs mt-0.5 flex-shrink-0" aria-hidden="true">!</span>
           <div className="flex-1 min-w-0">
             <p className="text-xs text-amber-400 font-medium">{t('decisions.autoDetectedNotice')}</p>
             <p className="text-[10px] text-text-muted mt-0.5">{t('decisions.autoDetectedHint')}</p>

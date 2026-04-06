@@ -73,6 +73,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
               window.open(item.url!, '_blank', 'noopener,noreferrer');
             });
           }}
+          aria-label={`${t('feedback.openLink')}: ${item.title}`}
           className="px-3 py-1.5 text-xs bg-accent-primary text-bg-primary rounded hover:bg-text-secondary transition-colors font-medium cursor-pointer"
         >
           {t('feedback.openLink')}
@@ -110,6 +111,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       <button
         onClick={handleDismiss}
         disabled={!!feedback}
+        aria-label={feedback === 'dismiss' ? t('feedback.dismissed') : t('action.dismiss')}
         className={`px-3 py-1.5 text-xs rounded font-medium transition-all duration-200 ${
           dismissFlash
             ? 'opacity-50'
@@ -130,6 +132,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
           onRecordInteraction(item.id, 'mark_irrelevant', item);
         }}
         disabled={!!feedback}
+        aria-label={feedback === 'mark_irrelevant' ? t('feedback.marked') : t('feedback.notRelevant')}
         className={`px-3 py-1.5 text-xs rounded transition-colors font-medium ${
           feedback === 'mark_irrelevant'
             ? 'bg-error/20 text-error cursor-default'
@@ -142,6 +145,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       </button>
       <button
         onClick={handleShare}
+        aria-label={`${t('action.share')}: ${item.title}`}
         className="px-2.5 py-1 text-xs rounded font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
       >
         {t('action.share')}

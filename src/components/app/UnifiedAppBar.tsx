@@ -90,7 +90,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
       >
         {/* Left: VoidEngine + status */}
         <div className="flex items-center gap-3 flex-shrink-0">
-          <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden">
+          <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden" aria-hidden="true">
             <VoidEngine size={36} variant="pentachoron" />
           </div>
           <div className="flex items-center gap-2">
@@ -209,6 +209,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
               onClick={onOpenSettings}
               className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition-colors"
               title={t('status.keywordOnlyTooltip', 'Semantic scoring unavailable. Configure an AI provider in Settings for better results.')}
+              aria-label={t('status.keywordOnlyTooltip', 'Semantic scoring unavailable. Configure an AI provider in Settings for better results.')}
             >
               {t('status.keywordOnly', 'Keyword mode')}
             </button>
@@ -218,6 +219,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
               onClick={onOpenSettings}
               className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-300 rounded hover:bg-amber-500/20 transition-colors"
               title={t('status.degradedTooltip', 'Embeddings using fallback. Results may be less accurate.')}
+              aria-label={t('status.degradedTooltip', 'Embeddings using fallback. Results may be less accurate.')}
             >
               {t('status.degraded', 'Limited')}
             </button>

@@ -145,6 +145,7 @@ export const BriefingView = memo(function BriefingView() {
                           {item.url ? (
                             <button
                               onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => window.open(item.url!, '_blank', 'noopener,noreferrer'))}
+                              aria-label={`${t('feedback.openLink')}: ${item.title}`}
                               className="text-xs text-white hover:text-text-secondary text-start transition-colors leading-snug"
                             >
                               {getTranslated(`free_${i}`, item.title)}
@@ -188,6 +189,7 @@ export const BriefingView = memo(function BriefingView() {
               <span className="text-[10px] font-mono text-text-muted">{t('briefing.signalsAnalyzed', { count: freeBriefing.total_items })}</span>
               <button
                 onClick={generateBriefing}
+                aria-label={t('briefing.generateAI')}
                 className="px-3 py-1.5 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all font-medium"
               >
                 {t('briefing.generateAI')}
