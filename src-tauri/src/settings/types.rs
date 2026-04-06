@@ -169,7 +169,7 @@ pub struct MonitoringConfig {
     /// Whether 4DA launches automatically at system startup (default: false)
     #[serde(default)]
     pub launch_at_startup: Option<bool>,
-    /// Notification style: "custom" (GAME-powered popup) or "native" (OS toast).
+    /// Notification style: "custom" (Glyph-powered popup) or "native" (OS toast).
     /// Default: "custom".
     #[serde(default = "default_notification_style")]
     pub notification_style: String,
