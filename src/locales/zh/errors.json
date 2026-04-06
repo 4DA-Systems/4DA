@@ -33,6 +33,7 @@
   "errorMsg.fileNotFound": "文件未找到。可能已被移动或删除。",
   "errorMsg.git": "Git 操作失败。请检查仓库路径。",
   "errorMsg.ipc": "应用通信错误。请重新启动应用。",
+  "errorMsg.limitAdjust": "在设置 > 智能中调整，或等待午夜重置。",
   "errorMsg.network": "网络请求失败。请检查你的互联网连接。",
   "errorMsg.ollamaNotRunning": "Ollama 未运行。请启动 Ollama 或在设置中配置 API 密钥。",
   "errorMsg.parse": "数据格式错误。请重试或重新启动应用。",

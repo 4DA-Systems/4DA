@@ -865,16 +865,7 @@ fn validate_binary_path(path: &str) -> bool {
 
 /// Cached AWE binary path — resolved once, reused for all calls.
 static AWE_BINARY_PATH: std::sync::LazyLock<Option<String>> = std::sync::LazyLock::new(|| {
-    let candidates = [
-        "D:\\runyourempire\\awe\\target\\release\\awe.exe",
-        "/d/runyourempire/awe/target/release/awe",
-    ];
-    for path in &candidates {
-        if validate_binary_path(path) {
-            info!(target: "4da::awe", path = path, "AWE binary resolved from hardcoded candidate");
-            return Some(path.to_string());
-        }
-    }
+    // Priority 1: AWE_BIN environment variable (explicit override)
     if let Some(env_path) = std::env::var("AWE_BIN").ok().filter(|p| !p.is_empty()) {
         if validate_binary_path(&env_path) {
             info!(target: "4da::awe", path = %env_path, "AWE binary resolved from AWE_BIN env var");
@@ -885,6 +876,39 @@ static AWE_BINARY_PATH: std::sync::LazyLock<Option<String>> = std::sync::LazyLoc
             path = %env_path,
             "AWE_BIN env var rejected: path failed validation (must be absolute, no .., must exist)"
         );
+    }
+
+    // Priority 2: Relative to current executable (bundled/installed deployments)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let awe_name = if cfg!(windows) { "awe.exe" } else { "awe" };
+            // Check sibling (same directory as 4DA binary)
+            let sibling = exe_dir.join(awe_name);
+            if sibling.is_file() {
+                let p = sibling.to_string_lossy().to_string();
+                info!(target: "4da::awe", path = %p, "AWE binary resolved as sibling of executable");
+                return Some(p);
+            }
+            // Check ../lib/ (common Linux package layout)
+            let lib_path = exe_dir.join("../lib").join(awe_name);
+            if lib_path.is_file() {
+                let p = lib_path.to_string_lossy().to_string();
+                info!(target: "4da::awe", path = %p, "AWE binary resolved in lib directory");
+                return Some(p);
+            }
+        }
+    }
+
+    // Priority 3: Developer machine hardcoded paths (development only)
+    let candidates = [
+        "D:\\runyourempire\\awe\\target\\release\\awe.exe",
+        "/d/runyourempire/awe/target/release/awe",
+    ];
+    for path in &candidates {
+        if validate_binary_path(path) {
+            info!(target: "4da::awe", path = path, "AWE binary resolved from dev candidate");
+            return Some(path.to_string());
+        }
     }
     None
 });

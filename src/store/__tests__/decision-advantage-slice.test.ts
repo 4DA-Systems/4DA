@@ -127,7 +127,7 @@ describe('decision-advantage-slice', () => {
 
       await useAppStore.getState().closeWindow(5);
 
-      expect(invoke).toHaveBeenCalledWith('close_decision_window', { windowId: 5 });
+      expect(invoke).toHaveBeenCalledWith('close_decision_window', { windowId: 5, outcome: null });
     });
   });
 });

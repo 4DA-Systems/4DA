@@ -33,6 +33,7 @@
   "errorMsg.fileNotFound": "Fichier introuvable. Il a peut-être été déplacé ou supprimé.",
   "errorMsg.git": "L'opération Git a échoué. Vérifiez le chemin du dépôt.",
   "errorMsg.ipc": "Erreur de communication de l'application. Veuillez redémarrer l'application.",
+  "errorMsg.limitAdjust": "Ajustez dans Paramètres > Intelligence, ou attendez la réinitialisation à minuit.",
   "errorMsg.network": "La requête réseau a échoué. Vérifiez votre connexion internet.",
   "errorMsg.ollamaNotRunning": "Ollama n'est pas en cours d'exécution. Démarrez Ollama ou configurez une clé API dans les Paramètres.",
   "errorMsg.parse": "Erreur de format de données. Réessayez ou redémarrez l'application.",

@@ -19,8 +19,19 @@ impl OfficeExtractor {
         Self
     }
 
+    /// Maximum office document size (100 MB) to prevent OOM on malicious/huge files
+    const MAX_OFFICE_SIZE: u64 = 100 * 1024 * 1024;
+
     /// Extract text from a DOCX file
     fn extract_docx(&self, path: &Path) -> Result<ExtractedDocument> {
+        let file_size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if file_size > Self::MAX_OFFICE_SIZE {
+            return Err(crate::error::FourDaError::Internal(format!(
+                "DOCX file too large ({:.1} MB, max {:.0} MB)",
+                file_size as f64 / (1024.0 * 1024.0),
+                Self::MAX_OFFICE_SIZE as f64 / (1024.0 * 1024.0)
+            )));
+        }
         let bytes = fs::read(path).context("Failed to read DOCX file")?;
 
         let docx = read_docx(&bytes).context("Failed to parse DOCX structure")?;
@@ -85,6 +96,14 @@ impl OfficeExtractor {
 
     /// Extract text from an XLSX file
     fn extract_xlsx(&self, path: &Path) -> Result<ExtractedDocument> {
+        let file_size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        if file_size > Self::MAX_OFFICE_SIZE {
+            return Err(crate::error::FourDaError::Internal(format!(
+                "XLSX file too large ({:.1} MB, max {:.0} MB)",
+                file_size as f64 / (1024.0 * 1024.0),
+                Self::MAX_OFFICE_SIZE as f64 / (1024.0 * 1024.0)
+            )));
+        }
         let mut workbook: Xlsx<_> = open_workbook(path).context("Failed to open Excel workbook")?;
 
         let mut all_text: Vec<String> = Vec::new();

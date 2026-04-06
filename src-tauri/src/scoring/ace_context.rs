@@ -163,12 +163,17 @@ pub(crate) fn get_ace_context() -> ACEContext {
     ctx
 }
 
-/// Check if item should be excluded by ACE anti-topics
+/// Check if item should be excluded by ACE anti-topics.
+/// Uses word-boundary matching to prevent "test" blocking "testing" or "contest".
 pub(crate) fn check_ace_exclusions(topics: &[String], ace_ctx: &ACEContext) -> Option<String> {
     // Both topics (from extract_topics) and anti_topics are already lowercase
     for topic in topics {
+        let topic_words: std::collections::HashSet<&str> = topic.split_whitespace().collect();
         for anti_topic in &ace_ctx.anti_topics {
-            if topic.contains(anti_topic.as_str()) || anti_topic.contains(topic.as_str()) {
+            let anti_words: Vec<&str> = anti_topic.split_whitespace().collect();
+            // All words in the anti-topic must appear as whole words in the topic
+            let all_match = anti_words.iter().all(|aw| topic_words.contains(aw));
+            if all_match && !anti_words.is_empty() {
                 return Some(format!("ACE anti-topic: {anti_topic}"));
             }
         }
@@ -200,17 +205,28 @@ mod tests {
     fn test_check_ace_exclusions_match() {
         let mut ctx = ACEContext::default();
         ctx.anti_topics.push("crypto".to_string());
-        let topics = vec!["cryptocurrency".to_string()];
+        // "crypto" as a whole word in the topic should match
+        let topics = vec!["crypto trading".to_string()];
         let result = check_ace_exclusions(&topics, &ctx);
         assert!(result.is_some());
         assert!(result.unwrap().contains("crypto"));
     }
 
     #[test]
-    fn test_check_ace_exclusions_reverse_match() {
+    fn test_check_ace_exclusions_no_substring_match() {
+        // "crypto" should NOT match "cryptocurrency" (word boundary enforcement)
         let mut ctx = ACEContext::default();
-        ctx.anti_topics.push("cryptocurrency".to_string());
-        let topics = vec!["crypto".to_string()];
+        ctx.anti_topics.push("crypto".to_string());
+        let topics = vec!["cryptocurrency".to_string()];
+        let result = check_ace_exclusions(&topics, &ctx);
+        assert!(result.is_none(), "Substring 'crypto' should not match 'cryptocurrency'");
+    }
+
+    #[test]
+    fn test_check_ace_exclusions_multi_word_anti_topic() {
+        let mut ctx = ACEContext::default();
+        ctx.anti_topics.push("machine learning".to_string());
+        let topics = vec!["machine learning ops".to_string()];
         let result = check_ace_exclusions(&topics, &ctx);
         assert!(result.is_some());
     }

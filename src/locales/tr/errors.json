@@ -33,6 +33,7 @@
   "errorMsg.fileNotFound": "Dosya bulunamadı. Taşınmış veya silinmiş olabilir.",
   "errorMsg.git": "Git işlemi başarısız. Depo yolunu kontrol edin.",
   "errorMsg.ipc": "Uygulama iletişim hatası. Lütfen uygulamayı yeniden başlatın.",
+  "errorMsg.limitAdjust": "Ayarlar > Zeka bölümünden ayarlayın veya gece yarısı sıfırlanmasını bekleyin.",
   "errorMsg.network": "Ağ isteği başarısız. İnternet bağlantınızı kontrol edin.",
   "errorMsg.ollamaNotRunning": "Ollama çalışmıyor. Ollama'yı başlatın veya Ayarlar'da API anahtarı girin.",
   "errorMsg.parse": "Veri biçimi hatası. Tekrar deneyin veya uygulamayı yeniden başlatın.",
