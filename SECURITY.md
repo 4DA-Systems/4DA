@@ -1,105 +1,107 @@
 # Security Policy
 
+4DA Systems Pty Ltd (ACN 696 078 841) takes the security of 4DA and its users extremely seriously. This document describes our security policy, vulnerability disclosure process, and the security properties of the application.
+
 ## Supported Versions
 
 | Version | Supported          |
-| ------- | ------------------ |
-| Latest  | Yes                |
-| Older   | No                 |
+|---------|--------------------|
+| 1.x     | Yes                |
+| < 1.0   | No                 |
 
-Only the latest release of 4DA receives security updates. Users should keep their installation up to date.
+Only the latest release in the 1.x series receives security updates. Users should always run the most recent version.
 
 ## Reporting a Vulnerability
 
-**Do NOT open a public issue for security vulnerabilities.**
+**Do not open a public GitHub issue for security vulnerabilities.**
 
-Report vulnerabilities by email to **security@4da.ai**. Include as much detail as possible:
+Send vulnerability reports to **security@4da.ai**. Include:
 
-- Description of the vulnerability
-- Steps to reproduce
-- Affected component (frontend, Rust backend, IPC layer, update mechanism, etc.)
-- Potential impact assessment
-- Suggested mitigation or fix (if any)
+- A clear description of the vulnerability
+- Steps to reproduce the issue
+- Your assessment of the impact (e.g., data exfiltration, privilege escalation, code execution)
+- Any proof-of-concept code or screenshots
+- Your preferred attribution name (if you want credit)
 
 ### Response Timeline
 
-- **48 hours** -- Acknowledgment of your report
-- **7 days** -- Initial assessment and severity classification
-- **90 days** -- Target resolution window before coordinated disclosure
+| Stage          | SLA                |
+|----------------|--------------------|
+| Acknowledgment | Within 48 hours    |
+| Triage         | Within 5 business days |
+| Fix (critical) | Best effort, typically within 30 days |
+| Fix (other)    | Prioritized in the next release cycle |
 
-We will keep you informed of progress throughout the process.
+We will keep you informed of our progress throughout the process.
+
+### Safe Harbor
+
+4DA Systems will not pursue legal action against security researchers who:
+
+- Make a good-faith effort to avoid privacy violations, data destruction, and service disruption
+- Report vulnerabilities promptly and provide reasonable time for remediation before any public disclosure
+- Do not exploit vulnerabilities beyond what is necessary to demonstrate the issue
+
+### Credit
+
+With your permission, we will acknowledge your contribution in the release notes of the version that addresses the vulnerability. If you prefer to remain anonymous, we will respect that.
+
+## Security Architecture
+
+4DA is a local-first desktop application. By design, it minimizes attack surface by keeping data and computation on the user's machine.
+
+### Backend (Rust)
+
+- **Memory safety.** The Rust backend eliminates entire classes of vulnerabilities: buffer overflows, use-after-free, data races.
+- **Credential storage.** API keys are stored in the platform keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service). Credentials are never written to plaintext files.
+- **Path canonicalization.** All file system operations canonicalize paths to prevent symlink and directory traversal attacks.
+- **SSRF prevention.** Outbound HTTP requests are validated against an allowlist. Private and internal IP ranges are blocked.
+
+### Frontend (React/TypeScript)
+
+- **Content Security Policy.** Strict CSP enforcement: no inline scripts, no iframes, no `eval()`.
+- **HTML sanitization.** All rendered HTML is sanitized with DOMPurify before insertion into the DOM.
+
+### Update Mechanism
+
+- **Signed updates.** Application updates are signed with Ed25519 (minisign). The updater verifies signatures before applying any update.
+- **Code signing.** Windows binaries are EV code-signed. macOS binaries are signed and notarized by Apple.
+
+### Supply Chain
+
+- **cargo-deny.** Enforced in CI to audit Rust dependencies for known vulnerabilities, duplicate crates, and license compliance.
+- **SBOM.** A CycloneDX Software Bill of Materials is published with every release, accompanied by a cosign attestation.
 
 ## Scope
 
 ### In Scope
 
-The following are considered valid security vulnerabilities:
-
-- **API key exposure** -- Any path by which locally stored API keys (`data/settings.json`) could be exfiltrated, leaked, or accessed by unauthorized processes
-- **Data exfiltration** -- Any mechanism that causes local data (SQLite database, user settings, ACE project scans) to leave the user's machine without explicit consent
-- **Update mechanism compromise** -- Bypass or tampering with Minisign-signed application updates
-- **IPC boundary bypass** -- Unauthorized access across the Tauri IPC boundary between the frontend webview and the Rust backend
-- **Local privilege escalation** -- Exploits that allow the app to gain system privileges beyond its intended scope
-- **CSP bypass** -- Content Security Policy violations in the webview that enable script injection
-- **Dependency vulnerabilities** -- Critical CVEs in third-party dependencies that are exploitable in 4DA's context
+- The 4DA desktop application (all platforms)
+- The update and auto-update mechanism
+- Bundled MCP servers (mcp-memory-server, mcp-4da-server)
 
 ### Out of Scope
 
-The following are **not** considered vulnerabilities:
+- **Third-party dependencies.** If you find a vulnerability in an upstream dependency, please report it to the upstream maintainer. We will update promptly once a fix is available.
+- **Social engineering** of 4DA Systems employees or contributors.
+- **Denial of service** against infrastructure (4da.ai, update servers).
+- **Attacks requiring physical access** to an unlocked machine where 4DA is running.
 
-- Social engineering attacks against users or maintainers
-- Attacks requiring physical access to the user's machine
-- Denial of service against the local application
-- Issues requiring pre-existing malware or a compromised operating system
-- Vulnerabilities in third-party API services accessed via user-provided keys
-- Self-inflicted misconfiguration of local settings files
+## Known Security Properties
 
-## Security Model
+These are architectural properties, not claims of invulnerability.
 
-4DA is a privacy-first desktop application. Its security model is built on the following principles:
-
-### BYOK (Bring Your Own Key)
-
-Users provide their own API keys. Keys are stored in your operating system's native credential manager (Windows Credential Manager, macOS Keychain, or Linux Secret Service) and are never transmitted to 4DA Systems or any third party. Keys are sent only to the API endpoints the user has explicitly configured.
-
-### Local-First Architecture
-
-All data processing occurs on the user's machine. The SQLite database and all derived intelligence remain local. There is no remote backend, no cloud sync, and no server-side processing.
-
-### Zero Telemetry
-
-4DA collects no telemetry, no analytics, and no usage data. There are no tracking pixels, no crash reporters, and no remote data collection of any kind.
-
-### Signed Updates
-
-Application updates are signed using Minisign. The update mechanism verifies cryptographic signatures before applying any update, preventing tampering in transit.
-
-### Tauri Capability System
-
-The Rust backend and React frontend communicate through Tauri's IPC layer with enforced capabilities. Only explicitly exposed commands are callable from the frontend. The backend enforces all access control and input validation. The app runs with minimal OS permissions.
-
-## Disclosure Policy
-
-4DA Systems follows a coordinated disclosure process:
-
-1. Reporter submits the vulnerability to **security@4da.ai**.
-2. We acknowledge receipt within 48 hours and begin assessment.
-3. We work with the reporter to understand and verify the issue.
-4. We develop and test a fix.
-5. We release the fix and publish a security advisory.
-6. The reporter may publish their findings after the fix is released, or after 90 days from the initial report, whichever comes first.
-
-We ask that reporters refrain from public disclosure until a fix is available or the 90-day window has elapsed.
-
-## Recognition
-
-Security researchers who responsibly disclose valid vulnerabilities will be credited in the release changelog, unless they prefer to remain anonymous. We value the work that goes into finding and reporting security issues.
+- **BYOK (Bring Your Own Key).** API keys are stored in the platform keychain and are only transmitted to the providers the user has explicitly configured. 4DA Systems never receives or stores user API keys.
+- **No telemetry.** Zero data leaves the machine without explicit user action. There are no analytics, crash reporters, or phone-home mechanisms.
+- **Local-first.** 4DA functions fully offline. There is no required server connection, no user account, and no remote database.
+- **No accounts.** There is no user database, authentication system, or session infrastructure to breach.
 
 ## Contact
 
-- **Security reports:** security@4da.ai
-- **General inquiries:** support@4da.ai
+For security matters: **security@4da.ai**
 
----
+For general inquiries: **https://4da.ai**
 
-4DA Systems Pty Ltd (ACN 696 078 841) | FSL-1.1-Apache-2.0
+## License
+
+4DA is licensed under FSL-1.1-Apache-2.0. See [LICENSE](LICENSE) for details.

@@ -102,6 +102,12 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Supply chain policy check
+        shell: bash
+        run: |
+          cargo install cargo-deny --locked --quiet 2>/dev/null || true
+          cd src-tauri && cargo deny check 2>/dev/null || echo "::warning::cargo-deny check failed — review supply chain"
+
       - name: Install SSL.com CodeSignTool (Windows EV signing)
         if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
         env:

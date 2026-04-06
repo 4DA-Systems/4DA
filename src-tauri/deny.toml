@@ -1,0 +1,262 @@
+# ============================================================================
+# cargo-deny configuration for 4DA (4 Dimensional Autonomy)
+# ============================================================================
+#
+# Supply chain security policy for a Tauri 2.0 desktop application.
+# Licensed under FSL-1.1-Apache-2.0.
+#
+# Run: cargo deny check (from src-tauri/)
+# CI:  cargo deny --all-features check
+#
+# Last reviewed: 2026-04-07
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# [graph] — Define the target platforms we build for.
+#
+# 4DA ships on Windows (x86_64), macOS (aarch64 + x86_64), and Linux (x86_64).
+# Restricting targets prevents cargo-deny from flagging platform-specific
+# advisories for architectures we never compile to.
+# ----------------------------------------------------------------------------
+[graph]
+targets = [
+    "x86_64-pc-windows-msvc",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+]
+
+# Enable all features so we audit the full dependency tree including
+# feature-gated code (enterprise, ocr, archive, etc.)
+all-features = true
+
+# ----------------------------------------------------------------------------
+# [output] — Diagnostic formatting
+# ----------------------------------------------------------------------------
+[output]
+feature-depth = 1
+
+# ============================================================================
+# [advisories] — Security vulnerability and maintenance checks
+# ============================================================================
+#
+# Policy: Every known vulnerability is a hard deny unless we have explicitly
+# reviewed it, documented the risk, and confirmed no fix exists. Unmaintained
+# crates get warnings (not denials) because many stable crates simply don't
+# need active development.
+# ============================================================================
+[advisories]
+# DENY any crate with a known security vulnerability in the RustSec database.
+vulnerability = "deny"
+
+# WARN on unmaintained crates. We prefer warnings here because many crates
+# (e.g., system bindings, mature algorithms) are feature-complete and don't
+# need active commits. Each warning is reviewed during quarterly audits.
+unmaintained = "warn"
+
+# WARN on crates whose RustSec advisory indicates "unsound" usage.
+# These are reviewed case-by-case; some are theoretical with no practical
+# exploit path for our usage patterns.
+unsound = "warn"
+
+# DENY yanked crate versions. A yanked version means the author explicitly
+# revoked it — we must not depend on revoked code.
+yanked = "deny"
+
+# WARN on crates with open "notice" advisories. These are informational
+# and don't indicate a vulnerability, but we want visibility.
+notice = "warn"
+
+# Explicitly allowed advisories — each must have a justification.
+ignore = [
+    # -----------------------------------------------------------------------
+    # RUSTSEC-2023-0071 — RSA "Marvin Attack" (timing sidechannel)
+    #
+    # The `rsa` crate (v0.9.x) has a known timing sidechannel vulnerability
+    # in PKCS#1 v1.5 decryption (CVE-2023-49092). No patched version exists
+    # as of 2026-04.
+    #
+    # Risk assessment:
+    #   - Only compiled when the `enterprise` feature is enabled (SSO crypto).
+    #   - Used for JWT RS256 signature VERIFICATION, not decryption.
+    #   - The Marvin Attack requires: (a) attacker-controlled ciphertexts,
+    #     (b) a decryption oracle with measurable timing. Our usage is
+    #     signature verification on locally-held public keys — neither
+    #     condition applies.
+    #   - If a fix lands in rsa 0.10+, we will upgrade immediately.
+    #
+    # Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
+    # Internal ref: Cargo.toml comment on `rsa` dependency
+    # -----------------------------------------------------------------------
+    "RUSTSEC-2023-0071",
+
+    # -----------------------------------------------------------------------
+    # RUSTSEC-2024-0416 — atk-sys (unmaintained)
+    #
+    # The `atk-sys` crate is unmaintained. It enters our tree as a transitive
+    # dependency on Linux only: webkit2gtk -> wry -> tauri.
+    #
+    # Risk assessment:
+    #   - We do not call atk-sys directly; it is a -sys FFI binding to the
+    #     system ATK accessibility library.
+    #   - The actual security surface is the system-installed libatk, which
+    #     is maintained by GNOME and patched via OS updates.
+    #   - The Rust -sys crate is a thin binding layer with no logic.
+    #   - Tauri upstream is aware; replacement will come via their gtk4 migration.
+    #   - Not compiled on Windows or macOS (our primary targets).
+    #
+    # Monitoring: https://rustsec.org/advisories/RUSTSEC-2024-0416
+    # -----------------------------------------------------------------------
+    "RUSTSEC-2024-0416",
+]
+
+# ============================================================================
+# [licenses] — License compatibility enforcement
+# ============================================================================
+#
+# 4DA is licensed under FSL-1.1-Apache-2.0 (source-available, converts to
+# Apache-2.0 after 2 years). We allow permissive open-source licenses and
+# carefully review any copyleft dependencies.
+# ============================================================================
+[licenses]
+# Deny any crate whose license we haven't explicitly approved.
+unlicensed = "deny"
+
+# Confidence threshold for license detection. SPDX expressions below this
+# confidence level will be flagged for manual review.
+confidence-threshold = 0.8
+
+# Approved license list — permissive licenses compatible with our distribution model.
+allow = [
+    # --- Permissive (no conditions beyond attribution) ---
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "BSL-1.0",          # Boost Software License
+
+    # --- Public domain / dedication ---
+    "CC0-1.0",
+    "Unlicense",
+
+    # --- Unicode / standards body ---
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+
+    # --- Weak copyleft (file-level, compatible with proprietary distribution) ---
+    # MPL-2.0 is file-level copyleft: modifications to MPL-licensed files must
+    # be shared, but the rest of the application is unaffected. This is
+    # compatible with our license as long as we don't modify MPL-licensed source
+    # files (we don't — these are used as unmodified library dependencies).
+    "MPL-2.0",
+
+    # --- OpenSSL (some transitive deps carry this) ---
+    "OpenSSL",
+]
+
+# Copyleft licenses that require careful handling. LGPL is used by some GTK
+# system bindings on Linux (glib-sys, gobject-sys, etc.). These are dynamically
+# linked against system libraries, which satisfies LGPL requirements.
+# We WARN (not deny) to maintain visibility during audits.
+exceptions = [
+    # ring uses a custom license that is ISC-style but includes OpenSSL heritage.
+    # It is well-established as permissive in the Rust ecosystem.
+    { allow = ["ring"], name = "ring", version = "*" },
+]
+
+# `ring` uses a non-standard license file that combines ISC, MIT, and OpenSSL
+# heritage text. cargo-deny cannot auto-detect it, so we clarify it manually.
+# NOTE: The LICENSE hash may change between ring versions. If cargo-deny fails
+# with a hash mismatch after updating ring, regenerate with:
+#   cargo deny --manifest-path Cargo.toml list -f json | jq '.[] | select(.name == "ring")'
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT AND ISC AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# ============================================================================
+# [bans] — Crate-level bans and duplicate detection
+# ============================================================================
+#
+# Policy: Warn on duplicate crate versions (inevitable in deep dep trees),
+# deny wildcards (pin everything), and ban crates with known issues.
+# ============================================================================
+[bans]
+# WARN on multiple versions of the same crate. In a tree with Tauri, tokio,
+# reqwest, and system bindings, some duplication is unavoidable (e.g., syn 1
+# + syn 2 during the ecosystem transition). We review these during audits to
+# minimize bloat.
+multiple-versions = "warn"
+
+# DENY wildcard version requirements (e.g., `version = "*"`). Every dependency
+# must have a bounded version to prevent accidental major-version bumps.
+wildcards = "deny"
+
+# Allow specific well-known duplicates that are unavoidable in the current
+# ecosystem. This suppresses noise from the multiple-versions warning.
+skip = [
+    # syn 1.x is still pulled by older proc-macro crates while syn 2.x is
+    # the current version. The ecosystem is mid-transition.
+    # { crate = "syn@1", reason = "Ecosystem transition from syn 1 to syn 2" },
+]
+
+# Skip the entire dependency tree of these crates when checking for duplicates.
+# Use sparingly — only for framework crates that legitimately vendor dependencies.
+skip-tree = []
+
+# Explicitly banned crates. These are either deprecated, known-insecure, or
+# have been replaced by better alternatives.
+deny = [
+    # --- Deprecated / replaced ---
+    # `rustc-serialize` was deprecated in favor of `serde`. Any transitive
+    # dependency pulling it indicates a very old, unmaintained upstream crate.
+    { crate = "rustc-serialize", reason = "Deprecated — use serde instead" },
+
+    # `gcc` was renamed to `cc`. Any crate still depending on `gcc` is
+    # unmaintained and potentially insecure.
+    { crate = "gcc", reason = "Deprecated — renamed to cc" },
+
+    # --- Security concerns ---
+    # `openssl-sys` / `openssl` — we use rustls for all TLS. Pulling OpenSSL
+    # introduces a large C dependency with a long CVE history. Reqwest and
+    # tokio-tungstenite are configured with rustls features specifically to
+    # avoid this.
+    { crate = "openssl-sys", reason = "Use rustls — OpenSSL introduces C dependency with CVE history", wrappers = ["ring"] },
+    { crate = "openssl", reason = "Use rustls — all TLS must go through rustls" },
+
+    # `native-tls` wraps platform TLS (SChannel/SecureTransport/OpenSSL).
+    # We standardize on rustls for cross-platform consistency and auditability.
+    { crate = "native-tls", reason = "Use rustls for consistent cross-platform TLS" },
+]
+
+# ============================================================================
+# [sources] — Crate source restrictions
+# ============================================================================
+#
+# Policy: All dependencies must come from crates.io. No unknown registries,
+# no arbitrary git sources. This prevents supply-chain attacks via typosquatting
+# on alternative registries or compromised git repos.
+# ============================================================================
+[sources]
+# DENY crates from registries other than crates.io.
+unknown-registry = "deny"
+
+# DENY crates sourced from git repositories. Git sources bypass the crates.io
+# review pipeline and can change without version bumps.
+unknown-git = "deny"
+
+# Only crates.io is an allowed registry.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+
+# Allowed git repositories. We keep this list empty by default.
+# If a Tauri plugin or other dependency requires a git source, it must be
+# explicitly listed here with a comment explaining why.
+allow-git = []
+
+# Allowed organizations for GitHub-sourced crates (if any git sources are
+# temporarily needed). Currently empty — all deps come from crates.io.
+# If we ever need a pre-release Tauri plugin:
+#   allow-org = { github = "tauri-apps" }

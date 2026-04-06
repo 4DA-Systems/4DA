@@ -17,4 +17,11 @@
 - **Files**: list of files being modified
 -->
 
+### T1 — Security Hardening (Fortress Wave)
+- **Status**: working
+- **Since**: 2026-04-07T12:00:00Z
+- **Files**:
+  - Wave 1 (Rust security): src-tauri/src/ipc_guard.rs, src-tauri/src/utils/url.rs, src-tauri/src/embeddings.rs, src-tauri/src/context_commands.rs
+  - Wave 2 (Supply chain): src-tauri/deny.toml, src-tauri/rust-toolchain.toml, .github/workflows/validate.yml
+  - Wave 3 (CI hardening): .github/workflows/release.yml, SECURITY.md
 

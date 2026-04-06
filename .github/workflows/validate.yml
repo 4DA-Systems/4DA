@@ -123,6 +123,12 @@ jobs:
         if: matrix.label == 'default'
         run: cd src-tauri && cargo audit
 
+      - name: Supply chain policy check
+        if: matrix.label == 'default'
+        run: |
+          cargo install cargo-deny --locked
+          cd src-tauri && cargo deny check
+
       - name: Run unit tests and verify count floor
         run: |
           cd src-tauri
