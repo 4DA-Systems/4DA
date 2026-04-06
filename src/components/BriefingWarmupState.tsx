@@ -43,7 +43,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
       return;
     }
     const lastAuto = Number(window.sessionStorage.getItem('4da-last-auto-analysis') ?? '0');
-    if (Date.now() - lastAuto < 30_000) {
+    if (Date.now() - lastAuto < 15_000) {
       setAutoStartPending(false);
       return;
     }
