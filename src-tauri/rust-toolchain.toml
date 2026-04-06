@@ -1,2 +1,8 @@
+# Pinned Rust toolchain for supply chain hardening.
+# Prevents silent auto-updates that could introduce compromised toolchain components.
+# Update policy: bump only after security review of the new toolchain release.
+# Last reviewed: 2026-02-11 (Rust 1.93.1)
+
 [toolchain]
-channel = "1.93"
+channel = "1.93.1"
+components = ["rustfmt", "clippy"]

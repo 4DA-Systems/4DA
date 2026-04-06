@@ -16,6 +16,18 @@ pub(crate) async fn scrape_article_content(url: &str) -> Option<String> {
         return None;
     }
 
+    // SSRF prevention: block requests to internal/private network addresses.
+    // Content URLs come from external sources (HN, Reddit, RSS) and could be
+    // crafted to probe internal services.
+    if crate::url_validation::validate_not_internal(url).is_err() {
+        tracing::warn!(
+            target: "4da::security",
+            url = %url,
+            "Blocked content scrape to internal address (SSRF prevention)"
+        );
+        return None;
+    }
+
     // Use shared client with per-request timeout
     let client = crate::sources::shared_client();
 

@@ -332,6 +332,46 @@ fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
     embedding
 }
 
+/// Validate that an Ollama endpoint URL is safe to use.
+///
+/// HTTP (unencrypted) connections are only permitted to localhost addresses
+/// (127.0.0.1, localhost, [::1]) to prevent sending embedding data in cleartext
+/// over the network. HTTPS connections are allowed to any host.
+fn validate_ollama_endpoint(url: &str) -> Result<()> {
+    // HTTPS is always safe — encryption protects the connection
+    if url.starts_with("https://") {
+        return Ok(());
+    }
+
+    // For HTTP, only allow localhost addresses
+    if url.starts_with("http://") {
+        let after_scheme = &url[7..]; // len("http://") == 7
+        let host = after_scheme
+            .split(|c: char| c == ':' || c == '/')
+            .next()
+            .unwrap_or("");
+
+        if matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+            return Ok(());
+        }
+
+        tracing::info!(
+            target: "4da::security",
+            host = %host,
+            "Blocked Ollama request to non-localhost HTTP endpoint"
+        );
+        return Err(crate::error::FourDaError::Validation(
+            "Ollama over HTTP is only allowed on localhost. Use HTTPS for remote Ollama instances."
+                .into(),
+        ));
+    }
+
+    // Unknown scheme — reject
+    Err(crate::error::FourDaError::Validation(format!(
+        "Unsupported Ollama endpoint scheme: {url}"
+    )))
+}
+
 /// Generate embeddings using Ollama API
 async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Result<Vec<Vec<f32>>> {
     let env_host = std::env::var("OLLAMA_HOST").ok();
@@ -339,6 +379,9 @@ async fn embed_texts_ollama(texts: &[String], base_url: &Option<String>) -> Resu
         .as_deref()
         .or(env_host.as_deref())
         .unwrap_or("http://localhost:11434");
+
+    // Security: block unencrypted connections to non-localhost endpoints
+    validate_ollama_endpoint(base)?;
 
     if texts.is_empty() {
         return Ok(vec![]);
