@@ -259,8 +259,10 @@ export function LocaleSection() {
                 onClick={() => setShowEditor(!showEditor)}
                 className="text-xs text-accent-gold hover:text-[#C4A030] transition-colors"
               >
-                {showEditor ? '- ' : '+ '}
-                {t('settings.translations.editorToggle')}
+                {showEditor ? '\u2212 ' : '+ '}
+                {showEditor
+                  ? t('settings.translations.editorToggle')
+                  : t('settings.locale.editTranslations', 'Edit translations')}
               </button>
               {showEditor && (
                 <div className="mt-3">
@@ -367,7 +369,7 @@ export function LocaleSection() {
           )}
         </div>
       ) : (
-        <div className="text-sm text-text-muted">Detecting region...</div>
+        <div className="text-sm text-text-muted animate-pulse">Detecting region...</div>
       )}
     </div>
   );

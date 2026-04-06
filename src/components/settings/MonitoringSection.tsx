@@ -260,6 +260,7 @@ export function MonitoringSection({
               className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
             />
             <span className="text-sm text-text-secondary">{t('settings.monitoring.minutes')}</span>
+            <span className="text-xs text-text-muted">5 min – 24 hr</span>
             <button
               onClick={onUpdateInterval}
               className="px-4 py-2 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
@@ -277,9 +278,10 @@ export function MonitoringSection({
               style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
             >
               <option value="critical_only">{t('settings.monitoring.criticalOnly', 'Critical only')}</option>
-              <option value="high_and_above">{t('settings.monitoring.alertAndAbove', 'Alert and above')}</option>
+              <option value="high_and_above">{t('settings.monitoring.highAndAbove', 'High and above')}</option>
               <option value="all">{t('settings.monitoring.allItems')}</option>
             </select>
+            <p className="text-xs text-text-muted mt-1">Critical = security advisories, High = important signals</p>
           </div>
 
           <div className="flex items-center gap-3">

@@ -77,6 +77,7 @@ export function DataHealthSection() {
   const { t } = useTranslation();
   const [health, setHealth] = useState<DataHealth | null>(null);
   const [loading, setLoading] = useState(true);
+  const [healthError, setHealthError] = useState<string | null>(null);
   const [cleanState, setCleanState] = useState<CleanState>('idle');
   const [cleanResult, setCleanResult] = useState<MaintenanceResult | null>(null);
   const [retentionDays, setRetentionDays] = useState(30);
@@ -89,7 +90,7 @@ export function DataHealthSection() {
       setHealth(data);
       setRetentionDays(data.retention_days);
     } catch {
-      // Non-fatal
+      setHealthError('Could not load data health');
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,13 @@ export function DataHealthSection() {
     );
   }
 
-  if (!health) return null;
+  if (!health) {
+    return healthError ? (
+      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+        <div className="text-xs text-red-400">{healthError}</div>
+      </div>
+    ) : null;
+  }
 
   const { stats } = health;
 
