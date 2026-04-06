@@ -18,8 +18,6 @@ use super::{fetch_with_retry, AdapterFailureTracker};
 /// This is the "write" side of the cache-first architecture
 /// Does NOT emit progress events - runs silently in background
 pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
-    use sources::Source;
-
     info!(target: "4da::cache", "=== BACKGROUND CACHE FILL STARTED ===");
     void_signal_fetching(app);
 

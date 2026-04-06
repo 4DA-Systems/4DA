@@ -146,6 +146,7 @@ pub fn get_cached_analysis(db: &Database, hash: &str) -> Result<Option<ContentAn
 ///
 /// Uses INSERT OR REPLACE so re-analysis of the same content
 /// simply updates the row.
+#[allow(dead_code)]
 pub fn store_analysis(
     db: &Database,
     source_item_id: i64,
