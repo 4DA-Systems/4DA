@@ -33,7 +33,7 @@ function persistDisclosure(data: PersistedDisclosure): void {
 const TIER_ORDER: ViewTier[] = ['core', 'explorer', 'invested', 'power'];
 
 const TIER_UPGRADE_MESSAGES: Partial<Record<ViewTier, string>> = {
-  explorer: 'New views unlocked: Channels & Decisions',
+  explorer: 'New views unlocked: Insights',
   invested: 'New views unlocked: Saved & Profile',
   power: 'All views unlocked: Toolkit & System',
 };

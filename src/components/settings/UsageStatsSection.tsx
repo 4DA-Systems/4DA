@@ -29,7 +29,7 @@ export function UsageStatsSection({ settings, provider }: UsageStatsSectionProps
         <div className="bg-bg-secondary rounded-lg p-3 text-center">
           {provider === 'openai-compatible' ? (
             <>
-              <p className="text-xl font-semibold text-text-muted">{t('settings.ai.costUnavailable')}</p>
+              <p className="text-sm font-semibold text-text-muted">{t('settings.ai.costUnavailableMessage', 'Not tracked for this provider')}</p>
               <p className="text-xs text-text-muted">{t('settings.ai.cost')}</p>
             </>
           ) : (
