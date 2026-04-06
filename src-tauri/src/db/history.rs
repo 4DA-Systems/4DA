@@ -95,9 +95,9 @@ impl Database {
 
         let deleted_void: usize = tx.execute("DELETE FROM void_positions", []).unwrap_or(0);
 
-        // Clean superseded digested_intelligence older than 90 days
+        // Clean superseded digested_intelligence older than 7 days (was 90 — 98.7% were dead rows)
         let deleted_intelligence: usize = tx.execute(
-            "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-90 days')",
+            "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-7 days')",
             [],
         ).unwrap_or(0);
 
@@ -115,6 +115,24 @@ impl Database {
             )
             .unwrap_or(0);
 
+        // Clean temporal_events older than 30 days
+        let deleted_temporal: usize = tx.execute(
+            "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
+            [],
+        ).unwrap_or(0);
+
+        // Clean file_signals older than 7 days
+        let deleted_file_signals: usize = tx.execute(
+            "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
+            [],
+        ).unwrap_or(0);
+
+        // Keep only the most recent 500 sun_runs
+        let deleted_sun_runs: usize = tx.execute(
+            "DELETE FROM sun_runs WHERE id NOT IN (SELECT id FROM sun_runs ORDER BY created_at DESC LIMIT 500)",
+            [],
+        ).unwrap_or(0);
+
         // Clean orphaned necessity scores
         let deleted_necessity: usize = tx.execute(
             "DELETE FROM item_necessity WHERE source_item_id NOT IN (SELECT id FROM source_items)",
@@ -130,6 +148,7 @@ impl Database {
         info!(
             target: "4da::db",
             deleted_intelligence, deleted_windows, deleted_cycles, deleted_necessity,
+            deleted_temporal, deleted_file_signals, deleted_sun_runs,
             "Deep clean: pruned unbounded tables"
         );
 
