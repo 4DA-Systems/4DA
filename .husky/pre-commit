@@ -131,6 +131,7 @@ STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | \
     grep -v 'docker-compose\.yml$' | \
     grep -v 'terms\.njk$' | \
     grep -v 'privacy\.njk$' | \
+    grep -v 'contact\.njk$' | \
     grep -v 'PRIVACY-POLICY\.md$' || true)
 
 if [ -n "$STAGED_FILES" ]; then

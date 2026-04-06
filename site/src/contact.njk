@@ -1,0 +1,236 @@
+---
+title: "Contact — 4DA Systems"
+description: "Contact information for 4DA Systems Pty Ltd. Business enquiries, support, and company details."
+permalink: "/contact.html"
+---
+{% extends "base.njk" %}
+
+{% block head %}
+  <link rel="canonical" href="https://4da.ai/contact">
+  <meta property="og:title" content="Contact — 4DA Systems">
+  <meta property="og:description" content="Contact information for 4DA Systems Pty Ltd. Business enquiries, support, and company details.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://4da.ai/contact">
+  <meta property="og:image" content="https://4da.ai/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Contact — 4DA Systems">
+  <meta name="twitter:description" content="Contact information for 4DA Systems Pty Ltd.">
+  <meta name="twitter:image" content="https://4da.ai/og-image.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0A0A0A;
+      color: #FFFFFF;
+      min-height: 100vh;
+      line-height: 1.7;
+    }
+    .legal-nav {
+      padding: 20px 0;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .legal-nav .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 0 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .legal-nav a {
+      color: #A0A0A0;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .legal-nav a:hover { color: #FFFFFF; }
+    .legal-nav .brand {
+      font-weight: 600;
+      color: #FFFFFF;
+      font-size: 15px;
+    }
+    .legal-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #A0A0A0;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid #2A2A2A;
+    }
+    .contact-card {
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 32px;
+    }
+    .contact-card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      letter-spacing: -0.01em;
+    }
+    .contact-row {
+      display: flex;
+      padding: 12px 0;
+      border-bottom: 1px solid #1F1F1F;
+      font-size: 15px;
+    }
+    .contact-row:last-child {
+      border-bottom: none;
+    }
+    .contact-label {
+      color: #A0A0A0;
+      min-width: 160px;
+      flex-shrink: 0;
+      font-size: 14px;
+    }
+    .contact-value {
+      color: #FFFFFF;
+    }
+    .contact-value a {
+      color: #FFFFFF;
+      text-decoration: underline;
+      text-decoration-color: #2A2A2A;
+      text-underline-offset: 3px;
+    }
+    .contact-value a:hover {
+      text-decoration-color: #FFFFFF;
+    }
+    .registry-links {
+      margin-top: 32px;
+    }
+    .registry-links h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      letter-spacing: -0.01em;
+    }
+    .registry-link {
+      display: block;
+      background: #141414;
+      border: 1px solid #2A2A2A;
+      border-radius: 8px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+      color: #A0A0A0;
+      text-decoration: none;
+      font-size: 14px;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .registry-link:hover {
+      border-color: #3A3A3A;
+      color: #FFFFFF;
+    }
+    .registry-link span {
+      color: #FFFFFF;
+      font-weight: 500;
+      display: block;
+      margin-bottom: 2px;
+      font-size: 15px;
+    }
+    .footer-links {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid #2A2A2A;
+      display: flex;
+      gap: 24px;
+      font-size: 13px;
+    }
+    .footer-links a {
+      color: #A0A0A0;
+      text-decoration: none;
+    }
+    .footer-links a:hover { color: #FFFFFF; }
+    @media (max-width: 600px) {
+      .contact-row {
+        flex-direction: column;
+        gap: 2px;
+      }
+      .contact-label {
+        min-width: unset;
+        font-size: 13px;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <nav class="legal-nav">
+    <div class="container">
+      <a href="/" class="brand">4DA</a>
+      <a href="/">&larr; Back to home</a>
+    </div>
+  </nav>
+
+  <main class="legal-container">
+    <h1>Contact</h1>
+    <p class="subtitle">4DA Systems Pty Ltd</p>
+
+    <div class="contact-card">
+      <h2>Company Details</h2>
+      <div class="contact-row">
+        <div class="contact-label">Legal Name</div>
+        <div class="contact-value">4DA Systems Pty Ltd</div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-label">ACN</div>
+        <div class="contact-value">696 078 841</div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-label">ABN</div>
+        <div class="contact-value">51 696 078 841</div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-label">Registered Address</div>
+        <div class="contact-value">Shop 2, 250 Boundary Street<br>Spring Hill QLD 4000<br>Australia</div>
+      </div>
+    </div>
+
+    <div class="contact-card">
+      <h2>Contact Information</h2>
+      <div class="contact-row">
+        <div class="contact-label">Phone</div>
+        <div class="contact-value"><a href="tel:+61401704467">+61 401 704 467</a></div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-label">General Enquiries</div>
+        <div class="contact-value"><a href="mailto:contact@4da.ai">contact@4da.ai</a></div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-label">Director</div>
+        <div class="contact-value">Antony Lawrence — <a href="mailto:antony@4da.ai">antony@4da.ai</a></div>
+      </div>
+      <div class="contact-row">
+        <div class="contact-label">Website</div>
+        <div class="contact-value"><a href="https://4da.ai">4da.ai</a></div>
+      </div>
+    </div>
+
+    <div class="registry-links">
+      <h2>Public Registries</h2>
+      <a class="registry-link" href="https://abr.business.gov.au/ABN/View?abn=51696078841" target="_blank" rel="noopener">
+        <span>Australian Business Register (ABR)</span>
+        ABN 51 696 078 841 — View on abr.business.gov.au
+      </a>
+      <a class="registry-link" href="https://connectonline.asic.gov.au/RegistrySearch/faces/landing/SearchRegisters.jspx" target="_blank" rel="noopener">
+        <span>ASIC Company Register</span>
+        ACN 696 078 841 — Search on connectonline.asic.gov.au
+      </a>
+    </div>
+
+    <div class="footer-links">
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Service</a>
+    </div>
+  </main>
+{% endblock %}
