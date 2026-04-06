@@ -33,6 +33,7 @@
   "errorMsg.fileNotFound": "ファイルが見つかりません。移動または削除された可能性があります。",
   "errorMsg.git": "Git 操作に失敗しました。リポジトリのパスを確認してください。",
   "errorMsg.ipc": "アプリ通信エラー。アプリを再起動してください。",
+  "errorMsg.limitAdjust": "設定 > インテリジェンスで調整するか、深夜のリセットをお待ちください。",
   "errorMsg.network": "ネットワークリクエストに失敗しました。インターネット接続を確認してください。",
   "errorMsg.ollamaNotRunning": "Ollama が起動していません。Ollama を起動するか、設定で API キーを設定してください。",
   "errorMsg.parse": "データフォーマットエラー。再試行するか、アプリを再起動してください。",

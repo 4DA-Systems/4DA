@@ -33,6 +33,7 @@
   "errorMsg.fileNotFound": "Datei nicht gefunden. Sie wurde möglicherweise verschoben oder gelöscht.",
   "errorMsg.git": "Git-Operation fehlgeschlagen. Überprüfe den Repository-Pfad.",
   "errorMsg.ipc": "Fehler in der App-Kommunikation. Bitte starte die App neu.",
+  "errorMsg.limitAdjust": "Anpassen unter Einstellungen > Intelligenz, oder warte bis zum Mitternachts-Reset.",
   "errorMsg.network": "Netzwerkanfrage fehlgeschlagen. Überprüfe deine Internetverbindung.",
   "errorMsg.ollamaNotRunning": "Ollama läuft nicht. Starte Ollama oder trage einen API-Schlüssel in den Einstellungen ein.",
   "errorMsg.parse": "Datenformatfehler. Versuche es erneut oder starte die App neu.",

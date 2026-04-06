@@ -61,7 +61,8 @@ pub(crate) fn count_confirmed_signals(
     // Broad interests (specificity < 0.50, e.g. "Open Source") cannot confirm the interest
     // axis from keyword matching alone — they need corroboration from embedding similarity.
     let interest_confirmed = if best_keyword_specificity < 0.50 {
-        // Broad interest: require BOTH keyword AND embedding confirmation
+        // Broad interest: require BOTH keyword AND embedding, OR very strong embedding alone
+        // (>= INTEREST_THRESHOLD of 0.50 indicates high semantic match even without keywords)
         (keyword_score >= scoring_config::KEYWORD_THRESHOLD && interest_score >= 0.35)
             || interest_score >= scoring_config::INTEREST_THRESHOLD
     } else {
@@ -104,8 +105,8 @@ pub(crate) fn count_confirmed_signals(
 /// Apply the multi-signal confirmation gate to a base score.
 /// Returns (gated_score, confirmation_count, confirmation_multiplier, confirmed_signal_names).
 ///
-/// Key property: with only 1 confirmed signal, score is capped at 0.45 — below the
-/// 0.50 relevance threshold. This means a single signal (no matter how strong) can
+/// Key property: with only 1 confirmed signal, score is capped at 0.28 — well below the
+/// 0.35 relevance threshold. This means a single signal (no matter how strong) can
 /// NEVER make an item relevant on its own.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_confirmation_gate(

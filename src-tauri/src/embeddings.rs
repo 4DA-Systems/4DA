@@ -88,7 +88,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                 async move { embed_texts_openai(&t, &key).await }
             })
             .await
-            .map(validate_embeddings)
+            .map(|vecs| validate_embeddings(vecs).into_iter().map(truncate_and_normalize).collect())
         }
         "ollama" => {
             let base_url = llm_settings.base_url.clone();
@@ -112,7 +112,7 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                     async move { embed_texts_openai(&t, &key).await }
                 })
                 .await
-                .map(validate_embeddings);
+                .map(|vecs| validate_embeddings(vecs).into_iter().map(truncate_and_normalize).collect());
             }
             // Try Ollama as fallback
             if let Some(base_url) = &llm_settings.base_url {
