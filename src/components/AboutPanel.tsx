@@ -59,10 +59,10 @@ export function AboutPanel() {
       {/* Framework */}
       <div className="bg-bg-tertiary/30 border border-orange-500/20 rounded-xl p-4 space-y-3">
         <h4 className="text-sm font-medium text-orange-400 tracking-wide uppercase">
-          {t('about.framework', { defaultValue: 'The 4DA Framework' })}
+          {t('about.frameworkTitle')}
         </h4>
         <p className="text-xs text-text-secondary leading-relaxed">
-          {t('about.frameworkDesc', { defaultValue: 'PASIFA scoring, Authority Stack governance, and the Autonomous Operations System — the philosophy behind 4DA, published openly.' })}
+          {t('about.frameworkDesc')}
         </p>
         <div className="flex gap-2">
           <button
@@ -72,7 +72,7 @@ export function AboutPanel() {
             }}
             className="flex-1 px-3 py-2 text-xs font-medium text-orange-400 bg-orange-500/10 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all"
           >
-            {t('about.viewFramework', { defaultValue: 'View Framework' })}
+            {t('about.viewFramework')}
           </button>
           <button
             onClick={() => {
@@ -81,7 +81,7 @@ export function AboutPanel() {
             }}
             className="flex-1 px-3 py-2 text-xs font-medium text-text-secondary bg-bg-secondary border border-border rounded-lg hover:bg-bg-tertiary transition-all"
           >
-            {t('about.viewComparison', { defaultValue: 'Compare' })}
+            {t('about.viewComparison')}
           </button>
         </div>
       </div>

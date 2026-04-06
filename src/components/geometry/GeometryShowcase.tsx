@@ -183,10 +183,10 @@ export function GeometryShowcase() {
   return (
     <div className="space-y-4">
       <h4 className="text-sm font-medium text-accent-gold tracking-wide uppercase">
-        {t('about.geometryTitle', { defaultValue: 'Platonic Architecture' })}
+        {t('about.geometryTitle')}
       </h4>
       <p className="text-xs text-text-secondary leading-relaxed">
-        {t('about.geometrySubtitle', { defaultValue: '4DA\u2019s core invariants map to Platonic geometry. Each claim below is verifiable against the referenced source files.' })}
+        {t('about.geometrySubtitle')}
       </p>
 
       <div className="grid grid-cols-2 gap-2">
@@ -205,10 +205,8 @@ export function GeometryShowcase() {
         className="flex items-center gap-1.5 text-[10px] text-text-muted hover:text-text-secondary transition-colors uppercase tracking-wider"
       >
         <span className="text-[8px]">{showFamily ? '\u25BC' : '\u25B6'}</span>
-        {showFamily
-          ? t('about.hideFamily', { defaultValue: 'Hide geometric family' })
-          : t('about.showFamily', { defaultValue: 'Show geometric family' })}
-        <span className="text-text-muted/50">{'\u00B7 '}{t('about.moreSolids', { defaultValue: '3 more solids' })}</span>
+        {showFamily ? t('about.hideFamily') : t('about.showFamily')}
+        <span className="text-text-muted/50">{'\u00B7 '}{t('about.moreSolids')}</span>
       </button>
 
       {showFamily && (
