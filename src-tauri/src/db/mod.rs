@@ -134,7 +134,9 @@ impl Database {
                 .map(|m| m.len() > 50 * 1024 * 1024)
                 .unwrap_or(false);
             if wal_large {
-                let wal_mb = std::fs::metadata(&wal_path).map(|m| m.len() / (1024 * 1024)).unwrap_or(0);
+                let wal_mb = std::fs::metadata(&wal_path)
+                    .map(|m| m.len() / (1024 * 1024))
+                    .unwrap_or(0);
                 tracing::info!(target: "4da::db", wal_mb, "Large WAL — TRUNCATE checkpoint before read pool");
                 if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
                     tracing::warn!(target: "4da::db", error = %e, "TRUNCATE checkpoint failed");

@@ -543,7 +543,8 @@ mod tests {
         assert!(
             bd.signal_count >= 2,
             "Expected 2+ signals even for new user, got {} ({:?})",
-            bd.signal_count, bd.confirmed_signals
+            bd.signal_count,
+            bd.confirmed_signals
         );
         assert!(
             result.relevant,
@@ -704,7 +705,11 @@ mod tests {
             .build();
 
         // Empty title — this triggers the short-title cap
-        let input = test_input("", "rust tokio async await performance", &interest_embedding);
+        let input = test_input(
+            "",
+            "rust tokio async await performance",
+            &interest_embedding,
+        );
         let options = ScoringOptions {
             apply_freshness: false,
             apply_signals: false,
@@ -793,7 +798,9 @@ mod tests {
         assert!(
             ratio >= 0.70,
             "Long title should not be penalized vs normal title: long={}, normal={}, ratio={}",
-            long_result.top_score, normal_result.top_score, ratio
+            long_result.top_score,
+            normal_result.top_score,
+            ratio
         );
     }
 
@@ -844,7 +851,10 @@ mod tests {
         );
 
         // Verify keyword_score is what's contributing (not embedding similarity)
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
         assert!(
             bd.keyword_score > 0.0,
             "Keyword interest score should be positive when title matches interest topic, got {}",
@@ -880,7 +890,11 @@ mod tests {
 
         // Determine user's current language so we can pick a definitively different one
         let user_lang = crate::i18n::get_user_language();
-        let mismatched_lang = if user_lang == "zz-test" { "en" } else { "zz-test" };
+        let mismatched_lang = if user_lang == "zz-test" {
+            "en"
+        } else {
+            "zz-test"
+        };
 
         // Content is about "rust" (matching interests + ACE) but in a mismatched language
         let input = ScoringInput {
@@ -905,7 +919,9 @@ mod tests {
         assert!(
             result.top_score <= 0.05,
             "Language mismatch (user={}, content={}) should cap score at 0.05, got {}",
-            user_lang, mismatched_lang, result.top_score
+            user_lang,
+            mismatched_lang,
+            result.top_score
         );
         assert!(
             !result.relevant,

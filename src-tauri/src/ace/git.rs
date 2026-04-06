@@ -36,7 +36,9 @@ fn run_git_with_timeout(args: &[&str], repo_path: &Path) -> Result<std::process:
         match child.try_wait() {
             Ok(Some(_status)) => {
                 // Process finished — collect output
-                return child.wait_with_output().context("Failed to read git output");
+                return child
+                    .wait_with_output()
+                    .context("Failed to read git output");
             }
             Ok(None) => {
                 if start.elapsed() > timeout {
@@ -46,7 +48,8 @@ fn run_git_with_timeout(args: &[&str], repo_path: &Path) -> Result<std::process:
                         "Git command timed out after {}s: git {}",
                         GIT_TIMEOUT_SECS,
                         args.join(" ")
-                    ).into());
+                    )
+                    .into());
                 }
                 std::thread::sleep(std::time::Duration::from_millis(50));
             }

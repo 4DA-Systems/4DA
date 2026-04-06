@@ -304,37 +304,60 @@ pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
 }
 
 /// Set whether 4DA launches at system startup.
+///
+/// Returns the ACTUAL autostart state after the operation, not the requested
+/// state. If OS registration fails (permissions, unsupported desktop, etc.),
+/// the response includes `registration_failed: true` so the frontend can warn
+/// the user instead of silently lying about the state.
 #[tauri::command]
 pub async fn set_launch_at_startup(
     app: tauri::AppHandle,
     enabled: bool,
 ) -> Result<serde_json::Value> {
-    // Update the autostart plugin
     use tauri_plugin_autostart::ManagerExt;
     let autostart = app.autolaunch();
-    if enabled {
-        if let Err(e) = autostart.enable() {
-            warn!(target: "4da::settings", error = %e, "Failed to enable autostart");
-        }
-    } else if let Err(e) = autostart.disable() {
-        warn!(target: "4da::settings", error = %e, "Failed to disable autostart");
+
+    // Attempt the OS-level registration
+    let registration_failed = if enabled {
+        autostart.enable().err()
+    } else {
+        autostart.disable().err()
+    };
+
+    if let Some(ref e) = registration_failed {
+        warn!(target: "4da::settings", error = %e, enabled, "Autostart registration failed");
     }
 
-    // Persist in settings
+    // Verify the actual state — trust the OS, not our request
+    let actual_enabled = autostart.is_enabled().unwrap_or(false);
+
+    // Persist the ACTUAL state, not the requested state
     {
         let mut settings = get_settings_manager().lock();
         let m = settings.get().monitoring.clone();
         let _ = settings.set_monitoring_config(settings::MonitoringConfig {
-            launch_at_startup: Some(enabled),
+            launch_at_startup: Some(actual_enabled),
             ..m
         });
     }
 
-    info!(target: "4da::settings", launch_at_startup = enabled, "Startup launch updated");
+    info!(target: "4da::settings",
+        requested = enabled,
+        actual = actual_enabled,
+        failed = registration_failed.is_some(),
+        "Startup launch updated"
+    );
 
     Ok(serde_json::json!({
-        "launch_at_startup": enabled,
-        "message": if enabled { "4DA will launch at system startup" } else { "4DA will not launch at system startup" }
+        "launch_at_startup": actual_enabled,
+        "registration_failed": registration_failed.is_some(),
+        "message": if registration_failed.is_some() {
+            "Failed to register autostart with the operating system. Check permissions or desktop environment support."
+        } else if actual_enabled {
+            "4DA will launch at system startup"
+        } else {
+            "4DA will not launch at system startup"
+        }
     }))
 }
 

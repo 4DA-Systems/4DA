@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { emit } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
 import { reportError } from '../lib/error-reporter';
 import sunLogo from '../assets/sun-logo.webp';
@@ -54,6 +55,20 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
     }, minimumDisplayTime);
     return () => clearTimeout(timer);
   }, [minimumDisplayTime]);
+
+  // Signal to Rust that the frontend UI has loaded (window can be shown).
+  // This fires on mount — before backend checks — so the user sees the
+  // SplashScreen immediately instead of a blank/error page.
+  useEffect(() => {
+    try {
+      const result = emit('frontend-ready');
+      if (result && typeof result.catch === 'function') {
+        result.catch(() => { /* ignore — may fail in browser mode */ });
+      }
+    } catch {
+      // Silently ignore — tests or non-Tauri environments
+    }
+  }, []);
 
   // Check backend readiness
   useEffect(() => {

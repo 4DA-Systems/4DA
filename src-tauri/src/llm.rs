@@ -1115,7 +1115,8 @@ mod tests {
     #[test]
     fn test_fallback_triggers_for_openai_on_generic_error() {
         let client = client_with_provider("openai");
-        let err = crate::error::FourDaError::Config("API error 500: internal server error".to_string());
+        let err =
+            crate::error::FourDaError::Config("API error 500: internal server error".to_string());
         assert!(
             client.should_fallback_to_ollama(&err),
             "OpenAI server error should trigger Ollama fallback"
@@ -1145,7 +1146,8 @@ mod tests {
     #[test]
     fn test_fallback_blocked_for_rate_limit_error() {
         let client = client_with_provider("anthropic");
-        let err = crate::error::FourDaError::Config("rate limit exceeded, retry after 30s".to_string());
+        let err =
+            crate::error::FourDaError::Config("rate limit exceeded, retry after 30s".to_string());
         assert!(
             !client.should_fallback_to_ollama(&err),
             "Rate limit should NOT trigger fallback — it's a temporary condition"
@@ -1155,7 +1157,9 @@ mod tests {
     #[test]
     fn test_fallback_blocked_for_quota_error() {
         let client = client_with_provider("openai");
-        let err = crate::error::FourDaError::Config("insufficient_quota: you have exceeded your plan".to_string());
+        let err = crate::error::FourDaError::Config(
+            "insufficient_quota: you have exceeded your plan".to_string(),
+        );
         assert!(
             !client.should_fallback_to_ollama(&err),
             "Quota/billing error must NOT trigger fallback"
@@ -1165,7 +1169,8 @@ mod tests {
     #[test]
     fn test_fallback_blocked_for_billing_error() {
         let client = client_with_provider("anthropic");
-        let err = crate::error::FourDaError::Config("billing issue: payment method required".to_string());
+        let err =
+            crate::error::FourDaError::Config("billing issue: payment method required".to_string());
         assert!(
             !client.should_fallback_to_ollama(&err),
             "Billing error must NOT trigger fallback"
@@ -1231,10 +1236,7 @@ mod tests {
             msg.contains("token limit exceeded"),
             "Should mention token limit: {msg}"
         );
-        assert!(
-            msg.contains("150000"),
-            "Should include actual usage: {msg}"
-        );
+        assert!(msg.contains("150000"), "Should include actual usage: {msg}");
     }
 
     #[test]
@@ -1282,7 +1284,10 @@ mod tests {
     fn test_sanitize_preserves_normal_error_message() {
         let text = "Model overloaded, please retry in 30 seconds";
         let result = sanitize_api_error(text);
-        assert_eq!(result, text, "Normal error messages should pass through unchanged");
+        assert_eq!(
+            result, text,
+            "Normal error messages should pass through unchanged"
+        );
     }
 
     #[test]
