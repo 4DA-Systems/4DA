@@ -156,6 +156,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
               <button
                 onClick={() => handleWatchSuggestion(suggestion)}
                 disabled={creatingSuggestion === suggestion.topic}
+                aria-label={`${t('search.watch', 'Watch')} ${suggestion.topic}`}
                 className="px-2 py-0.5 text-[10px] rounded bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
               >
                 {creatingSuggestion === suggestion.topic ? '...' : t('search.watch', 'Watch')}
@@ -163,7 +164,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
               <button
                 onClick={() => handleDismissSuggestion(suggestion.topic)}
                 className="text-text-muted hover:text-text-secondary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all text-xs"
-                aria-label={t('action.dismiss', 'Dismiss')}
+                aria-label={`${t('action.dismiss', 'Dismiss')} ${suggestion.topic}`}
               >
                 {'\u2715'}
               </button>
@@ -184,12 +185,14 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           onChange={(e) => setCustomQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleCreateCustom(); }}
           placeholder={t('search.watchPlaceholder', 'Watch a topic...')}
+          aria-label={t('search.watchPlaceholder', 'Watch a topic...')}
           disabled={creatingCustom}
           className="flex-1 px-3 py-1.5 text-sm bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:border-white/20 disabled:opacity-50"
         />
         <button
           onClick={handleCreateCustom}
           disabled={creatingCustom || !customQuery.trim()}
+          aria-label={t('search.createWatch', 'Create watch')}
           className="px-3 py-1.5 text-xs rounded-lg bg-white/5 text-text-secondary hover:bg-white/10 hover:text-text-primary transition-all font-medium disabled:opacity-50"
         >
           {creatingCustom ? '...' : t('search.watch', 'Watch')}
@@ -219,7 +222,7 @@ export function StandingQueries({ isPro }: StandingQueriesProps) {
           <button
             onClick={() => handleDelete(watch.id)}
             className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all text-xs"
-            aria-label={t('action.delete')}
+            aria-label={`${t('action.delete')} ${watch.query_text}`}
           >
             {'\u2715'}
           </button>

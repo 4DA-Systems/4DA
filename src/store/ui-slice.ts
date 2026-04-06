@@ -30,6 +30,15 @@ function persistDisclosure(data: PersistedDisclosure): void {
   } catch { /* ignore quota errors */ }
 }
 
+type ViewId = 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console';
+
+const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
+  core: ['briefing', 'chapters', 'results', 'playbook'],
+  explorer: ['briefing', 'chapters', 'results', 'playbook', 'insights'],
+  invested: ['briefing', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
+  power: ['briefing', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+};
+
 const TIER_ORDER: ViewTier[] = ['core', 'explorer', 'invested', 'power'];
 
 const TIER_UPGRADE_MESSAGES: Partial<Record<ViewTier, string>> = {
@@ -55,7 +64,14 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
 
   setShowSettings: (show) => set({ showSettings: show }),
   setShowSplash: (show) => set({ showSplash: show }),
-  setActiveView: (view) => set({ activeView: view }),
+  setActiveView: (view) => {
+    const { viewTier, showAllViews } = get();
+    if (!showAllViews) {
+      const allowed = TIER_VIEWS[viewTier];
+      if (!allowed.includes(view as ViewId)) return;
+    }
+    set({ activeView: view });
+  },
   setIsFirstRun: (v) => set({ isFirstRun: v }),
   setFirstRunDismissed: (v) => set({ firstRunDismissed: v }),
   setEmbeddingMode: (mode) => set({ embeddingMode: mode }),
