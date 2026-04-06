@@ -104,6 +104,12 @@ if [ -n "$STAGED_LOCALE" ]; then
     node scripts/validate-translations.cjs --summary 2>/dev/null || true
 fi
 
+# i18n Guard — blocks defaultValue bypasses, warns on missing translations
+node scripts/i18n-guard.cjs 2>/dev/null || {
+    echo "i18n guard failed. Remove defaultValue usage — use locale files instead."
+    exit 1
+}
+
 # Secret scanning — comprehensive, nukeproof detection
 # Blocks commits containing real API keys, tokens, private keys, PII, and credentials
 echo "Scanning for secrets..."
