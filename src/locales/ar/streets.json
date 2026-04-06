@@ -40,5 +40,10 @@
   "streets.tierPlaybook": "Playbook (مجاني)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "لغة الدرس",
+  "streets.lessonCount": "{{count}} درس",
+  "streets.lessonCount_plural": "{{count}} دروس",
+  "streets.translateModule": "ترجمة إلى {{lang}}",
+  "streets.translating": "جارٍ الترجمة..."
 }

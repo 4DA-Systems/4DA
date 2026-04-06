@@ -36,5 +36,8 @@
   "streets.tierPlaybook": "指南（免费）",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "课程语言",
+  "streets.translateModule": "翻译为{{lang}}",
+  "streets.translating": "翻译中..."
 }

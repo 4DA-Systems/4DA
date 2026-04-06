@@ -36,5 +36,8 @@
   "streets.tierPlaybook": "플레이북 (무료)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "레슨 언어",
+  "streets.translateModule": "{{lang}}(으)로 번역",
+  "streets.translating": "번역 중..."
 }
