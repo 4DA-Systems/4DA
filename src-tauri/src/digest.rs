@@ -807,38 +807,56 @@ mod tests {
             },
         ];
 
+        let lang = crate::i18n::get_user_language();
+        let rust_label = crate::i18n::t("ui:digest.topicRust", &lang, &[]);
+        let ai_label = crate::i18n::t("ui:digest.topicAI", &lang, &[]);
+        let general_label = crate::i18n::t("ui:digest.topicGeneral", &lang, &[]);
+
         let digest = Digest::new(items, Utc::now() - Duration::hours(24), Utc::now());
         let groups = digest.group_by_topic();
 
-        // Should have 3 groups: Rust Development (2), AI/ML (1), General (1)
+        // Should have 3 groups: Rust (2), AI/ML (1), General (1)
         assert_eq!(groups.len(), 3);
 
-        // First group should be Rust Development with 2 items
-        assert_eq!(groups[0].0, "Rust Development");
+        // First group should be Rust-related with 2 items (largest group sorts first)
+        assert_eq!(groups[0].0, rust_label);
         assert_eq!(groups[0].1.len(), 2);
 
         // AI/ML and General each have 1 item
-        let ai_ml = groups.iter().find(|(t, _)| t == "AI/ML");
+        let ai_ml = groups.iter().find(|(t, _)| t == &ai_label);
         assert!(ai_ml.is_some());
         assert_eq!(ai_ml.unwrap().1.len(), 1);
 
-        let general = groups.iter().find(|(t, _)| t == "General");
+        let general = groups.iter().find(|(t, _)| t == &general_label);
         assert!(general.is_some());
         assert_eq!(general.unwrap().1.len(), 1);
     }
 
     #[test]
     fn test_normalize_topic() {
-        assert_eq!(Digest::normalize_topic("rust"), "Rust Development");
-        assert_eq!(Digest::normalize_topic("Cargo"), "Rust Development");
-        assert_eq!(Digest::normalize_topic("typescript"), "Web Development");
-        assert_eq!(Digest::normalize_topic("React"), "Web Development");
-        assert_eq!(Digest::normalize_topic("PYTHON"), "Python");
-        assert_eq!(Digest::normalize_topic("AI"), "AI/ML");
-        assert_eq!(Digest::normalize_topic("machine learning"), "AI/ML");
-        assert_eq!(Digest::normalize_topic("security"), "Security");
-        assert_eq!(Digest::normalize_topic("postgresql"), "Databases");
-        assert_eq!(Digest::normalize_topic("kubernetes"), "Cloud/DevOps");
+        let lang = crate::i18n::get_user_language();
+        let rust_dev = crate::i18n::t("ui:digest.topicRust", &lang, &[]);
+        let web_dev = crate::i18n::t("ui:digest.topicWeb", &lang, &[]);
+        let python = crate::i18n::t("ui:digest.topicPython", &lang, &[]);
+        let ai_ml = crate::i18n::t("ui:digest.topicAI", &lang, &[]);
+        let security = crate::i18n::t("ui:digest.topicSecurity", &lang, &[]);
+        let databases = crate::i18n::t("ui:digest.topicDatabases", &lang, &[]);
+        let cloud = crate::i18n::t("ui:digest.topicCloud", &lang, &[]);
+
+        // Rust-related topics all normalize to the same group
+        assert_eq!(Digest::normalize_topic("rust"), rust_dev);
+        assert_eq!(Digest::normalize_topic("Cargo"), rust_dev);
+        // Web-related topics all normalize to the same group
+        assert_eq!(Digest::normalize_topic("typescript"), web_dev);
+        assert_eq!(Digest::normalize_topic("React"), web_dev);
+        // Other category mappings
+        assert_eq!(Digest::normalize_topic("PYTHON"), python);
+        assert_eq!(Digest::normalize_topic("AI"), ai_ml);
+        assert_eq!(Digest::normalize_topic("machine learning"), ai_ml);
+        assert_eq!(Digest::normalize_topic("security"), security);
+        assert_eq!(Digest::normalize_topic("postgresql"), databases);
+        assert_eq!(Digest::normalize_topic("kubernetes"), cloud);
+        // Unknown topics pass through unchanged
         assert_eq!(Digest::normalize_topic("custom topic"), "custom topic");
     }
 
@@ -895,8 +913,10 @@ mod tests {
         assert_eq!(digest.summary.signal_counts["tool_discovery"], 1);
 
         // Verify signals section appears in text output
+        let lang = crate::i18n::get_user_language();
+        let signals_label = crate::i18n::t("ui:digest.signals", &lang, &[]);
         let text = digest.to_text();
-        assert!(text.contains("SIGNALS"));
+        assert!(text.contains(&signals_label), "Text output should contain signals header");
         assert!(text.contains("CRITICAL"));
         assert!(text.contains("Review CVE"));
 

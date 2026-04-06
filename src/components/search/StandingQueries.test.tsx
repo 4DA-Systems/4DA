@@ -131,7 +131,7 @@ describe('StandingQueries', () => {
     // The delete invoke should succeed
     mockInvoke.mockResolvedValue(undefined);
 
-    const deleteButtons = screen.getAllByLabelText('action.delete');
+    const deleteButtons = screen.getAllByLabelText(/action\.delete/);
     fireEvent.click(deleteButtons[0]!);
 
     await waitFor(() => {
@@ -215,7 +215,7 @@ describe('StandingQueries', () => {
     });
 
     // Click dismiss (the X button on suggestion)
-    const dismissButton = screen.getByLabelText('action.dismiss');
+    const dismissButton = screen.getByLabelText(/action\.dismiss/);
     fireEvent.click(dismissButton);
 
     await waitFor(() => {

@@ -184,10 +184,16 @@ mod tests {
         let now = chrono::Utc::now().naive_utc();
         let iso = now.format("%Y-%m-%d %H:%M:%S").to_string();
         let result = relative_time(&iso);
+        // The result is locale-dependent, so compare against i18n outputs
+        let lang = crate::i18n::get_user_language();
+        let just_now = crate::i18n::t("ui:health.justNow", &lang, &[]);
+        let one_min_ago = crate::i18n::t("ui:health.minutesAgo", &lang, &[("count", "1")]);
+        // Timestamp is essentially "now", so we should get either "just now" or "1m ago"
+        // (in whatever locale is active). Must NOT be the raw ISO fallback.
         assert!(
-            result == "just now" || result.ends_with("m ago"),
-            "Expected 'just now' or 'Nm ago', got: {}",
-            result
+            result == just_now || result == one_min_ago,
+            "Expected '{}' or '{}', got: {}",
+            just_now, one_min_ago, result
         );
     }
 

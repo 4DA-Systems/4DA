@@ -111,7 +111,6 @@
   "settings.translation.embeddingCurrent": "Current: {{model}}",
   "settings.translation.embeddingReindexing": "Re-embedding content with new model...",
   "settings.translation.embeddingMultilingual": "For multilingual content, use {{model}} in AI Provider settings",
-  "settings.llm.title": "AI Provider",
   "settings.llm.apiKey": "API Key",
   "settings.llm.model": "Model",
   "settings.llm.baseUrl": "Base URL",

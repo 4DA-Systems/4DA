@@ -70,8 +70,8 @@ export const TechRadar = memo(function TechRadar() {
   if (loading) {
     return (
       <div className="bg-bg-secondary rounded-lg border border-border p-8 flex flex-col items-center justify-center gap-2">
-        <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" />
-        <div className="text-xs text-text-muted">{t('techRadar.loading')}</div>
+        <div className="w-5 h-5 border-2 border-gray-600 border-t-white rounded-full animate-spin" aria-hidden="true" />
+        <div className="text-xs text-text-muted" role="status">{t('techRadar.loading')}</div>
       </div>
     );
   }
@@ -83,6 +83,7 @@ export const TechRadar = memo(function TechRadar() {
           <p className="text-text-secondary text-sm">{t('error.generic')}</p>
           <button
             onClick={loadRadar}
+            aria-label={t('action.retry')}
             className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
           >
             {t('action.retry')}
@@ -108,7 +109,7 @@ export const TechRadar = memo(function TechRadar() {
       {/* Header */}
       <div className="px-5 py-4 border-b border-border flex items-center gap-3">
         <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-text-secondary">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-text-secondary" aria-hidden="true">
             <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.2" />
             <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1" opacity="0.4" />
             <line x1="8" y1="1" x2="8" y2="4" stroke="currentColor" strokeWidth="1" opacity="0.3" />
@@ -145,17 +146,17 @@ export const TechRadar = memo(function TechRadar() {
       <TemporalSlider onSnapshotChange={handleSnapshotChange} />
 
       {/* Legend */}
-      <div className="px-5 py-2.5 border-t border-border flex items-center gap-5 text-[10px] text-text-muted">
+      <div className="px-5 py-2.5 border-t border-border flex items-center gap-5 text-[10px] text-text-muted" role="group" aria-label={t('techRadar.legend', 'Legend')}>
         <div className="flex items-center gap-1.5">
-          <span className="text-green-400">{'\u2191'}</span>
+          <span className="text-green-400" aria-hidden="true">{'\u2191'}</span>
           <span>{t('techRadar.movingIn', 'Rising')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-red-400">{'\u2193'}</span>
+          <span className="text-red-400" aria-hidden="true">{'\u2193'}</span>
           <span>{t('techRadar.movingOut', 'Declining')}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-accent-gold">{'\u2726'}</span>
+          <span className="text-accent-gold" aria-hidden="true">{'\u2726'}</span>
           <span>{t('techRadar.new', 'New')}</span>
         </div>
       </div>

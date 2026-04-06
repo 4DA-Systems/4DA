@@ -146,7 +146,7 @@ describe('SignalsPanel', () => {
     expect(screen.getByText('Visible action')).toBeInTheDocument();
 
     // Click header to collapse
-    fireEvent.click(screen.getByLabelText('signals.title'));
+    fireEvent.click(screen.getByRole('button', { name: /signals\.title/ }));
 
     // Signal content should be hidden
     expect(screen.queryByText('Visible action')).not.toBeInTheDocument();
@@ -162,11 +162,11 @@ describe('SignalsPanel', () => {
     );
 
     // Collapse
-    fireEvent.click(screen.getByLabelText('signals.title'));
+    fireEvent.click(screen.getByRole('button', { name: /signals\.title/ }));
     expect(screen.queryByText('Toggle action')).not.toBeInTheDocument();
 
     // Expand
-    fireEvent.click(screen.getByLabelText('signals.title'));
+    fireEvent.click(screen.getByRole('button', { name: /signals\.title/ }));
     expect(screen.getByText('Toggle action')).toBeInTheDocument();
   });
 
@@ -378,7 +378,7 @@ describe('SignalsPanel (free tier)', () => {
     expect(screen.getByText('signals.title')).toBeInTheDocument();
 
     // Collapse should hide the teaser content
-    fireEvent.click(screen.getByLabelText('signals.title'));
+    fireEvent.click(screen.getByRole('button', { name: /signals\.title/ }));
     expect(screen.queryByText(/signals\.freeTeaser/)).not.toBeInTheDocument();
     expect(screen.queryByText('pro.upgrade')).not.toBeInTheDocument();
   });

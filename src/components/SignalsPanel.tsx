@@ -123,7 +123,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
         className="w-full px-5 py-4 border-b border-border flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center" aria-hidden="true">
             <span className="text-text-secondary">⚡</span>
           </div>
           <div className="text-start">
@@ -141,12 +141,12 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
         </div>
         <div className="flex items-center gap-3">
           {/* Priority dots summary */}
-          <div className="flex gap-1">
-            {criticalCount > 0 && <span className="w-2 h-2 rounded-full bg-red-400" title={`${criticalCount} critical`} />}
-            {highCount > 0 && <span className="w-2 h-2 rounded-full bg-orange-400" title={`${highCount} alert`} />}
-            {(priorityCounts['advisory'] || 0) > 0 && <span className="w-2 h-2 rounded-full bg-yellow-400" title={`${priorityCounts['advisory']} advisory`} />}
+          <div className="flex gap-1" aria-hidden="true">
+            {criticalCount > 0 && <span className="w-2 h-2 rounded-full bg-red-400" />}
+            {highCount > 0 && <span className="w-2 h-2 rounded-full bg-orange-400" />}
+            {(priorityCounts['advisory'] || 0) > 0 && <span className="w-2 h-2 rounded-full bg-yellow-400" />}
           </div>
-          <span className="text-text-muted text-sm">{expanded ? '▾' : '▸'}</span>
+          <span className="text-text-muted text-sm" aria-hidden="true">{expanded ? '▾' : '▸'}</span>
         </div>
       </button>
 
@@ -263,7 +263,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           </div>
 
           {/* Signal Items */}
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto" role="list" aria-label={t('signals.title')}>
             {filtered.length === 0 ? (
               <p className="text-center text-sm text-text-muted py-4">{t('signals.noMatch')}</p>
             ) : (
@@ -294,9 +294,9 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
     >
       <div className="flex items-start gap-3">
         {/* Icon + Priority */}
-        <div className="flex flex-col items-center gap-1 pt-0.5">
+        <div className="flex flex-col items-center gap-1 pt-0.5" aria-hidden="true">
           <span className="text-base">{config.icon}</span>
-          <span className={`w-2 h-2 rounded-full ${priority.dot}`} title={priority.label} />
+          <span className={`w-2 h-2 rounded-full ${priority.dot}`} />
         </div>
 
         {/* Content */}

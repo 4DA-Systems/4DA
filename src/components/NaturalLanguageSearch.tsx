@@ -330,15 +330,18 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               )}
 
               {/* Result items */}
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-2 max-h-64 overflow-y-auto" role="list" aria-label="Search results">
                 {result.items.map((item, index) => (
-                  <div key={`${item.id}-${index}`} className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors">
+                  <div key={`${item.id}-${index}`} role="listitem" className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors">
                     <div className="flex items-start gap-3">
                       <span className="text-[10px] text-text-muted uppercase font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">{sourceLabels[item.source_type] || 'SRC'}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-white font-medium truncate">{item.file_name || t('search.unknownFile')}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-text-secondary'}`}>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-text-secondary'}`}
+                            aria-label={`Relevance: ${(item.relevance * 100).toFixed(0)}%`}
+                          >
                             {(item.relevance * 100).toFixed(0)}%
                           </span>
                         </div>

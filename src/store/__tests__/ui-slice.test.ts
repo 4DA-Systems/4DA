@@ -83,16 +83,19 @@ describe('ui-slice', () => {
     });
 
     it('changes active view to saved', () => {
+      useAppStore.setState({ viewTier: 'invested' });
       useAppStore.getState().setActiveView('saved');
       expect(useAppStore.getState().activeView).toBe('saved');
     });
 
     it('changes active view to insights', () => {
+      useAppStore.setState({ viewTier: 'explorer' });
       useAppStore.getState().setActiveView('insights');
       expect(useAppStore.getState().activeView).toBe('insights');
     });
 
     it('changes active view to toolkit', () => {
+      useAppStore.setState({ viewTier: 'power' });
       useAppStore.getState().setActiveView('toolkit');
       expect(useAppStore.getState().activeView).toBe('toolkit');
     });
@@ -106,6 +109,22 @@ describe('ui-slice', () => {
       useAppStore.getState().setActiveView('results');
       useAppStore.getState().setActiveView('briefing');
       expect(useAppStore.getState().activeView).toBe('briefing');
+    });
+
+    it('blocks navigation to views above current tier', () => {
+      useAppStore.setState({ viewTier: 'core' });
+      useAppStore.getState().setActiveView('insights');
+      expect(useAppStore.getState().activeView).toBe('briefing');
+
+      useAppStore.setState({ viewTier: 'explorer' });
+      useAppStore.getState().setActiveView('saved');
+      expect(useAppStore.getState().activeView).toBe('briefing');
+    });
+
+    it('allows all views when showAllViews is true', () => {
+      useAppStore.setState({ viewTier: 'core', showAllViews: true });
+      useAppStore.getState().setActiveView('toolkit');
+      expect(useAppStore.getState().activeView).toBe('toolkit');
     });
   });
 

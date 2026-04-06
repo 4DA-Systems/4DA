@@ -19,7 +19,7 @@ function CompletenessRing({ percentage, size = 48 }: { percentage: number; size?
   const offset = circumference - (percentage / 100) * circumference;
 
   return (
-    <svg width={size} height={size} className="transform -rotate-90">
+    <svg width={size} height={size} className="transform -rotate-90" role="img" aria-label={`${Math.round(percentage)}% complete`}>
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -182,7 +182,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
   if (loading && !profile) {
     return (
       <div className="bg-bg-secondary border border-border rounded-lg p-6">
-        <div className="animate-pulse space-y-3">
+        <div className="animate-pulse space-y-3" role="status" aria-label={t('action.loading', 'Loading')}>
           <div className="h-5 bg-white/5 rounded w-48" />
           <div className="h-3 bg-white/5 rounded w-72" />
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mt-4">
