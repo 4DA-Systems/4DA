@@ -18,12 +18,12 @@ export default defineConfig(async () => ({
     sourcemap: false,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-tauri': ['@tauri-apps/api', '@tauri-apps/plugin-opener', '@tauri-apps/plugin-updater'],
-          'vendor-i18n': ['i18next', 'react-i18next'],
-          'vendor-store': ['zustand'],
-          'vendor-virtual': ['@tanstack/react-virtual'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'vendor-react';
+          if (id.includes('@tauri-apps/')) return 'vendor-tauri';
+          if (id.includes('i18next') || id.includes('react-i18next')) return 'vendor-i18n';
+          if (id.includes('zustand')) return 'vendor-store';
+          if (id.includes('@tanstack/react-virtual')) return 'vendor-virtual';
         },
       },
     },
