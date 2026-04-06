@@ -86,8 +86,8 @@ pub(crate) fn count_confirmed_signals(
     // When both fire, count them as a single signal to prevent one technology from
     // masquerading as two independent signals. If ACE fires via a genuinely independent
     // path (semantic_boost above threshold or stack_pain_match), count it separately.
-    let ace_independent = ace_confirmed
-        && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD || stack_pain_match);
+    let ace_independent =
+        ace_confirmed && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD || stack_pain_match);
     let deduped_ace = if interest_confirmed && ace_confirmed {
         ace_independent // only count ACE separately if it has an independent signal path
     } else {
@@ -295,7 +295,8 @@ mod tests {
         let (gated, count, mult, _) = apply_confirmation_gate(
             0.70, 0.50, // context confirmed
             0.55, // interest confirmed
-            0.10, 0.20, // ace confirmed via semantic boost (above 0.18 threshold = independent signal)
+            0.10,
+            0.20, // ace confirmed via semantic boost (above 0.18 threshold = independent signal)
             &ace_ctx, &topics, 0.10,  // feedback confirmed
             1.20,  // affinity confirmed
             0.0,   // no dep match

@@ -733,7 +733,9 @@ pub async fn get_pro_value_report() -> Result<serde_json::Value> {
         .unwrap_or(0);
 
     let decisions: i64 = conn
-        .query_row("SELECT COUNT(*) FROM decision_windows", [], |row| row.get(0))
+        .query_row("SELECT COUNT(*) FROM decision_windows", [], |row| {
+            row.get(0)
+        })
         .unwrap_or(0);
 
     Ok(serde_json::json!({

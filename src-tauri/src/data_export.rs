@@ -134,10 +134,23 @@ fn table_exists(conn: &rusqlite::Connection, table_name: &str) -> bool {
 
 /// Allowed table names for export — prevents SQL identifier injection.
 const ALLOWED_EXPORT_TABLES: &[&str] = &[
-    "sovereign_profile", "detected_tech", "active_topics", "detected_projects",
-    "selected_stacks", "developer_decisions", "validated_signals", "team_signals",
-    "decision_windows", "sources", "source_preferences", "briefings", "feedback",
-    "interactions", "accuracy_metrics", "topic_affinities", "anti_topics",
+    "sovereign_profile",
+    "detected_tech",
+    "active_topics",
+    "detected_projects",
+    "selected_stacks",
+    "developer_decisions",
+    "validated_signals",
+    "team_signals",
+    "decision_windows",
+    "sources",
+    "source_preferences",
+    "briefings",
+    "feedback",
+    "interactions",
+    "accuracy_metrics",
+    "topic_affinities",
+    "anti_topics",
     "activity_patterns",
 ];
 
@@ -150,12 +163,16 @@ fn safe_query_all(
 ) -> Result<(JsonValue, u32)> {
     // Whitelist validation — prevent SQL identifier injection
     if !ALLOWED_EXPORT_TABLES.contains(&table_name) {
-        return Err(crate::error::FourDaError::Validation(
-            format!("Table '{}' is not allowed for export", table_name),
-        ));
+        return Err(crate::error::FourDaError::Validation(format!(
+            "Table '{}' is not allowed for export",
+            table_name
+        )));
     }
     // Validate order_by contains only safe characters (alphanumeric, underscore, space, comma, DESC/ASC)
-    if !order_by.chars().all(|c| c.is_alphanumeric() || c == '_' || c == ' ' || c == ',') {
+    if !order_by
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == ' ' || c == ',')
+    {
         return Err(crate::error::FourDaError::Validation(
             "Invalid ORDER BY clause".to_string(),
         ));

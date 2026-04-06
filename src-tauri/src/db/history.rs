@@ -116,16 +116,20 @@ impl Database {
             .unwrap_or(0);
 
         // Clean temporal_events older than 30 days
-        let deleted_temporal: usize = tx.execute(
-            "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
-            [],
-        ).unwrap_or(0);
+        let deleted_temporal: usize = tx
+            .execute(
+                "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
+                [],
+            )
+            .unwrap_or(0);
 
         // Clean file_signals older than 7 days
-        let deleted_file_signals: usize = tx.execute(
-            "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
-            [],
-        ).unwrap_or(0);
+        let deleted_file_signals: usize = tx
+            .execute(
+                "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
+                [],
+            )
+            .unwrap_or(0);
 
         // Keep only the most recent 500 sun_runs
         let deleted_sun_runs: usize = tx.execute(

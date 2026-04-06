@@ -219,9 +219,11 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 })
                 .collect()
         } else {
-            // Fall back to DB query — now reads real scores and filters by language
+            // Fall back to DB query — now reads real scores and filters by language.
+            // Use a 72-hour window (not 24h) so users returning after a weekend
+            // or vacation still get a briefing from their last active session.
             if let Ok(db) = crate::get_database() {
-                let period_start = chrono::Utc::now() - chrono::Duration::hours(24);
+                let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
                 db.get_relevant_items_since(period_start, 0.15, 8, &user_lang)
                     .ok()
                     .map(|db_items| {

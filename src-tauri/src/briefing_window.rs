@@ -85,6 +85,16 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
 
+    // Recovery: if the window's JS never loaded (dev server race condition on
+    // startup), destroy the stale window so it gets recreated with a fresh load.
+    // By the time a briefing fires, the dev server is guaranteed to be up.
+    if !WINDOW_READY.load(Ordering::Relaxed) {
+        if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
+            info!(target: "4da::briefing", "Briefing window JS never loaded — recreating");
+            let _ = w.destroy();
+        }
+    }
+
     // Ensure the window exists.
     let window = if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
         w

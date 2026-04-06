@@ -125,6 +125,15 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
     // Cancel any existing dismiss timer before doing anything else.
     cancel_dismiss_timer();
 
+    // Recovery: if the window's JS never loaded (dev server race condition on
+    // startup), destroy the stale window so it gets recreated with a fresh load.
+    if !WINDOW_READY.load(Ordering::Relaxed) {
+        if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
+            info!(target: "4da::notify", "Notification window JS never loaded — recreating");
+            let _ = w.destroy();
+        }
+    }
+
     // Ensure the window exists.
     let window = if let Some(w) = app.get_webview_window(WINDOW_LABEL) {
         w

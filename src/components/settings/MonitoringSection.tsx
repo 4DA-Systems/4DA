@@ -54,6 +54,7 @@ function LaunchAtStartupToggle() {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [regFailed, setRegFailed] = useState(false);
 
   useEffect(() => {
     cmd('get_launch_at_startup').then(v => { setEnabled(v); setLoaded(true); }).catch(() => setLoaded(true));
@@ -62,8 +63,14 @@ function LaunchAtStartupToggle() {
   const toggle = async () => {
     const next = !enabled;
     setEnabled(next);
+    setRegFailed(false);
     try {
-      await cmd('set_launch_at_startup', { enabled: next });
+      const result = await cmd('set_launch_at_startup', { enabled: next });
+      // Trust the backend's actual state, not our optimistic update
+      setEnabled(result.launch_at_startup);
+      if (result.registration_failed) {
+        setRegFailed(true);
+      }
     } catch {
       setEnabled(!next);
     }
@@ -76,6 +83,11 @@ function LaunchAtStartupToggle() {
       <div>
         <span className="text-sm text-white">{t('settings.monitoring.launchAtStartup', 'Launch at startup')}</span>
         <p className="text-xs text-text-muted">{t('settings.monitoring.launchAtStartupDescription', 'Start 4DA automatically when you log in')}</p>
+        {regFailed && (
+          <p className="text-xs text-red-400 mt-1">
+            {t('settings.monitoring.autostartFailed', 'Could not register with the operating system. Check permissions or desktop environment support.')}
+          </p>
+        )}
       </div>
       <button
         onClick={toggle}

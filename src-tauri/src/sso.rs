@@ -1292,10 +1292,7 @@ mod tests {
             xml.contains("localhost:4445"),
             "Callback URL must reference the SSO callback port"
         );
-        assert!(
-            xml.contains("Version=\"2.0\""),
-            "Must be SAML 2.0"
-        );
+        assert!(xml.contains("Version=\"2.0\""), "Must be SAML 2.0");
     }
 
     // ========================================================================
@@ -1527,7 +1524,10 @@ mod tests {
         assert_eq!(deserialized.email, "test@example.com");
         assert_eq!(deserialized.groups.len(), 2);
         assert_eq!(deserialized.groups[0], "admin");
-        assert_eq!(deserialized.expires_at.as_deref(), Some("2026-04-06T14:00:00Z"));
+        assert_eq!(
+            deserialized.expires_at.as_deref(),
+            Some("2026-04-06T14:00:00Z")
+        );
     }
 
     // ========================================================================
