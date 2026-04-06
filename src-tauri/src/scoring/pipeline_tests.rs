@@ -89,11 +89,8 @@ mod tests {
     #[test]
     fn test_score_item_two_signals_can_pass() {
         let db = test_db();
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.active_topics.push("rust".to_string());
-        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+        let ace_ctx = ACEContext::default();
 
-        // Interest embedding matching "rust" — use a distinctive embedding
         let interest_embedding = vec![0.5_f32; 384];
         let interests = vec![context_engine::Interest {
             id: Some(1),
@@ -103,16 +100,21 @@ mod tests {
             source: context_engine::InterestSource::Explicit,
         }];
 
+        // Two genuinely independent signals: interest (via embedding) + learned (via feedback)
+        let mut feedback_boosts = std::collections::HashMap::new();
+        feedback_boosts.insert("performance".to_string(), 0.50); // net_score * FEEDBACK_SCALE must exceed FEEDBACK_THRESHOLD (0.05)
+
         let ctx = ScoringContext::builder()
             .interest_count(1)
             .interests(interests)
             .ace_ctx(ace_ctx)
+            .feedback_boosts(feedback_boosts)
             .build();
 
         // Use same embedding as interest so interest_score is high
         let input = test_input(
-            "Rust async runtime performance improvements",
-            "rust tokio async await performance benchmarks",
+            "Rust performance improvements in async runtimes",
+            "rust performance benchmarks async await tokio",
             &interest_embedding,
         );
         let options = ScoringOptions {
@@ -127,8 +129,8 @@ mod tests {
             .as_ref()
             .expect("should have breakdown");
 
-        // Interest should be confirmed (high interest_score via same embedding)
-        // ACE should be confirmed (active_topics contains "rust", title has "rust")
+        // Interest confirmed (high interest_score via same embedding)
+        // Learned confirmed (feedback_boost > 0.05 via "async" topic match)
         assert!(
             breakdown.signal_count >= 2,
             "Expected 2+ confirmed signals, got {} ({:?})",
@@ -139,11 +141,9 @@ mod tests {
 
     #[test]
     fn test_score_item_single_signal_cannot_pass() {
-        // NOTE: This test uses the default ScoringContext (feedback_interaction_count=0),
-        // which is bootstrap mode (< 10). However, the confirmation gate itself caps
-        // single-signal scores below the relevance threshold, so single-signal items
-        // still fail even in bootstrap mode — bootstrap only relaxes the quality floor
-        // signal_count check, not the gate's score ceiling.
+        // Single-signal items must never pass. The confirmation gate caps single-signal
+        // scores at 0.28 (well below the 0.35 threshold), and the quality floor requires
+        // min 2 signals regardless of feedback interaction count.
         let db = test_db();
         // Only set up interests, no ACE context, no context chunks
         let interest_embedding = vec![0.5_f32; 384];
@@ -494,10 +494,11 @@ mod tests {
     }
 
     #[test]
-    fn test_pipeline_bootstrap_mode_relaxes_gate() {
+    fn test_pipeline_new_user_still_requires_two_signals() {
+        // Even with zero feedback interactions, the quality floor still requires 2 signals.
+        // Previously "bootstrap mode" relaxed this to 1, causing false positives.
         let db = test_db();
-        let mut ace_ctx = ACEContext::default();
-        ace_ctx.active_topics.push("rust".to_string());
+        let ace_ctx = ACEContext::default();
 
         let interest_embedding = vec![0.5_f32; 384];
         let interests = vec![context_engine::Interest {
@@ -508,17 +509,22 @@ mod tests {
             source: context_engine::InterestSource::Explicit,
         }];
 
-        // Bootstrap mode: feedback_interaction_count = 0
+        // Two genuinely independent signals: interest (embedding) + learned (feedback)
+        let mut feedback_boosts = std::collections::HashMap::new();
+        feedback_boosts.insert("performance".to_string(), 0.50);
+
+        // New user: feedback_interaction_count = 0
         let ctx = ScoringContext::builder()
             .interest_count(1)
             .interests(interests)
             .ace_ctx(ace_ctx)
-            .feedback_interaction_count(0) // bootstrap
+            .feedback_boosts(feedback_boosts)
+            .feedback_interaction_count(0)
             .build();
 
         let input = test_input(
-            "Rust async runtime performance improvements",
-            "rust tokio async await performance benchmarks",
+            "Rust performance improvements in async runtimes",
+            "rust performance benchmarks async await tokio",
             &interest_embedding,
         );
         let options = ScoringOptions {
@@ -533,15 +539,15 @@ mod tests {
             .as_ref()
             .expect("should have breakdown");
 
-        // With 2+ signals (interest + ace), the gate opens and score passes
+        // With 2+ independent signals (interest + learned), score should pass
         assert!(
             bd.signal_count >= 2,
-            "Expected 2+ signals in bootstrap mode, got {}",
-            bd.signal_count
+            "Expected 2+ signals even for new user, got {} ({:?})",
+            bd.signal_count, bd.confirmed_signals
         );
         assert!(
             result.relevant,
-            "2-signal item should pass in bootstrap mode (score={}, signals={})",
+            "2-signal item should pass for new user (score={}, signals={})",
             result.top_score, bd.signal_count
         );
     }

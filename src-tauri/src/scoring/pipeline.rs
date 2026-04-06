@@ -409,6 +409,36 @@ pub(crate) fn score_item(
         * dampen(stack_competing_mult);
     let base_score = (base_score * composite_mult).clamp(0.0, 1.0);
 
+    // ── CVE/Security dependency validation ──
+    // Security items about packages NOT in user's actual dependencies get strongly
+    // penalized. Prevents Budibase/pyLoad CVEs scoring 90%+ when user doesn't
+    // use them. The dep_match_score check validates against Cargo.toml/package.json.
+    let base_score = if novelty.is_security && dep_match_score < 0.10 && !matched_deps.is_empty() {
+        // Some deps matched but very weakly — mild penalty
+        base_score * 0.60
+    } else if novelty.is_security && matched_deps.is_empty() {
+        // No dependency match at all — this CVE is about software the user doesn't use
+        base_score * 0.35
+    } else {
+        base_score
+    };
+
+    // ── Primary tech release boost ──
+    // Releases of the user's primary languages/frameworks deserve a strong additive
+    // boost. "Announcing Rust 1.94.0" should score 70%+, not 52%.
+    let base_score = if novelty.is_release {
+        let is_primary_release = topics.iter().any(|t| {
+            ctx.domain_profile.primary_stack.contains(&t.to_lowercase())
+        });
+        if is_primary_release {
+            (base_score + 0.15).min(1.0)
+        } else {
+            base_score
+        }
+    } else {
+        base_score
+    };
+
     // Intent boost: amplify items matching recent work topics (what you're coding RIGHT NOW)
     // If you committed code about "scoring" in the last 2h, articles about scoring get boosted
     let intent_boost: f32 = if ctx.work_topics.is_empty() {
@@ -589,16 +619,10 @@ pub(crate) fn score_item(
     };
 
     // Quality floor: must pass threshold AND either have N+ confirmed signals or strong score.
-    // Bootstrap mode: relax signal requirement for new users (< 10 feedback interactions).
-    // New users often have only 1 signal axis firing (interest OR dependency), and the
-    // 2-signal confirmation gate would show them nothing. After 10+ interactions,
-    // the behavioral learning loop provides enough data for the full gate.
-    let bootstrap_mode = ctx.feedback_interaction_count < 10;
-    let min_signals = if bootstrap_mode {
-        1u8
-    } else {
-        scoring_config::QUALITY_FLOOR_MIN_SIGNALS as u8
-    };
+    // Always require at least 2 signals — single-signal items are false positives too often.
+    // The confirmation gate already caps single-signal scores at 0.28 (below 0.35 threshold),
+    // but this explicit floor prevents any bypass path.
+    let min_signals = scoring_config::QUALITY_FLOOR_MIN_SIGNALS.max(2.0) as u8;
     let relevant = combined_score >= get_relevance_threshold()
         && (signal_count >= min_signals
             || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE);
