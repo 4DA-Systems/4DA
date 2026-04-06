@@ -16,6 +16,9 @@ const COMPETING_TECH: &[(&str, &[&str])] = &[
     ("vue", &["react", "angular", "svelte", "solid"]),
     ("angular", &["react", "vue", "svelte", "solid"]),
     ("svelte", &["react", "vue", "angular"]),
+    // Backend frameworks — "React and Laravel" is not relevant if user doesn't use Laravel
+    ("rust", &["django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi"]),
+    ("axum", &["express", "fastify", "koa", "hapi", "django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi", "fiber"]),
     // Package managers
     ("pnpm", &["npm", "yarn"]),
     ("yarn", &["npm", "pnpm"]),
@@ -27,6 +30,9 @@ const COMPETING_TECH: &[(&str, &[&str])] = &[
     ("postgresql", &["mysql", "mariadb"]),
     // Type systems
     ("typescript", &["flow", "rescript"]),
+    // Backend languages (when article is about a different backend entirely)
+    ("python", &["java", "csharp", "php", "ruby"]),
+    ("java", &["python", "csharp", "php", "ruby"]),
 ];
 
 /// Check if content is primarily about a competing technology.
@@ -167,11 +173,24 @@ mod tests {
     }
 
     #[test]
-    fn test_unrelated_tech_no_penalty() {
+    fn test_competing_backend_framework_penalized() {
+        // Django competes with Rust backends — Rust developer doesn't need Django content
         let primary = stack(&["rust", "tauri"]);
         let mult = compute_competing_penalty(
             &topics(&["python", "django"]),
             "Django 6.0 Released",
+            &primary,
+        );
+        assert_eq!(mult, 0.5);
+    }
+
+    #[test]
+    fn test_truly_unrelated_tech_no_penalty() {
+        // Kubernetes is unrelated (not a competing backend framework), no penalty
+        let primary = stack(&["rust", "tauri"]);
+        let mult = compute_competing_penalty(
+            &topics(&["kubernetes", "docker"]),
+            "Kubernetes 1.31 Released",
             &primary,
         );
         assert_eq!(mult, 1.0);

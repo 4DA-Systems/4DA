@@ -44,7 +44,7 @@ pub(crate) fn compute_semantic_ace_boost(
     for tech in &ace_ctx.detected_tech {
         if let Some(tech_emb) = topic_embeddings.get(tech) {
             let sim = crate::cosine_similarity_with_norm(item_embedding, item_norm, tech_emb);
-            let tech_weight = ace_ctx.tech_weights.get(tech).copied().unwrap_or(0.6);
+            let tech_weight = ace_ctx.tech_weights.get(tech).copied().unwrap_or(0.35);
             weighted_sum += sim * tech_weight;
             weight_total += tech_weight;
             max_similarity = max_similarity.max(sim);
