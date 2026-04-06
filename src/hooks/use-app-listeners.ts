@@ -121,10 +121,10 @@ export function useAppListeners({
 
         if (cancelled || useAppStore.getState().isFirstRun) return;
         const s = useAppStore.getState();
-        // Cooldown: don't auto-analyze if we did so recently (prevents hot-reload restart loops)
+        // Cooldown: don't auto-analyze if we started recently (prevents hot-reload restart loops).
+        // Only affects dev hot-reload — production cold starts clear sessionStorage automatically.
         const lastAutoAnalysis = Number(window.sessionStorage.getItem('4da-last-auto-analysis') ?? '0');
-        const cooldownMs = 30_000; // 30 seconds between auto-analysis attempts
-        if (Date.now() - lastAutoAnalysis < cooldownMs) return;
+        if (Date.now() - lastAutoAnalysis < 15_000) return;
         if (!s.isFirstRun && !s.showOnboarding) {
           window.sessionStorage.setItem('4da-last-auto-analysis', String(Date.now()));
           startAnalysis();
