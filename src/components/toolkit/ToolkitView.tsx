@@ -43,8 +43,8 @@ export function ToolkitView() {
 
   // Render tool cards
   return (
-    <section aria-label={t('toolkit.title', { defaultValue: 'Developer Toolkit' })}>
-      <div role="tablist" aria-label={t('toolkit.title', { defaultValue: 'Developer Toolkit' })} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
+    <section aria-label={t('toolkit.title')}>
+      <div role="tablist" aria-label={t('toolkit.title')} className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
         {TOOLS.map((tool) => (
           <button
             key={tool.id}

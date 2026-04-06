@@ -54,7 +54,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
   useEffect(() => {
     const labelKey = VIEW_LABEL_KEYS[activeView];
     if (labelKey !== undefined && labelKey !== '') {
-      setViewAnnouncement(t('app.viewChanged', { view: t(labelKey), defaultValue: 'Navigated to {{view}}' }));
+      setViewAnnouncement(t('app.viewChanged', { view: t(labelKey) }));
     }
   }, [activeView, t]);
 

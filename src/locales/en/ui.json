@@ -1934,6 +1934,8 @@
   "missed.filtered": "filtered",
   "missed.freeTeaser": "4DA filtered {{rejected}} items to surface {{relevant}} signals that matter to you.",
   "missed.freeSubtext": "Unlock full analytics — see exactly what was buried and why it matters.",
+  "missed.persuasion": "Without 4DA, this would have been buried in {{count}} other items.",
+  "profile.loadFailed": "Failed to load your developer profile.",
   "profile.copyProfile": "Copy Profile",
   "profile.exportJson": "Export JSON",
   "profile.copyDna": "Copy DNA",

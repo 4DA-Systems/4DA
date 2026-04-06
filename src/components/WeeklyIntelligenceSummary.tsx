@@ -107,10 +107,10 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
   const addInterest = async (topic: string) => {
     try {
       await cmd('add_interest', { topic });
-      addToast('success', t('weekly.interestAdded', { topic, defaultValue: `Added '${topic}' to interests` }));
+      addToast('success', t('weekly.interestAdded', { topic }));
       setData(prev => prev ? { ...prev, suggestions: prev.suggestions.filter(s => s.topic !== topic) } : null);
     } catch {
-      addToast('error', t('weekly.interestFailed', { defaultValue: 'Failed to add interest' }));
+      addToast('error', t('weekly.interestFailed'));
     }
   };
 
@@ -137,7 +137,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
             <span className="text-xs text-blue-400">{'\u{1F4CA}'}</span>
           </div>
           <span className="text-sm font-medium text-white">
-            {t('weekly.title', 'Weekly Intelligence Summary')}
+            {t('weekly.title')}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -151,7 +151,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
             onClick={dismiss}
             className="text-xs text-text-muted hover:text-text-secondary transition-colors"
           >
-            {t('action.dismiss', 'Dismiss')}
+            {t('action.dismiss')}
           </button>
         </div>
       </div>
@@ -161,18 +161,18 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
         <div className="flex gap-6">
           <div>
             <span className="text-lg font-bold text-white tabular-nums">{data.itemsAnalyzed}</span>
-            <p className="text-[10px] text-text-muted">{t('weekly.analyzed', 'items analyzed')}</p>
+            <p className="text-[10px] text-text-muted">{t('weekly.analyzed')}</p>
           </div>
           <div>
             <span className="text-lg font-bold text-white tabular-nums">{data.totalCycles}</span>
-            <p className="text-[10px] text-text-muted">{t('weekly.cycles', 'learning cycles')}</p>
+            <p className="text-[10px] text-text-muted">{t('weekly.cycles')}</p>
           </div>
           <div>
             <span className="text-lg font-bold text-white tabular-nums">
               {data.calibrationAccuracy}%
               {trendArrow && <span className={`ms-1 text-sm ${trendColor}`}>{trendArrow}</span>}
             </span>
-            <p className="text-[10px] text-text-muted">{t('weekly.accuracy', 'accuracy')}</p>
+            <p className="text-[10px] text-text-muted">{t('weekly.accuracy')}</p>
           </div>
         </div>
 
@@ -180,7 +180,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
         {data.newTopics.length > 0 && (
           <div>
             <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
-              {t('weekly.topTopics', 'Top learned topics')}
+              {t('weekly.topTopics')}
             </p>
             <div className="flex flex-wrap gap-1">
               {data.newTopics.map(topic => (
@@ -196,7 +196,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
         {data.suggestions.length > 0 && (
           <div>
             <p className="text-[10px] text-text-muted uppercase tracking-wider mb-1">
-              {t('weekly.suggestions', 'Suggested interests')}
+              {t('weekly.suggestions')}
             </p>
             {data.suggestions.map(s => (
               <div key={s.topic} className="flex items-center justify-between py-1">
@@ -208,7 +208,7 @@ export const WeeklyIntelligenceSummary = memo(function WeeklyIntelligenceSummary
                   onClick={() => addInterest(s.topic)}
                   className="text-[10px] text-blue-400 hover:text-blue-300 font-medium"
                 >
-                  {t('weekly.addInterest', '+ Add')}
+                  {t('weekly.addInterest')}
                 </button>
               </div>
             ))}
