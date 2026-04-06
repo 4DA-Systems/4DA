@@ -81,10 +81,23 @@ pub(crate) fn count_confirmed_signals(
         || affinity_mult >= scoring_config::AFFINITY_THRESHOLD;
     let dependency_confirmed = dep_match_score >= scoring_config::DEPENDENCY_THRESHOLD;
 
+    // Deduplicate interest + ACE: these axes often fire on the same technology
+    // (e.g. user has interest "React" AND React is in ACE active_topics/detected_tech).
+    // When both fire, count them as a single signal to prevent one technology from
+    // masquerading as two independent signals. If ACE fires via a genuinely independent
+    // path (semantic_boost above threshold or stack_pain_match), count it separately.
+    let ace_independent = ace_confirmed
+        && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD || stack_pain_match);
+    let deduped_ace = if interest_confirmed && ace_confirmed {
+        ace_independent // only count ACE separately if it has an independent signal path
+    } else {
+        ace_confirmed // no overlap possible, count normally
+    };
+
     let count = [
         context_confirmed,
         interest_confirmed,
-        ace_confirmed,
+        deduped_ace,
         learned_confirmed,
         dependency_confirmed,
     ]
@@ -217,9 +230,8 @@ mod tests {
     #[test]
     fn test_single_signal_cannot_pass_threshold() {
         // The key property: with only 1 confirmed signal, ceiling is 0.45 < 0.50 threshold
-        // NOTE: Bootstrap mode (feedback_interaction_count < 10) in mod.rs relaxes the
-        // quality floor to allow 1-signal items through for new users. This gate test
-        // validates the raw confirmation gate behavior independent of bootstrap mode.
+        // The quality floor always requires 2+ signals (no bootstrap bypass).
+        // This gate test validates the raw confirmation gate behavior.
         let ace_ctx = ACEContext::default();
         let topics = vec!["test".to_string()];
 
@@ -283,7 +295,7 @@ mod tests {
         let (gated, count, mult, _) = apply_confirmation_gate(
             0.70, 0.50, // context confirmed
             0.55, // interest confirmed
-            0.10, 0.10, // ace confirmed via semantic
+            0.10, 0.20, // ace confirmed via semantic boost (above 0.18 threshold = independent signal)
             &ace_ctx, &topics, 0.10,  // feedback confirmed
             1.20,  // affinity confirmed
             0.0,   // no dep match
