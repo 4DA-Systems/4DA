@@ -109,7 +109,14 @@ export function translateError(error: unknown): string {
   // Try structured error first (new backend error framework)
   const structured = parseStructuredError(error);
   if (structured) {
-    // Return title + detail for toast display
+    // Try to match the structured error against known patterns for i18n
+    const combined = `${structured.title} ${structured.detail}`;
+    for (const pattern of ERROR_PATTERNS) {
+      if (pattern.test.test(combined)) {
+        return t(pattern.key, pattern.fallback);
+      }
+    }
+    // No pattern match — use raw structured error with remediation
     if (structured.remediation.length > 0) {
       return `${structured.title}: ${structured.detail} ${structured.remediation[0]}`;
     }
