@@ -170,10 +170,13 @@ pub(crate) fn validate_path_canonical(
 }
 
 /// Ollama's default local endpoint — explicitly allowed through SSRF checks.
+#[allow(dead_code)]
 const OLLAMA_HOST: &str = "127.0.0.1";
+#[allow(dead_code)]
 const OLLAMA_PORT: u16 = 11434;
 
 /// Validate a URL is safe for outbound HTTP requests (SSRF prevention).
+#[allow(dead_code)]
 ///
 /// Blocks:
 /// - Non-HTTP(S) schemes (file://, ftp://, data:, etc.)

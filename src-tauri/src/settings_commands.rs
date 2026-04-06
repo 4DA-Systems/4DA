@@ -115,6 +115,15 @@ pub async fn set_llm_provider(
         if url.len() > 500 {
             return Err("Base URL too long".into());
         }
+        // Validate base URL scheme and format
+        if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
+            return Err("Base URL must use http:// or https:// scheme".into());
+        }
+        // SSRF prevention: block private/internal IPs for non-Ollama providers.
+        // Ollama is expected to run on localhost, so skip this check for it.
+        if !url.is_empty() && provider != "ollama" {
+            crate::url_validation::validate_not_internal(url)?;
+        }
     }
     if let Some(ref key) = openai_api_key {
         if key.len() > 500 {
