@@ -218,7 +218,7 @@ const ANOMALY_CHECK_INTERVAL: u64 = 3600; // 1 hour
 const BEHAVIOR_DECAY_INTERVAL: u64 = 86400; // 24 hours (daily)
 const ACCURACY_RECORD_INTERVAL: u64 = 604800; // 7 days
 const CVE_SCAN_INTERVAL: u64 = 3600; // 1 hour (was 30 min — advisory DBs update hourly)
-const DB_MAINTENANCE_INTERVAL: u64 = 14400; // 4 hours (was 1 hr — WAL checkpoint fine at lower freq)
+const DB_MAINTENANCE_INTERVAL: u64 = 3600; // 1 hour — WAL checkpoint + optimize (was 4h, too infrequent for startup spike recovery)
 const DEP_HEALTH_INTERVAL: u64 = 21600; // 6 hours — dependency health check (Layer 5)
 
 /// Start the background monitoring scheduler
