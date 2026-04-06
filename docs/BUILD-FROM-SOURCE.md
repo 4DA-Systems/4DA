@@ -220,7 +220,7 @@ pnpm run test
 pnpm run validate
 ```
 
-This runs file size checks, GAME component validation, command validation, ESLint, TypeScript type checking, frontend tests, and the production build.
+This runs file size checks, Glyph component validation, command validation, ESLint, TypeScript type checking, frontend tests, and the production build.
 
 ### Rust Validation
 

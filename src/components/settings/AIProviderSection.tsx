@@ -157,7 +157,7 @@ export function AIProviderSection({
                   <span className="text-xs text-text-secondary font-mono">{envDetection.anthropic_env_preview}</span>
                   <button onClick={() => handleImportEnv('anthropic')} disabled={importing}
                     className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50">
-                    {importing ? '...' : 'Use'}
+                    {importing ? '...' : 'Import'}
                   </button>
                 </div>
               )}
@@ -166,7 +166,7 @@ export function AIProviderSection({
                   <span className="text-xs text-text-secondary font-mono">{envDetection.openai_env_preview}</span>
                   <button onClick={() => handleImportEnv('openai')} disabled={importing}
                     className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50">
-                    {importing ? '...' : 'Use'}
+                    {importing ? '...' : 'Import'}
                   </button>
                 </div>
               )}

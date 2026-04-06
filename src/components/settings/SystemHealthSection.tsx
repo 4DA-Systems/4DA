@@ -144,6 +144,7 @@ export function SystemHealthSection() {
       <button
         onClick={() => { void refresh(); }}
         className="mt-3 text-[10px] text-text-muted hover:text-text-secondary transition-colors"
+        title="Check system capabilities: embeddings, storage, notifications"
       >
         {t('settings.systemHealth.refresh', 'Refresh status')}
       </button>
