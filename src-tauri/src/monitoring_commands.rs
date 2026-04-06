@@ -255,7 +255,7 @@ pub async fn trigger_notification_preview(
     Ok(serde_json::json!({ "success": true, "priority": priority }))
 }
 
-/// Set notification style ("custom" for GAME-powered or "native" for OS toasts)
+/// Set notification style ("custom" for Glyph-powered or "native" for OS toasts)
 #[tauri::command]
 pub async fn set_notification_style(style: String) -> Result<serde_json::Value> {
     let valid = ["custom", "native"];
