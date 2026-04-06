@@ -150,6 +150,7 @@ impl DocumentExtractor for PdfExtractor {
         // Extract text content (cap at 5MB to prevent memory exhaustion)
         let text = self.extract_text(path)?;
         let text = if text.len() > 5_000_000 {
+            tracing::warn!(target: "4da::extractors", bytes = text.len(), "PDF text exceeds 5MB limit — truncating");
             text[..5_000_000].to_string()
         } else {
             text

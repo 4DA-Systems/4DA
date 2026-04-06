@@ -301,13 +301,9 @@ impl Source for HackerNewsSource {
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
         let status = response.status();
-        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
-                "Hacker News scrape rate limited (HTTP 429)".to_string(),
-            ));
-        }
         if !status.is_success() {
-            return Err(SourceError::Network(format!("HTTP {status}")));
+            warn!(target: "4da::sources", url = %url, status = %status, "Scrape failed — returning empty content");
+            return Ok(String::new());
         }
 
         let html = response

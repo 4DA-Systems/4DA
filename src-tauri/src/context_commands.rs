@@ -990,6 +990,45 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
             }
         }
 
+        // Block sensitive system directories on Windows
+        #[cfg(target_os = "windows")]
+        {
+            let canonical =
+                std::fs::canonicalize(&converted).unwrap_or_else(|_| PathBuf::from(&converted));
+            let canonical_str = canonical.to_string_lossy();
+            let path_lower = canonical_str.to_lowercase().replace('/', "\\");
+            const SENSITIVE_WIN_PATHS: &[&str] = &[
+                "c:\\windows",
+                "c:\\program files",
+                "c:\\program files (x86)",
+                "c:\\programdata",
+                "c:\\users\\default",
+            ];
+            const SENSITIVE_WIN_PATTERNS: &[&str] = &[
+                "\\.ssh",
+                "\\.gnupg",
+                "\\.aws",
+                "\\.azure",
+                "\\appdata\\local\\temp",
+            ];
+            for sp in SENSITIVE_WIN_PATHS {
+                if path_lower.starts_with(sp) {
+                    return Err(FourDaError::Config(format!(
+                        "Cannot add system directory as context: {}",
+                        sanitize_path(&converted)
+                    )));
+                }
+            }
+            for pattern in SENSITIVE_WIN_PATTERNS {
+                if path_lower.contains(pattern) {
+                    return Err(FourDaError::Config(format!(
+                        "Cannot add sensitive directory as context: {}",
+                        sanitize_path(&converted)
+                    )));
+                }
+            }
+        }
+
         // Block filesystem root on any platform
         if converted == "/"
             || converted == "\\"
