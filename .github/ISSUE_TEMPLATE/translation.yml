@@ -1,0 +1,54 @@
+name: Translation Improvement
+description: Report an incorrect or awkward translation
+title: "[i18n] {language}: "
+labels: ["i18n"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve 4DA's translations. Please describe what you saw and what it should say.
+
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      description: Which language has the issue?
+      placeholder: e.g., Japanese, German, Chinese
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What you saw
+      description: The current text that looks wrong or awkward. Copy-paste or describe where it appears.
+      placeholder: |
+        Screen: Settings > General
+        Current text: "データベースエラー。アプリを再起動してみてください。"
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested
+    attributes:
+      label: What it should say
+      description: Your suggested correction (optional but very helpful).
+      placeholder: The more natural phrasing in your language
+
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Found in Settings > About
+      placeholder: e.g., 1.0.0
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it?
+      options:
+        - Minor — slightly awkward phrasing
+        - Moderate — confusing or unclear meaning
+        - Critical — wrong meaning or offensive
+    validations:
+      required: true
