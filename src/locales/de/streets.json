@@ -36,5 +36,8 @@
   "streets.tierPlaybook": "Playbook (Kostenlos)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "Lektionssprache",
+  "streets.translateModule": "Auf {{lang}} übersetzen",
+  "streets.translating": "Wird übersetzt..."
 }

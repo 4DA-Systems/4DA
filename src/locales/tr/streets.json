@@ -36,5 +36,8 @@
   "streets.tierPlaybook": "Rehber (Ücretsiz)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "Ders dili",
+  "streets.translateModule": "{{lang}} diline çevir",
+  "streets.translating": "Çevriliyor..."
 }

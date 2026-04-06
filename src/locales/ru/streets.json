@@ -38,5 +38,10 @@
   "streets.tierPlaybook": "Playbook (Бесплатно)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "Язык урока",
+  "streets.lessonCount": "{{count}} урок",
+  "streets.lessonCount_plural": "{{count}} уроков",
+  "streets.translateModule": "Перевести на {{lang}}",
+  "streets.translating": "Перевод..."
 }

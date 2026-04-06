@@ -36,5 +36,8 @@
   "streets.tierPlaybook": "प्लेबुक (मुफ़्त)",
   "streets.tierSignal": "Signal",
   "streets.tierTeam": "Team",
-  "streets.tierEnterprise": "Enterprise"
+  "streets.tierEnterprise": "Enterprise",
+  "streets.language": "पाठ की भाषा",
+  "streets.translateModule": "{{lang}} में अनुवाद करें",
+  "streets.translating": "अनुवाद हो रहा है..."
 }
