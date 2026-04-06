@@ -125,6 +125,23 @@ impl Database {
         ",
         )?;
 
+        // TRUNCATE checkpoint BEFORE opening read connections.
+        // PASSIVE can't move pages while readers hold snapshots, so a stale
+        // WAL grows unbounded. TRUNCATE resets it while we're the only connection.
+        if db_path.to_string_lossy() != ":memory:" {
+            let wal_path = db_path.with_extension("db-wal");
+            let wal_large = std::fs::metadata(&wal_path)
+                .map(|m| m.len() > 50 * 1024 * 1024)
+                .unwrap_or(false);
+            if wal_large {
+                let wal_mb = std::fs::metadata(&wal_path).map(|m| m.len() / (1024 * 1024)).unwrap_or(0);
+                tracing::info!(target: "4da::db", wal_mb, "Large WAL — TRUNCATE checkpoint before read pool");
+                if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
+                    tracing::warn!(target: "4da::db", error = %e, "TRUNCATE checkpoint failed");
+                }
+            }
+        }
+
         // Create read-only connection pool for parallel queries.
         // WAL mode allows multiple concurrent readers alongside one writer.
         // Skip pool for in-memory databases (tests) — they can't share connections.
@@ -231,12 +248,20 @@ impl Database {
     }
 
     /// Run lightweight scheduled maintenance (safe to call frequently).
-    /// - WAL checkpoint (PASSIVE — non-blocking)
+    /// - WAL checkpoint (TRUNCATE if large, else PASSIVE)
     /// - PRAGMA optimize (SQLite auto-tune)
     /// Does NOT VACUUM (too heavy for frequent runs).
     pub fn run_scheduled_maintenance(&self) -> SqliteResult<()> {
         let conn = self.conn.lock();
-        conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);")?;
+        let wal_path = self.db_path.with_extension("db-wal");
+        let wal_large = std::fs::metadata(&wal_path)
+            .map(|m| m.len() > 50 * 1024 * 1024)
+            .unwrap_or(false);
+        if wal_large {
+            conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+        } else {
+            conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);")?;
+        }
         conn.execute_batch("PRAGMA optimize;")?;
         tracing::info!(target: "4da::db", "Scheduled maintenance: WAL checkpoint + optimize complete");
         Ok(())
