@@ -182,13 +182,10 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             <p className="text-sm text-text-secondary">
               {t('signals.freeTeaser', {
                 count: signals.length,
-                defaultValue: 'Signal intelligence classified {{count}} actionable items with priorities and tactical advice.',
               })}
             </p>
             <p className="text-xs text-text-muted">
-              {t('signals.freeSubtext', {
-                defaultValue: 'Unlock to see which signals need your attention and what action to take.',
-              })}
+              {t('signals.freeSubtext')}
             </p>
             <SignalUpgradeCTA compact />
           </div>

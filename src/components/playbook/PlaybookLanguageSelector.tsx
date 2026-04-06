@@ -76,7 +76,7 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
       <button
         onClick={() => setShowPicker((p) => !p)}
         className="flex items-center gap-2 px-3 py-1.5 text-xs bg-bg-tertiary border border-border rounded-lg hover:border-white/20 transition-colors w-full"
-        aria-label={t('streets:streets.language', { defaultValue: 'Lesson language' })}
+        aria-label={t('streets:streets.language')}
       >
         <span className="text-text-secondary">{currentLangInfo.native}</span>
         {activeModuleId && !hasTranslation && currentLang !== 'en' && (
@@ -99,8 +99,8 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
           className="mt-1.5 w-full px-3 py-1.5 text-[10px] text-accent-gold border border-accent-gold/20 rounded-lg hover:bg-accent-gold/10 transition-colors disabled:opacity-50 disabled:cursor-wait"
         >
           {isTranslating
-            ? t('streets:streets.translating', { defaultValue: 'Translating...' })
-            : t('streets:streets.translateModule', { defaultValue: 'Translate to {{lang}}', lang: currentLangInfo.native })}
+            ? t('streets:streets.translating')
+            : t('streets:streets.translateModule', { lang: currentLangInfo.native })}
         </button>
       )}
 

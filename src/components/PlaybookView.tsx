@@ -180,8 +180,8 @@ export const PlaybookView = memo(function PlaybookView() {
           <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
             <p className="text-text-secondary text-sm">
               {isBrowserMode
-                ? t('error.playbookBrowser', { defaultValue: 'Playbook requires the desktop app. Open 4DA through the Tauri window.' })
-                : t('error.playbookFailed', { defaultValue: 'Failed to load playbook content. Check your connection and try again.' })}
+                ? t('error.playbookBrowser')
+                : t('error.playbookFailed')}
             </p>
             {!isBrowserMode && (
               <button

@@ -61,7 +61,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
   }, [item.title, item.top_score, t]);
 
   return (
-    <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions', { defaultValue: 'Feedback actions' })}>
+    <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions')}>
       {item.url && isSafeUrl(item.url) && (
         <button
           onClick={(e) => {
@@ -101,7 +101,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         {sessionSaveCount != null && sessionSaveCount > 0 && (
           <span
             className="absolute -top-1.5 -end-1.5 min-w-[16px] h-4 px-1 text-[10px] leading-4 text-center bg-success text-white rounded-full font-mono"
-            aria-label={t('feedback.sessionSaves', { count: sessionSaveCount, defaultValue: '{{count}} saved this session' })}
+            aria-label={t('feedback.sessionSaves', { count: sessionSaveCount })}
           >
             {sessionSaveCount}
           </span>
@@ -144,7 +144,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         onClick={handleShare}
         className="px-2.5 py-1 text-xs rounded font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
       >
-        {t('action.share', 'Share')}
+        {t('action.share')}
       </button>
     </div>
   );

@@ -103,7 +103,7 @@ export function SavedItemsView() {
   }
 
   return (
-    <section aria-label={t('saved.title', { defaultValue: 'Saved items' })}>
+    <section aria-label={t('saved.title')}>
       <div className="flex items-center justify-between mb-4">
         <span className="text-xs text-text-muted">{t('saved.count', { count: items.length })}</span>
         <button
@@ -170,10 +170,10 @@ export function SavedItemsView() {
                               setCopiedId(item.item_id);
                               setTimeout(() => setCopiedId(prev => prev === item.item_id ? null : prev), 2000);
                             }}
-                            aria-label={copiedId === item.item_id ? t('saved.copied', 'Copied!') : `${t('saved.copyUrl')} for ${item.title}`}
+                            aria-label={copiedId === item.item_id ? t('saved.copied') : `${t('saved.copyUrl')} for ${item.title}`}
                             className={`text-[10px] transition-colors ${copiedId === item.item_id ? 'text-green-400' : 'text-text-muted hover:text-text-secondary'}`}
                           >
-                            {copiedId === item.item_id ? t('saved.copied', 'Copied!') : t('saved.copyUrl')}
+                            {copiedId === item.item_id ? t('saved.copied') : t('saved.copyUrl')}
                           </button>
                         )}
                       </div>

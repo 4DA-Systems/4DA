@@ -39,20 +39,17 @@ export class ViewErrorBoundary extends Component<ViewErrorBoundaryProps, ViewErr
         >
           <h2 className="text-lg font-semibold text-white mb-2">
             {i18n.t('error.viewFailed', {
-              defaultValue: '{{viewName}} failed to load',
               viewName: this.props.viewName,
             })}
           </h2>
           <p className="text-sm text-text-secondary mb-4">
-            {i18n.t('error.viewRecovery', {
-              defaultValue: 'An unexpected error occurred. You can retry loading this view.',
-            })}
+            {i18n.t('error.viewRecovery')}
           </p>
           <button
             onClick={this.handleRetry}
             className="px-4 py-2 text-sm font-medium bg-bg-tertiary text-white border border-border rounded-lg hover:bg-bg-secondary transition-colors"
           >
-            {i18n.t('error.retry', { defaultValue: 'Retry' })}
+            {i18n.t('error.retry')}
           </button>
         </div>
       );
