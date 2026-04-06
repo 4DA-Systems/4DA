@@ -221,15 +221,15 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       {result && (
         <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12, marginBottom: 16 }}>
           <p style={{ fontSize: 11, color: '#A0A0A0', fontWeight: 500, marginBottom: 8 }}>
-            {t('calibration.onboarding.setupComplete', 'Setup complete:')}
+            {t('calibration.onboarding.setupComplete')}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
                 {embeddingMode === 'keyword-only'
-                  ? t('calibration.onboarding.summaryKeyword', 'Keyword mode — add AI key in Settings')
-                  : t('calibration.onboarding.summaryAI', 'AI provider configured')
+                  ? t('calibration.onboarding.summaryKeyword')
+                  : t('calibration.onboarding.summaryAI')
                 }
               </span>
             </div>
@@ -239,9 +239,8 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                 {(discoveredContext?.tech?.length ?? 0) > 0
                   ? t('calibration.onboarding.summaryProjects', {
                       count: discoveredContext.tech.length,
-                      defaultValue: '{{count}} projects detected',
                     })
-                  : t('calibration.onboarding.summaryNoProjects', 'No projects found — add directories in Settings')
+                  : t('calibration.onboarding.summaryNoProjects')
                 }
               </span>
             </div>
@@ -251,9 +250,8 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                 {(userContext?.interests?.length ?? 0) > 0
                   ? t('calibration.onboarding.summaryInterests', {
                       count: userContext!.interests!.length,
-                      defaultValue: '{{count}} interests set',
                     })
-                  : t('calibration.onboarding.summaryDefaultInterests', 'Default interests — customize in Settings')
+                  : t('calibration.onboarding.summaryDefaultInterests')
                 }
               </span>
             </div>

@@ -54,7 +54,7 @@ export const PulseSummary = memo(function PulseSummary({
     const parts: string[] = [];
 
     if (stats.total === 0) {
-      return t('pulse.noData', 'No intelligence gathered yet. Run an analysis to get started.');
+      return t('pulse.noData');
     }
 
     // New items — prefer session diff when available
@@ -62,15 +62,13 @@ export const PulseSummary = memo(function PulseSummary({
       parts.push(t('pulse.newSinceLastSession', {
         newItems: diff.new_items,
         newRelevant: diff.new_relevant,
-        defaultValue: '{{newItems}} new items since last session. {{newRelevant}} newly relevant.',
       }));
     } else if (diff?.has_previous && diff.new_items === 0) {
-      parts.push(t('pulse.noNewItems', 'No new items since last session.'));
+      parts.push(t('pulse.noNewItems'));
     } else {
       parts.push(t('pulse.itemsAnalyzed', {
         count: stats.total,
         relevant: stats.relevant,
-        defaultValue: '{{count}} items analyzed, {{relevant}} relevant to you.',
       }));
     }
 
@@ -78,7 +76,6 @@ export const PulseSummary = memo(function PulseSummary({
     if (signalCount > 0) {
       parts.push(t('pulse.signalsNeedAttention', {
         count: signalCount,
-        defaultValue: '{{count}} need your attention.',
       }));
     }
 
@@ -86,7 +83,6 @@ export const PulseSummary = memo(function PulseSummary({
     if (topCount > 0 && signalCount === 0) {
       parts.push(t('pulse.topPicks', {
         count: topCount,
-        defaultValue: '{{count}} top picks.',
       }));
     }
 
@@ -95,7 +91,6 @@ export const PulseSummary = memo(function PulseSummary({
       parts.push(t('pulse.sourcesPartial', {
         healthy: stats.healthyCount,
         total: stats.totalSources,
-        defaultValue: '{{healthy}}/{{total}} sources healthy.',
       }));
     }
 

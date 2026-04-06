@@ -17,12 +17,12 @@ function getTimeRemaining(expiresAt: string | null, t: (key: string, opts?: Reco
   const now = Date.now();
   const exp = new Date(expiresAt).getTime();
   const diff = exp - now;
-  if (diff <= 0) return t('decisions.expired', { defaultValue: 'Expired' });
+  if (diff <= 0) return t('decisions.expired');
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
-  if (days > 0) return t('decisions.timeLeftDaysHours', { defaultValue: '{{days}}d {{hours}}h left', days, hours: hours % 24 });
-  if (hours > 0) return t('decisions.timeLeftHours', { defaultValue: '{{hours}}h left', hours });
-  return t('decisions.timeLeftMinutes', { defaultValue: '{{minutes}}m left', minutes: Math.floor(diff / (1000 * 60)) });
+  if (days > 0) return t('decisions.timeLeftDaysHours', { days, hours: hours % 24 });
+  if (hours > 0) return t('decisions.timeLeftHours', { hours });
+  return t('decisions.timeLeftMinutes', { minutes: Math.floor(diff / (1000 * 60)) });
 }
 
 function UrgencyBar({ urgency }: { urgency: number }) {
