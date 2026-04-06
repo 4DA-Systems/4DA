@@ -18,7 +18,7 @@
 /// This is best-effort: if the OS denies the request (e.g., insufficient
 /// privileges or `RLIMIT_MEMLOCK` on Linux), a warning is logged and the
 /// function returns `false`. The data remains usable but may be swapped.
-#[allow(unsafe_code, unused_variables)]
+#[allow(unsafe_code, unused_variables, dead_code)]
 pub(crate) fn lock_memory(data: &[u8]) -> bool {
     if data.is_empty() {
         return true;
@@ -71,7 +71,7 @@ pub(crate) fn lock_memory(data: &[u8]) -> bool {
 }
 
 /// Unlock a previously locked byte slice, allowing it to be paged normally.
-#[allow(unsafe_code, unused_variables)]
+#[allow(unsafe_code, unused_variables, dead_code)]
 pub(crate) fn unlock_memory(data: &[u8]) {
     if data.is_empty() {
         return;

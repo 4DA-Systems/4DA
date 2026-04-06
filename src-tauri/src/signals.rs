@@ -42,6 +42,7 @@ impl SignalType {
         }
     }
 
+    #[allow(dead_code)]
     fn label(&self) -> &'static str {
         match self {
             SignalType::SecurityAlert => "Security Alert",
@@ -102,6 +103,7 @@ impl SignalPriority {
     }
 
     /// Translated label for user-facing display.
+    #[allow(dead_code)]
     pub fn label_translated(&self, lang: &str) -> String {
         let key = match self {
             SignalPriority::Critical => "signals:priority.critical",
@@ -131,6 +133,7 @@ impl SignalHorizon {
     }
 
     /// Translated label for user-facing display.
+    #[allow(dead_code)]
     pub fn label_translated(&self, lang: &str) -> String {
         let key = match self {
             SignalHorizon::Tactical => "signals:horizon.tactical",

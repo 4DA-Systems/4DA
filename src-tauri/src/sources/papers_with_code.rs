@@ -38,6 +38,7 @@ struct PwcTask {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct PwcRepo {
     url: Option<String>,
     stars: Option<u32>,

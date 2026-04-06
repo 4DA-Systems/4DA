@@ -15,6 +15,7 @@ pub const MAX_INPUT_LENGTH: usize = 10_000;
 pub const MAX_CONTENT_LENGTH: usize = 50_000;
 
 /// Maximum length for URL inputs
+#[allow(dead_code)]
 pub const MAX_URL_LENGTH: usize = 2_048;
 
 /// Maximum length for file path inputs
@@ -55,6 +56,7 @@ pub(crate) fn validate_no_null_bytes(field: &str, value: &str) -> Result<()> {
 }
 
 /// Validate a URL input: length + no null bytes + valid URL format.
+#[allow(dead_code)]
 pub(crate) fn validate_url_input(field: &str, url: &str) -> Result<String> {
     let clean = validate_length(field, url, MAX_URL_LENGTH)?;
     validate_no_null_bytes(field, &clean)?;

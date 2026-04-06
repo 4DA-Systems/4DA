@@ -607,6 +607,7 @@ impl ACE {
     ///
     /// **Deprecated:** Prefer `get_session_aware_work_topics()` which uses session
     /// detection instead of a fixed time window.
+    #[allow(dead_code)]
     pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
 

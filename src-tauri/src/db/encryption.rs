@@ -12,6 +12,7 @@
 use tracing::{info, warn};
 
 const DB_KEY_NAME: &str = "4da_db_encryption_key";
+#[allow(dead_code)]
 const DB_KEY_LENGTH: usize = 64; // 256-bit key as hex string
 
 /// Get or generate the database encryption key from the OS keychain.
@@ -69,6 +70,7 @@ pub(crate) fn apply_key_to_connection(
 
 /// Check if a database file is encrypted by attempting to read its header.
 /// SQLCipher-encrypted databases have a non-standard header (not "SQLite format 3\0").
+#[allow(dead_code)]
 pub(crate) fn is_database_encrypted(db_path: &std::path::Path) -> bool {
     if !db_path.exists() {
         return false;

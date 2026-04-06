@@ -15,15 +15,7 @@ use crate::error::{Result, ResultExt};
 use crate::job_queue;
 use crate::monitoring;
 use crate::settings::SettingsManager;
-use crate::source_fetching::{
-    load_github_languages_from_settings, load_rss_feeds_from_settings, load_twitter_settings,
-    load_youtube_channels_from_settings,
-};
-use crate::sources::{
-    arxiv::ArxivSource, github::GitHubSource, hackernews::HackerNewsSource,
-    producthunt::ProductHuntSource, reddit::RedditSource, rss::RssSource, twitter::TwitterSource,
-    youtube::YouTubeSource, SourceRegistry,
-};
+use crate::sources::SourceRegistry;
 use crate::AnalysisState;
 
 // ============================================================================

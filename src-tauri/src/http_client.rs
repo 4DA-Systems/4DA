@@ -50,6 +50,7 @@ pub(crate) static PROBE_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 
 /// Create a reqwest client builder with optional proxy from settings.
 /// Call this when you need a client that respects the user's proxy config.
+#[allow(dead_code)]
 pub(crate) fn client_builder_with_proxy() -> reqwest::ClientBuilder {
     let mut builder =
         reqwest::Client::builder().user_agent("Mozilla/5.0 (compatible; desktop-app)");

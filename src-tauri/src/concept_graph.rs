@@ -23,6 +23,7 @@ use crate::extract_topics;
 
 /// A weighted edge between two co-occurring topics in the concept graph.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ConceptEdge {
     pub topic_a: String,
     pub topic_b: String,

@@ -9,6 +9,7 @@ use crate::domain_profile::DomainProfile;
 
 /// Result of sophistication analysis
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SophisticationScore {
     pub title_complexity: f32,
     pub content_depth: f32,
