@@ -420,10 +420,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
             if total_deleted > 0 {
                 info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
-                // Checkpoint WAL after large deletions to reclaim space
-                if total_deleted > 1000 {
+                // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,
+                // PASSIVE (non-blocking) for small cleanups. Previous threshold of 1000
+                // was too high — even 100 deleted rows can produce meaningful WAL bloat.
+                if total_deleted > 100 {
                     let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-                    info!(target: "4da::startup", "WAL checkpoint after startup cleanup");
+                    info!(target: "4da::startup", "WAL TRUNCATE checkpoint after startup cleanup");
+                } else {
+                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
                 }
             }
         }
@@ -790,8 +794,10 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                                 // even when the webview shows an error page.
                                 let _ = w.navigate(dev_url.clone());
                             }
-                            // Give the navigation up to 5s to trigger frontend-ready
-                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                            // Give the navigation up to 2s to trigger frontend-ready.
+                            // The emit now fires from main.tsx before React mounts
+                            // (~300-500ms), so 2s is generous.
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                             break;
                         }
                     }
@@ -859,6 +865,21 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
         // Disable monitoring to stop scheduler
         let state = get_monitoring_state();
         state.set_enabled(false);
+
+        // Checkpoint WAL before exit — prevents large WAL persisting to next
+        // cold boot. TRUNCATE resets the WAL file to zero length. Without this,
+        // users face 100-275MB WAL recovery on every startup.
+        if let Ok(db) = get_database() {
+            match db
+                .conn
+                .lock()
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            {
+                Ok(()) => info!(target: "4da::shutdown", "WAL checkpoint complete"),
+                Err(e) => warn!(target: "4da::shutdown", error = %e, "WAL checkpoint failed"),
+            }
+        }
+
         // Clean up temp extraction directory (cross-platform)
         if let Some(data_dir) = dirs::data_local_dir() {
             let temp_dir = data_dir.join("4da").join("temp");
