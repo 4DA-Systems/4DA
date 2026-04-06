@@ -78,6 +78,36 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         "Autophagy pre-analysis stats"
     );
 
+    // Skip cycle when nothing to analyze (avoids 5s+ overhead per wasteful cycle).
+    // Only skip after initial calibration period (3+ cycles) so early users still get value.
+    if items_analyzed == 0 && cycle_count >= 3 {
+        // Double-check: also no recent feedback that source autopsy / anti-patterns could use
+        let recent_feedback: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM feedback WHERE created_at > datetime('now', '-1 day')",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if recent_feedback == 0 {
+            info!(
+                target: "4da::autophagy",
+                cycle_count,
+                "Nothing to prune and no recent feedback — skipping cycle"
+            );
+            return Ok(super::AutophagyCycleResult {
+                items_analyzed: 0,
+                items_pruned: 0,
+                calibrations_produced: 0,
+                topic_decay_rates_updated: 0,
+                source_autopsies_produced: 0,
+                anti_patterns_detected: 0,
+                decision_outcomes_analyzed: 0,
+                duration_ms: start.elapsed().as_millis() as i64,
+            });
+        }
+    }
+
     // Run all 6 analyzers (each returns empty vec on failure, never panics)
     let calibrations = super::calibration::analyze_calibration(conn, max_age_days);
     let topic_calibrations =

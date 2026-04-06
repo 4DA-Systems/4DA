@@ -362,6 +362,59 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // One-time startup data cleanup: purge bloated tables that accumulate dead rows.
+    // Non-blocking, non-fatal — runs in background to avoid slowing startup.
+    tauri::async_runtime::spawn(async {
+        if let Ok(conn) = crate::open_db_connection() {
+            let mut total_deleted: usize = 0;
+
+            // Purge superseded intelligence older than 7 days (98.7% are useless dead rows)
+            match conn.execute(
+                "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-7 days')",
+                [],
+            ) {
+                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: superseded intelligence"); } }
+                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: digested_intelligence failed"); }
+            }
+
+            // Purge temporal_events older than 30 days
+            match conn.execute(
+                "DELETE FROM temporal_events WHERE created_at < datetime('now', '-30 days')",
+                [],
+            ) {
+                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: old temporal_events"); } }
+                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: temporal_events failed"); }
+            }
+
+            // Purge file_signals older than 7 days
+            match conn.execute(
+                "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
+                [],
+            ) {
+                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: old file_signals"); } }
+                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: file_signals failed"); }
+            }
+
+            // Keep only the most recent 500 sun_runs
+            match conn.execute(
+                "DELETE FROM sun_runs WHERE id NOT IN (SELECT id FROM sun_runs ORDER BY created_at DESC LIMIT 500)",
+                [],
+            ) {
+                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: excess sun_runs"); } }
+                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: sun_runs failed"); }
+            }
+
+            if total_deleted > 0 {
+                info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
+                // Checkpoint WAL after large deletions to reclaim space
+                if total_deleted > 1000 {
+                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+                    info!(target: "4da::startup", "WAL checkpoint after startup cleanup");
+                }
+            }
+        }
+    });
+
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");
