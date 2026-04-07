@@ -550,14 +550,21 @@ fn compute_quality_composite(
     //
     // Tiers (aligned with V1 pipeline.rs exactly so both pipelines agree):
     //   * no matched deps at all          → 0.35 (hard suppression)
-    //   * matched but confidence < 0.10   → 0.60 (mild penalty)
+    //   * matched but confidence < 0.20   → 0.60 (mild penalty)
     //   * strong match                    → unchanged (full strength)
+    //
+    // The 0.20 threshold is calibrated so a single content-only word-boundary
+    // match (0.2 confidence → dep_match_score 0.1) still gets the mild penalty.
+    // Only 2+ content matches OR a title match (0.5 confidence → 0.25) survive
+    // as a "strong" match. Previously the threshold was 0.10 which let single
+    // weak subterm hits (e.g. the word "cert" matching x509-cert in an
+    // unrelated AWS advisory) escape the gate entirely.
     //
     // Applies to both explicit CVE source items and any other source whose
     // title/content matches the security classifier — so future security
     // sources are governed by the same gate automatically.
     let quality_score = if novelty.is_security
-        && raw.dep_match_score < 0.10
+        && raw.dep_match_score < 0.20
         && !raw.matched_deps.is_empty()
     {
         quality_score * 0.60
