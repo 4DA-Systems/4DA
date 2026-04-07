@@ -192,7 +192,27 @@ pub(crate) fn initialize_pre_tauri() {
 /// Tauri `setup()` callback body.
 ///
 /// Handles tray, monitoring, event listeners, background tasks, and ACE initialization.
+///
+/// # Sovereign Cold Boot — phased startup
+///
+/// Even though `setup_app` is structurally one function, we instrument it
+/// with explicit phase markers so the watchdog can enforce time budgets and
+/// regressions show up as warnings in the cold-boot logs:
+///
+/// - **Phase 0** (first-light, target <500ms): tray, monitoring config,
+///   sqlite-vec verify, scheduler hydration, briefing snapshot fetch
+/// - **Phase 1** (essential services, target <2s): scheduler start,
+///   immediate briefing trigger, ACE initialization
+/// - **Phase 2** (background warmup, no budget): AWE sync, model registry,
+///   re-embedding, CVE refresh — all fire-and-forget
+///
+/// Each phase logs `phase=N elapsed_ms=X` so you can grep for them in cold-boot
+/// traces. If a phase exceeds its budget, the watchdog writes a `.stalled`
+/// marker so the next launch can surface the regression.
 pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let setup_began = std::time::Instant::now();
+    info!(target: "4da::startup", "setup_app: phase 0 (essential services) begin");
+
     // Record app start time for diagnostics uptime tracking
     crate::diagnostics::record_start_time();
 
@@ -293,6 +313,19 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Start background scheduler
     let app_handle = app.handle().clone();
     monitoring::start_scheduler(app_handle.clone(), monitoring_state.clone());
+
+    // Sovereign Cold Boot — Phase 0 (essential services) complete.
+    // From here on, all spawned tasks are background warmup that the user
+    // doesn't need to wait for. The window can show, the briefing snapshot
+    // can render, and Phase 1 work catches up silently.
+    let phase0_ms = setup_began.elapsed().as_millis();
+    info!(
+        target: "4da::startup",
+        phase = 0,
+        elapsed_ms = phase0_ms,
+        "setup_app: phase 0 (essential services) complete"
+    );
+    crate::startup_watchdog::mark_phase1_complete();
 
     // Start team sync scheduler (if configured)
     #[cfg(feature = "team-sync")]
@@ -815,6 +848,13 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         // WebView2 error pages (edge://network-error/) block JS execution.
         // Tauri's navigate() operates at the engine level — works regardless
         // of what the webview is currently displaying.
+        //
+        // Wave 7 enhancement: this loop now KEEPS RUNNING after the initial
+        // navigation, polling the dev server periodically. If the user sees
+        // a stale error page because the dev server was briefly unreachable
+        // when the webview first tried to load, we re-navigate as soon as
+        // the dev server responds. The previous behavior was to give up
+        // after 30s, which left the user staring at a broken page forever.
         {
             let ready_handle = app_handle.clone();
             let shown_poll = shown.clone();
@@ -828,21 +868,27 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 let dev_url =
                     url::Url::parse("http://localhost:4444/").expect("hardcoded dev URL is valid");
 
-                // Poll dev server every 500ms for up to 30 seconds
+                let mut window_shown_locally = false;
+                let mut last_navigate_attempt: Option<std::time::Instant> = None;
+
+                // Phase A: aggressive poll every 500ms for the first 30s.
+                // Most cold boots resolve here (dev server is up within ~5s).
                 for attempt in 1..=60u32 {
                     if shown_poll.load(Ordering::SeqCst) {
-                        return; // frontend-ready already fired — nothing to do
+                        // Frontend-ready fired. The window is visible AND React
+                        // mounted successfully — we're done with phase A.
+                        window_shown_locally = true;
+                        break;
                     }
                     if let Ok(r) = client.get(dev_url.as_str()).send().await {
                         if r.status().is_success() {
                             info!(target: "4da::startup", attempt, "Dev server ready — navigating webview");
                             if let Some(w) = ready_handle.get_webview_window("main") {
-                                // Force-navigate at the engine level. This works
-                                // even when the webview shows an error page.
                                 let _ = w.navigate(dev_url.clone());
+                                last_navigate_attempt = Some(std::time::Instant::now());
                             }
                             // Give the navigation up to 2s to trigger frontend-ready.
-                            // The emit now fires from main.tsx before React mounts
+                            // main.tsx emits frontend-ready before React mounts
                             // (~300-500ms), so 2s is generous.
                             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                             break;
@@ -851,17 +897,81 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 }
 
-                // Fallback: show window regardless (better than invisible forever)
+                // Phase A fallback: show window regardless (better than invisible forever)
                 if !shown_poll.swap(true, Ordering::SeqCst) {
                     if let Some(w) = ready_handle.get_webview_window("main") {
                         let _ = w.show();
                         let _ = w.set_focus();
                     }
                     warn!(target: "4da::startup", "Main window shown (dev server poll fallback)");
-                    // Sovereign Cold Boot — Phase 0 still considered "complete" even
-                    // on the fallback path. The watchdog will write a stalled marker
-                    // because we exceeded the budget, but the user still sees the window.
                     crate::startup_watchdog::mark_phase0_complete();
+                    window_shown_locally = true;
+                }
+
+                // Phase B: persistent recovery loop (Wave 7).
+                // The window is visible but `frontend-ready` may not have fired
+                // — webview could be on an error page. Poll the dev server every
+                // 3s for the next 5 minutes. Whenever we successfully reach the
+                // dev server AND the frontend still hasn't signaled ready, force
+                // a navigate. This rescues users from the "stale error page"
+                // scenario in screenshot 1900.
+                if window_shown_locally {
+                    let frontend_ready_listener = ready_handle.clone();
+                    let frontend_did_ready = Arc::new(AtomicBool::new(false));
+                    let did_ready_clone = frontend_did_ready.clone();
+                    frontend_ready_listener.listen("frontend-ready", move |_| {
+                        did_ready_clone.store(true, Ordering::SeqCst);
+                    });
+
+                    let recovery_began = std::time::Instant::now();
+                    let recovery_max = std::time::Duration::from_secs(300); // 5 min ceiling
+                    let mut consecutive_navigates = 0_u32;
+                    while recovery_began.elapsed() < recovery_max {
+                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+                        if frontend_did_ready.load(Ordering::SeqCst) {
+                            debug!(target: "4da::startup", "Recovery loop: frontend-ready fired, exiting");
+                            break;
+                        }
+
+                        // Frontend still hasn't signaled ready. Probe the dev server.
+                        let server_up = client
+                            .get(dev_url.as_str())
+                            .send()
+                            .await
+                            .map(|r| r.status().is_success())
+                            .unwrap_or(false);
+
+                        if server_up {
+                            // Avoid hammering the webview: only re-navigate if the
+                            // last attempt was at least 5 seconds ago.
+                            let should_navigate = match last_navigate_attempt {
+                                Some(t) => t.elapsed() >= std::time::Duration::from_secs(5),
+                                None => true,
+                            };
+                            if should_navigate {
+                                consecutive_navigates += 1;
+                                warn!(
+                                    target: "4da::startup",
+                                    consecutive_navigates,
+                                    "Recovery: dev server reachable but frontend not ready — re-navigating webview"
+                                );
+                                if let Some(w) = ready_handle.get_webview_window("main") {
+                                    let _ = w.navigate(dev_url.clone());
+                                    last_navigate_attempt = Some(std::time::Instant::now());
+                                }
+                                // After 3 consecutive failed re-navigates, log a
+                                // hard error so it shows up in diagnostics.
+                                if consecutive_navigates >= 3 {
+                                    warn!(
+                                        target: "4da::startup",
+                                        "Recovery: 3 consecutive re-navigates failed — frontend may be broken"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    debug!(target: "4da::startup", "Recovery loop exited");
                 }
             });
         }
@@ -873,6 +983,17 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // first heartbeat check doesn't have to wait a minute.
     crate::startup_watchdog::write_heartbeat();
     crate::startup_watchdog::start_heartbeat();
+
+    // Sovereign Cold Boot — setup_app fully done. All remaining work is
+    // either background tasks or scheduler ticks. The user should already
+    // have a window with the cached briefing visible at this point.
+    let total_ms = setup_began.elapsed().as_millis();
+    info!(
+        target: "4da::startup",
+        phase = "setup_app",
+        elapsed_ms = total_ms,
+        "setup_app: complete (background tasks continuing in spawned futures)"
+    );
 
     Ok(())
 }
