@@ -61,6 +61,10 @@ data/license_cache.json
 # Model registry cache (auto-refreshed from LiteLLM)
 data/model_registry.json
 
+# Briefing snapshot (Sovereign Cold Boot — runtime state, contains user briefing data)
+data/briefing_snapshot.json
+data/briefing_snapshot.json.tmp
+
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
 !.env.example

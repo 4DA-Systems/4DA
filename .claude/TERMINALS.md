@@ -21,8 +21,8 @@
 - **Status**: committing
 - **Since**: 2026-04-07T03:00:00Z
 - **Commit Lock**: HELD
-- **Wave 1 (foundation) — READY TO COMMIT**: src-tauri/src/state.rs, src-tauri/src/monitoring.rs, src-tauri/src/db/migrations.rs, src-tauri/src/scheduler_state.rs (NEW), src-tauri/src/lib.rs, src-tauri/src/app_setup.rs
-- **Wave 2 (UX critical)**: src-tauri/src/briefing_snapshot.rs (NEW), src-tauri/src/lib.rs, src/main.tsx, src/components/Briefing/BriefingCard.tsx, src-tauri/src/ollama.rs, src-tauri/src/app_setup.rs
+- **Wave 1 (foundation) — COMMITTED 5816ee06**
+- **Wave 2 (UX critical) — READY TO COMMIT**: src-tauri/src/briefing_snapshot.rs (NEW), src-tauri/src/lib.rs, src-tauri/src/app_setup.rs, src-tauri/src/ollama.rs, src-tauri/src/monitoring.rs, src-tauri/src/monitoring_briefing.rs
 - **Wave 3 (architectural)**: src-tauri/src/boot_context.rs (NEW), src-tauri/src/startup_watchdog.rs (NEW), src-tauri/src/app_setup.rs, src-tauri/src/lib.rs
 - **Wave 4 (validation)**: scripts/benchmark-cold-boot.cjs (NEW), src-tauri/src/first_run_audit.rs
 

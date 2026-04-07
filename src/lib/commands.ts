@@ -80,6 +80,43 @@ import type { PersonalizedLesson as PersonalizedLessonType } from '../types/pers
 // Command Map — maps every command name to { params, result }
 // ============================================================================
 
+/**
+ * Sovereign Cold Boot — pre-baked briefing snapshot returned by
+ * `get_briefing_snapshot`. Loaded by `main.tsx` BEFORE React mounts so the
+ * first paint after a cold boot is yesterday's briefing instead of a black
+ * window. Mirrors the Rust `BriefingSnapshot` shape in `briefing_snapshot.rs`.
+ */
+interface BriefingSnapshotItem {
+  title: string;
+  source_type: string;
+  score: number;
+  signal_type?: string | null;
+  url?: string | null;
+  item_id?: number | null;
+  signal_priority?: string | null;
+  description?: string | null;
+  matched_deps?: string[];
+}
+
+interface BriefingSnapshotPayload {
+  title: string;
+  items: BriefingSnapshotItem[];
+  total_relevant: number;
+  synthesis?: string | null;
+  wisdom_synthesis?: string | null;
+}
+
+interface BriefingSnapshotResult {
+  /** Format version. v1 at present; older versions are silently ignored. */
+  version: number;
+  /** Unix timestamp when this snapshot was generated. */
+  generated_at_unix: number;
+  /** Pre-formatted display string, e.g. "Mon Apr 7, 9:14 AM". */
+  generated_at_display: string;
+  /** The actual briefing payload — same shape as the live morning brief. */
+  briefing: BriefingSnapshotPayload;
+}
+
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
@@ -145,6 +182,9 @@ interface CommandMap {
   notification_clicked: { params: { item_id?: number | null }; result: void };
   briefing_item_clicked: { params: { item_id?: number | null }; result: void };
   briefing_open_url: { params: { url: string }; result: void };
+  // Sovereign Cold Boot — instant first-paint of yesterday's briefing snapshot.
+  // Returns null if no fresh (≤24h, version-matched) snapshot is on disk.
+  get_briefing_snapshot: { params: Record<string, never>; result: BriefingSnapshotResult | null };
   set_morning_briefing_enabled: { params: { enabled: boolean }; result: { morning_briefing: boolean; message: string } };
   get_morning_briefing_config: { params: Record<string, never>; result: { enabled: boolean; time: string } };
   set_briefing_time: { params: { time: string }; result: { briefing_time: string; message: string } };
