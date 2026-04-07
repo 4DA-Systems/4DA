@@ -221,6 +221,26 @@ const CVE_SCAN_INTERVAL: u64 = 3600; // 1 hour (was 30 min — advisory DBs upda
 const DB_MAINTENANCE_INTERVAL: u64 = 3600; // 1 hour — WAL checkpoint + optimize (was 4h, too infrequent for startup spike recovery)
 const DEP_HEALTH_INTERVAL: u64 = 21600; // 6 hours — dependency health check (Layer 5)
 
+/// Sovereign Cold Boot — adaptive grace period.
+///
+/// On cold boot, the scheduler runs ZERO maintenance jobs for this many
+/// seconds. The first minute (or two) belongs to the user: instant briefing,
+/// instant window, instant interaction. Maintenance catches up afterward.
+///
+/// The default is 90 seconds for the conservative cold-boot case. The
+/// scheduler tightens this to ~30s if it detects the app was launched by
+/// user action (vs autostart) — see `boot_context::adapt_grace_secs`.
+const COLD_BOOT_GRACE_SECS_DEFAULT: u64 = 90;
+
+/// Helper: update an atomic AND persist the new timestamp to the
+/// `scheduler_state` table. Best-effort persistence — failures are logged
+/// but never crash the scheduler.
+#[inline]
+fn mark_job_complete(atomic: &AtomicU64, now: u64, job_name: &'static str) {
+    atomic.store(now, Ordering::Relaxed);
+    crate::scheduler_state::persist_run(job_name, now);
+}
+
 /// Start the background monitoring scheduler
 pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState>) {
     info!(target: "4da::monitor", "Starting background scheduler");
@@ -228,15 +248,37 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
         health_interval_min = HEALTH_CHECK_INTERVAL / 60,
         anomaly_interval_hr = ANOMALY_CHECK_INTERVAL / 3600,
         decay_interval_hr = BEHAVIOR_DECAY_INTERVAL / 3600,
+        cold_boot_grace_s = COLD_BOOT_GRACE_SECS_DEFAULT,
         "Background job intervals configured"
     );
 
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Check every minute
         let mut last_wake_time = std::time::Instant::now();
+        let scheduler_started_at = std::time::Instant::now();
 
         loop {
             interval.tick().await;
+
+            // ================================================================
+            // Sovereign Cold Boot — grace period
+            // ================================================================
+            // For the first COLD_BOOT_GRACE_SECS_DEFAULT seconds after the
+            // scheduler starts, run NO maintenance jobs at all. This guarantees
+            // the user owns the CPU/IO/network for the first minute of every
+            // cold boot, regardless of whether persisted timestamps think any
+            // jobs are due. This is the second half of the stampede fix
+            // (the first half is `scheduler_state::hydrate_from_db`).
+            let cold_boot_elapsed = scheduler_started_at.elapsed().as_secs();
+            if cold_boot_elapsed < COLD_BOOT_GRACE_SECS_DEFAULT {
+                tracing::debug!(
+                    target: "4da::monitor",
+                    elapsed_s = cold_boot_elapsed,
+                    grace_s = COLD_BOOT_GRACE_SECS_DEFAULT,
+                    "Cold-boot grace period — deferring all maintenance"
+                );
+                continue;
+            }
 
             // Power-aware scheduling: detect sleep/wake and stagger deferred jobs
             let elapsed_since_last = last_wake_time.elapsed();
@@ -267,7 +309,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Health check - every 5 minutes
             let last_health = state.last_health_check.load(Ordering::Relaxed);
             if now - last_health >= HEALTH_CHECK_INTERVAL {
-                state.last_health_check.store(now, Ordering::Relaxed);
+                mark_job_complete(
+                    &state.last_health_check,
+                    now,
+                    crate::scheduler_state::jobs::HEALTH_CHECK,
+                );
                 match crate::run_background_health_check().await {
                     Ok(result) => {
                         info!(target: "4da::monitor", result = %result, "Health check completed");
@@ -335,11 +381,29 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Prevents WAL bloat (139MB+ observed) and keeps query planner current
             let last_health_for_db = state.last_health_check.load(Ordering::Relaxed);
             if now - last_health_for_db < 2 && now > DB_MAINTENANCE_INTERVAL {
-                // Piggyback on health check tick (runs every 5 min, but we only maintain hourly)
+                // Piggyback on health check tick (runs every 5 min, but we only maintain hourly).
+                // Sovereign Cold Boot — function-local statics LAST_MAINTENANCE and
+                // LAST_VACUUM are hydrated from the persisted scheduler_state table on
+                // first use via an atomic init flag. Without this, every cold boot would
+                // re-fire VACUUM and DB maintenance because the static atomics start at 0.
                 static LAST_MAINTENANCE: AtomicU64 = AtomicU64::new(0);
+                static LAST_MAINTENANCE_HYDRATED: AtomicBool = AtomicBool::new(false);
+                if !LAST_MAINTENANCE_HYDRATED.swap(true, Ordering::SeqCst) {
+                    let persisted = crate::scheduler_state::get_persisted_timestamp(
+                        crate::scheduler_state::jobs::DB_MAINTENANCE,
+                    );
+                    if persisted > 0 {
+                        LAST_MAINTENANCE.store(persisted, Ordering::Relaxed);
+                    }
+                }
+
                 let last_maint = LAST_MAINTENANCE.load(Ordering::Relaxed);
                 if now - last_maint >= DB_MAINTENANCE_INTERVAL {
                     LAST_MAINTENANCE.store(now, Ordering::Relaxed);
+                    crate::scheduler_state::persist_run(
+                        crate::scheduler_state::jobs::DB_MAINTENANCE,
+                        now,
+                    );
                     if let Ok(db) = crate::get_database() {
                         match db.run_scheduled_maintenance() {
                             Ok(()) => {
@@ -362,10 +426,24 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
                     // Weekly VACUUM to reclaim disk space after deletions
                     static LAST_VACUUM: AtomicU64 = AtomicU64::new(0);
+                    static LAST_VACUUM_HYDRATED: AtomicBool = AtomicBool::new(false);
+                    if !LAST_VACUUM_HYDRATED.swap(true, Ordering::SeqCst) {
+                        let persisted = crate::scheduler_state::get_persisted_timestamp(
+                            crate::scheduler_state::jobs::VACUUM,
+                        );
+                        if persisted > 0 {
+                            LAST_VACUUM.store(persisted, Ordering::Relaxed);
+                        }
+                    }
+
                     let last_vac = LAST_VACUUM.load(Ordering::Relaxed);
                     const VACUUM_INTERVAL: u64 = 7 * 24 * 3600; // Weekly
                     if now - last_vac >= VACUUM_INTERVAL {
                         LAST_VACUUM.store(now, Ordering::Relaxed);
+                        crate::scheduler_state::persist_run(
+                            crate::scheduler_state::jobs::VACUUM,
+                            now,
+                        );
                         if let Ok(db) = crate::get_database() {
                             match db.conn.lock().execute_batch("VACUUM;") {
                                 Ok(()) => {
@@ -383,7 +461,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Anomaly detection - every hour + anomaly bridge (Fix 5)
             let last_anomaly = state.last_anomaly_check.load(Ordering::Relaxed);
             if now - last_anomaly >= ANOMALY_CHECK_INTERVAL {
-                state.last_anomaly_check.store(now, Ordering::Relaxed);
+                mark_job_complete(
+                    &state.last_anomaly_check,
+                    now,
+                    crate::scheduler_state::jobs::ANOMALY_DETECTION,
+                );
                 match crate::run_background_anomaly_detection_with_results().await {
                     Ok(anomalies) => {
                         info!(target: "4da::monitor", found = anomalies.len(), "Anomaly detection completed");
@@ -421,7 +503,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // CVE scan — Developer Immune System (every 30 minutes)
             let last_cve = state.last_cve_scan.load(Ordering::Relaxed);
             if now - last_cve >= CVE_SCAN_INTERVAL {
-                state.last_cve_scan.store(now, Ordering::Relaxed);
+                mark_job_complete(
+                    &state.last_cve_scan,
+                    now,
+                    crate::scheduler_state::jobs::CVE_SCAN,
+                );
                 let cve_app = app.clone();
                 tokio::spawn(async move {
                     crate::monitoring_jobs::run_cve_scan(&cve_app).await;
@@ -433,7 +519,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // proactive decision windows for stale or vulnerable packages.
             let last_dep_health = state.last_dep_health_check.load(Ordering::Relaxed);
             if now - last_dep_health >= DEP_HEALTH_INTERVAL {
-                state.last_dep_health_check.store(now, Ordering::Relaxed);
+                mark_job_complete(
+                    &state.last_dep_health_check,
+                    now,
+                    crate::scheduler_state::jobs::DEP_HEALTH,
+                );
                 match crate::run_dependency_health_check() {
                     Ok(health) => {
                         let actionable = health
@@ -505,7 +595,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Behavior decay - daily
             let last_decay = state.last_decay.load(Ordering::Relaxed);
             if now - last_decay >= BEHAVIOR_DECAY_INTERVAL {
-                state.last_decay.store(now, Ordering::Relaxed);
+                mark_job_complete(
+                    &state.last_decay,
+                    now,
+                    crate::scheduler_state::jobs::BEHAVIOR_DECAY,
+                );
                 match crate::run_background_behavior_decay().await {
                     Ok(result) => {
                         info!(target: "4da::monitor", result = %result, "Behavior decay completed");
@@ -732,7 +826,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Weekly accuracy + timeline recording
             let last_accuracy = state.last_accuracy_check.load(Ordering::Relaxed);
             if now - last_accuracy >= ACCURACY_RECORD_INTERVAL {
-                state.last_accuracy_check.store(now, Ordering::Relaxed);
+                mark_job_complete(
+                    &state.last_accuracy_check,
+                    now,
+                    crate::scheduler_state::jobs::ACCURACY_RECORD,
+                );
                 if let Ok(db) = crate::get_database() {
                     let conn = db.conn.lock();
                     match crate::accuracy::record_weekly_accuracy(&conn) {
