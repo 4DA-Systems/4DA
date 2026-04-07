@@ -542,6 +542,31 @@ fn compute_quality_composite(
 
     let quality_score = (relevance_score * composite).clamp(0.0, 1.0);
 
+    // ── CVE/Security dependency validation (ported from V1) ─────────────
+    // Security items about packages NOT in the user's actual dependencies
+    // get strongly penalized. Without this, every CVE source item rides the
+    // SecurityAdvisory (1.30) + novelty (1.10) multipliers and surfaces at
+    // 70-80% regardless of whether the user uses the affected software.
+    //
+    // Tiers (aligned with V1 pipeline.rs exactly so both pipelines agree):
+    //   * no matched deps at all          → 0.35 (hard suppression)
+    //   * matched but confidence < 0.10   → 0.60 (mild penalty)
+    //   * strong match                    → unchanged (full strength)
+    //
+    // Applies to both explicit CVE source items and any other source whose
+    // title/content matches the security classifier — so future security
+    // sources are governed by the same gate automatically.
+    let quality_score = if novelty.is_security
+        && raw.dep_match_score < 0.10
+        && !raw.matched_deps.is_empty()
+    {
+        quality_score * 0.60
+    } else if novelty.is_security && raw.matched_deps.is_empty() {
+        quality_score * 0.35
+    } else {
+        quality_score
+    };
+
     (
         quality_score,
         freshness,
@@ -766,12 +791,18 @@ fn classify_signals(
     let show_and_tell_blocked =
         *content_type == crate::content_dna::ContentType::ShowAndTell && domain_relevance < 1.0;
 
-    // Security advisories and breaking changes with dependency matches bypass
-    // the domain_relevance gate — a CVE in your deps is urgent regardless
+    // Security advisories and breaking changes with STRONG dependency matches
+    // bypass the domain_relevance gate — a CVE in your deps is urgent regardless
     // of how "on-domain" the advisory text appears.
+    //
+    // Requires a non-dev dep match with confidence >= 0.15 so a single weak
+    // word-boundary hit cannot escalate an unrelated CVE into a Critical signal.
+    let has_strong_non_dev_match = matched_deps
+        .iter()
+        .any(|d| !d.is_dev && d.confidence >= 0.15);
     let is_critical_content = (*content_type == crate::content_dna::ContentType::SecurityAdvisory
         || *content_type == crate::content_dna::ContentType::BreakingChange)
-        && !matched_deps.is_empty();
+        && has_strong_non_dev_match;
 
     if !is_critical_content
         && !(options.apply_signals
@@ -1017,10 +1048,16 @@ pub(crate) fn score_item(
     // Security advisories and breaking changes affecting user's actual
     // dependencies ALWAYS surface, regardless of relevance score.
     // This prevents the gate from silently dropping critical alerts.
+    //
+    // IMPORTANT: the dep match must be strong AND touch a non-dev dep.
+    // `dep_match_score > 0.0` is too loose — a single stray word-boundary
+    // hit (e.g. the word "hostname" in an unrelated CVE) would trigger the
+    // floor and surface CVEs that have nothing to do with the user's stack.
     let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
-    let has_dep_match = raw.dep_match_score > 0.0;
-    let critical_fast_path = (is_security || is_breaking) && has_dep_match;
+    let has_strong_dep_match = raw.dep_match_score >= 0.15
+        && raw.matched_deps.iter().any(|d| !d.is_dev);
+    let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // If critical fast-path, boost score to ensure it passes the gate
     let combined_score = if critical_fast_path && combined_score < 0.50 {
