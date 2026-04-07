@@ -32,8 +32,15 @@ pub(crate) enum VersionDelta {
     Unknown,
 }
 
-/// Common English words that collide with package names.
+/// Common English words AND generic tech stems that collide with package names.
 /// These require nearby language-context words to match.
+///
+/// The tech-stem entries (cert, auth, api, http, lib, util, sdk, ...) are the
+/// subterms produced by extract_search_terms when splitting multi-part package
+/// names like `x509-cert`, `json-web-token`, `auth-client`, `http-common`. On
+/// their own they match far too much CVE/blog content — e.g. "cert" as a
+/// stand-alone word appears in almost every TLS advisory regardless of whether
+/// the user has `x509-cert` in their lockfile.
 const COMMON_ENGLISH_WORDS: &[&str] = &[
     // 2-3 letter
     "is", "it", "or", "and", "the", "got", "set", "get", "put", "has", "run", "use", "can", "will",
@@ -45,6 +52,14 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "image", "sharp", "quote", "level", "model", "state", "store", "route", "group", "serve",
     "watch", "clean", "fresh", "smart", "craft", "prime", "solid", "super", "simple", "table",
     "notify", "scraper",
+    // Generic tech stems — subterms of compound package names that are too
+    // broad on their own. Only match when used with language context nearby.
+    "cert", "auth", "api", "web", "http", "https", "lib", "util", "utils", "sdk",
+    "crypto", "net", "client", "server", "common", "plugin", "plugins", "tool",
+    "tools", "helper", "helpers", "shared", "admin", "user", "users", "proxy",
+    "config", "debug", "token", "tokens", "middleware", "schema", "query",
+    "queries", "parser", "parsers", "loader", "loaders", "runner", "runners",
+    "engine", "runtime", "service", "services", "provider", "providers",
 ];
 
 /// Language-context words that disambiguate package names from English
@@ -402,7 +417,41 @@ mod tests {
         assert!(terms.contains(&"tanstack-react-query".to_string()));
         assert!(terms.contains(&"tanstack".to_string()));
         assert!(terms.contains(&"react".to_string()));
-        assert!(terms.contains(&"query".to_string()));
+        // "query" is a generic tech stem (matches SQL/GraphQL/database content)
+        // and is intentionally excluded. The full name + "tanstack" + "react"
+        // are sufficient to identify TanStack Query content without false
+        // positives from the word "query" appearing in unrelated advisories.
+        assert!(!terms.contains(&"query".to_string()));
+    }
+
+    #[test]
+    fn test_extract_search_terms_excludes_generic_tech_stems() {
+        // x509-cert → splits to ["x509", "cert"]; "cert" is now a generic stem
+        let terms = extract_search_terms("x509-cert");
+        assert!(terms.contains(&"x509-cert".to_string()));
+        assert!(terms.contains(&"x509".to_string()));
+        assert!(
+            !terms.contains(&"cert".to_string()),
+            "'cert' is a generic tech stem, should be excluded"
+        );
+
+        // auth-client → both "auth" and "client" are generic stems
+        let terms = extract_search_terms("auth-client");
+        assert!(terms.contains(&"auth-client".to_string()));
+        assert!(
+            !terms.contains(&"auth".to_string()),
+            "'auth' is a generic tech stem, should be excluded"
+        );
+        assert!(
+            !terms.contains(&"client".to_string()),
+            "'client' is a generic tech stem, should be excluded"
+        );
+
+        // http-common → both parts are generic
+        let terms = extract_search_terms("http-common");
+        assert!(terms.contains(&"http-common".to_string()));
+        assert!(!terms.contains(&"http".to_string()));
+        assert!(!terms.contains(&"common".to_string()));
     }
 
     #[test]

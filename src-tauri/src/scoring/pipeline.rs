@@ -416,7 +416,9 @@ pub(crate) fn score_item(
     //
     // Kept aligned with V2 (pipeline_v2.rs compute_quality_composite) so both
     // pipelines apply the same CVE gating regardless of which is active.
-    let base_score = if novelty.is_security && dep_match_score < 0.10 && !matched_deps.is_empty() {
+    // Threshold 0.20 catches single content-only subterm matches (e.g. "cert"
+    // hitting x509-cert in unrelated AWS advisories).
+    let base_score = if novelty.is_security && dep_match_score < 0.20 && !matched_deps.is_empty() {
         // Some deps matched but very weakly — mild penalty
         base_score * 0.60
     } else if novelty.is_security && matched_deps.is_empty() {
