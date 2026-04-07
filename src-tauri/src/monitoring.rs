@@ -221,15 +221,19 @@ const CVE_SCAN_INTERVAL: u64 = 3600; // 1 hour (was 30 min — advisory DBs upda
 const DB_MAINTENANCE_INTERVAL: u64 = 3600; // 1 hour — WAL checkpoint + optimize (was 4h, too infrequent for startup spike recovery)
 const DEP_HEALTH_INTERVAL: u64 = 21600; // 6 hours — dependency health check (Layer 5)
 
-/// Sovereign Cold Boot — adaptive grace period.
+/// Sovereign Cold Boot — adaptive grace period (default).
 ///
 /// On cold boot, the scheduler runs ZERO maintenance jobs for this many
 /// seconds. The first minute (or two) belongs to the user: instant briefing,
 /// instant window, instant interaction. Maintenance catches up afterward.
 ///
-/// The default is 90 seconds for the conservative cold-boot case. The
-/// scheduler tightens this to ~30s if it detects the app was launched by
-/// user action (vs autostart) — see `boot_context::adapt_grace_secs`.
+/// The actual grace used at runtime is `boot_context::current_grace_secs()`,
+/// which adapts based on detected launch cause:
+///   - 90s for cold power-on / autostart
+///   - 30s for user-launched after the system has been running a while
+///   - 0s for process restart (persisted state already prevents stampede)
+///
+/// This constant is the safe ceiling used in startup logging.
 const COLD_BOOT_GRACE_SECS_DEFAULT: u64 = 90;
 
 /// Helper: update an atomic AND persist the new timestamp to the
@@ -261,20 +265,23 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             interval.tick().await;
 
             // ================================================================
-            // Sovereign Cold Boot — grace period
+            // Sovereign Cold Boot — adaptive grace period
             // ================================================================
-            // For the first COLD_BOOT_GRACE_SECS_DEFAULT seconds after the
-            // scheduler starts, run NO maintenance jobs at all. This guarantees
-            // the user owns the CPU/IO/network for the first minute of every
-            // cold boot, regardless of whether persisted timestamps think any
-            // jobs are due. This is the second half of the stampede fix
-            // (the first half is `scheduler_state::hydrate_from_db`).
+            // Read the grace duration from boot_context, which detected the
+            // launch cause at startup (cold power-on / autostart / user / restart).
+            // This guarantees the user owns the CPU/IO/network for the first
+            // N seconds of every cold boot, where N depends on the boot cause.
+            //
+            // - Cold power-on / autostart: 90s grace
+            // - User-clicked icon:         30s grace
+            // - Process restart:           0s grace (persisted state suffices)
             let cold_boot_elapsed = scheduler_started_at.elapsed().as_secs();
-            if cold_boot_elapsed < COLD_BOOT_GRACE_SECS_DEFAULT {
+            let grace_s = crate::boot_context::current_grace_secs();
+            if cold_boot_elapsed < grace_s {
                 tracing::debug!(
                     target: "4da::monitor",
                     elapsed_s = cold_boot_elapsed,
-                    grace_s = COLD_BOOT_GRACE_SECS_DEFAULT,
+                    grace_s,
                     "Cold-boot grace period — deferring all maintenance"
                 );
                 continue;

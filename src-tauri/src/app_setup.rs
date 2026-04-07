@@ -38,6 +38,11 @@ pub(crate) fn initialize_pre_tauri() {
     // memory in the panic hook so crash dumps don't leak API keys.
     crate::crash_guard::install();
 
+    // Sovereign Cold Boot — start the startup watchdog timer immediately.
+    // This records the startup clock used by phase budget enforcement and
+    // inspects crash-trail markers from the previous session.
+    crate::startup_watchdog::begin_startup_watch();
+
     // Verify binary integrity (code signature, size sanity, permissions).
     // Runs after crash guard so any panics are handled. Logs only — never blocks.
     crate::integrity::verify_integrity();
@@ -273,6 +278,17 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // jobs whose interval has not actually elapsed since last run will be
     // skipped on the first tick instead of all firing simultaneously.
     crate::scheduler_state::hydrate_from_db(&monitoring_state);
+
+    // Sovereign Cold Boot — detect WHY this process was launched and adapt
+    // the cold-boot grace period accordingly:
+    //   - cold power-on / autostart: 90s grace (shared CPU with desktop boot)
+    //   - user clicked icon:         30s grace (responsiveness expected)
+    //   - process restart:           0s grace (persisted state already prevents stampede)
+    {
+        use tauri_plugin_autostart::ManagerExt;
+        let autostart_enabled = app.handle().autolaunch().is_enabled().unwrap_or(false);
+        crate::boot_context::detect_and_cache(autostart_enabled);
+    }
 
     // Start background scheduler
     let app_handle = app.handle().clone();
@@ -763,6 +779,10 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             let _ = w.set_focus();
         }
         info!(target: "4da::startup", "Main window shown (production mode)");
+        // Sovereign Cold Boot — Phase 0 (first-light) is complete as soon
+        // as the window is visible. Logs elapsed time and triggers the
+        // stalled-marker write if we exceeded the budget.
+        crate::startup_watchdog::mark_phase0_complete();
     }
 
     #[cfg(debug_assertions)]
@@ -783,6 +803,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         let _ = w.set_focus();
                     }
                     info!(target: "4da::startup", "Main window shown (frontend-ready signal)");
+                    // Sovereign Cold Boot — Phase 0 complete on first window-visible.
+                    crate::startup_watchdog::mark_phase0_complete();
                 }
             });
         }
@@ -836,10 +858,21 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         let _ = w.set_focus();
                     }
                     warn!(target: "4da::startup", "Main window shown (dev server poll fallback)");
+                    // Sovereign Cold Boot — Phase 0 still considered "complete" even
+                    // on the fallback path. The watchdog will write a stalled marker
+                    // because we exceeded the budget, but the user still sees the window.
+                    crate::startup_watchdog::mark_phase0_complete();
                 }
             });
         }
     }
+
+    // Sovereign Cold Boot — start the steady-state heartbeat writer.
+    // Writes data/.healthy every 60s so the frontend can detect a frozen
+    // backend via a future IPC command. Also write one immediately so the
+    // first heartbeat check doesn't have to wait a minute.
+    crate::startup_watchdog::write_heartbeat();
+    crate::startup_watchdog::start_heartbeat();
 
     Ok(())
 }
@@ -890,6 +923,10 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
         // Disable monitoring to stop scheduler
         let state = get_monitoring_state();
         state.set_enabled(false);
+
+        // Sovereign Cold Boot — remove the startup-watchdog markers so the
+        // next launch knows this was a clean shutdown (no crash recovery toast).
+        crate::startup_watchdog::mark_clean_shutdown();
 
         // Sovereign Cold Boot — capture the latest in-memory briefing to disk
         // so the NEXT cold boot can render it as the first paint. This is the
