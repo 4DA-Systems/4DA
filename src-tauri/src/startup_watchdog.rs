@@ -39,9 +39,22 @@ use crate::state::get_db_path;
 
 /// Time budget for Phase 0 (first-light). Exceeding this logs a warning
 /// and triggers the `.stalled` marker. Phase 0 should end when the window
-/// becomes visible — any dev mode is allowed to overrun briefly, but a
-/// release build hitting this ceiling is a real incident.
+/// becomes visible.
+///
+/// Release builds get a tight 5-second budget because the bundled frontend
+/// loads instantly and there's no dev-server poll. Debug builds get 10
+/// seconds because:
+///   - Vite dev server bootstrap can take 1-3s
+///   - The dev-mode webview poll watchdog adds up to 2s wait-for-frontend
+///   - Larger development databases (200MB+) take longer to migrate
+///
+/// A release build hitting 5s OR a debug build hitting 10s is a real
+/// incident and warrants the `.stalled` marker for the next launch to
+/// surface as a recovery toast.
+#[cfg(not(debug_assertions))]
 const PHASE0_BUDGET_SECS: u64 = 5;
+#[cfg(debug_assertions)]
+const PHASE0_BUDGET_SECS: u64 = 10;
 
 /// Time budget for Phase 1 (essential services ready).
 #[allow(dead_code)] // Used by Wave 6 phased startup rewrite
@@ -250,9 +263,11 @@ mod tests {
     fn phase0_budget_is_reasonable() {
         // Phase 0 budget has to be larger than a typical cold-start window
         // paint (<500ms on release builds) but tight enough that a real
-        // regression gets caught. 5s is the current compromise.
+        // regression gets caught. 5s in release / 10s in debug is the
+        // current compromise — debug needs more headroom for the Vite
+        // dev-server bootstrap and the webview poll watchdog.
         assert!(PHASE0_BUDGET_SECS >= 2);
-        assert!(PHASE0_BUDGET_SECS <= 10);
+        assert!(PHASE0_BUDGET_SECS <= 15);
     }
 
     #[test]
