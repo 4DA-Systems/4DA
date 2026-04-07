@@ -2,6 +2,20 @@
 //!
 //! Contains: score_items_full (cache-first analysis), run_background_analysis (scheduled),
 //! and post-analysis hooks (temporal events, topic centroids, reverse mentions).
+//!
+//! ## Architectural invariant
+//!
+//! Every source item that reaches the user MUST pass through
+//! `scoring::score_item` in this module (via `score_items_full` or
+//! `run_background_analysis`). New sources are added by implementing the
+//! `Source` trait and letting the existing DB → `get_items_tiered` →
+//! `score_item` path carry them through the full PASIFA V2 pipeline.
+//!
+//! Do NOT construct `SourceRelevance` values directly in source adapters or
+//! bypass the pipeline. The only sanctioned bypass is the concept-graph
+//! serendipity injection in `analysis_deep_scan.rs`, which is explicitly
+//! capped at 0.45 and marked `serendipity: true` so it cannot masquerade as a
+//! scored signal.
 
 use tauri::Emitter;
 use tracing::{info, warn};
