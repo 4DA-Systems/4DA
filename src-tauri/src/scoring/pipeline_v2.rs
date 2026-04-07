@@ -187,6 +187,38 @@ struct CalibratedSignals {
 // Phase 1: Extract all raw signals independently
 // ============================================================================
 
+/// Strip synthetic metadata blocks from security-advisory content before
+/// running dependency text matching.
+///
+/// The CVE and OSV source adapters format content as:
+///   `{description}\n\nSeverity: {sev}\nAffected: {pkg1 (eco), pkg2 (eco)...}\n{cvss}`
+///
+/// The `Affected:` line is a raw concatenation of every affected package
+/// name from the advisory — which causes massive false positives when
+/// `match_dependencies` runs word-boundary search against it. For example,
+/// a CVE affecting `aws-lc-rs` lists "aws-lc-rs (rust)" in the Affected
+/// line, and the word "rs" or substrings trigger matches on unrelated user
+/// deps. The stripped form only keeps the actual prose description, which
+/// is where a legitimate mention of a user's package would appear.
+///
+/// Returns the content unchanged when no `\n\nSeverity:` marker is found
+/// (non-security sources or future format changes).
+fn strip_security_metadata(content: &str) -> &str {
+    content
+        .split_once("\n\nSeverity:")
+        .map_or(content, |(description, _metadata)| description)
+}
+
+/// Return whichever content should be used for dependency matching. For CVE
+/// and OSV source items the synthetic metadata block is stripped; all other
+/// sources use the content verbatim.
+fn dep_match_content_for<'a>(input: &'a ScoringInput) -> &'a str {
+    match input.source_type {
+        "cve" | "osv" => strip_security_metadata(input.content),
+        _ => input.content,
+    }
+}
+
 fn extract_signals(
     input: &ScoringInput,
     ctx: &ScoringContext,
@@ -212,9 +244,88 @@ fn extract_signals(
         compute_semantic_ace_boost(input.embedding, &ctx.ace_ctx, &ctx.topic_embeddings)
             .unwrap_or_else(|| semantic::compute_keyword_ace_boost(&topics, &ctx.ace_ctx));
 
-    // Dependency intelligence
-    let (matched_deps, dep_match_score) =
-        match_dependencies(input.title, input.content, &topics, &ctx.ace_ctx);
+    // Dependency intelligence — for security sources, strip the synthetic
+    // `Affected:` metadata block from the content so text matching only
+    // operates on the actual CVE description, not the list of affected
+    // package names that would otherwise create massive false positives.
+    let dep_match_text = dep_match_content_for(input);
+    let (matched_deps, dep_match_score) = {
+        let (mut deps, mut score) =
+            match_dependencies(input.title, dep_match_text, &topics, &ctx.ace_ctx);
+
+        // For CVE/OSV items, apply a MUCH stricter post-filter. The goal is
+        // to only keep matches where the CVE is plausibly about the user's
+        // actual package — not a generic English word that happens to
+        // coincide with a package name (hostname, proxy, client, cert, ...).
+        //
+        // A match survives if ANY of:
+        //   1. Full normalized package name appears in the TITLE (high
+        //      evidence — advisories name the affected software directly).
+        //   2. Full name appears in the description AND there is package
+        //      language context ("npm X", "cargo X", "crate X", "package X")
+        //      within 80 chars, OR
+        //   3. Name contains a hyphen (compound names like `x509-cert` are
+        //      inherently specific and hyphen matches are strong evidence).
+        //
+        // Single word-boundary hits in prose (e.g. the word "hostname" in
+        // a DNS-related advisory) are rejected — they're noise.
+        if matches!(input.source_type, "cve" | "osv") && !deps.is_empty() {
+            let title_lower = input.title.to_lowercase();
+            let body_lower = dep_match_text.to_lowercase();
+            deps.retain(|d| {
+                let full = d.package_name.to_lowercase();
+
+                // Rule 1: title match
+                if has_word_boundary_match(&title_lower, &full) {
+                    return true;
+                }
+
+                // Rule 3: compound name (contains hyphen)
+                let is_compound = full.contains('-');
+                if !has_word_boundary_match(&body_lower, &full) {
+                    return false;
+                }
+                if is_compound {
+                    return true;
+                }
+
+                // Rule 2: single-word name — require language context nearby
+                const CONTEXT_WORDS: &[&str] = &[
+                    "npm",
+                    "cargo",
+                    "crate",
+                    "crates",
+                    "pip",
+                    "pypi",
+                    "gem",
+                    "composer",
+                    "maven",
+                    "nuget",
+                    "package",
+                    "library",
+                    " lib ",
+                    "module",
+                    "dependency",
+                ];
+                let window: usize = 80;
+                // Find each occurrence and check for context nearby
+                for (idx, _) in body_lower.match_indices(&full) {
+                    let start = idx.saturating_sub(window);
+                    let end = (idx + full.len() + window).min(body_lower.len());
+                    let slice = &body_lower[start..end];
+                    if CONTEXT_WORDS.iter().any(|w| slice.contains(w)) {
+                        return true;
+                    }
+                }
+                false
+            });
+            // Recompute dep_match_score from the surviving deps.
+            let total: f32 = deps.iter().map(|d| d.confidence).sum();
+            score = (total / 2.0).min(1.0);
+        }
+
+        (deps, score)
+    };
 
     // Feedback learning boost
     let feedback_boost = if ctx.feedback_boosts.is_empty() {
@@ -1324,4 +1435,101 @@ fn count_affected_projects(db: &Database, matched_deps: &[String]) -> usize {
         |row: &rusqlite::Row<'_>| row.get(0),
     )
     .unwrap_or(0)
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_strip_security_metadata_with_severity_block() {
+        let content = "A critical deserialization vulnerability was discovered.\n\nSeverity: HIGH\nAffected: lodash (npm), wildcard-match (npm)\nCVSS: 9.8";
+        let stripped = strip_security_metadata(content);
+        assert_eq!(
+            stripped,
+            "A critical deserialization vulnerability was discovered."
+        );
+        assert!(!stripped.contains("Affected"));
+        assert!(!stripped.contains("lodash"));
+        assert!(!stripped.contains("wildcard-match"));
+    }
+
+    #[test]
+    fn test_strip_security_metadata_without_marker() {
+        // When there's no Severity marker, content is returned as-is
+        let content = "Just a regular blog post about lodash performance";
+        let stripped = strip_security_metadata(content);
+        assert_eq!(stripped, content);
+    }
+
+    #[test]
+    fn test_strip_security_metadata_empty() {
+        assert_eq!(strip_security_metadata(""), "");
+    }
+
+    #[test]
+    fn test_strip_security_metadata_affected_line_after_severity() {
+        // Realistic OSV-style content
+        let content = "Buffer overflow in TLS handshake.\n\nSeverity: CRITICAL\nAffected: openssl (c), hostname (rust), aws-lc-rs (rust)\nFixed in: 3.2.0\nDetails about the bug.";
+        let stripped = strip_security_metadata(content);
+        // Everything after the description should be stripped — including the
+        // Affected line that contains the hostname/aws-lc-rs noise.
+        assert_eq!(stripped, "Buffer overflow in TLS handshake.");
+        assert!(!stripped.contains("hostname"));
+        assert!(!stripped.contains("aws-lc-rs"));
+    }
+
+    #[test]
+    fn test_dep_match_content_for_cve() {
+        let input = ScoringInput {
+            id: 1,
+            title: "CVE-2024-1234",
+            url: None,
+            content: "desc text.\n\nSeverity: HIGH\nAffected: hostname (rust)\n",
+            source_type: "cve",
+            embedding: &[],
+            created_at: None,
+            detected_lang: "en",
+        };
+        let cleaned = dep_match_content_for(&input);
+        assert_eq!(cleaned, "desc text.");
+        assert!(!cleaned.contains("hostname"));
+    }
+
+    #[test]
+    fn test_dep_match_content_for_osv() {
+        let input = ScoringInput {
+            id: 1,
+            title: "OSV ID",
+            url: None,
+            content: "summary.\n\nSeverity: HIGH\nAffected: x509-cert (rust)\n",
+            source_type: "osv",
+            embedding: &[],
+            created_at: None,
+            detected_lang: "en",
+        };
+        let cleaned = dep_match_content_for(&input);
+        assert_eq!(cleaned, "summary.");
+    }
+
+    #[test]
+    fn test_dep_match_content_for_non_security_source() {
+        let input = ScoringInput {
+            id: 1,
+            title: "HN Post",
+            url: None,
+            content: "lodash released 5.0 with breaking changes.\n\nSeverity: isn't a marker here",
+            source_type: "hackernews",
+            embedding: &[],
+            created_at: None,
+            detected_lang: "en",
+        };
+        // Non-security source content is passed through verbatim
+        let cleaned = dep_match_content_for(&input);
+        assert_eq!(cleaned, input.content);
+    }
 }
