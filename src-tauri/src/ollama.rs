@@ -218,15 +218,39 @@ pub(crate) fn mark_warm(model: &str) {
 // Startup: Ensure Models Available
 // ============================================================================
 
-/// Ensure required Ollama models are available, auto-pulling any that are missing.
+/// Event emitted when Ollama is reachable but required models are missing.
+/// Frontend listens for this and shows a non-blocking banner asking the user
+/// for explicit consent before downloading (potentially gigabytes of) models.
+#[derive(Clone, Serialize)]
+pub struct OllamaNeedsModelsEvent {
+    /// List of model names the user is missing.
+    pub missing: Vec<String>,
+    /// Approximate total download size in MB. Conservative estimates only —
+    /// the frontend should phrase this as "approximately X MB".
+    pub estimated_mb: u64,
+    /// The base URL the frontend should use when the user accepts.
+    pub base_url: String,
+}
+
+/// Sovereign Cold Boot — DETECT (do not auto-pull) Ollama model availability.
 ///
-/// This is the main startup entry point. It:
-/// 1. Checks if Ollama is running
-/// 2. Detects missing models (embedding + LLM)
-/// 3. Auto-pulls missing models with progress events
-/// 4. Warms the LLM model once all models are present
+/// Replaces the previous `ensure_models_available` which auto-downloaded
+/// missing models on startup, potentially fetching gigabytes behind the
+/// user's back during the cold-boot stampede. This version:
+///
+/// 1. Checks if Ollama is running.
+/// 2. Detects missing models (embedding + LLM).
+/// 3. **Emits** `ollama-needs-models` if any are missing — does NOT pull.
+///    The frontend shows a banner; the user explicitly clicks "Download"
+///    and the existing `pull_ollama_model` Tauri command runs the download
+///    with a visible progress bar.
+/// 4. Warms the LLM model only if it is already present.
+///
+/// This is the contract every responsible app uses: never download large
+/// payloads on startup without explicit user consent. It is also the
+/// trust pillar for Signal users who pay for a calm, predictable cold boot.
 pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app: &AppHandle) {
-    // Step 1: Check Ollama status
+    // Step 1: Check Ollama status (cheap — local HTTP probe)
     let status =
         match crate::settings_commands::check_ollama_status(Some(base_url.to_string())).await {
             Ok(s) => s,
@@ -272,59 +296,112 @@ pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app
         .iter()
         .any(|m| m.starts_with(llm_model) || m.contains(llm_model));
 
-    let mut need_pull: Vec<String> = Vec::new();
+    let mut missing: Vec<String> = Vec::new();
     if !has_embedding {
-        need_pull.push(embed_model);
+        missing.push(embed_model.clone());
     }
     if !has_llm {
-        need_pull.push(llm_model.to_string());
+        missing.push(llm_model.to_string());
     }
 
-    // Step 3: Auto-pull missing models
-    if !need_pull.is_empty() {
-        info!(target: "4da::ollama", missing = ?need_pull, "Auto-pulling missing Ollama models");
+    // Step 3: If anything is missing, emit a CONSENT REQUEST instead of pulling.
+    // The frontend shows a banner; user clicks "Download" to invoke the
+    // existing `pull_ollama_model` command via the normal IPC path.
+    if !missing.is_empty() {
+        let estimated_mb = estimate_model_size_mb(&missing);
+        info!(
+            target: "4da::ollama",
+            missing = ?missing,
+            estimated_mb,
+            "Ollama models missing — emitting consent request (no auto-pull)"
+        );
 
+        let _ = app.emit(
+            "ollama-needs-models",
+            OllamaNeedsModelsEvent {
+                missing: missing.clone(),
+                estimated_mb,
+                base_url: base_url.to_string(),
+            },
+        );
+
+        // Also emit a phase update so any UI listening to ollama-status sees
+        // the "needs-consent" state instead of going silent.
         let _ = app.emit(
             "ollama-status",
             OllamaStatusEvent {
-                phase: "pulling".into(),
-                model: need_pull.join(", "),
+                phase: "needs-consent".into(),
+                model: missing.join(", "),
                 error: None,
             },
         );
 
-        for model in &need_pull {
-            info!(target: "4da::ollama", model = %model, "Pulling model");
-            match crate::settings_commands::pull_ollama_model(
-                app.clone(),
-                model.clone(),
-                Some(base_url.to_string()),
-            )
-            .await
-            {
-                Ok(_) => {
-                    info!(target: "4da::ollama", model = %model, "Model pulled successfully");
-                }
-                Err(e) => {
-                    error!(target: "4da::ollama", model = %model, error = %e, "Failed to auto-pull model");
-                    let _ = app.emit(
-                        "ollama-status",
-                        OllamaStatusEvent {
-                            phase: "error".into(),
-                            model: model.clone(),
-                            error: Some(format!("Failed to pull {model}: {e}")),
-                        },
-                    );
-                    return;
-                }
-            }
-        }
-
-        info!(target: "4da::ollama", "All missing models pulled successfully");
+        // Do NOT pull. Do NOT warm — the LLM model isn't here yet.
+        return;
     }
 
-    // Step 4: Warm the LLM model
+    // Step 4: All models present — warm the LLM model
     warm_model(llm_model, base_url, app).await;
+}
+
+/// Conservative size estimate (MB) for the models a user might be missing.
+/// Used by the consent banner. Errs on the high side so users don't feel
+/// the download was bigger than promised.
+fn estimate_model_size_mb(missing: &[String]) -> u64 {
+    let mut total = 0_u64;
+    for m in missing {
+        let lower = m.to_lowercase();
+        // Embedding models — small (~80MB for nomic-embed-text)
+        if lower.contains("nomic-embed") || lower.contains("minilm") {
+            total += 100;
+            continue;
+        }
+        // LLM size estimation by parameter count in the tag
+        // Format examples: "llama3.2:latest", "llama3.2:3b", "qwen2.5:7b", "phi3:14b"
+        if lower.contains(":1b") || lower.contains("1b") {
+            total += 700;
+        } else if lower.contains(":3b") || lower.contains("3b") || lower.contains("llama3.2:latest")
+        {
+            total += 2000;
+        } else if lower.contains(":7b") || lower.contains("7b") {
+            total += 4500;
+        } else if lower.contains(":8b") || lower.contains("8b") {
+            total += 5000;
+        } else if lower.contains(":13b") || lower.contains(":14b") {
+            total += 8000;
+        } else if lower.contains(":70b") {
+            total += 40_000;
+        } else {
+            // Unknown — assume mid-size
+            total += 2500;
+        }
+    }
+    total
+}
+
+#[cfg(test)]
+mod size_estimate_tests {
+    use super::estimate_model_size_mb;
+
+    #[test]
+    fn embed_model_is_small() {
+        assert!(estimate_model_size_mb(&["nomic-embed-text:latest".to_string()]) <= 200);
+    }
+
+    #[test]
+    fn llama3_2_latest_is_around_2gb() {
+        let mb = estimate_model_size_mb(&["llama3.2:latest".to_string()]);
+        assert!(mb >= 1500 && mb <= 2500, "got {mb}");
+    }
+
+    #[test]
+    fn missing_both_embed_and_llm() {
+        let mb = estimate_model_size_mb(&[
+            "nomic-embed-text:latest".to_string(),
+            "llama3.2:latest".to_string(),
+        ]);
+        assert!(mb >= 2000 && mb <= 2500, "got {mb}");
+    }
 }
 
 // ============================================================================

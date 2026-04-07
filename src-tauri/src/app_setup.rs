@@ -634,6 +634,13 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     items = briefing.total_relevant,
                     "Immediate morning briefing (cold boot catch-up)"
                 );
+
+                // Sovereign Cold Boot — persist this briefing immediately so the
+                // NEXT cold boot has it pre-baked. The snapshot will be re-saved
+                // once the LLM synthesis completes (below) so the next-boot view
+                // includes the narrative paragraph.
+                crate::briefing_snapshot::save_snapshot(&briefing);
+
                 crate::monitoring_notifications::send_morning_briefing_notification(
                     &briefing_handle,
                     &briefing,
@@ -671,6 +678,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                                     "morning-briefing-synthesis",
                                     serde_json::json!({ "synthesis": synthesis }),
                                 );
+
+                                // Re-save the snapshot now that we have the synthesis text,
+                                // so the next cold boot loads the briefing WITH narrative.
+                                let mut enriched = briefing_synth.clone();
+                                enriched.synthesis = Some(synthesis);
+                                crate::briefing_snapshot::save_snapshot(&enriched);
                             }
                             Err(e) => {
                                 info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
@@ -877,6 +890,58 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
         // Disable monitoring to stop scheduler
         let state = get_monitoring_state();
         state.set_enabled(false);
+
+        // Sovereign Cold Boot — capture the latest in-memory briefing to disk
+        // so the NEXT cold boot can render it as the first paint. This is the
+        // shutdown half of the briefing snapshot system; the steady-state half
+        // persists snapshots whenever a new briefing fires.
+        //
+        // Best-effort: a missing/empty snapshot just means the next boot shows
+        // its normal first-run state.
+        {
+            let analysis_state = crate::get_analysis_state().lock();
+            if let Some(ref results) = analysis_state.results {
+                use crate::monitoring_briefing::{BriefingItem, BriefingNotification};
+                let user_lang = crate::i18n::get_user_language();
+                let items: Vec<BriefingItem> = results
+                    .iter()
+                    .filter(|r| r.relevant && !r.excluded)
+                    .filter(|r| r.detected_lang == user_lang)
+                    .filter(|r| r.top_score >= 0.15)
+                    .take(8)
+                    .map(|r| BriefingItem {
+                        title: r.title.clone(),
+                        source_type: r.source_type.clone(),
+                        score: r.top_score,
+                        signal_type: r.signal_type.clone(),
+                        url: r.url.clone(),
+                        item_id: Some(r.id as i64),
+                        signal_priority: r.signal_priority.clone(),
+                        description: r.signal_action.clone(),
+                        matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                    })
+                    .collect();
+                if !items.is_empty() {
+                    let total_relevant =
+                        results.iter().filter(|r| r.relevant && !r.excluded).count();
+                    let briefing = BriefingNotification {
+                        title: format!("Brief — {} signals", total_relevant),
+                        items,
+                        total_relevant,
+                        ongoing_topics: vec![],
+                        knowledge_gaps: vec![],
+                        escalating_chains: vec![],
+                        wisdom_signals: vec![],
+                        synthesis: None,
+                        wisdom_synthesis: None,
+                        labels: None,
+                    };
+                    drop(analysis_state); // release lock before disk I/O
+                    crate::briefing_snapshot::save_snapshot(&briefing);
+                    info!(target: "4da::shutdown", "Briefing snapshot persisted for next cold boot");
+                }
+            }
+        }
 
         // Checkpoint WAL before exit — prevents large WAL persisting to next
         // cold boot. TRUNCATE resets the WAL file to zero length. Without this,
