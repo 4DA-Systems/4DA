@@ -21,9 +21,11 @@
 - **Status**: committing
 - **Since**: 2026-04-07T03:00:00Z
 - **Commit Lock**: HELD
-- **Wave 1 (foundation) — COMMITTED 5816ee06**
-- **Wave 2 (UX critical) — READY TO COMMIT**: src-tauri/src/briefing_snapshot.rs (NEW), src-tauri/src/lib.rs, src-tauri/src/app_setup.rs, src-tauri/src/ollama.rs, src-tauri/src/monitoring.rs, src-tauri/src/monitoring_briefing.rs
-- **Wave 3 (architectural)**: src-tauri/src/boot_context.rs (NEW), src-tauri/src/startup_watchdog.rs (NEW), src-tauri/src/app_setup.rs, src-tauri/src/lib.rs
-- **Wave 4 (validation)**: scripts/benchmark-cold-boot.cjs (NEW), src-tauri/src/first_run_audit.rs
+- **Wave 1 (foundation) — COMMITTED 5816ee06** (7 files, 454 LOC)
+- **Wave 2 (UX critical) — COMMITTED b758ee7e** (9 files, 609 LOC)
+- **Waves 3+4+5 (frontend instant-paint + boot context + watchdog) — READY TO COMMIT**: src/main.tsx, src/components/BriefingView.tsx, src/hooks/use-analysis.ts, src/store/briefing-slice.ts, src/store/types.ts, src-tauri/src/boot_context.rs (NEW), src-tauri/src/startup_watchdog.rs (NEW), src-tauri/src/lib.rs, src-tauri/src/app_setup.rs, src-tauri/src/monitoring.rs, .gitignore
+- **Wave 6 (phased startup rewrite)**: src-tauri/src/app_setup.rs
+- **Wave 7 (webview navigation listener)**: src-tauri/src/app_setup.rs, src-tauri/src/startup_watchdog.rs
+- **Wave 8 (CI cold-boot benchmark)**: scripts/benchmark-cold-boot.cjs (NEW)
 
 
