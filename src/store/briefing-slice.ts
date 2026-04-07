@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
-import type { AppStore, BriefingSlice, BriefingState, FreeBriefingData } from './types';
+import type { AppStore, BriefingSlice, BriefingState, FreeBriefingData, InstantBriefingSnapshot } from './types';
 
 const initialBriefingState: BriefingState = {
   content: null,
@@ -9,6 +9,26 @@ const initialBriefingState: BriefingState = {
   model: null,
   lastGenerated: null,
 };
+
+/**
+ * Sovereign Cold Boot — read the pre-loaded snapshot stashed by main.tsx
+ * BEFORE React mounted. The synchronous fetch happens once at module load
+ * (in main.tsx), and we just pick up the result here on first store init.
+ *
+ * This is the entry point that turns 4DA from "fast" to "instant" on cold
+ * boot: by the time the store is constructed, the snapshot is already in
+ * memory, so the briefing card has data on the very first render.
+ */
+function readPreloadedSnapshot(): InstantBriefingSnapshot | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as Window & { __4DA_INSTANT_SNAPSHOT__?: InstantBriefingSnapshot | null };
+  const snap = w.__4DA_INSTANT_SNAPSHOT__ ?? null;
+  // Consume it — once the store has it, the global is no longer needed.
+  if (snap) {
+    w.__4DA_INSTANT_SNAPSHOT__ = null;
+  }
+  return snap;
+}
 
 export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> = (set) => ({
   aiBriefing: { ...initialBriefingState },
@@ -19,11 +39,15 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   freeBriefing: null,
   freeBriefingLoading: false,
   morningBriefSynthesis: null,
+  // Sovereign Cold Boot: hydrate from the pre-mount fetch in main.tsx so the
+  // first render already has yesterday's briefing on screen.
+  instantSnapshot: readPreloadedSnapshot(),
 
   setShowBriefing: (show) => set({ showBriefing: show }),
   setMorningBriefSynthesis: (synthesis) => set({ morningBriefSynthesis: synthesis }),
   setAutoBriefingEnabled: (enabled) => set({ autoBriefingEnabled: enabled }),
   setLastBackgroundResultsAt: (date) => set({ lastBackgroundResultsAt: date }),
+  setInstantSnapshot: (snapshot) => set({ instantSnapshot: snapshot }),
 
   loadPersistedBriefing: async () => {
     try {

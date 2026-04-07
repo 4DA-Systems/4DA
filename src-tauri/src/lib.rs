@@ -73,10 +73,12 @@ mod anomaly;
 mod app_setup;
 mod attention;
 mod autophagy;
+// Wave 4 — adapt cold-boot grace period to launch context
 mod autophagy_commands;
 mod autophagy_pulse;
 mod awe_commands;
 mod awe_synthesis;
+mod boot_context;
 mod briefing_snapshot;
 mod briefing_window;
 mod calibration_commands;
@@ -190,6 +192,8 @@ mod standing_queries;
 mod standing_queries_evaluation;
 mod standing_queries_suggestions;
 mod startup_health;
+// Wave 5 — universal startup watchdog with crash trail and heartbeat
+mod startup_watchdog;
 mod suns;
 mod suns_commands;
 mod tech_convergence;

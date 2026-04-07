@@ -232,6 +232,42 @@ export interface FreeBriefingData {
   generated_at?: string;
 }
 
+/**
+ * Sovereign Cold Boot — pre-baked briefing snapshot loaded BEFORE React mounts
+ * for instant first-paint. The Rust side (briefing_snapshot.rs) writes this
+ * file at shutdown and after each morning briefing fires; main.tsx reads it
+ * synchronously via the get_briefing_snapshot Tauri command and stashes the
+ * result on window.__4DA_INSTANT_SNAPSHOT__ before ReactDOM.createRoot.
+ *
+ * The frontend renders the snapshot as the first paint with a freshness
+ * banner, then transparently swaps in fresh data when the backend catches up.
+ */
+export interface InstantBriefingSnapshot {
+  /** Format version. v1 at present; older versions are silently ignored. */
+  version: number;
+  /** Unix timestamp when this snapshot was generated. */
+  generatedAtUnix: number;
+  /** Pre-formatted display string, e.g. "Mon Apr 7, 9:14 AM". */
+  generatedAtDisplay: string;
+  /** Briefing payload. */
+  title: string;
+  items: Array<{
+    title: string;
+    sourceType: string;
+    score: number;
+    signalType?: string | null;
+    url?: string | null;
+    itemId?: number | null;
+    signalPriority?: string | null;
+    description?: string | null;
+    matchedDeps?: string[];
+  }>;
+  totalRelevant: number;
+  /** LLM-synthesized narrative — populated when previous session had time to compute it. */
+  synthesis?: string | null;
+  wisdomSynthesis?: string | null;
+}
+
 export interface BriefingSlice {
   aiBriefing: BriefingState;
   showBriefing: boolean;
@@ -241,10 +277,17 @@ export interface BriefingSlice {
   freeBriefing: FreeBriefingData | null;
   freeBriefingLoading: boolean;
   morningBriefSynthesis: string | null;
+  /** Pre-baked briefing from the previous session. Populated on app boot
+   *  via window.__4DA_INSTANT_SNAPSHOT__ for sub-200ms first paint, then
+   *  set to null once a fresh briefing replaces it. */
+  instantSnapshot: InstantBriefingSnapshot | null;
   setShowBriefing: (show: boolean) => void;
   setMorningBriefSynthesis: (synthesis: string | null) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
+  /** Replace or clear the instant snapshot. Called once on mount with the
+   *  globalThis-cached value, and called with null once fresh data lands. */
+  setInstantSnapshot: (snapshot: InstantBriefingSnapshot | null) => void;
   generateBriefing: () => Promise<void>;
   generateFreeBriefing: () => Promise<void>;
   loadPersistedBriefing: () => Promise<void>;

@@ -21,7 +21,7 @@ export const BriefingView = memo(function BriefingView() {
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
     lastBackgroundResultsAt, sourceHealth,
-    freeBriefing, freeBriefingLoading, morningBriefSynthesis,
+    freeBriefing, freeBriefingLoading, morningBriefSynthesis, instantSnapshot,
   } = useAppStore(
     useShallow((s) => ({
       briefing: s.aiBriefing,
@@ -34,6 +34,7 @@ export const BriefingView = memo(function BriefingView() {
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
       morningBriefSynthesis: s.morningBriefSynthesis,
+      instantSnapshot: s.instantSnapshot,
     })),
   );
 
@@ -89,6 +90,77 @@ export const BriefingView = memo(function BriefingView() {
   // Loading skeleton
   if (briefing.loading) {
     return <BriefingSkeleton />;
+  }
+
+  // ==========================================================================
+  // Sovereign Cold Boot — instant first paint of yesterday's briefing
+  // ==========================================================================
+  // If we're still booting (no fresh briefing content yet, no fresh results)
+  // AND a pre-baked snapshot was loaded by main.tsx, render the snapshot
+  // immediately with a refreshing-in-background banner. This is the difference
+  // between cold-boot UX of "black screen for 5+ seconds" and "yesterday's
+  // briefing is already here, refreshing now".
+  //
+  // The instant snapshot is cleared as soon as fresh data arrives via the
+  // morning-briefing-ready event handler (use-analysis.ts), at which point
+  // this branch stops matching and the normal flow takes over.
+  if (!briefing.content && !analysisComplete && instantSnapshot) {
+    return (
+      <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
+        <div className="bg-bg-secondary rounded-lg border border-border">
+          <div className="px-5 pt-5 pb-3 border-b border-border flex items-center justify-between gap-3">
+            <h2 className="text-[9px] font-semibold tracking-[0.12em] text-text-muted uppercase">
+              {t('briefing.intelligenceBriefing')}
+            </h2>
+            <div
+              className="flex items-center gap-2 text-[10px] text-text-muted"
+              title={t('briefing.refreshingInBackground', 'Refreshing intelligence in background')}
+            >
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
+              <span>{instantSnapshot.generatedAtDisplay}</span>
+            </div>
+          </div>
+          <div className="p-5 space-y-4">
+            {instantSnapshot.synthesis && (
+              <div className="pb-3 mb-1 border-b border-border">
+                <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
+                  {instantSnapshot.synthesis}
+                </p>
+              </div>
+            )}
+            <div>
+              <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">
+                {t('briefing.topSignals', 'Top Signals')}
+              </h3>
+              <div className="space-y-2">
+                {instantSnapshot.items.map((item, i) => (
+                  <a
+                    key={i}
+                    href={item.url ?? '#'}
+                    target={item.url ? '_blank' : undefined}
+                    rel={item.url ? 'noopener noreferrer' : undefined}
+                    className="block pl-2 border-l-2 border-border hover:border-[#D4AF37] py-1 transition-colors"
+                  >
+                    <p className="text-xs text-text-primary leading-snug line-clamp-2">{item.title}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[9px] font-mono text-text-muted uppercase tracking-wider">
+                        {item.sourceType}
+                      </span>
+                      <span className="text-[9px] font-mono text-text-muted">
+                        {Math.round(item.score * 100)}%
+                      </span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+            <div className="pt-2 text-[10px] text-text-muted italic">
+              {t('briefing.cachedFreshening', 'Cached briefing — fresh intelligence loading…')}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   // Empty state: no briefing content and not generating

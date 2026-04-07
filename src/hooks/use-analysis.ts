@@ -190,6 +190,10 @@ export function useAnalysis(
           const { total_relevant } = event.payload;
           if (total_relevant > 0) {
             useAppStore.getState().setShowBriefing(true);
+            // Sovereign Cold Boot — fresh briefing has arrived; the instant
+            // snapshot from the previous session is no longer needed and the
+            // freshness banner can disappear.
+            useAppStore.getState().setInstantSnapshot(null);
             useAppStore.getState().addToast('info', i18n.t('analysis.morningBriefingReady', { count: total_relevant }));
           }
         }),
