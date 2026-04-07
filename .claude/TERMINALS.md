@@ -18,14 +18,13 @@
 -->
 
 ### T1 — Sovereign Cold Boot architecture (8-wave overhaul)
-- **Status**: committing
+- **Status**: paused after Wave 5 — awaiting user verification
 - **Since**: 2026-04-07T03:00:00Z
-- **Commit Lock**: HELD
 - **Wave 1 (foundation) — COMMITTED 5816ee06** (7 files, 454 LOC)
 - **Wave 2 (UX critical) — COMMITTED b758ee7e** (9 files, 609 LOC)
-- **Waves 3+4+5 (frontend instant-paint + boot context + watchdog) — READY TO COMMIT**: src/main.tsx, src/components/BriefingView.tsx, src/hooks/use-analysis.ts, src/store/briefing-slice.ts, src/store/types.ts, src-tauri/src/boot_context.rs (NEW), src-tauri/src/startup_watchdog.rs (NEW), src-tauri/src/lib.rs, src-tauri/src/app_setup.rs, src-tauri/src/monitoring.rs, .gitignore
-- **Wave 6 (phased startup rewrite)**: src-tauri/src/app_setup.rs
-- **Wave 7 (webview navigation listener)**: src-tauri/src/app_setup.rs, src-tauri/src/startup_watchdog.rs
-- **Wave 8 (CI cold-boot benchmark)**: scripts/benchmark-cold-boot.cjs (NEW)
+- **Waves 3+4+5 (instant paint + boot context + watchdog) — COMMITTED e59df4e8** (12 files, 854 LOC)
+- **Wave 6 (phased startup rewrite)**: TODO — not strictly needed for the user-visible fix
+- **Wave 7 (webview navigation listener)**: TODO — stretch goal, recovers from WebView2 error pages
+- **Wave 8 (CI cold-boot benchmark)**: TODO — shipping safeguard, not a UX change
 
 
