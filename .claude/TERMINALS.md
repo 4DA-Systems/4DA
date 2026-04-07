@@ -18,13 +18,12 @@
 -->
 
 ### T1 — Sovereign Cold Boot architecture (8-wave overhaul)
-- **Status**: paused after Wave 5 — awaiting user verification
+- **Status**: committing
 - **Since**: 2026-04-07T03:00:00Z
+- **Commit Lock**: HELD
 - **Wave 1 (foundation) — COMMITTED 5816ee06** (7 files, 454 LOC)
 - **Wave 2 (UX critical) — COMMITTED b758ee7e** (9 files, 609 LOC)
 - **Waves 3+4+5 (instant paint + boot context + watchdog) — COMMITTED e59df4e8** (12 files, 854 LOC)
-- **Wave 6 (phased startup rewrite)**: TODO — not strictly needed for the user-visible fix
-- **Wave 7 (webview navigation listener)**: TODO — stretch goal, recovers from WebView2 error pages
-- **Wave 8 (CI cold-boot benchmark)**: TODO — shipping safeguard, not a UX change
+- **Waves 6+7+8 — READY TO COMMIT**: src-tauri/src/app_setup.rs (phase markers, recovery loop), src/main.tsx (typed cmd wrapper), scripts/benchmark-cold-boot.cjs (NEW), package.json (validate:cold-boot)
 
 

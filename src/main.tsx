@@ -29,29 +29,11 @@ import type { InstantBriefingSnapshot } from './store/types';
 // never shown an error from this path.
 // ============================================================================
 try {
-  const { invoke } = await import('@tauri-apps/api/core');
-  const raw = await invoke<{
-    version: number;
-    generated_at_unix: number;
-    generated_at_display: string;
-    briefing: {
-      title: string;
-      items: Array<{
-        title: string;
-        source_type: string;
-        score: number;
-        signal_type?: string | null;
-        url?: string | null;
-        item_id?: number | null;
-        signal_priority?: string | null;
-        description?: string | null;
-        matched_deps?: string[];
-      }>;
-      total_relevant: number;
-      synthesis?: string | null;
-      wisdom_synthesis?: string | null;
-    };
-  } | null>('get_briefing_snapshot');
+  // Use the typed `cmd` wrapper so the IPC validator is satisfied and we
+  // get full type-checking on the snapshot shape. The dynamic import keeps
+  // this safe in non-Tauri environments (tests, browser).
+  const { cmd } = await import('./lib/commands');
+  const raw = await cmd('get_briefing_snapshot');
 
   if (raw) {
     // Convert snake_case (Rust contract) to camelCase (TypeScript convention)
