@@ -96,8 +96,15 @@ impl BriefingSnapshot {
 }
 
 /// Resolve the on-disk snapshot path.
+///
 /// Lives next to the database so cross-platform path resolution is shared.
+/// An optional `FOURDA_BRIEFING_SNAPSHOT_PATH` override exists for tests that
+/// need to write to a temp dir without poisoning the shared `FOURDA_DB_PATH`
+/// env var (which other tests rely on for their own DB resolution).
 fn snapshot_path() -> PathBuf {
+    if let Ok(override_path) = std::env::var("FOURDA_BRIEFING_SNAPSHOT_PATH") {
+        return PathBuf::from(override_path);
+    }
     let mut path = get_db_path();
     path.set_file_name("briefing_snapshot.json");
     path
@@ -239,6 +246,15 @@ pub async fn get_briefing_snapshot() -> Result<Option<BriefingSnapshot>, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serialize tests that mutate the global FOURDA_DB_PATH env var.
+    /// Without this, parallel test execution races and can leak the
+    /// production data path between tests, causing the snapshot file to
+    /// land in the real `data/` directory (we hit this in the first
+    /// real cold-boot test — leftover "Test Brief" data appeared in
+    /// production state and would have shown to the user).
+    static ENV_VAR_LOCK: Mutex<()> = Mutex::new(());
 
     fn fake_briefing(items: usize) -> BriefingNotification {
         use crate::monitoring_briefing::BriefingItem;
@@ -312,13 +328,19 @@ mod tests {
     #[test]
     fn empty_briefing_does_not_save() {
         // Verify save_snapshot early-returns on empty (we check by ensuring
-        // no snapshot file appears). Use a temp dir via FOURDA_DB_PATH.
-        let tmp = std::env::temp_dir().join(format!("4da_test_{}", std::process::id()));
-        std::fs::create_dir_all(&tmp).unwrap();
-        let db_path = tmp.join("4da.db");
-        std::env::set_var("FOURDA_DB_PATH", &db_path);
+        // no snapshot file appears).
+        //
+        // Uses the dedicated FOURDA_BRIEFING_SNAPSHOT_PATH override (NOT
+        // FOURDA_DB_PATH) so this test cannot pollute the production data
+        // directory even if other tests are racing on the shared db env var.
+        // Serialized via ENV_VAR_LOCK as belt-and-braces.
+        let _guard = ENV_VAR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
 
+        let tmp = std::env::temp_dir().join(format!("4da_test_empty_{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
         let snapshot_file = tmp.join("briefing_snapshot.json");
+        std::env::set_var("FOURDA_BRIEFING_SNAPSHOT_PATH", &snapshot_file);
+
         let _ = std::fs::remove_file(&snapshot_file);
 
         save_snapshot(&fake_briefing(0));
@@ -327,16 +349,23 @@ mod tests {
             "save_snapshot should refuse empty briefings"
         );
 
-        std::env::remove_var("FOURDA_DB_PATH");
+        std::env::remove_var("FOURDA_BRIEFING_SNAPSHOT_PATH");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn save_then_load_round_trip() {
+        // Uses the dedicated FOURDA_BRIEFING_SNAPSHOT_PATH override so this
+        // test cannot accidentally write to the production data directory
+        // (the original first-cold-boot test caught a leak from FOURDA_DB_PATH
+        // racing with parallel tests — fix is two-layer: dedicated env var +
+        // mutex serialization).
+        let _guard = ENV_VAR_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+
         let tmp = std::env::temp_dir().join(format!("4da_test_rt_{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        let db_path = tmp.join("4da.db");
-        std::env::set_var("FOURDA_DB_PATH", &db_path);
+        let snapshot_file = tmp.join("briefing_snapshot.json");
+        std::env::set_var("FOURDA_BRIEFING_SNAPSHOT_PATH", &snapshot_file);
 
         save_snapshot(&fake_briefing(2));
         let loaded = load_snapshot();
@@ -349,7 +378,7 @@ mod tests {
             Some("Test synthesis paragraph.")
         );
 
-        std::env::remove_var("FOURDA_DB_PATH");
+        std::env::remove_var("FOURDA_BRIEFING_SNAPSHOT_PATH");
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }
