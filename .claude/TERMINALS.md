@@ -17,13 +17,13 @@
 - **Files**: list of files being modified
 -->
 
-### T1 — Sovereign Cold Boot architecture (8-wave overhaul)
-- **Status**: committing
-- **Since**: 2026-04-07T03:00:00Z
-- **Commit Lock**: HELD
+### T1 — Sovereign Cold Boot architecture (8-wave overhaul) — COMPLETE
+- **Status**: done — all 8 waves committed
 - **Wave 1 (foundation) — COMMITTED 5816ee06** (7 files, 454 LOC)
 - **Wave 2 (UX critical) — COMMITTED b758ee7e** (9 files, 609 LOC)
 - **Waves 3+4+5 (instant paint + boot context + watchdog) — COMMITTED e59df4e8** (12 files, 854 LOC)
-- **Waves 6+7+8 — READY TO COMMIT**: src-tauri/src/app_setup.rs (phase markers, recovery loop), src/main.tsx (typed cmd wrapper), scripts/benchmark-cold-boot.cjs (NEW), package.json (validate:cold-boot)
+- **Waves 6+7+8 (instrumentation + webview recovery + regression gate) — COMMITTED 3037a39e** (5 files, 601 LOC)
+- **Total**: 4 commits, 24 unique files, ~2500 LOC, 25 new tests, 41 regression-gate checks
+- All 8 waves verified compiling, all targeted tests passing, IPC validator clean, TypeScript clean.
 
 
