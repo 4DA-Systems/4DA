@@ -860,6 +860,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             if let Some(briefing) = crate::monitoring_notifications::check_morning_briefing(&state)
             {
                 info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
+
+                // Sovereign Cold Boot — persist this briefing for tomorrow's instant
+                // first paint. Will be re-saved with synthesis text when the LLM
+                // narrative completes (below).
+                crate::briefing_snapshot::save_snapshot(&briefing);
+
                 crate::monitoring_notifications::send_morning_briefing_notification(
                     &app, &briefing,
                 );
@@ -898,6 +904,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                     "morning-briefing-synthesis",
                                     serde_json::json!({ "synthesis": synthesis }),
                                 );
+
+                                // Re-save snapshot WITH the LLM synthesis text so the
+                                // next cold boot loads the full briefing including the
+                                // narrative paragraph.
+                                let mut enriched = briefing_synth.clone();
+                                enriched.synthesis = Some(synthesis);
+                                crate::briefing_snapshot::save_snapshot(&enriched);
                             }
                             Err(e) => {
                                 info!(target: "4da::briefing", reason = %e, "Synthesis skipped");

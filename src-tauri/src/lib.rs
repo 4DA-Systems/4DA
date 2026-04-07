@@ -77,6 +77,7 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod awe_commands;
 mod awe_synthesis;
+mod briefing_snapshot;
 mod briefing_window;
 mod calibration_commands;
 mod calibration_probes;
@@ -572,6 +573,8 @@ pub fn run() {
             // Briefing window
             briefing_window::briefing_item_clicked,
             briefing_window::briefing_open_url,
+            // Briefing snapshot — Sovereign Cold Boot instant-paint
+            briefing_snapshot::get_briefing_snapshot,
             // AWE page-specific commands
             awe_commands::get_awe_pattern_match,
             awe_commands::get_awe_decision_history,

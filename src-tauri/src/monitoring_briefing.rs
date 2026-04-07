@@ -4,7 +4,7 @@
 //! Handles morning briefing scheduling, date tracking, and notification content.
 
 use chrono::Timelike;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_notification::NotificationExt;
 use tracing::{info, warn};
@@ -18,7 +18,7 @@ use crate::monitoring_notifications::truncate_safe;
 
 /// Item for morning briefing notification.
 /// Enriched with url, item_id, matched_deps for the center-screen briefing window.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefingItem {
     pub title: String,
     pub source_type: String,
@@ -42,14 +42,14 @@ pub struct BriefingItem {
 }
 
 /// A topic the user hasn't seen intelligence about recently
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeGap {
     pub topic: String,
     pub days_since_last: i64,
 }
 
 /// Summary of an escalating signal chain for inclusion in the briefing
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChainSummary {
     pub name: String,
     pub phase: String,
@@ -59,7 +59,7 @@ pub struct ChainSummary {
 }
 
 /// AWE wisdom signal — a validated principle or anti-pattern from the Wisdom Graph
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WisdomSignal {
     pub text: String,
     pub confidence: f32,
@@ -67,7 +67,7 @@ pub struct WisdomSignal {
 }
 
 /// Translated labels for the briefing window UI
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefingLabels {
     pub header: String,
     pub escalating: String,
@@ -83,7 +83,7 @@ pub struct BriefingLabels {
 /// Morning briefing notification content.
 /// Enriched for center-screen briefing window with knowledge gaps, ongoing topics,
 /// and escalating signal chains.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefingNotification {
     pub title: String,
     pub items: Vec<BriefingItem>,
