@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 50;
+        const TARGET_VERSION: i64 = 51;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1420,6 +1420,50 @@ impl Database {
                              CREATE INDEX IF NOT EXISTS idx_channel_provenance_render ON channel_provenance(render_id);",
                         )?;
                         info!(target: "4da::db", "Added audit cascade triggers and FK join indexes");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 51: Sovereign Cold Boot — persisted scheduler state.
+            // Stores last-run timestamps for each background job so they
+            // survive process restart. Without this table, every cold boot
+            // re-fires the entire backlog of "scheduled" jobs because the
+            // in-memory atomics default to 0 (the cold-boot stampede).
+            if current_version < 51 {
+                Self::run_versioned_migration(
+                    &conn,
+                    50,
+                    51,
+                    "Phase 51: scheduler_state for cold-boot stampede prevention",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS scheduler_state (
+                                job_name TEXT PRIMARY KEY NOT NULL,
+                                last_run_unix INTEGER NOT NULL DEFAULT 0,
+                                last_duration_ms INTEGER,
+                                run_count INTEGER NOT NULL DEFAULT 0,
+                                last_outcome TEXT,
+                                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+
+                             -- Pre-seed all known jobs with last_run = 0 so a fresh
+                             -- DB still benefits from the grace period (the scheduler
+                             -- will skip jobs whose first run is within the grace).
+                             -- Existing rows are left alone (INSERT OR IGNORE).
+                             INSERT OR IGNORE INTO scheduler_state (job_name, last_run_unix) VALUES
+                                ('health_check', 0),
+                                ('db_maintenance', 0),
+                                ('vacuum', 0),
+                                ('anomaly_detection', 0),
+                                ('cve_scan', 0),
+                                ('dep_health', 0),
+                                ('behavior_decay', 0),
+                                ('autophagy', 0),
+                                ('accuracy_record', 0),
+                                ('temporal_snapshot', 0);",
+                        )?;
+                        info!(target: "4da::db", "Created scheduler_state table (Sovereign Cold Boot)");
                         Ok(())
                     },
                 )?;
