@@ -109,6 +109,12 @@ pub(crate) fn initialize_pre_tauri() {
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
     info!(target: "4da::startup", model = "all-MiniLM-L6-v2", dimensions = 384, "Embedding model");
 
+    // Sovereign Cold Boot — verify sqlite-vec ONCE per process here, before any
+    // other code opens a connection. This eliminates ~200 redundant verification
+    // log lines that previously appeared on every cold boot (one per call to
+    // open_db_connection across 83 files / 224 callsites).
+    crate::verify_sqlite_vec_once();
+
     // Initialize relevance threshold from ACE storage or default
     if let Ok(ace) = get_ace_engine() {
         if let Some(stored) = ace.get_stored_threshold() {
@@ -261,6 +267,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             });
         }
     }
+
+    // Sovereign Cold Boot — hydrate persisted scheduler timestamps BEFORE the
+    // scheduler starts ticking. This is the fix for the cold-boot stampede:
+    // jobs whose interval has not actually elapsed since last run will be
+    // skipped on the first tick instead of all firing simultaneously.
+    crate::scheduler_state::hydrate_from_db(&monitoring_state);
 
     // Start background scheduler
     let app_handle = app.handle().clone();

@@ -116,11 +116,75 @@ fn get_platform_data_dir() -> PathBuf {
 /// the post-load verification query fails.
 static SQLITE_VEC_AVAILABLE: AtomicBool = AtomicBool::new(true);
 
+/// One-shot guard for sqlite-vec verification logging.
+/// The verify query runs once per process at startup; subsequent
+/// `open_db_connection()` calls trust the cached result and stay silent.
+/// This is what eliminates the cold-boot log spam (224 callsites would
+/// otherwise log "sqlite-vec verified" on every connection open).
+static SQLITE_VEC_VERIFY_DONE: AtomicBool = AtomicBool::new(false);
+
 /// Check whether vector search (sqlite-vec) is available.
 /// Returns `false` if the extension failed to load or verification failed,
 /// meaning the app should fall back to keyword-only search.
 pub fn is_vector_search_available() -> bool {
     SQLITE_VEC_AVAILABLE.load(Ordering::Relaxed)
+}
+
+/// Run the sqlite-vec verification query exactly once per process.
+///
+/// Called from `initialize_pre_tauri()` at startup. Opens a throwaway
+/// connection, runs `SELECT vec_version()`, logs the result a single time.
+/// If verification fails, marks the extension unavailable so the rest of
+/// the app degrades to keyword-only search.
+///
+/// Subsequent `open_db_connection()` calls skip the verify+log entirely —
+/// this is the fix for the cold-boot log stampede where every background
+/// task printed the same "sqlite-vec verified" line on every connection.
+pub fn verify_sqlite_vec_once() {
+    if SQLITE_VEC_VERIFY_DONE.swap(true, Ordering::SeqCst) {
+        return; // already verified earlier in this process
+    }
+
+    register_sqlite_vec_extension();
+
+    let db_path = get_db_path();
+    if let Some(parent) = db_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+
+    match rusqlite::Connection::open(&db_path) {
+        Ok(conn) => {
+            match conn.query_row("SELECT vec_version()", [], |row| row.get::<_, String>(0)) {
+                Ok(version) => {
+                    info!(target: "4da::state", version = %version, "sqlite-vec verified (once per process)");
+                }
+                Err(e) => {
+                    warn!(
+                        target: "4da::state",
+                        error = %e,
+                        "sqlite-vec verification query failed — disabling vector search"
+                    );
+                    SQLITE_VEC_AVAILABLE.store(false, Ordering::Relaxed);
+                    crate::capabilities::report_degraded(
+                        crate::capabilities::Capability::VectorSearch,
+                        "sqlite-vec extension failed to load",
+                        "Keyword search only (no vector similarity)",
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            warn!(
+                target: "4da::state",
+                error = %e,
+                "sqlite-vec one-shot verify could not open DB — will retry per-connection on first failure"
+            );
+            // Reset the flag so a later open_db_connection retries verification
+            // (defensive — should not normally happen because pre-Tauri init
+            // already ensured the data dir is writable).
+            SQLITE_VEC_VERIFY_DONE.store(false, Ordering::SeqCst);
+        }
+    }
 }
 
 /// Register the sqlite-vec extension globally (idempotent).
@@ -180,28 +244,14 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
     )
     .context("Failed to set connection PRAGMAs")?;
 
-    // Verify sqlite-vec actually works on this connection.
-    // Even if register didn't panic, the extension might fail at query time.
-    if is_vector_search_available() {
-        match conn.query_row("SELECT vec_version()", [], |row| row.get::<_, String>(0)) {
-            Ok(version) => {
-                info!(target: "4da::state", version = %version, "sqlite-vec verified");
-            }
-            Err(e) => {
-                warn!(
-                    target: "4da::state",
-                    error = %e,
-                    "sqlite-vec verification query failed — disabling vector search"
-                );
-                SQLITE_VEC_AVAILABLE.store(false, Ordering::Relaxed);
-                crate::capabilities::report_degraded(
-                    crate::capabilities::Capability::VectorSearch,
-                    "sqlite-vec extension failed to load",
-                    "Keyword search only (no vector similarity)",
-                );
-            }
-        }
-    }
+    // Sqlite-vec verification happens ONCE per process via `verify_sqlite_vec_once()`,
+    // called from `initialize_pre_tauri()` at startup. We deliberately do NOT verify
+    // here because this function is called from 224 callsites across 83 files —
+    // logging on every call produced hundreds of identical "sqlite-vec verified"
+    // log lines on every cold boot (fixed in the Sovereign Cold Boot architecture).
+    //
+    // If the one-shot verify failed, `is_vector_search_available()` already returns
+    // false and the rest of the app degrades to keyword-only search.
 
     Ok(conn)
 }

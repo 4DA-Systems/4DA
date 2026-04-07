@@ -57,7 +57,7 @@ pub(crate) use state::{
     get_context_dirs, get_context_engine, get_database, get_llm_token_usage, get_monitoring_state,
     get_relevance_threshold, get_settings_manager, get_source_registry, invalidate_context_engine,
     open_db_connection, register_sqlite_vec_extension, set_relevance_threshold,
-    SUPPORTED_EXTENSIONS,
+    verify_sqlite_vec_once, SUPPORTED_EXTENSIONS,
 };
 
 mod accuracy;
@@ -170,6 +170,7 @@ mod probes_engine;
 mod project_health;
 mod project_health_dimensions;
 pub mod query;
+mod scheduler_state;
 mod scoring;
 pub(crate) mod scoring_config;
 mod search_synthesis;
