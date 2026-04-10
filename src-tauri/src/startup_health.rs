@@ -92,12 +92,9 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
 // Individual Checks
 // ============================================================================
 
-/// Resolve the data directory (same logic as state.rs get_db_path).
+/// Resolve the data directory via centralized RuntimePaths.
 fn get_data_dir() -> PathBuf {
-    let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    base.pop();
-    base.push("data");
-    base
+    crate::runtime_paths::RuntimePaths::get().data_dir.clone()
 }
 
 /// Check 1: Database file exists and is readable.
@@ -169,6 +166,8 @@ pub(crate) fn check_settings(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
 
 /// Check 3: If an LLM provider is configured, verify the API key is non-empty.
 /// No network calls — just validates the config looks plausible.
+/// Checks both the JSON file and the platform keychain (keys may have been
+/// migrated from plaintext to keychain by SettingsManager).
 pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     let settings_path = data_dir.join("settings.json");
     if !settings_path.exists() {
@@ -206,13 +205,23 @@ pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthI
         .unwrap_or("");
 
     if api_key.is_empty() {
-        issues.push(HealthIssue {
-            component: "embedding",
-            severity: HealthSeverity::Warning,
-            message: format!(
-                "LLM provider '{provider}' is configured but API key is empty. LLM features will not work."
-            ),
-        });
+        // Key is empty in JSON — check the platform keychain (keys are migrated
+        // there by SettingsManager and stripped from the on-disk JSON).
+        let has_keychain_key = crate::settings::keystore::has_secret("llm_api_key")
+            || match crate::settings::keystore::get_secret("llm_api_key") {
+                Ok(Some(k)) => !k.is_empty(),
+                _ => false,
+            };
+
+        if !has_keychain_key {
+            issues.push(HealthIssue {
+                component: "embedding",
+                severity: HealthSeverity::Warning,
+                message: format!(
+                    "LLM provider '{provider}' is configured but API key is empty. LLM features will not work."
+                ),
+            });
+        }
     }
 }
 

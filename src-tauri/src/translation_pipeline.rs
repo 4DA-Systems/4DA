@@ -146,11 +146,11 @@ pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String
 /// Load all English source strings from the bundled locale files.
 /// Returns `"namespace:flat.key" -> "English value"`.
 pub fn load_english_strings() -> Result<HashMap<String, String>> {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let locales_dir = manifest_dir
-        .parent()
-        .map(|p| p.join("src").join("locales").join("en"))
-        .ok_or_else(|| String::from("Cannot resolve locales directory"))?;
+    let paths = crate::runtime_paths::RuntimePaths::get();
+    let locales_dir = paths.resource_dir.join("src").join("locales").join("en");
+    if !locales_dir.exists() {
+        return Err("Cannot resolve locales directory".into());
+    }
 
     let mut english_strings: HashMap<String, String> = HashMap::new();
 

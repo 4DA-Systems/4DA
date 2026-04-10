@@ -24,8 +24,8 @@ static OCR_ENGINE: OnceLock<std::result::Result<OcrEngine, String>> = OnceLock::
 fn find_models_dir() -> Option<PathBuf> {
     // Check common locations in order of preference
     let search_paths = [
-        // 1. Relative to CARGO_MANIFEST_DIR (for development)
-        Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models")),
+        // 1. Via centralized RuntimePaths (dev: src-tauri/models, prod: resource_dir/models)
+        Some(crate::runtime_paths::RuntimePaths::get().ocr_models_dir()),
         // 2. Data directory alongside the app
         dirs::data_local_dir().map(|p| p.join("4da").join("models")),
         // 3. Current directory

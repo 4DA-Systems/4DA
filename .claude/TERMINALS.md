@@ -17,15 +17,9 @@
 - **Files**: list of files being modified
 -->
 
-### T1 — Sovereign Cold Boot architecture (8-wave overhaul) — COMPLETE
-- **Status**: done — all 8 waves committed
-- **Wave 1 (foundation) — COMMITTED 5816ee06** (7 files, 454 LOC)
-- **Wave 2 (UX critical) — COMMITTED b758ee7e** (9 files, 609 LOC)
-- **Waves 3+4+5 (instant paint + boot context + watchdog) — COMMITTED e59df4e8** (12 files, 854 LOC)
-- **Waves 6+7+8 (instrumentation + webview recovery + regression gate) — COMMITTED 3037a39e** (5 files, 601 LOC)
-- **Total**: 4 commits, 24 unique files, ~2500 LOC, 25 new tests, 41 regression-gate checks
-- All 8 waves verified compiling, all targeted tests passing, IPC validator clean, TypeScript clean.
-
-
+### T2 — Codex Audit Strategy & Execution Plans
+- **Status**: working
+- **Since**: 2026-04-10T12:00:00Z
+- **Files**: MASTER-STRATEGY.md, PLAN-PHASE-0-FOUNDATION-FIXES.md, PLAN-PHASE-1-FLAGSHIP-LOOPS.md, PLAN-PHASE-2-PROOF-LAYER.md, PLAN-PHASE-3-MCP-PRODUCTIZATION.md, PLAN-PHASE-4-CROSS-PLATFORM.md, PLAN-PHASE-5-PREEMPTION-ENGINE.md
 
 

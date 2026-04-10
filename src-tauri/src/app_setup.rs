@@ -34,6 +34,9 @@ pub(crate) fn initialize_pre_tauri() {
         )
         .init();
 
+    // Initialize runtime paths (must happen before any path resolution)
+    crate::runtime_paths::RuntimePaths::init();
+
     // Install crash guard BEFORE any secrets are loaded — zeroizes sensitive
     // memory in the panic hook so crash dumps don't leak API keys.
     crate::crash_guard::install();

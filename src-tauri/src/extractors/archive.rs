@@ -32,11 +32,12 @@ impl ArchiveExtractor {
         // Check compressed file size to prevent decompression bombs
         let compressed_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
         if compressed_size > MAX_COMPRESSED_SIZE {
-            return Err(anyhow::anyhow!(
+            return Err(format!(
                 "Archive too large: {}MB exceeds {}MB limit",
                 compressed_size / (1024 * 1024),
                 MAX_COMPRESSED_SIZE / (1024 * 1024)
-            ));
+            )
+            .into());
         }
 
         let file = File::open(path).context("Failed to open ZIP")?;
