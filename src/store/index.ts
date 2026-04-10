@@ -26,6 +26,9 @@ import { createTeamSlice } from './team-slice';
 import { createEnterpriseSlice } from './enterprise-slice';
 import { createTeamIntelligenceSlice } from './team-intelligence-slice';
 import { createAweSlice } from './awe-slice';
+import { createPreemptionSlice } from './preemption-slice';
+import { createBlindSpotsSlice } from './blind-spots-slice';
+import { createTrustSlice } from './trust-slice';
 
 // Re-export all types
 export type {
@@ -73,4 +76,7 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createEnterpriseSlice(...a),
   ...createTeamIntelligenceSlice(...a),
   ...createAweSlice(...a),
+  ...createPreemptionSlice(...a),
+  ...createBlindSpotsSlice(...a),
+  ...createTrustSlice(...a),
 }));

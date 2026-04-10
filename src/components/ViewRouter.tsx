@@ -21,6 +21,8 @@ const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => (
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
 const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
 const CategoryChapterView = lazy(() => import('./CategoryChapterView').then(m => ({ default: m.CategoryChapterView })));
+const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
+const BlindSpotsView = lazy(() => import('./blindspots/BlindSpotsView'));
 
 interface ViewRouterProps {
   newItemIds: Set<number>;
@@ -29,6 +31,8 @@ interface ViewRouterProps {
 
 const VIEW_LABEL_KEYS: Record<string, string> = {
   briefing: 'nav.briefing.label',
+  preemption: 'nav.preemption.label',
+  blindspots: 'nav.blindspots.label',
   results: 'nav.results',
   profile: 'nav.profile',
   insights: 'nav.insights',
@@ -68,6 +72,14 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       {activeView === 'briefing' ? (
         <ViewErrorBoundary viewName="Briefing">
           <BriefingView />
+        </ViewErrorBoundary>
+      ) : activeView === 'preemption' ? (
+        <ViewErrorBoundary viewName="Preemption">
+          <PreemptionView />
+        </ViewErrorBoundary>
+      ) : activeView === 'blindspots' ? (
+        <ViewErrorBoundary viewName="BlindSpots">
+          <BlindSpotsView />
         </ViewErrorBoundary>
       ) : activeView === 'profile' ? (
         <ViewErrorBoundary viewName="Profile">
