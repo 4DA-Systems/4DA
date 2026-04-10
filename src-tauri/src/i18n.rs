@@ -16,23 +16,18 @@ static TRANSLATIONS: Lazy<RwLock<HashMap<String, HashMap<String, Value>>>> =
 
 /// Get the translations directory path.
 pub(crate) fn translations_dir() -> PathBuf {
-    // Development: data/translations relative to project root
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if let Some(root) = manifest_dir.parent() {
-        let dev_path = root.join("data").join("translations");
-        if dev_path.exists() {
-            return dev_path;
-        }
+    let paths = crate::runtime_paths::RuntimePaths::get();
+
+    // Primary: data/translations inside the data directory
+    let data_path = paths.data_dir.join("translations");
+    if data_path.exists() {
+        return data_path;
     }
 
-    // Production: relative to executable
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            let rel = exe_dir.join("data").join("translations");
-            if rel.exists() {
-                return rel;
-            }
-        }
+    // Fallback: resource_dir/data/translations (production bundle)
+    let resource_path = paths.resource_dir.join("data").join("translations");
+    if resource_path.exists() {
+        return resource_path;
     }
 
     PathBuf::from("data/translations")
@@ -56,10 +51,23 @@ fn ensure_loaded(lang: &str) {
 
     // Fallback: frontend locale directory (for development)
     let fallback_dir = {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        manifest_dir
-            .parent()
-            .map(|p| p.join("src").join("locales").join(lang))
+        let locales_base = crate::runtime_paths::RuntimePaths::get().locales_dir();
+        let candidate = locales_base.join(lang);
+        if candidate.exists() {
+            Some(candidate)
+        } else {
+            // Also check src/locales (legacy dev layout)
+            let src_locales = crate::runtime_paths::RuntimePaths::get()
+                .resource_dir
+                .join("src")
+                .join("locales")
+                .join(lang);
+            if src_locales.exists() {
+                Some(src_locales)
+            } else {
+                None
+            }
+        }
     };
 
     let search_dirs: Vec<&std::path::Path> = [Some(dir.as_path()), fallback_dir.as_deref()]

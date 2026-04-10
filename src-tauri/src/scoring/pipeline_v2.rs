@@ -674,16 +674,14 @@ fn compute_quality_composite(
     // Applies to both explicit CVE source items and any other source whose
     // title/content matches the security classifier — so future security
     // sources are governed by the same gate automatically.
-    let quality_score = if novelty.is_security
-        && raw.dep_match_score < 0.20
-        && !raw.matched_deps.is_empty()
-    {
-        quality_score * 0.60
-    } else if novelty.is_security && raw.matched_deps.is_empty() {
-        quality_score * 0.35
-    } else {
-        quality_score
-    };
+    let quality_score =
+        if novelty.is_security && raw.dep_match_score < 0.20 && !raw.matched_deps.is_empty() {
+            quality_score * 0.60
+        } else if novelty.is_security && raw.matched_deps.is_empty() {
+            quality_score * 0.35
+        } else {
+            quality_score
+        };
 
     (
         quality_score,
@@ -1173,8 +1171,8 @@ pub(crate) fn score_item(
     // floor and surface CVEs that have nothing to do with the user's stack.
     let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
-    let has_strong_dep_match = raw.dep_match_score >= 0.15
-        && raw.matched_deps.iter().any(|d| !d.is_dev);
+    let has_strong_dep_match =
+        raw.dep_match_score >= 0.15 && raw.matched_deps.iter().any(|d| !d.is_dev);
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // If critical fast-path, boost score to ensure it passes the gate

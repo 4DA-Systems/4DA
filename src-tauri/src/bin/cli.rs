@@ -3,6 +3,7 @@
 
 //! 4DA CLI — Terminal access to your intelligence feed
 //!
+#![allow(clippy::manual_let_else)]
 //! Reads from the same SQLite database as the desktop app.
 //! All data stays local. This binary is read-only.
 //!

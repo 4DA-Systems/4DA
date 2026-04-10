@@ -5,9 +5,7 @@ use super::SunResult;
 pub fn execute() -> SunResult {
     // Verify that regional data files exist and are readable.
     // Future: opt-in public API fetch for live electricity rates.
-    let data_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .map(|p| p.join("docs").join("streets").join("regions"));
+    let data_dir = Some(crate::runtime_paths::RuntimePaths::get().streets_regions_dir());
 
     match data_dir {
         Some(dir) if dir.exists() => {
