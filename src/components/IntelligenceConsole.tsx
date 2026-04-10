@@ -8,14 +8,15 @@ import { AccuracyTab } from './intelligence/AccuracyTab';
 import { ConvergenceTab } from './intelligence/ConvergenceTab';
 import { CostTab } from './intelligence/CostTab';
 import { WisdomTab } from './intelligence/WisdomTab';
+import { TrustDashboard } from './trust/TrustDashboard';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-type ConsoleTab = 'accuracy' | 'convergence' | 'costs' | 'wisdom';
+type ConsoleTab = 'accuracy' | 'convergence' | 'costs' | 'wisdom' | 'trust';
 
-const TAB_IDS: ConsoleTab[] = ['accuracy', 'convergence', 'costs', 'wisdom'];
+const TAB_IDS: ConsoleTab[] = ['accuracy', 'convergence', 'costs', 'wisdom', 'trust'];
 
 // ============================================================================
 // TabButton
@@ -151,6 +152,7 @@ export const IntelligenceConsole = memo(function IntelligenceConsole() {
         {tab === 'convergence' && <ConvergenceTab />}
         {tab === 'costs' && <CostTab />}
         {tab === 'wisdom' && <WisdomTab />}
+        {tab === 'trust' && <TrustDashboard />}
       </div>
     </div>
   );
