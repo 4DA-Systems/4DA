@@ -39,9 +39,9 @@ describe('ViewTabBar', () => {
     setMockState({});
     render(<ViewTabBar />);
     expect(screen.getByRole('tablist')).toBeInTheDocument();
-    // Tabs: briefing, chapters, results, playbook, insights, saved, profile, console, toolkit, calibrate
+    // Tabs: briefing, preemption, blindspots, chapters, results, playbook, insights, saved, profile, console, toolkit, calibrate
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(10);
+    expect(tabs.length).toBe(12);
   });
 
   it('marks the active view tab as selected', () => {
@@ -72,8 +72,8 @@ describe('ViewTabBar', () => {
     setMockState({ viewTier: 'explorer', showAllViews: false });
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    // explorer tier: briefing, chapters, results, playbook, insights
-    expect(tabs.length).toBe(5);
+    // explorer tier: briefing, preemption, blindspots, chapters, results, playbook, insights
+    expect(tabs.length).toBe(7);
   });
 
   it('shows badge indicator when results have items', () => {
