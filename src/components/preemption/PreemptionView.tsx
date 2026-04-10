@@ -1,11 +1,12 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { useEffect, memo } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import type { PreemptionAlert, PreemptionUrgency } from '../../store/preemption-slice';
+import { recordTrustEvent } from '../../lib/trust-feedback';
 
 // ============================================================================
 // Constants
@@ -57,9 +58,17 @@ const EvidenceList = memo(function EvidenceList({ evidence }: { evidence: Preemp
   );
 });
 
-const AlertCard = memo(function AlertCard({ alert }: { alert: PreemptionAlert }) {
+const AlertCard = memo(function AlertCard({ alert, surfacedRef }: { alert: PreemptionAlert; surfacedRef: React.RefObject<Set<string>> }) {
   const { t } = useTranslation();
   const cfg = URGENCY_CONFIG[alert.urgency] ?? URGENCY_CONFIG.watch;
+
+  // Record surfaced event once per alert
+  useEffect(() => {
+    if (!surfacedRef.current!.has(alert.id)) {
+      surfacedRef.current!.add(alert.id);
+      recordTrustEvent({ eventType: 'surfaced', alertId: alert.id, sourceType: alert.alert_type, topic: alert.title });
+    }
+  }, [alert.id, alert.alert_type, alert.title, surfacedRef]);
 
   return (
     <div className={`rounded-lg border ${cfg.border} ${cfg.bg} p-4`}>
@@ -109,6 +118,15 @@ const AlertCard = memo(function AlertCard({ alert }: { alert: PreemptionAlert })
               key={i}
               className="px-3 py-1 text-xs rounded-md border border-border bg-bg-tertiary text-text-secondary hover:text-white hover:border-white/20 transition-colors"
               title={action.description}
+              onClick={() => {
+                recordTrustEvent({
+                  eventType: action.label.toLowerCase().includes('dismiss') ? 'dismissed' : 'acted_on',
+                  alertId: alert.id,
+                  sourceType: alert.alert_type,
+                  topic: alert.title,
+                  notes: action.label,
+                });
+              }}
             >
               {action.label}
             </button>
@@ -125,6 +143,7 @@ const AlertCard = memo(function AlertCard({ alert }: { alert: PreemptionAlert })
 
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
+  const surfacedRef = useRef(new Set<string>());
 
   const { feed, loading, error } = useAppStore(
     useShallow(s => ({
@@ -202,7 +221,7 @@ const PreemptionView = memo(function PreemptionView() {
           {/* Alert cards */}
           <div className="space-y-3">
             {sortedAlerts.map(alert => (
-              <AlertCard key={alert.id} alert={alert} />
+              <AlertCard key={alert.id} alert={alert} surfacedRef={surfacedRef} />
             ))}
           </div>
         </>

@@ -900,6 +900,7 @@ pub fn run() {
             weekly_digest::get_latest_digest,
             // Decision Impact Tracking (Signal)
             decision_signals::get_decision_signals,
+            decision_signals::get_decision_health_report,
             // Standing Queries (Signal)
             standing_queries::create_standing_query,
             standing_queries::list_standing_queries,
