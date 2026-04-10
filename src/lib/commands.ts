@@ -77,6 +77,103 @@ import type { PersonalizedLesson as PersonalizedLessonType } from '../types/pers
 
 
 // ============================================================================
+// Preemption & Intelligence Types (Phase 1.1)
+// ============================================================================
+
+type AlertUrgency = 'critical' | 'high' | 'medium' | 'watch';
+type PreemptionType = 'SecurityAdvisory' | 'BreakingChange' | 'MigrationWindow' | 'EcosystemShift' | 'MaintainerDecline' | 'KnowledgeBlindSpot';
+
+interface AlertEvidence {
+  source: string;
+  title: string;
+  url: string | null;
+  freshness_days: number;
+  relevance_score: number;
+}
+
+interface SuggestedAction {
+  action_type: string;
+  label: string;
+  description: string;
+}
+
+interface PreemptionAlert {
+  id: string;
+  alert_type: PreemptionType;
+  title: string;
+  explanation: string;
+  evidence: AlertEvidence[];
+  affected_projects: string[];
+  affected_dependencies: string[];
+  urgency: AlertUrgency;
+  confidence: number;
+  predicted_window: string | null;
+  suggested_actions: SuggestedAction[];
+  created_at: string;
+}
+
+interface PreemptionFeed {
+  alerts: PreemptionAlert[];
+  total: number;
+  critical_count: number;
+  high_count: number;
+}
+
+interface UncoveredDep {
+  name: string;
+  dep_type: string;
+  projects_using: string[];
+  days_since_last_signal: number;
+  available_signal_count: number;
+  risk_level: string;
+}
+
+interface StaleTopic {
+  topic: string;
+  last_engagement_days: number;
+  active_deps_in_topic: number;
+  missed_signal_count: number;
+}
+
+interface MissedSignal {
+  item_id: number;
+  title: string;
+  url: string | null;
+  source_type: string;
+  relevance_score: number;
+  created_at: string;
+  why_relevant: string;
+}
+
+interface BlindSpotRecommendation {
+  action: string;
+  reason: string;
+  priority: string;
+}
+
+interface BlindSpotReport {
+  overall_score: number;
+  uncovered_dependencies: UncoveredDep[];
+  stale_topics: StaleTopic[];
+  missed_signals: MissedSignal[];
+  recommendations: BlindSpotRecommendation[];
+  generated_at: string;
+}
+
+interface TrustSummary {
+  period_days: number;
+  total_surfaced: number;
+  acted_on: number;
+  dismissed: number;
+  false_positives: number;
+  precision: number;
+  action_conversion_rate: number;
+  preemption_wins: number;
+  avg_lead_time_hours: number | null;
+  trend: string;
+}
+
+// ============================================================================
 // Command Map — maps every command name to { params, result }
 // ============================================================================
 
@@ -377,6 +474,14 @@ interface CommandMap {
   // -- Engagement & Attention --
   get_engagement_summary: { params: Record<string, never>; result: EngagementData };
   get_attention_report: { params: { periodDays: number }; result: AttentionReport };
+
+  // -- Preemption & Blind Spots --
+  get_preemption_alerts: { params: Record<string, never>; result: PreemptionFeed };
+  get_blind_spots: { params: Record<string, never>; result: BlindSpotReport };
+
+  // -- Trust Ledger --
+  get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
+  record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string }; result: null };
 
   // -- Developer DNA --
   get_developer_dna: { params: Record<string, never>; result: DeveloperDna };
