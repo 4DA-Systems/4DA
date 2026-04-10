@@ -1,5 +1,5 @@
 /**
- * Tool exports for 4DA MCP Server — 33 tools across 8 categories
+ * Tool exports for 4DA MCP Server — 35 tools across 8 categories
  *
  * Core (4)                  — content feed, context, relevance, feedback
  * Intelligence (9)          — briefings, signals, autopsy, trends, topics, chains, shifts, attention
@@ -9,6 +9,7 @@
  * Agent Autonomy (6)        — persistent memory, session briefs, delegation scoring, agent feedback, pre-task briefing
  * Developer DNA (1)         — tech identity profile
  * Intelligence Metabolism (3)— autophagy status, decision windows, compound advantage
+ * Trust & Preemption (2)    — trust summary, preemption feed
  */
 
 // Core Tools
@@ -182,3 +183,14 @@ export {
   whatShouldIKnowTool,
   executeWhatShouldIKnow,
 } from "./what-should-i-know.js";
+
+// Trust & Preemption Tools
+export {
+  trustSummaryTool,
+  executeTrustSummary,
+} from "./trust-summary.js";
+
+export {
+  preemptionFeedTool,
+  executePreemptionFeed,
+} from "./preemption-feed.js";

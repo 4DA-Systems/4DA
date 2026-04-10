@@ -253,6 +253,20 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     tags: ["agent", "briefing", "synthesis", "pre-task", "delegation", "advisories"],
   },
 
+  // Trust & Preemption Tools
+  trust_summary: {
+    summary: "Intelligence quality metrics — precision, action rate, false positives, preemption wins",
+    schemaFile: "trust-summary.json",
+    category: "intelligence",
+    tags: ["trust", "precision", "quality", "metrics", "reliability"],
+  },
+  preemption_feed: {
+    summary: "Forward-looking alerts — signal chains, dependency risks, knowledge gaps",
+    schemaFile: "preemption-feed.json",
+    category: "intelligence",
+    tags: ["preemption", "alerts", "risks", "dependencies", "forward-looking"],
+  },
+
 };
 
 /**

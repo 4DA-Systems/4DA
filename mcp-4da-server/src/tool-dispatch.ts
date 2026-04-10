@@ -43,6 +43,8 @@ import {
   executeRecordAgentFeedback,
   executeGetAgentFeedbackStats,
   executeWhatShouldIKnow,
+  executeTrustSummary,
+  executePreemptionFeed,
 } from "./tools/index.js";
 
 /**
@@ -112,6 +114,10 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
 
   // Synthesis
   what_should_i_know: executeWhatShouldIKnow,
+
+  // Trust & Preemption
+  trust_summary: executeTrustSummary,
+  preemption_feed: executePreemptionFeed,
 
 };
 
