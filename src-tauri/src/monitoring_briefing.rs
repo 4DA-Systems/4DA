@@ -66,6 +66,14 @@ pub struct WisdomSignal {
     pub signal_type: String, // "principle" or "anti-pattern"
 }
 
+/// A preemption alert included in the morning briefing (critical/high only).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BriefingPreemptionAlert {
+    pub title: String,
+    pub urgency: String,
+    pub explanation: String,
+}
+
 /// Translated labels for the briefing window UI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefingLabels {
@@ -78,6 +86,8 @@ pub struct BriefingLabels {
     pub gap_days_suffix: String,
     pub signals_today_suffix: String,
     pub empty_state: String,
+    pub preemption: String,
+    pub blind_spots_score: String,
 }
 
 /// Morning briefing notification content.
@@ -107,6 +117,12 @@ pub struct BriefingNotification {
     /// Populated async alongside synthesis by awe_synthesis::synthesize_daily_wisdom
     #[serde(default)]
     pub wisdom_synthesis: Option<String>,
+    /// Preemption alerts — critical/high urgency items from the preemption engine
+    #[serde(default)]
+    pub preemption_alerts: Vec<BriefingPreemptionAlert>,
+    /// Blind spot summary — quick overview of coverage gaps (0-100, higher = more gaps)
+    #[serde(default)]
+    pub blind_spot_score: Option<f32>,
     /// Translated labels for the briefing window (i18n)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<BriefingLabels>,
@@ -286,7 +302,34 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // 8. Recall AWE wisdom signals — validated principles and anti-patterns
     let wisdom_signals = recall_awe_wisdom();
 
-    // 9. Build translated labels for the briefing window
+    // 9. Collect preemption alerts for briefing (critical + high only, max 3)
+    let preemption_alerts = match crate::preemption::get_preemption_feed() {
+        Ok(feed) => feed
+            .alerts
+            .iter()
+            .filter(|a| {
+                matches!(
+                    a.urgency,
+                    crate::preemption::AlertUrgency::Critical
+                        | crate::preemption::AlertUrgency::High
+                )
+            })
+            .take(3)
+            .map(|a| BriefingPreemptionAlert {
+                title: a.title.clone(),
+                urgency: format!("{:?}", a.urgency).to_lowercase(),
+                explanation: a.explanation.clone(),
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+
+    // 10. Collect blind spot score
+    let blind_spot_score = crate::blind_spots::generate_blind_spot_report()
+        .ok()
+        .map(|r| r.overall_score);
+
+    // 11. Build translated labels for the briefing window
     let labels = build_briefing_labels(&user_lang);
 
     Some(BriefingNotification {
@@ -299,6 +342,8 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         wisdom_signals,
         synthesis: None,
         wisdom_synthesis: None,
+        preemption_alerts,
+        blind_spot_score,
         labels: Some(labels),
     })
 }
@@ -330,6 +375,8 @@ fn build_briefing_labels(lang: &str) -> BriefingLabels {
             "ui:briefing.empty_state",
             "Your stack is quiet. Nothing new.",
         ),
+        preemption: tr("ui:briefing.preemption", "PREEMPTION"),
+        blind_spots_score: tr("ui:briefing.blind_spots_score", "BLIND SPOT SCORE"),
     }
 }
 
@@ -1056,6 +1103,8 @@ mod tests {
             }],
             synthesis: None,
             wisdom_synthesis: None,
+            preemption_alerts: vec![],
+            blind_spot_score: None,
             labels: None,
         };
         assert_eq!(briefing.items.len(), 2);

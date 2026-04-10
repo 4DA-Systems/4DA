@@ -280,6 +280,8 @@ mod tests {
             wisdom_signals: vec![],
             synthesis: Some("Test synthesis paragraph.".into()),
             wisdom_synthesis: None,
+            preemption_alerts: vec![],
+            blind_spot_score: None,
             labels: None,
         }
     }
