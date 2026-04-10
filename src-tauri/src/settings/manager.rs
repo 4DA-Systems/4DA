@@ -20,14 +20,31 @@ use tracing::{info, warn};
 fn atomic_replace(tmp: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
     #[cfg(windows)]
     {
-        // On Windows, try rename first (works if target doesn't exist or isn't locked).
-        // If it fails, fall back to: remove target then rename.
+        // Try direct rename first (works if target doesn't exist)
         if std::fs::rename(tmp, target).is_ok() {
             return Ok(());
         }
-        // Target likely exists and is locked — try remove + rename
-        let _ = std::fs::remove_file(target);
-        std::fs::rename(tmp, target)
+        // Target exists — use backup strategy for crash safety
+        let backup = target.with_extension("json.bak");
+        // Step 1: Rename existing to backup (original is preserved as .bak)
+        if target.exists() {
+            let _ = std::fs::rename(target, &backup);
+        }
+        // Step 2: Rename new file into place
+        match std::fs::rename(tmp, target) {
+            Ok(()) => {
+                // Success — clean up backup
+                let _ = std::fs::remove_file(&backup);
+                Ok(())
+            }
+            Err(e) => {
+                // Failed — restore from backup
+                if backup.exists() && !target.exists() {
+                    let _ = std::fs::rename(&backup, target);
+                }
+                Err(e)
+            }
+        }
     }
     #[cfg(not(windows))]
     {

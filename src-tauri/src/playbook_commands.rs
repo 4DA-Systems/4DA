@@ -125,23 +125,10 @@ pub(crate) fn module_id_to_filename(id: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn get_content_dir() -> PathBuf {
-    // Development: docs/streets/ relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    if let Some(root) = manifest_dir.parent() {
-        let dev_path = root.join("docs").join("streets");
-        if dev_path.exists() {
-            return dev_path;
-        }
-    }
-
-    // Production: relative to executable
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            let rel = exe_dir.join("docs").join("streets");
-            if rel.exists() {
-                return rel;
-            }
-        }
+    let paths = crate::runtime_paths::RuntimePaths::get();
+    let docs_dir = paths.streets_docs_dir();
+    if docs_dir.exists() {
+        return docs_dir;
     }
 
     // Final fallback

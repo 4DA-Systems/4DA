@@ -83,16 +83,10 @@ fn currency_symbol(currency: &str) -> String {
 // ============================================================================
 
 fn load_regional_file(country_code: &str) -> Option<RegionalData> {
+    let regions_dir = crate::runtime_paths::RuntimePaths::get().streets_regions_dir();
     let paths_to_try = vec![
-        // Development path: relative to the Cargo manifest (src-tauri/../docs/...)
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .map(|p| {
-                p.join("docs")
-                    .join("streets")
-                    .join("regions")
-                    .join(format!("{country_code}.json"))
-            }),
+        // Primary: via centralized RuntimePaths
+        Some(regions_dir.join(format!("{country_code}.json"))),
         // Fallback: relative to current working directory
         Some(std::path::PathBuf::from("docs/streets/regions").join(format!("{country_code}.json"))),
     ];

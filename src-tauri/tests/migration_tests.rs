@@ -223,10 +223,8 @@ fn test_settings_clamp_zero_batch_size() {
 /// Test: embedding_threshold out of range is clamped
 #[test]
 fn test_settings_clamp_embedding_threshold() {
-    let mut settings = fourda_lib::settings::Settings {
-        embedding_threshold: 1.5,
-        ..Default::default()
-    };
+    let mut settings = fourda_lib::settings::Settings::default();
+    settings.embedding_threshold = 1.5;
     settings.validate();
     assert_eq!(settings.embedding_threshold, 1.0);
 
@@ -261,15 +259,13 @@ fn test_settings_clamp_zero_interval() {
 /// Test: empty context_dirs entries are removed
 #[test]
 fn test_settings_remove_empty_context_dirs() {
-    let mut settings = fourda_lib::settings::Settings {
-        context_dirs: vec![
-            "valid/path".to_string(),
-            "".to_string(),
-            "  ".to_string(),
-            "another/valid".to_string(),
-        ],
-        ..Default::default()
-    };
+    let mut settings = fourda_lib::settings::Settings::default();
+    settings.context_dirs = vec![
+        "valid/path".to_string(),
+        "".to_string(),
+        "  ".to_string(),
+        "another/valid".to_string(),
+    ];
     settings.validate();
     assert_eq!(settings.context_dirs.len(), 2);
     assert_eq!(settings.context_dirs[0], "valid/path");

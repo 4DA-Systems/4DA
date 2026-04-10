@@ -410,13 +410,10 @@ fn export_section_data(conn: &rusqlite::Connection, section: &str) -> Result<(Js
 
 /// Get the exports directory path, creating it if necessary.
 fn get_exports_dir() -> Result<PathBuf> {
-    let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    base.pop();
-    base.push("data");
-    base.push("exports");
-    std::fs::create_dir_all(&base)
-        .with_context(|| format!("Cannot create exports directory: {}", base.display()))?;
-    Ok(base)
+    let dir = crate::runtime_paths::RuntimePaths::get().exports_dir();
+    std::fs::create_dir_all(&dir)
+        .with_context(|| format!("Cannot create exports directory: {}", dir.display()))?;
+    Ok(dir)
 }
 
 // ============================================================================

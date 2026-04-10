@@ -174,11 +174,9 @@ pub fn bundled_registry() -> ModelRegistry {
 
 /// Path to the on-disk registry cache.
 fn cache_path() -> std::path::PathBuf {
-    let mut base = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    base.pop();
-    base.push("data");
-    base.push("model_registry.json");
-    base
+    crate::runtime_paths::RuntimePaths::get()
+        .data_dir
+        .join("model_registry.json")
 }
 
 /// Load the registry from the disk cache. Returns None if missing or corrupt.
