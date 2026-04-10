@@ -27,7 +27,8 @@
     "validate:game": "node scripts/validate-game-components.cjs",
     "validate:commands": "node scripts/validate-commands.cjs",
     "validate:cold-boot": "node scripts/benchmark-cold-boot.cjs",
-    "validate": "node scripts/check-file-sizes.cjs && pnpm run validate:game && pnpm run validate:commands && pnpm run validate:cold-boot && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "validate:vite-smoke": "node scripts/smoke-test-vite.cjs",
+    "validate": "node scripts/check-file-sizes.cjs && pnpm run validate:game && pnpm run validate:commands && pnpm run validate:cold-boot && pnpm run validate:vite-smoke && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "validate:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
     "validate:mcp": "cd mcp-4da-server && pnpm run build",
     "validate:translations": "node scripts/validate-translations.cjs",
@@ -48,7 +49,8 @@
     "quality": "node scripts/compound-quality-check.cjs",
     "size": "size-limit",
     "size:check": "size-limit --check",
-    "prepare": "husky"
+    "prepare": "husky",
+    "postinstall": "node -e \"const fs=require('fs'),p=require('path');const d=p.join('node_modules','.vite','deps');if(fs.existsSync(d)){fs.rmSync(d,{recursive:true,force:true});console.log('[postinstall] Cleared node_modules/.vite/deps — stale Vite optimizer cache purged')}\""
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",

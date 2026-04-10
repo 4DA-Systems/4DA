@@ -303,7 +303,9 @@ fn health_to_alert(ph: &crate::project_health::ProjectHealth) -> PreemptionAlert
         SuggestedAction {
             action_type: "review_decision".to_string(),
             label: "Review dependency decisions".to_string(),
-            description: "Consider whether stale or vulnerable dependencies should be updated or replaced".to_string(),
+            description:
+                "Consider whether stale or vulnerable dependencies should be updated or replaced"
+                    .to_string(),
         },
     ];
 

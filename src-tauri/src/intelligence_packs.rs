@@ -8,8 +8,8 @@
 //! Packs create depth without noise — specialized intelligence for specific stacks.
 
 use serde::{Deserialize, Serialize};
-use ts_rs::TS;
 use tracing::{info, warn};
+use ts_rs::TS;
 
 use crate::error::{Result, ResultExt};
 
@@ -185,7 +185,9 @@ pub fn list_packs() -> Result<Vec<IntelligencePack>> {
 
     let activated: std::collections::HashMap<String, String> = conn
         .prepare("SELECT pack_id, activated_at FROM intelligence_packs WHERE active = 1")?
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -304,10 +306,7 @@ pub fn suggest_packs_for_stack() -> Result<Vec<PackSuggestion>> {
     }
 
     if tech.iter().any(|t| {
-        t.contains("react")
-            || t.contains("vue")
-            || t.contains("svelte")
-            || t.contains("angular")
+        t.contains("react") || t.contains("vue") || t.contains("svelte") || t.contains("angular")
     }) || dep_types.contains(&"npm".to_string())
     {
         suggestions.push(PackSuggestion {
@@ -343,9 +342,10 @@ pub fn suggest_packs_for_stack() -> Result<Vec<PackSuggestion>> {
         });
     }
 
-    if tech.iter().any(|t| {
-        t.contains("docker") || t.contains("kubernetes") || t.contains("terraform")
-    }) {
+    if tech
+        .iter()
+        .any(|t| t.contains("docker") || t.contains("kubernetes") || t.contains("terraform"))
+    {
         suggestions.push(PackSuggestion {
             pack_id: "infrastructure".into(),
             reason: "Infrastructure tooling detected".into(),
@@ -377,12 +377,12 @@ pub fn suggest_packs_for_stack() -> Result<Vec<PackSuggestion>> {
 fn extract_pack_keywords(query: &str) -> Vec<String> {
     const STOP_WORDS: &[&str] = &[
         "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
-        "from", "is", "it", "that", "this", "was", "are", "be", "has", "have", "had", "do",
-        "does", "did", "will", "would", "could", "should", "may", "might", "can", "shall", "not",
-        "no", "so", "if", "then", "than", "when", "where", "what", "which", "who", "how", "all",
-        "each", "every", "any", "some", "such", "only", "own", "same", "other", "into", "about",
-        "up", "out", "just", "also", "very", "my", "me", "i", "we", "you", "your", "our", "they",
-        "them", "their", "show", "find", "get", "give", "tell", "list", "display",
+        "from", "is", "it", "that", "this", "was", "are", "be", "has", "have", "had", "do", "does",
+        "did", "will", "would", "could", "should", "may", "might", "can", "shall", "not", "no",
+        "so", "if", "then", "than", "when", "where", "what", "which", "who", "how", "all", "each",
+        "every", "any", "some", "such", "only", "own", "same", "other", "into", "about", "up",
+        "out", "just", "also", "very", "my", "me", "i", "we", "you", "your", "our", "they", "them",
+        "their", "show", "find", "get", "give", "tell", "list", "display",
     ];
     let stop_set: std::collections::HashSet<&str> = STOP_WORDS.iter().copied().collect();
     query
