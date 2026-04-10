@@ -114,9 +114,67 @@ export function executeExportContextPacket(
       .all() as SavedItemRow[];
   }
 
+  // Trust metrics
+  let trustMetrics: {
+    precision_30d: number | null;
+    action_rate_30d: number | null;
+    total_surfaced_30d: number;
+    false_positives_30d: number;
+  } | null = null;
+  try {
+    const trustCounts = rawDb
+      .prepare(
+        `SELECT event_type, COUNT(*) as cnt
+       FROM trust_events
+       WHERE created_at >= datetime('now', '-30 days')
+       GROUP BY event_type`,
+      )
+      .all() as Array<{ event_type: string; cnt: number }>;
+
+    const getCount = (t: string) =>
+      trustCounts.find((c) => c.event_type === t)?.cnt ?? 0;
+    const surfaced = getCount("surfaced");
+    const acted = getCount("acted_on");
+    const fp = getCount("false_positive");
+    const validated = getCount("validated");
+    const tp = acted + validated;
+
+    trustMetrics = {
+      precision_30d:
+        tp + fp > 0 ? Math.round((tp / (tp + fp)) * 100) / 100 : null,
+      action_rate_30d:
+        surfaced > 0
+          ? Math.round((acted / surfaced) * 100) / 100
+          : null,
+      total_surfaced_30d: surfaced,
+      false_positives_30d: fp,
+    };
+  } catch {
+    /* trust tables may not exist yet */
+  }
+
+  // Recent preemption alerts count
+  let preemptionSummary: {
+    active_critical_alerts: number;
+  } | null = null;
+  try {
+    const alertCount = rawDb
+      .prepare(
+        `SELECT COUNT(*) as cnt FROM dependency_alerts
+       WHERE created_at >= datetime('now', '-7 days') AND severity IN ('critical', 'high')`,
+      )
+      .get() as { cnt: number } | undefined;
+
+    preemptionSummary = {
+      active_critical_alerts: alertCount?.cnt ?? 0,
+    };
+  } catch {
+    /* table may not exist */
+  }
+
   return {
     generated_at: new Date().toISOString(),
-    version: "1.0.0",
+    version: "1.1.0",
     active_context: {
       detected_tech: detectedTech,
       active_topics: activeTopics,
@@ -125,6 +183,8 @@ export function executeExportContextPacket(
     },
     open_signals: openSignals,
     saved_items: savedItems,
+    trust_metrics: trustMetrics,
+    preemption_summary: preemptionSummary,
     summary: `${interestTopics.length} interests, ${detectedTech.length} detected tech, ${openSignals.length} open signals, ${savedItems.length} saved items`,
   };
 }
