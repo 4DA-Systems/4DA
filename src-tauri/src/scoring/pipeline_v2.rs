@@ -436,11 +436,17 @@ fn compute_relevance(
         (base * (1.0 + cal.semantic_boost)).clamp(0.0, 1.0)
     } else if ctx.interest_count > 0 {
         // Interest only
-        let semantic_mult = if has_real_embedding
+        // Bootstrap semantic dampening: reduce embedding influence for TRULY
+        // thin profiles to prevent false positives from noisy embeddings.
+        // Previously triggered on (interest_count < 3 && deps < 5) which was
+        // too aggressive — a Rust project with 200+ deps and 20+ detected
+        // techs still got dampened. Now requires thin ACE signals too.
+        let truly_thin_profile = has_real_embedding
             && ctx.interest_count < 3
             && ctx.feedback_interaction_count < 10
-            && ctx.ace_ctx.dependency_names.len() < 5
-        {
+            && ctx.ace_ctx.detected_tech.len() < 5
+            && ctx.ace_ctx.dependency_names.len() < 10;
+        let semantic_mult = if truly_thin_profile {
             scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.4
         } else {
             scoring_config::INTEREST_ONLY_SEMANTIC_MULT

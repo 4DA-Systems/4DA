@@ -27,6 +27,11 @@ pub(crate) fn interest_specificity_weight(interest_topic: &str) -> f32 {
 
 /// Find the best-matching interest for an item and return its specificity weight.
 /// Used to attenuate keyword_score for broad interests.
+///
+/// When the user has very few interests (1-2), ALL interests get full 1.0x
+/// weight — someone who only declares "AI" and "Rust" clearly means both.
+/// The broad-term discount only kicks in when there are 3+ interests, and
+/// at a gentler rate (0.60x for 3-5 interests) than the default (0.25x for 6+).
 pub(crate) fn best_interest_specificity_weight(
     title: &str,
     content: &str,
@@ -35,6 +40,10 @@ pub(crate) fn best_interest_specificity_weight(
     if interests.is_empty() {
         return 1.0;
     }
+
+    // Focused users: if 1-2 declared interests, trust all of them at full weight.
+    // They chose few → each one is definitional, not casual.
+    let focused_user = interests.len() <= 2;
 
     let title_lower = title.to_lowercase();
     let text_lower = format!("{} {}", title_lower, content.to_lowercase());
@@ -51,10 +60,17 @@ pub(crate) fn best_interest_specificity_weight(
         });
 
         if has_hit {
-            let w = interest_specificity_weight(&interest.topic);
+            let w = if focused_user {
+                1.0 // Full weight for focused users
+            } else if interests.len() <= 5 {
+                // 3-5 interests: softer discount (0.60x floor for broad terms)
+                let raw_w = interest_specificity_weight(&interest.topic);
+                raw_w.max(0.60)
+            } else {
+                // 6+ interests: full specificity logic (0.25x for broad)
+                interest_specificity_weight(&interest.topic)
+            };
             if !found_match || w > best_weight {
-                // Use the HIGHEST specificity weight among matching interests
-                // (if a specific interest matches, credit it even if a broad one also matches)
                 best_weight = w;
                 found_match = true;
             }

@@ -258,9 +258,7 @@ pub async fn get_decision_signals() -> Result<Vec<DecisionSignals>> {
 /// Parse a date string and compute the number of days elapsed since that date.
 fn compute_days_since_str(date_str: &str) -> u32 {
     chrono::NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| {
-            chrono::NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%.f")
-        })
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%.f"))
         .map(|dt| {
             let now = chrono::Utc::now().naive_utc();
             (now - dt).num_days().max(0) as u32
