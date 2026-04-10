@@ -644,6 +644,12 @@ interface CommandMap {
   get_standing_query_matches: { params: { id: number; limit?: number }; result: StandingQueryMatch[] };
   get_standing_query_suggestions: { params: Record<string, never>; result: StandingQuerySuggestion[] };
 
+  // -- Intelligence Packs --
+  list_intelligence_packs: { params: Record<string, never>; result: IntelligencePack[] };
+  activate_intelligence_pack: { params: { packId: string }; result: null };
+  deactivate_intelligence_pack: { params: { packId: string }; result: null };
+  suggest_intelligence_packs: { params: Record<string, never>; result: PackSuggestion[] };
+
   // -- Intelligence History --
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
   get_session_diff: { params: Record<string, never>; result: { new_items: number; new_relevant: number; hours_since_last: number; has_previous: boolean } };
@@ -1711,6 +1717,22 @@ interface StandingQuerySuggestion {
   query_type: string;
 }
 
+interface IntelligencePack {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  concepts: Array<{ name: string; keywords: string[]; importance: number }>;
+  default_watches: string[];
+  active: boolean;
+  activated_at: string | null;
+}
+
+interface PackSuggestion {
+  pack_id: string;
+  reason: string;
+}
+
 interface IntelligenceGrowthData {
   snapshots: Array<{ recorded_at: string; accuracy: number; topics_learned: number; items_analyzed: number; relevant_found: number }>;
   current_accuracy: number;
@@ -2087,6 +2109,8 @@ export type {
   StandingQuery,
   StandingQueryMatch,
   StandingQuerySuggestion,
+  IntelligencePack,
+  PackSuggestion,
   IntelligenceGrowthData,
   CommunityStatus,
   StackHealthData,

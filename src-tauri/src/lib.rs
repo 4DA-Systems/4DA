@@ -229,6 +229,7 @@ mod http_client;
 mod indexed_documents_commands;
 mod integrity;
 mod intelligence_history;
+mod intelligence_packs;
 mod ipc_guard;
 mod ipc_rate_limit;
 mod job_queue;
@@ -917,6 +918,11 @@ pub fn run() {
             // Intelligence History
             intelligence_history::get_intelligence_growth,
             intelligence_history::get_session_diff,
+            // Intelligence Packs
+            intelligence_packs::list_intelligence_packs,
+            intelligence_packs::activate_intelligence_pack,
+            intelligence_packs::deactivate_intelligence_pack,
+            intelligence_packs::suggest_intelligence_packs,
             // Community Intelligence
             community_intelligence::get_community_status,
             community_intelligence::set_community_intelligence_enabled,
