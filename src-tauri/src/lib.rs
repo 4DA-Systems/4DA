@@ -1030,6 +1030,8 @@ pub fn run() {
             // Trust Ledger (intelligence quality measurement)
             trust_ledger::get_trust_dashboard,
             trust_ledger::record_intelligence_feedback,
+            trust_ledger::get_domain_precision_report,
+            trust_ledger::get_false_positive_analysis,
         ])
         .setup(app_setup::setup_app)
         .build(tauri::generate_context!())

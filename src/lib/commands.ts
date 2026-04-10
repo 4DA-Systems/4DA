@@ -173,6 +173,21 @@ interface TrustSummary {
   trend: string;
 }
 
+interface DomainPrecision {
+  domain: string;
+  precision: number;
+  total_surfaced: number;
+  acted_on: number;
+  false_positives: number;
+}
+
+interface FalsePositiveAnalysis {
+  total_fp: number;
+  by_source: Array<{ source_type: string; total: number; fp_count: number; fp_rate: number }>;
+  by_topic: Array<{ topic: string; total: number; fp_count: number; fp_rate: number }>;
+  recommendations: string[];
+}
+
 // ============================================================================
 // Command Map — maps every command name to { params, result }
 // ============================================================================
@@ -482,6 +497,8 @@ interface CommandMap {
   // -- Trust Ledger --
   get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
   record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string }; result: null };
+  get_domain_precision_report: { params: { days?: number }; result: DomainPrecision[] };
+  get_false_positive_analysis: { params: { days?: number }; result: FalsePositiveAnalysis };
 
   // -- Developer DNA --
   get_developer_dna: { params: Record<string, never>; result: DeveloperDna };

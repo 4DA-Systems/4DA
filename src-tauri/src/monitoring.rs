@@ -855,6 +855,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 }
+                // Trust ledger precision stats — compute weekly
+                match crate::trust_ledger::compute_and_store_weekly_precision() {
+                    Ok(()) => info!(target: "4da::monitor", "Weekly precision stats computed"),
+                    Err(e) => warn!(target: "4da::monitor", error = %e, "Precision stats computation failed"),
+                }
             }
 
             // Digest scheduler (Fix 2) -- check on every tick
