@@ -1095,6 +1095,8 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         wisdom_signals: vec![],
                         synthesis: None,
                         wisdom_synthesis: None,
+                        preemption_alerts: vec![],
+                        blind_spot_score: None,
                         labels: None,
                     };
                     drop(analysis_state); // release lock before disk I/O

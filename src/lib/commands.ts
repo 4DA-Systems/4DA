@@ -618,6 +618,7 @@ interface CommandMap {
 
   // -- Decision Impact Tracking (Pro) --
   get_decision_signals: { params: Record<string, never>; result: DecisionSignals[] };
+  get_decision_health_report: { params: Record<string, never>; result: DecisionHealthReport[] };
 
   // -- Standing Queries (Pro) --
   create_standing_query: { params: { queryText: string }; result: number };
@@ -1654,6 +1655,19 @@ interface DecisionSignals {
   challenging: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string }>;
 }
 
+interface DecisionHealthReport {
+  decision_id: number;
+  subject: string;
+  decision: string;
+  created_at: string;
+  days_since: number;
+  supporting_count: number;
+  challenging_count: number;
+  volatility: number;
+  status: 'confident' | 'challenged' | 'stale' | 'needs_review';
+  latest_evidence: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string; discovered_at: string }>;
+}
+
 interface StandingQuery {
   id: number;
   query_text: string;
@@ -2052,6 +2066,7 @@ export type {
   SynthesisResponse,
   WeeklyDigest,
   DecisionSignals,
+  DecisionHealthReport,
   StandingQuery,
   StandingQueryMatch,
   StandingQuerySuggestion,

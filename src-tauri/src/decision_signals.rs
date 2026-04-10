@@ -35,6 +35,30 @@ pub struct RelatedSignal {
     pub discovered_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionHealth {
+    pub decision_id: i64,
+    pub subject: String,
+    pub decision: String,
+    pub created_at: String,
+    pub days_since: u32,
+    pub supporting_count: usize,
+    pub challenging_count: usize,
+    /// 0.0 = stable, 1.0 = highly challenged
+    pub volatility: f32,
+    pub status: DecisionHealthStatus,
+    pub latest_evidence: Vec<RelatedSignal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionHealthStatus {
+    Confident,
+    Challenged,
+    Stale,
+    NeedsReview,
+}
+
 // ============================================================================
 // Core logic
 // ============================================================================
@@ -225,4 +249,99 @@ pub async fn get_decision_signals() -> Result<Vec<DecisionSignals>> {
     }
 
     Ok(results)
+}
+
+// ============================================================================
+// Decision Health
+// ============================================================================
+
+/// Parse a date string and compute the number of days elapsed since that date.
+fn compute_days_since_str(date_str: &str) -> u32 {
+    chrono::NaiveDateTime::parse_from_str(date_str, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(date_str, "%Y-%m-%dT%H:%M:%S%.f")
+        })
+        .map(|dt| {
+            let now = chrono::Utc::now().naive_utc();
+            (now - dt).num_days().max(0) as u32
+        })
+        .unwrap_or(0)
+}
+
+/// Get health status for all active decisions, enriched with signal counts
+/// and volatility metrics.
+pub async fn get_all_decision_health() -> Result<Vec<DecisionHealth>> {
+    require_signal_feature("get_decision_health_report")?;
+
+    let conn = crate::open_db_connection()?;
+
+    // Get active decisions
+    let decisions = crate::decisions::list_decisions(&conn, None, None, 50)?;
+
+    debug!(
+        target: "4da::decisions",
+        count = decisions.len(),
+        "Computing decision health for active decisions"
+    );
+
+    let mut health = Vec::new();
+
+    for decision in &decisions {
+        if decision.status == crate::decisions::DecisionStatus::Superseded {
+            continue;
+        }
+
+        let (supporting, challenging) = find_signals_for_decision(&conn, decision);
+        let supporting_count = supporting.len();
+        let challenging_count = challenging.len();
+        let total = supporting_count + challenging_count;
+
+        // Volatility = proportion of challenging signals
+        let volatility = if total > 0 {
+            challenging_count as f32 / total as f32
+        } else {
+            0.0
+        };
+
+        let days_since = compute_days_since_str(&decision.created_at);
+
+        // Determine status
+        let status = if total == 0 && days_since > 30 {
+            DecisionHealthStatus::Stale
+        } else if volatility > 0.5 || (days_since > 60 && challenging_count > 2) {
+            DecisionHealthStatus::NeedsReview
+        } else if challenging_count > supporting_count && total > 3 {
+            DecisionHealthStatus::Challenged
+        } else {
+            DecisionHealthStatus::Confident
+        };
+
+        // Latest evidence (max 5 most recent from both supporting and challenging)
+        let mut latest: Vec<RelatedSignal> = supporting
+            .into_iter()
+            .chain(challenging.into_iter())
+            .collect();
+        latest.sort_by(|a, b| b.discovered_at.cmp(&a.discovered_at));
+        latest.truncate(5);
+
+        health.push(DecisionHealth {
+            decision_id: decision.id,
+            subject: decision.subject.clone(),
+            decision: decision.decision.clone(),
+            created_at: decision.created_at.clone(),
+            days_since,
+            supporting_count,
+            challenging_count,
+            volatility,
+            status,
+            latest_evidence: latest,
+        });
+    }
+
+    Ok(health)
+}
+
+#[tauri::command]
+pub async fn get_decision_health_report() -> std::result::Result<Vec<DecisionHealth>, String> {
+    get_all_decision_health().await.map_err(|e| e.to_string())
 }

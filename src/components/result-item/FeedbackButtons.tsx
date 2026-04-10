@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useAppStore } from '../../store';
+import { recordTrustEvent } from '../../lib/trust-feedback';
 
 interface FeedbackButtonsProps {
   item: SourceRelevance;
@@ -41,12 +42,26 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     e.stopPropagation();
     setSavePulse(true);
     onRecordInteraction(item.id, 'save', item);
+    recordTrustEvent({
+      eventType: 'acted_on',
+      signalId: String(item.id),
+      sourceType: item.source_type || undefined,
+      topic: item.title,
+      notes: 'save',
+    });
   }, [item, onRecordInteraction]);
 
   const handleDismiss = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setDismissFlash(true);
     onRecordInteraction(item.id, 'dismiss', item);
+    recordTrustEvent({
+      eventType: 'dismissed',
+      signalId: String(item.id),
+      sourceType: item.source_type || undefined,
+      topic: item.title,
+      notes: 'dismiss',
+    });
   }, [item, onRecordInteraction]);
 
   const handleShare = useCallback((e: React.MouseEvent) => {
@@ -67,6 +82,13 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
           onClick={(e) => {
             e.stopPropagation();
             onRecordInteraction(item.id, 'click', item);
+            recordTrustEvent({
+              eventType: 'acted_on',
+              signalId: String(item.id),
+              sourceType: item.source_type || undefined,
+              topic: item.title,
+              notes: 'open_link',
+            });
             import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
               void openUrl(item.url!);
             }).catch(() => {
@@ -130,6 +152,13 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         onClick={(e) => {
           e.stopPropagation();
           onRecordInteraction(item.id, 'mark_irrelevant', item);
+          recordTrustEvent({
+            eventType: 'false_positive',
+            signalId: String(item.id),
+            sourceType: item.source_type || undefined,
+            topic: item.title,
+            notes: 'mark_irrelevant',
+          });
         }}
         disabled={!!feedback}
         aria-label={feedback === 'mark_irrelevant' ? t('feedback.marked') : t('feedback.notRelevant')}

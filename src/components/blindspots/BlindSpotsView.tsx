@@ -1,10 +1,11 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { memo, useEffect, useCallback } from 'react';
+import { memo, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
+import { recordTrustEvent } from '../../lib/trust-feedback';
 
 const SCORE_TIERS = [
   { max: 25, color: 'text-green-400', bg: 'bg-green-500', labelKey: 'blindspots.score.good' },
@@ -60,6 +61,23 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
 
 const UncoveredDeps = memo(function UncoveredDeps({ deps }: { deps: NonNullable<ReturnType<typeof useAppStore.getState>['blindSpotReport']>['uncovered_dependencies'] }) {
   const { t } = useTranslation();
+  const surfacedRef = useRef(new Set<string>());
+
+  // Record surfaced for uncovered deps on first render
+  useEffect(() => {
+    for (const dep of deps) {
+      if (!surfacedRef.current.has(dep.name)) {
+        surfacedRef.current.add(dep.name);
+        recordTrustEvent({
+          eventType: 'surfaced',
+          sourceType: dep.dep_type,
+          topic: dep.name,
+          notes: 'blind_spot_uncovered_dep',
+        });
+      }
+    }
+  }, [deps]);
+
   if (deps.length === 0) return null;
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
@@ -70,7 +88,18 @@ const UncoveredDeps = memo(function UncoveredDeps({ deps }: { deps: NonNullable<
       </div>
       <div className="divide-y divide-border">
         {deps.map((dep) => (
-          <div key={dep.name} className="px-5 py-4">
+          <div
+            key={dep.name}
+            className="px-5 py-4 cursor-pointer hover:bg-bg-tertiary/50 transition-colors"
+            onClick={() => {
+              recordTrustEvent({
+                eventType: 'acted_on',
+                sourceType: dep.dep_type,
+                topic: dep.name,
+                notes: 'blind_spot_dep_click',
+              });
+            }}
+          >
             <div className="flex items-center gap-2 mb-1">
               <span className="text-sm font-medium text-white">{dep.name}</span>
               <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-bg-tertiary rounded">
@@ -99,6 +128,24 @@ const UncoveredDeps = memo(function UncoveredDeps({ deps }: { deps: NonNullable<
 
 const MissedSignals = memo(function MissedSignals({ signals }: { signals: NonNullable<ReturnType<typeof useAppStore.getState>['blindSpotReport']>['missed_signals'] }) {
   const { t } = useTranslation();
+  const surfacedRef = useRef(new Set<number>());
+
+  // Record surfaced for all missed signals on first render
+  useEffect(() => {
+    for (const signal of signals) {
+      if (!surfacedRef.current.has(signal.item_id)) {
+        surfacedRef.current.add(signal.item_id);
+        recordTrustEvent({
+          eventType: 'surfaced',
+          signalId: String(signal.item_id),
+          sourceType: signal.source_type,
+          topic: signal.title,
+          notes: 'blind_spot_missed_signal',
+        });
+      }
+    }
+  }, [signals]);
+
   if (signals.length === 0) return null;
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
@@ -117,6 +164,15 @@ const MissedSignals = memo(function MissedSignals({ signals }: { signals: NonNul
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-white hover:text-amber-400 transition-colors"
+                  onClick={() => {
+                    recordTrustEvent({
+                      eventType: 'acted_on',
+                      signalId: String(signal.item_id),
+                      sourceType: signal.source_type,
+                      topic: signal.title,
+                      notes: 'blind_spot_click',
+                    });
+                  }}
                 >
                   {signal.title}
                 </a>

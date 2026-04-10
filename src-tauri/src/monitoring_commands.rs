@@ -495,6 +495,8 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
         wisdom_signals: vec![],
         synthesis: None,
         wisdom_synthesis: None,
+        preemption_alerts: vec![],
+        blind_spot_score: None,
         labels: None,
     };
 
