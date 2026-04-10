@@ -226,7 +226,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 51;
+        const TARGET_VERSION: i64 = 52;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1469,6 +1469,66 @@ impl Database {
                 )?;
             }
 
+            // Phase 52: Trust Ledger — intelligence quality measurement
+            if current_version < 52 {
+                Self::run_versioned_migration(
+                    &conn,
+                    51,
+                    52,
+                    "Phase 52: trust ledger (precision, preemption, action tracking)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS trust_events (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                event_type TEXT NOT NULL,
+                                signal_id TEXT,
+                                alert_id TEXT,
+                                source_type TEXT,
+                                topic TEXT,
+                                lead_time_hours REAL,
+                                user_action TEXT,
+                                outcome TEXT,
+                                confidence_at_surface REAL,
+                                notes TEXT,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                resolved_at TEXT
+                             );
+
+                             CREATE TABLE IF NOT EXISTS precision_stats (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                period TEXT NOT NULL,
+                                domain TEXT NOT NULL,
+                                total_surfaced INTEGER DEFAULT 0,
+                                true_positives INTEGER DEFAULT 0,
+                                false_positives INTEGER DEFAULT 0,
+                                false_negatives INTEGER DEFAULT 0,
+                                acted_on INTEGER DEFAULT 0,
+                                dismissed INTEGER DEFAULT 0,
+                                precision REAL,
+                                action_conversion_rate REAL,
+                                avg_lead_time_hours REAL,
+                                computed_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+
+                             CREATE TABLE IF NOT EXISTS preemption_wins (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                alert_id TEXT NOT NULL,
+                                alert_title TEXT NOT NULL,
+                                alerted_at TEXT NOT NULL,
+                                incident_at TEXT,
+                                lead_time_hours REAL,
+                                affected_deps TEXT,
+                                user_acted INTEGER DEFAULT 0,
+                                verified INTEGER DEFAULT 0,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );",
+                        )?;
+                        info!(target: "4da::db", "Created trust_events, precision_stats, preemption_wins tables");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -2222,6 +2282,10 @@ mod tests {
             "content_analyses",
             // Phase 43: Multilingual content translation cache
             "translation_cache",
+            // Phase 52: Trust Ledger
+            "trust_events",
+            "precision_stats",
+            "preemption_wins",
         ];
         for table in &expected {
             assert!(

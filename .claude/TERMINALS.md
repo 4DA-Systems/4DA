@@ -17,9 +17,9 @@
 - **Files**: list of files being modified
 -->
 
-### T2 — Codex Audit Strategy & Execution Plans
+### T2 — Phase 1: Flagship Loop Activation
 - **Status**: working
-- **Since**: 2026-04-10T12:00:00Z
-- **Files**: MASTER-STRATEGY.md, PLAN-PHASE-0-FOUNDATION-FIXES.md, PLAN-PHASE-1-FLAGSHIP-LOOPS.md, PLAN-PHASE-2-PROOF-LAYER.md, PLAN-PHASE-3-MCP-PRODUCTIZATION.md, PLAN-PHASE-4-CROSS-PLATFORM.md, PLAN-PHASE-5-PREEMPTION-ENGINE.md
+- **Since**: 2026-04-11T00:30:00Z
+- **Files**: Phase 1 frontend + backend (claiming per wave)
 
 

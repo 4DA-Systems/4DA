@@ -159,6 +159,7 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod awe_commands;
 mod awe_synthesis;
+mod blind_spots;
 mod boot_context;
 mod briefing_snapshot;
 mod briefing_window;
@@ -249,6 +250,7 @@ mod novelty;
 mod ollama;
 mod plugin_commands;
 pub mod plugins;
+mod preemption;
 mod probes_corpus;
 mod probes_engine;
 mod project_health;
@@ -399,6 +401,7 @@ mod translation_commands;
 mod translation_commands_tests;
 mod translation_pipeline;
 mod translation_providers;
+mod trust_ledger;
 
 /// Shared test utilities — compiled unconditionally so integration tests
 /// and benchmarks can access them via `fourda_lib::test_utils`.
@@ -726,7 +729,9 @@ pub fn run() {
             void_commands::get_void_signal,
             // Intelligence panels
             attention::get_attention_report,
+            blind_spots::get_blind_spots,
             knowledge_decay::get_knowledge_gaps,
+            preemption::get_preemption_alerts,
             signal_chains::get_signal_chains,
             signal_chains::get_signal_chains_predicted,
             signal_chains::resolve_signal_chain,
@@ -1021,6 +1026,9 @@ pub fn run() {
             // Waitlist
             waitlist::save_waitlist_signup,
             waitlist::get_waitlist_signups,
+            // Trust Ledger (intelligence quality measurement)
+            trust_ledger::get_trust_dashboard,
+            trust_ledger::record_intelligence_feedback,
         ])
         .setup(app_setup::setup_app)
         .build(tauri::generate_context!())
