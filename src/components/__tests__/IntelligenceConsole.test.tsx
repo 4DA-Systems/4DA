@@ -31,14 +31,15 @@ describe('IntelligenceConsole', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders a tab bar with 4 tabs', () => {
+  it('renders a tab bar with 5 tabs', () => {
     render(<IntelligenceConsole />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs).toHaveLength(4);
+    expect(tabs).toHaveLength(5);
     expect(screen.getByText('console.tab_accuracy')).toBeInTheDocument();
     expect(screen.getByText('console.tab_convergence')).toBeInTheDocument();
     expect(screen.getByText('console.tab_costs')).toBeInTheDocument();
     expect(screen.getByText('console.tab_wisdom')).toBeInTheDocument();
+    expect(screen.getByText('console.tab_trust')).toBeInTheDocument();
   });
 
   it('defaults to the Accuracy tab being selected', () => {
