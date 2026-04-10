@@ -581,9 +581,7 @@ pub fn analyze_false_positives(days: u32) -> Result<FalsePositiveAnalysis> {
 // ============================================================================
 
 #[tauri::command]
-pub async fn get_trust_dashboard(
-    days: Option<u32>,
-) -> std::result::Result<TrustSummary, String> {
+pub async fn get_trust_dashboard(days: Option<u32>) -> std::result::Result<TrustSummary, String> {
     get_trust_summary(days.unwrap_or(30)).map_err(|e| e.to_string())
 }
 

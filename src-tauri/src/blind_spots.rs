@@ -141,9 +141,9 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
     let mut result: Vec<DepCoverage> = Vec::new();
 
     // Get unique deps from user_dependencies
-    let mut stmt = match conn.prepare(
-        "SELECT DISTINCT name, COALESCE(dep_type, 'unknown') FROM user_dependencies",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT DISTINCT name, COALESCE(dep_type, 'unknown') FROM user_dependencies")
+    {
         Ok(s) => s,
         Err(e) => {
             warn!("Failed to query user_dependencies (table may not exist): {e}");
@@ -171,9 +171,9 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
 
 /// Look up which projects reference a given dependency.
 fn get_projects_for_dep(conn: &rusqlite::Connection, dep_name: &str) -> Vec<String> {
-    let mut stmt = match conn.prepare(
-        "SELECT DISTINCT project_path FROM project_dependencies WHERE package_name = ?1",
-    ) {
+    let mut stmt = match conn
+        .prepare("SELECT DISTINCT project_path FROM project_dependencies WHERE package_name = ?1")
+    {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
@@ -347,10 +347,7 @@ fn count_deps_for_topic(deps: &[DepCoverage], topic: &str) -> u32 {
 }
 
 /// Count missed items from knowledge gaps that match the given topic.
-fn count_missed_for_topic(
-    gaps: &[crate::knowledge_decay::KnowledgeGap],
-    topic: &str,
-) -> u32 {
+fn count_missed_for_topic(gaps: &[crate::knowledge_decay::KnowledgeGap], topic: &str) -> u32 {
     let topic_lower = topic.to_lowercase();
     gaps.iter()
         .filter(|g| {
@@ -376,12 +373,13 @@ fn generate_recommendations(
         .collect();
 
     if !critical_deps.is_empty() {
-        let dep_names: Vec<&str> = critical_deps.iter().take(3).map(|d| d.name.as_str()).collect();
+        let dep_names: Vec<&str> = critical_deps
+            .iter()
+            .take(3)
+            .map(|d| d.name.as_str())
+            .collect();
         recs.push(BlindSpotRecommendation {
-            action: format!(
-                "Review signals for: {}",
-                dep_names.join(", ")
-            ),
+            action: format!("Review signals for: {}", dep_names.join(", ")),
             reason: format!(
                 "{} dependencies have critical/high risk blind spots with no recent engagement",
                 critical_deps.len()
@@ -397,12 +395,13 @@ fn generate_recommendations(
         .collect();
 
     if !active_stale.is_empty() {
-        let topic_names: Vec<&str> = active_stale.iter().take(3).map(|s| s.topic.as_str()).collect();
+        let topic_names: Vec<&str> = active_stale
+            .iter()
+            .take(3)
+            .map(|s| s.topic.as_str())
+            .collect();
         recs.push(BlindSpotRecommendation {
-            action: format!(
-                "Catch up on stale topics: {}",
-                topic_names.join(", ")
-            ),
+            action: format!("Catch up on stale topics: {}", topic_names.join(", ")),
             reason: format!(
                 "{} topics have active dependencies but declining attention",
                 active_stale.len()
@@ -484,10 +483,7 @@ fn calculate_blind_spot_score(
 
     let stale_score = stale.len() as f32 * 5.0;
 
-    let missed_score = missed
-        .iter()
-        .map(|m| m.relevance_score * 3.0)
-        .sum::<f32>();
+    let missed_score = missed.iter().map(|m| m.relevance_score * 3.0).sum::<f32>();
 
     let raw = uncovered_score + stale_score + missed_score;
     raw.min(100.0)

@@ -93,6 +93,16 @@ Fonts: Inter (UI), JetBrains Mono (code) | Weights: 400, 500, 600
 - **OCR:** use `ocrs` crate (pure Rust), not tesseract (requires C bindings)
 - **PDF:** pdf-extract + lopdf. **Office:** docx-rs + calamine
 - **ts-rs** v10 with serde-compat generates TypeScript types from Rust structs
+- **Vite dep updates + running fourda.exe** — if you update a Vite-adjacent
+  dep (`vite`, `@tailwindcss/vite`, `@vitejs/plugin-react`, etc.) while
+  `fourda.exe` is running, the running process keeps the OLD paths in
+  memory and crashes with "Cannot find module vite@X.X.X_@emnapi+core..."
+  when anything triggers module resolution.
+  **Guards in place:**
+  - `pnpm postinstall` hook auto-clears `node_modules/.vite/deps` on every install
+  - `pnpm run validate:vite-smoke` does a cold-start and verifies 13 critical routes
+  - `pnpm run validate` includes the smoke test
+  **If it happens:** `taskkill /F /IM fourda.exe && pnpm install --frozen-lockfile`
 
 ## Reference Docs
 
