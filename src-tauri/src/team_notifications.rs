@@ -51,6 +51,7 @@ pub struct TeamNotification {
     pub severity: String,
     pub read: bool,
     pub created_at: String,
+    #[ts(type = "any")]
     pub metadata: Option<serde_json::Value>,
 }
 
