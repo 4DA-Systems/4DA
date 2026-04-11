@@ -353,11 +353,12 @@ fn keyword_concentration_penalty(title: &str) -> f32 {
 
     let max_repeats = counts.values().copied().max().unwrap_or(0);
 
+    // Only penalize at 3+ repeats. 2 repeats is common in legitimate titles
+    // like "React vs React Native" or "How Rust Makes Rust Developers Happy".
     match max_repeats {
-        0..=1 => 0.0,
-        2 => -0.05,
-        3 => -0.15,
-        _ => -0.25, // 4+
+        0..=2 => 0.0,
+        3 => -0.10,
+        _ => -0.20, // 4+
     }
 }
 
@@ -404,9 +405,9 @@ fn title_body_coherence_penalty(title: &str, content: &str) -> f32 {
 }
 
 /// unique_words / total_words for the title.
-/// Titles with diversity < 0.50 get -0.15 penalty (every word repeated at least once on avg).
-/// Titles with diversity < 0.70 get -0.05 mild penalty.
-/// Normal titles have diversity 0.80-1.0 and get no penalty.
+/// Titles with diversity < 0.50 get -0.15 penalty (extreme keyword soup).
+/// Only the harshest tier: legitimate comparative titles ("React vs React
+/// Native: When to Use React Native Over React") hit ~0.57 and must pass.
 fn title_diversity_penalty(title: &str) -> f32 {
     use std::collections::HashSet;
 
@@ -424,10 +425,12 @@ fn title_diversity_penalty(title: &str) -> f32 {
     let unique: HashSet<&String> = words.iter().collect();
     let diversity = unique.len() as f32 / words.len() as f32;
 
+    // Only penalize extreme keyword soup (diversity < 0.50 means every word
+    // appears at least twice on average). The 0.70 tier was removed because
+    // legitimate comparative titles like "React vs React Native: When to Use
+    // React Native Over React" hit 0.57 diversity naturally.
     if diversity < 0.50 {
         -0.15
-    } else if diversity < 0.70 {
-        -0.05
     } else {
         0.0
     }
@@ -595,21 +598,18 @@ mod tests {
     }
 
     #[test]
-    fn test_keyword_concentration_two_repeats() {
+    fn test_keyword_concentration_two_repeats_allowed() {
+        // 2 repeats is legitimate: "React vs React Native"
         let p = keyword_concentration_penalty("Rust patterns in Rust systems programming");
-        assert!(
-            (p - (-0.05)).abs() < f32::EPSILON,
-            "2 repeats of 'rust' should give -0.05: {}",
-            p
-        );
+        assert_eq!(p, 0.0, "2 repeats should be allowed (legitimate): {}", p);
     }
 
     #[test]
     fn test_keyword_concentration_three_repeats() {
         let p = keyword_concentration_penalty("Rust async Rust patterns async Rust");
         assert!(
-            (p - (-0.15)).abs() < f32::EPSILON,
-            "3 repeats of 'rust' should give -0.15: {}",
+            (p - (-0.10)).abs() < f32::EPSILON,
+            "3 repeats of 'rust' should give -0.10: {}",
             p
         );
     }
@@ -618,8 +618,8 @@ mod tests {
     fn test_keyword_concentration_four_repeats() {
         let p = keyword_concentration_penalty("Rust Rust Rust Rust framework");
         assert!(
-            (p - (-0.25)).abs() < f32::EPSILON,
-            "4 repeats should give -0.25: {}",
+            (p - (-0.20)).abs() < f32::EPSILON,
+            "4 repeats should give -0.20: {}",
             p
         );
     }
@@ -703,14 +703,15 @@ mod tests {
     }
 
     #[test]
-    fn test_diversity_mild_penalty() {
-        // 5 unique out of 8 total = 0.625 → < 0.70 mild penalty
+    fn test_diversity_moderate_repetition_allowed() {
+        // Legitimate comparative titles repeat terms naturally.
+        // "Rust patterns Rust async patterns Rust async guide"
+        // unique: rust, patterns, async, guide = 4, total = 8 → 0.50
+        // 0.50 is NOT < 0.50, so no penalty (mild tier removed).
         let p = title_diversity_penalty("Rust patterns Rust async patterns Rust async guide");
-        // unique: rust, patterns, async, guide = 4, total = 8 → 0.50, that's < 0.50? No, 0.50 is not < 0.50.
-        // Actually 0.50 is exactly 0.50 which is NOT < 0.50, so it falls to < 0.70 → -0.05
-        assert!(
-            (p - (-0.05)).abs() < f32::EPSILON,
-            "Mild low diversity should get -0.05: {}",
+        assert_eq!(
+            p, 0.0,
+            "0.50 diversity should NOT be penalized (legitimate repetition): {}",
             p
         );
     }
