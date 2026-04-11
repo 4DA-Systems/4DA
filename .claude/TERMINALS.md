@@ -33,13 +33,12 @@
 - **NOT touching**: lib.rs, app_setup.rs, commands.ts, en/ui.json (all have uncommitted changes from other terminals); any file in T-PRELAUNCH-HARDENING or T-SCORING claims
 
 ### T-GLYPH — Glyph Envelope Protocol (GEP) foundation
-- **Status**: staged — waiting for T-PRELAUNCH-HARDENING to release Commit Lock before 4DA commit
+- **Status**: committing
 - **Since**: 2026-04-11T10:00:00Z
-- **Glyph repo**: D:\runyourempire\glyph — **COMMITTED** (74cba31, 44 files, 5829 insertions, 30+ tests passing)
-- **Files staged for 4DA commit (docs-only)**: CLAUDE.md (+49 lines Glyph section), docs/glyph/GEP-SPEC.md, GEP-SAFETY.md, GEP-INTEGRATION.md, GEP-ALPHABET.md, .claude/TERMINALS.md (this file)
-- **Files in staging**: confirmed via `git add` with explicit paths only — zero overlap with any other terminal's claim
-- **Commit ready**: user or next session may run `git commit` once T-PRELAUNCH-HARDENING releases
-- **NOT touching**: any src-tauri/src/** file, any migrations, any src/components/**, db/sources.rs. Rust integration deferred to Phase 2 follow-up commit.
+- **Commit Lock**: HELD
+- **Glyph repo**: D:\runyourempire\glyph — COMMITTED (74cba31 wave 1 foundation, 9d4c609 wave 2 Phase 2 harness + tokenizer). 55 files total, 35 tests passing.
+- **Files staging for 4DA commit (docs-only)**: CLAUDE.md (+49 lines Glyph section), docs/glyph/GEP-SPEC.md, GEP-SAFETY.md, GEP-INTEGRATION.md, GEP-ALPHABET.md, .claude/TERMINALS.md (this file)
+- **NOT touching**: any src-tauri/src/** file, any migrations, any src/components/**, db/sources.rs. Rust integration deferred to Phase 2 follow-up commit — harness crate at D:\runyourempire\glyph\crates\glyph-integration-harness is the drop-in template.
 
 ### T-PRELAUNCH-HARDENING — DONE (wave 1+2+3 in HEAD)
 - **Status**: done

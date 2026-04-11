@@ -155,6 +155,48 @@ Do NOT record the same decision in all three. Route by purpose. AWE is for decis
 **AWE binary:** `D:\runyourempire\awe\target\release\awe.exe`
 **Wisdom database:** `%APPDATA%\awe\wisdom.db` (87 decisions, 1 validated principle, compounding)
 
+## Glyph Envelope Protocol (GEP)
+
+GEP is a typed semantic envelope for inter-agent communication. It wraps natural-language payloads with a fixed 6-glyph header (source · confidence · action · domain · reversibility · risk) so broker routing becomes machine-trivial while payloads stay fully human-readable.
+
+**Strong form only.** Glyphs are the envelope, NL is the payload. Agents still reason in natural language. GEP just labels what they emit.
+
+**Repository:** `D:\runyourempire\glyph` (standalone Rust workspace, Apache 2.0)
+**Dictionary:** 60 glyphs across 8 categories, hash-locked via blake3
+**Crates:** glyph-core, glyph-engine, glyph-compile, glyph-lift, glyph-safety, glyph-cli
+
+**9 safety gates** (all load-bearing, non-optional):
+
+1. Roundtrip invariant — every envelope compiles to non-empty NL, property-tested
+2. Payload invariant — payloads cannot contain glyphs (anti-steganography)
+3. Anti-steg statistical monitor — per-agent frequency divergence flagging
+4. Capability declaration — agents register which glyphs they may emit
+5. Reversibility gate — `⟲` and `🔒` envelopes route through AWE consequence scan
+6. Mandatory human ACK — `🔴` `⬛` `🔒` `✋` envelopes block until human ACK
+7. Dual-form audit log — wire + compiled NL, always written (even for rejections)
+8. Dictionary version gate — hard mismatch error, no compatibility mode
+9. Semantic drift detector — weekly recompile of stored envelopes vs current dict
+
+**When to use GEP tools (once Phase 2 lands):**
+- Agents emit envelopes alongside NL for all inter-agent messages once opted in
+- Broker routes envelopes by glyph headers without LLM involvement
+- Destructive (`🔒`) or alerting (`🔴`) actions auto-trigger Wisdom Gate 2 + AWE
+- Audit log surfaces in the Compound Intelligence dashboard
+
+**Rollout phases:**
+- Phase 0 — spec + tokenizer measurement ✅
+- Phase 1 — Rust crate with 30+ tests ✅
+- Phase 2 — audit-only mode in 4DA (follow-up commit, adds `glyph_audit` table + `glyph_integration` module behind a `glyph_audit` cargo feature flag)
+- Phase 3 — first opt-in agent (`gotcha-detector`)
+- Phase 4 — broker routing by glyph
+- Phase 5 — safety hardening (real AWE + UI bridges)
+- Phase 6 — compound measurement + AWE feedback loop
+
+**Kill gates:** Phase 2 aborts if compression ratio <30% or categorical coverage <50%. The crate stays as reference material; the 4DA integration is reverted cleanly.
+
+**Docs in 4DA:** `docs/glyph/GEP-SPEC.md`, `GEP-SAFETY.md`, `GEP-INTEGRATION.md`, `GEP-ALPHABET.md`
+**Canonical spec:** `D:\runyourempire\glyph\docs\SPEC.md` (dual-licensed CC-BY-4.0)
+
 ## Claude-Specific
 
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
