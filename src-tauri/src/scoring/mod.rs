@@ -110,4 +110,8 @@ pub(crate) struct ScoringContext {
     // Diagnostic: populated for scoring introspection
     #[allow(dead_code)] // Reason: diagnostic field for scoring introspection
     pub dominant_persona: Option<(usize, f32)>,
+    /// User's professional role from onboarding (developer, security, devops, data, manager)
+    pub user_role: Option<String>,
+    /// User's experience level (learning, building, leading, architecting)
+    pub experience_level: Option<String>,
 }
