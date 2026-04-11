@@ -30,13 +30,17 @@ function persistDisclosure(data: PersistedDisclosure): void {
   } catch { /* ignore quota errors */ }
 }
 
-type ViewId = 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console';
+type ViewId = 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots';
 
-const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
+// CANONICAL SOURCE: What setActiveView will ACCEPT per tier.
+// MUST stay in sync with TIER_VIEWS in src/components/ViewTabBar.tsx.
+// Exported for the consistency test at src/components/__tests__/tier-views-consistency.test.ts.
+// If they diverge, tabs show up visually but clicking them silently fails.
+export const UI_SLICE_TIER_VIEWS: Record<ViewTier, ViewId[]> = {
   core: ['briefing', 'chapters', 'results', 'playbook'],
-  explorer: ['briefing', 'chapters', 'results', 'playbook', 'insights'],
-  invested: ['briefing', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
-  power: ['briefing', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+  explorer: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights'],
+  invested: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
+  power: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const TIER_ORDER: ViewTier[] = ['core', 'explorer', 'invested', 'power'];
@@ -67,7 +71,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set, get)
   setActiveView: (view) => {
     const { viewTier, showAllViews } = get();
     if (!showAllViews) {
-      const allowed = TIER_VIEWS[viewTier];
+      const allowed = UI_SLICE_TIER_VIEWS[viewTier];
       if (!allowed.includes(view as ViewId)) return;
     }
     set({ activeView: view });
