@@ -83,9 +83,36 @@ export const Momentum = memo(function Momentum() {
       if (histR.status === 'fulfilled') setHistory(histR.value as number[]);
       if (chainsR.status === 'fulfilled') setChains(chainsR.value as SignalChainWithPrediction[]);
       if (aweR.status === 'fulfilled') {
+        // run_awe_recall returns the PLAIN TEXT output of `awe wisdom -d <domain>`.
+        // The previous code tried JSON.parse and silently fell back to null for every
+        // user (the real AWE CLI never emitted JSON for this command), which is why
+        // the flagship AWE panel has looked static for a week. Parse the text format:
+        // lines like "[85%] Some principle statement" under a "VALIDATED PRINCIPLES"
+        // or "CANDIDATE PRINCIPLES" section header.
         try {
-          const parsed = typeof aweR.value === 'string' ? JSON.parse(aweR.value) : aweR.value;
-          setAweData(parsed as { principles?: string[] });
+          const raw = typeof aweR.value === 'string' ? aweR.value : String(aweR.value);
+          const principles: string[] = [];
+          let inPrincipleSection = false;
+          for (const line of raw.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (trimmed.includes('VALIDATED PRINCIPLES') || trimmed.includes('CANDIDATE PRINCIPLES')) {
+              inPrincipleSection = true;
+              continue;
+            }
+            if (trimmed.includes('ANTI-PATTERNS') || trimmed.startsWith('---')) {
+              inPrincipleSection = false;
+              continue;
+            }
+            if (inPrincipleSection && /^\[\s*\d+\s*%?\s*\]/.test(trimmed)) {
+              const afterBracket = trimmed.split(']').slice(1).join(']').trim();
+              if (afterBracket.length > 0
+                  && !afterBracket.startsWith('Evidence')
+                  && !afterBracket.startsWith('Status')) {
+                principles.push(afterBracket);
+              }
+            }
+          }
+          setAweData({ principles });
         } catch { setAweData(null); }
       }
       if (workR.status === 'fulfilled') {
