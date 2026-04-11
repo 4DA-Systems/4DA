@@ -174,12 +174,23 @@ function updateOpsState(modifiedFiles, recentCommits) {
   try {
     const state = loadOpsState();
 
-    // Bug fix detection
-    const bugFixCommits = recentCommits.filter(c => FIX_PATTERNS.test(c));
-    if (bugFixCommits.length > 0) {
+    // Bug fix detection — only flag commits that haven't already been scanned
+    // by an earlier immune-system run. `scannedBugFixCommits` is a set of
+    // commit SHAs (or first-token of commit summary) that have already had
+    // an antibody recorded; we skip them to prevent the flag from re-firing
+    // every session for the same commit.
+    state.scannedBugFixCommits = state.scannedBugFixCommits || [];
+    const scannedSet = new Set(state.scannedBugFixCommits);
+    const allBugFixCommits = recentCommits.filter(c => FIX_PATTERNS.test(c));
+    const newBugFixCommits = allBugFixCommits.filter(c => {
+      // Match by commit short SHA (first whitespace-separated token).
+      const sha = (c.split(/\s+/)[0] || '').trim();
+      return sha && !scannedSet.has(sha);
+    });
+    if (newBugFixCommits.length > 0) {
       state.immuneScanPending = true;
       state.immuneContext = {
-        commits: bugFixCommits,
+        commits: newBugFixCommits,
         files: modifiedFiles.map(f => f.file),
         timestamp: new Date().toISOString(),
       };

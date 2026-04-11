@@ -231,6 +231,47 @@ function buildBriefing(state) {
     instructions.push('Run immune scan: /ops immune');
   }
 
+  // Recent antibodies — surface the most recent 3 by mtime so this session
+  // remembers the latest learned-from-failure patterns. Antibodies live in
+  // .claude/wisdom/antibodies/ as markdown files with the pattern name as
+  // the H1 heading. We display the heading + the first ~80 chars of the
+  // first paragraph so the LLM gets enough context to apply the rule
+  // without having to read the whole file.
+  try {
+    const antibodyDir = path.join(__dirname, '..', 'wisdom', 'antibodies');
+    if (fs.existsSync(antibodyDir)) {
+      const files = fs.readdirSync(antibodyDir)
+        .filter(f => f.endsWith('.md'))
+        .map(f => ({
+          file: f,
+          path: path.join(antibodyDir, f),
+          mtime: fs.statSync(path.join(antibodyDir, f)).mtime,
+        }))
+        .sort((a, b) => b.mtime - a.mtime)
+        .slice(0, 3);
+      if (files.length > 0) {
+        lines.push('');
+        lines.push('ACTIVE ANTIBODIES (recent learned-from-failure patterns):');
+        for (const f of files) {
+          try {
+            const content = fs.readFileSync(f.path, 'utf-8');
+            // Extract H1 heading (usually "# Antibody: <name>")
+            const h1Match = content.match(/^#\s+(.+)$/m);
+            const title = h1Match ? h1Match[1].trim() : f.file.replace(/\.md$/, '');
+            // Extract first non-heading paragraph as a one-line summary
+            const paraMatch = content.match(/^([^#\n].{20,})$/m);
+            const summary = paraMatch ? paraMatch[1].slice(0, 100).trim() : '';
+            lines.push(`  - ${title}`);
+            if (summary) {
+              lines.push(`    ${summary}${summary.length >= 100 ? '...' : ''}`);
+            }
+          } catch (_) {}
+        }
+        lines.push(`  (full antibodies in .claude/wisdom/antibodies/)`);
+      }
+    }
+  } catch (_) {}
+
   // Instructions
   if (instructions.length > 0) {
     lines.push('');
