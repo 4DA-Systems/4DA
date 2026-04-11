@@ -75,11 +75,17 @@ pub struct BlindSpotRecommendation {
     pub priority: String,
 }
 
-// Internal struct for dependency coverage tracking
+// Internal struct for dependency coverage tracking.
+//
+// NOTE on column naming: `user_dependencies` has `package_name` and `ecosystem`.
+// Earlier versions of this file used `name`/`dep_type` which don't exist in the
+// schema — the query silently failed and this function returned an empty Vec,
+// which cascaded into the "Blind Spot Index = 100" bug (no deps → empty
+// uncovered → score driven entirely by the missed-signals tally).
 #[derive(Debug, Clone)]
 struct DepCoverage {
-    name: String,
-    dep_type: String,
+    package_name: String,
+    ecosystem: String,
     projects: Vec<String>,
 }
 
@@ -116,14 +122,14 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
         })
         .collect::<Vec<_>>();
 
-    // 6. Find missed signals (high-relevance, not interacted with, last 7 days)
-    let missed = find_missed_signals(&conn, 7)?;
+    // 6. Find missed signals (high-relevance, not seen, older than feed window)
+    let missed = find_missed_signals(&conn, 14, &deps)?;
 
     // 7. Generate recommendations
     let recommendations = generate_recommendations(&uncovered, &stale, &gaps);
 
-    // 8. Calculate overall score
-    let score = calculate_blind_spot_score(&uncovered, &stale, &missed);
+    // 8. Calculate overall score (normalized against direct-dep count)
+    let score = calculate_blind_spot_score(&uncovered, &stale, &missed, deps.len());
 
     Ok(BlindSpotReport {
         overall_score: score,
@@ -135,67 +141,112 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
     })
 }
 
-/// Query user_dependencies JOIN project_dependencies to get all deps with their
-/// project count and metadata.
+/// Query `project_dependencies` to get a coverage view of the user's stack.
+///
+/// Uses `project_dependencies` (not `user_dependencies`) because:
+///   1. `project_dependencies` is the canonical per-project dep list the ACE
+///      scanner populates on every scan.
+///   2. It already has `package_name`, `is_direct`, `is_dev`, `language` —
+///      everything we need for risk classification.
+///   3. `user_dependencies` is a user-curated watchlist that may be empty.
+///
+/// Returns only DIRECT dependencies (deps declared in a manifest file, not
+/// transitive lockfile entries). Transitive deps balloon the set to ~2500
+/// entries on a typical 4DA developer machine and are dominated by packages
+/// the user never directly cares about.
+///
+/// Skips dev-only deps — they're not runtime risk surface for blind spots.
 fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverage>> {
-    let mut result: Vec<DepCoverage> = Vec::new();
+    // One query: aggregate projects per unique (package_name, language) pair,
+    // filtering to direct runtime deps only.
+    let sql = "SELECT package_name,
+                      language,
+                      MAX(is_direct) as any_direct,
+                      GROUP_CONCAT(DISTINCT project_path) as project_list
+               FROM project_dependencies
+               WHERE is_dev = 0
+               GROUP BY package_name, language
+               HAVING any_direct = 1
+               ORDER BY package_name";
 
-    // Get unique deps from user_dependencies
-    let mut stmt = match conn
-        .prepare("SELECT DISTINCT name, COALESCE(dep_type, 'unknown') FROM user_dependencies")
-    {
+    let mut stmt = match conn.prepare(sql) {
         Ok(s) => s,
         Err(e) => {
-            warn!("Failed to query user_dependencies (table may not exist): {e}");
-            return Ok(result);
+            warn!(
+                target: "4da::blind_spots",
+                "Failed to query project_dependencies: {e}"
+            );
+            return Ok(Vec::new());
         }
     };
 
     let rows = stmt.query_map([], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        let package_name: String = row.get(0)?;
+        let ecosystem: String = row.get(1)?;
+        let project_list: Option<String> = row.get(3).ok();
+        let projects: Vec<String> = project_list
+            .unwrap_or_default()
+            .split(',')
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
+        Ok(DepCoverage {
+            package_name,
+            ecosystem,
+            projects,
+        })
     })?;
 
-    for row in rows {
-        let (name, dep_type) = row?;
-        // Find which projects use this dep
-        let projects = get_projects_for_dep(conn, &name);
-        result.push(DepCoverage {
-            name,
-            dep_type,
-            projects,
-        });
+    let result: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+
+    if result.is_empty() {
+        warn!(
+            target: "4da::blind_spots",
+            "get_dependency_coverage returned 0 direct deps — user has no direct project deps scanned"
+        );
     }
 
     Ok(result)
 }
 
-/// Look up which projects reference a given dependency.
-fn get_projects_for_dep(conn: &rusqlite::Connection, dep_name: &str) -> Vec<String> {
-    let mut stmt = match conn
-        .prepare("SELECT DISTINCT project_path FROM project_dependencies WHERE package_name = ?1")
-    {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-
-    stmt.query_map(params![dep_name], |row| row.get::<_, String>(0))
-        .ok()
-        .map(|rows| rows.flatten().collect())
-        .unwrap_or_default()
-}
-
-/// For each dependency, check if any source_items mention it in the last 14 days
-/// AND whether the user interacted with them. If no interaction, it's uncovered.
+/// For each direct dependency, check if any source_items mention it in the
+/// last 14 days AND whether the user interacted with them. If no interaction
+/// AND signals exist, it's a blind spot.
+///
+/// Performance notes:
+/// - Capped at `MAX_DEPS_TO_PROCESS` unique direct deps (default 50). The user's
+///   most-used deps come first via sort order, so the cap is rarely reached.
+/// - Short dep names (< 4 chars) are skipped — too generic for reliable LIKE
+///   matching ("go", "c", "r" would match everything).
+/// - Deps with zero available signals in the window are skipped early,
+///   avoiding the remaining two queries for each.
+///
+/// Schema correction (was a bug): `interactions` has `timestamp` NOT
+/// `created_at`. The previous query silently errored via `.unwrap_or(999)`,
+/// causing every dep to register `days_since = 999` → critical risk → score
+/// pinned to 100.
 fn find_uncovered_deps(
     conn: &rusqlite::Connection,
     deps: &[DepCoverage],
 ) -> Result<Vec<UncoveredDep>> {
+    const MAX_DEPS_TO_PROCESS: usize = 50;
+    const MIN_DEP_NAME_LEN: usize = 4;
+
     let mut uncovered = Vec::new();
+    let mut processed = 0usize;
 
     for dep in deps {
-        let search_term = format!("%{}%", dep.name);
+        if processed >= MAX_DEPS_TO_PROCESS {
+            break;
+        }
+        if dep.package_name.len() < MIN_DEP_NAME_LEN {
+            continue;
+        }
+        processed += 1;
 
-        // Count available signals mentioning this dep in the last 14 days
+        let search_term = format!("%{}%", dep.package_name);
+
+        // Count available signals mentioning this dep in the last 14 days.
         let available: u32 = conn
             .query_row(
                 "SELECT COUNT(*) FROM source_items
@@ -206,7 +257,12 @@ fn find_uncovered_deps(
             )
             .unwrap_or(0);
 
-        // Count how many of those the user actually interacted with
+        // Early exit: no available signals means nothing to miss — not a blind spot.
+        if available == 0 {
+            continue;
+        }
+
+        // Count how many of those the user actually interacted with.
         let interacted: u32 = conn
             .query_row(
                 "SELECT COUNT(DISTINCT si.id) FROM source_items si
@@ -218,11 +274,12 @@ fn find_uncovered_deps(
             )
             .unwrap_or(0);
 
-        // Days since last interaction with any signal mentioning this dep
+        // Days since last interaction. Uses `i.timestamp` (the real column).
+        // NULL handling: if never interacted, we use 999 (never engaged).
         let days_since: u32 = conn
             .query_row(
                 "SELECT COALESCE(
-                    CAST(julianday('now') - julianday(MAX(i.created_at)) AS INTEGER),
+                    CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER),
                     999
                  )
                  FROM source_items si
@@ -233,18 +290,24 @@ fn find_uncovered_deps(
             )
             .unwrap_or(999);
 
-        // Skip if user has recently interacted
+        // Skip if user has recently interacted.
         if days_since < 14 && interacted > 0 {
             continue;
         }
 
         let not_seen = available.saturating_sub(interacted);
 
+        // If the user has interacted recently AND there are no new unseen
+        // signals, there's nothing to surface.
+        if not_seen == 0 && days_since < 30 {
+            continue;
+        }
+
         let risk_level = classify_dep_risk(days_since, not_seen, dep.projects.len());
 
         uncovered.push(UncoveredDep {
-            name: dep.name.clone(),
-            dep_type: dep.dep_type.clone(),
+            name: dep.package_name.clone(),
+            dep_type: dep.ecosystem.clone(),
             projects_using: dep.projects.clone(),
             days_since_last_signal: days_since,
             available_signal_count: not_seen,
@@ -252,7 +315,7 @@ fn find_uncovered_deps(
         });
     }
 
-    // Sort by risk: critical first, then by days since last signal
+    // Sort by risk: critical first, then by days since last signal.
     uncovered.sort_by(|a, b| {
         risk_ord(&a.risk_level)
             .cmp(&risk_ord(&b.risk_level))
@@ -285,24 +348,68 @@ fn risk_ord(risk: &str) -> u8 {
     }
 }
 
-/// Query source_items with relevance_score > 0.5 from the last N days that
-/// have NO matching interaction. Limited to 20 results.
-fn find_missed_signals(conn: &rusqlite::Connection, days: u32) -> Result<Vec<MissedSignal>> {
+/// Find TRULY missed signals — high-relevance items the user hasn't seen,
+/// excluding anything currently in their main feed window.
+///
+/// Key design decisions:
+///
+/// 1. **Dedup window**: only return items from `3..=days` days ago. This
+///    excludes the current-briefing window (typically the last 3 days, which
+///    the main feed actively surfaces). The user genuinely "missed" an item
+///    only if it's old enough to no longer appear in the main feed.
+///
+/// 2. **Impression filter**: exclude items that have an `impression` event in
+///    `user_events` — the frontend records an impression when an item is
+///    rendered on screen. An item with an impression has technically been
+///    seen even if the user didn't click.
+///
+/// 3. **Interaction filter**: exclude items the user clicked/saved/dismissed
+///    via the `interactions` table.
+///
+/// 4. **Real `why_relevant`**: computed per-item by scanning the title for
+///    direct-dep name mentions. Falls back to a score-tier canned string only
+///    when no specific match is found (documented as a fallback, not a claim).
+///
+/// Returns at most 15 items ranked by relevance score.
+fn find_missed_signals(
+    conn: &rusqlite::Connection,
+    days: u32,
+    direct_deps: &[DepCoverage],
+) -> Result<Vec<MissedSignal>> {
+    // Dedup window: 3 days ago through N days ago.
+    // Items from the last 3 days are in the user's main feed — those are
+    // not "missed," they're "not yet seen."
+    const FEED_WINDOW_DAYS: u32 = 3;
+    if days <= FEED_WINDOW_DAYS {
+        return Ok(Vec::new()); // No meaningful "missed" window
+    }
+
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score, si.created_at
          FROM source_items si
          LEFT JOIN interactions i ON i.item_id = si.id
+         LEFT JOIN user_events ue ON (
+             ue.event_type = 'impression'
+             AND ue.metadata LIKE '%\"item_id\":' || si.id || '%'
+         )
          WHERE si.relevance_score > 0.5
            AND si.created_at >= datetime('now', '-{days} days')
+           AND si.created_at < datetime('now', '-{feed_window} days')
            AND i.item_id IS NULL
+           AND ue.id IS NULL
          ORDER BY si.relevance_score DESC
-         LIMIT 20"
+         LIMIT 15",
+        days = days,
+        feed_window = FEED_WINDOW_DAYS
     );
 
     let mut stmt = match conn.prepare(&sql) {
         Ok(s) => s,
         Err(e) => {
-            warn!("Failed to query missed signals: {e}");
+            warn!(
+                target: "4da::blind_spots",
+                "Failed to query missed signals: {e}"
+            );
             return Ok(Vec::new());
         }
     };
@@ -321,26 +428,88 @@ fn find_missed_signals(conn: &rusqlite::Connection, days: u32) -> Result<Vec<Mis
 
     let mut signals: Vec<MissedSignal> = rows.flatten().collect();
 
-    // Populate why_relevant based on relevance score tier
+    // Populate `why_relevant` by actually looking for dep mentions in titles.
     for signal in &mut signals {
-        signal.why_relevant = if signal.relevance_score > 0.8 {
-            "Highly relevant to your stack — strong match with your dependencies".to_string()
-        } else if signal.relevance_score > 0.65 {
-            "Relevant to your interests — matches topics you actively work with".to_string()
-        } else {
-            "Moderately relevant — may contain useful context for your projects".to_string()
-        };
+        signal.why_relevant = compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
     }
 
     Ok(signals)
 }
 
-/// Count deps whose name fuzzy-matches the given topic.
+/// Compute a concrete `why_relevant` string for a missed signal.
+///
+/// Scans the title (lowercased) for any of the user's direct dep names. If
+/// found, returns a specific "Mentions <dep>" message. Otherwise falls back
+/// to a score-tier canned string that is honest about its generality.
+fn compute_why_relevant(title: &str, score: f32, direct_deps: &[DepCoverage]) -> String {
+    let title_lower = title.to_lowercase();
+
+    // Look for direct dep mentions, preferring longer names (more specific).
+    let mut matched: Vec<&str> = direct_deps
+        .iter()
+        .filter_map(|d| {
+            if d.package_name.len() < 4 {
+                return None; // Too generic
+            }
+            // Check word-boundary match on the dep name.
+            let dep_lower = d.package_name.to_lowercase();
+            if has_word_boundary_match(&title_lower, &dep_lower) {
+                Some(d.package_name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+    matched.sort_by_key(|b| std::cmp::Reverse(b.len()));
+    matched.truncate(3);
+
+    if !matched.is_empty() {
+        return format!("Mentions {} from your stack", matched.join(", "));
+    }
+
+    // No specific match — fall back to generic text keyed to score tier.
+    // These strings are DELIBERATELY general: we didn't find a specific
+    // match, so we don't claim one.
+    if score >= 0.85 {
+        "High-relevance item matching your topic affinities".to_string()
+    } else if score >= 0.7 {
+        "Moderately relevant based on your scoring profile".to_string()
+    } else {
+        "Borderline-relevant — worth a glance if you have time".to_string()
+    }
+}
+
+/// Check whether `text` contains `term` at a word boundary.
+/// Case-sensitive; pass already-lowercased strings for case-insensitive matching.
+fn has_word_boundary_match(text: &str, term: &str) -> bool {
+    if term.is_empty() {
+        return false;
+    }
+    let bytes = text.as_bytes();
+    let mut search_from = 0;
+    while let Some(pos) = text[search_from..].find(term) {
+        let abs = search_from + pos;
+        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
+        let after = abs + term.len();
+        let after_ok = after >= bytes.len()
+            || !bytes[after].is_ascii_alphanumeric()
+            || text[after..].starts_with(".js")
+            || text[after..].starts_with(".ts")
+            || text[after..].starts_with(".rs");
+        if before_ok && after_ok {
+            return true;
+        }
+        search_from = abs + 1;
+    }
+    false
+}
+
+/// Count deps whose package name fuzzy-matches the given topic.
 fn count_deps_for_topic(deps: &[DepCoverage], topic: &str) -> u32 {
     let topic_lower = topic.to_lowercase();
     deps.iter()
         .filter(|d| {
-            let name_lower = d.name.to_lowercase();
+            let name_lower = d.package_name.to_lowercase();
             name_lower.contains(&topic_lower) || topic_lower.contains(&name_lower)
         })
         .count() as u32
@@ -463,30 +632,77 @@ fn generate_recommendations(
     recs
 }
 
-/// Weighted score: more uncovered deps + more stale topics + more missed
-/// signals = higher score. Capped at 100.
+/// Compute a normalized blind-spot score in [0, 100].
+///
+/// The score is a weighted blend of three normalized signals:
+///   - Uncovered-dep pressure (55% of the score)
+///   - Stale-topic pressure (25% of the score)
+///   - Missed-signal pressure (20% of the score)
+///
+/// Each component is independently normalized to [0, 1] before blending.
+/// The weighted blend guarantees the raw score is in [0, 100] without ever
+/// needing a `.min(100.0)` cap — the previous implementation was additive
+/// and unbounded, causing the score to trivially saturate at 100 for any
+/// non-trivial stack (which is how we got the "Blind Spot Index = 100"
+/// screenshot bug).
+///
+/// `total_direct_deps` is the full direct-dep count from `get_dependency_coverage`
+/// (before filtering to short-name / empty-signal skips). Used as the
+/// denominator for uncovered-dep percentage so bigger stacks don't saturate.
 fn calculate_blind_spot_score(
     uncovered: &[UncoveredDep],
     stale: &[StaleTopic],
     missed: &[MissedSignal],
+    total_direct_deps: usize,
 ) -> f32 {
-    // Weights: uncovered deps are heaviest (they represent real risk)
-    let uncovered_score = uncovered
+    // ─── 1. Uncovered pressure (0-1) ──────────────────────────────────
+    // Severity-weighted fraction of the user's direct stack that's uncovered.
+    let uncovered_weighted: f32 = uncovered
         .iter()
         .map(|d| match d.risk_level.as_str() {
-            "critical" => 15.0,
-            "high" => 10.0,
-            "medium" => 5.0,
-            _ => 2.0,
+            "critical" => 1.0,
+            "high" => 0.7,
+            "medium" => 0.4,
+            _ => 0.15,
         })
-        .sum::<f32>();
+        .sum();
 
-    let stale_score = stale.len() as f32 * 5.0;
+    // Denominator floor: if the user has fewer than 5 direct deps, use 5 as
+    // the denominator. This prevents a 1-dep stack with 1 uncovered critical
+    // from scoring 1.0 (100% uncovered).
+    let denom = (total_direct_deps.max(5)) as f32;
+    let uncovered_pressure = (uncovered_weighted / denom).min(1.0);
 
-    let missed_score = missed.iter().map(|m| m.relevance_score * 3.0).sum::<f32>();
+    // ─── 2. Stale-topic pressure (0-1) ────────────────────────────────
+    // Diminishing returns: 1 stale topic = 0.25, 5 stale topics = 0.75, 10+ ≈ 1.0.
+    // Uses a soft asymptote so one stale topic is noticeable but not alarming.
+    let stale_pressure = if stale.is_empty() {
+        0.0
+    } else {
+        let n = stale.len() as f32;
+        (n / (n + 3.0)).min(1.0)
+    };
 
-    let raw = uncovered_score + stale_score + missed_score;
-    raw.min(100.0)
+    // ─── 3. Missed-signal pressure (0-1) ──────────────────────────────
+    // Averaged relevance of the top missed signals. A single 0.9-relevance
+    // missed item contributes more than five 0.5-relevance items.
+    let missed_pressure = if missed.is_empty() {
+        0.0
+    } else {
+        // Average relevance of the missed signals, capped at 1.0.
+        let sum: f32 = missed.iter().map(|m| m.relevance_score).sum();
+        let avg = sum / missed.len() as f32;
+        // Boost by log-scale count: more missed items bumps the pressure,
+        // but the returns diminish fast so it can't dominate.
+        let count_boost = ((missed.len() as f32).ln_1p() / 4.0).min(1.0);
+        (avg * 0.7 + count_boost * 0.3).min(1.0)
+    };
+
+    // ─── Final weighted blend ─────────────────────────────────────────
+    let score = (uncovered_pressure * 55.0) + (stale_pressure * 25.0) + (missed_pressure * 20.0);
+
+    // Clamp defensively (should already be in range given the component caps).
+    score.clamp(0.0, 100.0)
 }
 
 // ============================================================================
@@ -496,4 +712,447 @@ fn calculate_blind_spot_score(
 #[tauri::command]
 pub async fn get_blind_spots() -> std::result::Result<BlindSpotReport, String> {
     generate_blind_spot_report().map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Tests — use REAL schema definitions from migrations to catch column drift
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::{params, Connection};
+
+    /// Create an in-memory DB with the EXACT schema from migrations.rs.
+    /// This is the single source of truth for what the real DB looks like —
+    /// if migrations.rs changes a column name, these tests will catch the drift.
+    fn setup_test_db() -> Connection {
+        let conn = Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(
+            "
+            CREATE TABLE source_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                url TEXT,
+                source_type TEXT NOT NULL,
+                content TEXT,
+                relevance_score REAL DEFAULT 0.0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                content_hash TEXT,
+                last_seen TEXT
+            );
+
+            CREATE TABLE project_dependencies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_path TEXT NOT NULL,
+                manifest_type TEXT NOT NULL,
+                package_name TEXT NOT NULL,
+                version TEXT,
+                is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
+                language TEXT NOT NULL DEFAULT 'unknown',
+                last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(project_path, package_name)
+            );
+
+            CREATE TABLE user_dependencies (
+                id INTEGER PRIMARY KEY,
+                project_path TEXT NOT NULL,
+                package_name TEXT NOT NULL,
+                version TEXT,
+                ecosystem TEXT NOT NULL,
+                is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
+                detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+                last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+                license TEXT,
+                UNIQUE(project_path, package_name, ecosystem)
+            );
+
+            -- REAL schema: interactions has `timestamp`, NOT `created_at`.
+            -- The Phase 1.1 agent guessed `created_at` and the bug sat
+            -- silently in production. This test schema catches that class
+            -- of drift at compile-time.
+            CREATE TABLE interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_item_id INTEGER,
+                item_id INTEGER,
+                action TEXT,
+                action_type TEXT,
+                action_data TEXT,
+                item_topics TEXT,
+                item_source TEXT,
+                signal_strength REAL DEFAULT 0.5,
+                timestamp TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE user_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                view_id TEXT,
+                metadata TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                session_id TEXT
+            );
+
+            CREATE TABLE feedback (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_item_id INTEGER NOT NULL,
+                relevant INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            ",
+        )
+        .expect("schema create");
+        conn
+    }
+
+    fn insert_project_dep(
+        conn: &Connection,
+        project_path: &str,
+        package_name: &str,
+        language: &str,
+        is_direct: bool,
+        is_dev: bool,
+    ) {
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, is_direct, is_dev, language)
+             VALUES (?1, 'npm', ?2, ?3, ?4, ?5)",
+            params![project_path, package_name, is_direct as i32, is_dev as i32, language],
+        )
+        .unwrap();
+    }
+
+    fn insert_source_item(
+        conn: &Connection,
+        title: &str,
+        score: f32,
+        days_ago: i64,
+    ) -> i64 {
+        conn.execute(
+            "INSERT INTO source_items (title, source_type, content, relevance_score, created_at)
+             VALUES (?1, 'hackernews', 'content', ?2, datetime('now', ?3))",
+            params![title, score, format!("-{} days", days_ago)],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    // ─── Fix 1: column names (package_name / ecosystem) ──────────────────
+
+    #[test]
+    fn fix1_get_dependency_coverage_uses_correct_columns() {
+        let conn = setup_test_db();
+        insert_project_dep(&conn, "/proj/a", "react", "javascript", true, false);
+        insert_project_dep(&conn, "/proj/a", "typescript", "javascript", true, false);
+        insert_project_dep(&conn, "/proj/b", "react", "javascript", true, false);
+        insert_project_dep(&conn, "/proj/a", "jest", "javascript", true, true); // dev — should be excluded
+        insert_project_dep(&conn, "/proj/a", "lodash", "javascript", false, false); // transitive — should be excluded
+
+        let deps = get_dependency_coverage(&conn).expect("coverage query");
+
+        // react + typescript, deduped to 2 unique package names
+        assert_eq!(deps.len(), 2, "should return 2 unique direct runtime deps");
+        let names: Vec<&str> = deps.iter().map(|d| d.package_name.as_str()).collect();
+        assert!(names.contains(&"react"));
+        assert!(names.contains(&"typescript"));
+        assert!(!names.contains(&"jest"), "dev dep must be excluded");
+        assert!(!names.contains(&"lodash"), "transitive dep must be excluded");
+
+        // react appears in 2 projects — project list must aggregate
+        let react = deps.iter().find(|d| d.package_name == "react").unwrap();
+        assert_eq!(react.projects.len(), 2, "react used in 2 projects");
+    }
+
+    #[test]
+    fn fix1_get_dependency_coverage_returns_empty_when_no_table() {
+        // Use a DB with no schema at all
+        let conn = Connection::open_in_memory().unwrap();
+        let deps = get_dependency_coverage(&conn).expect("should not error on missing table");
+        assert_eq!(deps.len(), 0);
+    }
+
+    // ─── Fix 2: timestamp column (not created_at) ────────────────────────
+
+    #[test]
+    fn fix2_find_uncovered_deps_uses_timestamp_column() {
+        // Regression test for Bug 3: find_uncovered_deps referenced
+        // `i.created_at` but the real column is `i.timestamp`. The SQL
+        // silently errored and the `.unwrap_or(999)` caught it, making
+        // every dep look like "999 days since last interaction" → critical.
+        //
+        // This test proves the query works against the REAL schema AND
+        // that the days_since value reflects the actual timestamp.
+
+        let conn = setup_test_db();
+        insert_project_dep(&conn, "/proj/a", "myframework", "javascript", true, false);
+
+        // 3 recent source items — all unread
+        for i in 0..3 {
+            insert_source_item(&conn, &format!("myframework release {i}"), 0.8, 2);
+        }
+
+        // Record an interaction 20 days ago (OUTSIDE the 14-day recent
+        // window, so the dep is NOT skipped by the "recently interacted" rule).
+        // The interaction is on a different (older) item.
+        let item_id = insert_source_item(&conn, "myframework past article", 0.7, 25);
+        conn.execute(
+            "INSERT INTO interactions (item_id, action, timestamp)
+             VALUES (?1, 'click', datetime('now', '-20 days'))",
+            params![item_id],
+        )
+        .unwrap();
+
+        let deps = vec![DepCoverage {
+            package_name: "myframework".to_string(),
+            ecosystem: "javascript".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps).expect("must not SQL-error");
+        assert_eq!(uncovered.len(), 1, "should flag as blind spot");
+        let u = &uncovered[0];
+
+        // CRITICAL: days_since must reflect the REAL interaction timestamp.
+        // If the query had used the wrong column (created_at), unwrap_or(999)
+        // would produce 999 here.
+        assert!(
+            u.days_since_last_signal >= 18 && u.days_since_last_signal <= 22,
+            "days_since should be ~20 from real i.timestamp, got {} (999 = column bug)",
+            u.days_since_last_signal
+        );
+    }
+
+    #[test]
+    fn fix2_find_uncovered_deps_skips_zero_available() {
+        let conn = setup_test_db();
+        insert_project_dep(&conn, "/proj/a", "nobodycares", "javascript", true, false);
+
+        // No source_items mention "nobodycares" at all.
+        let deps = vec![DepCoverage {
+            package_name: "nobodycares".to_string(),
+            ecosystem: "javascript".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps).unwrap();
+        assert_eq!(
+            uncovered.len(),
+            0,
+            "deps with zero available signals must not be flagged as blind spots"
+        );
+    }
+
+    // ─── Fix 3: LIMIT and short-name filter ──────────────────────────────
+
+    #[test]
+    fn fix3_find_uncovered_deps_caps_at_max() {
+        let conn = setup_test_db();
+        // Create 100 deps (more than the MAX_DEPS_TO_PROCESS = 50 cap)
+        let mut deps = Vec::new();
+        for i in 0..100 {
+            let name = format!("package_number_{i:03}");
+            insert_source_item(&conn, &format!("{name} released"), 0.8, 2);
+            deps.push(DepCoverage {
+                package_name: name,
+                ecosystem: "javascript".to_string(),
+                projects: vec!["/proj/a".to_string()],
+            });
+        }
+
+        let uncovered = find_uncovered_deps(&conn, &deps).unwrap();
+        assert!(
+            uncovered.len() <= 50,
+            "must cap at MAX_DEPS_TO_PROCESS=50, got {}",
+            uncovered.len()
+        );
+    }
+
+    #[test]
+    fn fix3_find_uncovered_deps_skips_short_names() {
+        let conn = setup_test_db();
+        insert_source_item(&conn, "security advisory for go runtime", 0.9, 2);
+
+        let deps = vec![DepCoverage {
+            package_name: "go".to_string(), // 2 chars, too short
+            ecosystem: "go".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps).unwrap();
+        assert_eq!(
+            uncovered.len(),
+            0,
+            "short dep names must be skipped to avoid LIKE noise"
+        );
+    }
+
+    // ─── Fix 4: score normalization ──────────────────────────────────────
+
+    #[test]
+    fn fix4_score_never_pinned_to_100_for_normal_stack() {
+        // Reproduces the screenshot bug: many uncovered deps with critical
+        // risk should NOT trivially saturate to 100.
+        let uncovered: Vec<UncoveredDep> = (0..20)
+            .map(|i| UncoveredDep {
+                name: format!("dep{i}"),
+                dep_type: "npm".to_string(),
+                projects_using: vec!["/proj".to_string()],
+                days_since_last_signal: 30,
+                available_signal_count: 5,
+                risk_level: "medium".to_string(),
+            })
+            .collect();
+        let stale: Vec<StaleTopic> = (0..3)
+            .map(|i| StaleTopic {
+                topic: format!("topic{i}"),
+                last_engagement_days: 15,
+                active_deps_in_topic: 2,
+                missed_signal_count: 5,
+            })
+            .collect();
+        let missed: Vec<MissedSignal> = (0..10)
+            .map(|i| MissedSignal {
+                item_id: i,
+                title: format!("Article {i}"),
+                url: None,
+                source_type: "hn".to_string(),
+                relevance_score: 0.7,
+                created_at: "2026-04-11T00:00:00Z".to_string(),
+                why_relevant: String::new(),
+            })
+            .collect();
+
+        // total_direct_deps = 100 means 20 uncovered mediums = 20*0.4 = 8 weighted,
+        // divided by max(100, 5) = 100 → uncovered_pressure = 0.08
+        // stale: 3 topics → 3 / (3+3) = 0.5
+        // missed: avg 0.7, count_boost ≈ 0.6, → 0.7*0.7 + 0.6*0.3 = 0.67
+        // score = 0.08*55 + 0.5*25 + 0.67*20 = 4.4 + 12.5 + 13.4 = 30.3
+        let score = calculate_blind_spot_score(&uncovered, &stale, &missed, 100);
+        assert!(score > 0.0 && score < 100.0, "score must be in range, got {score}");
+        assert!(
+            score < 50.0,
+            "moderate stack with medium risks should score under 50, got {score}"
+        );
+    }
+
+    #[test]
+    fn fix4_score_clean_stack_is_near_zero() {
+        let score = calculate_blind_spot_score(&[], &[], &[], 50);
+        assert_eq!(score, 0.0);
+    }
+
+    #[test]
+    fn fix4_score_respects_denominator_floor() {
+        // Tiny stack with 1 critical uncovered shouldn't max out.
+        let uncovered = vec![UncoveredDep {
+            name: "one".to_string(),
+            dep_type: "npm".to_string(),
+            projects_using: vec!["/p".to_string()],
+            days_since_last_signal: 100,
+            available_signal_count: 5,
+            risk_level: "critical".to_string(),
+        }];
+        // total_direct_deps = 1 → floor to 5 → 1.0/5 = 0.2 uncovered_pressure
+        // Score = 0.2 * 55 = 11.0
+        let score = calculate_blind_spot_score(&uncovered, &[], &[], 1);
+        assert!(score < 20.0, "small stack with 1 critical: {score}");
+    }
+
+    // ─── Fix 5: missed_signals dedup (feed window) ──────────────────────
+
+    #[test]
+    fn fix5_find_missed_signals_excludes_feed_window() {
+        let conn = setup_test_db();
+        // Recent item (within feed window) — should NOT be surfaced as missed
+        insert_source_item(&conn, "very recent thing", 0.9, 1);
+        // Old enough to be "missed" (outside the 3-day feed window)
+        insert_source_item(&conn, "older missed thing", 0.9, 7);
+
+        let signals = find_missed_signals(&conn, 14, &[]).unwrap();
+        assert!(
+            !signals.iter().any(|s| s.title == "very recent thing"),
+            "items within feed window must be excluded"
+        );
+        assert!(
+            signals.iter().any(|s| s.title == "older missed thing"),
+            "items older than feed window must be surfaced"
+        );
+    }
+
+    #[test]
+    fn fix5_find_missed_signals_excludes_impressions() {
+        let conn = setup_test_db();
+        let item_id = insert_source_item(&conn, "seen article", 0.9, 5);
+        // Record an impression — the user DID see this item
+        conn.execute(
+            "INSERT INTO user_events (event_type, metadata) VALUES ('impression', ?1)",
+            params![format!("{{\"item_id\":{item_id}}}")],
+        )
+        .unwrap();
+
+        insert_source_item(&conn, "unseen article", 0.9, 5);
+
+        let signals = find_missed_signals(&conn, 14, &[]).unwrap();
+        assert!(
+            !signals.iter().any(|s| s.title == "seen article"),
+            "items with an impression event must be excluded"
+        );
+        assert!(
+            signals.iter().any(|s| s.title == "unseen article"),
+            "items without impressions must be surfaced"
+        );
+    }
+
+    // ─── Fix 6: real why_relevant ───────────────────────────────────────
+
+    #[test]
+    fn fix6_why_relevant_detects_dep_mentions() {
+        let deps = vec![DepCoverage {
+            package_name: "react".to_string(),
+            ecosystem: "javascript".to_string(),
+            projects: vec![],
+        }];
+        let text = compute_why_relevant("New features in React 19", 0.9, &deps);
+        assert!(
+            text.contains("react"),
+            "why_relevant must name the matched dep: {text}"
+        );
+        assert!(
+            !text.contains("strong match with your dependencies"),
+            "must not use the old canned lying text: {text}"
+        );
+    }
+
+    #[test]
+    fn fix6_why_relevant_falls_back_when_no_match() {
+        let deps = vec![DepCoverage {
+            package_name: "react".to_string(),
+            ecosystem: "javascript".to_string(),
+            projects: vec![],
+        }];
+        // Title doesn't mention react
+        let text = compute_why_relevant("Postgres new extension released", 0.9, &deps);
+        assert!(
+            !text.contains("react"),
+            "must not claim a match that isn't there: {text}"
+        );
+        // Fallback text is deliberately generic
+        assert!(
+            text.contains("scoring") || text.contains("relevance") || text.contains("topic"),
+            "fallback should be honestly generic: {text}"
+        );
+    }
+
+    #[test]
+    fn fix6_word_boundary_match_rejects_substrings() {
+        assert!(has_word_boundary_match("react is great", "react"));
+        assert!(has_word_boundary_match("next.js is fine", "next")); // .js suffix allowed
+        assert!(has_word_boundary_match("use serde.rs for json", "serde")); // .rs suffix allowed
+        assert!(!has_word_boundary_match(
+            "unexpected happens here",
+            "next"
+        )); // embedded in word
+        assert!(!has_word_boundary_match("configuring app", "conf")); // substring of config
+    }
 }

@@ -390,6 +390,201 @@ check('Essential Rust primitives', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
+// CHECK 9: SQL schema drift — detect bad column references
+// ═════════════════════════════════════════════════════════════════════════
+//
+// Regression guard for the 2026-04-12 incident where `blind_spots.rs`
+// referenced `user_dependencies.name` (real column: `package_name`) and
+// `interactions.created_at` (real column: `timestamp`). Both queries
+// silently errored via `.unwrap_or(...)` and the bugs sat in production
+// causing "Blind Spot Index = 100" with bogus data.
+//
+// Strategy: parse every `CREATE TABLE` in `db/migrations.rs` to build a
+// canonical schema map, then scan `.rs` files under `src-tauri/src/` for
+// SQL-ish strings that reference a column the schema doesn't have.
+//
+// This is a heuristic — it can false-positive on dynamic column names or
+// non-SQL string literals that happen to look like SQL. The check reports
+// WARN rather than FAIL for unknown-table references (common with joins
+// to runtime-only or feature-gated tables).
+check('SQL schema column drift', () => {
+  const migrationsFile = path.join(SRC_TAURI, 'db', 'migrations.rs');
+  const migContent = readFileSafe(migrationsFile);
+  if (!migContent) {
+    return { ok: true, details: 'migrations.rs not found — skipped' };
+  }
+
+  // Parse CREATE TABLE definitions into a { tableName: Set<columnName> } map.
+  // Uses a balanced-paren walker to correctly handle nested constraints
+  // like `UNIQUE(col1, col2)` inside the table body.
+  const schema = {};
+  const createStartRe = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(/gim;
+  let tm;
+  while ((tm = createStartRe.exec(migContent)) !== null) {
+    const table = tm[1];
+    // Find the matching close paren, respecting nested parens.
+    let depth = 1;
+    let i = tm.index + tm[0].length;
+    const body_start = i;
+    while (i < migContent.length && depth > 0) {
+      const ch = migContent[i];
+      if (ch === '(') depth++;
+      else if (ch === ')') depth--;
+      i++;
+    }
+    if (depth !== 0) continue; // unbalanced — skip
+    const body = migContent.slice(body_start, i - 1);
+
+    const cols = new Set();
+    for (const rawLine of body.split('\n')) {
+      const line = rawLine.trim().replace(/--.*$/, '');
+      if (!line) continue;
+      if (/^(PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|CONSTRAINT|INDEX)\b/i.test(line)) continue;
+      const colMatch = line.match(/^(\w+)\s+/);
+      if (colMatch) cols.add(colMatch[1].toLowerCase());
+    }
+    if (cols.size > 0) {
+      // If the table is redefined later (migration upgrade paths), union columns.
+      if (schema[table.toLowerCase()]) {
+        for (const c of cols) schema[table.toLowerCase()].add(c);
+      } else {
+        schema[table.toLowerCase()] = cols;
+      }
+    }
+  }
+
+  // Also include ALTER TABLE ADD COLUMN additions
+  const alterRe = /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/gim;
+  while ((tm = alterRe.exec(migContent)) !== null) {
+    const table = tm[1].toLowerCase();
+    const col = tm[2].toLowerCase();
+    if (!schema[table]) schema[table] = new Set();
+    schema[table].add(col);
+  }
+
+  // Known tables from schema
+  const knownTables = new Set(Object.keys(schema));
+
+  // Files to scan — focus on places that actually write SQL
+  const filesToScan = [];
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!['target', 'node_modules', 'tests', '__tests__'].includes(entry.name)) {
+          walk(full);
+        }
+      } else if (entry.name.endsWith('.rs') && entry.name !== 'migrations.rs') {
+        filesToScan.push(full);
+      }
+    }
+  }
+  walk(SRC_TAURI);
+
+  // Pattern: `i.created_at` or `table.column` references where
+  // the table/alias maps to a real known table.
+  //
+  // We scan for `JOIN <table> <alias> ON ... <alias>.<col>` and
+  // `FROM <table> <alias> ... <alias>.<col>` to build alias-to-table
+  // mappings, then cross-check column references.
+  //
+  // For this check we use a narrower heuristic that's reliable:
+  // scan for the specific pattern `<alias>.<col>` within an SQL-looking
+  // string literal, then check if ANY schema table contains that column.
+  // If NO table has that column, it's very likely a bug.
+
+  const issues = [];
+
+  // Extract SQL string literals (""-delimited, allowing multi-line via raw strings)
+  for (const file of filesToScan) {
+    const content = readFileSafe(file);
+    if (!content) continue;
+
+    // Find rusqlite::params + .prepare + .query_row calls — the places SQL lives.
+    // Naive regex extraction: find strings containing SELECT/INSERT/UPDATE/DELETE.
+    const sqlStringRe = /"((?:[^"\\]|\\.)*(?:SELECT|INSERT|UPDATE|DELETE|FROM|JOIN)(?:[^"\\]|\\.)*)"/gi;
+    let sm;
+    while ((sm = sqlStringRe.exec(content)) !== null) {
+      const sql = sm[1].toLowerCase();
+
+      // Pattern: JOIN <table> <alias> — record alias → table mapping
+      // Also: FROM <table> [AS] <alias>
+      const aliasMap = {};
+      const joinRe = /(?:from|join)\s+(\w+)(?:\s+(?:as\s+)?(\w+))?/gi;
+      let jm;
+      while ((jm = joinRe.exec(sql)) !== null) {
+        const table = jm[1];
+        const alias = jm[2] || table;
+        if (knownTables.has(table)) {
+          aliasMap[alias] = table;
+        }
+      }
+
+      // Find <alias>.<col> references and check them against the mapped table.
+      const refRe = /\b(\w+)\.(\w+)\b/g;
+      let rm;
+      while ((rm = refRe.exec(sql)) !== null) {
+        const alias = rm[1];
+        const col = rm[2];
+        const table = aliasMap[alias];
+        if (!table) continue; // unknown alias, skip
+        const tableCols = schema[table];
+        if (!tableCols) continue;
+        if (!tableCols.has(col)) {
+          // Check if it's a SQL function or keyword we'd misparse
+          if (['datetime', 'julianday', 'max', 'min', 'count', 'avg', 'sum', 'coalesce', 'cast'].includes(col)) continue;
+          const rel = path.relative(REPO_ROOT, file);
+          issues.push(`${rel}: SQL references "${alias}.${col}" but table "${table}" has no such column`);
+        }
+      }
+    }
+  }
+
+  // Known-issue allowlist — real bugs in files this validator has detected
+  // but that are owned by other terminals / outside this commit's scope.
+  // These should be fixed in a follow-up commit by whoever owns the file.
+  // Each entry is a substring match against the full issue string.
+  //
+  // Remove an entry when the underlying bug is fixed. Adding an entry here
+  // is a deliberate "known issue — tracked" acknowledgement, not a
+  // permanent silence.
+  const KNOWN_ISSUES = [
+    // content_personalization/temporal.rs: uses `si.source` and `si.fetched_at`
+    // but the real source_items columns are `source_type` and `created_at`.
+    // Silently failing — flagged for the content_personalization owner.
+    'content_personalization\\temporal.rs',
+    'content_personalization/temporal.rs',
+    // query/executor.rs: uses `c.content` but context_chunks column is `text`.
+    // Silently failing — flagged for the query/executor owner.
+    'query\\executor.rs',
+    'query/executor.rs',
+  ];
+
+  // Deduplicate and partition into blocking + known-issue
+  const unique = [...new Set(issues)];
+  const blocking = unique.filter(
+    (issue) => !KNOWN_ISSUES.some((known) => issue.includes(known)),
+  );
+  const tracked = unique.filter((issue) =>
+    KNOWN_ISSUES.some((known) => issue.includes(known)),
+  );
+
+  let details;
+  if (blocking.length > 0) {
+    details = `BLOCKING:\n    ` + blocking.slice(0, 10).join('\n    ');
+    if (tracked.length > 0) {
+      details += `\n    KNOWN (${tracked.length} tracked): ${tracked.length} issues allowlisted`;
+    }
+  } else if (tracked.length > 0) {
+    details = `scanned ${filesToScan.length} files × ${Object.keys(schema).length} tables — ${tracked.length} known issue(s) tracked, 0 blocking`;
+  } else {
+    details = `scanned ${filesToScan.length} files × ${Object.keys(schema).length} tables — no column drift`;
+  }
+
+  return { ok: blocking.length === 0, details };
+});
+
+// ═════════════════════════════════════════════════════════════════════════
 // Report
 // ═════════════════════════════════════════════════════════════════════════
 console.log('\n=== 4DA Wiring Validator ===\n');
