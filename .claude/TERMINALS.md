@@ -24,6 +24,13 @@
 - **Added**: scripts/cleanup-orphaned-worktrees.cjs (safe dry-run by default) + CLAUDE.md Worktree Hygiene section
 - **Reflog**: all 11 branches recoverable for 90 days
 
+### T-DOCS-HYGIENE — Strategy docs batch commit
+- **Status**: committing
+- **Commit Lock**: HELD
+- **Scope**: commit 7 orphaned docs/strategy/*.md files (created 2026-04-12 01:56-02:51, 925 lines total, coherent strategy essays series)
+- **Files**: docs/strategy/{COMPOUND-VS-CAMPAIGN,DISCERNMENT,PARALLEL-AWAKENING,RIGHT-PEOPLE-FUNNEL,SOVEREIGNTY,TWO-SURFACE-ARCHITECTURE,WISDOM-LAYER}.md
+- **NOT touching**: src-tauri/src/awe_commands.rs (T-WAR-ROOM's explicit claim)
+
 ### T-WAR-ROOM — AWE deep wiring (critical bugs + real-time + autonomous tiers)
 - **Status**: working — implementing full AWE assessment plan
 - **Prior waves** (done): d8823c5d source-balanced DB, 80433345 Wisdom Trajectory redesign, 1297a15e chapter health dots
