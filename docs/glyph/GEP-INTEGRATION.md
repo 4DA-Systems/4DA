@@ -16,27 +16,45 @@ This file tracks the 4DA-specific rollout and kill gates.
 | 5 | Anti-steg + drift hardening | Future | False positive rate >5% → retune or disable |
 | 6 | Compound measurement + AWE feedback | Future | None — steady state |
 
-### Phase 0 real measurement (2026-04-12, claude-opus-4-6)
+### Phase 0 full bake-off (2026-04-12, claude-opus-4-6)
 
-**Important: the original compression claim from the offline proxy was wrong.**
-Real Anthropic tokenizer measurement:
+**The compression claim is not just wrong — it is inverted.** The real
+measurement ran every candidate header form through Anthropic's tokenizer:
 
-- Batch amortised: **2.53 tokens/glyph** (passes ≤3 threshold)
-- Per-message baseline-corrected avg: 3.52 tokens/glyph
-- Real 6-glyph header: **28 tokens**
-- Real NL metadata equivalent: **30 tokens**
-- Savings vs NL: **6.7% — essentially parity**
+| Form | Example | Net tokens |
+|------|---------|-----------:|
+| v1.0.0 canonical glyph | `⟦🌐·◉·➜·⚙·⟲·🟡⟧` | 28 |
+| Verbose NL (old strawman) | `[web] [verified] [implies] in domain [infra] ...` | 30 |
+| v1.1 glyph no brackets | `🌐·◉·➜·⚙·⟲·🟡` | 22 |
+| v1.1 glyph prefix marker | `⟦🌐◉➜⚙⟲🟡` | 20 |
+| Bracketed NL | `[web] [verified] [implies] [infra] [partial] [caution]` | 20 |
+| key=value NL | `src=web conf=high act=implies dom=infra rev=partial risk=caution` | 20 |
+| **Best glyph form** | `🌐◉➜⚙⟲🟡` | **17** |
+| Pipe-delimited NL | `web\|high\|implies\|infra\|partial\|caution` | 13 |
+| **Best NL form** | `web high implies infra partial caution` | **8** |
 
-**The compression pitch is officially downgraded.** GEP is a typed
-routing protocol with composable safety gates, not a token-savings
-technology. When talking about GEP internally or externally, lead with:
+**The best NL form beats the best glyph form by more than 2×.** BPE is
+trained on common English words (1 token each); most emoji and math
+symbols are 2-3 tokens. Differential measurement confirmed 32 of 60
+glyphs already cost the minimum 2-3 tokens, with only one 1-token
+glyph in the entire alphabet. No dictionary engineering closes the gap.
 
-1. **Typed routing** — brokers make decisions without LLM parsing
-2. **Composable safety gates** — reversibility, human-ack, anti-steg, drift
-3. **Dual-form audit** — wire + compiled NL always stored
-4. **Capability enforcement** — per-agent manifest gating
+**The compression pitch is officially RETRACTED.** When talking about
+GEP internally or externally, lead with these (never with a compression
+number):
 
-Full measurement dataset: `D:\runyourempire\glyph\dictionary\token-measurement.json`
+1. **Visual distinctiveness** — glyphs are unmistakable in logs and dashboards
+2. **Steganography resistance** — Gate 2 requires glyphs be absent from prose
+3. **Typed routing** — brokers make decisions without LLM parsing
+4. **Composable safety gates** — reversibility, human-ack, anti-steg, drift
+5. **Dual-form audit** — wire + compiled NL always stored
+6. **Capability enforcement** — per-agent manifest gating
+
+**Absolute cost:** at ~1k envelopes/day, the extra ~9 tokens per envelope
+costs roughly **$10/year** on current Claude pricing. Negligible. Ship.
+
+**Full measurement dataset:** `D:\runyourempire\glyph\dictionary\token-measurement.json`
+**Glyph repo wave 4:** commit b0db4cb (pushed to `runyourempire/glyph`)
 
 ## Phase 2 — next commit (details)
 

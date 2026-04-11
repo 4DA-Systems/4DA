@@ -193,10 +193,12 @@ GEP is a typed semantic envelope for inter-agent communication. It wraps natural
 - Phase 5 — safety hardening (real AWE + UI bridges)
 - Phase 6 — compound measurement + AWE feedback loop
 
-**Phase 0 honest verdict (2026-04-12, claude-opus-4-6):**
-- Batch amortised per-glyph: 2.53 tokens (PASS ≤3)
-- Real 6-glyph header: 28 tokens vs NL metadata: 30 tokens = 6.7% savings (parity)
-- **Compression claim DOWNGRADED.** GEP is typed routing + composable safety gates + dual-form audit, NOT a token-savings technology. Lead with typing/routing/audit when pitching GEP, never with "5x compression."
+**Phase 0 full bake-off verdict (2026-04-12, claude-opus-4-6):**
+- v1.0.0 canonical glyph header: **28 tokens**
+- Best possible glyph form (raw concat `🌐◉➜⚙⟲🟡`): **17 tokens**
+- Space-separated NL (`web high implies infra partial caution`): **8 tokens**
+- **Plain English wins by more than 2× against the best glyph form.** BPE is trained on English words (each is 1 token); most emoji/math glyphs are 2-3 tokens. 32 of 60 glyphs already at the 2-3 token floor. No dictionary engineering fixes this.
+- **Compression claim FULLY RETRACTED.** GEP is typed routing + composable safety gates + dual-form audit + visual distinctiveness + steganography resistance. It is NOT a compression technology. Never lead with a compression number. The extra ~9 tokens/envelope costs ~$10/year at realistic 4DA volumes — a negligible premium for the real benefits.
 
 **Kill gates:** Phase 2 aborts if categorical coverage <50% or audit log growth excessive. The crate stays as reference material; the 4DA integration is reverted cleanly.
 
