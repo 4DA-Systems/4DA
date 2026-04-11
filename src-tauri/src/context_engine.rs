@@ -246,6 +246,26 @@ impl ContextEngine {
         Ok(())
     }
 
+    /// Get experience level
+    pub fn get_experience_level(&self) -> SqliteResult<Option<String>> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT experience_level FROM user_identity WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+    }
+
+    /// Set experience level
+    pub fn set_experience_level(&self, level: Option<&str>) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE user_identity SET experience_level = ?1, updated_at = datetime('now') WHERE id = 1",
+            params![level],
+        )?;
+        Ok(())
+    }
+
     /// Get tech stack
     pub fn get_tech_stack(&self) -> SqliteResult<Vec<String>> {
         let conn = self.conn.lock();

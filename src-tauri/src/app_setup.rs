@@ -129,11 +129,11 @@ pub(crate) fn initialize_pre_tauri() {
             set_relevance_threshold(stored);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Loaded stored relevance threshold");
         } else {
-            set_relevance_threshold(0.35);
+            set_relevance_threshold(0.40);
             info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default)");
         }
     } else {
-        set_relevance_threshold(0.35);
+        set_relevance_threshold(0.40);
         info!(target: "4da::startup", threshold = get_relevance_threshold(), "Relevance threshold (default, ACE unavailable)");
     }
 

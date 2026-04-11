@@ -9,6 +9,9 @@ pub(crate) struct DepInfo {
     pub package_name: String,
     pub version: Option<String>,
     pub is_dev: bool,
+    /// Whether this is a direct dependency (from manifest) or transitive (from lockfile).
+    /// Direct deps get full confidence; transitive deps get 0.5x confidence.
+    pub is_direct: bool,
     /// Searchable terms extracted from the package name
     /// e.g. "@tanstack/react-query" -> ["tanstack-react-query", "tanstack", "react-query"]
     pub search_terms: Vec<String>,
@@ -21,6 +24,9 @@ pub(crate) struct DepMatch {
     pub confidence: f32,
     pub version_delta: VersionDelta,
     pub is_dev: bool,
+    /// Direct dependency (from manifest) vs transitive (from lockfile).
+    /// CVE scoring uses this to differentiate urgency.
+    pub is_direct: bool,
 }
 
 /// Version comparison between installed and mentioned
@@ -380,6 +386,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                 package_name: dep.package_name,
                 version: dep.version,
                 is_dev: dep.is_dev,
+                is_direct: dep.is_direct,
                 search_terms,
             },
         );
@@ -451,6 +458,13 @@ pub(crate) fn match_dependencies(
             confidence *= 0.7;
         }
 
+        // Transitive dependencies contribute less than direct dependencies.
+        // A user chose `tauri` directly — a CVE in tauri is urgent.
+        // `x509-cert` came in via rustls — background noise at half weight.
+        if !info.is_direct {
+            confidence *= 0.5;
+        }
+
         // Version intelligence
         let version_delta =
             compare_version_in_content(&text_lower, &info.search_terms[0], &info.version);
@@ -465,6 +479,7 @@ pub(crate) fn match_dependencies(
             confidence: confidence.min(1.0),
             version_delta,
             is_dev: info.is_dev,
+            is_direct: info.is_direct,
         });
     }
 
@@ -700,6 +715,7 @@ mod tests {
                 package_name: "tokio".to_string(),
                 version: Some("1.35.0".to_string()),
                 is_dev: false,
+                is_direct: true,
                 search_terms: vec!["tokio".to_string()],
             },
         );
@@ -726,6 +742,7 @@ mod tests {
                 package_name: "react".to_string(),
                 version: Some("18.2.0".to_string()),
                 is_dev: false,
+                is_direct: true,
                 search_terms: vec!["react".to_string()],
             },
         );
@@ -756,6 +773,7 @@ mod tests {
                 package_name: "got".to_string(),
                 version: Some("14.0.0".to_string()),
                 is_dev: false,
+                is_direct: true,
                 search_terms: vec!["got".to_string()],
             },
         );
@@ -783,6 +801,7 @@ mod tests {
                 package_name: "got".to_string(),
                 version: Some("14.0.0".to_string()),
                 is_dev: false,
+                is_direct: true,
                 search_terms: vec!["got".to_string()],
             },
         );
@@ -810,6 +829,7 @@ mod tests {
                 package_name: "vitest".to_string(),
                 version: Some("1.0.0".to_string()),
                 is_dev: true,
+                is_direct: true,
                 search_terms: vec!["vitest".to_string()],
             },
         );
@@ -839,6 +859,7 @@ mod tests {
                 package_name: "@tanstack/react-query".to_string(),
                 version: Some("5.0.0".to_string()),
                 is_dev: false,
+                is_direct: true,
                 search_terms: extract_search_terms("@tanstack/react-query"),
             },
         );
@@ -870,5 +891,70 @@ mod tests {
 
         assert!(matches.is_empty(), "No deps = no matches");
         assert_eq!(score, 0.0, "No deps = zero score");
+    }
+
+    #[test]
+    fn test_transitive_dep_attenuated() {
+        // Direct dep should get higher confidence than an identical transitive dep
+        let mut ace_direct = ACEContext::default();
+        ace_direct.dependency_info.insert(
+            "tokio".to_string(),
+            DepInfo {
+                package_name: "tokio".to_string(),
+                version: Some("1.35.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: vec!["tokio".to_string()],
+            },
+        );
+
+        let mut ace_transitive = ACEContext::default();
+        ace_transitive.dependency_info.insert(
+            "tokio".to_string(),
+            DepInfo {
+                package_name: "tokio".to_string(),
+                version: Some("1.35.0".to_string()),
+                is_dev: false,
+                is_direct: false,
+                search_terms: vec!["tokio".to_string()],
+            },
+        );
+
+        let (direct_matches, direct_score) = match_dependencies(
+            "Tokio 1.36 released with performance improvements",
+            "The new version includes better async runtime tuning.",
+            &["tokio".to_string()],
+            &ace_direct,
+        );
+        let (transitive_matches, transitive_score) = match_dependencies(
+            "Tokio 1.36 released with performance improvements",
+            "The new version includes better async runtime tuning.",
+            &["tokio".to_string()],
+            &ace_transitive,
+        );
+
+        assert!(!direct_matches.is_empty(), "Direct dep should match");
+        assert!(
+            !transitive_matches.is_empty(),
+            "Transitive dep should match"
+        );
+        assert!(
+            direct_matches[0].is_direct,
+            "Direct match should be flagged direct"
+        );
+        assert!(
+            !transitive_matches[0].is_direct,
+            "Transitive match should be flagged transitive"
+        );
+        assert!(
+            direct_score > transitive_score,
+            "Direct dep score ({direct_score}) should exceed transitive ({transitive_score})"
+        );
+        // Transitive gets 0.5x multiplier, so score should be roughly half
+        let ratio = transitive_score / direct_score;
+        assert!(
+            ratio < 0.7 && ratio > 0.3,
+            "Transitive/direct ratio ({ratio}) should be near 0.5"
+        );
     }
 }

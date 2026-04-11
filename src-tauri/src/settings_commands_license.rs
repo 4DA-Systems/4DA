@@ -480,6 +480,37 @@ pub async fn set_user_role(app: AppHandle, role: Option<String>) -> Result<serde
     }))
 }
 
+/// Set the user's experience level
+#[tauri::command]
+pub async fn set_experience_level(
+    app: AppHandle,
+    level: Option<String>,
+) -> Result<serde_json::Value> {
+    if let Some(ref l) = level {
+        validate_input_length(l, "Experience level", 50)?;
+    }
+    let engine = get_context_engine()?;
+    engine
+        .set_experience_level(level.as_deref())
+        .map_err(|e| format!("Failed to set experience level: {e}"))?;
+
+    info!(target: "4da::context", level = ?level, "Experience level updated");
+
+    // GAME: track profile updates
+    if level.is_some() {
+        if let Ok(db) = crate::get_database() {
+            for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
+                crate::events::emit_achievement_unlocked(&app, &a);
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "experience_level": level
+    }))
+}
+
 /// Add a technology to the user's tech stack
 #[tauri::command]
 pub async fn add_tech_stack(app: AppHandle, technology: String) -> Result<serde_json::Value> {

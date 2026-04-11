@@ -687,7 +687,8 @@ fn compute_quality_composite(
     // Tiers (aligned with V1 pipeline.rs exactly so both pipelines agree):
     //   * no matched deps at all          → 0.35 (hard suppression)
     //   * matched but confidence < 0.20   → 0.60 (mild penalty)
-    //   * strong match                    → unchanged (full strength)
+    //   * strong match, ALL transitive    → 0.60 (mild penalty — not urgent)
+    //   * strong match, any direct        → unchanged (full strength)
     //
     // The 0.20 threshold is calibrated so a single content-only word-boundary
     // match (0.2 confidence → dep_match_score 0.1) still gets the mild penalty.
@@ -696,14 +697,24 @@ fn compute_quality_composite(
     // weak subterm hits (e.g. the word "cert" matching x509-cert in an
     // unrelated AWS advisory) escape the gate entirely.
     //
+    // Direct vs transitive: A CVE in `tauri` (direct dep) is urgent — the user
+    // chose this dependency. A CVE in `x509-cert` (transitive, via rustls) is
+    // background noise. When ALL matched deps are transitive (none direct),
+    // apply the mild 0.60 penalty even if dep_match_score >= 0.20.
+    //
     // Applies to both explicit CVE source items and any other source whose
     // title/content matches the security classifier — so future security
     // sources are governed by the same gate automatically.
+    let all_transitive =
+        !raw.matched_deps.is_empty() && raw.matched_deps.iter().all(|d| !d.is_direct);
     let quality_score =
         if novelty.is_security && raw.dep_match_score < 0.20 && !raw.matched_deps.is_empty() {
             quality_score * 0.60
         } else if novelty.is_security && raw.matched_deps.is_empty() {
             quality_score * 0.35
+        } else if novelty.is_security && all_transitive {
+            // Strong match but all deps are transitive — not urgent
+            quality_score * 0.60
         } else {
             quality_score
         };
