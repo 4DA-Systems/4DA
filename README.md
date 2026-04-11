@@ -87,9 +87,44 @@ Then it scores every piece of incoming content against 5 independent signal axes
 | **Dependency** | Direct matches against your installed packages |
 | **Learned** | Save/dismiss signals boost or suppress future scores |
 
-An item needs **2+ independent signals** to pass the confirmation gate. Everything else gets rejected. Typical rejection rate: **99%+**.
+An item needs **2+ independent signals** to pass the confirmation gate. Single-axis matches are hard-capped at 28% — no matter how strong one signal is, it cannot pass alone. Everything else gets rejected. Typical rejection rate: **99%+**.
 
-What survives is scored with content quality analysis (kills clickbait), novelty detection (demotes "intro to X" if you're advanced), competing tech penalties, and intent scoring from your recent work.
+What survives goes through 12 quality multipliers: content depth analysis, novelty detection (demotes "intro to X" if you're advanced), competing tech penalties, title-body coherence scoring, and intent scoring from your recent work. The math is calibrated across 9 simulated developer personas with 215 labeled test items — every constant has a test behind it.
+
+### LLM Verification (Optional)
+
+After keyword scoring produces results, an optional LLM reranking layer verifies the top items against your full developer context — your stack, dependencies, recent commits, anti-technologies, and engagement history. The LLM uses a strict 1-5 rubric:
+
+- **5 = MUST-READ**: Security alert for YOUR dependency, breaking change YOU must act on
+- **3 = WORTH KNOWING**: Useful tool that fits YOUR exact stack
+- **1 = NOISE**: Mentions your tech but isn't actionable
+
+This is where gold nuggets surface — articles the keyword pipeline undervalues because there's no keyword overlap, but the LLM understands the conceptual relevance to your specific project.
+
+**You control the compute.** Use [Ollama](https://ollama.com/) for free local inference (fully private, nothing leaves your machine), or bring your own Anthropic/OpenAI key. 4DA never pays for your compute, never stores your keys remotely, never makes API calls you didn't configure. No LLM configured = keyword pipeline only, which is still 85-90% accurate.
+
+### Adversarial Resistance
+
+Content creators who learn the scoring algorithm can't game it:
+
+- **Title-body coherence**: titles must deliver on what they promise. Claim "React + Rust + Tauri" in the title but only discuss React? Coherence penalty.
+- **Keyword concentration**: repeating "Rust" four times in a title hurts your score, not helps it.
+- **Confirmation gate**: keyword-stuffing a title only hits one axis (Interest). Without matching the user's actual codebase embeddings (Context), installed packages (Dependency), AND recent work (ACE), the gate rejects it.
+- **Feedback compound loop**: if a gamed article surfaces and gets dismissed, the system learns. Sources that produce dismissed content lose quality score over time. Gaming becomes self-defeating.
+
+The optimal strategy against these defenses is writing genuinely useful content. That's the point.
+
+### Compound Intelligence
+
+4DA gets measurably smarter with use:
+
+- **Save** an article → topics boost, source reputation rises, taste embedding sharpens
+- **Dismiss** an article → topics suppress, anti-patterns form, future noise drops
+- After ~50 interactions, the Learned axis activates and topic affinities compound
+- Autophagy cycles detect systematic over/under-scoring and self-correct
+- Topic decay half-lives calibrate per-topic: "Rust" content stays relevant for days, "JavaScript framework of the week" decays in hours
+
+No setup required for this. Just use the app. Every interaction is a training signal.
 
 ## Features
 
@@ -97,9 +132,11 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 - 5-axis scoring with multi-signal confirmation gate (99%+ rejection rate)
 - Domain profile: graduated tech identity (primary stack → dependencies → detected → interests)
 - Content DNA: classifies content type (security advisory, release, tutorial, hiring, etc.)
-- Novelty detection: demotes introductory content, boosts new releases
+- Novelty detection: demotes introductory content, boosts new releases and security advisories
+- Role-aware scoring: security engineers see security content prominently; experience level adjusts tutorial/depth balance
 - Intent scoring: recent Git/file activity influences what surfaces
 - Knowledge gap detection: finds blind spots in your dependency understanding
+- Anti-gaming: title-body coherence, keyword concentration, adversarial resistance built into the pipeline
 
 **Sources** — 20+ adapters, all running locally
 - Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow
@@ -127,9 +164,11 @@ What survives is scored with content quality analysis (kills clickbait), novelty
 
 **Privacy & Control**
 - All data stays on your machine. Raw content never leaves.
-- BYOK: Anthropic Claude, OpenAI, or fully local with Ollama
+- BYOK: bring your own Anthropic, OpenAI, or Ollama key. We never touch your compute costs.
+- Core scoring is pure Rust — zero API calls, 2 seconds for 500 items, $0.00 per analysis
+- LLM verification (optional): free with Ollama, or ~$0.05/analysis with your own cloud key
 - ed25519 license verification (public key embedded, private key server-side)
-- Auto-updates via Tauri updater with GitHub releases
+- Zero telemetry. Zero analytics. Zero tracking. Zero user accounts.
 - System tray: runs in background, surfaces what matters
 
 ## Quick Start
@@ -292,13 +331,15 @@ pnpm validate:all           # Full validation (lint + types + tests + build)
 
 | Tool | Approach | Limitation |
 |------|----------|------------|
-| **daily.dev** | Personalizes by engagement (what you click) | Optimizes for curiosity, not project relevance. Click on one ZFS article, get storage content for weeks. |
+| **daily.dev** | Personalizes by engagement (what you click) | Optimizes for curiosity, not project relevance. Click on one ZFS article, get storage content for weeks. Gameable by engagement farming. |
 | **Feedly** | Aggregates by subscription (what feeds you add) | Solves aggregation, not relevance. 100+ feeds = a different firehose. AI features locked behind $156/yr. |
 | **Pocket** | Saves what you manually bookmark | Read-it-later, not intelligence. Cloud-dependent — Mozilla killed the team in 2023. |
 | **TLDR / newsletters** | Someone else curates for "developers" broadly | One person's bias. "Developers" includes React engineers, ML researchers, and game devs — one newsletter fits none. |
 | **4DA** | Scores against your actual codebase (Cargo.toml, package.json, Git) | Requires a local codebase to scan. That's the point. |
 
 4DA doesn't personalize by what you click or subscribe to. It scores by what you **build**. A categorically different approach to developer intelligence.
+
+No algorithm can be gamed when the scoring signal comes from your local filesystem. Your `Cargo.lock` doesn't lie. Your Git history doesn't optimize for engagement. Your dependency graph isn't curated by an editorial team. That's the structural advantage of local-first intelligence.
 
 ## Pricing
 
