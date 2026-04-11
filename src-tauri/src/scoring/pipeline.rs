@@ -369,6 +369,8 @@ pub(crate) fn score_item(
         input.content,
         &topics,
         &ctx.domain_profile.primary_stack,
+        ctx.user_role.as_deref(),
+        ctx.experience_level.as_deref(),
     );
 
     // Ecosystem shift detection from stack profiles

@@ -213,6 +213,13 @@ impl ContextEngine {
             INSERT OR IGNORE INTO user_identity (id) VALUES (1);
         ")?;
 
+        // Migration: add experience_level column if it doesn't exist
+        // Standard SQLite migration pattern — ignore "duplicate column" error
+        let _ = conn.execute(
+            "ALTER TABLE user_identity ADD COLUMN experience_level TEXT",
+            [],
+        );
+
         info!(target: "4da::context", "Context engine tables initialized");
         Ok(())
     }
