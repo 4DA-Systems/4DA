@@ -29,23 +29,40 @@ use super::*;
 // V2 Constants (self-contained)
 // ============================================================================
 
+// Calibration rationale (2026-04-07 score-spread widening):
+//
+// The pipeline was over-damped: 12 dampened multipliers + capped boosts + gate
+// ceilings compressed a 0.55–0.85 raw range into 0.50–0.65 output, losing 50%
+// of useful score spread. These changes restore differentiation:
+//
+// - 0/1 signal ceilings are INTENTIONALLY hard — noise suppression is critical.
+//   A single confirmation axis must never push an item above threshold (0.35).
+// - 2/3 signal ceilings raised (0.65→0.72, 0.85→0.88) to create usable spread
+//   for legitimately confirmed content without touching noise floor.
+// - STRENGTH_BONUS_MAX raised 0.08→0.12 for within-tier differentiation:
+//   strong 2-signal items can now reach 0.84 vs weak at 0.72 (12-point spread).
+// - BOOST_CAP_MAX raised 0.35→0.45 to stop truncating legitimate boost
+//   accumulation when 4+ independent boosts fire simultaneously.
+// - Dampening reduced (penalty 0.65→0.72, boost 0.55→0.65) in pipeline.scoring
+//   to preserve more signal through the quality composite (~3.2% less automatic
+//   compression per multiplier).
 const V2_GATE: [(f32, f32); 6] = [
-    (0.25, 0.20), // 0 signals — heavy penalty
-    (0.45, 0.28), // 1 signal — safely below 0.35 threshold
-    (1.00, 0.65), // 2 signals — tightened ceiling (was 0.80)
-    (1.10, 0.85), // 3 signals — tightened ceiling (was 0.92)
-    (1.20, 1.00), // 4 signals — strong confirmation
-    (1.25, 1.00), // 5 signals — full confidence
+    (0.25, 0.20), // 0 signals — heavy penalty (unchanged)
+    (0.45, 0.28), // 1 signal — below threshold (unchanged)
+    (1.00, 0.72), // 2 signals — raised from 0.65 to let strong matches breathe
+    (1.10, 0.88), // 3 signals — raised from 0.85
+    (1.20, 1.00), // 4 signals — strong confirmation (unchanged)
+    (1.25, 1.00), // 5 signals — full confidence (unchanged)
 ];
 
 const BOOST_CAP_MIN: f32 = -0.15;
-const BOOST_CAP_MAX: f32 = 0.35;
+const BOOST_CAP_MAX: f32 = 0.45;
 const KNN_CENTER: f32 = 0.49;
 
 /// Maximum gate ceiling bonus for strong signals (creates mid-band spread).
-/// Strong 2-signal items can reach 0.65 + 0.08 = 0.73 vs weak at 0.65.
+/// Strong 2-signal items can reach 0.72 + 0.12 = 0.84 vs weak at 0.72.
 /// Only applies at 2+ signals — 0-1 signal ceilings are intentionally hard.
-const STRENGTH_BONUS_MAX: f32 = 0.08;
+const STRENGTH_BONUS_MAX: f32 = 0.12;
 const KNN_SCALE: f32 = 12.0;
 
 // ============================================================================
