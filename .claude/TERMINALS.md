@@ -41,15 +41,14 @@
 - **Commit ready**: user or next session may run `git commit` once T-PRELAUNCH-HARDENING releases
 - **NOT touching**: any src-tauri/src/** file, any migrations, any src/components/**, db/sources.rs. Rust integration deferred to Phase 2 follow-up commit.
 
-### T-PRELAUNCH-HARDENING — Pre-launch risk mitigations (wave 2 — WIRED)
-- **Status**: committing
+### T-PRELAUNCH-HARDENING — Pre-launch risk mitigations (wave 3 — INFRASTRUCTURE)
+- **Status**: committing wave 3 (infrastructure: docs + offline installer config; wave 1+2 already in HEAD as commit 15f2c708)
 - **Commit Lock**: HELD
 - **Since**: 2026-04-11T22:55:00Z
-- **Files**: src-tauri/src/startup_health.rs, src-tauri/src/ollama.rs, src-tauri/src/db/migrations.rs, src-tauri/src/db/mod.rs (1-line `mod migrations` → `pub(crate) mod migrations`), src-tauri/src/state.rs (recover-before-Database::new + result stash, near line 271, far from any other claimed hunk), docs/strategy/PRELAUNCH-HARDENING.md
-- **db/mod.rs surgical change**: line 13 only (`mod migrations` → `pub(crate) mod migrations`). T-SCORING's db/mod.rs work has not yet started — coexists at hunk level.
-- **state.rs surgical change**: lines around 271 only (preemptive recovery insertion). The orphaned 0.35→0.40 threshold change at line 698 is from a different prior session and is NOT mine — different hunk, can be split via git add -p or committed together if user prefers.
-- **Scope**: WIRED — `recover_corrupt_db_if_needed` now runs before `Database::new()`, results surfaced via existing `HealthIssue` channel through the new `set_db_recovery_notice`/`take_db_recovery_notice` static. NO new Tauri commands, NO new frontend listeners needed (existing health-issue display handles it).
-- **NOT touching**: db/sources.rs (T-WAR-ROOM's prior claim), Momentum.tsx, MomentumWisdomTrajectory.tsx, awe-slice.ts, en/ui.json, awe_commands.rs/awe_events.rs/awe_source_mining.rs (T-WAR-ROOM in-progress), context_engine.rs (T-SCORING), app_setup.rs (orphaned changes from prior session, not mine to commit), lib.rs (orphaned changes), tauri.conf.json.
+- **Wave 1+2 in HEAD**: commit 15f2c708 (note: that commit landed under T-SCORING's commit message due to a race — actual contents are mine, see PRELAUNCH-HARDENING.md). Wave 1+2 covers: WebView2 check, Ollama version check, DB corruption recovery (wired into state.rs::get_database before Database::new), HealthIssue surfacing via existing channel.
+- **Wave 3 staging**: src-tauri/tauri.windows-offline.conf.json (NEW — partial config override for offlineInstaller mode), docs/strategy/UPDATER-KEY-ROTATION.md (NEW — full rotation runbook), docs/strategy/PRELAUNCH-HARDENING.md (UPDATED — reflects static-CRT discovery, both installer modes buildable, key rotation runbook reference)
+- **MSVC redist (option d)**: ALREADY MITIGATED — `.cargo/config.toml` already has `target-feature=+crt-static` for windows-msvc. Discovery, no code change.
+- **NOT touching**: anything claimed by other terminals, T-GLYPH's pre-staged CLAUDE.md / docs/glyph/, any src-tauri/src/** beyond wave 1+2 (already in HEAD).
 
 ### T-SCORING — Scoring hardening + onboarding + feedback instrumentation
 - **Status**: working
