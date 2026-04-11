@@ -674,6 +674,7 @@ pub fn run() {
             awe_commands::get_awe_growth_trajectory,
             awe_commands::submit_awe_batch_feedback,
             awe_commands::run_awe_auto_feedback,
+            awe_commands::run_awe_autonomous_now,
             awe_commands::run_awe_purge,
             awe_commands::get_awe_candidates,
             awe_commands::record_awe_interaction_feedback,
