@@ -32,13 +32,13 @@
   - src/components/awe/MomentumWisdomTrajectory.tsx (subscribe to live events)
 - **NOT touching**: lib.rs, app_setup.rs, commands.ts, en/ui.json (all have uncommitted changes from other terminals); any file in T-PRELAUNCH-HARDENING or T-SCORING claims
 
-### T-GLYPH — Glyph Envelope Protocol (GEP) foundation
-- **Status**: committing
-- **Since**: 2026-04-11T10:00:00Z
-- **Commit Lock**: HELD
-- **Glyph repo**: D:\runyourempire\glyph — COMMITTED (74cba31 wave 1 foundation, 9d4c609 wave 2 Phase 2 harness + tokenizer). 55 files total, 35 tests passing.
-- **Files staging for 4DA commit (docs-only)**: CLAUDE.md (+49 lines Glyph section), docs/glyph/GEP-SPEC.md, GEP-SAFETY.md, GEP-INTEGRATION.md, GEP-ALPHABET.md, .claude/TERMINALS.md (this file)
-- **NOT touching**: any src-tauri/src/** file, any migrations, any src/components/**, db/sources.rs. Rust integration deferred to Phase 2 follow-up commit — harness crate at D:\runyourempire\glyph\crates\glyph-integration-harness is the drop-in template.
+### T-GLYPH — Glyph Envelope Protocol (GEP) foundation — DONE
+- **Status**: done
+- **Glyph repo commits**: 74cba31 (foundation, 44 files, 30 tests), 9d4c609 (Phase 2 harness + tokenizer, 11 files, 5 tests)
+- **4DA commit**: e0da9bf5 (docs only, 6 files, 590 insertions)
+- **Total**: 55 files in glyph repo, 35 tests passing, 6 files in 4DA
+- **Phase 2 template**: D:\runyourempire\glyph\crates\glyph-integration-harness is the drop-in reference. When T-SCORING/T-PREEMPTION-FIX release their claims on src-tauri/src/db/*, the 4DA glyph_integration module can be built from this template.
+- **Phase 0 kill gate**: provisional PASS (offline avg 2.00 tokens/glyph, max 2). Real Anthropic API measurement still pending — run scripts/measure-tokens.mjs with ANTHROPIC_API_KEY for authoritative verdict.
 
 ### T-PRELAUNCH-HARDENING — DONE (wave 1+2+3 in HEAD)
 - **Status**: done
