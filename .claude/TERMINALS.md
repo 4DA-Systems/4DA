@@ -17,12 +17,12 @@
 - **Files**: list of files being modified
 -->
 
-### T-HYGIENE — Orphaned worktree cleanup + prevention script
-- **Status**: committing
-- **Commit Lock**: HELD
-- **Scope**: one-time cleanup (11 dead worktree-agent-* branches + 4 stale dirs deleted, verified all tip-reachable-from-main and zero uncommitted work) + new prevention script scripts/cleanup-orphaned-worktrees.cjs
-- **Files**: scripts/cleanup-orphaned-worktrees.cjs (new), CLAUDE.md (append 1-paragraph usage note)
-- **Safety**: destructive operations already done, verified clean via `git worktree list` + `git branch --list worktree-*`. Reflog preserves everything for 90 days if rollback is ever needed.
+### T-HYGIENE — Orphaned worktree cleanup + prevention script — DONE
+- **Status**: done
+- **Commit**: 5eea8b1e
+- **Deleted**: 11 dead worktree-agent-* branches + 6 stale directories (4 git-tracked + 2 orphaned)
+- **Added**: scripts/cleanup-orphaned-worktrees.cjs (safe dry-run by default) + CLAUDE.md Worktree Hygiene section
+- **Reflog**: all 11 branches recoverable for 90 days
 
 ### T-WAR-ROOM — AWE deep wiring (critical bugs + real-time + autonomous tiers)
 - **Status**: working — implementing full AWE assessment plan
