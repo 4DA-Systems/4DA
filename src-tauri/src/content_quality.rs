@@ -30,6 +30,11 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
 
     let info_density = assess_information_density(title);
 
+    // Anti-gaming defenses
+    let keyword_penalty = keyword_concentration_penalty(title);
+    let coherence_penalty = title_body_coherence_penalty(title, content);
+    let diversity_penalty = title_diversity_penalty(title);
+
     // Combine: original weights preserved for calibration stability.
     // Info density acts as a bonus/penalty layer — dense titles get a small boost,
     // vague titles get a small penalty. Conservative to avoid breaking recall.
@@ -37,7 +42,7 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
     let density_adjustment = (info_density - 0.5) * 0.10; // -0.05 to +0.05
 
     // Map to multiplier range [0.5, 1.2]
-    let multiplier = (raw * 0.7 + 0.5 + density_adjustment).clamp(0.5, 1.2);
+    let multiplier = (raw * 0.7 + 0.5 + density_adjustment + keyword_penalty + coherence_penalty + diversity_penalty).clamp(0.5, 1.2);
 
     ContentQuality {
         title_quality,
@@ -307,6 +312,127 @@ fn assess_information_density(title: &str) -> f32 {
     density.clamp(0.0, 1.0)
 }
 
+/// Shared stop-word list for anti-gaming heuristics.
+/// Common English words that should not count as "significant" or "repeated keywords".
+const STOP_WORDS: &[&str] = &[
+    "the", "and", "for", "with", "how", "that", "this", "your", "from", "about",
+    "into", "will", "have", "when", "what", "does", "more", "than", "just", "like",
+    "also", "been", "were", "them", "they", "some", "each", "which", "their", "then",
+    "there", "would", "could", "should", "being", "over", "most", "very", "only",
+    "other", "using", "used", "here", "after", "before", "between", "where", "while",
+    "because", "through", "during", "without", "again", "further", "once", "still",
+    "can", "not", "but", "its", "are", "was", "has", "had", "all", "any", "who",
+    "why", "our", "out", "off", "own", "too", "now", "new", "way",
+];
+
+/// Returns true if `word` is a stop word (case-insensitive, assumes lowercase input).
+fn is_stop_word(word: &str) -> bool {
+    STOP_WORDS.contains(&word)
+}
+
+/// Count how many times any single word (4+ chars) repeats in the title.
+/// "Rust async Rust patterns async Rust" -> "rust" appears 3 times.
+/// 2 repeats -> -0.05, 3+ repeats -> -0.15, 4+ repeats -> -0.25.
+/// Exempt: common English stop words.
+fn keyword_concentration_penalty(title: &str) -> f32 {
+    use std::collections::HashMap;
+
+    let mut counts: HashMap<&str, u32> = HashMap::new();
+    let lower = title.to_lowercase();
+    // We need to collect words from the lowered string to avoid lifetime issues.
+    // Re-split from the lowered string.
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 4)
+        .filter(|w| !is_stop_word(w))
+        .collect();
+
+    for word in &words {
+        *counts.entry(word).or_insert(0) += 1;
+    }
+
+    let max_repeats = counts.values().copied().max().unwrap_or(0);
+
+    match max_repeats {
+        0..=1 => 0.0,
+        2 => -0.05,
+        3 => -0.15,
+        _ => -0.25, // 4+
+    }
+}
+
+/// Extract significant words from title and body, compute overlap.
+/// coherence = |title_words ∩ body_words| / |title_words|
+/// If coherence < 0.30 -> -0.20 penalty (title promises what body doesn't deliver)
+/// If coherence < 0.50 -> -0.10 penalty
+/// Only triggers when title has 3+ significant tech words.
+fn title_body_coherence_penalty(title: &str, content: &str) -> f32 {
+    use std::collections::HashSet;
+
+    let extract_significant = |text: &str| -> HashSet<String> {
+        text.to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.len() >= 4)
+            .filter(|w| !is_stop_word(w))
+            .map(|w| w.to_string())
+            .collect()
+    };
+
+    let title_words = extract_significant(title);
+    let body_words = extract_significant(content);
+
+    // Only trigger when title has 3+ significant words
+    if title_words.len() < 3 {
+        return 0.0;
+    }
+
+    // If body is empty, we can't assess coherence — no penalty
+    if body_words.is_empty() {
+        return 0.0;
+    }
+
+    let overlap = title_words.intersection(&body_words).count();
+    let coherence = overlap as f32 / title_words.len() as f32;
+
+    if coherence < 0.30 {
+        -0.20
+    } else if coherence < 0.50 {
+        -0.10
+    } else {
+        0.0
+    }
+}
+
+/// unique_words / total_words for the title.
+/// Titles with diversity < 0.50 get -0.15 penalty (every word repeated at least once on avg).
+/// Titles with diversity < 0.70 get -0.05 mild penalty.
+/// Normal titles have diversity 0.80-1.0 and get no penalty.
+fn title_diversity_penalty(title: &str) -> f32 {
+    use std::collections::HashSet;
+
+    let words: Vec<String> = title
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(|w| w.to_string())
+        .collect();
+
+    if words.is_empty() {
+        return 0.0;
+    }
+
+    let unique: HashSet<&String> = words.iter().collect();
+    let diversity = unique.len() as f32 / words.len() as f32;
+
+    if diversity < 0.50 {
+        -0.15
+    } else if diversity < 0.70 {
+        -0.05
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -454,5 +580,180 @@ mod tests {
         let low = assess_information_density("thoughts on stuff is it just me hot take");
         assert!(high <= 1.0 && high >= 0.0, "Should be in range: {}", high);
         assert!(low <= 1.0 && low >= 0.0, "Should be in range: {}", low);
+    }
+
+    // ====================================================================
+    // Anti-gaming defense tests
+    // ====================================================================
+
+    // --- keyword_concentration_penalty ---
+
+    #[test]
+    fn test_keyword_concentration_no_repeats() {
+        let p = keyword_concentration_penalty("Building REST APIs with Axum and Tokio");
+        assert_eq!(p, 0.0, "No repeats should have zero penalty: {}", p);
+    }
+
+    #[test]
+    fn test_keyword_concentration_two_repeats() {
+        let p = keyword_concentration_penalty("Rust patterns in Rust systems programming");
+        assert!(
+            (p - (-0.05)).abs() < f32::EPSILON,
+            "2 repeats of 'rust' should give -0.05: {}",
+            p
+        );
+    }
+
+    #[test]
+    fn test_keyword_concentration_three_repeats() {
+        let p = keyword_concentration_penalty("Rust async Rust patterns async Rust");
+        assert!(
+            (p - (-0.15)).abs() < f32::EPSILON,
+            "3 repeats of 'rust' should give -0.15: {}",
+            p
+        );
+    }
+
+    #[test]
+    fn test_keyword_concentration_four_repeats() {
+        let p = keyword_concentration_penalty("Rust Rust Rust Rust framework");
+        assert!(
+            (p - (-0.25)).abs() < f32::EPSILON,
+            "4 repeats should give -0.25: {}",
+            p
+        );
+    }
+
+    #[test]
+    fn test_keyword_concentration_stop_words_exempt() {
+        // "this" and "with" are stop words — repeated but should not trigger
+        let p = keyword_concentration_penalty("this with this with this with");
+        assert_eq!(p, 0.0, "Stop word repeats should not trigger penalty: {}", p);
+    }
+
+    #[test]
+    fn test_keyword_concentration_short_words_exempt() {
+        // Words under 4 chars should be ignored
+        let p = keyword_concentration_penalty("the API API API use for fun");
+        assert_eq!(p, 0.0, "Short word repeats should not trigger: {}", p);
+    }
+
+    // --- title_body_coherence_penalty ---
+
+    #[test]
+    fn test_coherence_good_match() {
+        let p = title_body_coherence_penalty(
+            "Building React apps with Tauri and Rust",
+            "This article covers building React applications using the Tauri framework powered by Rust.",
+        );
+        assert_eq!(p, 0.0, "Good title-body match should have no penalty: {}", p);
+    }
+
+    #[test]
+    fn test_coherence_poor_match() {
+        let p = title_body_coherence_penalty(
+            "React Rust Tauri performance benchmarks",
+            "Today we discuss cooking recipes and gardening tips for beginners.",
+        );
+        assert!(
+            p <= -0.10,
+            "Title-body mismatch should be penalized: {}",
+            p
+        );
+    }
+
+    #[test]
+    fn test_coherence_empty_body_no_penalty() {
+        let p = title_body_coherence_penalty(
+            "React Rust Tauri performance benchmarks",
+            "",
+        );
+        assert_eq!(p, 0.0, "Empty body should not trigger penalty: {}", p);
+    }
+
+    #[test]
+    fn test_coherence_few_title_words_no_penalty() {
+        // Title with fewer than 3 significant words should not trigger
+        let p = title_body_coherence_penalty(
+            "Rust news",
+            "Completely unrelated body content about cooking.",
+        );
+        assert_eq!(p, 0.0, "Short title should not trigger coherence check: {}", p);
+    }
+
+    // --- title_diversity_penalty ---
+
+    #[test]
+    fn test_diversity_normal_title() {
+        let p = title_diversity_penalty("Building REST APIs with Axum and Tokio");
+        assert_eq!(p, 0.0, "Normal diverse title should have no penalty: {}", p);
+    }
+
+    #[test]
+    fn test_diversity_keyword_soup() {
+        // Every word repeated: diversity = 3/6 = 0.50 exactly, which is < 0.50? No, 0.50 is not < 0.50.
+        // Need diversity strictly < 0.50 for -0.15
+        let p = title_diversity_penalty("Rust Rust Rust React React React AI AI");
+        // unique=3, total=8 → 0.375
+        assert!(
+            (p - (-0.15)).abs() < f32::EPSILON,
+            "Low diversity keyword soup should get -0.15: {}",
+            p
+        );
+    }
+
+    #[test]
+    fn test_diversity_mild_penalty() {
+        // 5 unique out of 8 total = 0.625 → < 0.70 mild penalty
+        let p = title_diversity_penalty("Rust patterns Rust async patterns Rust async guide");
+        // unique: rust, patterns, async, guide = 4, total = 8 → 0.50, that's < 0.50? No, 0.50 is not < 0.50.
+        // Actually 0.50 is exactly 0.50 which is NOT < 0.50, so it falls to < 0.70 → -0.05
+        assert!(
+            (p - (-0.05)).abs() < f32::EPSILON,
+            "Mild low diversity should get -0.05: {}",
+            p
+        );
+    }
+
+    #[test]
+    fn test_diversity_empty_title() {
+        let p = title_diversity_penalty("");
+        assert_eq!(p, 0.0, "Empty title should have no penalty: {}", p);
+    }
+
+    // --- Integration test: anti-gaming titles get lower multiplier ---
+
+    #[test]
+    fn test_gaming_title_lower_than_genuine() {
+        let genuine = compute_content_quality(
+            "How we migrated our PostgreSQL database to CockroachDB",
+            "This article describes our migration from PostgreSQL to CockroachDB including schema changes and performance results.",
+            None,
+        );
+        let gamed = compute_content_quality(
+            "Rust Rust Rust AI AI AI Docker Docker Docker",
+            "A short post about nothing in particular.",
+            None,
+        );
+        assert!(
+            gamed.multiplier < genuine.multiplier,
+            "Gamed title ({}) should score lower than genuine ({})",
+            gamed.multiplier,
+            genuine.multiplier
+        );
+    }
+
+    #[test]
+    fn test_gaming_multiplier_still_in_range() {
+        let q = compute_content_quality(
+            "Rust Rust Rust Rust async Rust performance Rust",
+            "",
+            None,
+        );
+        assert!(
+            q.multiplier >= 0.5 && q.multiplier <= 1.2,
+            "Multiplier must stay in [0.5, 1.2]: {}",
+            q.multiplier
+        );
     }
 }
