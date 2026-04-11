@@ -32,13 +32,12 @@
   - src/components/awe/MomentumWisdomTrajectory.tsx (subscribe to live events)
 - **NOT touching**: lib.rs, app_setup.rs, commands.ts, en/ui.json (all have uncommitted changes from other terminals); any file in T-PRELAUNCH-HARDENING or T-SCORING claims
 
-### T-GLYPH — Glyph Envelope Protocol (GEP) foundation — DONE
+### T-GLYPH — Phase 2 integration — DONE
 - **Status**: done
-- **Glyph repo commits**: 74cba31 (foundation, 44 files, 30 tests), 9d4c609 (Phase 2 harness + tokenizer, 11 files, 5 tests)
-- **4DA commit**: e0da9bf5 (docs only, 6 files, 590 insertions)
-- **Total**: 55 files in glyph repo, 35 tests passing, 6 files in 4DA
-- **Phase 2 template**: D:\runyourempire\glyph\crates\glyph-integration-harness is the drop-in reference. When T-SCORING/T-PREEMPTION-FIX release their claims on src-tauri/src/db/*, the 4DA glyph_integration module can be built from this template.
-- **Phase 0 kill gate**: provisional PASS (offline avg 2.00 tokens/glyph, max 2). Real Anthropic API measurement still pending — run scripts/measure-tokens.mjs with ANTHROPIC_API_KEY for authoritative verdict.
+- **Phase 2 commit**: 7548a690 (cherry-picked from worktree glyph-phase2/85a73b54)
+- **Files landed**: src-tauri/Cargo.toml (+5 optional deps, +glyph_audit feature), src-tauri/Cargo.lock, src-tauri/src/db/migrations.rs (Phase 54 glyph_audit table), src-tauri/src/lib.rs (1-line mod decl), src-tauri/src/glyph_integration/** (5 new files, 4 passing tests)
+- **Feature off by default.** Default cargo check clean. cargo check --features glyph_audit clean. 4 glyph_integration tests pass.
+- **Prior commits**: glyph repo 74cba31→b0db4cb (4 commits), 4DA docs e0da9bf5/953f6d78/8b87de21, lock release 07b3b641
 
 ### T-PRELAUNCH-HARDENING — DONE (wave 1+2+3 in HEAD)
 - **Status**: done
@@ -53,14 +52,13 @@
 - **Files**: src-tauri/src/scoring/dependencies.rs, src-tauri/src/scoring/pipeline_v2.rs, src-tauri/src/scoring_config.rs, src-tauri/scoring/pipeline.scoring, src-tauri/src/ace/scanner.rs, src-tauri/src/context_engine.rs, src/components/onboarding/*, src-tauri/src/db/mod.rs
 - **NOT touching**: startup_health.rs, ollama.rs, migrations.rs, docs/glyph/*, Momentum*.tsx, CategoryChapterView.tsx
 
-### T-PREEMPTION-FIX — Fix preemption timeout + blind_spots schema bugs (worktree isolated)
-- **Status**: working — in isolated worktree ../4DA-preemption-fix
-- **Since**: 2026-04-12T00:00:00Z
-- **Worktree**: D:\4DA-preemption-fix (branched from origin/main, not local HEAD)
-- **Files**: src-tauri/src/blind_spots.rs, src-tauri/src/preemption.rs, src-tauri/src/project_health_dimensions.rs, scripts/validate-wiring.cjs (add SQL column check), new tests in src-tauri/src/blind_spots.rs + preemption.rs + new test file
-- **Scope**: 8 fixes — column name corrections (name→package_name, i.created_at→i.timestamp), is_direct filtering, score normalization, missed_signals dedup via user_events, real why_relevant, compute_all_project_health project cap, detect_chains memoization, health dimensions is_direct batching
-- **NOT touching**: ANY file claimed by T-WAR-ROOM, T-GLYPH, T-PRELAUNCH-HARDENING, or T-SCORING. No lib.rs, no app_setup.rs, no migrations.rs, no scoring/**, no sources/**, no awe_*, no startup_health.rs, no state.rs, no project_health.rs (only *_dimensions.rs).
-- **Target**: preemption feed returns in <5s against real 239MB DB (vs current 30s+ timeout)
+### T-PREEMPTION-FIX — Fix preemption timeout + blind_spots schema bugs — COMPLETE
+- **Status**: done — COMMITTED dd71762b, pushed to origin/main
+- **Files**: src-tauri/src/blind_spots.rs, src-tauri/src/preemption.rs, scripts/validate-wiring.cjs
+- **Result**: preemption feed 248s→2.9s (85x speedup). Blind spot score no longer pinned to 100. Missed signals dedup via user_events. Real why_relevant via dep mention detection.
+- **Tests**: 22 new unit tests (14 blind_spots + 8 preemption), 2,632 total Rust tests passing
+- **New guard**: wiring-validator check #9 "SQL schema column drift" catches future column-name bugs
+- **Worktree**: D:\4DA-preemption-fix (removed after commit)
 
 ### T2 — Phases 0-3 execution — COMPLETE
 - **Status**: done — 10 commits pushed
