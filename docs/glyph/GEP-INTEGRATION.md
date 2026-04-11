@@ -7,13 +7,36 @@ This file tracks the 4DA-specific rollout and kill gates.
 
 | Phase | Scope | Status | Kill gate |
 |-------|-------|--------|-----------|
-| 0 | Spec + tokenizer measurement tool | ✅ Done | If >3 tokens/glyph avg → kill compression story |
-| 1 | Rust crate, 30+ tests passing | ✅ Done | Any red test → quarantine |
-| 2 | Audit-only mode (4DA Rust integration) | ⏳ Next commit | <30% compression OR <50% glyph coverage → deprecate |
+| 0 | Spec + real Anthropic tokenizer measurement | ✅ Done — **CONDITIONAL PASS** | Avg ≤ 3 tokens/glyph (batch amortised: 2.53 — PASS). Header vs NL: 28 vs 30 tokens = 6.7% savings — compression claim DOWNGRADED to "parity" |
+| 1 | Rust crate, 35 tests passing | ✅ Done | Any red test → quarantine |
+| 1.5 | Phase 2 integration harness (SqliteAuditSink, mocks, demo) | ✅ Done at `runyourempire/glyph/crates/glyph-integration-harness` | — |
+| 2 | Audit-only mode (4DA Rust integration) | ⏳ Follow-up | If Phase 2 measures <30% categorical glyph coverage OR excessive audit log growth → deprecate |
 | 3 | First opt-in agent (`gotcha-detector`) | Future | No measurable routing improvement → stop expansion |
 | 4 | Broker routing by glyph | Future | Routing accuracy regressed → rollback |
 | 5 | Anti-steg + drift hardening | Future | False positive rate >5% → retune or disable |
 | 6 | Compound measurement + AWE feedback | Future | None — steady state |
+
+### Phase 0 real measurement (2026-04-12, claude-opus-4-6)
+
+**Important: the original compression claim from the offline proxy was wrong.**
+Real Anthropic tokenizer measurement:
+
+- Batch amortised: **2.53 tokens/glyph** (passes ≤3 threshold)
+- Per-message baseline-corrected avg: 3.52 tokens/glyph
+- Real 6-glyph header: **28 tokens**
+- Real NL metadata equivalent: **30 tokens**
+- Savings vs NL: **6.7% — essentially parity**
+
+**The compression pitch is officially downgraded.** GEP is a typed
+routing protocol with composable safety gates, not a token-savings
+technology. When talking about GEP internally or externally, lead with:
+
+1. **Typed routing** — brokers make decisions without LLM parsing
+2. **Composable safety gates** — reversibility, human-ack, anti-steg, drift
+3. **Dual-form audit** — wire + compiled NL always stored
+4. **Capability enforcement** — per-agent manifest gating
+
+Full measurement dataset: `D:\runyourempire\glyph\dictionary\token-measurement.json`
 
 ## Phase 2 — next commit (details)
 
