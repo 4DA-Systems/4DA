@@ -65,7 +65,6 @@ import { useAppStore } from '../../store';
  * coupling the test to an exact tick count.
  */
 async function flushAllPromises() {
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
   await new Promise<void>((resolve) => { setTimeout(() => { resolve(); }, 0); });
 }
 
