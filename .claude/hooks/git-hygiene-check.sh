@@ -88,8 +88,12 @@ if [ -f "$TERMINALS_FILE" ]; then
             continue
         fi
 
-        # Terminal header: ### T1 — description
-        if [[ "$line" =~ ^###[[:space:]]+(T[0-9]+) ]]; then
+        # Terminal header: ### T1 — description OR ### T-NAMED-THING — description
+        # Matches both numeric (T1, T42) and hyphenated-named (T-WAR-ROOM,
+        # T-PRELAUNCH-HARDENING) terminal IDs. Previously only the numeric
+        # form was recognized, which silently orphaned every T-named claim
+        # and reported their files as unclaimed in the hygiene warning.
+        if [[ "$line" =~ ^###[[:space:]]+(T[0-9A-Za-z_-]+) ]]; then
             current_terminal="${BASH_REMATCH[1]}"
             terminal_claims[$current_terminal]=""
             terminal_status[$current_terminal]=""
