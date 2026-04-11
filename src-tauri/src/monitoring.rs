@@ -974,17 +974,45 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     }
                 });
-                // 2. Auto-infer feedback from git history
-                tauri::async_runtime::spawn(async {
-                    match crate::awe_commands::run_awe_auto_feedback().await {
-                        Ok(msg) => {
-                            info!(target: "4da::awe", msg = %msg, "Daily AWE auto-feedback complete")
+                // 2. Auto-infer feedback from git history — uses the event-
+                //    emitting impl so the UI ticks live as scans complete.
+                //    Also triggers Tier 0 cold-start seeding if needed.
+                {
+                    let app_fb = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        match crate::awe_commands::auto_feedback_scan_impl(Some(&app_fb)).await {
+                            Ok(stats) => {
+                                info!(
+                                    target: "4da::awe",
+                                    stored = stats.decisions_stored,
+                                    inferred = stats.outcomes_inferred,
+                                    "Daily AWE auto-feedback complete"
+                                )
+                            }
+                            Err(e) => {
+                                warn!(target: "4da::awe", error = %e, "Daily AWE auto-feedback failed (non-fatal)")
+                            }
                         }
-                        Err(e) => {
-                            warn!(target: "4da::awe", error = %e, "Daily AWE auto-feedback failed (non-fatal)")
-                        }
-                    }
-                });
+                    });
+                }
+                // 3. Full autonomous tier job — Tier 0 seed + Tier 1 classify
+                //    scan + Tier 2 source mining + Tier 3 retriage. Each tier
+                //    is independent and emits its own AWE events so the UI
+                //    updates live. See awe_autonomous::run_daily_autonomous_job.
+                {
+                    let app_autonomous = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        info!(
+                            target: "4da::awe",
+                            "Daily AWE autonomous job starting (tiers 0+1+2+3)"
+                        );
+                        crate::awe_commands::awe_autonomous::run_daily_autonomous_job(
+                            &app_autonomous,
+                        )
+                        .await;
+                        info!(target: "4da::awe", "Daily AWE autonomous job complete");
+                    });
+                }
             }
 
             // Suns: tick all enabled suns

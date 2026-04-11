@@ -599,6 +599,10 @@ pub async fn run_awe_quick_check(query: String) -> Result<String> {
         return Err("AWE binary not found".into());
     };
 
+    // NOTE: AWE CLI auto-prepends the `Receive` stage. Passing "receive"
+    // explicitly causes `parse_stages` in awe-cli/main.rs to fail with
+    // `Unknown stage: 'receive'`. Historical bug — had been failing silently
+    // for every user since the feature shipped. See awe-cli/src/main.rs:2014.
     let output = run_awe_with_timeout(
         std::process::Command::new(&awe_path).args([
             "transmute",
@@ -607,7 +611,7 @@ pub async fn run_awe_quick_check(query: String) -> Result<String> {
             "-d",
             "software-engineering",
             "--stages",
-            "receive,interrogate,articulate",
+            "interrogate,articulate",
         ]),
         30,
     )
@@ -626,6 +630,7 @@ pub async fn run_awe_consequence_scan(query: String) -> Result<String> {
         return Err("AWE binary not found".into());
     };
 
+    // See note above — never pass `receive` explicitly, CLI auto-prepends it.
     let output = run_awe_with_timeout(
         std::process::Command::new(&awe_path).args([
             "transmute",
@@ -634,7 +639,7 @@ pub async fn run_awe_consequence_scan(query: String) -> Result<String> {
             "-d",
             "software-engineering",
             "--stages",
-            "receive,consequent,articulate",
+            "consequent,articulate",
         ]),
         30,
     )

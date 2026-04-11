@@ -5,6 +5,7 @@ import { useEffect, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useGameComponent } from '../../hooks/use-game-component';
+import { useAweLiveEvents } from '../../hooks/use-awe-live-events';
 import type { AweSummary, AweWisdomWell, AwePendingDecision, AweBehavioralContext } from '../../types/awe';
 
 // ============================================================================
@@ -222,11 +223,26 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
 
   const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-momentum-field');
 
+  // Subscribe to Tauri AWE events — every mutation in the Rust backend
+  // (user feedback, daily scans, Tier 2 source mining, retriage) now
+  // reaches this component without polling. See awe_events.rs.
+  useAweLiveEvents();
+
   useEffect(() => {
     void loadAweSummary();
     void loadAweWisdomWell();
     void loadAwePendingDecisions(20);
     void loadBehavioralContext();
+
+    // Poll safety net — refreshes the summary every 30 s while the
+    // Momentum tab is mounted. Catches any state change that happened
+    // outside 4DA's process (e.g. someone ran `awe.exe` in a terminal).
+    // The read is cheap (~80 ms) and idempotent.
+    const POLL_MS = 30_000;
+    const timer = window.setInterval(() => {
+      void useAppStore.getState().loadAweSummary();
+    }, POLL_MS);
+    return () => { window.clearInterval(timer); };
   }, [loadAweSummary, loadAweWisdomWell, loadAwePendingDecisions, loadBehavioralContext]);
 
   // Drive the background shader from REAL wisdom signals, not interaction proxies

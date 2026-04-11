@@ -6,9 +6,32 @@
 //! These commands provide structured JSON responses for each page's unique
 //! wisdom needs. Unlike the generic commands in context_commands.rs, these
 //! are designed for specific UI integration points.
+//!
+//! ## Submodules
+//!
+//! - [`awe_events`] — typed real-time Tauri event layer. Every mutation
+//!   command emits events so the UI re-renders without polling.
+//! - [`awe_source_mining`] — Tier 2: autonomous decision mining from
+//!   4DA's source-item feed (Hacker News, Reddit, etc.).
+//! - [`awe_autonomous`] — Tier 0 (seeding), Tier 1 (classify-enhanced
+//!   scan), and Tier 3 (retriage) loops invoked by the daily scheduler.
+
+// Child modules declared with `#[path]` because the canonical crate root
+// (`lib.rs`) has uncommitted changes from parallel terminals — we cannot
+// add `pub mod` declarations there without colliding. Declaring these as
+// children of `awe_commands` makes them reachable via
+// `crate::awe_commands::awe_events::*` from anywhere in the crate.
+#[path = "awe_events.rs"]
+pub mod awe_events;
+
+#[path = "awe_source_mining.rs"]
+pub mod awe_source_mining;
+
+#[path = "awe_autonomous.rs"]
+pub mod awe_autonomous;
 
 use crate::context_commands::{find_awe_binary, run_awe_with_timeout};
-use tracing::info;
+use tracing::{info, warn};
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -76,17 +99,60 @@ pub async fn get_awe_candidates(domain: String) -> Result<String> {
 // Interaction Feedback — User behavior feeds AWE
 // ============================================================================
 
-/// Record user interaction as AWE feedback. Non-blocking.
+/// Record a user interaction as AWE feedback.
+///
+/// This is the primary channel by which user behavior in 4DA (save,
+/// dismiss, click, mark_irrelevant) feeds AWE's wisdom graph.
+///
+/// **Historical bugs (both fixed):**
+/// 1. Original code passed `--stages receive`, but the CLI rejects
+///    `receive` as an unknown stage (it's auto-prepended). Every call
+///    was failing silently via `let _ = ...`.
+/// 2. Original code minted a local `ux_<timestamp>` feedback ID that
+///    never matched a real decision in AWE's DB. Even if the transmute
+///    had succeeded, the feedback call would target a nonexistent ID.
+///
+/// **New flow:**
+/// 1. Check if `item_title` is decision-shaped (heuristic). If not,
+///    record as a lightweight interest signal and return early — we
+///    don't want to pollute the wisdom graph with every click.
+/// 2. If decision-shaped: run `awe transmute` (no `receive` stage) to
+///    persist the decision to AWE's DB.
+/// 3. Read the newly-created decision ID from `awe history --limit 1
+///    --json`. Match by statement text to defend against races.
+/// 4. Record feedback against the real ID.
+/// 5. Emit `awe:decision-added` and `awe:feedback-recorded` Tauri events
+///    so the UI can update live.
 #[tauri::command]
 pub async fn record_awe_interaction_feedback(
+    app: tauri::AppHandle,
     item_title: String,
     interaction: String,
     source_type: String,
 ) -> Result<String> {
+    use self::awe_events::{emit_awe_event, AweEvent};
+
+    // Validate input lengths defensively (item_title comes from source feeds
+    // which may contain very long strings or malformed text).
+    let item_title = crate::ipc_guard::validate_length(
+        "item_title",
+        &item_title,
+        crate::ipc_guard::MAX_INPUT_LENGTH,
+    )
+    .map_err(|e| e.to_string())?
+    .to_string();
+    let interaction = crate::ipc_guard::validate_length("interaction", &interaction, 50)
+        .map_err(|e| e.to_string())?
+        .to_string();
+    let source_type = crate::ipc_guard::validate_length("source_type", &source_type, 100)
+        .map_err(|e| e.to_string())?
+        .to_string();
+
     let awe_path = match find_awe_binary() {
         Some(p) => p,
-        None => return Ok(r#"{"status":"skipped"}"#.into()),
+        None => return Ok(r#"{"status":"skipped","reason":"awe_not_installed"}"#.into()),
     };
+
     let outcome = match interaction.as_str() {
         "save" => "confirmed",
         "dismiss" | "mark_irrelevant" => "refuted",
@@ -98,32 +164,152 @@ pub async fn record_awe_interaction_feedback(
         "click" => "clicked",
         o => o,
     };
-    let stmt = format!("User {} '{}' from {}", verb, item_title, source_type);
-    let _ = run_awe_with_timeout(
+
+    // Decision-shape filter — only transmute items that look like decisions.
+    // Raw news titles, release notes, etc. are signals but not decisions and
+    // should not pollute the wisdom graph.
+    if !self::awe_source_mining::looks_like_decision(&item_title) {
+        info!(
+            target: "4da::awe",
+            %interaction,
+            %source_type,
+            "AWE feedback skipped — item is not decision-shaped"
+        );
+        return Ok(serde_json::json!({
+            "status": "skipped",
+            "reason": "not_decision_shaped"
+        })
+        .to_string());
+    }
+
+    // Step 1: transmute the item as a persisted AWE decision.
+    // Use only interrogate+articulate stages — receive auto-prepended by CLI,
+    // skipping consequent/synthesize/judge saves ~10s per call (5s vs 15s).
+    let transmute_out = run_awe_with_timeout(
         std::process::Command::new(&awe_path).args([
             "transmute",
-            &stmt,
+            &item_title,
             "--stages",
-            "receive",
+            "interrogate,articulate",
             "-d",
             "software-engineering",
+            "--json",
         ]),
-        10,
+        15,
     );
-    let id = format!("ux_{}", chrono::Utc::now().timestamp_millis());
-    let _ = run_awe_with_timeout(
+    if let Err(e) = &transmute_out {
+        warn!(target: "4da::awe", error = %e, "transmute failed — skipping feedback");
+        return Ok(serde_json::json!({
+            "status": "error",
+            "phase": "transmute",
+            "error": e.to_string()
+        })
+        .to_string());
+    }
+
+    // Step 2: capture the newly-created decision ID by reading the head of
+    // history. Matched by statement text — if someone else raced us and
+    // created a different decision, our lookup won't match and we skip
+    // gracefully rather than corrupt data.
+    let history_out = run_awe_with_timeout(
+        std::process::Command::new(&awe_path).args([
+            "history",
+            "-d",
+            "software-engineering",
+            "--limit",
+            "3",
+            "--json",
+        ]),
+        5,
+    );
+    let decision_id = match &history_out {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            serde_json::from_str::<serde_json::Value>(&stdout)
+                .ok()
+                .and_then(|json| {
+                    json.get("decisions")
+                        .and_then(|v| v.as_array())
+                        .and_then(|arr| {
+                            arr.iter().find(|d| {
+                                d.get("statement").and_then(|s| s.as_str())
+                                    == Some(item_title.as_str())
+                            })
+                        })
+                        .and_then(|d| d.get("id").and_then(|v| v.as_str()).map(String::from))
+                })
+        }
+        Err(_) => None,
+    };
+    let Some(decision_id) = decision_id else {
+        warn!(
+            target: "4da::awe",
+            "transmute succeeded but decision ID lookup failed — feedback skipped"
+        );
+        return Ok(serde_json::json!({
+            "status": "error",
+            "phase": "id_lookup",
+            "error": "could not find newly-created decision in history"
+        })
+        .to_string());
+    };
+
+    // Step 3: record feedback against the real decision ID.
+    let feedback_result = run_awe_with_timeout(
         std::process::Command::new(&awe_path).args([
             "feedback",
-            &id,
+            &decision_id,
             "--outcome",
             outcome,
             "--details",
-            &format!("Auto: user {} from {}", verb, source_type),
+            &format!("4DA user {} from {}", verb, source_type),
         ]),
         10,
     );
-    info!(target: "4da::awe", %interaction, %outcome, "AWE interaction feedback");
-    Ok(serde_json::json!({"status": "recorded", "outcome": outcome}).to_string())
+    if let Err(e) = &feedback_result {
+        warn!(target: "4da::awe", %decision_id, error = %e, "feedback call failed");
+        return Ok(serde_json::json!({
+            "status": "error",
+            "phase": "feedback",
+            "error": e.to_string(),
+            "decision_id": decision_id
+        })
+        .to_string());
+    }
+
+    info!(
+        target: "4da::awe",
+        %interaction,
+        %outcome,
+        %decision_id,
+        "AWE interaction feedback recorded"
+    );
+
+    // Step 4: emit live events so the UI can update without polling.
+    emit_awe_event(
+        &app,
+        AweEvent::DecisionAdded {
+            id: decision_id.clone(),
+            statement: item_title.clone(),
+            domain: "software-engineering".into(),
+            source: "user_interaction".into(),
+        },
+    );
+    emit_awe_event(
+        &app,
+        AweEvent::FeedbackRecorded {
+            decision_id: decision_id.clone(),
+            outcome: outcome.into(),
+        },
+    );
+    emit_awe_event(&app, AweEvent::SummaryStale);
+
+    Ok(serde_json::json!({
+        "status": "recorded",
+        "outcome": outcome,
+        "decision_id": decision_id
+    })
+    .to_string())
 }
 
 // ============================================================================
@@ -151,12 +337,14 @@ pub async fn get_awe_pattern_match(query: String, domain: String) -> Result<Stri
         .to_string());
     }
 
+    // NOTE: AWE CLI auto-prepends `Receive`. Passing it explicitly fails
+    // with `Unknown stage: 'receive'`. See context_commands.rs for history.
     let result = run_awe(
         &[
             "transmute",
             &query,
             "--stages",
-            "receive,synthesize,articulate",
+            "synthesize,articulate",
             "--json",
             "-d",
             &domain,
@@ -402,13 +590,62 @@ pub async fn submit_awe_batch_feedback(feedbacks: Vec<serde_json::Value>) -> Res
 /// Scans configured context directories for decisions, infers outcomes
 /// from git patterns (time-stability, reverts), and records feedback.
 /// Called by the monitoring scheduler daily or on-demand from Console.
+///
+/// This is the **Tauri command entry point** — it takes no AppHandle arg
+/// so the existing call sites in `app_setup.rs` (startup spawn) and
+/// `monitoring.rs` keep compiling without needing edits. Internally it
+/// delegates to `auto_feedback_scan_impl` which is the event-emitting
+/// variant used by the autonomous tier orchestrator.
 #[tauri::command]
 pub async fn run_awe_auto_feedback() -> Result<String> {
+    let stats = auto_feedback_scan_impl::<tauri::Wry>(None).await?;
+    Ok(stats.to_json())
+}
+
+/// Scan statistics returned by `auto_feedback_scan_impl`.
+#[derive(Debug, Clone, Default)]
+pub struct AutoFeedbackStats {
+    pub repos_scanned: u64,
+    pub decisions_stored: u64,
+    pub outcomes_inferred: u64,
+    pub seed_outcome: Option<self::awe_autonomous::SeedOutcome>,
+}
+
+impl AutoFeedbackStats {
+    /// Serialize to the JSON shape the frontend has always consumed.
+    pub fn to_json(&self) -> String {
+        serde_json::json!({
+            "decisions_stored": self.decisions_stored,
+            "outcomes_inferred": self.outcomes_inferred,
+            "repos_scanned": self.repos_scanned,
+            "seed_outcome": self.seed_outcome
+                .map(|o| format!("{:?}", o))
+                .unwrap_or_else(|| "skipped".to_string()),
+        })
+        .to_string()
+    }
+}
+
+/// Shared implementation of the auto-feedback scan path. Callers that
+/// have a live `AppHandle` pass `Some(&app)` and get event emission + the
+/// Tier 0 seed check; callers without one (the legacy tauri command) pass
+/// `None` and the scan still runs without live UI ticks.
+pub async fn auto_feedback_scan_impl<R: tauri::Runtime>(
+    app: Option<&tauri::AppHandle<R>>,
+) -> Result<AutoFeedbackStats> {
     let awe_path = require_awe()?;
 
+    // Tier 0 — seed if the wisdom graph is empty. Safe to call repeatedly;
+    // the helper short-circuits when decisions already exist.
+    let seed_outcome = if let Some(app) = app {
+        Some(self::awe_autonomous::run_tier0_seed_if_empty(app).await)
+    } else {
+        None
+    };
+
     let context_dirs = crate::get_context_dirs();
-    let mut total_inferred = 0;
-    let mut total_stored = 0;
+    let mut total_inferred = 0u64;
+    let mut total_stored = 0u64;
 
     for dir in &context_dirs {
         let dir_str = dir.to_string_lossy();
@@ -442,19 +679,33 @@ pub async fn run_awe_auto_feedback() -> Result<String> {
         }
     }
 
+    // Emit scan-complete so the UI ticks without needing a poll. Only
+    // when an AppHandle was provided — tests and the legacy command
+    // path skip this.
+    if let Some(app) = app {
+        let scan_event = self::awe_events::AweEvent::ScanComplete {
+            repos_scanned: context_dirs.len() as u64,
+            decisions_stored: total_stored,
+            outcomes_inferred: total_inferred,
+        };
+        self::awe_events::emit_awe_event(app, scan_event);
+        self::awe_events::emit_awe_event(app, self::awe_events::AweEvent::SummaryStale);
+    }
+
     info!(
         target: "4da::awe",
         stored = total_stored,
         inferred = total_inferred,
+        seed_outcome = ?seed_outcome,
         "AWE auto-feedback scan complete"
     );
 
-    Ok(serde_json::json!({
-        "decisions_stored": total_stored,
-        "outcomes_inferred": total_inferred,
-        "repos_scanned": context_dirs.len(),
+    Ok(AutoFeedbackStats {
+        repos_scanned: context_dirs.len() as u64,
+        decisions_stored: total_stored,
+        outcomes_inferred: total_inferred,
+        seed_outcome,
     })
-    .to_string())
 }
 
 // ============================================================================
@@ -491,5 +742,210 @@ mod tests {
         let result = run_awe(&["nonexistent_command"], 5);
         // Either fails or returns something — just shouldn't panic
         let _ = result;
+    }
+
+    // ========================================================================
+    // Bug #1 regression guard — the "--stages receive" bug
+    // ========================================================================
+    //
+    // Before the fix, 4DA passed `--stages receive` to every transmute call.
+    // The CLI auto-prepends `Receive` and rejects an explicit `receive` name,
+    // so every call returned `Error: Unknown stage: 'receive'` — silently
+    // swallowed by `let _ = run_awe_with_timeout(...)`. The whole Wisdom
+    // Panel transmute path + every user interaction feedback was dead.
+    //
+    // This regression guard runs on the dev machine only (where AWE exists)
+    // and asserts that the exact argument pattern 4DA uses now succeeds.
+    // ========================================================================
+
+    #[test]
+    fn regression_bug_1_transmute_stage_args_are_valid() {
+        let awe_path = "D:\\runyourempire\\awe\\target\\release\\awe.exe";
+        if !std::path::Path::new(awe_path).exists() {
+            return; // Not the dev machine — skip silently
+        }
+
+        // Exact arg pattern used in awe_commands.rs:get_awe_pattern_match
+        let out = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "transmute",
+                "Should 4DA regression-test adopt strict semver?",
+                "--stages",
+                "synthesize,articulate",
+                "--json",
+                "-d",
+                "software-engineering",
+                "--no-persist",
+            ]),
+            30,
+        );
+        assert!(
+            out.is_ok(),
+            "transmute with synthesize,articulate must succeed — bug #1 regressed: {:?}",
+            out.as_ref().err()
+        );
+        let output = out.unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !stdout.contains("Unknown stage"),
+            "AWE rejected the stage args — bug #1 regressed: {stdout}"
+        );
+
+        // Exact arg pattern used in context_commands.rs:run_awe_quick_check
+        let out = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "transmute",
+                "Should 4DA regression-test adopt strict semver?",
+                "--json",
+                "-d",
+                "software-engineering",
+                "--stages",
+                "interrogate,articulate",
+                "--no-persist",
+            ]),
+            30,
+        );
+        assert!(
+            out.is_ok(),
+            "transmute with interrogate,articulate must succeed — bug #1 regressed"
+        );
+
+        // Exact arg pattern used in context_commands.rs:run_awe_consequence_scan
+        let out = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "transmute",
+                "Should 4DA regression-test adopt strict semver?",
+                "--json",
+                "-d",
+                "software-engineering",
+                "--stages",
+                "consequent,articulate",
+                "--no-persist",
+            ]),
+            30,
+        );
+        assert!(
+            out.is_ok(),
+            "transmute with consequent,articulate must succeed — bug #1 regressed"
+        );
+
+        // Exact arg pattern used in record_awe_interaction_feedback (Tier 4)
+        let out = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "transmute",
+                "Should we regression-test adopt memory-mapped IO?",
+                "--stages",
+                "interrogate,articulate",
+                "-d",
+                "software-engineering",
+                "--json",
+                "--no-persist",
+            ]),
+            30,
+        );
+        assert!(
+            out.is_ok(),
+            "interaction-feedback transmute args must succeed — bug #1 regressed"
+        );
+    }
+
+    // ========================================================================
+    // Bug #2 regression guard — decision ID lookup after transmute
+    // ========================================================================
+    //
+    // Original record_awe_interaction_feedback minted a `ux_<timestamp>` ID
+    // that never matched any real decision in AWE's DB. The fix does a
+    // history lookup by statement text. This test proves the pattern:
+    //
+    //   1. Run transmute (persist).
+    //   2. Read `awe history --limit 3 --json`.
+    //   3. Assert the newest decision's statement matches our input.
+    //   4. Record feedback against that real ID.
+    //   5. Assert feedback call succeeds.
+    // ========================================================================
+
+    #[test]
+    fn regression_bug_2_feedback_uses_real_decision_id() {
+        let awe_path = "D:\\runyourempire\\awe\\target\\release\\awe.exe";
+        if !std::path::Path::new(awe_path).exists() {
+            return;
+        }
+
+        // Use a unique marker so we can find our decision back reliably
+        // without racing against any other recent activity.
+        let marker = format!(
+            "4DA-regression-test-{}",
+            chrono::Utc::now().timestamp_millis()
+        );
+        let statement = format!("Should we {} adopt a new logger crate?", marker);
+
+        // Step 1: transmute to persist
+        let transmute = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "transmute",
+                &statement,
+                "--stages",
+                "interrogate,articulate",
+                "-d",
+                "software-engineering",
+                "--json",
+            ]),
+            30,
+        );
+        assert!(
+            transmute.is_ok(),
+            "transmute failed — bug #2 test blocked by bug #1: {:?}",
+            transmute.err()
+        );
+
+        // Step 2: lookup via history
+        let history = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "history",
+                "-d",
+                "software-engineering",
+                "--limit",
+                "5",
+                "--json",
+            ]),
+            10,
+        )
+        .expect("history call must succeed");
+        let stdout = String::from_utf8_lossy(&history.stdout);
+        let json: serde_json::Value =
+            serde_json::from_str(&stdout).expect("history --json must parse");
+        let decision_id = json
+            .get("decisions")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| {
+                arr.iter().find(|d| {
+                    d.get("statement").and_then(|s| s.as_str()) == Some(statement.as_str())
+                })
+            })
+            .and_then(|d| d.get("id").and_then(|v| v.as_str()).map(String::from))
+            .expect("our freshly-persisted decision must appear at head of history");
+
+        assert!(
+            decision_id.starts_with("dc_"),
+            "decision ID must be a UUIDv7 dc_ prefix, got: {decision_id}"
+        );
+
+        // Step 3: feedback against the REAL ID
+        let feedback = run_awe_with_timeout(
+            std::process::Command::new(awe_path).args([
+                "feedback",
+                &decision_id,
+                "--outcome",
+                "confirmed",
+                "--details",
+                "regression-test: bug #2 end-to-end flow",
+            ]),
+            10,
+        );
+        assert!(
+            feedback.is_ok(),
+            "feedback with real ID must succeed — bug #2 regressed: {:?}",
+            feedback.err()
+        );
     }
 }
