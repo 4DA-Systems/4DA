@@ -1,12 +1,42 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
 import { getSourceLabel, getSourceColorClass, getSourcesByCategory, getSourceCategory } from '../config/sources';
 import type { SourceRelevance } from '../types/analysis';
+import type { SourceHealthStatus } from '../types';
 import { ResultItem } from './ResultItem';
 
 interface CategoryMeta { label: string; description: string; color: string }
+
+interface ChapterHealth {
+  healthy: number;
+  error: number;
+  idle: number;
+  total: number;
+}
+
+function computeChapterHealth(
+  categorySourceIds: string[],
+  sourceHealth: SourceHealthStatus[],
+): ChapterHealth {
+  let healthy = 0;
+  let error = 0;
+  let idle = 0;
+  for (const id of categorySourceIds) {
+    const h = sourceHealth.find(x => x.source_type === id);
+    if (h == null) {
+      idle++;
+    } else if (h.status === 'healthy') {
+      healthy++;
+    } else if (h.status === 'error' || h.status === 'circuit_open') {
+      error++;
+    } else {
+      idle++;
+    }
+  }
+  return { healthy, error, idle, total: categorySourceIds.length };
+}
 
 const CATEGORY_ORDER = ['security', 'package_registry', 'news', 'research', 'community', 'social'];
 
@@ -29,13 +59,23 @@ export function CategoryChapterView() {
     social: { label: t('chapters.cat.social'), description: t('chapters.cat.socialDesc'), color: 'text-blue-400' },
   }), [t]);
 
-  const { relevanceResults, feedbackGiven } = useAppStore(
+  const { relevanceResults, feedbackGiven, sourceHealth } = useAppStore(
     useShallow(s => ({
       relevanceResults: s.appState.relevanceResults,
       feedbackGiven: s.feedbackGiven,
+      sourceHealth: s.sourceHealth,
     })),
   );
   const recordInteraction = useAppStore(s => s.recordInteraction);
+  const loadSourceHealth = useAppStore(s => s.loadSourceHealth);
+
+  // Refresh source health whenever the chapter grid is viewed — cheap,
+  // gives users live visibility into per-source reliability. Was the
+  // missing piece for "sources are erratic, sometimes populated
+  // sometimes not": now you can SEE which sources are idle or failing.
+  useEffect(() => {
+    void loadSourceHealth();
+  }, [loadSourceHealth]);
 
   // Group items by category
   const chapters = useMemo(() => {
@@ -87,6 +127,20 @@ export function CategoryChapterView() {
             const relevantCount = items.filter(i => i.relevant).length;
             const sources = getSourcesByCategory().get(cat) ?? [];
             const criticalCount = items.filter(i => i.signal_priority === 'critical' || i.signal_priority === 'alert').length;
+            const health = computeChapterHealth(sources, sourceHealth);
+            // Derive a single status color for the dot: red if any source
+            // is failing, amber if all sources are idle/unknown, green if
+            // at least one is healthy. This answers "are my sources
+            // actually working?" at a glance.
+            const statusColor = health.error > 0 ? 'bg-red-400' :
+              health.healthy > 0 ? 'bg-green-400' :
+              health.total > 0 ? 'bg-amber-400/60' :
+              'bg-text-muted/30';
+            const statusTitle = health.error > 0
+              ? t('chapters.health.failing', '{{count}} of {{total}} sources failing', { count: health.error, total: health.total })
+              : health.healthy > 0
+                ? t('chapters.health.healthy', '{{healthy}} of {{total}} sources active', { healthy: health.healthy, total: health.total })
+                : t('chapters.health.idle', 'Sources idle — waiting on next fetch');
 
             return (
               <button
@@ -95,9 +149,16 @@ export function CategoryChapterView() {
                 className="bg-bg-secondary border border-border rounded-lg p-4 text-left hover:border-border/80 hover:bg-bg-tertiary/50 transition-all group"
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`text-sm font-medium ${meta.color}`}>
-                    {meta.label}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${statusColor}`}
+                      title={statusTitle}
+                      aria-label={statusTitle}
+                    />
+                    <span className={`text-sm font-medium ${meta.color}`}>
+                      {meta.label}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     {criticalCount > 0 && (
                       <span className="px-1.5 py-0.5 text-[10px] bg-red-500/20 text-red-400 rounded">
@@ -113,14 +174,23 @@ export function CategoryChapterView() {
                   {meta.description}
                 </p>
                 <div className="flex flex-wrap gap-1">
-                  {sources.slice(0, 6).map(id => (
-                    <span
-                      key={id}
-                      className={`px-1.5 py-0.5 text-[10px] rounded ${getSourceColorClass(id)}`}
-                    >
-                      {getSourceLabel(id)}
-                    </span>
-                  ))}
+                  {sources.slice(0, 6).map(id => {
+                    const h = sourceHealth.find(x => x.source_type === id);
+                    const sourceOk = h == null || h.status === 'healthy';
+                    return (
+                      <span
+                        key={id}
+                        className={`px-1.5 py-0.5 text-[10px] rounded ${getSourceColorClass(id)} ${sourceOk ? '' : 'opacity-40 line-through decoration-1'}`}
+                        title={
+                          h == null ? t('chapters.health.sourceIdle', '{{source}}: no recent fetches', { source: getSourceLabel(id) })
+                          : h.status === 'healthy' ? t('chapters.health.sourceHealthy', '{{source}}: {{items}} items, last {{when}}', { source: getSourceLabel(id), items: h.items_fetched, when: h.last_success_relative ?? 'unknown' })
+                          : t('chapters.health.sourceFailing', '{{source}}: {{message}}', { source: getSourceLabel(id), message: h.gap_message ?? h.status })
+                        }
+                      >
+                        {getSourceLabel(id)}
+                      </span>
+                    );
+                  })}
                 </div>
               </button>
             );
