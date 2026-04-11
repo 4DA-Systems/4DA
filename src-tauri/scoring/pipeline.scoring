@@ -96,9 +96,11 @@ priority_caps {
     high_score_floor: 0.70   # [0.50, 0.90]
 }
 
+# Dampening reduced to preserve signal through quality composite:
+# penalty 0.65->0.72, boost 0.55->0.65 (score-spread widening 2026-04-07)
 dampening {
-    penalty_strength: 0.65       # [0.30, 0.90]
-    boost_strength: 0.55         # [0.20, 0.70]
+    penalty_strength: 0.72       # [0.30, 0.90]
+    boost_strength: 0.65         # [0.20, 0.70]
     domain_aware_strength: 0.20  # [0.10, 0.50]
 }
 
