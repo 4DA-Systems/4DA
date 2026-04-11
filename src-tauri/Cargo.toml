@@ -60,6 +60,15 @@ scraper = "0.23"
 once_cell = "1"
 parking_lot = "0.12"
 
+# Glyph Envelope Protocol (Phase 2 audit-only mode; behind glyph_audit feature)
+# Path deps to the standalone glyph repo at D:\runyourempire\glyph
+# When glyph-* crates ship to crates.io these become version deps.
+glyph-core    = { path = "../../runyourempire/glyph/crates/glyph-core",    optional = true }
+glyph-compile = { path = "../../runyourempire/glyph/crates/glyph-compile", optional = true }
+glyph-lift    = { path = "../../runyourempire/glyph/crates/glyph-lift",    optional = true }
+glyph-engine  = { path = "../../runyourempire/glyph/crates/glyph-engine",  optional = true }
+glyph-safety  = { path = "../../runyourempire/glyph/crates/glyph-safety",  optional = true }
+
 # Database (sqlite + vector search)
 # Default: "bundled" (plaintext SQLite). For encrypted databases:
 #   1. Install Strawberry Perl: choco install strawberryperl
@@ -183,6 +192,17 @@ archive = ["dep:zip", "dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
 experimental = []
+# Glyph Envelope Protocol — Phase 2 audit-only mode.
+# Off by default; enable to activate the glyph_integration module.
+# Kill gate: if measurements fail (see docs/glyph/GEP-INTEGRATION.md),
+# turn this feature off and the code is dormant with zero user impact.
+glyph_audit = [
+    "dep:glyph-core",
+    "dep:glyph-compile",
+    "dep:glyph-lift",
+    "dep:glyph-engine",
+    "dep:glyph-safety",
+]
 # Feature-gated command groups (ghost commands with zero frontend callers)
 team-sync = []       # Team Sync, Intelligence, Monitoring (AD-023) — 17 commands
 enterprise = ["dep:jsonwebtoken", "dep:rsa", "dep:pkcs8", "dep:x509-cert"]      # Audit, Webhooks, Organizations, Analytics, SSO crypto — 15 commands

@@ -206,6 +206,8 @@ mod digest_email;
 mod domain_profile;
 mod domain_profile_data;
 pub mod extractors;
+#[cfg(feature = "glyph_audit")]
+mod glyph_integration;
 mod free_briefing;
 #[cfg(feature = "experimental")]
 mod game_achievements;
