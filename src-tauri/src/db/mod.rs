@@ -10,7 +10,7 @@ mod concurrency_tests;
 mod dependencies;
 pub(crate) mod encryption;
 mod history;
-mod migrations;
+pub(crate) mod migrations;
 mod sources;
 #[cfg(test)]
 mod stress_tests;
