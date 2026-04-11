@@ -54,6 +54,11 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
         check_display_server(&mut issues);
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        check_webview2_version(&mut issues);
+    }
+
     #[cfg(target_os = "macos")]
     {
         check_icloud_interference(&data_dir, &mut issues);
@@ -99,6 +104,53 @@ fn get_data_dir() -> PathBuf {
 
 /// Check 1: Database file exists and is readable.
 pub(crate) fn check_database(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    // First, surface any cold-boot recovery notice. `state.rs::get_database`
+    // calls `recover_corrupt_db_if_needed` and stashes the result so we can
+    // tell the user about it on the next health-check poll. The notice is
+    // consumed (one-shot) so the banner shows exactly once per cold boot.
+    if let Some(notice) = crate::db::migrations::take_db_recovery_notice() {
+        match notice {
+            crate::db::migrations::CorruptionRecovery::Healthy
+            | crate::db::migrations::CorruptionRecovery::NoExistingDb => {
+                // Healthy paths produce no banner.
+            }
+            crate::db::migrations::CorruptionRecovery::RestoredFromBackup { restored_from } => {
+                issues.push(HealthIssue {
+                    component: "database",
+                    severity: HealthSeverity::Warning,
+                    message: format!(
+                        "Database was corrupt and was restored from a backup ({}). \
+                         Some recent changes may be missing. \
+                         Your previous database is preserved alongside the backup file for support.",
+                        restored_from.display()
+                    ),
+                });
+            }
+            crate::db::migrations::CorruptionRecovery::QuarantinedNoBackup { quarantined_to } => {
+                issues.push(HealthIssue {
+                    component: "database",
+                    severity: HealthSeverity::Error,
+                    message: format!(
+                        "Database was corrupt and no backup was available — a fresh database has been created. \
+                         The corrupted file is preserved at {} so you can attach it to a support request.",
+                        quarantined_to.display()
+                    ),
+                });
+            }
+            crate::db::migrations::CorruptionRecovery::RecoveryFailed { reason } => {
+                issues.push(HealthIssue {
+                    component: "database",
+                    severity: HealthSeverity::Error,
+                    message: format!(
+                        "Database integrity check failed and preemptive recovery could not run: {reason}. \
+                         The app may have fallen back to a fresh database. \
+                         Check the data directory for *.db.corrupt files and contact support."
+                    ),
+                });
+            }
+        }
+    }
+
     let db_path = data_dir.join("4da.db");
     if !db_path.exists() {
         // Not an error on first run — the DB will be created.
@@ -464,6 +516,156 @@ fn check_display_server(issues: &mut Vec<HealthIssue>) {
             ),
         });
     }
+}
+
+/// Minimum WebView2 runtime version required by 4DA.
+///
+/// WebView2 ships its own update channel ("evergreen") via Edge, so most
+/// Windows users are well above this floor. We pin a deliberately conservative
+/// minimum that covers every web platform feature 4DA's frontend uses, plus
+/// a 12-month safety margin against feature drift.
+///
+/// Update this constant when introducing a new web API that needs a newer
+/// WebView2 build. Always raise — never lower.
+#[cfg(target_os = "windows")]
+const MIN_WEBVIEW2_MAJOR: u32 = 120; // Chromium 120 = Jan 2024 — well below the evergreen floor as of 2026
+
+/// Windows-only: detect the installed WebView2 Runtime version and warn if
+/// it's missing or older than the minimum 4DA supports.
+///
+/// Reads the version from the EdgeUpdate registry key (the canonical
+/// Microsoft-documented location). Tries the four possible registry roots
+/// in order: system-wide x86, system-wide x64, per-user x86, per-user x64.
+///
+/// This check is intentionally:
+///   - Offline (registry only — no network)
+///   - Fast (single `reg query` invocation, ~10ms)
+///   - Soft-fail (warning, not error) — if WebView2 is missing entirely the
+///     app would not have launched in the first place, so reaching this
+///     code means *some* webview is present and the user can keep working
+///     while we surface the upgrade hint
+#[cfg(target_os = "windows")]
+fn check_webview2_version(issues: &mut Vec<HealthIssue>) {
+    // Stable WebView2 Runtime client GUID per Microsoft docs.
+    const CLIENT_GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+
+    let candidates = [
+        format!("HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"),
+        format!("HKLM\\SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"),
+        format!("HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"),
+        format!("HKCU\\SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\{CLIENT_GUID}"),
+    ];
+
+    let mut found_version: Option<String> = None;
+    for key in &candidates {
+        if let Some(v) = read_registry_value(key, "pv") {
+            if !v.is_empty() && v != "0.0.0.0" {
+                found_version = Some(v);
+                break;
+            }
+        }
+    }
+
+    let version = match found_version {
+        Some(v) => v,
+        None => {
+            // No version found in any of the four canonical locations. The app
+            // is running, so a webview is loaded somehow — but we can't verify
+            // its version. Surface a soft warning so the user can investigate.
+            issues.push(HealthIssue {
+                component: "webview2",
+                severity: HealthSeverity::Warning,
+                message: "WebView2 Runtime version could not be determined from the registry. \
+                          The app is running, but auto-update health may be unverifiable. \
+                          Reinstall WebView2 from https://go.microsoft.com/fwlink/p/?LinkId=2124703 \
+                          if you see UI rendering issues."
+                    .to_string(),
+            });
+            return;
+        }
+    };
+
+    // Parse the major version (first dotted segment). Version strings look like
+    // "120.0.2210.144" or sometimes "120.0.0.0" — we only care about the major.
+    let major = version
+        .split('.')
+        .next()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+
+    if major == 0 {
+        issues.push(HealthIssue {
+            component: "webview2",
+            severity: HealthSeverity::Warning,
+            message: format!(
+                "WebView2 Runtime reported an unparseable version '{version}'. \
+                 The app is running but UI features may be limited. \
+                 Update Microsoft Edge from Settings → About to refresh WebView2."
+            ),
+        });
+        return;
+    }
+
+    if major < MIN_WEBVIEW2_MAJOR {
+        issues.push(HealthIssue {
+            component: "webview2",
+            severity: HealthSeverity::Warning,
+            message: format!(
+                "WebView2 Runtime is version {version} (major {major}). \
+                 4DA requires at least major {MIN_WEBVIEW2_MAJOR} for full UI support. \
+                 Update Microsoft Edge — WebView2 evergreen updates ride along with Edge updates. \
+                 Check Settings → Apps → Microsoft Edge WebView2 Runtime, then run Edge's \
+                 'About' page to trigger an update. Some UI features may render incorrectly until updated."
+            ),
+        });
+    } else {
+        // Healthy — log only, no user-visible issue.
+        tracing::info!(
+            target: "4da::startup",
+            webview2_version = %version,
+            webview2_major = major,
+            min_required = MIN_WEBVIEW2_MAJOR,
+            "WebView2 runtime version is healthy"
+        );
+    }
+}
+
+/// Read a single REG_SZ value from the Windows registry by shelling out to
+/// `reg query`. Returns `None` on any failure (missing key, missing value,
+/// non-zero exit, parse error).
+///
+/// Why `reg.exe` instead of a registry crate: zero new dependencies, works on
+/// every Windows build since XP, can never panic, fast enough for a one-shot
+/// startup probe (~10ms). The output format is stable and parses cleanly.
+#[cfg(target_os = "windows")]
+fn read_registry_value(key: &str, value_name: &str) -> Option<String> {
+    use std::process::Command;
+    let output = Command::new("reg")
+        .args(["query", key, "/v", value_name])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Output looks like:
+    //     HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{...}
+    //         pv    REG_SZ    120.0.2210.144
+    // We split on whitespace and take the last token of the line that starts
+    // with the value name.
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with(value_name) {
+            // Split on REG_SZ to get everything after the type marker.
+            if let Some(after) = trimmed.split("REG_SZ").nth(1) {
+                let v = after.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Check if the data directory is inside an iCloud Drive synced folder.
