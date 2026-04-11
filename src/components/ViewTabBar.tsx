@@ -22,7 +22,10 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
   { id: 'calibrate', labelKey: 'nav.calibrate', subtitleKey: 'nav.calibrate.subtitle', activeColor: 'bg-sky-500/20 text-sky-400' },
 ];
 
-const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
+// CANONICAL SOURCE: The list of views visible per tier.
+// MUST stay in sync with TIER_VIEWS in src/store/ui-slice.ts.
+// Exported for the consistency test at src/components/__tests__/tier-views-consistency.test.ts.
+export const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
   core: ['briefing', 'chapters', 'results', 'playbook'],
   explorer: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights'],
   invested: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
