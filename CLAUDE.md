@@ -184,15 +184,21 @@ GEP is a typed semantic envelope for inter-agent communication. It wraps natural
 - Audit log surfaces in the Compound Intelligence dashboard
 
 **Rollout phases:**
-- Phase 0 — spec + tokenizer measurement ✅
-- Phase 1 — Rust crate with 30+ tests ✅
-- Phase 2 — audit-only mode in 4DA (follow-up commit, adds `glyph_audit` table + `glyph_integration` module behind a `glyph_audit` cargo feature flag)
+- Phase 0 — spec + real Anthropic tokenizer measurement ✅ (CONDITIONAL PASS)
+- Phase 1 — Rust crate with 35 tests ✅
+- Phase 1.5 — Phase 2 integration harness crate (SqliteAuditSink, mocks, demo) ✅
+- Phase 2 — audit-only mode in 4DA (follow-up, drop harness into src-tauri/src/glyph_integration/)
 - Phase 3 — first opt-in agent (`gotcha-detector`)
 - Phase 4 — broker routing by glyph
 - Phase 5 — safety hardening (real AWE + UI bridges)
 - Phase 6 — compound measurement + AWE feedback loop
 
-**Kill gates:** Phase 2 aborts if compression ratio <30% or categorical coverage <50%. The crate stays as reference material; the 4DA integration is reverted cleanly.
+**Phase 0 honest verdict (2026-04-12, claude-opus-4-6):**
+- Batch amortised per-glyph: 2.53 tokens (PASS ≤3)
+- Real 6-glyph header: 28 tokens vs NL metadata: 30 tokens = 6.7% savings (parity)
+- **Compression claim DOWNGRADED.** GEP is typed routing + composable safety gates + dual-form audit, NOT a token-savings technology. Lead with typing/routing/audit when pitching GEP, never with "5x compression."
+
+**Kill gates:** Phase 2 aborts if categorical coverage <50% or audit log growth excessive. The crate stays as reference material; the 4DA integration is reverted cleanly.
 
 **Docs in 4DA:** `docs/glyph/GEP-SPEC.md`, `GEP-SAFETY.md`, `GEP-INTEGRATION.md`, `GEP-ALPHABET.md`
 **Canonical spec:** `D:\runyourempire\glyph\docs\SPEC.md` (dual-licensed CC-BY-4.0)
