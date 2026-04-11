@@ -584,6 +584,8 @@ fn compute_quality_composite(
         input.content,
         &raw.topics,
         &ctx.domain_profile.primary_stack,
+        ctx.user_role.as_deref(),
+        ctx.experience_level.as_deref(),
     );
 
     // Ecosystem shift from stack profiles
