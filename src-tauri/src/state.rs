@@ -268,14 +268,54 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
 
         info!(target: "4da::db", path = ?db_path, "Initializing database");
 
+        // PRE-FLIGHT: try preemptive corruption recovery before opening the
+        // connection. This catches subtle corruption (the kind that opens
+        // cleanly but fails on read) via PRAGMA quick_check, and restores
+        // from a `*.db.backup.vN` sibling if one exists. The result is
+        // recorded so `startup_health::check_database` can surface it as a
+        // `HealthIssue` on the next frontend poll. The fallback `Database::new`
+        // primitive recovery below remains as a belt-and-suspenders safety net
+        // for the residual case where preemptive recovery itself failed.
+        let recovery = crate::db::migrations::recover_corrupt_db_if_needed(&db_path);
+        match &recovery {
+            crate::db::migrations::CorruptionRecovery::Healthy
+            | crate::db::migrations::CorruptionRecovery::NoExistingDb => {
+                // Common path — log nothing, no notice.
+            }
+            crate::db::migrations::CorruptionRecovery::RestoredFromBackup { restored_from } => {
+                tracing::warn!(
+                    target: "4da::db",
+                    from = %restored_from.display(),
+                    "DB was corrupt — restored from backup before open"
+                );
+            }
+            crate::db::migrations::CorruptionRecovery::QuarantinedNoBackup { quarantined_to } => {
+                tracing::error!(
+                    target: "4da::db",
+                    quarantined = %quarantined_to.display(),
+                    "DB was corrupt and no backup existed — starting fresh"
+                );
+            }
+            crate::db::migrations::CorruptionRecovery::RecoveryFailed { reason } => {
+                tracing::error!(target: "4da::db", %reason, "Preemptive DB recovery failed — falling through to Database::new");
+            }
+        }
+        crate::db::migrations::set_db_recovery_notice(recovery);
+
         let db = match Database::new(&db_path) {
             Ok(db) => db,
             Err(e) => {
-                // Database may be corrupted — attempt recovery by renaming and recreating
+                // Last-resort recovery — Database::new() still failed even after
+                // the preemptive pass. Rename the offending file to the legacy
+                // single-slot `.db.corrupt` name and create a fresh DB. This
+                // path only fires for edge cases (rusqlite open errors that
+                // PRAGMA quick_check didn't catch) and intentionally uses a
+                // different filename pattern from the new recovery so both
+                // artifacts can coexist for support investigation.
                 tracing::warn!(
                     target: "4da::db",
                     error = %e,
-                    "Database open failed, attempting recovery"
+                    "Database open failed after preemptive recovery — last-resort fallback"
                 );
                 let corrupt_path = db_path.with_extension("db.corrupt");
                 if let Err(rename_err) = std::fs::rename(&db_path, &corrupt_path) {
@@ -698,7 +738,7 @@ static RELEVANCE_THRESHOLD_BITS: AtomicU32 = AtomicU32::new(0);
 pub(crate) fn get_relevance_threshold() -> f32 {
     let bits = RELEVANCE_THRESHOLD_BITS.load(Ordering::Relaxed);
     if bits == 0 {
-        0.35 // Default: accounts for multiplicative compression from quality layers
+        0.40 // Default: tightened from 0.35 to cut borderline items and produce a more curated stream
     } else {
         f32::from_bits(bits)
     }
@@ -766,7 +806,7 @@ mod tests {
     #[test]
     fn test_relevance_threshold_default() {
         RELEVANCE_THRESHOLD_BITS.store(0, Ordering::Relaxed);
-        assert!((get_relevance_threshold() - 0.35).abs() < f32::EPSILON);
+        assert!((get_relevance_threshold() - 0.40).abs() < f32::EPSILON);
     }
 
     #[test]

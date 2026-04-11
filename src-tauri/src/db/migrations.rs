@@ -1,10 +1,380 @@
 //! Database migrations — schema versioning, backup, and migration orchestration.
 
+use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
 use rusqlite::{params, Connection, Result as SqliteResult};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tracing::info;
 
 use super::Database;
+
+// ============================================================================
+// Cold-Boot Recovery Notice — surfaced via startup_health
+// ============================================================================
+//
+// `state.rs::get_database()` calls `recover_corrupt_db_if_needed` *before*
+// `Database::new()`. The recovery result is stored in this static so that
+// `startup_health::check_database()` can pick it up and emit a `HealthIssue`
+// the frontend already knows how to display. This avoids plumbing
+// `AppHandle` into the lazy database initializer (which has no async runtime
+// and no Tauri context at the moment it runs).
+
+/// Last cold-boot DB recovery outcome. Set once per process by `state.rs`,
+/// read by `startup_health.rs`. `None` means recovery hasn't run yet.
+static DB_RECOVERY_NOTICE: OnceCell<RwLock<Option<CorruptionRecovery>>> = OnceCell::new();
+
+/// Record a recovery outcome for the startup health check to surface.
+/// Called by `state.rs::get_database()` immediately after running
+/// `recover_corrupt_db_if_needed`.
+pub fn set_db_recovery_notice(result: CorruptionRecovery) {
+    let cell = DB_RECOVERY_NOTICE.get_or_init(|| RwLock::new(None));
+    *cell.write() = Some(result);
+}
+
+/// Read and clear the recovery notice. Returns `None` if recovery never ran
+/// or has already been read once. Used by `startup_health::check_database()`.
+///
+/// We clear after reading so the issue is shown exactly once per cold boot —
+/// repeated frontend health-check polls don't keep re-surfacing the banner
+/// after the user has already seen and dismissed it.
+pub fn take_db_recovery_notice() -> Option<CorruptionRecovery> {
+    let cell = DB_RECOVERY_NOTICE.get()?;
+    cell.write().take()
+}
+
+// ============================================================================
+// Cold-Boot Corruption Recovery
+// ============================================================================
+
+/// Result of a cold-boot integrity check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CorruptionRecovery {
+    /// DB file does not exist yet — first run, nothing to recover.
+    NoExistingDb,
+    /// DB opened cleanly and `PRAGMA quick_check` returned `ok`.
+    Healthy,
+    /// DB was corrupt and was successfully restored from a backup.
+    /// `restored_from` is the path of the backup file used.
+    RestoredFromBackup { restored_from: PathBuf },
+    /// DB was corrupt and no usable backup existed. The corrupt file was
+    /// quarantined to `quarantined_to`. The next call to `Database::new`
+    /// will create a fresh DB at the original path.
+    QuarantinedNoBackup { quarantined_to: PathBuf },
+    /// DB was corrupt and recovery itself failed (filesystem error,
+    /// permission issue, etc.). The original file is untouched. The
+    /// caller must decide whether to abort startup or proceed degraded.
+    RecoveryFailed { reason: String },
+}
+
+/// Inspect the main DB at `db_path`. If it's missing the function returns
+/// `NoExistingDb`. If it opens cleanly and `quick_check` returns `ok`, the
+/// function returns `Healthy`. Otherwise the function attempts to restore
+/// from the most recent `*.db.backup.v*` sibling file in the same directory.
+///
+/// Recovery semantics, in order:
+///
+/// 1. **Quarantine.** The corrupt file is renamed to
+///    `<name>.corrupt-<unix-timestamp>` so it can be examined post-mortem
+///    and never accidentally re-opened.
+/// 2. **Restore.** The most recent backup (highest `vN` suffix) is copied
+///    over the original path. If the copy succeeds the function returns
+///    `RestoredFromBackup`.
+/// 3. **Fresh start.** If no backup exists, the function returns
+///    `QuarantinedNoBackup`. The caller's normal `Database::new` call
+///    will then create an empty DB at the original path and run all
+///    migrations from scratch.
+///
+/// **This function is intentionally unwired in the cold-boot path as of
+/// 2026-04-11.** Wiring it requires touching the bootstrap site (likely
+/// `lib.rs` or `state.rs::open_db_connection`) which is currently
+/// claimed by another terminal's read-only sweep. Wire it after the next
+/// commit lock release by calling it once at the start of the database
+/// initialization path, before `Database::new(db_path)`.
+///
+/// All file operations are infallible at the API level — failures are
+/// captured into `CorruptionRecovery::RecoveryFailed` so the caller can
+/// log and decide. The function never panics.
+///
+/// **Wiring:** called from `state.rs::get_database()` immediately before
+/// `Database::new(&db_path)`. The result is stored via
+/// `set_db_recovery_notice()` so `startup_health::check_database()` can
+/// surface a `HealthIssue` to the frontend on the next health-check poll.
+pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
+    // 1. Missing file → first run, nothing to do.
+    if !db_path.exists() {
+        return CorruptionRecovery::NoExistingDb;
+    }
+
+    // 2. Try to open the file and run a structural integrity check.
+    //    Use `quick_check` rather than `integrity_check` because the latter
+    //    is O(n) on rows and a 500MB DB would block startup for seconds.
+    //    `quick_check` catches structural corruption (the kind that causes
+    //    crash loops) without scanning every row.
+    let healthy = match Connection::open(db_path) {
+        Ok(conn) => {
+            let pragma_result: rusqlite::Result<String> =
+                conn.query_row("PRAGMA quick_check", [], |row| row.get(0));
+            match pragma_result {
+                Ok(s) if s == "ok" => true,
+                Ok(other) => {
+                    tracing::error!(
+                        target: "4da::db::recovery",
+                        path = %db_path.display(),
+                        result = %other,
+                        "PRAGMA quick_check did not return 'ok' — DB is corrupt"
+                    );
+                    false
+                }
+                Err(e) => {
+                    tracing::error!(
+                        target: "4da::db::recovery",
+                        path = %db_path.display(),
+                        error = %e,
+                        "PRAGMA quick_check failed — DB is corrupt"
+                    );
+                    false
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!(
+                target: "4da::db::recovery",
+                path = %db_path.display(),
+                error = %e,
+                "Connection::open failed — DB is unreadable"
+            );
+            false
+        }
+    };
+
+    if healthy {
+        return CorruptionRecovery::Healthy;
+    }
+
+    // 3. Quarantine the corrupt file.
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let quarantine_path = db_path.with_extension(format!("db.corrupt-{timestamp}"));
+
+    if let Err(e) = std::fs::rename(db_path, &quarantine_path) {
+        return CorruptionRecovery::RecoveryFailed {
+            reason: format!(
+                "Could not quarantine corrupt DB to {}: {e}",
+                quarantine_path.display()
+            ),
+        };
+    }
+    tracing::warn!(
+        target: "4da::db::recovery",
+        from = %db_path.display(),
+        to = %quarantine_path.display(),
+        "Quarantined corrupt DB"
+    );
+
+    // 4. Find the most recent backup. Backups are named "<stem>.db.backup.vN"
+    //    with N = schema version at backup time. We pick the file with the
+    //    highest N because higher schema = more migrations applied = closer
+    //    to the user's expected state.
+    let parent = match db_path.parent() {
+        Some(p) => p,
+        None => {
+            return CorruptionRecovery::QuarantinedNoBackup {
+                quarantined_to: quarantine_path,
+            };
+        }
+    };
+
+    let backup = find_most_recent_backup(parent, db_path);
+
+    let restore_from = match backup {
+        Some(p) => p,
+        None => {
+            tracing::warn!(
+                target: "4da::db::recovery",
+                "No backups available — next launch will start with a fresh DB"
+            );
+            return CorruptionRecovery::QuarantinedNoBackup {
+                quarantined_to: quarantine_path,
+            };
+        }
+    };
+
+    // 5. Restore by copying the backup over the (now-empty) original path.
+    if let Err(e) = std::fs::copy(&restore_from, db_path) {
+        return CorruptionRecovery::RecoveryFailed {
+            reason: format!(
+                "Quarantined corrupt DB but failed to restore from {}: {e}",
+                restore_from.display()
+            ),
+        };
+    }
+
+    tracing::info!(
+        target: "4da::db::recovery",
+        from = %restore_from.display(),
+        to = %db_path.display(),
+        "Restored DB from backup after quarantine"
+    );
+
+    CorruptionRecovery::RestoredFromBackup {
+        restored_from: restore_from,
+    }
+}
+
+/// Scan the directory for files matching `<stem>.db.backup.vN` siblings of
+/// `db_path` and return the one with the highest numeric suffix.
+fn find_most_recent_backup(dir: &Path, db_path: &Path) -> Option<PathBuf> {
+    let stem = db_path.file_stem()?.to_string_lossy().to_string();
+    let prefix = format!("{stem}.db.backup.v");
+
+    let entries = std::fs::read_dir(dir).ok()?;
+
+    let mut best: Option<(u64, PathBuf)> = None;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if !name.starts_with(&prefix) {
+            continue;
+        }
+        let suffix = &name[prefix.len()..];
+        // Parse the version number from the suffix. We accept any unsigned
+        // integer — Database versioning is monotonically increasing.
+        let version: u64 = match suffix.parse() {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        if best.as_ref().map_or(true, |(v, _)| version > *v) {
+            best = Some((version, path));
+        }
+    }
+
+    best.map(|(_, p)| p)
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::*;
+    use rusqlite::Connection;
+    use tempfile::tempdir;
+
+    #[test]
+    fn no_existing_db_returns_no_existing() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("nonexistent.db");
+        assert_eq!(
+            recover_corrupt_db_if_needed(&path),
+            CorruptionRecovery::NoExistingDb
+        );
+    }
+
+    #[test]
+    fn healthy_db_returns_healthy() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("healthy.db");
+        // Create a real, valid SQLite file with some content.
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (1);")
+            .unwrap();
+        drop(conn);
+
+        assert_eq!(
+            recover_corrupt_db_if_needed(&path),
+            CorruptionRecovery::Healthy
+        );
+        // Original file untouched.
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn corrupt_db_with_no_backup_quarantines() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("corrupt.db");
+        // Garbage bytes are not a valid SQLite file.
+        std::fs::write(&path, b"this is not a sqlite database, just garbage").unwrap();
+
+        let result = recover_corrupt_db_if_needed(&path);
+        match result {
+            CorruptionRecovery::QuarantinedNoBackup { quarantined_to } => {
+                assert!(quarantined_to.exists());
+                assert!(!path.exists()); // original moved
+                assert!(quarantined_to
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .contains("corrupt-"));
+            }
+            other => panic!("expected QuarantinedNoBackup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn corrupt_db_with_backup_restores() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("d.db");
+
+        // Create a valid backup file with a known marker table.
+        let backup_path = dir.path().join("d.db.backup.v3");
+        let backup_conn = Connection::open(&backup_path).unwrap();
+        backup_conn
+            .execute_batch("CREATE TABLE marker (id INTEGER); INSERT INTO marker VALUES (42);")
+            .unwrap();
+        drop(backup_conn);
+
+        // Write garbage as the "current" db.
+        std::fs::write(&path, b"corrupt").unwrap();
+
+        let result = recover_corrupt_db_if_needed(&path);
+        match result {
+            CorruptionRecovery::RestoredFromBackup { restored_from } => {
+                assert_eq!(restored_from, backup_path);
+                // Original path now contains the backup contents.
+                assert!(path.exists());
+                let conn = Connection::open(&path).unwrap();
+                let count: i64 = conn
+                    .query_row("SELECT COUNT(*) FROM marker", [], |r| r.get(0))
+                    .unwrap();
+                assert_eq!(count, 1);
+            }
+            other => panic!("expected RestoredFromBackup, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn picks_highest_version_backup() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("d.db");
+
+        // Three backups, v1 / v5 / v3 — recovery should pick v5.
+        for (v, marker) in [(1u32, 100i64), (5, 500), (3, 300)] {
+            let p = dir.path().join(format!("d.db.backup.v{v}"));
+            let c = Connection::open(&p).unwrap();
+            c.execute_batch(&format!(
+                "CREATE TABLE m (x INTEGER); INSERT INTO m VALUES ({marker});"
+            ))
+            .unwrap();
+        }
+
+        std::fs::write(&path, b"corrupt").unwrap();
+
+        let result = recover_corrupt_db_if_needed(&path);
+        if let CorruptionRecovery::RestoredFromBackup { restored_from } = result {
+            assert!(restored_from.to_string_lossy().ends_with("v5"));
+            // Verify it's the v5 marker (500), not v1 (100) or v3 (300).
+            let conn = Connection::open(&path).unwrap();
+            let val: i64 = conn
+                .query_row("SELECT x FROM m LIMIT 1", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(val, 500);
+        } else {
+            panic!("expected RestoredFromBackup");
+        }
+    }
+}
 
 impl Database {
     /// Create a pre-migration backup of the database file.
@@ -226,7 +596,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 52;
+        const TARGET_VERSION: i64 = 53;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1524,6 +1894,33 @@ impl Database {
                              );",
                         )?;
                         info!(target: "4da::db", "Created trust_events, precision_stats, preemption_wins tables");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 53: Add is_direct column to project_dependencies for
+            // direct vs transitive dependency differentiation in scoring.
+            if current_version < 53 {
+                Self::run_versioned_migration(
+                    &conn,
+                    52,
+                    53,
+                    "Phase 53: is_direct column on project_dependencies",
+                    |c| {
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name='is_direct'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE project_dependencies ADD COLUMN is_direct INTEGER DEFAULT 1;",
+                            )?;
+                            info!(target: "4da::db", "Added is_direct column to project_dependencies");
+                        }
                         Ok(())
                     },
                 )?;

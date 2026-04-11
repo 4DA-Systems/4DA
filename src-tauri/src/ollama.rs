@@ -232,6 +232,167 @@ pub struct OllamaNeedsModelsEvent {
     pub base_url: String,
 }
 
+// ============================================================================
+// Ollama Runtime Version Check
+// ============================================================================
+
+/// Minimum Ollama runtime version 4DA supports.
+///
+/// Why pinned: Ollama's `/api/embeddings` and `/api/generate` contracts have
+/// changed multiple times during 0.x. We need a version floor that contains
+/// all the API surface 4DA depends on, so users running ancient Ollama builds
+/// get a clear upgrade hint instead of confusing "model not loading" errors.
+///
+/// Update this constant when Ollama ships a breaking API change that 4DA
+/// adopts. Always raise — never lower.
+///
+/// Format: "MAJOR.MINOR.PATCH" — only the numeric tuple is compared.
+const MIN_OLLAMA_VERSION: (u32, u32, u32) = (0, 1, 32);
+
+/// Event emitted when the connected Ollama daemon is older than 4DA's
+/// supported floor. The frontend listens and shows a non-blocking banner
+/// asking the user to update Ollama.
+#[derive(Clone, Serialize)]
+pub struct OllamaVersionWarningEvent {
+    /// The version string returned by `/api/version` (raw, e.g. "0.1.30").
+    pub current: String,
+    /// The minimum version 4DA supports, formatted "MAJOR.MINOR.PATCH".
+    pub minimum: String,
+    /// User-facing message explaining the impact and the fix.
+    pub message: String,
+}
+
+/// Parse a semver-ish "MAJOR.MINOR.PATCH" string into a numeric tuple.
+///
+/// Tolerant of trailing build metadata (e.g. "0.1.32-rc1" → (0,1,32)).
+/// Returns `None` if any of the three numeric segments fail to parse —
+/// in which case the caller should treat the version as unknown rather
+/// than throwing a misleading "too old" warning.
+fn parse_ollama_version(s: &str) -> Option<(u32, u32, u32)> {
+    // Strip a leading "v" if present (Ollama doesn't currently use one,
+    // but be defensive for future format changes).
+    let s = s.trim().trim_start_matches('v');
+    // Cut off everything after the first '-' or '+' (semver pre-release/build).
+    let core = s.split(|c| c == '-' || c == '+').next().unwrap_or(s);
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse::<u32>().ok()?;
+    let minor = parts.next()?.parse::<u32>().ok()?;
+    let patch = parts.next()?.parse::<u32>().ok()?;
+    Some((major, minor, patch))
+}
+
+/// Compare two version tuples lexicographically.
+fn version_lt(a: (u32, u32, u32), b: (u32, u32, u32)) -> bool {
+    a < b
+}
+
+/// Query Ollama's `/api/version` endpoint and warn the frontend if the
+/// installed daemon is older than `MIN_OLLAMA_VERSION`.
+///
+/// This complements `check_ollama_status` (which only verifies reachability)
+/// by adding a contract-version check on top. It is intentionally:
+///
+///   - **Soft-fail.** If `/api/version` is unreachable or returns garbage,
+///     no event is emitted — the regular reachability check has already
+///     handled the offline case.
+///   - **Non-blocking.** Returns void; emits an event if the version is
+///     too old. The user keeps control of the UX.
+///   - **Idempotent.** Safe to call from multiple startup paths.
+///
+/// Called from `ensure_models_available` so it runs once per cold boot
+/// alongside the existing model-presence detection.
+pub(crate) async fn check_ollama_version(base_url: &str, app: &AppHandle) {
+    let url = format!("{}/api/version", base_url.trim_end_matches('/'));
+
+    let client = match reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            warn!(target: "4da::ollama", error = %e, "Could not build HTTP client for version check");
+            return;
+        }
+    };
+
+    let response = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            // Reachability handled elsewhere. Stay silent here.
+            tracing::debug!(target: "4da::ollama", error = %e, "Ollama version probe failed (reachability checked elsewhere)");
+            return;
+        }
+    };
+
+    if !response.status().is_success() {
+        tracing::debug!(target: "4da::ollama", status = %response.status(), "Ollama /api/version returned non-2xx");
+        return;
+    }
+
+    let body: serde_json::Value = match response.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::debug!(target: "4da::ollama", error = %e, "Ollama /api/version returned non-JSON");
+            return;
+        }
+    };
+
+    let version_str = match body.get("version").and_then(|v| v.as_str()) {
+        Some(s) => s.to_string(),
+        None => {
+            tracing::debug!(target: "4da::ollama", "Ollama /api/version response missing 'version' field");
+            return;
+        }
+    };
+
+    let parsed = match parse_ollama_version(&version_str) {
+        Some(t) => t,
+        None => {
+            // Unparseable → log and stay silent. We'd rather miss an old-version
+            // warning than nag the user about a future Ollama format change.
+            tracing::warn!(
+                target: "4da::ollama",
+                version = %version_str,
+                "Could not parse Ollama version string — skipping version check"
+            );
+            return;
+        }
+    };
+
+    let min = MIN_OLLAMA_VERSION;
+    let min_str = format!("{}.{}.{}", min.0, min.1, min.2);
+
+    if version_lt(parsed, min) {
+        let message = format!(
+            "Ollama {version_str} is older than 4DA's minimum supported version ({min_str}). \
+             Some embedding and chat features may behave unexpectedly. \
+             Update Ollama from https://ollama.com/download — your existing models stay intact."
+        );
+        warn!(
+            target: "4da::ollama",
+            current = %version_str,
+            minimum = %min_str,
+            "Ollama runtime is older than the supported floor"
+        );
+        let _ = app.emit(
+            "ollama-version-warning",
+            OllamaVersionWarningEvent {
+                current: version_str,
+                minimum: min_str,
+                message,
+            },
+        );
+    } else {
+        info!(
+            target: "4da::ollama",
+            current = %version_str,
+            minimum = %min_str,
+            "Ollama runtime version is supported"
+        );
+    }
+}
+
 /// Sovereign Cold Boot — DETECT (do not auto-pull) Ollama model availability.
 ///
 /// Replaces the previous `ensure_models_available` which auto-downloaded
@@ -279,6 +440,11 @@ pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app
         );
         return;
     }
+
+    // Step 1.5: Check the Ollama runtime version. Soft-fail — emits its own
+    // event if the daemon is older than MIN_OLLAMA_VERSION. Does not affect
+    // the rest of the startup flow.
+    check_ollama_version(base_url, app).await;
 
     // Step 2: Check which models are present
     let models: Vec<String> = status["models"]
