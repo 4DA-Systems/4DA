@@ -74,17 +74,16 @@ No algorithm can be gamed when the scoring signal comes from your local filesyst
 
 ---
 
-## Why Not Just Use...
+## How 4DA Is Different
 
-| Tool | Approach | Limitation |
-|------|----------|------------|
-| **daily.dev** | Personalizes by engagement (what you click) | Optimizes for curiosity, not project relevance. Gameable by engagement farming. |
-| **Feedly** | Aggregates by subscription (what feeds you add) | Solves aggregation, not relevance. AI features locked behind $156/yr. |
-| **Pocket** | Saves what you manually bookmark | Read-it-later, not intelligence. Mozilla killed the team in 2023. |
-| **TLDR / newsletters** | Someone else curates for "developers" broadly | One person's bias for all developers. Fits none precisely. |
-| **4DA** | Scores against your actual codebase | Requires a local codebase to scan. That's the point. |
+| Tool | What it does well | How 4DA differs |
+|------|-------------------|-----------------|
+| **daily.dev** | Great for discovery — surfaces trending content across the developer ecosystem | 4DA scores against your codebase, not your clicks. Relevance comes from what you build, not what you browse. |
+| **Feedly** | Powerful aggregation — brings all your feeds into one place | 4DA adds relevance scoring on top of aggregation. 20+ sources built in, no subscription management. |
+| **Pocket** | Clean read-it-later experience for saving articles | 4DA surfaces what you should read before you know to save it. Proactive, not reactive. |
+| **TLDR / newsletters** | Consistent daily curation from knowledgeable editors | 4DA personalizes to YOUR stack. A Rust systems developer and a React frontend developer get completely different results. |
 
-4DA scores by what you **build**, not what you click or subscribe to.
+These are good tools that solve different problems. 4DA solves a specific one: scoring content against your actual technology identity — your `Cargo.lock`, your `package.json`, your Git history. That's a fundamentally different signal source than clicks, subscriptions, or editorial judgment.
 
 ---
 
