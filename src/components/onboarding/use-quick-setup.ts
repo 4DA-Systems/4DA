@@ -6,6 +6,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { OllamaStatus, PullProgress } from './types';
 import { fallbackSuggestions, SECTION_KEY, getPersistedSections } from './onboarding-constants';
 import type { SectionState } from './onboarding-constants';
+import type { ExperienceLevel } from './setup-experience';
 
 interface UseQuickSetupProps {
   isAnimating: boolean;
@@ -23,8 +24,10 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const [stacksOpen, setStacksOpen] = useState(persisted.stacksOpen ?? false);
   const [interestsOpen, setInterestsOpen] = useState(persisted.interestsOpen ?? false);
   const [localeOpen, setLocaleOpen] = useState(persisted.localeOpen ?? false);
+  const [experienceOpen, setExperienceOpen] = useState(persisted.experienceOpen ?? false);
   const [localeConfigured, setLocaleConfigured] = useState(false);
   const [selectedStacks, setSelectedStacks] = useState<string[]>([]);
+  const [experienceLevel, setExperienceLevel] = useState<ExperienceLevel | null>(null);
 
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
@@ -49,10 +52,10 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // Persist section state to localStorage
   useEffect(() => {
     try {
-      const state: SectionState = { aiOpen, projectsOpen, stacksOpen, interestsOpen, localeOpen };
+      const state: SectionState = { aiOpen, projectsOpen, stacksOpen, interestsOpen, localeOpen, experienceOpen };
       localStorage.setItem(SECTION_KEY, JSON.stringify(state));
     } catch { /* noop */ }
-  }, [aiOpen, projectsOpen, stacksOpen, interestsOpen, localeOpen]);
+  }, [aiOpen, projectsOpen, stacksOpen, interestsOpen, localeOpen, experienceOpen]);
 
   // --- AI Provider auto-detect ---
   const pullMissingModels = useCallback(async (status: OllamaStatus) => {
@@ -208,6 +211,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   useEffect(() => { if (discoveryDone) setStacksOpen(true); }, [discoveryDone]);
   useEffect(() => { if (selectedStacks.length > 0) setLocaleOpen(true); }, [selectedStacks.length]);
   useEffect(() => { if (localeConfigured) setInterestsOpen(true); }, [localeConfigured]);
+  useEffect(() => { if (interests.length > 0) setExperienceOpen(true); }, [interests.length]);
 
   // Auto-expand remaining sections after a delay if AI not configured
   useEffect(() => {
@@ -303,6 +307,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     try {
       await saveLlmProvider();
       if (role) await cmd('set_user_role', { role });
+      if (experienceLevel) await cmd('set_experience_level', { level: experienceLevel });
 
       const interestsToSave = interests.length > 0
         ? interests
@@ -334,6 +339,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     aiOpen, setAiOpen, projectsOpen, setProjectsOpen,
     stacksOpen, setStacksOpen, interestsOpen, setInterestsOpen,
     localeOpen, setLocaleOpen, localeConfigured, setLocaleConfigured,
+    experienceOpen, setExperienceOpen, experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured,
     detectedTech, discoveryDone,

@@ -319,6 +319,7 @@ interface CommandMap {
   add_tech_stack: { params: { technology: string }; result: void };
   remove_tech_stack: { params: { technology: string }; result: void };
   set_user_role: { params: { role: string | null }; result: void };
+  set_experience_level: { params: { level: string | null }; result: void };
   set_selected_stacks: { params: { profileIds: string[] }; result: void };
   get_selected_stacks: { params: Record<string, never>; result: string[] };
   get_stack_profiles: { params: Record<string, never>; result: StackProfileSummary[] };

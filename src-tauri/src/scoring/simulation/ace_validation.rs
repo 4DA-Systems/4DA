@@ -76,6 +76,7 @@ fn ace_dependency_match_boosts_score() {
             package_name: "tokio".to_string(),
             search_terms: vec!["tokio".to_string()],
             is_dev: false,
+            is_direct: true,
             version: Some("1.36".to_string()),
         },
     );
@@ -384,6 +385,7 @@ fn ace_context_increases_confirmation_signals() {
             package_name: "tokio".to_string(),
             search_terms: vec!["tokio".to_string()],
             is_dev: false,
+            is_direct: true,
             version: Some("1.36".to_string()),
         },
     );

@@ -2,6 +2,7 @@ import { SetupAIProvider } from './setup-ai-provider';
 import { SetupProjects } from './setup-projects';
 import { SetupStack } from './setup-stack';
 import { SetupInterests } from './setup-interests';
+import { SetupExperience } from './setup-experience';
 import { SetupLocale } from './setup-locale';
 import { useQuickSetup } from './use-quick-setup';
 
@@ -22,6 +23,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     interestsOpen, setInterestsOpen,
     localeOpen, setLocaleOpen,
     localeConfigured, setLocaleConfigured,
+    experienceOpen, setExperienceOpen,
+    experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
     ollamaStatus,
     provider,
@@ -220,6 +223,25 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
               onNewInterestChange={setNewInterest}
               onAddInterest={addInterest}
               onToggleInterest={toggleInterest}
+            />
+          </div>
+        </div>
+
+        {/* Section 5: Experience Level */}
+        <div>
+          <SectionHeader
+            title={t('onboarding.setup.yourExperience')}
+            subtitle={experienceLevel
+              ? t(`onboarding.experience.${experienceLevel}.label`)
+              : t('onboarding.setup.helpsScoring')}
+            isOpen={experienceOpen}
+            onToggle={() => setExperienceOpen(!experienceOpen)}
+            done={experienceLevel !== null}
+          />
+          <div style={{ display: experienceOpen ? undefined : 'none' }}>
+            <SetupExperience
+              selected={experienceLevel}
+              onSelect={setExperienceLevel}
             />
           </div>
         </div>

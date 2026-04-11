@@ -152,6 +152,7 @@ mod tests {
                 package_name TEXT NOT NULL,
                 version TEXT,
                 is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
                 language TEXT NOT NULL DEFAULT 'unknown',
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(project_path, package_name)
@@ -199,6 +200,7 @@ mod tests {
             "serde",
             Some("1.0"),
             false,
+            true,
             "rust",
         )
         .unwrap();
@@ -209,6 +211,7 @@ mod tests {
             "tokio",
             Some("1.35"),
             false,
+            true,
             "rust",
         )
         .unwrap();
@@ -237,6 +240,7 @@ mod tests {
             "serde",
             Some("1.0"),
             false,
+            true,
             "rust",
         )
         .unwrap();
@@ -247,6 +251,7 @@ mod tests {
             "tokio",
             None,
             false,
+            true,
             "rust",
         )
         .unwrap();

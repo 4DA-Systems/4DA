@@ -33,6 +33,10 @@ pub struct ProjectDependency {
     pub package_name: String,
     pub version: Option<String>,
     pub is_dev: bool,
+    /// Whether this is a direct dependency (listed in manifest) vs transitive
+    /// (pulled in via lockfile). Direct deps default to true for backwards
+    /// compatibility — existing rows without the column get is_direct=1.
+    pub is_direct: bool,
     pub language: String,
     pub last_scanned: String,
 }
@@ -41,7 +45,13 @@ pub struct ProjectDependency {
 // Project Dependencies
 // ============================================================================
 
-/// Upsert a project dependency
+/// Upsert a project dependency.
+///
+/// `is_direct` indicates whether this dependency is declared directly in a
+/// manifest file (`true`) or is a transitive dependency discovered from a
+/// lockfile (`false`). On conflict the `is_direct` value is only *upgraded*
+/// (transitive → direct) but never downgraded, so a lockfile upsert cannot
+/// demote a previously-seen direct dep.
 pub fn upsert_dependency(
     conn: &rusqlite::Connection,
     project_path: &str,
@@ -49,14 +59,15 @@ pub fn upsert_dependency(
     package_name: &str,
     version: Option<&str>,
     is_dev: bool,
+    is_direct: bool,
     language: &str,
 ) -> Result<()> {
     conn.execute(
-        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, language, last_scanned)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
          ON CONFLICT(project_path, package_name)
-         DO UPDATE SET version = ?4, is_dev = ?5, last_scanned = datetime('now')",
-        params![project_path, manifest_type, package_name, version, is_dev as i32, language],
+         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), last_scanned = datetime('now')",
+        params![project_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language],
     )
     .context("Failed to upsert dependency")?;
     Ok(())
@@ -69,7 +80,7 @@ pub fn get_project_dependencies(
 ) -> Result<Vec<ProjectDependency>> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
              FROM project_dependencies
              WHERE project_path = ?1
              ORDER BY package_name",
@@ -77,18 +88,7 @@ pub fn get_project_dependencies(
         ?;
 
     let results: Vec<ProjectDependency> = stmt
-        .query_map(params![project_path], |row| {
-            Ok(ProjectDependency {
-                id: row.get(0)?,
-                project_path: row.get(1)?,
-                manifest_type: row.get(2)?,
-                package_name: row.get(3)?,
-                version: row.get(4)?,
-                is_dev: row.get::<_, i32>(5)? != 0,
-                language: row.get(6)?,
-                last_scanned: row.get(7)?,
-            })
-        })?
+        .query_map(params![project_path], map_project_dependency_row)?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -99,6 +99,23 @@ pub fn get_project_dependencies(
         .collect();
 
     Ok(results)
+}
+
+/// Map a row from the project_dependencies table to a `ProjectDependency`.
+/// Column order must be: id, project_path, manifest_type, package_name,
+///                        version, is_dev, is_direct, language, last_scanned.
+fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectDependency> {
+    Ok(ProjectDependency {
+        id: row.get(0)?,
+        project_path: row.get(1)?,
+        manifest_type: row.get(2)?,
+        package_name: row.get(3)?,
+        version: row.get(4)?,
+        is_dev: row.get::<_, i32>(5)? != 0,
+        is_direct: row.get::<_, i32>(6).unwrap_or(1) != 0,
+        language: row.get(7)?,
+        last_scanned: row.get(8)?,
+    })
 }
 
 /// Get all tracked dependencies, scoped to projects with recent git activity.
@@ -128,25 +145,14 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
+            "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
              FROM project_dependencies
              ORDER BY project_path, package_name",
         )
         ?;
 
     let all_deps: Vec<ProjectDependency> = stmt
-        .query_map([], |row| {
-            Ok(ProjectDependency {
-                id: row.get(0)?,
-                project_path: row.get(1)?,
-                manifest_type: row.get(2)?,
-                package_name: row.get(3)?,
-                version: row.get(4)?,
-                is_dev: row.get::<_, i32>(5)? != 0,
-                language: row.get(6)?,
-                last_scanned: row.get(7)?,
-            })
-        })?
+        .query_map([], map_project_dependency_row)?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -178,22 +184,11 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
     if filtered.is_empty() {
         return Ok(conn
             .prepare(
-                "SELECT id, project_path, manifest_type, package_name, version, is_dev, language, last_scanned
+                "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
                  FROM project_dependencies ORDER BY project_path, package_name",
             )
             ?
-            .query_map([], |row| {
-                Ok(ProjectDependency {
-                    id: row.get(0)?,
-                    project_path: row.get(1)?,
-                    manifest_type: row.get(2)?,
-                    package_name: row.get(3)?,
-                    version: row.get(4)?,
-                    is_dev: row.get::<_, i32>(5)? != 0,
-                    language: row.get(6)?,
-                    last_scanned: row.get(7)?,
-                })
-            })
+            .query_map([], map_project_dependency_row)
             ?
             .filter_map(|r| match r {
                 Ok(v) => Some(v),

@@ -12,6 +12,7 @@ export interface SectionState {
   stacksOpen?: boolean;
   interestsOpen?: boolean;
   localeOpen?: boolean;
+  experienceOpen?: boolean;
 }
 
 export function getPersistedSections(): SectionState {

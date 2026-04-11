@@ -42,7 +42,13 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
     let density_adjustment = (info_density - 0.5) * 0.10; // -0.05 to +0.05
 
     // Map to multiplier range [0.5, 1.2]
-    let multiplier = (raw * 0.7 + 0.5 + density_adjustment + keyword_penalty + coherence_penalty + diversity_penalty).clamp(0.5, 1.2);
+    let multiplier = (raw * 0.7
+        + 0.5
+        + density_adjustment
+        + keyword_penalty
+        + coherence_penalty
+        + diversity_penalty)
+        .clamp(0.5, 1.2);
 
     ContentQuality {
         title_quality,
@@ -315,14 +321,13 @@ fn assess_information_density(title: &str) -> f32 {
 /// Shared stop-word list for anti-gaming heuristics.
 /// Common English words that should not count as "significant" or "repeated keywords".
 const STOP_WORDS: &[&str] = &[
-    "the", "and", "for", "with", "how", "that", "this", "your", "from", "about",
-    "into", "will", "have", "when", "what", "does", "more", "than", "just", "like",
-    "also", "been", "were", "them", "they", "some", "each", "which", "their", "then",
-    "there", "would", "could", "should", "being", "over", "most", "very", "only",
-    "other", "using", "used", "here", "after", "before", "between", "where", "while",
-    "because", "through", "during", "without", "again", "further", "once", "still",
-    "can", "not", "but", "its", "are", "was", "has", "had", "all", "any", "who",
-    "why", "our", "out", "off", "own", "too", "now", "new", "way",
+    "the", "and", "for", "with", "how", "that", "this", "your", "from", "about", "into", "will",
+    "have", "when", "what", "does", "more", "than", "just", "like", "also", "been", "were", "them",
+    "they", "some", "each", "which", "their", "then", "there", "would", "could", "should", "being",
+    "over", "most", "very", "only", "other", "using", "used", "here", "after", "before", "between",
+    "where", "while", "because", "through", "during", "without", "again", "further", "once",
+    "still", "can", "not", "but", "its", "are", "was", "has", "had", "all", "any", "who", "why",
+    "our", "out", "off", "own", "too", "now", "new", "way",
 ];
 
 /// Returns true if `word` is a stop word (case-insensitive, assumes lowercase input).
@@ -628,7 +633,11 @@ mod tests {
     fn test_keyword_concentration_stop_words_exempt() {
         // "this" and "with" are stop words — repeated but should not trigger
         let p = keyword_concentration_penalty("this with this with this with");
-        assert_eq!(p, 0.0, "Stop word repeats should not trigger penalty: {}", p);
+        assert_eq!(
+            p, 0.0,
+            "Stop word repeats should not trigger penalty: {}",
+            p
+        );
     }
 
     #[test]
@@ -646,7 +655,11 @@ mod tests {
             "Building React apps with Tauri and Rust",
             "This article covers building React applications using the Tauri framework powered by Rust.",
         );
-        assert_eq!(p, 0.0, "Good title-body match should have no penalty: {}", p);
+        assert_eq!(
+            p, 0.0,
+            "Good title-body match should have no penalty: {}",
+            p
+        );
     }
 
     #[test]
@@ -655,19 +668,12 @@ mod tests {
             "React Rust Tauri performance benchmarks",
             "Today we discuss cooking recipes and gardening tips for beginners.",
         );
-        assert!(
-            p <= -0.10,
-            "Title-body mismatch should be penalized: {}",
-            p
-        );
+        assert!(p <= -0.10, "Title-body mismatch should be penalized: {}", p);
     }
 
     #[test]
     fn test_coherence_empty_body_no_penalty() {
-        let p = title_body_coherence_penalty(
-            "React Rust Tauri performance benchmarks",
-            "",
-        );
+        let p = title_body_coherence_penalty("React Rust Tauri performance benchmarks", "");
         assert_eq!(p, 0.0, "Empty body should not trigger penalty: {}", p);
     }
 
@@ -678,7 +684,11 @@ mod tests {
             "Rust news",
             "Completely unrelated body content about cooking.",
         );
-        assert_eq!(p, 0.0, "Short title should not trigger coherence check: {}", p);
+        assert_eq!(
+            p, 0.0,
+            "Short title should not trigger coherence check: {}",
+            p
+        );
     }
 
     // --- title_diversity_penalty ---
@@ -746,11 +756,8 @@ mod tests {
 
     #[test]
     fn test_gaming_multiplier_still_in_range() {
-        let q = compute_content_quality(
-            "Rust Rust Rust Rust async Rust performance Rust",
-            "",
-            None,
-        );
+        let q =
+            compute_content_quality("Rust Rust Rust Rust async Rust performance Rust", "", None);
         assert!(
             q.multiplier >= 0.5 && q.multiplier <= 1.2,
             "Multiplier must stay in [0.5, 1.2]: {}",

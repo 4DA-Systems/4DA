@@ -632,6 +632,7 @@ pub fn run() {
             settings_commands::get_pro_value_report,
             settings_commands::get_user_context,
             settings_commands::set_user_role,
+            settings_commands::set_experience_level,
             settings_commands::add_tech_stack,
             settings_commands::remove_tech_stack,
             settings_commands::add_interest,

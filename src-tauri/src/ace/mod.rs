@@ -355,6 +355,7 @@ impl ACE {
                                         dep,
                                         None,
                                         false,
+                                        true, // direct: from manifest [dependencies]
                                         language,
                                     );
                                 }
@@ -366,6 +367,7 @@ impl ACE {
                                         dep,
                                         None,
                                         true,
+                                        true, // direct: from manifest [dev-dependencies]
                                         language,
                                     );
                                 }
