@@ -41,14 +41,12 @@
 - **Commit ready**: user or next session may run `git commit` once T-PRELAUNCH-HARDENING releases
 - **NOT touching**: any src-tauri/src/** file, any migrations, any src/components/**, db/sources.rs. Rust integration deferred to Phase 2 follow-up commit.
 
-### T-PRELAUNCH-HARDENING — Pre-launch risk mitigations (wave 3 — INFRASTRUCTURE)
-- **Status**: committing wave 3 (infrastructure: docs + offline installer config; wave 1+2 already in HEAD as commit 15f2c708)
-- **Commit Lock**: HELD
-- **Since**: 2026-04-11T22:55:00Z
-- **Wave 1+2 in HEAD**: commit 15f2c708 (note: that commit landed under T-SCORING's commit message due to a race — actual contents are mine, see PRELAUNCH-HARDENING.md). Wave 1+2 covers: WebView2 check, Ollama version check, DB corruption recovery (wired into state.rs::get_database before Database::new), HealthIssue surfacing via existing channel.
-- **Wave 3 staging**: src-tauri/tauri.windows-offline.conf.json (NEW — partial config override for offlineInstaller mode), docs/strategy/UPDATER-KEY-ROTATION.md (NEW — full rotation runbook), docs/strategy/PRELAUNCH-HARDENING.md (UPDATED — reflects static-CRT discovery, both installer modes buildable, key rotation runbook reference)
-- **MSVC redist (option d)**: ALREADY MITIGATED — `.cargo/config.toml` already has `target-feature=+crt-static` for windows-msvc. Discovery, no code change.
-- **NOT touching**: anything claimed by other terminals, T-GLYPH's pre-staged CLAUDE.md / docs/glyph/, any src-tauri/src/** beyond wave 1+2 (already in HEAD).
+### T-PRELAUNCH-HARDENING — DONE (wave 1+2+3 in HEAD)
+- **Status**: done
+- **Commits**: 15f2c708 (wave 1+2 — wrong message due to race, contents are pre-launch hardening), 96ba9fed (wave 3 — offline installer config, key rotation runbook, status doc update)
+- **Coverage**: All four pre-launch risk classes (a-d) mitigated. WebView2 version check + Ollama version check + DB corruption recovery (wired) + MSVC redist (already in .cargo/config.toml). Both installer modes buildable. Key rotation runbook written.
+- **Strategy doc**: docs/strategy/PRELAUNCH-HARDENING.md (current source of truth)
+- **Key rotation runbook**: docs/strategy/UPDATER-KEY-ROTATION.md
 
 ### T-SCORING — Scoring hardening + onboarding + feedback instrumentation
 - **Status**: working
