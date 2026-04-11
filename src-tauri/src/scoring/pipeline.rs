@@ -420,12 +420,20 @@ pub(crate) fn score_item(
     // pipelines apply the same CVE gating regardless of which is active.
     // Threshold 0.20 catches single content-only subterm matches (e.g. "cert"
     // hitting x509-cert in unrelated AWS advisories).
+    //
+    // Direct vs transitive: when ALL matched deps are transitive (none direct),
+    // apply the mild 0.60 penalty even for strong matches — the user didn't
+    // choose those packages, so the CVE is less urgent.
+    let all_transitive = !matched_deps.is_empty() && matched_deps.iter().all(|d| !d.is_direct);
     let base_score = if novelty.is_security && dep_match_score < 0.20 && !matched_deps.is_empty() {
         // Some deps matched but very weakly — mild penalty
         base_score * 0.60
     } else if novelty.is_security && matched_deps.is_empty() {
         // No dependency match at all — this CVE is about software the user doesn't use
         base_score * 0.35
+    } else if novelty.is_security && all_transitive {
+        // Strong match but all deps are transitive — not urgent
+        base_score * 0.60
     } else {
         base_score
     };

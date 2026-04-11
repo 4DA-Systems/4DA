@@ -262,6 +262,7 @@ mod tests {
                 package_name TEXT NOT NULL,
                 version TEXT,
                 is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
                 language TEXT NOT NULL DEFAULT 'unknown',
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(project_path, package_name)
@@ -306,6 +307,7 @@ mod tests {
             package_name: name.to_string(),
             version: version.map(|v| v.to_string()),
             is_dev,
+            is_direct: true,
             language: "rust".to_string(),
             last_scanned: "2026-02-28T00:00:00".to_string(),
         }

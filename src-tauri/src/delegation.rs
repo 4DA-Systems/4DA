@@ -385,6 +385,7 @@ mod tests {
                 package_name TEXT,
                 version TEXT,
                 is_dev INTEGER DEFAULT 0,
+                is_direct INTEGER DEFAULT 1,
                 language TEXT,
                 last_scanned TEXT DEFAULT (datetime('now')),
                 UNIQUE(project_path, package_name)
