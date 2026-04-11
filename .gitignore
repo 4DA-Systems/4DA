@@ -211,3 +211,6 @@ data/settings.json.bak
 
 # Generated i18n type declarations (run pnpm i18n:types to regenerate)
 src/types/i18n-resources.d.ts
+
+# Codex AI tool's local audit/scratch directory (user's personal workspace, not project source)
+/! codex audits/
