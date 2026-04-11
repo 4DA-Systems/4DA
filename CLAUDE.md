@@ -205,6 +205,14 @@ GEP is a typed semantic envelope for inter-agent communication. It wraps natural
 **Docs in 4DA:** `docs/glyph/GEP-SPEC.md`, `GEP-SAFETY.md`, `GEP-INTEGRATION.md`, `GEP-ALPHABET.md`
 **Canonical spec:** `D:\runyourempire\glyph\docs\SPEC.md` (dual-licensed CC-BY-4.0)
 
+## Worktree Hygiene
+
+Subagents spawned with `isolation: "worktree"` create a new worktree under `.claude/worktrees/agent-<hash>/` and a matching branch `worktree-agent-<hash>`. After the subagent's commits are merged into main, the worktree directory and branch remain — neither the subagent nor the orchestrator cleans up. Over time these accumulate and trigger sentinel alarms.
+
+**Prevention:** `node scripts/cleanup-orphaned-worktrees.cjs` — dry-run by default, shows what would be removed. Add `--execute` to apply. Safe by design: refuses to remove any branch whose tip is NOT reachable from main, or any worktree with uncommitted changes. Reflog preserves everything for 90 days. Suggested cadence: run nightly or via a pre-push hook.
+
+**2026-04-12 cleanup:** 11 dead `worktree-agent-*` branches + 4 stale `.claude/worktrees/agent-*` directories deleted. All verified safe (every branch tip was reachable from main; all directories were empty or held only stale snapshots with zero unique content).
+
 ## Claude-Specific
 
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
