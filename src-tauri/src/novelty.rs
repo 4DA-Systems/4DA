@@ -29,16 +29,35 @@ pub fn compute_novelty(
     content: &str,
     topics: &[String],
     user_tech: &std::collections::HashSet<String>,
+    user_role: Option<&str>,
+    experience_level: Option<&str>,
 ) -> NoveltyScore {
-    let intro_confidence = detect_introductory_confidence(title, content);
+    let mut intro_confidence = detect_introductory_confidence(title, content);
     let is_release = detect_release(title, content);
     let is_security = detect_security(title, content);
 
     // Check if the article is about tech the user already knows
     let about_known_tech = topics.iter().any(|t| user_tech.contains(&t.to_lowercase()));
 
+    // ── Experience-aware intro penalty scaling ──
+    // Learners benefit from intro content; experienced users don't need it.
+    // Applied AFTER intro_confidence computation, BEFORE multiplier calculation.
+    if intro_confidence > 0.0 {
+        match experience_level {
+            Some("learning") => intro_confidence *= 0.30, // Much softer penalty for learners
+            Some("building") => intro_confidence *= 0.70, // Moderate reduction
+            // "leading", "architecting", None → no change (current behavior)
+            _ => {}
+        }
+    }
+
+    // ── Role-aware security scoring ──
+    // Security professionals get the full 1.30x boost for ALL security content,
+    // not just content about their known tech stack.
+    let is_security_role = matches!(user_role, Some("security"));
+
     // Dependency-aware novelty: releases/security about YOUR tech get stronger boosts
-    let multiplier = if is_security && about_known_tech {
+    let multiplier = if is_security && (about_known_tech || is_security_role) {
         1.30
     } else if is_security {
         1.10
@@ -387,7 +406,14 @@ mod tests {
         let user_tech = HashSet::from(["rust".to_string(), "tauri".to_string()]);
         let topics = vec!["rust".to_string()];
 
-        let result = compute_novelty("Getting Started with Rust", "", &topics, &user_tech);
+        let result = compute_novelty(
+            "Getting Started with Rust",
+            "",
+            &topics,
+            &user_tech,
+            None,
+            None,
+        );
         assert!(result.intro_confidence >= 0.85);
         assert!(!result.is_release);
         // Graduated: strong intro (0.90+) × known tech → ~0.55 (was fixed 0.50)
@@ -403,7 +429,7 @@ mod tests {
         let user_tech = HashSet::from(["rust".to_string()]);
         let topics = vec!["rust".to_string()];
 
-        let result = compute_novelty("Rust 1.80 Released", "", &topics, &user_tech);
+        let result = compute_novelty("Rust 1.80 Released", "", &topics, &user_tech, None, None);
         assert!(result.is_release);
         assert_eq!(result.multiplier, 1.25); // Stronger boost: YOUR dependency
     }
@@ -413,7 +439,7 @@ mod tests {
         let user_tech = HashSet::from(["rust".to_string()]);
         let topics = vec!["python".to_string()];
 
-        let result = compute_novelty("Python 3.14 Released", "", &topics, &user_tech);
+        let result = compute_novelty("Python 3.14 Released", "", &topics, &user_tech, None, None);
         assert!(result.is_release);
         assert_eq!(result.multiplier, 1.05); // Mild: informational only
     }
@@ -428,6 +454,8 @@ mod tests {
             "",
             &topics,
             &user_tech,
+            None,
+            None,
         );
         assert!(result.is_security);
         assert_eq!(result.multiplier, 1.30); // Urgent: YOUR dependency has a CVE
@@ -443,6 +471,8 @@ mod tests {
             "",
             &topics,
             &user_tech,
+            None,
+            None,
         );
         assert!(result.is_security);
         assert_eq!(result.multiplier, 1.10); // Informational: not your stack
@@ -453,7 +483,14 @@ mod tests {
         let user_tech = HashSet::from(["rust".to_string()]);
         let topics = vec!["rust".to_string()];
 
-        let result = compute_novelty("Advanced async patterns in Tokio", "", &topics, &user_tech);
+        let result = compute_novelty(
+            "Advanced async patterns in Tokio",
+            "",
+            &topics,
+            &user_tech,
+            None,
+            None,
+        );
         assert!(result.intro_confidence == 0.0);
         assert!(!result.is_release);
         assert!(!result.is_security);
@@ -465,7 +502,14 @@ mod tests {
         let user_tech = HashSet::from(["rust".to_string()]);
         let topics = vec!["python".to_string()];
 
-        let result = compute_novelty("Getting Started with Python", "", &topics, &user_tech);
+        let result = compute_novelty(
+            "Getting Started with Python",
+            "",
+            &topics,
+            &user_tech,
+            None,
+            None,
+        );
         assert!(result.intro_confidence >= 0.85);
         // Graduated: strong intro × unknown tech → ~0.82 (was fixed 0.80)
         assert!(

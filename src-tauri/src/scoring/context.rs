@@ -43,6 +43,21 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         .map(|t| t.to_lowercase())
         .collect();
 
+    // User's professional role from onboarding
+    let user_role = static_identity.role.clone();
+
+    // User's experience level (safe query — column may not exist yet)
+    let experience_level: Option<String> = {
+        let conn = crate::open_db_connection()?;
+        conn.query_row(
+            "SELECT experience_level FROM user_identity WHERE id = 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten()
+    };
+
     let ace_ctx = get_ace_context();
 
     // Load session-aware work topics for intent scoring.
@@ -300,6 +315,8 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         contradicted_topics,
         sovereign_profile,
         dominant_persona,
+        user_role,
+        experience_level,
     };
 
     // Store in cache for subsequent calls within TTL

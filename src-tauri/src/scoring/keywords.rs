@@ -186,26 +186,59 @@ mod tests {
 
     #[test]
     fn test_broad_interest_specificity_penalty() {
-        // An item matching a broad interest ("open source") should get a lower keyword_score
-        let interests = vec![context_engine::Interest {
+        // Helper to make an interest
+        let make = |topic: &str| context_engine::Interest {
             id: Some(1),
-            topic: "Open Source".to_string(),
+            topic: topic.to_string(),
             weight: 1.0,
             source: context_engine::InterestSource::Explicit,
             embedding: None,
-        }];
+        };
 
+        // 6+ interests: broad terms get full penalty (0.25x)
+        let many_interests = vec![
+            make("Open Source"),
+            make("Rust"),
+            make("TypeScript"),
+            make("AI"),
+            make("Security"),
+            make("DevOps"),
+        ];
         let specificity = best_interest_specificity_weight(
             "New open source project for data pipelines",
             "",
-            &interests,
+            &many_interests,
         );
         assert_eq!(
             specificity, 0.25,
-            "Broad interest should return 0.25 weight"
+            "Broad interest with 6+ interests should return 0.25 weight"
         );
 
-        // A specific interest should get full weight
+        // 3-5 interests: broad terms get softened penalty (floor 0.60)
+        let medium_interests = vec![make("Open Source"), make("Rust"), make("TypeScript")];
+        let specificity = best_interest_specificity_weight(
+            "New open source project for data pipelines",
+            "",
+            &medium_interests,
+        );
+        assert_eq!(
+            specificity, 0.60,
+            "Broad interest with 3-5 interests should return 0.60 floor"
+        );
+
+        // 1-2 interests: focused user, all interests get 1.0x (trust them)
+        let few_interests = vec![make("Open Source")];
+        let specificity = best_interest_specificity_weight(
+            "New open source project for data pipelines",
+            "",
+            &few_interests,
+        );
+        assert_eq!(
+            specificity, 1.00,
+            "Focused user (1-2 interests) should get 1.0 weight even for broad terms"
+        );
+
+        // A specific interest should get full weight regardless of count
         let specific_interests = vec![context_engine::Interest {
             id: Some(2),
             topic: "Tauri plugins".to_string(),
@@ -213,7 +246,6 @@ mod tests {
             source: context_engine::InterestSource::Explicit,
             embedding: None,
         }];
-
         let specificity = best_interest_specificity_weight(
             "Building Tauri plugins for desktop apps",
             "",

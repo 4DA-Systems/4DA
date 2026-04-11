@@ -73,6 +73,11 @@ pub struct TrustSummary {
     pub trend: String,
 }
 
+/// Preemption win — record of a case where 4DA caught something before it became urgent.
+/// Populated by the background validator (Phase 2 plan, scheduled task runs weekly)
+/// that checks whether past preemption alerts were later validated by reality
+/// (e.g. a CVE we warned about was published, a breaking change actually shipped).
+#[allow(dead_code)] // Scheduled validator lands in Phase 2.4 — struct already wired to DB schema
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PreemptionWin {
@@ -238,6 +243,9 @@ pub fn get_trust_summary(days: u32) -> Result<TrustSummary> {
 }
 
 /// Record a preemption win (4DA caught something before it became urgent).
+/// Called by the Phase 2.4 background validator that checks whether past
+/// preemption alerts were later validated by reality.
+#[allow(dead_code)] // Invoked by scheduled validator (Phase 2.4)
 pub fn record_preemption_win(win: PreemptionWin) -> Result<()> {
     let conn = open_db_connection()?;
     conn.execute(
