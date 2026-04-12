@@ -768,9 +768,50 @@ pub(crate) fn run_awe_with_timeout(
     loop {
         match child.try_wait() {
             Ok(Some(_status)) => {
-                return child
+                let output = child
                     .wait_with_output()
-                    .map_err(|e| format!("Failed to read AWE output: {e}"));
+                    .map_err(|e| format!("Failed to read AWE output: {e}"))?;
+
+                // Silent-failure defense: scan stdout/stderr for known error patterns
+                // even when exit code is 0. See external/awe.rs for the full contract.
+                if output.status.success() {
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+
+                    const KNOWN_ERROR_PATTERNS: &[&str] = &[
+                        "Unknown stage:",
+                        "error: invalid",
+                        "error: unexpected",
+                        "error: the following required arguments",
+                        "Error: ",
+                        "panicked at",
+                        "thread '",
+                        "No such file or directory",
+                        "permission denied",
+                        "Permission denied",
+                    ];
+
+                    for pattern in KNOWN_ERROR_PATTERNS {
+                        if stderr.contains(pattern) {
+                            tracing::warn!(
+                                target: "4da::awe",
+                                pattern,
+                                "AWE silent failure detected in stderr (exit 0 but error pattern found)"
+                            );
+                            return Err(format!("AWE silent failure: stderr contains '{pattern}'"));
+                        }
+                        if stdout.contains(pattern) {
+                            tracing::warn!(
+                                target: "4da::awe",
+                                pattern,
+                                "AWE silent failure detected in stdout (exit 0 but error pattern found)"
+                            );
+                            return Err(format!("AWE silent failure: stdout contains '{pattern}'"));
+                        }
+                    }
+                }
+
+                return Ok(output);
             }
             Ok(None) => {
                 if start.elapsed().as_secs() > timeout_secs {
@@ -828,7 +869,48 @@ pub(crate) async fn run_awe_async(
     }
 
     match tokio::time::timeout(std::time::Duration::from_secs(timeout_secs), cmd.output()).await {
-        Ok(Ok(output)) => Ok(output),
+        Ok(Ok(output)) => {
+            // Silent-failure defense: scan stdout/stderr for known error patterns
+            // even when exit code is 0. See external/awe.rs for the full contract.
+            if output.status.success() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
+                const KNOWN_ERROR_PATTERNS: &[&str] = &[
+                    "Unknown stage:",
+                    "error: invalid",
+                    "error: unexpected",
+                    "error: the following required arguments",
+                    "Error: ",
+                    "panicked at",
+                    "thread '",
+                    "No such file or directory",
+                    "permission denied",
+                    "Permission denied",
+                ];
+
+                for pattern in KNOWN_ERROR_PATTERNS {
+                    if stderr.contains(pattern) {
+                        tracing::warn!(
+                            target: "4da::awe",
+                            pattern,
+                            "AWE silent failure detected in stderr (exit 0 but error pattern found)"
+                        );
+                        return Err(format!("AWE silent failure: stderr contains '{pattern}'"));
+                    }
+                    if stdout.contains(pattern) {
+                        tracing::warn!(
+                            target: "4da::awe",
+                            pattern,
+                            "AWE silent failure detected in stdout (exit 0 but error pattern found)"
+                        );
+                        return Err(format!("AWE silent failure: stdout contains '{pattern}'"));
+                    }
+                }
+            }
+
+            Ok(output)
+        }
         Ok(Err(e)) => Err(format!("AWE process error: {e}")),
         Err(_) => Err(format!("AWE timed out after {timeout_secs}s")),
     }

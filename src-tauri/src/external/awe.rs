@@ -28,15 +28,17 @@
 //!
 //! ## Status (2026-04-12)
 //!
-//! **Skeleton.** Method signatures and error types are defined; internal
-//! implementation (`invoke`, `parse_*`) is drafted. **NOT yet wired to
-//! call sites.** Migration of the ~29 existing `Command::new("awe"...)`
-//! sites in `awe_commands.rs`, `context_commands.rs`, `awe_autonomous.rs`,
-//! `awe_source_mining.rs`, and `monitoring_briefing.rs` is a follow-up
-//! commit that needs to coordinate with T-WAR-ROOM's recent
-//! `register_awe_app_handle` threading work.
+//! **Error-pattern scanning is LIVE.** The contract checks from step 3-4
+//! (scan stderr/stdout for known error patterns) are now enforced in
+//! `context_commands::run_awe_with_timeout` and `context_commands::run_awe_async`,
+//! which all 30 call sites go through. This means ALL AWE invocations now
+//! catch silent failures (Bug #1: "Unknown stage:" and similar).
 //!
-//! Migration plan:
+//! Individual call-site migration to `AweClient` methods (typed outputs,
+//! Bug #2 decision-ID validation) remains a follow-up but is lower
+//! priority since the core safety contract is now enforced.
+//!
+//! Remaining migration plan (lower priority):
 //! 1. Finalize `AweClient` API by moving one call site as a spike
 //! 2. Add a real-binary integration test in `tests/integration/test_awe_cli.rs`
 //! 3. Migrate `awe_commands.rs` call sites
