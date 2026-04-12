@@ -9,13 +9,15 @@
 
 ## Active Terminals
 
-<!-- Add entries below. Format:
-### T[N] — [short description]
-- **Status**: working | committing | done
-- **Since**: ISO timestamp (e.g., 2026-03-22T10:00:00Z)
-- **Commit Lock**: HELD | (omit if not held)
-- **Files**: list of files being modified
--->
+### T-AUDIT-REMEDIATION — comprehensive audit fix execution (all waves)
+- **Status**: working
+- **Since**: 2026-04-12T15:30:00Z
+- **Files**:
+  - Wave 0: .ai/LAUNCH-SCOPE.md, .ai/DEBT.md
+  - Wave 1: relay/src/auth.rs, relay/src/clients.rs, relay/src/entries.rs, relay/src/main.rs, src-tauri/src/settings/keystore.rs, src-tauri/src/settings/manager.rs
+  - Wave 2: scripts/sign-windows.ps1, src-tauri/src/translation_pipeline.rs, src/components/enterprise/TeamOnboardingWizard.tsx, src/components/settings/TeamSection.tsx, src-tauri/src/ipc_guard.rs, src-tauri/src/sso.rs, package.json
+  - Wave 3: src/components/BriefingWarmupState.tsx, src/components/settings/DigestSection.tsx
+  - Wave 4: src-tauri/src/ace/context.rs, src-tauri/src/awe_autonomous.rs, src-tauri/src/sources/rss.rs, src-tauri/src/sources/hackernews.rs
 
 ---
 
