@@ -456,6 +456,11 @@ pub struct TranslationConfig {
     pub auto_translate: bool,
     /// Also translate descriptions (not just titles) — more API usage
     pub translate_descriptions: bool,
+    /// Whether the user has explicitly consented to sending content to cloud
+    /// translation APIs (DeepL, Google, Azure). Default false — cloud
+    /// translation requires opt-in to protect privacy.
+    #[serde(default)]
+    pub cloud_translation_consent: bool,
 }
 
 impl std::fmt::Debug for TranslationConfig {
@@ -472,6 +477,7 @@ impl std::fmt::Debug for TranslationConfig {
             )
             .field("auto_translate", &self.auto_translate)
             .field("translate_descriptions", &self.translate_descriptions)
+            .field("cloud_translation_consent", &self.cloud_translation_consent)
             .finish()
     }
 }
@@ -489,6 +495,7 @@ impl Default for TranslationConfig {
             api_key: String::new(),
             auto_translate: true,
             translate_descriptions: false,
+            cloud_translation_consent: false,
         }
     }
 }

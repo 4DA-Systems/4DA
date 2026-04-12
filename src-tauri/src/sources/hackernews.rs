@@ -77,6 +77,11 @@ impl HackerNewsSource {
             .map(|id| {
                 let client = self.client.clone();
                 async move {
+                    // Per-request rate limiting — respects HN Firebase interval
+                    super::rate_limiter::rate_limiter()
+                        .wait_for_rate_limit("hackernews")
+                        .await;
+
                     let url = format!("https://hacker-news.firebaseio.com/v0/item/{id}.json");
                     match client.get(&url).send().await {
                         Ok(response) => match response.json::<HNStory>().await {

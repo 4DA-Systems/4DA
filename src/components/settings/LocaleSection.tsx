@@ -73,7 +73,7 @@ export function LocaleSection() {
   const [loaded, setLoaded] = useState(false);
   const [translationCoverage, setTranslationCoverage] = useState<number | null>(null);
   const [txConfig, setTxConfig] = useState<TranslationConfig>({
-    provider: 'auto', api_key: '', auto_translate: false, translate_descriptions: false,
+    provider: 'auto', api_key: '', auto_translate: false, translate_descriptions: false, cloud_translation_consent: false,
   });
   const [embeddingInfo, setEmbeddingInfo] = useState<{
     model: string; reembed_in_progress: boolean; multilingual_model: string;

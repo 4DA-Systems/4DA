@@ -1398,6 +1398,7 @@ export interface TranslationConfig {
   api_key: string;
   auto_translate: boolean;
   translate_descriptions: boolean;
+  cloud_translation_consent: boolean;
 }
 
 interface DigestConfig {
