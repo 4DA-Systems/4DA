@@ -56,10 +56,7 @@ pub struct ShadowEnvelopeBuilder<'a> {
 impl<'a> ShadowEnvelopeBuilder<'a> {
     /// Construct a builder over an active dictionary and capability registry.
     pub fn new(dict: &'a Dictionary, capabilities: &'a CapabilityRegistry) -> Self {
-        Self {
-            dict,
-            capabilities,
-        }
+        Self { dict, capabilities }
     }
 
     /// Wrap an MCP tool call with a shadow envelope and write it to the

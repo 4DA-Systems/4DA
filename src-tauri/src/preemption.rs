@@ -132,7 +132,9 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     // Replaces the O(projects × deps × LIKE) loop that caused the timeout.
     match fetch_direct_dep_security_alerts(&conn) {
         Ok(fast_alerts) => alerts.extend(fast_alerts),
-        Err(e) => warn!(target: "4da::preemption", error = %e, "Failed to fetch direct-dep security alerts"),
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Failed to fetch direct-dep security alerts")
+        }
     }
 
     // ─── 3. Knowledge gaps as blind-spot alerts ──────────────────────────
@@ -208,9 +210,7 @@ fn has_is_direct_column(conn: &rusqlite::Connection) -> bool {
 /// Scope: direct runtime deps only when the `is_direct` column exists,
 /// otherwise all non-dev deps. Last 30 days only. Deduped by
 /// (package_name, project_path) and capped at 20 via word-boundary post-filter.
-fn fetch_direct_dep_security_alerts(
-    conn: &rusqlite::Connection,
-) -> Result<Vec<PreemptionAlert>> {
+fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<PreemptionAlert>> {
     // Runtime column detection for `is_direct`. Pre-Phase-53 DBs lack it —
     // we fall back to processing all non-dev deps in that case.
     let has_is_direct = has_is_direct_column(conn);
@@ -259,13 +259,13 @@ fn fetch_direct_dep_security_alerts(
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], |row| {
         Ok((
-            row.get::<_, String>(0)?,  // project_path
-            row.get::<_, String>(1)?,  // package_name
-            row.get::<_, String>(2)?,  // language (ecosystem)
-            row.get::<_, String>(3)?,  // title
+            row.get::<_, String>(0)?,         // project_path
+            row.get::<_, String>(1)?,         // package_name
+            row.get::<_, String>(2)?,         // language (ecosystem)
+            row.get::<_, String>(3)?,         // title
             row.get::<_, Option<String>>(4)?, // url
-            row.get::<_, String>(5)?,  // created_at
-            row.get::<_, String>(6)?,  // source_type
+            row.get::<_, String>(5)?,         // created_at
+            row.get::<_, String>(6)?,         // source_type
         ))
     })?;
 
@@ -353,7 +353,9 @@ fn fetch_direct_dep_security_alerts(
             SuggestedAction {
                 action_type: "dismiss".to_string(),
                 label: "Not relevant".to_string(),
-                description: format!("Dismiss if {package_name} is not in the vulnerable version range."),
+                description: format!(
+                    "Dismiss if {package_name} is not in the vulnerable version range."
+                ),
             },
         ];
 
@@ -739,7 +741,7 @@ mod tests {
     fn fix7_fast_path_filters_direct_runtime_deps_only() {
         let conn = setup_test_db();
         insert_dep(&conn, "/proj/a", "react", true, false);
-        insert_dep(&conn, "/proj/a", "jest", true, true);  // dev — excluded
+        insert_dep(&conn, "/proj/a", "jest", true, true); // dev — excluded
         insert_dep(&conn, "/proj/a", "lodash", false, false); // transitive — excluded
         insert_item(&conn, "CVE-2026-1234 critical vulnerability in react");
         insert_item(&conn, "jest has a new security advisory");
@@ -750,7 +752,9 @@ mod tests {
         // Only react should yield an alert (jest is dev, lodash is transitive)
         assert_eq!(alerts.len(), 1, "only direct runtime deps count");
         assert!(alerts[0].title.contains("CVE-2026-1234"));
-        assert!(alerts[0].affected_dependencies.contains(&"react".to_string()));
+        assert!(alerts[0]
+            .affected_dependencies
+            .contains(&"react".to_string()));
     }
 
     #[test]
@@ -766,13 +770,22 @@ mod tests {
         let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
 
         let axios = alerts.iter().find(|a| a.title.contains("axios")).unwrap();
-        assert!(matches!(axios.urgency, AlertUrgency::Critical), "CVE+RCE = critical");
+        assert!(
+            matches!(axios.urgency, AlertUrgency::Critical),
+            "CVE+RCE = critical"
+        );
 
         let webpack = alerts.iter().find(|a| a.title.contains("webpack")).unwrap();
-        assert!(matches!(webpack.urgency, AlertUrgency::High), "breaking = high");
+        assert!(
+            matches!(webpack.urgency, AlertUrgency::High),
+            "breaking = high"
+        );
 
         let react = alerts.iter().find(|a| a.title.contains("react")).unwrap();
-        assert!(matches!(react.urgency, AlertUrgency::Medium), "plain security = medium");
+        assert!(
+            matches!(react.urgency, AlertUrgency::Medium),
+            "plain security = medium"
+        );
     }
 
     #[test]
@@ -790,7 +803,11 @@ mod tests {
             .iter()
             .filter(|a| a.affected_dependencies.contains(&"react".to_string()))
             .collect();
-        assert_eq!(react_alerts.len(), 1, "same dep+project dedups to one alert");
+        assert_eq!(
+            react_alerts.len(),
+            1,
+            "same dep+project dedups to one alert"
+        );
     }
 
     #[test]
@@ -842,8 +859,9 @@ mod tests {
                 package_name TEXT NOT NULL,
                 is_dev INTEGER DEFAULT 0,
                 language TEXT NOT NULL DEFAULT 'unknown'
-            );"
-        ).unwrap();
+            );",
+        )
+        .unwrap();
         assert!(!has_is_direct_column(&conn));
     }
 
@@ -879,8 +897,12 @@ mod tests {
         .unwrap();
 
         // Must not error, must return the alert using the fallback path
-        let alerts = fetch_direct_dep_security_alerts(&conn)
-            .expect("must work without is_direct column");
-        assert_eq!(alerts.len(), 1, "should find the webpack alert via fallback");
+        let alerts =
+            fetch_direct_dep_security_alerts(&conn).expect("must work without is_direct column");
+        assert_eq!(
+            alerts.len(),
+            1,
+            "should find the webpack alert via fallback"
+        );
     }
 }
