@@ -13,7 +13,10 @@ use crate::{clients, entries, health};
 /// Create an in-memory SQLite pool for testing.
 async fn test_pool() -> SqlitePool {
     // Ensure JWT_SECRET is set for tests (safe test-only value)
-    std::env::set_var("JWT_SECRET", "test-only-jwt-secret-do-not-use-in-production");
+    std::env::set_var(
+        "JWT_SECRET",
+        "test-only-jwt-secret-do-not-use-in-production",
+    );
     crate::db::create_pool("sqlite::memory:").await.unwrap()
 }
 

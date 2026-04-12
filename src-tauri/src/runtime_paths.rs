@@ -7,7 +7,7 @@
 //! both development (CARGO_MANIFEST_DIR) and production (platform-specific) builds.
 //! Eliminates scattered `env!("CARGO_MANIFEST_DIR")` calls that break in packaged installs.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use tracing::info;
 
@@ -76,11 +76,11 @@ impl RuntimePaths {
         let _ = std::fs::create_dir_all(&data_dir);
         let _ = std::fs::create_dir_all(&cache_dir);
 
-        // Resource dir: in production, bundled resources are next to the executable
-        let resource_dir = std::env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-            .unwrap_or_else(|| data_dir.clone());
+        // Resource dir: in production, bundled resources location varies by platform.
+        // - Windows: next to the executable (exe parent)
+        // - macOS: AppName.app/Contents/Resources/
+        // - Linux: next to the executable or in /usr/share/appname/
+        let resource_dir = Self::resolve_resource_dir(&data_dir);
 
         RuntimePaths {
             data_dir,
@@ -141,6 +141,40 @@ impl RuntimePaths {
         }
 
         PathBuf::from("cache")
+    }
+
+    /// Resolve the resource directory based on the current platform.
+    ///
+    /// On macOS, Tauri bundles resources in `AppName.app/Contents/Resources/`,
+    /// not next to the executable. On Windows and Linux, resources are next to
+    /// the executable. Falls back to `fallback` if the exe path can't be determined.
+    fn resolve_resource_dir(fallback: &Path) -> PathBuf {
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.to_path_buf()));
+
+        if let Some(ref dir) = exe_dir {
+            // macOS: check if we're inside an .app bundle
+            #[cfg(target_os = "macos")]
+            {
+                // In a macOS .app bundle, the exe is at:
+                //   AppName.app/Contents/MacOS/appname
+                // Resources are at:
+                //   AppName.app/Contents/Resources/
+                if let Some(macos_dir) = dir.parent() {
+                    let resources = macos_dir.join("Resources");
+                    if resources.exists() {
+                        return resources;
+                    }
+                }
+            }
+
+            // Windows and Linux: resources are next to the executable
+            return dir.clone();
+        }
+
+        // Fallback to data_dir if exe path can't be determined
+        fallback.to_path_buf()
     }
 
     // ── Convenience accessors ──────────────────────────────────────

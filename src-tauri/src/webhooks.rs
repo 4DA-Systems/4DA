@@ -143,6 +143,9 @@ pub fn register_webhook(
     created_by: Option<&str>,
 ) -> Result<Webhook> {
     let id = Uuid::new_v4().to_string();
+    // TODO(DEBT): Webhook signing secrets are stored in plaintext SQLite.
+    // When enterprise ships, move to keychain or application-level encryption.
+    // See: .ai/COMPREHENSIVE-AUDIT-AND-PREVENTION-2026-04-12.md G-P1-11
     let secret = Uuid::new_v4().to_string();
     let events_json = serde_json::to_string(&events).context("Serialize events")?;
     let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
