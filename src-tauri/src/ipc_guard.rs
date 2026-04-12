@@ -55,12 +55,27 @@ pub(crate) fn validate_no_null_bytes(field: &str, value: &str) -> Result<()> {
     Ok(())
 }
 
-/// Validate a URL input: length + no null bytes + valid URL format.
+/// Validate a URL input: length + no null bytes + scheme validation.
 #[allow(dead_code)]
 pub(crate) fn validate_url_input(field: &str, url: &str) -> Result<String> {
     let clean = validate_length(field, url, MAX_URL_LENGTH)?;
     validate_no_null_bytes(field, &clean)?;
-    // URL format validation is done by utils::validate_safe_url when needed
+
+    // Reject websocket schemes for REST relay endpoints
+    let lower = clean.to_lowercase();
+    if lower.starts_with("ws://") || lower.starts_with("wss://") {
+        return Err(FourDaError::Validation(format!(
+            "{field} must use http:// or https:// scheme, not WebSocket"
+        )));
+    }
+
+    // Basic URL scheme validation
+    if !lower.starts_with("http://") && !lower.starts_with("https://") {
+        return Err(FourDaError::Validation(format!(
+            "{field} must start with http:// or https://"
+        )));
+    }
+
     Ok(clean)
 }
 

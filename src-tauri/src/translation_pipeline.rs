@@ -147,7 +147,7 @@ pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String
 /// Returns `"namespace:flat.key" -> "English value"`.
 pub fn load_english_strings() -> Result<HashMap<String, String>> {
     let paths = crate::runtime_paths::RuntimePaths::get();
-    let locales_dir = paths.resource_dir.join("src").join("locales").join("en");
+    let locales_dir = paths.resource_dir.join("locales").join("en");
     if !locales_dir.exists() {
         return Err("Cannot resolve locales directory".into());
     }

@@ -12,7 +12,7 @@ const STEPS: { key: WizardStep; label: string }[] = [
   { key: 'done', label: 'Complete' },
 ];
 
-const DEFAULT_RELAY = 'wss://relay.4da.ai';
+const DEFAULT_RELAY = 'https://relay.4da.ai';
 
 export function TeamOnboardingWizard() {
   const { t } = useTranslation();
@@ -128,7 +128,7 @@ export function TeamOnboardingWizard() {
               value={relayUrl}
               onChange={e => setRelayUrl(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
-              placeholder="wss://relay.4da.ai"
+              placeholder="https://relay.4da.ai"
             />
             <p className="text-[9px] text-text-muted mt-1">
               {t('enterprise.wizard.relayNote', 'Use the default managed relay or enter your self-hosted relay URL.')}

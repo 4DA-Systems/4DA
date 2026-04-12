@@ -8,7 +8,7 @@ param(
 )
 
 if (-not $env:SSL_COM_CREDENTIAL_ID) {
-    Write-Host "  [sign] Skipping code signing — SSL_COM_CREDENTIAL_ID not set"
+    Write-Host "  [sign] Skipping code signing -- SSL_COM_CREDENTIAL_ID not set"
     exit 0
 }
 
