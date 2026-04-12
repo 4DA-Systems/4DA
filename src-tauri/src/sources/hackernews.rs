@@ -66,7 +66,7 @@ impl Default for HackerNewsSource {
 
 impl HackerNewsSource {
     /// Fetch story details by IDs (helper method)
-    /// Uses buffer_unordered(20) for parallel fetching — reqwest::Client is Arc-backed.
+    /// Uses buffer_unordered(5) for parallel fetching — reqwest::Client is Arc-backed.
     async fn fetch_stories_by_ids(
         &self,
         ids: Vec<u64>,
@@ -110,7 +110,8 @@ impl HackerNewsSource {
                     }
                 }
             })
-            .buffer_unordered(20)
+            // Limit concurrent HN API requests to avoid rate limiting
+            .buffer_unordered(5)
             .filter_map(|opt| async { opt })
             .collect()
             .await;

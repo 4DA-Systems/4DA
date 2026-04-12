@@ -270,7 +270,10 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                         last_seen = datetime('now')",
                     rusqlite::params![topic, confidence, confidence],
                 )
-                .ok(); // Non-critical — don't fail the whole batch
+                .unwrap_or_else(|e| {
+                    warn!(target: "4da::ace", error = %e, topic = %topic, "Failed to upsert rich topic");
+                    0
+                }); // Non-critical — don't fail the whole batch
             }
         }
 
@@ -310,7 +313,10 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                         0.8_f64, // Default confidence for successful extraction
                         topics_json
                     ],
-                ).ok();
+                ).unwrap_or_else(|e| {
+                    warn!(target: "4da::ace", error = %e, path = %file_path_str, "Failed to upsert indexed_documents");
+                    0
+                });
 
                 // Get the document ID
                 if let Ok(doc_id) = conn.query_row(
@@ -319,11 +325,12 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                     |row| row.get::<_, i64>(0),
                 ) {
                     // Delete old chunks for this document
-                    conn.execute(
+                    if let Err(e) = conn.execute(
                         "DELETE FROM document_chunks WHERE document_id = ?1",
                         rusqlite::params![doc_id],
-                    )
-                    .ok();
+                    ) {
+                        warn!(target: "4da::ace", error = %e, doc_id, "Failed to delete old document chunks");
+                    }
 
                     // Split text into chunks (max 1000 words per chunk)
                     let words: Vec<&str> = text.split_whitespace().collect();
@@ -331,11 +338,13 @@ pub fn process_file_changes(conn: &Arc<Mutex<Connection>>, changes: &[FileChange
                     for (i, chunk_words) in words.chunks(chunk_size).enumerate() {
                         let chunk_text = chunk_words.join(" ");
                         let chunk_word_count = chunk_words.len() as i64;
-                        conn.execute(
+                        if let Err(e) = conn.execute(
                             "INSERT INTO document_chunks (document_id, chunk_index, content, word_count)
                              VALUES (?1, ?2, ?3, ?4)",
                             rusqlite::params![doc_id, i as i64, chunk_text, chunk_word_count],
-                        ).ok();
+                        ) {
+                            warn!(target: "4da::ace", error = %e, doc_id, chunk_index = i, "Failed to insert document chunk");
+                        }
                     }
 
                     debug!(target: "ace::watcher",
