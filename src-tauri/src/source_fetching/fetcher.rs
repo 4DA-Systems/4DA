@@ -106,10 +106,15 @@ pub(crate) async fn fetch_all_sources(
     info!(target: "4da::sources", count = sources.len(), "Fetching from enabled sources");
 
     let mut all_items: Vec<(GenericSourceItem, Vec<f32>)> = Vec::new();
-    let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
     let tracker = AdapterFailureTracker::new();
 
+    /// Maximum items to embed in a single cycle. Prevents Ollama saturation
+    /// (20+ minute stalls). Remaining items are stored with embedding_status =
+    /// 'pending' and picked up in the next fetch cycle.
+    const MAX_EMBED_BATCH: usize = 2000;
+
     for source in &sources {
+        let mut new_items_to_embed: Vec<(GenericSourceItem, String)> = Vec::new();
         let source_type = source.source_type();
         let source_name = source.name();
 
@@ -386,122 +391,145 @@ pub(crate) async fn fetch_all_sources(
                 }
             }
         }
+
+        // ---- Per-source embed + insert (memory streaming) ----
+        // Process this source's new items immediately so the Vec doesn't
+        // accumulate across all sources (prevents 10 GB+ spikes at 100+ sources).
+        if !new_items_to_embed.is_empty() {
+            // Enforce embedding queue cap per source
+            if new_items_to_embed.len() > MAX_EMBED_BATCH {
+                tracing::warn!(
+                    target: "4da::fetcher",
+                    total = new_items_to_embed.len(),
+                    cap = MAX_EMBED_BATCH,
+                    source = source_name,
+                    "Embedding queue exceeds cap — deferring {} items to next cycle",
+                    new_items_to_embed.len() - MAX_EMBED_BATCH
+                );
+                // Store overflow items as pending before truncating
+                let overflow: Vec<_> = new_items_to_embed.split_off(MAX_EMBED_BATCH);
+                let pending_overflow: Vec<_> = overflow
+                    .into_iter()
+                    .map(|(item, embed_text)| {
+                        (
+                            item.source_type.clone(),
+                            item.source_id.clone(),
+                            item.url.clone(),
+                            crate::decode_html_entities(&item.title),
+                            crate::decode_html_entities(&item.content),
+                            embed_text,
+                        )
+                    })
+                    .collect();
+                db.batch_upsert_pending_source_items(&pending_overflow).ok();
+            }
+
+            debug!(target: "4da::embed", count = new_items_to_embed.len(), source = source_name, "Embedding new items for source");
+
+            emit_progress(
+                app,
+                "embed",
+                0.6,
+                &format!(
+                    "Embedding {} new items from {source_name}...",
+                    new_items_to_embed.len()
+                ),
+                all_items.len(),
+                all_items.len() + new_items_to_embed.len(),
+            );
+
+            let texts: Vec<String> = new_items_to_embed
+                .iter()
+                .map(|(_, text)| text.clone())
+                .collect();
+
+            // Try to embed, with fallback to zero vectors (keyword-only scoring)
+            let embeddings = match embed_texts(&texts).await {
+                Ok(emb) => {
+                    let is_zero_fallback = emb.first().is_some_and(|v| v.iter().all(|&x| x == 0.0));
+                    if is_zero_fallback {
+                        let _ = app.emit(
+                            "embedding-mode",
+                            serde_json::json!({
+                                "mode": "keyword-only",
+                                "reason": "No embedding provider available"
+                            }),
+                        );
+                    } else if let Err(e) =
+                        app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }))
+                    {
+                        tracing::warn!("Failed to emit 'embedding-mode': {e}");
+                    }
+                    emb
+                }
+                Err(e) => {
+                    warn!(target: "4da::embed", error = %e, count = texts.len(),
+                        "Embedding service unavailable - using fallback (keyword-only scoring)");
+                    let _ = app.emit(
+                        "embedding-mode",
+                        serde_json::json!({ "mode": "keyword-only", "reason": e.to_string() }),
+                    );
+                    // Record embedding failure to local error telemetry
+                    crate::telemetry::record_error_async("embedding", &format!("{e}"), None);
+                    // Create zero vectors as fallback - items will score via keyword matching only
+                    vec![vec![0.0f32; 384]; texts.len()]
+                }
+            };
+
+            // Batch upsert: separate successful and failed embeddings
+            let mut items_to_insert = Vec::new();
+            let mut pending_items = Vec::new();
+            for ((item, embed_text), embedding) in
+                new_items_to_embed.into_iter().zip(embeddings.into_iter())
+            {
+                // Decode HTML entities at ingestion time so DB always has clean text.
+                // This ensures dedup, embeddings, and display all see the same clean text.
+                let clean_title = crate::decode_html_entities(&item.title);
+                let clean_content = crate::decode_html_entities(&item.content);
+
+                let is_fallback = embedding.iter().all(|&v| v == 0.0);
+                let detected_lang = crate::language_detect::detect_language(&clean_title);
+                if is_fallback {
+                    // Store as pending for re-embedding on next analysis
+                    pending_items.push((
+                        item.source_type.clone(),
+                        item.source_id.clone(),
+                        item.url.clone(),
+                        clean_title.clone(),
+                        clean_content.clone(),
+                        embed_text,
+                    ));
+                } else {
+                    items_to_insert.push((
+                        item.source_type.clone(),
+                        item.source_id.clone(),
+                        item.url.clone(),
+                        clean_title.clone(),
+                        clean_content.clone(),
+                        embedding.clone(),
+                        detected_lang,
+                    ));
+                }
+                all_items.push((item, embedding));
+            }
+
+            // Batch insert successful embeddings
+            if !items_to_insert.is_empty() {
+                db.batch_upsert_source_items(&items_to_insert).ok();
+            }
+
+            // Store pending items for retry on next analysis
+            if !pending_items.is_empty() {
+                info!(target: "4da::sources", count = pending_items.len(), "Storing pending items for embedding retry");
+                db.batch_upsert_pending_source_items(&pending_items).ok();
+            }
+        }
+        // ---- End per-source embed + insert ----
     }
 
     // Log summary of fetch results
-    if all_items.is_empty() && new_items_to_embed.is_empty() {
+    if all_items.is_empty() {
         warn!(target: "4da::sources", "No items fetched from any source - check network connectivity");
-    }
-
-    // Embed new items with graceful degradation
-    if !new_items_to_embed.is_empty() {
-        debug!(target: "4da::embed", count = new_items_to_embed.len(), "Embedding new items");
-
-        // Narration: embedding start
-        emit_narration(
-            app,
-            NarrationEvent {
-                narration_type: "insight".into(),
-                message: "Analyzing content patterns...".into(),
-                source: None,
-                relevance: None,
-            },
-        );
-
-        emit_progress(
-            app,
-            "embed",
-            0.6,
-            &format!("Embedding {} new items...", new_items_to_embed.len()),
-            all_items.len(),
-            all_items.len() + new_items_to_embed.len(),
-        );
-
-        let texts: Vec<String> = new_items_to_embed
-            .iter()
-            .map(|(_, text)| text.clone())
-            .collect();
-
-        // Try to embed, with fallback to zero vectors (keyword-only scoring)
-        let embeddings = match embed_texts(&texts).await {
-            Ok(emb) => {
-                let is_zero_fallback = emb.first().is_some_and(|v| v.iter().all(|&x| x == 0.0));
-                if is_zero_fallback {
-                    let _ = app.emit(
-                        "embedding-mode",
-                        serde_json::json!({
-                            "mode": "keyword-only",
-                            "reason": "No embedding provider available"
-                        }),
-                    );
-                } else if let Err(e) =
-                    app.emit("embedding-mode", serde_json::json!({ "mode": "semantic" }))
-                {
-                    tracing::warn!("Failed to emit 'embedding-mode': {e}");
-                }
-                emb
-            }
-            Err(e) => {
-                warn!(target: "4da::embed", error = %e, count = texts.len(),
-                    "Embedding service unavailable - using fallback (keyword-only scoring)");
-                let _ = app.emit(
-                    "embedding-mode",
-                    serde_json::json!({ "mode": "keyword-only", "reason": e.to_string() }),
-                );
-                // Record embedding failure to local error telemetry
-                crate::telemetry::record_error_async("embedding", &format!("{e}"), None);
-                // Create zero vectors as fallback - items will score via keyword matching only
-                vec![vec![0.0f32; 384]; texts.len()]
-            }
-        };
-
-        // Batch upsert: separate successful and failed embeddings
-        let mut items_to_insert = Vec::new();
-        let mut pending_items = Vec::new();
-        for ((item, embed_text), embedding) in
-            new_items_to_embed.into_iter().zip(embeddings.into_iter())
-        {
-            // Decode HTML entities at ingestion time so DB always has clean text.
-            // This ensures dedup, embeddings, and display all see the same clean text.
-            let clean_title = crate::decode_html_entities(&item.title);
-            let clean_content = crate::decode_html_entities(&item.content);
-
-            let is_fallback = embedding.iter().all(|&v| v == 0.0);
-            let detected_lang = crate::language_detect::detect_language(&clean_title);
-            if is_fallback {
-                // Store as pending for re-embedding on next analysis
-                pending_items.push((
-                    item.source_type.clone(),
-                    item.source_id.clone(),
-                    item.url.clone(),
-                    clean_title.clone(),
-                    clean_content.clone(),
-                    embed_text,
-                ));
-            } else {
-                items_to_insert.push((
-                    item.source_type.clone(),
-                    item.source_id.clone(),
-                    item.url.clone(),
-                    clean_title.clone(),
-                    clean_content.clone(),
-                    embedding.clone(),
-                    detected_lang,
-                ));
-            }
-            all_items.push((item, embedding));
-        }
-
-        // Batch insert successful embeddings
-        if !items_to_insert.is_empty() {
-            db.batch_upsert_source_items(&items_to_insert).ok();
-        }
-
-        // Store pending items for retry on next analysis
-        if !pending_items.is_empty() {
-            info!(target: "4da::sources", count = pending_items.len(), "Storing pending items for embedding retry");
-            db.batch_upsert_pending_source_items(&pending_items).ok();
-        }
     }
 
     // Narration: all sources fetched
@@ -898,6 +926,35 @@ pub(crate) async fn fetch_all_sources_deep(
 
     // Embed new items in batches for better progress feedback
     if !new_items_to_embed.is_empty() {
+        // Enforce embedding queue cap — prevents Ollama saturation (20+ minute
+        // stalls). Deferred items are stored as pending and picked up next cycle.
+        const MAX_EMBED_BATCH: usize = 2000;
+        if new_items_to_embed.len() > MAX_EMBED_BATCH {
+            tracing::warn!(
+                target: "4da::fetcher",
+                total = new_items_to_embed.len(),
+                cap = MAX_EMBED_BATCH,
+                "Embedding queue exceeds cap — deferring {} items to next cycle",
+                new_items_to_embed.len() - MAX_EMBED_BATCH
+            );
+            // Store overflow items as pending before truncating
+            let overflow: Vec<_> = new_items_to_embed.split_off(MAX_EMBED_BATCH);
+            let pending_overflow: Vec<_> = overflow
+                .into_iter()
+                .map(|(item, embed_text)| {
+                    (
+                        item.source_type.clone(),
+                        item.source_id.clone(),
+                        item.url.clone(),
+                        crate::decode_html_entities(&item.title),
+                        crate::decode_html_entities(&item.content),
+                        embed_text,
+                    )
+                })
+                .collect();
+            db.batch_upsert_pending_source_items(&pending_overflow).ok();
+        }
+
         // Narration: embedding start (deep scan)
         emit_narration(
             app,
