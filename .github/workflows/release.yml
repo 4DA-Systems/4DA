@@ -102,6 +102,24 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build AWE sidecar
+        shell: bash
+        run: |
+          # Clone and build the AWE (Artificial Wisdom Engine) binary.
+          # AWE is placed next to the Tauri executable so find_awe_binary()
+          # resolves it via sibling-of-exe (Priority 2).
+          git clone --depth 1 https://github.com/runyourempire/awe.git "$RUNNER_TEMP/awe"
+          cd "$RUNNER_TEMP/awe"
+          cargo build --release -p awe-cli --target ${{ matrix.target }}
+          # Copy to where Tauri will bundle it (next to fourda binary)
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            AWE_BIN="target/${{ matrix.target }}/release/awe.exe"
+          else
+            AWE_BIN="target/${{ matrix.target }}/release/awe"
+          fi
+          # Store path for post-build copy into bundle
+          echo "AWE_SIDECAR=$RUNNER_TEMP/awe/$AWE_BIN" >> $GITHUB_ENV
+
       - name: Supply chain policy check
         shell: bash
         run: |
@@ -145,6 +163,19 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
+
+      - name: Place AWE sidecar in bundle
+        shell: bash
+        run: |
+          # Copy AWE binary next to the Tauri desktop executable.
+          # On packaged installs, find_awe_binary() resolves it as exe sibling.
+          RELEASE_DIR="src-tauri/target/${{ matrix.target }}/release"
+          if [[ -f "$AWE_SIDECAR" ]]; then
+            cp "$AWE_SIDECAR" "$RELEASE_DIR/"
+            echo "AWE sidecar placed at: $RELEASE_DIR/$(basename $AWE_SIDECAR)"
+          else
+            echo "::warning::AWE sidecar not found at $AWE_SIDECAR — AWE features will be unavailable"
+          fi
 
       - name: Report binary sizes
         shell: bash
