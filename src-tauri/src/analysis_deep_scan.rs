@@ -243,6 +243,13 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
         .map_err(|e| format!("Deep fetch failed: {e}"))?;
     info!(target: "4da::analysis", items = all_items.len(), "Deep fetched items from all sources");
 
+    // Auto-prune oldest items if DB exceeds capacity
+    if let Ok(pruned) = db.prune_items_if_needed(crate::sources::MAX_TOTAL_ITEMS) {
+        if pruned > 0 {
+            info!(target: "4da::analysis", pruned, "Auto-pruned oldest items after fetch");
+        }
+    }
+
     emit_progress(
         app,
         "fetch",

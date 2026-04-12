@@ -6,7 +6,9 @@
 
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Semaphore;
 use tracing::debug;
 
 /// Default minimum interval between requests to the same source (2 seconds).
@@ -44,17 +46,37 @@ fn source_interval(source: &str) -> Duration {
     }
 }
 
-/// Centralized rate limiter that tracks per-source request timing.
+/// Maximum concurrent HTTP requests across all sources.
+/// Prevents overwhelming the network or hitting OS file-descriptor limits
+/// when 100+ sources are fetching simultaneously.
+const MAX_CONCURRENT_REQUESTS: usize = 15;
+
+/// Centralized rate limiter that tracks per-source request timing
+/// and enforces a global concurrency cap via semaphore.
 pub struct RateLimiter {
     last_requests: Mutex<HashMap<String, Instant>>,
+    global_permits: Arc<Semaphore>,
 }
 
 impl RateLimiter {
-    /// Create a new rate limiter with no history.
+    /// Create a new rate limiter with no history and a global concurrency cap.
     pub fn new() -> Self {
         Self {
             last_requests: Mutex::new(HashMap::new()),
+            global_permits: Arc::new(Semaphore::new(MAX_CONCURRENT_REQUESTS)),
         }
+    }
+
+    /// Acquire a global request permit. Returns a guard that releases on drop.
+    /// This limits total concurrent HTTP requests across all sources to
+    /// [`MAX_CONCURRENT_REQUESTS`] (15), preventing network saturation when
+    /// many sources fetch in parallel.
+    pub async fn acquire_global_permit(&self) -> tokio::sync::OwnedSemaphorePermit {
+        self.global_permits
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("global request semaphore closed")
     }
 
     /// Check whether a request to the given source is currently allowed

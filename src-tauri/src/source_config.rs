@@ -7,6 +7,7 @@ use tracing::{info, warn};
 
 use crate::error::Result;
 use crate::get_settings_manager;
+use crate::sources::MAX_SOURCES;
 
 /// Validate string input length
 fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<()> {
@@ -40,8 +41,12 @@ pub async fn get_rss_feeds() -> Result<serde_json::Value> {
 /// Set all RSS feed URLs (replacing existing)
 #[tauri::command]
 pub async fn set_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value> {
-    if feeds.len() > 100 {
-        return Err("Too many RSS feeds (max 100)".into());
+    if feeds.len() > MAX_SOURCES {
+        return Err(format!(
+            "Maximum of {} RSS feeds reached. Remove a feed before adding another.",
+            MAX_SOURCES
+        )
+        .into());
     }
     for url in &feeds {
         validate_input_length(url, "Feed URL", 2000)?;
@@ -85,8 +90,12 @@ pub async fn get_twitter_handles() -> Result<serde_json::Value> {
 /// Set all Twitter handles (replacing existing)
 #[tauri::command]
 pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Value> {
-    if handles.len() > 100 {
-        return Err("Too many Twitter handles (max 100)".into());
+    if handles.len() > MAX_SOURCES {
+        return Err(format!(
+            "Maximum of {} Twitter handles reached. Remove a handle before adding another.",
+            MAX_SOURCES
+        )
+        .into());
     }
     for handle in &handles {
         validate_input_length(handle, "Twitter handle", 50)?;
@@ -247,8 +256,12 @@ pub async fn get_youtube_channels() -> Result<serde_json::Value> {
 /// Set all YouTube channel IDs (replacing existing)
 #[tauri::command]
 pub async fn set_youtube_channels(channels: Vec<String>) -> Result<serde_json::Value> {
-    if channels.len() > 100 {
-        return Err("Too many YouTube channels (max 100)".into());
+    if channels.len() > MAX_SOURCES {
+        return Err(format!(
+            "Maximum of {} YouTube channels reached. Remove a channel before adding another.",
+            MAX_SOURCES
+        )
+        .into());
     }
     for channel in &channels {
         validate_input_length(channel, "YouTube channel ID", 100)?;
