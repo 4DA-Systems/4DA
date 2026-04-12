@@ -143,6 +143,7 @@ pub fn emit_awe_event<R: Runtime>(app: &AppHandle<R>, event: AweEvent) {
 
 /// Emit multiple events in quick succession. Equivalent to calling
 /// `emit_awe_event` in a loop but makes the intent explicit.
+#[allow(dead_code)] // Public API — available for future batch-emission patterns
 pub fn emit_awe_events<R: Runtime>(app: &AppHandle<R>, events: impl IntoIterator<Item = AweEvent>) {
     for event in events {
         emit_awe_event(app, event);

@@ -272,11 +272,14 @@ impl RssSource {
             .replace("&nbsp;", " ")
     }
 
-    /// Strip HTML tags from content, leaving only safe text.
+    /// Strip ALL HTML tags from content, producing plain text only.
     pub(crate) fn strip_html(html: &str) -> String {
-        // Use ammonia to properly sanitize HTML — handles entity decoding,
-        // attribute stripping, and edge cases that naive parsing misses.
-        let clean = ammonia::clean(html);
+        // ammonia::Builder with an empty tag set removes every HTML tag,
+        // leaving only decoded plain text.
+        let clean = ammonia::Builder::new()
+            .tags(std::collections::HashSet::new())
+            .clean(html)
+            .to_string();
         // Collapse whitespace for consistent output
         clean.split_whitespace().collect::<Vec<_>>().join(" ")
     }

@@ -77,6 +77,10 @@ data/.stalled
 # ONNX models
 src-tauri/models/
 
+# Sidecar binaries (built by CI, not committed)
+src-tauri/binaries/*.exe
+src-tauri/binaries/awe-*
+
 # MCP memory server build
 mcp-memory-server/dist/
 mcp-memory-server/node_modules/

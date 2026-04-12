@@ -247,6 +247,7 @@ impl ContextEngine {
     }
 
     /// Get experience level
+    #[allow(dead_code)] // Public API — reserved for future user-profile features
     pub fn get_experience_level(&self) -> SqliteResult<Option<String>> {
         let conn = self.conn.lock();
         conn.query_row(
