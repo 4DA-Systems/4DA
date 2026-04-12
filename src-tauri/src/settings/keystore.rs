@@ -13,7 +13,13 @@ use tracing::{info, warn};
 const SERVICE_NAME: &str = "com.4da.app";
 
 /// Key names for secrets stored in the platform keychain.
-const KEY_NAMES: &[&str] = &["llm_api_key", "openai_api_key", "x_api_key", "license_key"];
+const KEY_NAMES: &[&str] = &[
+    "llm_api_key",
+    "openai_api_key",
+    "x_api_key",
+    "license_key",
+    "translation_api_key",
+];
 
 /// Report of a plaintext-to-keychain migration run.
 #[derive(Debug, Clone)]
@@ -144,6 +150,7 @@ pub fn migrate_from_plaintext(settings: &super::Settings) -> Result<MigrationRep
         ("openai_api_key", &settings.llm.openai_api_key),
         ("x_api_key", &settings.x_api_key),
         ("license_key", &settings.license.license_key),
+        ("translation_api_key", &settings.translation.api_key),
     ];
 
     for (key_name, value) in key_values {
@@ -263,11 +270,12 @@ mod tests {
         let report = report.unwrap();
         // All keys should be skipped since default settings have empty values
         assert!(report.migrated.is_empty());
-        assert_eq!(report.skipped.len(), 4);
+        assert_eq!(report.skipped.len(), 5);
         assert!(report.skipped.contains(&"llm_api_key".to_string()));
         assert!(report.skipped.contains(&"openai_api_key".to_string()));
         assert!(report.skipped.contains(&"x_api_key".to_string()));
         assert!(report.skipped.contains(&"license_key".to_string()));
+        assert!(report.skipped.contains(&"translation_api_key".to_string()));
     }
 
     #[test]
@@ -284,19 +292,21 @@ mod tests {
         // Two keys had values — they were either migrated or failed (no panic either way)
         let attempted = report.migrated.len() + report.failed.len();
         assert_eq!(attempted, 2);
-        assert_eq!(report.skipped.len(), 2);
+        assert_eq!(report.skipped.len(), 3);
         assert!(report.skipped.contains(&"openai_api_key".to_string()));
         assert!(report.skipped.contains(&"license_key".to_string()));
+        assert!(report.skipped.contains(&"translation_api_key".to_string()));
     }
 
     #[test]
     fn test_known_key_names() {
         let names = known_key_names();
-        assert_eq!(names.len(), 4);
+        assert_eq!(names.len(), 5);
         assert!(names.contains(&"llm_api_key"));
         assert!(names.contains(&"openai_api_key"));
         assert!(names.contains(&"x_api_key"));
         assert!(names.contains(&"license_key"));
+        assert!(names.contains(&"translation_api_key"));
     }
 
     #[test]
