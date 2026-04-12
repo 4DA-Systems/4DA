@@ -104,8 +104,8 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
         smtp_from: smtpForm.fromAddress || undefined,
         smtp_use_tls: smtpForm.useTls,
       });
-      setSettingsStatus(t('settings.digest.emailConfigSaved'));
-      setTimeout(() => setSettingsStatus(''), 2000);
+      setSettingsStatus(t('settings.digest.emailConfigSavedSessionOnly', 'Email configuration saved (password is session-only and will need to be re-entered after restart)'));
+      setTimeout(() => setSettingsStatus(''), 4000);
     } catch (error) {
       setSettingsStatus(`Error: ${error}`);
     } finally {
@@ -262,6 +262,9 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
                           placeholder="App password or SMTP password"
                           className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-white placeholder-text-muted focus:outline-none focus:border-blue-500/50"
                         />
+                        <p className="text-xs text-text-muted mt-1 opacity-70">
+                          {t('settings.digest.passwordSessionOnly', 'Session-only — not persisted to disk for security')}
+                        </p>
                       </div>
 
                       <div>
