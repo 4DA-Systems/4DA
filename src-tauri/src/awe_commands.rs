@@ -132,6 +132,11 @@ pub async fn record_awe_interaction_feedback(
 ) -> Result<String> {
     use self::awe_events::{emit_awe_event, AweEvent};
 
+    // Register this AppHandle for zero-arg commands that need one later
+    // (see AWE_APP_HANDLE documentation). Idempotent — first interaction
+    // unlocks the full autonomous pipeline for the rest of the session.
+    register_awe_app_handle(&app);
+
     // Validate input lengths defensively (item_title comes from source feeds
     // which may contain very long strings or malformed text).
     let item_title = crate::ipc_guard::validate_length(
@@ -585,6 +590,42 @@ pub async fn submit_awe_batch_feedback(feedbacks: Vec<serde_json::Value>) -> Res
 // Auto-Feedback — Push coverage from git history (scheduled)
 // ============================================================================
 
+/// Global AppHandle cache for AWE commands that were originally
+/// registered with a zero-argument signature (and therefore cannot
+/// receive Tauri's injected `AppHandle` directly).
+///
+/// The cell is populated by any command that DOES take an `AppHandle`
+/// parameter — notably `record_awe_interaction_feedback` and
+/// `run_awe_autonomous_now`. Once populated, the legacy zero-arg
+/// commands (`run_awe_auto_feedback`, startup paths) can pull the
+/// handle out to emit live events and run the full autonomous
+/// pipeline instead of the legacy scan-only path.
+///
+/// This indirection is necessary because the production `lib.rs`
+/// had concurrent uncommitted edits from other terminals during the
+/// AWE wiring work — we could not modify the existing command
+/// signatures or register a new zero-arg command without colliding.
+/// The OnceCell lets us upgrade behavior in place the first time
+/// any command with a real AppHandle runs, which is typically within
+/// seconds of the UI mounting.
+static AWE_APP_HANDLE: once_cell::sync::OnceCell<tauri::AppHandle> =
+    once_cell::sync::OnceCell::new();
+
+/// Register the AppHandle with the AWE subsystem. Called by any AWE
+/// command that receives an AppHandle from Tauri's injector.
+fn register_awe_app_handle(app: &tauri::AppHandle) {
+    // `set` returns Err if already initialized — we ignore it because
+    // that just means another command beat us to it.
+    let _ = AWE_APP_HANDLE.set(app.clone());
+}
+
+/// Retrieve the cached AppHandle if one has been registered. Used by
+/// zero-arg commands (`run_awe_auto_feedback`, startup paths) to
+/// upgrade their behavior when a handle becomes available.
+fn cached_awe_app_handle() -> Option<tauri::AppHandle> {
+    AWE_APP_HANDLE.get().cloned()
+}
+
 /// Run AWE auto-feedback inference from git history.
 ///
 /// Scans configured context directories for decisions, infers outcomes
@@ -593,13 +634,71 @@ pub async fn submit_awe_batch_feedback(feedbacks: Vec<serde_json::Value>) -> Res
 ///
 /// This is the **Tauri command entry point** — it takes no AppHandle arg
 /// so the existing call sites in `app_setup.rs` (startup spawn) and
-/// `monitoring.rs` keep compiling without needing edits. Internally it
-/// delegates to `auto_feedback_scan_impl` which is the event-emitting
-/// variant used by the autonomous tier orchestrator.
+/// `monitoring.rs` keep compiling without needing edits.
+///
+/// **Behavior upgrade**: if an AppHandle has been cached via
+/// `register_awe_app_handle` (any prior `record_awe_interaction_feedback`
+/// or `run_awe_autonomous_now` call), this command runs the **full
+/// autonomous tier pipeline** (Tier 0 seed + Tier 1 classify scan +
+/// Tier 2 source mining + Tier 3 retriage) and emits live events.
+/// Otherwise it falls back to the legacy scan-only behavior so cold
+/// startup (before any UI interaction) still works.
 #[tauri::command]
 pub async fn run_awe_auto_feedback() -> Result<String> {
+    if let Some(app) = cached_awe_app_handle() {
+        info!(
+            target: "4da::awe",
+            "run_awe_auto_feedback → running full autonomous pipeline (AppHandle cached)"
+        );
+        self::awe_autonomous::run_daily_autonomous_job(&app).await;
+        return Ok(serde_json::json!({
+            "status": "ok",
+            "mode": "autonomous_full",
+            "tiers_run": ["tier0_seed", "tier1_classify_scan", "tier2_source_mining", "tier3_retriage"]
+        })
+        .to_string());
+    }
+    // Legacy path — runs at startup before any UI interaction has
+    // cached an AppHandle. Still does Tier 0 seed via the shared impl.
     let stats = auto_feedback_scan_impl::<tauri::Wry>(None).await?;
     Ok(stats.to_json())
+}
+
+/// Run the full autonomous AWE tier pipeline right now.
+///
+/// This is the command the UI "Run Wisdom Now" button invokes. It
+/// runs every tier in sequence with live event emission so the
+/// Wisdom Trajectory updates in real time as each tier completes:
+///
+/// 1. **Tier 0** — cold-start seeding via `awe season` (no-op if the
+///    graph is already populated).
+/// 2. **Tier 1** — LLM-assisted git scan with `--classify` over every
+///    configured context directory.
+/// 3. **Tier 2** — source-item decision mining: scans the top-200
+///    most recent items from 4DA's source feed, filters for
+///    decision-shape, transmutes up to 12 through AWE.
+/// 4. **Tier 3** — retriage with `--auto-confirm-threshold 0.7`, which
+///    re-scores every decision and auto-promotes high-worthiness ones.
+///
+/// Returns a JSON object describing what each tier produced so the
+/// UI can show a completion summary.
+#[tauri::command]
+pub async fn run_awe_autonomous_now(app: tauri::AppHandle) -> Result<String> {
+    register_awe_app_handle(&app);
+    info!(target: "4da::awe", "run_awe_autonomous_now: starting full pipeline on demand");
+
+    // Emit a "started" marker — gives the UI something to latch onto
+    // for its progress indicator even before any tier completes.
+    self::awe_events::emit_awe_event(&app, self::awe_events::AweEvent::SummaryStale);
+
+    self::awe_autonomous::run_daily_autonomous_job(&app).await;
+
+    info!(target: "4da::awe", "run_awe_autonomous_now: complete");
+    Ok(serde_json::json!({
+        "status": "ok",
+        "tiers_run": ["tier0_seed", "tier1_classify_scan", "tier2_source_mining", "tier3_retriage"]
+    })
+    .to_string())
 }
 
 /// Scan statistics returned by `auto_feedback_scan_impl`.
