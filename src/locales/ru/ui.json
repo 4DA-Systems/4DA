@@ -2864,5 +2864,290 @@
   "toolkit.sourceDebugger.itemCount_many": "{{count}} элементов",
   "toolkit.sourceDebugger.itemCount_one": "{{count}} элемент",
   "vulns.projectCount_few": "{{count}} проекта",
-  "vulns.projectCount_many": "{{count}} проектов"
+  "vulns.projectCount_many": "{{count}} проектов",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "Заметили ошибку в переводе?",
+      "feedbackLink": "Помогите нам улучшить"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI"
+    },
+    "license": {
+      "tierTeam": "Team",
+      "lastVerified": "Последняя проверка: {{date}}",
+      "recovery": {
+        "title": "Потеряли ключ лицензии?",
+        "explanation": "Если вы приобрели лицензию Signal и больше не можете найти свой ключ (например, после переустановки или сброса системы), вы можете восстановить его здесь.",
+        "emailHint": "Введите адрес электронной почты, который вы использовали при покупке лицензии. Это адрес, связанный с вашим платежом.",
+        "privacy": "Ваша электронная почта отправляется только на 4da.ai для поиска вашей лицензии. Никакие другие данные не покидают ваш компьютер.",
+        "retrieve": "Восстановить лицензию",
+        "placeholder": "your@email.com",
+        "success": "Лицензия восстановлена и активирована!",
+        "expired": "Ваша лицензия истекла. Обновите её на 4da.ai/signal, чтобы получить новый ключ.",
+        "networkError": "Не удалось подключиться к серверу восстановления. Проверьте подключение к интернету и попробуйте снова.",
+        "rateLimited": "Слишком много попыток. Подождите некоторое время перед новой попыткой."
+      }
+    },
+    "streets": {
+      "tierEnterprise": "Enterprise"
+    }
+  },
+  "nav": {
+    "playbook": "Playbook",
+    "preemption": {
+      "label": "Превентивные меры",
+      "subtitle": "Что важно до того, как произойдёт проблема"
+    },
+    "blindspots": {
+      "label": "Слепые зоны",
+      "subtitle": "Что вы не отслеживаете"
+    }
+  },
+  "preemption": {
+    "title": "Радар превентивных мер",
+    "subtitle": "Прогнозная аналитика для вашего стека",
+    "empty": "Нет превентивных оповещений в данный момент. Ваш стек выглядит здоровым.",
+    "loading": "Сканирование на предмет появляющихся рисков...",
+    "summary": "{{critical}} критических, {{high}} высоких, {{total}} всего оповещений",
+    "evidence": "Доказательства",
+    "affected": {
+      "projects": "Затронутые проекты",
+      "deps": "Затронутые зависимости"
+    },
+    "confidence": "Уверенность: {{value}}%",
+    "window": "Прогнозируемый период"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "Team",
+    "enterprise": "Enterprise"
+  },
+  "onboarding": {
+    "trialHint": "Все функции Signal доступны бесплатно в течение 14 дней. Начните пробный период в любое время в Настройках.",
+    "setup": {
+      "yourExperience": "Уровень опыта",
+      "helpsScoring": "Помогает адаптировать контент к вашему уровню"
+    },
+    "experience": {
+      "description": "Как вы взаимодействуете с технологией? Это помогает 4DA предоставлять контент нужного уровня детализации.",
+      "learning": {
+        "label": "Обучение",
+        "description": "Я изучаю новые технологии и хочу учебные материалы"
+      },
+      "building": {
+        "label": "Разработка",
+        "description": "Я активно разрабатываю проекты и хочу практический контент"
+      },
+      "leading": {
+        "label": "Лидерство",
+        "description": "Я принимаю технические решения и хочу стратегические идеи"
+      },
+      "architecting": {
+        "label": "Архитектура",
+        "description": "Я проектирую системы и хочу глубокий технический анализ"
+      }
+    }
+  },
+  "commandRunner": {
+    "exit": "выход {{code}}"
+  },
+  "pro": {
+    "hint": "Сигнал: {{feature}}"
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "Enterprise"
+    },
+    "webhooks": {
+      "title": "Вебхуки",
+      "enterprise": "Enterprise"
+    },
+    "org": {
+      "enterprise": "Enterprise"
+    }
+  },
+  "about": {
+    "fullName": "4 Dimensional Autonomy",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "privacyValue": "Local-First / BYOK",
+    "attributionCreatorName": "Antony Lawrence Kiddie Pasifa",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}} из {{total}} источников активны",
+      "failing": "{{count}} из {{total}} источников не работают",
+      "idle": "Источники неактивны — ожидание следующей загрузки",
+      "sourceHealthy": "{{source}}: {{items}} элементов, последнее {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: нет недавних загрузок"
+    }
+  },
+  "toolkit": {
+    "scoringSandbox": {
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "profile": {
+    "developerDna": "Developer DNA"
+  },
+  "dna": {
+    "title": "Developer DNA",
+    "markdown": "Markdown"
+  },
+  "momentum": {
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "loading": "Загрузка графика знаний...",
+    "decisions": "Решения",
+    "principles": "Принципы",
+    "feedbackRate": "Обратная связь",
+    "pendingCount": "{{count}} ожидающих",
+    "validatedPrinciples": "Подтвержденные принципы",
+    "showMore": "+{{count}} еще",
+    "showLess": "Свернуть",
+    "earlyStage": "AWE еще учится. Принципы появляются после 5+ решений с обратной связью.",
+    "pendingNudge": "{{count}} решений ожидают обратную связь о результатах",
+    "momentum": {
+      "title": "Траектория мудрости",
+      "decisionsTracked": "Решения",
+      "principlesEarned": "Принципы",
+      "coverageLabel": "Покрытие",
+      "pendingCta": "{{count}} решений ожидают обратную связь",
+      "earnedPrinciples": "Заработанные принципы",
+      "evidenceCount": "{{count}} свидетельств",
+      "daysAgo": "{{count}}д",
+      "loading": "Загрузка траектории мудрости...",
+      "offline": "Двигатель мудрости (AWE) еще не подключен. Его роль: преобразовать ваши решения и их результаты в калиброванные принципы, которые управляют 4DA.",
+      "offlineHint": "См. вкладку \"Мудрость\" для настройки.",
+      "wellHighlights": "Формирование интеллекта",
+      "wellHighlightsHint": "Наиболее достоверные закономерности, находящиеся в Хранилище мудрости.",
+      "pendingTitle": "Ожидание обратной связи по результатам",
+      "pendingMore": "+{{count}} еще во вкладке \"Мудрость\"",
+      "intelligenceProfile": "Профиль интеллекта",
+      "itemsMonitored": "контролируемых элементов",
+      "sourcesActive": "активных источников",
+      "yourActions": "ваши действия",
+      "phase": {
+        "cold_start": "Холодный старт",
+        "accumulating": "Накопление",
+        "compounding": "Усложнение",
+        "mature": "Зрелость"
+      }
+    },
+    "playbook": {
+      "title": "Резонанс мудрости",
+      "reinforcement": "{{count}} решений в {{aligned}} согласованных темах усиливают этот урок",
+      "mastery": "Оценка мастерства"
+    },
+    "profile": {
+      "title": "ДНК мудрости",
+      "decisionVelocity": "Решения",
+      "principlesFormed": "Принципы",
+      "coverage": "Охват",
+      "gapToImpact": "Разрешение {{count}} ожидающих решений может создать новые принципы"
+    },
+    "console": {
+      "transmutation": "Трансмутация",
+      "wisdomWell": "Хранилище мудрости",
+      "calibration": "Калибровка",
+      "feedbackQueue": "Очередь обратной связи",
+      "totalDecisions": "Всего решений",
+      "totalPrinciples": "Принципы",
+      "feedbackGiven": "Обратная связь предоставлена",
+      "coverageRate": "Охват",
+      "healthStatus": "Здоровье",
+      "calibrationUnavailable": "Данные калибровки недоступны",
+      "confirm": "Подтвердить",
+      "refute": "Опровергнуть",
+      "unavailable": "AWE недоступен",
+      "wellEmpty": "Данных мудрости еще нет. Принципы появляются по мере накопления решений с обратной связью.",
+      "queueEmpty": "Все решения имеют записанную обратную связь"
+    }
+  },
+  "console": {
+    "tab_trust": "Доверие",
+    "tabDesc_trust": "Качество интеллекта и доказательство предотвращения"
+  },
+  "trust": {
+    "title": "Качество интеллекта",
+    "subtitle": "Последние {{days}} дней",
+    "precision": "Точность",
+    "actionRate": "Коэффициент действий",
+    "fpRate": "Коэффициент ложных срабатываний",
+    "caughtEarly": "Поймано рано",
+    "avgLeadTime": "среднее время упреждения {{days}}д",
+    "summary": "{{surfaced}} сигналов обнаружено, {{acted}} на них реагировано, {{dismissed}} отклонено",
+    "falsePositives": "{{count}} ложное срабатывание",
+    "trend": {
+      "improving": "Тренд: улучшается",
+      "stable": "Тренд: стабилен",
+      "declining": "Тренд: ухудшается"
+    },
+    "empty": "Данные аналитики еще не собраны. Используйте 4DA несколько дней, чтобы увидеть метрики качества.",
+    "explanation": {
+      "good": "4DA корректно идентифицировала важные сигналы в {{precision}}% случаев. {{wins}} проблем были обнаружены до того, как они стали критичными.",
+      "building": "4DA создает базовую линию аналитики. Метрики качества станут более значимыми по мере взаимодействия с большим количеством сигналов."
+    }
+  },
+  "comp": {
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml"
+    },
+    "tradeoffs": {
+      "localLabel": "Локально-ориентированный"
+    }
+  },
+  "digest": {
+    "topicPython": "Python",
+    "topicAI": "ИИ/ML",
+    "topicCloud": "Облако/DevOps"
+  },
+  "blindspots": {
+    "title": "Индекс слепых зон",
+    "subtitle": "Что вы отслеживаете недостаточно хорошо",
+    "score": {
+      "good": "Хорошее покрытие",
+      "moderate": "Умеренные пробелы",
+      "significant": "Значительные пробелы",
+      "critical": "Критические слепые зоны"
+    },
+    "uncovered": "Неотслеживаемые зависимости",
+    "missed": "Пропущенная аналитика",
+    "recommendations": "Рекомендации",
+    "empty": "Слепые зоны не обнаружены. Покрытие вашего стека отличное.",
+    "loading": "Анализ покрытия..."
+  }
 }

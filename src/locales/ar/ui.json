@@ -2928,5 +2928,289 @@
   "vulns.projectCount_few": "{{count}} مشاريع",
   "vulns.projectCount_many": "{{count}} مشروعًا",
   "vulns.projectCount_two": "مشروعان",
-  "vulns.projectCount_zero": "لا مشاريع"
+  "vulns.projectCount_zero": "لا مشاريع",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "هل لاحظت مشكلة في الترجمة؟",
+      "feedbackLink": "ساعدنا في تحسينها"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI"
+    },
+    "license": {
+      "tierTeam": "فريق",
+      "lastVerified": "آخر تحقق: {{date}}",
+      "recovery": {
+        "title": "هل فقدت مفتاح الترخيص الخاص بك؟",
+        "explanation": "إذا اشتريت ترخيص Signal ولم تعد تستطيع العثور على مفتاحك (على سبيل المثال، بعد إعادة التثبيت أو إذا تم إعادة تعيين نظامك)، يمكنك استرجاعه هنا.",
+        "emailHint": "أدخل عنوان البريد الإلكتروني الذي استخدمته عند شراء الترخيص. هذا هو البريد الإلكتروني المرتبط بدفعتك.",
+        "privacy": "يتم إرسال بريدك الإلكتروني فقط إلى 4da.ai للبحث عن ترخيصك. لا تغادر أي بيانات أخرى جهازك.",
+        "retrieve": "استرجاع الترخيص",
+        "placeholder": "your@email.com",
+        "success": "تم استرجاع الترخيص وتفعيله!",
+        "expired": "انتهى صلاحية ترخيصك. جدد عليه من خلال 4da.ai/signal للحصول على مفتاح جديد.",
+        "networkError": "لم يتمكن من الوصول إلى خادم الاسترجاع. تحقق من اتصالك بالإنترنت وحاول مرة أخرى.",
+        "rateLimited": "عدد كبير جداً من المحاولات. يرجى الانتظار قليلاً قبل المحاولة مرة أخرى."
+      }
+    },
+    "streets": {
+      "tierEnterprise": "مؤسسة"
+    }
+  },
+  "nav": {
+    "playbook": "دليل التشغيل",
+    "preemption": {
+      "label": "الاستباقية",
+      "subtitle": "ما يهم قبل أن يسبب الألم"
+    },
+    "blindspots": {
+      "label": "النقاط العمياء",
+      "subtitle": "ما لا تراقبه"
+    }
+  },
+  "preemption": {
+    "title": "رادار الاستباقية",
+    "subtitle": "ذكاء موجه للمستقبل لمكدسك",
+    "empty": "لا توجد تنبيهات استباقية الآن. مكدسك يبدو صحياً.",
+    "loading": "جاري البحث عن المخاطر الناشئة...",
+    "summary": "{{critical}} حرجة، {{high}} عالية، {{total}} إجمالي التنبيهات",
+    "evidence": "الأدلة",
+    "affected": {
+      "projects": "المشاريع المتأثرة",
+      "deps": "التبعيات المتأثرة"
+    },
+    "confidence": "الثقة: {{value}}%",
+    "window": "نافذة التنبؤ"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "فريق",
+    "enterprise": "مؤسسة"
+  },
+  "onboarding": {
+    "trialHint": "جميع ميزات Signal متاحة مجاناً لمدة 14 يوماً. ابدأ التجربة في أي وقت في الإعدادات.",
+    "apiKeys": {
+      "bearerToken": "Bearer Token"
+    },
+    "setup": {
+      "yourExperience": "مستوى الخبرة",
+      "helpsScoring": "يساعد في تخصيص المحتوى لمستواك"
+    },
+    "experience": {
+      "description": "كيف تتفاعل مع التكنولوجيا؟ هذا يساعد 4DA على عرض المحتوى بالعمق المناسب.",
+      "learning": {
+        "label": "التعلم",
+        "description": "أنا أتعلم تقنيات جديدة وأريد دروساً تعليمية"
+      },
+      "building": {
+        "label": "البناء",
+        "description": "أنا أبني مشاريع بنشاط وأريد محتوى عملي"
+      },
+      "leading": {
+        "label": "القيادة",
+        "description": "أنا أقود القرارات التقنية وأريد رؤى استراتيجية"
+      },
+      "architecting": {
+        "label": "العمارة",
+        "description": "أصمم الأنظمة وأريد تحليلاً تقنياً عميقاً"
+      }
+    }
+  },
+  "commandRunner": {
+    "exit": "خروج {{code}}"
+  },
+  "pro": {
+    "hint": "الإشارة: {{feature}}"
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "Enterprise"
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "enterprise": "Enterprise"
+    },
+    "org": {
+      "enterprise": "Enterprise"
+    }
+  },
+  "about": {
+    "fullName": "الحكم الذاتي رباعي الأبعاد",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "privacyValue": "Local-First / BYOK",
+    "attributionCreatorName": "Antony Lawrence Kiddie Pasifa",
+    "attributionClaudeName": "Claude",
+    "copyright": "الإصدار {{version}} · © 2025–2026 نظم 4DA"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}} من {{total}} المصادر نشطة",
+      "failing": "{{count}} من {{total}} المصادر معطلة",
+      "idle": "المصادر خاملة — في انتظار الجلب التالي",
+      "sourceHealthy": "{{source}}: {{items}} عناصر، آخر {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: لا توجد عمليات جلب حديثة"
+    }
+  },
+  "toolkit": {
+    "scoringSandbox": {
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "dna": {
+    "markdown": "Markdown"
+  },
+  "momentum": {
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "loading": "جاري تحميل رسم البيانات الحكيمة...",
+    "decisions": "القرارات",
+    "principles": "المبادئ",
+    "feedbackRate": "الملاحظات",
+    "pendingCount": "{{count}} قيد الانتظار",
+    "validatedPrinciples": "المبادئ المصدقة",
+    "showMore": "+{{count}} المزيد",
+    "showLess": "عرض أقل",
+    "earlyStage": "AWE لا يزال يتعلم. تظهر المبادئ بعد 5+ قرارات مع ملاحظات.",
+    "pendingNudge": "{{count}} قرار في انتظار ملاحظات النتائج",
+    "momentum": {
+      "title": "مسار الحكمة",
+      "decisionsTracked": "القرارات",
+      "principlesEarned": "المبادئ",
+      "coverageLabel": "التغطية",
+      "pendingCta": "{{count}} قرار في انتظار الملاحظات",
+      "earnedPrinciples": "المبادئ المكتسبة",
+      "evidenceCount": "{{count}} دليل",
+      "daysAgo": "{{count}}ي",
+      "loading": "جاري تحميل مسار الحكمة...",
+      "offline": "محرك الحكمة (AWE) غير متصل حالياً. دوره: تحويل قراراتك ونتائجها إلى مبادئ معايرة توجه 4DA.",
+      "offlineHint": "راجع تبويب الحكمة للإعداد.",
+      "wellHighlights": "تشكيل الذكاء",
+      "wellHighlightsHint": "أعلى الأنماط ثقة حالياً في بئر الحكمة.",
+      "pendingTitle": "في انتظار تعليقات النتائج",
+      "pendingMore": "+{{count}} آخرون في تبويب الحكمة",
+      "intelligenceProfile": "ملف الذكاء",
+      "itemsMonitored": "عناصر تحت المراقبة",
+      "sourcesActive": "مصادر منتجة",
+      "yourActions": "إجراءاتك",
+      "phase": {
+        "cold_start": "بداية باردة",
+        "accumulating": "تراكمي",
+        "compounding": "مركب",
+        "mature": "نضج"
+      }
+    },
+    "playbook": {
+      "title": "رنين الحكمة",
+      "reinforcement": "{{count}} قرارات عبر {{aligned}} مواضيع متسقة تعزز هذا الدرس",
+      "mastery": "تقدير الإتقان"
+    },
+    "profile": {
+      "title": "الحمض النووي للحكمة",
+      "decisionVelocity": "القرارات",
+      "principlesFormed": "المبادئ",
+      "coverage": "التغطية",
+      "gapToImpact": "حل {{count}} قرار معلق يمكن أن يولد مبادئ جديدة"
+    },
+    "console": {
+      "transmutation": "التحويل",
+      "wisdomWell": "بئر الحكمة",
+      "calibration": "المعايرة",
+      "feedbackQueue": "قائمة التعليقات",
+      "totalDecisions": "إجمالي القرارات",
+      "totalPrinciples": "المبادئ",
+      "feedbackGiven": "التعليقات المقدمة",
+      "coverageRate": "التغطية",
+      "healthStatus": "الصحة",
+      "calibrationUnavailable": "بيانات المعايرة غير متاحة",
+      "confirm": "تأكيد",
+      "refute": "دحض",
+      "unavailable": "AWE غير متاح",
+      "wellEmpty": "لا توجد بيانات حكمة حتى الآن. تظهر المبادئ مع تراكم التعليقات على القرارات.",
+      "queueEmpty": "تم تسجيل التعليقات لجميع القرارات"
+    }
+  },
+  "console": {
+    "tab_trust": "الثقة",
+    "tabDesc_trust": "جودة الذكاء وإثبات الاستباق"
+  },
+  "trust": {
+    "title": "جودة الذكاء",
+    "subtitle": "آخر {{days}} أيام",
+    "precision": "الدقة",
+    "actionRate": "معدل الإجراء",
+    "fpRate": "معدل الإيجابيات الخاطئة",
+    "caughtEarly": "تم اكتشافها مبكراً",
+    "avgLeadTime": "{{days}} أيام متوسط وقت التنبيه",
+    "summary": "{{surfaced}} إشارات مرتفعة، {{acted}} تم التصرف بشأنها، {{dismissed}} تم رفضها",
+    "falsePositives": "{{count}} إيجابي خاطئ",
+    "trend": {
+      "improving": "الاتجاه: يتحسن",
+      "stable": "الاتجاه: مستقر",
+      "declining": "الاتجاه: متراجع"
+    },
+    "empty": "لا توجد بيانات استخبارية حتى الآن. استخدم 4DA لبضعة أيام لرؤية مقاييس الجودة.",
+    "explanation": {
+      "good": "حددت 4DA الإشارات المهمة بشكل صحيح {{precision}}% من الوقت. تم اكتشاف {{wins}} مشكلة قبل أن تصبح عاجلة.",
+      "building": "4DA يبني خط أساس الاستخبارات الخاص به. ستصبح مقاييس الجودة أكثر معنى مع تفاعلك مع المزيد من الإشارات."
+    }
+  },
+  "comp": {
+    "privacy": {
+      "embeddingsLabel": "التضمينات"
+    },
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml",
+      "gitLabel": "سجل Git"
+    },
+    "tradeoffs": {
+      "localLabel": "محلي أولاً"
+    }
+  },
+  "digest": {
+    "topicPython": "Python",
+    "topicAI": "الذكاء الاصطناعي/التعلم الآلي"
+  },
+  "blindspots": {
+    "title": "مؤشر النقاط العمياء",
+    "subtitle": "ما لا تراقبه بشكل جيد بما فيه الكفاية",
+    "score": {
+      "good": "تغطية جيدة",
+      "moderate": "فجوات معتدلة",
+      "significant": "فجوات كبيرة",
+      "critical": "نقاط عمياء حرجة"
+    },
+    "uncovered": "التبعيات غير المغطاة",
+    "missed": "الاستخبارات المفقودة",
+    "recommendations": "التوصيات",
+    "empty": "لم يتم اكتشاف نقاط عمياء. تغطية مكدسك ممتازة.",
+    "loading": "تحليل تغطيتك جارٍ..."
+  }
 }
