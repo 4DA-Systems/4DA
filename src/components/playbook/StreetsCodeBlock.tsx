@@ -11,11 +11,17 @@ interface StreetsCodeBlockProps {
   blockIndex: number;
 }
 
-// Detect current OS for auto-selecting the right tab
+// Detect current OS for auto-selecting the right tab.
+// navigator.platform is deprecated; prefer userAgent with platform as fallback.
 function detectCurrentOs(): OsTarget {
-  const platform = navigator.platform?.toLowerCase() ?? '';
-  if (platform.includes('win')) return 'windows';
-  if (platform.includes('mac')) return 'mac_os';
+  const ua = navigator.userAgent?.toLowerCase() ?? '';
+  if (ua.includes('win')) return 'windows';
+  if (ua.includes('mac')) return 'mac_os';
+  if (ua.includes('linux')) return 'linux';
+  // Fallback to deprecated navigator.platform for older environments
+  const plat = navigator.platform?.toLowerCase() ?? '';
+  if (plat.includes('win')) return 'windows';
+  if (plat.includes('mac')) return 'mac_os';
   return 'linux';
 }
 

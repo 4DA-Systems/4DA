@@ -829,8 +829,11 @@ mod tests {
 
     #[test]
     fn require_awe_returns_some_on_this_machine() {
-        // This test only passes on the dev machine with AWE built
-        if std::path::Path::new("D:\\runyourempire\\awe\\target\\release\\awe.exe").exists() {
+        // Check if AWE binary is available (cross-platform)
+        let awe_available = std::env::var("AWE_BIN").is_ok()
+            || std::env::var("AWE_ROOT").is_ok()
+            || find_awe_binary().is_some();
+        if awe_available {
             assert!(require_awe().is_ok());
         }
     }
@@ -859,10 +862,17 @@ mod tests {
 
     #[test]
     fn regression_bug_1_transmute_stage_args_are_valid() {
-        let awe_path = "D:\\runyourempire\\awe\\target\\release\\awe.exe";
-        if !std::path::Path::new(awe_path).exists() {
-            return; // Not the dev machine — skip silently
-        }
+        // Check if AWE binary is available (cross-platform)
+        let awe_available = std::env::var("AWE_BIN").is_ok()
+            || std::env::var("AWE_ROOT").is_ok()
+            || find_awe_binary().is_some();
+        let Some(awe_path) = find_awe_binary() else {
+            if !awe_available {
+                return;
+            } // AWE not available — skip silently
+            return;
+        };
+        let awe_path: &str = &awe_path;
 
         // Exact arg pattern used in awe_commands.rs:get_awe_pattern_match
         let out = run_awe_with_timeout(
@@ -965,10 +975,11 @@ mod tests {
 
     #[test]
     fn regression_bug_2_feedback_uses_real_decision_id() {
-        let awe_path = "D:\\runyourempire\\awe\\target\\release\\awe.exe";
-        if !std::path::Path::new(awe_path).exists() {
-            return;
-        }
+        // Check if AWE binary is available (cross-platform)
+        let Some(awe_path) = find_awe_binary() else {
+            return; // AWE not available — skip silently
+        };
+        let awe_path: &str = &awe_path;
 
         // Use a unique marker so we can find our decision back reliably
         // without racing against any other recent activity.
