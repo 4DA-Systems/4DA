@@ -17,17 +17,17 @@
 - **Files**: list of files being modified
 -->
 
-### T-WAR-ROOM — AWE deep wiring (continuation: app_handle threading)
-- **Status**: working
-- **Current file**: src-tauri/src/awe_commands.rs (register_awe_app_handle threading for zero-arg command paths)
-- **Prior waves (done)**: d8823c5d, 80433345, 1297a15e, 81a41b3c, c88f002d
-- **NOT touching**: any file in other active claims.
-
-### T-IMMUNE-HYGIENE-FOLLOWTHROUGH — Immune scan + hygiene parser fix
+### T-LOCK-CLEANUP — Stalled-terminal recovery + diverged branch rebase
 - **Status**: committing
 - **Commit Lock**: HELD
-- **Scope**: Done-terminal cleanup in TERMINALS.md + hygiene parser regex fix + antibody for ghost IPC / idempotency amnesia
-- **Files**: .claude/TERMINALS.md, .claude/hooks/git-hygiene-check.sh
+- **User authorization**: explicit — user confirmed the terminals holding locks are no longer active
+- **Scope**:
+  1. Remove stale .git/index.stash.62140.lock (Mar 1, 6 weeks old)
+  2. Commit src-tauri/src/awe_commands.rs (102 insertions, syntactically closed, cargo check clean) as T-WAR-ROOM recovery
+  3. Release T-IMMUNE-HYGIENE-FOLLOWTHROUGH stale lock in TERMINALS.md (their work already landed as 55ed60ee + 569620eb)
+  4. Rebase 12 local commits onto origin/main to pull in dd71762b (T-PREEMPTION-FIX)
+  5. Push to origin
+- **Files**: src-tauri/src/awe_commands.rs, .claude/TERMINALS.md
 
 ---
 
