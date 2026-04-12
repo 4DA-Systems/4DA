@@ -406,7 +406,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
           {/* Sync info footer */}
           <div className="pt-2 border-t border-border">
             <p className="text-[10px] text-text-muted">
-              {t('settings.team.relay', 'Relay')}: <span className="font-mono">relay.4da.ai</span>
+              {t('settings.team.relay', 'Relay')}: <span className="font-mono">{relayUrl}</span>
               {' | '}
               {t('settings.team.syncInterval', 'Sync interval')}: 30s
             </p>

@@ -105,7 +105,7 @@ pub struct SsoSession {
 }
 
 /// The localhost callback port for SSO redirects.
-const SSO_CALLBACK_PORT: u16 = 4445;
+const SSO_CALLBACK_PORT: u16 = 4446;
 
 // ============================================================================
 // Internal helpers
