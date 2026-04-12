@@ -45,7 +45,7 @@
     "generate:knowledge": "node scripts/generate-knowledge.cjs",
     "sentinel": "node scripts/sentinel-scan.cjs",
     "sentinel:quick": "node scripts/sentinel-scan.cjs --quick",
-    "generate:types": "cd src-tauri && cargo test export_bindings --lib 2>/dev/null; if [ -d bindings ]; then mkdir -p ../src/generated && cp bindings/*.ts ../src/generated/; fi",
+    "generate:types": "node -e \"const{execSync:x}=require('child_process'),fs=require('fs'),p=require('path');try{x('cargo test export_bindings --lib',{cwd:p.join(__dirname,'src-tauri'),stdio:'ignore'})}catch{}const b=p.join(__dirname,'src-tauri','bindings');if(fs.existsSync(b)){const d=p.join(__dirname,'src','generated');fs.mkdirSync(d,{recursive:true});fs.readdirSync(b).filter(f=>f.endsWith('.ts')).forEach(f=>fs.copyFileSync(p.join(b,f),p.join(d,f)))}\"",
     "guardian": "node scripts/build-guardian.cjs",
     "quality": "node scripts/compound-quality-check.cjs",
     "size": "size-limit",

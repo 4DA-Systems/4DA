@@ -23,7 +23,8 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   useEffect(() => {
     cmd('get_sources')
       .then(r => r as unknown as SourceInfo[])
-      .then(sources => {
+      .then(rawSources => {
+        const sources = Array.isArray(rawSources) ? rawSources : [];
         const enabled = sources
           .filter(s => s.enabled)
           .map(s => s.name);
