@@ -118,10 +118,8 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
   };
 
   const handleLeave = () => {
-    // Leave is a destructive action — for now, surface a confirmation
-    // The actual leave command will be added when the backend supports it
     setConfirmLeave(false);
-    onStatus(t('settings.team.leftTeam', 'Left team'));
+    onStatus(t('settings.team.leaveNotAvailable', 'Leave team will be available in a future update'));
     setTimeout(() => onStatus(''), 3000);
   };
 

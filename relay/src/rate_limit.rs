@@ -1,7 +1,7 @@
 //! In-memory per-IP rate limiter as a tower Layer/Service.
 
-use axum::http::{Request, Response, StatusCode};
 use axum::body::Body;
+use axum::http::{Request, Response, StatusCode};
 use futures::future::BoxFuture;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -120,9 +120,7 @@ where
                 .body(Body::from(
                     r#"{"error":"Rate limit exceeded. Try again later."}"#,
                 ))
-                .unwrap_or_else(|_| {
-                    Response::new(Body::from("rate limited"))
-                });
+                .unwrap_or_else(|_| Response::new(Body::from("rate limited")));
 
             return Box::pin(async move { Ok(response) });
         }

@@ -277,7 +277,15 @@ pub fn get_sync_status(
 
     Ok(TeamSyncStatus {
         enabled: true,
-        connected: false, // Updated by scheduler when relay is reachable
+        // Consider connected if last sync was within 5 minutes
+        connected: last_sync.as_ref().map_or(false, |ts| {
+            if let Ok(parsed) = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S") {
+                let now = chrono::Utc::now().naive_utc();
+                (now - parsed).num_seconds() < 300
+            } else {
+                false
+            }
+        }),
         team_id: Some(team_id.to_string()),
         client_id: Some(client_id.to_string()),
         display_name: None, // Filled from settings by the caller

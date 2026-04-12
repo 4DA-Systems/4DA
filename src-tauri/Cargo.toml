@@ -148,6 +148,7 @@ zeroize = "1"
 
 # Keyring — cross-platform credential storage (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 keyring = { version = "3", features = ["sync-secret-service", "linux-native"] }
+ammonia = "4"
 
 # Platform-specific dependencies
 [target.'cfg(not(windows))'.dependencies]

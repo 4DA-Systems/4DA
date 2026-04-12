@@ -123,7 +123,16 @@ pub async fn list_clients(
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
 
-    let clients = sqlx::query_as::<_, (String, Option<String>, String, Option<Vec<u8>>, Option<String>)>(
+    let clients = sqlx::query_as::<
+        _,
+        (
+            String,
+            Option<String>,
+            String,
+            Option<Vec<u8>>,
+            Option<String>,
+        ),
+    >(
         "SELECT client_id, display_name, role, public_key, last_seen
          FROM team_clients
          WHERE team_id = $1
@@ -294,13 +303,11 @@ pub async fn remove_member(
         ));
     }
 
-    let result = sqlx::query(
-        "DELETE FROM team_clients WHERE team_id = $1 AND client_id = $2",
-    )
-    .bind(&team_id)
-    .bind(&client_id)
-    .execute(&pool)
-    .await?;
+    let result = sqlx::query("DELETE FROM team_clients WHERE team_id = $1 AND client_id = $2")
+        .bind(&team_id)
+        .bind(&client_id)
+        .execute(&pool)
+        .await?;
 
     if result.rows_affected() == 0 {
         return Err(RelayError::NotFound("Client not found".to_string()));
@@ -324,9 +331,7 @@ pub async fn update_role(
     let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     if claims.role != "admin" {
-        return Err(RelayError::Auth(
-            "Only admins can change roles".to_string(),
-        ));
+        return Err(RelayError::Auth("Only admins can change roles".to_string()));
     }
 
     if body.role != "admin" && body.role != "member" {
@@ -335,14 +340,13 @@ pub async fn update_role(
         ));
     }
 
-    let result = sqlx::query(
-        "UPDATE team_clients SET role = $1 WHERE team_id = $2 AND client_id = $3",
-    )
-    .bind(&body.role)
-    .bind(&team_id)
-    .bind(&client_id)
-    .execute(&pool)
-    .await?;
+    let result =
+        sqlx::query("UPDATE team_clients SET role = $1 WHERE team_id = $2 AND client_id = $3")
+            .bind(&body.role)
+            .bind(&team_id)
+            .bind(&client_id)
+            .execute(&pool)
+            .await?;
 
     if result.rows_affected() == 0 {
         return Err(RelayError::NotFound("Client not found".to_string()));
