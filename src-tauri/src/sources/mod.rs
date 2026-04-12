@@ -45,6 +45,29 @@ pub fn shared_client() -> reqwest::Client {
 }
 
 // ============================================================================
+// Scalability limits — guards for 100+ source configurations
+// ============================================================================
+
+/// Maximum number of sources a user can configure.
+/// Calibrated for 500 concurrent sources with 15-connection parallel fetch:
+/// 500 sources ÷ 15 concurrent × 2.5s rate limit = ~83s per cycle.
+/// DB handles ~100,000 items comfortably in SQLite with WAL mode.
+pub const MAX_SOURCES: usize = 500;
+
+/// Maximum items to retain per source in the database.
+/// 500 sources × 200 items = 100,000 total (within SQLite comfort zone).
+pub const MAX_ITEMS_PER_SOURCE: usize = 200;
+
+/// Maximum total items in the database before old items are pruned.
+/// At 500 sources × 30 items/cycle, takes ~6 cycles to fill.
+/// Auto-pruning removes oldest items beyond this threshold.
+pub const MAX_TOTAL_ITEMS: usize = 100_000;
+
+/// Warning thresholds for progressive UI feedback
+pub const SOURCE_WARNING_THRESHOLD: usize = 50;
+pub const SOURCE_CAUTION_THRESHOLD: usize = 200;
+
+// ============================================================================
 // Source Item - Universal representation of content from any source
 // ============================================================================
 

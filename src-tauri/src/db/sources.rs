@@ -611,6 +611,42 @@ impl Database {
         conn.query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
     }
 
+    /// Prune oldest items when the database exceeds the total item cap.
+    /// Keeps the newest `max_items` by `created_at`, deletes the rest.
+    /// Returns the number of items deleted.
+    pub fn prune_items_if_needed(&self, max_items: usize) -> SqliteResult<usize> {
+        let total = self.total_item_count()? as usize;
+        if total <= max_items {
+            return Ok(0);
+        }
+
+        let to_delete = total - max_items;
+        let conn = self.conn.lock();
+
+        // Delete oldest items (by created_at) that aren't bookmarked/saved
+        let deleted = conn.execute(
+            "DELETE FROM source_items WHERE id IN (
+                SELECT id FROM source_items
+                WHERE id NOT IN (SELECT source_item_id FROM saved_items)
+                ORDER BY created_at ASC
+                LIMIT ?1
+            )",
+            params![to_delete],
+        )?;
+
+        if deleted > 0 {
+            tracing::info!(
+                target: "4da::db",
+                deleted,
+                total,
+                cap = max_items,
+                "Auto-pruned oldest items to stay within capacity"
+            );
+        }
+
+        Ok(deleted)
+    }
+
     // ========================================================================
     // Feedback Operations
     // ========================================================================
