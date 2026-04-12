@@ -205,9 +205,10 @@ mod digest_config;
 mod digest_email;
 mod domain_profile;
 mod domain_profile_data;
+// Silent-Failure Defense Layer 1 — typed wrappers for external boundaries.
+// See docs/strategy/SILENT-FAILURE-DEFENSE.md. Skeleton only in this commit.
+mod external;
 pub mod extractors;
-#[cfg(feature = "glyph_audit")]
-mod glyph_integration;
 mod free_briefing;
 #[cfg(feature = "experimental")]
 mod game_achievements;
@@ -225,6 +226,8 @@ mod game_engine;
 #[cfg(not(feature = "experimental"))]
 #[path = "game_engine_stub.rs"]
 mod game_engine;
+#[cfg(feature = "glyph_audit")]
+mod glyph_integration;
 mod health;
 mod health_commands;
 mod http_client;
