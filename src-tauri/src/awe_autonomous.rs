@@ -311,11 +311,21 @@ fn parse_retriage_outcome(stdout: &str) -> RetriageOutcome {
 /// abort the others.
 pub async fn run_daily_autonomous_job<R: Runtime>(app: &AppHandle<R>) {
     // Tier 0 — seed only if the graph is empty. Cheap to check, cheap to skip.
-    let _ = run_tier0_seed_if_empty(app).await;
+    match run_tier0_seed_if_empty(app).await {
+        SeedOutcome::Failed => {
+            warn!(target: "4da::awe", "tier0: AWE seeding failed (non-fatal, continuing)");
+        }
+        other => {
+            info!(target: "4da::awe", outcome = ?other, "tier0: seed check complete");
+        }
+    }
 
     // Tier 1 — classify-enhanced git scan. Replaces the old auto-feedback
     // scan for the daily path (startup still runs the old scan for speed).
-    let _ = run_tier1_classify_scan(app).await;
+    let (stored, inferred) = run_tier1_classify_scan(app).await;
+    if stored == 0 && inferred == 0 {
+        info!(target: "4da::awe", "tier1: classify-scan produced no new decisions");
+    }
 
     // Tier 2 — source-item decision mining. Lives in its own module.
     if let Err(e) = crate::awe_commands::awe_source_mining::run_daily_source_mining(app).await {
