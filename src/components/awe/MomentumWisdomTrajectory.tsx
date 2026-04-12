@@ -1,206 +1,13 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { useEffect, memo, useMemo } from 'react';
+import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { useGameComponent } from '../../hooks/use-game-component';
 import { useAweLiveEvents } from '../../hooks/use-awe-live-events';
-import type { AweSummary, AweWisdomWell, AwePendingDecision, AweBehavioralContext } from '../../types/awe';
-
-// ============================================================================
-// Sub-components
-// ============================================================================
-
-function BigStat({ value, label, sub, color }: { value: string | number; label: string; sub?: string; color?: string }) {
-  return (
-    <div className="text-center">
-      <div className={`text-xl font-semibold tabular-nums ${color ?? 'text-white'}`}>{value}</div>
-      <div className="text-[10px] text-text-muted mt-0.5">{label}</div>
-      {sub != null && sub.length > 0 && (
-        <div className="text-[9px] text-text-muted/60 mt-0.5">{sub}</div>
-      )}
-    </div>
-  );
-}
-
-function InsightRow({ icon, text, color }: { icon: string; text: string; color?: string }) {
-  return (
-    <div className="flex items-start gap-2 py-1.5">
-      <span className={`text-xs mt-0.5 flex-shrink-0 ${color ?? 'text-accent-gold/60'}`}>{icon}</span>
-      <p className="text-xs text-text-secondary leading-relaxed">{text}</p>
-    </div>
-  );
-}
-
-function SourceBar({ name, count, total }: { name: string; count: number; total: number }) {
-  const pct = total > 0 ? (count / total) * 100 : 0;
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-[10px] text-text-secondary w-24 truncate capitalize">{name.replace('_', ' ')}</span>
-      <div className="flex-1 h-1.5 bg-bg-primary rounded overflow-hidden">
-        <div className="h-full rounded bg-accent-gold/60" style={{ width: `${Math.min(100, pct)}%` }} />
-      </div>
-      <span className="text-[9px] text-text-muted tabular-nums w-12 text-right">{count}</span>
-    </div>
-  );
-}
-
-// ============================================================================
-// Wisdom Phase — classifies AWE state from summary + well data
-// ============================================================================
-
-type WisdomPhase = 'empty' | 'seeding' | 'learning' | 'calibrating' | 'compounding' | 'mature';
-
-interface WisdomState {
-  phase: WisdomPhase;
-  phaseLabel: string;
-  phaseColor: string;
-  narrative: string;
-}
-
-function classifyPhase(summary: AweSummary | null, well: AweWisdomWell | null): WisdomState {
-  if (!summary || !summary.available) {
-    return {
-      phase: 'empty',
-      phaseLabel: 'Offline',
-      phaseColor: 'text-text-muted',
-      narrative: 'AWE engine not connected. Wisdom is computed from your decisions, feedback, and outcomes — see Settings.',
-    };
-  }
-
-  const { decisions, principles, feedback_coverage, feedback_count } = summary;
-  const wellSize = well != null
-    ? (well.surface.length + well.pattern.length + well.principle.length
-       + well.causal.length + well.meta.length + well.universal.length)
-    : 0;
-
-  if (decisions < 5) {
-    return {
-      phase: 'seeding',
-      phaseLabel: 'Seeding',
-      phaseColor: 'text-text-muted',
-      narrative: `${decisions} decision${decisions === 1 ? '' : 's'} tracked. Wisdom begins forming after 5+ decisions with outcome feedback.`,
-    };
-  }
-
-  if (feedback_coverage < 30) {
-    return {
-      phase: 'learning',
-      phaseLabel: 'Learning',
-      phaseColor: 'text-amber-400',
-      narrative: `${decisions} decisions tracked but only ${feedback_coverage}% have outcome feedback. Principles cannot validate without evidence — review the pending queue.`,
-    };
-  }
-
-  if (principles === 0) {
-    return {
-      phase: 'calibrating',
-      phaseLabel: 'Calibrating',
-      phaseColor: 'text-amber-400',
-      narrative: `${decisions} decisions, ${feedback_count} feedback signals recorded (${feedback_coverage}% coverage). Patterns are forming but no principle has crossed the validation threshold yet.`,
-    };
-  }
-
-  if (principles < 3 || wellSize < 10) {
-    return {
-      phase: 'compounding',
-      phaseLabel: 'Compounding',
-      phaseColor: 'text-accent-gold',
-      narrative: `${principles} principle${principles === 1 ? '' : 's'} validated from ${decisions} decisions. The wisdom graph is growing — keep providing outcome feedback to compound.`,
-    };
-  }
-
-  return {
-    phase: 'mature',
-    phaseLabel: 'Mature',
-    phaseColor: 'text-success',
-    narrative: `${principles} principles validated, ${decisions} decisions tracked, ${feedback_coverage}% feedback coverage. AWE is actively calibrated and shaping 4DA's judgment.`,
-  };
-}
-
-// ============================================================================
-// Insights — computed from real AWE + behavioral data (no LLM, no hallucination)
-// ============================================================================
-
-interface Insight { icon: string; text: string; color?: string }
-
-function computeInsights(
-  summary: AweSummary | null,
-  pending: AwePendingDecision[],
-  ctx: AweBehavioralContext | null,
-): Insight[] {
-  const out: Insight[] = [];
-
-  // Pending feedback — actionable
-  if (summary?.available === true && pending.length > 0) {
-    const oldestDays = Math.max(...pending.map(p => p.age_days));
-    out.push({
-      icon: '\u25C6',
-      text: `${pending.length} decision${pending.length === 1 ? '' : 's'} awaiting outcome feedback${oldestDays > 7 ? ` (oldest: ${oldestDays} days)` : ''}. Each resolved decision sharpens the wisdom graph.`,
-      color: 'text-amber-400/70',
-    });
-  }
-
-  // Top principle — the crown jewel
-  if (summary?.top_principle != null && summary.top_principle.length > 0) {
-    out.push({
-      icon: '\u2737',
-      text: `Top principle: ${summary.top_principle}`,
-      color: 'text-accent-gold',
-    });
-  }
-
-  // Calibration health guidance
-  if (summary?.available === true) {
-    switch (summary.health) {
-      case 'cold':
-        out.push({
-          icon: '\u2192',
-          text: 'Cold start — no decisions recorded yet. AWE compounds as you make and evaluate choices.',
-          color: 'text-text-muted',
-        });
-        break;
-      case 'needs_feedback':
-        out.push({
-          icon: '\u2197',
-          text: `Feedback coverage is the bottleneck (${summary.feedback_coverage}%). Without outcomes, decisions cannot crystallize into principles.`,
-          color: 'text-amber-400/70',
-        });
-        break;
-      case 'learning':
-        out.push({
-          icon: '\u25C6',
-          text: `Learning phase — ${summary.decisions} decisions, ${summary.feedback_coverage}% coverage. Patterns emerging.`,
-        });
-        break;
-      case 'good':
-      case 'healthy':
-        if (summary.principles > 0) {
-          out.push({
-            icon: '\u25C6',
-            text: `Wisdom is compounding — ${summary.principles} validated principle${summary.principles === 1 ? '' : 's'} actively shape scoring and recommendations.`,
-            color: 'text-success/70',
-          });
-        }
-        break;
-    }
-  }
-
-  // Behavioral velocity (secondary — still useful if present)
-  if (ctx != null) {
-    const ip = ctx.interaction_patterns;
-    if (ip.weekly_velocity > 1.5) {
-      out.push({
-        icon: '\u2197',
-        text: `Engagement accelerating (${ip.weekly_velocity.toFixed(1)}x vs last week). Discovery phase — AWE will see more signals to work with.`,
-        color: 'text-success/60',
-      });
-    }
-  }
-
-  return out;
-}
+import { cmd } from '../../lib/commands';
+import { BigStat, InsightRow, SourceBar, classifyPhase, computeInsights } from './momentum-wisdom-helpers';
 
 // ============================================================================
 // Main Component
@@ -222,6 +29,27 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
   const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
 
   const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-momentum-field');
+
+  // --- Run Wisdom Now button state ---
+  const [aweRunning, setAweRunning] = useState(false);
+  const handleRunNow = useCallback(async () => {
+    if (aweRunning) return;
+    setAweRunning(true);
+    try {
+      await cmd('run_awe_autonomous_now');
+      // Events emitted during the run already refresh the store via
+      // useAweLiveEvents — no manual refresh needed here.
+    } catch (err) {
+      console.warn('[awe] autonomous run failed:', err);
+      useAppStore.getState().addToast('warning', 'Wisdom engine run encountered an issue');
+    } finally {
+      setAweRunning(false);
+      // Final refresh to catch any events that arrived during the run
+      void useAppStore.getState().loadAweSummary();
+      void useAppStore.getState().loadAweWisdomWell();
+      void useAppStore.getState().loadAwePendingDecisions(20);
+    }
+  }, [aweRunning]);
 
   // Subscribe to Tauri AWE events — every mutation in the Rust backend
   // (user feedback, daily scans, Tier 2 source mining, retriage) now
@@ -306,7 +134,7 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden relative">
       <div ref={gameRef} className="absolute inset-0 opacity-[0.06] pointer-events-none" aria-hidden="true" />
 
-      {/* Header — now includes live phase badge */}
+      {/* Header — phase badge + manual trigger */}
       <div className="relative px-4 py-3 border-b border-border/50 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-accent-gold text-sm">{'\u25C7'}</span>
@@ -314,12 +142,35 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
             {t('awe.momentum.title', 'Wisdom Trajectory')}
           </h4>
         </div>
-        <span
-          className={`text-[10px] px-2 py-0.5 rounded-full bg-bg-primary/60 border border-border/30 ${phaseState.phaseColor}`}
-          title={phaseState.narrative}
-        >
-          {phaseState.phaseLabel}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { void handleRunNow(); }}
+            disabled={aweRunning}
+            className={`text-[10px] px-2.5 py-1 rounded border transition-all ${
+              aweRunning
+                ? 'border-accent-gold/30 text-accent-gold/50 cursor-wait'
+                : 'border-border/50 text-text-muted hover:text-accent-gold hover:border-accent-gold/40'
+            }`}
+            title={aweRunning
+              ? t('awe.momentum.running', 'Wisdom engine is running...')
+              : t('awe.momentum.runNow', 'Run all tiers now: seed, scan, mine sources, retriage')}
+          >
+            {aweRunning ? (
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 border border-accent-gold/50 border-t-accent-gold rounded-full animate-spin" />
+                {t('awe.momentum.runningShort', 'Running...')}
+              </span>
+            ) : (
+              t('awe.momentum.runNowButton', 'Run wisdom')
+            )}
+          </button>
+          <span
+            className={`text-[10px] px-2 py-0.5 rounded-full bg-bg-primary/60 border border-border/30 ${phaseState.phaseColor}`}
+            title={phaseState.narrative}
+          >
+            {phaseState.phaseLabel}
+          </span>
+        </div>
       </div>
 
       <div className="relative p-4 space-y-4">
