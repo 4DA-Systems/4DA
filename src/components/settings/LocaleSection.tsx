@@ -311,6 +311,30 @@ export function LocaleSection() {
                 </div>
               )}
 
+              {/* Cloud translation privacy consent — required before DeepL/Google/Azure */}
+              {PROVIDERS_REQUIRING_KEY.has(txConfig.provider) && (
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 pr-3">
+                    <span className="text-sm text-white">{t('settings.translation.cloudConsent', 'Allow cloud translation')}</span>
+                    <p className="text-[10px] text-text-muted mt-0.5">
+                      {t('settings.translation.cloudConsentHelp', 'Content will be sent to the selected provider for translation. Required for cloud providers.')}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => saveTxConfig({ ...txConfig, cloud_translation_consent: !txConfig.cloud_translation_consent })}
+                    className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
+                      txConfig.cloud_translation_consent ? 'bg-green-500/40' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                        txConfig.cloud_translation_consent ? 'translate-x-5' : ''
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <span className="text-sm text-white">{t('settings.translation.autoTranslate')}</span>
                 <button
