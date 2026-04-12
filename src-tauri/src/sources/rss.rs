@@ -259,7 +259,9 @@ impl RssSource {
         None
     }
 
-    /// Decode common HTML entities
+    /// Decode common HTML entities in text content.
+    /// Note: For HTML content, prefer strip_html() which uses ammonia for
+    /// proper sanitization including entity handling.
     pub(crate) fn decode_html_entities(text: &str) -> String {
         text.replace("&amp;", "&")
             .replace("&lt;", "<")
@@ -270,24 +272,13 @@ impl RssSource {
             .replace("&nbsp;", " ")
     }
 
-    /// Strip HTML tags from content
+    /// Strip HTML tags from content, leaving only safe text.
     pub(crate) fn strip_html(html: &str) -> String {
-        // Remove HTML tags
-        let mut result = String::new();
-        let mut in_tag = false;
-
-        for ch in html.chars() {
-            if ch == '<' {
-                in_tag = true;
-            } else if ch == '>' {
-                in_tag = false;
-            } else if !in_tag {
-                result.push(ch);
-            }
-        }
-
-        // Clean up whitespace
-        result.split_whitespace().collect::<Vec<_>>().join(" ")
+        // Use ammonia to properly sanitize HTML — handles entity decoding,
+        // attribute stripping, and edge cases that naive parsing misses.
+        let clean = ammonia::clean(html);
+        // Collapse whitespace for consistent output
+        clean.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 
     /// Generate a stable ID from a string

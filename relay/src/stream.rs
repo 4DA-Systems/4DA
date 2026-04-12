@@ -1,5 +1,10 @@
-//! SSE notification stream — lightweight push notifications.
-//! Only sends sequence numbers, not payloads. Clients fetch encrypted blobs via HTTP.
+//! SSE notification stream for real-time sync updates.
+//!
+//! NOTE: This stream endpoint is implemented and authenticated but is NOT
+//! currently consumed by the 4DA desktop client. The client uses interval
+//! polling (30s) via team_sync_scheduler.rs instead. Wiring the SSE
+//! consumer is tracked as future work.
+//! See: .ai/COMPREHENSIVE-AUDIT-AND-PREVENTION-2026-04-12.md G-P1-14
 
 use axum::extract::{Path, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -23,13 +28,12 @@ pub async fn event_stream(
     }
 
     // Get current max sequence as starting point
-    let current_max: i64 = sqlx::query_scalar(
-        "SELECT COALESCE(MAX(id), 0) FROM sync_entries WHERE team_id = $1",
-    )
-    .bind(&team_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap_or(0);
+    let current_max: i64 =
+        sqlx::query_scalar("SELECT COALESCE(MAX(id), 0) FROM sync_entries WHERE team_id = $1")
+            .bind(&team_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap_or(0);
 
     let team_id_owned = team_id.clone();
     let stream = stream::unfold(
