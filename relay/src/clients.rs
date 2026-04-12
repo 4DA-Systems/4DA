@@ -19,6 +19,7 @@ pub struct ClientInfo {
 
 #[derive(Deserialize)]
 pub struct RegisterClient {
+    #[allow(dead_code)] // Deserialized but identity comes from JWT claims
     pub client_id: String,
     pub display_name: String,
     pub public_key: Vec<u8>,
@@ -72,6 +73,13 @@ pub async fn create_team(
     State(pool): State<SqlitePool>,
     Json(body): Json<CreateTeamRequest>,
 ) -> Result<Json<CreateTeamResponse>, RelayError> {
+    // Validate license key hash is provided
+    if body.license_key_hash.is_empty() {
+        return Err(RelayError::BadRequest(
+            "License key required to create a team".to_string(),
+        ));
+    }
+
     // Insert into teams table
     sqlx::query(
         "INSERT INTO teams (team_id, created_by, license_key_hash)
@@ -151,20 +159,21 @@ pub async fn register_client(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     sqlx::query(
         "INSERT OR REPLACE INTO team_clients (team_id, client_id, public_key, display_name, role)
          VALUES ($1, $2, $3, $4, $5)",
     )
     .bind(&team_id)
-    .bind(&body.client_id)
+    .bind(&claims.client_id)
     .bind(&body.public_key)
     .bind(&body.display_name)
     .bind(&claims.role)
     .execute(&pool)
     .await?;
 
-    tracing::info!(target: "relay::clients", team_id = %team_id, client_id = %body.client_id, "Client registered");
+    tracing::info!(target: "relay::clients", team_id = %team_id, client_id = %claims.client_id, "Client registered");
 
     Ok(Json(serde_json::json!({ "ok": true })))
 }
@@ -179,6 +188,7 @@ pub async fn create_invite(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     if claims.role != "admin" {
         return Err(RelayError::Auth(
@@ -270,6 +280,7 @@ pub async fn remove_member(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     if claims.role != "admin" {
         return Err(RelayError::Auth(
@@ -310,6 +321,7 @@ pub async fn update_role(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     if claims.role != "admin" {
         return Err(RelayError::Auth(
@@ -356,6 +368,7 @@ pub async fn leave_team(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     // Check if this is the last admin
     if claims.role == "admin" {
@@ -394,30 +407,30 @@ pub async fn join_via_invite(
     State(pool): State<SqlitePool>,
     Json(body): Json<JoinTeamRequest>,
 ) -> Result<Json<JoinTeamResponse>, RelayError> {
-    // Validate invite
-    let invite = sqlx::query_as::<_, (String, String, Option<String>)>(
-        "SELECT team_id, role, used_at FROM team_invites
-         WHERE code = $1 AND expires_at > datetime('now')",
+    // Atomically claim the invite — the WHERE clause prevents double-use
+    let rows_affected = sqlx::query(
+        "UPDATE team_invites SET used_at = datetime('now'), used_by = $1
+         WHERE code = $2 AND expires_at > datetime('now') AND used_at IS NULL",
     )
+    .bind(&body.client_id)
     .bind(&body.invite_code)
-    .fetch_optional(&pool)
+    .execute(&pool)
     .await?
-    .ok_or_else(|| RelayError::NotFound("Invalid or expired invite code".to_string()))?;
+    .rows_affected();
 
-    let (team_id, role, used_at) = invite;
-
-    if used_at.is_some() {
-        return Err(RelayError::BadRequest(
-            "Invite code already used".to_string(),
+    if rows_affected == 0 {
+        return Err(RelayError::NotFound(
+            "Invalid, expired, or already used invite code".to_string(),
         ));
     }
 
-    // Mark invite as used
-    sqlx::query("UPDATE team_invites SET used_at = datetime('now'), used_by = $1 WHERE code = $2")
-        .bind(&body.client_id)
-        .bind(&body.invite_code)
-        .execute(&pool)
-        .await?;
+    // Now fetch the invite details (it's claimed, so safe to read)
+    let (team_id, role) = sqlx::query_as::<_, (String, String)>(
+        "SELECT team_id, role FROM team_invites WHERE code = $1",
+    )
+    .bind(&body.invite_code)
+    .fetch_one(&pool)
+    .await?;
 
     // Register the new member
     sqlx::query(
