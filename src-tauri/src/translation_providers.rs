@@ -254,11 +254,25 @@ pub async fn try_dedicated_provider(
     target_lang: &str,
 ) -> Result<ProviderResult> {
     let manager = crate::get_settings_manager();
-    let (provider, api_key) = {
+    let (provider, api_key, cloud_consent) = {
         let guard = manager.lock();
         let tc = &guard.get().translation;
-        (tc.provider.clone(), tc.api_key.clone())
+        (
+            tc.provider.clone(),
+            tc.api_key.clone(),
+            tc.cloud_translation_consent,
+        )
     };
+
+    // Privacy gate: cloud translation APIs require explicit user consent.
+    // Local providers (ollama, llm) are always allowed.
+    if !cloud_consent && matches!(provider.as_str(), "deepl" | "google" | "azure" | "auto") {
+        tracing::debug!(
+            target: "4da::i18n",
+            "Cloud translation skipped — user has not opted in (privacy)"
+        );
+        return Ok(ProviderResult::UseLlm);
+    }
 
     match provider.as_str() {
         "deepl" if !api_key.is_empty() => {
