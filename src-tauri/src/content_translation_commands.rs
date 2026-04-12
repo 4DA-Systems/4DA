@@ -127,10 +127,16 @@ pub fn get_translation_config() -> Result<crate::settings::types::TranslationCon
 }
 
 /// Update the dedicated translation provider configuration.
+///
+/// The API key is persisted to the platform keychain (if available) and stripped
+/// from the on-disk JSON. The in-memory config retains the key.
 #[tauri::command]
 pub fn set_translation_config(config: crate::settings::types::TranslationConfig) -> Result<()> {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
+    if !config.api_key.is_empty() {
+        let _ = crate::settings::keystore::store_secret("translation_api_key", &config.api_key);
+    }
     guard.get_mut().translation = config;
     guard.save()
 }
