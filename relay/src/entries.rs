@@ -10,6 +10,7 @@ use crate::error::RelayError;
 
 #[derive(Deserialize)]
 pub struct PushEntry {
+    #[allow(dead_code)] // Deserialized but identity comes from JWT claims
     pub client_id: String,
     pub payload: Vec<u8>,
 }
@@ -49,6 +50,7 @@ pub async fn push_entry(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     if body.payload.is_empty() {
         return Err(RelayError::BadRequest("Empty payload".to_string()));
@@ -67,7 +69,7 @@ pub async fn push_entry(
          RETURNING id",
     )
     .bind(&team_id)
-    .bind(&body.client_id)
+    .bind(&claims.client_id)
     .bind(&body.payload)
     .fetch_one(&pool)
     .await?;
@@ -78,7 +80,7 @@ pub async fn push_entry(
          WHERE team_id = $1 AND client_id = $2",
     )
     .bind(&team_id)
-    .bind(&body.client_id)
+    .bind(&claims.client_id)
     .execute(&pool)
     .await
     .ok(); // Non-critical -- don't fail the push
@@ -98,6 +100,7 @@ pub async fn pull_entries(
     if claims.team_id != team_id {
         return Err(RelayError::Auth("Team ID mismatch".to_string()));
     }
+    let _claims = crate::auth::verify_membership(&pool, &claims).await?;
 
     let since = query.since.unwrap_or(0);
     let limit = query.limit.unwrap_or(200).min(1000);

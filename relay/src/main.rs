@@ -127,7 +127,8 @@ async fn main() {
 
     // Server
     let port = std::env::var("PORT").unwrap_or_else(|_| "8443".to_string());
-    let addr = format!("0.0.0.0:{port}");
+    let bind_addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let addr = format!("{bind_addr}:{port}");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("Failed to bind");
