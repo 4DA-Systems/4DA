@@ -70,6 +70,16 @@ if [ -n "$STAGED_RS" ] || [ -n "$STAGED_CMD" ]; then
     }
 fi
 
+# Boundary-call validation (~1s) — runs when .rs or hook files are staged
+# Layer 2 of the Silent-Failure Defense Architecture (see docs/strategy/SILENT-FAILURE-DEFENSE.md).
+# Informational only for now — won't block until the 48-site migration backlog is cleared.
+# Once backlog is <= 5, switch to: node scripts/validate-boundary-calls.cjs --strict || exit 1
+STAGED_HOOKS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cjs|sh)$' || true)
+if [ -n "$STAGED_RS" ] || [ -n "$STAGED_HOOKS" ]; then
+    echo "Checking boundary calls (silent-failure defense)..."
+    node scripts/validate-boundary-calls.cjs 2>/dev/null || true
+fi
+
 # ESLint on staged files only (~3s vs full project ~8s) — always runs (lightweight)
 # Needs extra memory for type-checked linting (no-floating-promises, no-misused-promises)
 echo "Running ESLint (staged files)..."
