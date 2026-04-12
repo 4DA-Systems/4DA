@@ -2772,5 +2772,293 @@
   "blindspots.recommendations": "Recommendations",
   "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
   "blindspots.loading": "Analyzing your coverage...",
-  "settings.llm.title": "AI 제공자"
+  "settings.llm.title": "AI 제공자",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "번역 문제를 발견했나요?",
+      "feedbackLink": "개선를 도와주세요"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "llm": {
+      "apiKey": "API 키"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI",
+      "apiKey": "API 키"
+    },
+    "license": {
+      "tierTeam": "Team",
+      "lastVerified": "마지막 확인: {{date}}",
+      "recovery": {
+        "title": "라이선스 키를 잃어버렸나요?",
+        "explanation": "Signal 라이선스를 구매했지만 키를 더 이상 찾을 수 없다면 (예: 재설치 후 또는 시스템 초기화 후), 여기서 복구할 수 있습니다.",
+        "emailHint": "라이선스를 구매할 때 사용한 이메일 주소를 입력하세요. 결제와 연결된 이메일입니다.",
+        "privacy": "귀하의 이메일은 라이선스 조회를 위해 4da.ai로만 전송됩니다. 다른 데이터는 귀하의 기기를 떠나지 않습니다.",
+        "retrieve": "라이선스 복구",
+        "placeholder": "your@email.com",
+        "success": "라이선스가 복구되고 활성화되었습니다!",
+        "expired": "라이선스가 만료되었습니다. 4da.ai/signal에서 갱신하여 새 키를 받으세요.",
+        "networkError": "복구 서버에 연결할 수 없습니다. 인터넷 연결을 확인하고 다시 시도하세요.",
+        "rateLimited": "시도 횟수가 너무 많습니다. 잠시 후 다시 시도하세요."
+      }
+    },
+    "streets": {
+      "tierEnterprise": "Enterprise"
+    }
+  },
+  "nav": {
+    "preemption": {
+      "label": "선제적 감지",
+      "subtitle": "문제가 발생하기 전에 감지"
+    },
+    "blindspots": {
+      "label": "사각지대",
+      "subtitle": "모니터링하지 않는 것"
+    }
+  },
+  "preemption": {
+    "title": "선제적 감지 레이더",
+    "subtitle": "스택을 위한 선제적 인텔리전스",
+    "empty": "지금은 선제적 경고가 없습니다. 스택이 정상입니다.",
+    "loading": "새로운 위험 검색 중...",
+    "summary": "{{critical}}개 심각, {{high}}개 높음, 총 {{total}}개 경고",
+    "evidence": "증거",
+    "affected": {
+      "projects": "영향을 받은 프로젝트",
+      "deps": "영향을 받은 종속성"
+    },
+    "confidence": "신뢰도: {{value}}%",
+    "window": "예상 시간"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "Team",
+    "enterprise": "Enterprise"
+  },
+  "onboarding": {
+    "trialHint": "모든 Signal 기능을 14일간 무료로 사용할 수 있습니다. 설정에서 언제든지 평가판을 시작하세요.",
+    "apiKeys": {
+      "title": "API 키",
+      "openaiLabel": "OpenAI API 키",
+      "anthropicLabel": "Anthropic API 키",
+      "xApiLabel": "X / Twitter API 키"
+    },
+    "setup": {
+      "yourExperience": "경험 수준",
+      "helpsScoring": "콘텐츠를 귀하의 수준에 맞게 조정하는 데 도움됩니다"
+    },
+    "experience": {
+      "description": "기술과 어떻게 상호작용하나요? 이를 통해 4DA가 적절한 수준의 콘텐츠를 제공합니다.",
+      "learning": {
+        "label": "학습",
+        "description": "새로운 기술을 배우고 있으며 튜토리얼을 원합니다"
+      },
+      "building": {
+        "label": "개발",
+        "description": "활발하게 프로젝트를 구축 중이며 실용적인 콘텐츠를 원합니다"
+      },
+      "leading": {
+        "label": "리딩",
+        "description": "기술 결정을 주도하며 전략적 인사이트를 원합니다"
+      },
+      "architecting": {
+        "label": "아키텍팅",
+        "description": "시스템을 설계하며 깊이 있는 기술 분석을 원합니다"
+      }
+    }
+  },
+  "pro": {
+    "hint": "신호: {{feature}}"
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "엔터프라이즈"
+    },
+    "webhooks": {
+      "enterprise": "엔터프라이즈"
+    },
+    "org": {
+      "enterprise": "엔터프라이즈"
+    }
+  },
+  "about": {
+    "fullName": "4 Dimensional Autonomy",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "attributionCreatorName": "Antony Lawrence Kiddie Pasifa",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}}개 중 {{total}}개 소스 활성",
+      "failing": "{{total}}개 중 {{count}}개 소스 실패",
+      "idle": "소스 유휴 상태 — 다음 가져오기 대기 중",
+      "sourceHealthy": "{{source}}: {{items}}개 항목, 마지막 {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: 최근 가져오기 없음"
+    }
+  },
+  "toolkit": {
+    "jsonViewer": {
+      "diff": "비교"
+    },
+    "scoringSandbox": {
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "techRadar": {
+    "title": "기술 레이더"
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "dna": {
+    "markdown": "마크다운"
+  },
+  "momentum": {
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "loading": "지혜 그래프 로딩 중...",
+    "decisions": "결정",
+    "principles": "원칙",
+    "feedbackRate": "피드백",
+    "pendingCount": "{{count}}개 대기 중",
+    "validatedPrinciples": "검증된 원칙",
+    "showMore": "+{{count}}개 더보기",
+    "showLess": "접기",
+    "earlyStage": "AWE는 아직 학습 중입니다. 원칙은 5개 이상의 피드백 결정 후 나타납니다.",
+    "pendingNudge": "결과 피드백을 기다리는 {{count}}개 결정",
+    "momentum": {
+      "title": "지혜 궤적",
+      "decisionsTracked": "결정",
+      "principlesEarned": "원칙",
+      "coverageLabel": "커버리지",
+      "pendingCta": "{{count}}개의 의사결정 피드백 대기 중",
+      "earnedPrinciples": "획득한 원칙",
+      "evidenceCount": "{{count}}개의 증거",
+      "daysAgo": "{{count}}일",
+      "loading": "지혜 궤적 로드 중...",
+      "offline": "지혜 엔진(AWE)이 아직 연결되지 않았습니다. 역할: 의사결정과 결과를 보정된 원칙으로 변환하여 4DA를 안내합니다.",
+      "offlineHint": "설정을 위해 지혜 탭을 참조하세요.",
+      "wellHighlights": "인텔리전스 형성 중",
+      "wellHighlightsHint": "지혜 우물에서 현재 가장 신뢰도 높은 패턴입니다.",
+      "pendingTitle": "결과 피드백 대기 중",
+      "pendingMore": "지혜 탭에 {{count}}개 이상",
+      "intelligenceProfile": "인텔리전스 프로필",
+      "itemsMonitored": "모니터링된 항목",
+      "sourcesActive": "활성 소스",
+      "yourActions": "당신의 행동",
+      "phase": {
+        "cold_start": "콜드 스타트",
+        "accumulating": "축적 중",
+        "compounding": "복합 중",
+        "mature": "성숙"
+      }
+    },
+    "playbook": {
+      "title": "지혜 공명",
+      "reinforcement": "{{aligned}}개의 정렬된 주제에 걸친 {{count}}개의 의사결정이 이 교훈을 강화합니다",
+      "mastery": "숙달 추정"
+    },
+    "profile": {
+      "title": "지혜 DNA",
+      "decisionVelocity": "의사결정",
+      "principlesFormed": "원칙",
+      "coverage": "범위",
+      "gapToImpact": "{{count}}개의 보류 중인 의사결정을 해결하면 새로운 원칙이 생성될 수 있습니다"
+    },
+    "console": {
+      "transmutation": "변환",
+      "wisdomWell": "지혜 우물",
+      "calibration": "보정",
+      "feedbackQueue": "피드백 대기열",
+      "totalDecisions": "전체 의사결정",
+      "totalPrinciples": "원칙",
+      "feedbackGiven": "제공된 피드백",
+      "coverageRate": "범위",
+      "healthStatus": "상태",
+      "calibrationUnavailable": "보정 데이터를 사용할 수 없습니다",
+      "confirm": "확인",
+      "refute": "반박",
+      "unavailable": "AWE를 사용할 수 없습니다",
+      "wellEmpty": "아직 지혜 데이터가 없습니다. 의사결정이 피드백을 축적하면서 원칙이 형성됩니다.",
+      "queueEmpty": "모든 의사결정에 피드백이 기록되었습니다"
+    }
+  },
+  "console": {
+    "tab_trust": "신뢰도",
+    "tabDesc_trust": "인텔리전스 품질 및 선제 증명"
+  },
+  "trust": {
+    "title": "인텔리전스 품질",
+    "subtitle": "지난 {{days}}일",
+    "precision": "정확도",
+    "actionRate": "행동 비율",
+    "fpRate": "거짓양성 비율",
+    "caughtEarly": "조기 포착",
+    "avgLeadTime": "{{days}}일 평균 리드 타임",
+    "summary": "{{surfaced}}개 신호 감지됨, {{acted}}개 조치됨, {{dismissed}}개 무시됨",
+    "falsePositives": "{{count}}개 거짓 양성",
+    "trend": {
+      "improving": "추세: 개선 중",
+      "stable": "추세: 안정적",
+      "declining": "추세: 하락 중"
+    },
+    "empty": "아직 인텔리전스 데이터가 없습니다. 품질 지표를 확인하려면 4DA를 며칠 동안 사용하세요.",
+    "explanation": {
+      "good": "4DA가 중요한 신호를 {{precision}}% 정확하게 식별했습니다. {{wins}}개의 문제가 긴급 상황이 되기 전에 포착되었습니다.",
+      "building": "4DA가 인텔리전스 기준선을 구축 중입니다. 더 많은 신호와 상호작용하면서 품질 지표가 더 의미 있어질 것입니다."
+    }
+  },
+  "comp": {
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml"
+    }
+  },
+  "digest": {
+    "topicPython": "Python",
+    "topicAI": "AI/ML",
+    "topicCloud": "Cloud/DevOps"
+  },
+  "blindspots": {
+    "title": "사각지대 지수",
+    "subtitle": "충분히 모니터링하지 않는 것",
+    "score": {
+      "good": "양호한 범위",
+      "moderate": "중간 정도의 격차",
+      "significant": "상당한 격차",
+      "critical": "심각한 사각지대"
+    },
+    "uncovered": "미포함 종속성",
+    "missed": "놓친 인텔리전스",
+    "recommendations": "권장사항",
+    "empty": "감지된 사각지대가 없습니다. 스택 범위가 우수합니다.",
+    "loading": "범위 분석 중..."
+  }
 }
