@@ -17,18 +17,6 @@
 - **Files**: list of files being modified
 -->
 
-### T-LOCK-CLEANUP — Stalled-terminal recovery + diverged branch rebase
-- **Status**: committing
-- **Commit Lock**: HELD
-- **User authorization**: explicit — user confirmed the terminals holding locks are no longer active
-- **Scope**:
-  1. Remove stale .git/index.stash.62140.lock (Mar 1, 6 weeks old)
-  2. Commit src-tauri/src/awe_commands.rs (102 insertions, syntactically closed, cargo check clean) as T-WAR-ROOM recovery
-  3. Release T-IMMUNE-HYGIENE-FOLLOWTHROUGH stale lock in TERMINALS.md (their work already landed as 55ed60ee + 569620eb)
-  4. Rebase 12 local commits onto origin/main to pull in dd71762b (T-PREEMPTION-FIX)
-  5. Push to origin
-- **Files**: src-tauri/src/awe_commands.rs, .claude/TERMINALS.md
-
 ---
 
 ## Completed in recent sessions (historical record, no active claim)
@@ -39,4 +27,6 @@
 - **T-GLYPH** — Glyph Envelope Protocol foundation (4 docs commits) + Phase 2 integration module (commit `7548a690`, feature-gated behind `glyph_audit`). 4 passing tests.
 - **T-PRELAUNCH-HARDENING** — All four pre-launch risk classes (a-d) mitigated. WebView2 + Ollama version checks, DB corruption recovery (wired), static-CRT verified. Commits `15f2c708`, `96ba9fed`, `2b59be0d`, `d0b5070d`, `76de616b`. Strategy doc: `docs/strategy/PRELAUNCH-HARDENING.md`. Key rotation runbook: `docs/strategy/UPDATER-KEY-ROTATION.md`.
 - **T-HYGIENE** — orphaned worktree cleanup + prevention script. Commit `5eea8b1e`. Deleted 11 dead branches + 6 stale directories (reflog recoverable 90 days).
-- **T-DOCS-HYGIENE** — strategy docs batch (7 files, 932 insertions). Commit `9f62eb7c`.
+- **T-DOCS-HYGIENE** — strategy docs batch (7 files, 932 insertions). Commit `d6fc22a0` (was `9f62eb7c` pre-rebase). Later relocated out of product repo by `7b081c1f`.
+- **T-WAR-ROOM (recovered)** — AWE app_handle threading: register_awe_app_handle + cached_awe_app_handle + run_awe_autonomous_now command, 102 insertions. Committed by T-LOCK-CLEANUP as `0f0ae5aa` after user confirmed T-WAR-ROOM was no longer active. cargo check clean.
+- **T-LOCK-CLEANUP** — stalled-terminal recovery + diverged branch rebase. Removed stale stash lock, committed T-WAR-ROOM's work, rebased 13 local commits onto origin/main (picked up `dd71762b`), pushed to origin. Tip: `0f0ae5aa`. User authorized all steps.
