@@ -57,6 +57,32 @@ where
     }
 }
 
+/// Verify that the authenticated client is still a member of their claimed team
+/// and that their role matches the current DB state.
+/// Call this in any handler that needs fresh membership verification.
+pub async fn verify_membership(
+    pool: &sqlx::SqlitePool,
+    claims: &TeamClaims,
+) -> Result<TeamClaims, RelayError> {
+    let row = sqlx::query_as::<_, (String,)>(
+        "SELECT role FROM team_clients WHERE team_id = $1 AND client_id = $2",
+    )
+    .bind(&claims.team_id)
+    .bind(&claims.client_id)
+    .fetch_optional(pool)
+    .await?;
+
+    match row {
+        Some((current_role,)) => Ok(TeamClaims {
+            team_id: claims.team_id.clone(),
+            client_id: claims.client_id.clone(),
+            role: current_role,
+            exp: claims.exp,
+        }),
+        None => Err(RelayError::Auth("Member no longer in team".to_string())),
+    }
+}
+
 /// Issue a JWT for a team member.
 pub fn issue_token(team_id: &str, client_id: &str, role: &str) -> Result<String, RelayError> {
     let jwt_secret = jwt_secret()?;
