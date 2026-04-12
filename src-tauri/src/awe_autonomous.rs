@@ -39,8 +39,8 @@ use crate::context_commands::{find_awe_binary, run_awe_with_timeout};
 pub enum SeedOutcome {
     /// AWE already had decisions — no seeding needed.
     NotNeeded,
-    /// Seeding ran and loaded N decisions.
-    Seeded(u64),
+    /// Seeding ran and loaded decisions.
+    Seeded(()),
     /// AWE binary is missing.
     AweUnavailable,
     /// Seeding failed (logged, non-fatal).
@@ -99,7 +99,7 @@ pub async fn run_tier0_seed_if_empty<R: Runtime>(app: &AppHandle<R>) -> SeedOutc
         },
     );
     emit_awe_event(app, AweEvent::SummaryStale);
-    SeedOutcome::Seeded(loaded)
+    SeedOutcome::Seeded(())
 }
 
 /// Parse the decision count from `awe calibration` stdout. Format:
