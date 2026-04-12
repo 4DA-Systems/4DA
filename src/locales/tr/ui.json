@@ -2772,5 +2772,316 @@
   "blindspots.recommendations": "Recommendations",
   "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
   "blindspots.loading": "Analyzing your coverage...",
-  "settings.llm.title": "AI Sağlayıcı"
+  "settings.llm.title": "AI Sağlayıcı",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "Bir çeviri sorunu fark ettiniz mi?",
+      "feedbackLink": "İyileştirmemize yardımcı olun"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "llm": {
+      "model": "Model"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI",
+      "model": "Model"
+    },
+    "license": {
+      "tierTeam": "Team",
+      "recovery": {
+        "retrieve": "Lisansı Al",
+        "placeholder": "your@email.com"
+      }
+    },
+    "streets": {
+      "tierEnterprise": "Enterprise"
+    },
+    "attention": {
+      "risk": "{{level}} risk"
+    },
+    "digest": {
+      "port": "Port"
+    }
+  },
+  "nav": {
+    "insights": "Momentum",
+    "preemption": {
+      "label": "Ön Engelleme",
+      "subtitle": "Zarar vermeden önce önemli olanlar"
+    },
+    "blindspots": {
+      "label": "Kör Noktalar",
+      "subtitle": "İzlemediğiniz şeyler"
+    }
+  },
+  "preemption": {
+    "title": "Ön Engelleme Radarı",
+    "subtitle": "Yığın için ileri görüşlü istihbarat",
+    "empty": "Şu anda ön engelleme uyarısı yok. Yığın sağlıklı görünüyor.",
+    "loading": "Ortaya çıkan riskler taranıyor...",
+    "summary": "{{critical}} kritik, {{high}} yüksek, {{total}} toplam uyarılar",
+    "evidence": "Kanıt",
+    "affected": {
+      "projects": "Etkilenen projeler",
+      "deps": "Etkilenen bağımlılıklar"
+    },
+    "confidence": "Güven: {{value}}%",
+    "window": "Öngörülen zaman penceresi"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "Team",
+    "enterprise": "Enterprise"
+  },
+  "onboarding": {
+    "setup": {
+      "yourExperience": "Deneyim Seviyesi",
+      "helpsScoring": "İçeriği seviyenize göre özelleştirmeye yardımcı olur"
+    },
+    "experience": {
+      "description": "Teknoloji ile nasıl etkileşime girersiniz? Bu, 4DA'nın içeriği doğru derinlikte sunmasına yardımcı olur.",
+      "learning": {
+        "label": "Öğrenme",
+        "description": "Yeni teknolojiler öğreniyorum ve öğretici istiyorum"
+      },
+      "building": {
+        "label": "İnşa Etme",
+        "description": "Aktif olarak projeler geliştiriyorum ve pratik içerik istiyorum"
+      },
+      "leading": {
+        "label": "Liderlik",
+        "description": "Teknik kararlar alıyorum ve stratejik öngörüler istiyorum"
+      },
+      "architecting": {
+        "label": "Mimarı Tasarlama",
+        "description": "Sistemleri tasarlıyorum ve derin teknik analiz istiyorum"
+      }
+    }
+  },
+  "pro": {
+    "hint": "Signal: {{feature}}"
+  },
+  "team": {
+    "intelligence": {
+      "tabs": {
+        "risk": "Risk"
+      },
+      "risk": {
+        "riskLevel": "Risk"
+      }
+    }
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "Enterprise"
+    },
+    "webhooks": {
+      "title": "Web Kancaları",
+      "enterprise": "Enterprise"
+    },
+    "org": {
+      "enterprise": "Enterprise"
+    }
+  },
+  "about": {
+    "fullName": "4 Boyutlu Özerklik",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "attributionCreatorName": "4DA Systems",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Sistemleri"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}} / {{total}} kaynak aktif",
+      "failing": "{{count}} / {{total}} kaynak başarısız",
+      "idle": "Kaynaklar boşta — sonraki getirme bekleniyor",
+      "sourceHealthy": "{{source}}: {{items}} öğe, son {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: son getirmeler yok"
+    }
+  },
+  "commandDeck": {
+    "git": {
+      "commit": "Commit"
+    }
+  },
+  "toolkit": {
+    "scoringSandbox": {
+      "sourceSandbox": "Sandbox",
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "delegation": {
+    "factorRisk": "Risk"
+  },
+  "digest": {
+    "title": "4DA DİJEST",
+    "topicPython": "Python",
+    "topicAI": "AI/ML",
+    "topicCloud": "Cloud/DevOps"
+  },
+  "results": {
+    "signal": {
+      "tech_trend": "Trend"
+    }
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "dna": {
+    "markdown": "Markdown"
+  },
+  "techRadar": {
+    "weightTrend": "Trend"
+  },
+  "momentum": {
+    "title": "Momentum",
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "decisions": "Kararlar",
+    "principles": "İlkeler",
+    "feedbackRate": "Geri Bildirim",
+    "pendingCount": "{{count}} beklemede",
+    "validatedPrinciples": "Doğrulanmış İlkeler",
+    "showMore": "+{{count}} daha fazla",
+    "showLess": "Daha az göster",
+    "momentum": {
+      "title": "Bilgelik Yörüngesi",
+      "decisionsTracked": "Kararlar",
+      "principlesEarned": "İlkeler",
+      "coverageLabel": "Kapsam",
+      "earnedPrinciples": "Kazanılan İlkeler",
+      "evidenceCount": "{{count}} kanıt",
+      "daysAgo": "{{count}}g",
+      "loading": "Bilgelik yörüngesi yükleniyor...",
+      "offline": "Bilgelik motoru (AWE) henüz bağlanmadı. Rolü: kararlarınızı ve sonuçlarını 4DA'yı yönlendiren kalibre edilmiş ilkelere dönüştürmek.",
+      "offlineHint": "Kurulum için Bilgelik Sekmesine bakın.",
+      "wellHighlights": "Zeka Oluşturuluyor",
+      "wellHighlightsHint": "Şu anda Wisdom Well'de en yüksek güven düzeyine sahip desenler.",
+      "pendingTitle": "Sonuç Geri Bildirimi Bekleniyor",
+      "pendingMore": "+{{count}} daha fazla Wisdom Sekmesinde",
+      "intelligenceProfile": "Zeka profili",
+      "itemsMonitored": "izlenen öğeler",
+      "sourcesActive": "üreten kaynaklar",
+      "yourActions": "sizin eylemleriniz",
+      "phase": {
+        "cold_start": "Soğuk Başlangıç",
+        "accumulating": "Biriktirilme",
+        "compounding": "Bileşik",
+        "mature": "Olgun"
+      }
+    },
+    "playbook": {
+      "title": "Wisdom Resonance",
+      "mastery": "Ustalık tahmini"
+    },
+    "profile": {
+      "title": "Wisdom DNA",
+      "decisionVelocity": "Kararlar",
+      "principlesFormed": "İlkeler",
+      "coverage": "Kapsam"
+    },
+    "console": {
+      "transmutation": "Transmutasyon",
+      "wisdomWell": "Wisdom Well",
+      "calibration": "Kalibrasyon",
+      "feedbackQueue": "Geri Bildirim Sırası",
+      "totalDecisions": "Toplam Kararlar",
+      "totalPrinciples": "İlkeler",
+      "feedbackGiven": "Verilen Geri Bildirim",
+      "coverageRate": "Kapsam",
+      "healthStatus": "Sağlık",
+      "confirm": "Onayla",
+      "refute": "Çürüt",
+      "unavailable": "AWE kullanılamıyor"
+    }
+  },
+  "console": {
+    "tab_trust": "Güven",
+    "tabDesc_trust": "Zeka kalitesi ve önalım kanıtı"
+  },
+  "trust": {
+    "title": "Zeka Kalitesi",
+    "subtitle": "Son {{days}} gün",
+    "precision": "Kesinlik",
+    "actionRate": "Eylem Oranı",
+    "fpRate": "Yanlış Pozitif Oranı",
+    "caughtEarly": "Erken Yakalandı",
+    "avgLeadTime": "{{days}}g ortalama öncü zaman",
+    "summary": "{{surfaced}} sinyal ortaya çıkıldı, {{acted}} üzerine hareket edildi, {{dismissed}} reddedildi",
+    "falsePositives": "{{count}} yanlış pozitif",
+    "trend": {
+      "improving": "Eğilim: iyileşiyor",
+      "stable": "Eğilim: sabit",
+      "declining": "Eğilim: düşüşte"
+    },
+    "empty": "Henüz zeka verisi yok. Kalite metriklerini görmek için birkaç gün 4DA kullanın.",
+    "explanation": {
+      "good": "4DA önemli sinyalleri %{{precision}} oranında doğru şekilde tanımladı. {{wins}} sorun acil hale gelmeden önce yakalandı.",
+      "building": "4DA zeka tabanını oluşturuyor. Daha fazla sinyal ile etkileşim kurduğunuz için kalite metrikleri daha anlamlı hale gelecektir."
+    }
+  },
+  "accuracy": {
+    "thRisk": "Risk"
+  },
+  "costs": {
+    "thModel": "Model"
+  },
+  "comp": {
+    "privacy": {
+      "embeddingsLabel": "Embeddings"
+    },
+    "scoring": {
+      "p8Label": "8. Final"
+    },
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml",
+      "docsLabel": "README / docs",
+      "gitLabel": "Git geçmişi"
+    },
+    "tradeoffs": {
+      "localLabel": "Yerel-öncelikli"
+    }
+  },
+  "blindspots": {
+    "title": "Kör Nokta İndeksi",
+    "subtitle": "Yeterince iyi izlemediğiniz şeyler",
+    "score": {
+      "good": "İyi kapsam",
+      "moderate": "Orta düzeyde açıklar",
+      "significant": "Önemli açıklar",
+      "critical": "Kritik kör noktalar"
+    },
+    "uncovered": "Kapsanmamış Bağımlılıklar",
+    "missed": "Kaçırılan İstihbarat",
+    "recommendations": "Öneriler",
+    "empty": "Kör nokta tespit edilmedi. Stack kapsamınız mükemmel.",
+    "loading": "Kapsamınız analiz ediliyor..."
+  }
 }

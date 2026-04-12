@@ -2772,5 +2772,324 @@
   "blindspots.recommendations": "Recommendations",
   "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
   "blindspots.loading": "Analyzing your coverage...",
-  "settings.llm.title": "AI प्रदाता"
+  "settings.llm.title": "AI प्रदाता",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "अनुवाद समस्या देखी गई?",
+      "feedbackLink": "इसे बेहतर बनाने में हमारी मदद करें"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI"
+    },
+    "dataHealth": {
+      "embeddings": "एम्बेडिंग"
+    },
+    "license": {
+      "tierTeam": "Team",
+      "recovery": {
+        "retrieve": "लाइसेंस प्राप्त करें",
+        "placeholder": "your@email.com"
+      }
+    },
+    "streets": {
+      "tierEnterprise": "Enterprise"
+    }
+  },
+  "nav": {
+    "preemption": {
+      "label": "प्रिएम्पशन",
+      "subtitle": "समस्या होने से पहले क्या मायने रखता है"
+    },
+    "blindspots": {
+      "label": "अंधे स्थान",
+      "subtitle": "जो आप नहीं देख रहे हैं"
+    }
+  },
+  "preemption": {
+    "title": "प्रिएम्पशन राडार",
+    "subtitle": "आपकी स्टैक के लिए आगे की ओर देखने वाली बुद्धिमत्ता",
+    "empty": "अभी कोई निवारक सतर्कता नहीं है। आपकी स्टैक स्वस्थ दिख रही है।",
+    "loading": "उभरते जोखिमों के लिए स्कैन किया जा रहा है...",
+    "summary": "{{critical}} गंभीर, {{high}} उच्च, {{total}} कुल सतर्कता",
+    "evidence": "साक्ष्य",
+    "affected": {
+      "projects": "प्रभावित प्रोजेक्ट",
+      "deps": "प्रभावित निर्भरताएं"
+    },
+    "confidence": "आत्मविश्वास: {{value}}%",
+    "window": "अनुमानित विंडो"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "Team",
+    "enterprise": "Enterprise"
+  },
+  "onboarding": {
+    "setup": {
+      "yourExperience": "अनुभव स्तर",
+      "helpsScoring": "सामग्री को आपके स्तर के अनुसार अनुकूलित करने में मदद करता है"
+    },
+    "experience": {
+      "description": "आप प्रौद्योगिकी के साथ कैसे जुड़ते हैं? यह 4DA को सही गहराई पर सामग्री दिखाने में मदद करता है।",
+      "learning": {
+        "label": "सीखना",
+        "description": "मैं नई तकनीकें सीख रहा हूं और ट्यूटोरियल चाहता हूं"
+      },
+      "building": {
+        "label": "निर्माण",
+        "description": "मैं सक्रिय रूप से प्रोजेक्ट बना रहा हूं और व्यावहारिक सामग्री चाहता हूं"
+      },
+      "leading": {
+        "label": "नेतृत्व",
+        "description": "मैं तकनीकी निर्णय लेता हूं और रणनीतिक अंतर्दृष्टि चाहता हूं"
+      },
+      "architecting": {
+        "label": "आर्किटेक्चरिंग",
+        "description": "मैं सिस्टम डिजाइन करता हूं और गहन तकनीकी विश्लेषण चाहता हूं"
+      }
+    }
+  },
+  "pro": {
+    "hint": "Signal: {{feature}}"
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "Enterprise"
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "enterprise": "Enterprise"
+    },
+    "diagnostics": {
+      "check": {
+        "embeddings": "एम्बेडिंग",
+        "relay": "Team Relay",
+        "webhooks": "Webhooks"
+      }
+    },
+    "org": {
+      "enterprise": "Enterprise"
+    }
+  },
+  "about": {
+    "fullName": "4 Dimensional Autonomy",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "attributionCreatorName": "4DA Systems",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}} का {{total}} स्रोत सक्रिय",
+      "failing": "{{count}} का {{total}} स्रोत विफल",
+      "idle": "स्रोत निष्क्रिय — अगली फेच की प्रतीक्षा में",
+      "sourceHealthy": "{{source}}: {{items}} आइटम, अंतिम {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: कोई हाल की फेच नहीं"
+    }
+  },
+  "toolkit": {
+    "scoringSandbox": {
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "dna": {
+    "markdown": "Markdown"
+  },
+  "momentum": {
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "decisions": "निर्णय",
+    "principles": "सिद्धांत",
+    "feedbackRate": "प्रतिक्रिया",
+    "pendingCount": "{{count}} लंबित",
+    "validatedPrinciples": "सत्यापित सिद्धांत",
+    "showMore": "+{{count}} और",
+    "showLess": "कम दिखाएं",
+    "momentum": {
+      "title": "बुद्धिमता प्रक्षेपवक्र",
+      "decisionsTracked": "निर्णय",
+      "principlesEarned": "सिद्धांत",
+      "coverageLabel": "कवरेज",
+      "earnedPrinciples": "अर्जित सिद्धांत",
+      "evidenceCount": "{{count}} साक्ष्य",
+      "daysAgo": "{{count}}d",
+      "loading": "बुद्धिमता प्रक्षेपवक्र लोड हो रहा है...",
+      "offline": "बुद्धिमता इंजन (AWE) अभी तक जुड़ा नहीं है। इसकी भूमिका: आपके निर्णयों और उनके परिणामों को अंशांकित सिद्धांतों में रूपांतरित करना जो 4DA को निर्देशित करते हैं।",
+      "offlineHint": "सेटअप के लिए Wisdom टैब देखें।",
+      "wellHighlights": "बुद्धिमता का निर्माण",
+      "wellHighlightsHint": "Wisdom Well में वर्तमान में उच्चतम-आत्मविश्वास पैटर्न।",
+      "pendingTitle": "परिणाम प्रतिक्रिया की प्रतीक्षा में",
+      "pendingMore": "+{{count}} और Wisdom टैब में",
+      "intelligenceProfile": "बुद्धिमता प्रोफ़ाइल",
+      "itemsMonitored": "आइटम निगरानी की गई",
+      "sourcesActive": "स्रोत उत्पादन कर रहे हैं",
+      "yourActions": "आपकी क्रियाएं",
+      "phase": {
+        "cold_start": "कोल्ड स्टार्ट",
+        "accumulating": "जमा हो रहा है",
+        "compounding": "संयोजन",
+        "mature": "परिपक्व"
+      }
+    },
+    "playbook": {
+      "title": "ज्ञान अनुनाद",
+      "mastery": "दक्षता अनुमान"
+    },
+    "profile": {
+      "title": "ज्ञान डीएनए",
+      "decisionVelocity": "निर्णय",
+      "principlesFormed": "सिद्धांत",
+      "coverage": "कवरेज"
+    },
+    "console": {
+      "transmutation": "परिवर्तन",
+      "wisdomWell": "ज्ञान कुआं",
+      "calibration": "अंशांकन",
+      "feedbackQueue": "प्रतिक्रिया कतार",
+      "totalDecisions": "कुल निर्णय",
+      "totalPrinciples": "सिद्धांत",
+      "feedbackGiven": "प्रतिक्रिया दी गई",
+      "coverageRate": "कवरेज",
+      "healthStatus": "स्वास्थ्य",
+      "confirm": "पुष्टि करें",
+      "refute": "खंडन करें",
+      "unavailable": "AWE उपलब्ध नहीं है"
+    }
+  },
+  "console": {
+    "tab_trust": "विश्वास",
+    "tabDesc_trust": "बुद्धिमत्ता गुणवत्ता और पूर्वाभास प्रमाण"
+  },
+  "trust": {
+    "title": "बुद्धिमत्ता गुणवत्ता",
+    "subtitle": "पिछले {{days}} दिन",
+    "precision": "सटीकता",
+    "actionRate": "कार्य दर",
+    "fpRate": "गलत सकारात्मक दर",
+    "caughtEarly": "जल्दी पकड़ा गया",
+    "avgLeadTime": "{{days}}d औसत अग्रणी समय",
+    "summary": "{{surfaced}} सिग्नल सामने आए, {{acted}} कार्य किया गया, {{dismissed}} खारिज किया गया",
+    "falsePositives": "{{count}} गलत सकारात्मक",
+    "trend": {
+      "improving": "प्रवृत्ति: सुधार",
+      "stable": "प्रवृत्ति: स्थिर",
+      "declining": "प्रवृत्ति: गिरावट"
+    },
+    "empty": "अभी तक कोई बुद्धिमत्ता डेटा नहीं। गुणवत्ता मेट्रिक्स देखने के लिए कुछ दिनों के लिए 4DA का उपयोग करें।",
+    "explanation": {
+      "good": "4DA ने महत्वपूर्ण सिग्नल को {{precision}}% समय सही तरीके से पहचाना। {{wins}} समस्याएं तत्काल होने से पहले पकड़ी गईं।",
+      "building": "4DA अपनी बुद्धिमत्ता आधारभूत स्थिति बना रहा है। जैसे-जैसे आप अधिक सिग्नल के साथ इंटरैक्ट करते हैं, गुणवत्ता मेट्रिक्स अधिक अर्थपूर्ण हो जाएंगी।"
+    }
+  },
+  "comp": {
+    "nav": {
+      "privacy": "गोपनीयता मॉडल",
+      "privacyDesc": "स्थानीय-प्रथम आर्किटेक्चर",
+      "scoring": "स्कोरिंग",
+      "context": "संदर्भ",
+      "contextDesc": "स्वचालित खोज",
+      "compound": "समग्र बुद्धिमत्ता",
+      "tradeoffs": "ट्रेड-ऑफ"
+    },
+    "privacy": {
+      "colLayer": "परत",
+      "storageLabel": "डेटा भंडारण",
+      "embeddingsLabel": "एम्बेडिंग",
+      "llmLabel": "एलएलएम कॉल",
+      "scanLabel": "कोडबेस स्कैनिंग",
+      "networkLabel": "नेटवर्क नीति",
+      "keysLabel": "API कुंजियाँ",
+      "keysValue": "OS कीचेन (macOS कीचेन, Windows DPAPI)",
+      "byokTitle": "BYOK मॉडल"
+    },
+    "scoring": {
+      "title": "PASIFA स्कोरिंग पाइपलाइन",
+      "colPhase": "चरण",
+      "p1Label": "1. निकालें",
+      "p2Label": "2. कैलिब्रेट करें",
+      "p3Label": "3. गेट गणना",
+      "p4Label": "4. प्रासंगिकता",
+      "p5Label": "5. गुणवत्ता",
+      "p5Value": "सामग्री परिष्कार, सूचना घनत्व, ताजगी",
+      "p6Label": "6. बूस्ट",
+      "p6Value": "एनगेजमेंट सिग्नल, सीखी गई प्राथमिकताएं, निर्भरता मिलान",
+      "p7Label": "7. गेट प्रभाव",
+      "p8Label": "8. अंतिम",
+      "gateTitle": "पुष्टिकरण गेट"
+    },
+    "context": {
+      "title": "स्वचालित संदर्भ खोज",
+      "colSignal": "सिग्नल स्रोत",
+      "pkgLabel": "package.json / Cargo.toml",
+      "pkgValue": "निर्भरताएं, संस्करण, इकोसिस्टम",
+      "importLabel": "आयात विवरण",
+      "configLabel": "कॉन्फ़िगरेशन फाइलें",
+      "configValue": "फ्रेमवर्क, बिल्ड टूल्स, CI/CD पैटर्न",
+      "docsLabel": "README / डॉक्स",
+      "gitLabel": "Git इतिहास",
+      "zeroTitle": "शून्य कॉन्फ़िगरेशन",
+      "evolveTitle": "विकसित संदर्भ"
+    },
+    "compound": {
+      "title": "यौगिक बुद्धिमत्ता",
+      "inspectTitle": "निरीक्षणीय सीखना"
+    },
+    "tradeoffs": {
+      "desktopLabel": "डेस्कटॉप नेटिव",
+      "localLabel": "स्थानीय-प्रथम",
+      "devLabel": "डेवलपर-केंद्रित",
+      "explainLabel": "व्याख्यात्मक स्कोरिंग"
+    }
+  },
+  "digest": {
+    "topicPython": "Python",
+    "topicAI": "AI/ML",
+    "topicCloud": "Cloud/DevOps"
+  },
+  "blindspots": {
+    "title": "अंधे स्थान सूचकांक",
+    "subtitle": "जो आप पर्याप्त रूप से नहीं देख रहे हैं",
+    "score": {
+      "good": "अच्छी कवरेज",
+      "moderate": "मध्यम अंतराल",
+      "significant": "महत्वपूर्ण अंतराल",
+      "critical": "गंभीर अंधे स्थान"
+    },
+    "uncovered": "असंरक्षित निर्भरताएं",
+    "missed": "छूती हुई बुद्धिमत्ता",
+    "recommendations": "सिफारिशें",
+    "empty": "कोई अंधे स्थान का पता नहीं चला। आपकी स्टैक कवरेज उत्कृष्ट है।",
+    "loading": "आपकी कवरेज का विश्लेषण किया जा रहा है..."
+  }
 }

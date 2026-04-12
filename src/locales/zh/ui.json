@@ -2772,5 +2772,217 @@
   "blindspots.recommendations": "Recommendations",
   "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
   "blindspots.loading": "Analyzing your coverage...",
-  "settings.llm.title": "AI 提供商"
+  "settings.llm.title": "AI 提供商",
+  "settings": {
+    "locale": {
+      "feedbackHint": "发现翻译问题？",
+      "feedbackLink": "帮助我们改进"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure 翻译器"
+    },
+    "llm": {
+      "apiKey": "API 密钥"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI",
+      "apiKey": "API 密钥"
+    },
+    "license": {
+      "tierTeam": "团队版",
+      "lastVerified": "最后验证：{{date}}",
+      "recovery": {
+        "title": "丢失了许可证密钥？",
+        "explanation": "如果您购买了 Signal 许可证但找不到密钥（例如重新安装后或系统重置后），您可以在此处检索。",
+        "emailHint": "输入购买许可证时使用的电子邮件地址。这是与您付款关联的电子邮件。",
+        "privacy": "您的电子邮件仅发送给 4da.ai 以查找您的许可证。您的机器上不会发送任何其他数据。",
+        "retrieve": "检索许可证",
+        "placeholder": "your@email.com",
+        "success": "许可证已恢复并激活！",
+        "expired": "您的许可证已过期。访问 4da.ai/signal 续订以获取新密钥。",
+        "networkError": "无法连接到恢复服务器。检查您的互联网连接并重试。",
+        "rateLimited": "尝试次数过多。请稍候片刻后重试。"
+      }
+    },
+    "streets": {
+      "tierEnterprise": "企业版"
+    }
+  },
+  "nav": {
+    "preemption": {
+      "label": "预防",
+      "subtitle": "在伤害发生前的关键事项"
+    },
+    "blindspots": {
+      "label": "盲点",
+      "subtitle": "您未监控的内容"
+    }
+  },
+  "preemption": {
+    "title": "预防雷达",
+    "subtitle": "为您的技术栈提供前瞻性情报",
+    "empty": "暂无预防性警报。您的技术栈状态良好。",
+    "loading": "正在扫描新兴风险...",
+    "summary": "{{critical}} 个严重，{{high}} 个高危，共 {{total}} 个警报",
+    "evidence": "证据",
+    "affected": {
+      "projects": "受影响的项目",
+      "deps": "受影响的依赖项"
+    },
+    "confidence": "置信度：{{value}}%",
+    "window": "预测窗口"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "团队版",
+    "enterprise": "企业版"
+  },
+  "onboarding": {
+    "trialHint": "所有 Signal 功能在 14 天内免费提供。您可以随时在设置中开始试用。",
+    "apiKeys": {
+      "title": "API 密钥",
+      "openaiLabel": "OpenAI API 密钥",
+      "anthropicLabel": "Anthropic API 密钥",
+      "xApiLabel": "X / Twitter API 密钥"
+    },
+    "setup": {
+      "yourExperience": "经验水平",
+      "helpsScoring": "帮助根据您的水平定制内容"
+    },
+    "experience": {
+      "description": "您如何与技术互动？这帮助 4DA 在适当的深度呈现内容。",
+      "learning": {
+        "label": "学习",
+        "description": "我正在学习新技术，希望获得教程"
+      },
+      "building": {
+        "label": "构建",
+        "description": "我正在积极构建项目，希望获得实用内容"
+      },
+      "leading": {
+        "label": "领导",
+        "description": "我主导技术决策，需要战略性洞察"
+      },
+      "architecting": {
+        "label": "架构设计",
+        "description": "我设计系统，需要深度技术分析"
+      }
+    }
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "企业版"
+    },
+    "webhooks": {
+      "enterprise": "企业版"
+    },
+    "org": {
+      "enterprise": "企业版"
+    }
+  },
+  "about": {
+    "fullName": "4 Dimensional Autonomy",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "attributionCreatorName": "4DA Systems",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}} 个活跃源中的 {{total}} 个",
+      "failing": "{{count}} 个源在 {{total}} 个中失败",
+      "idle": "源闲置 — 等待下一次获取",
+      "sourceHealthy": "{{source}}：{{items}} 项，最后更新于 {{when}}",
+      "sourceFailing": "{{source}}：{{message}}",
+      "sourceIdle": "{{source}}：无最近获取"
+    }
+  },
+  "toolkit": {
+    "scoringSandbox": {
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "techRadar": {
+    "title": "技术雷达"
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "dna": {
+    "markdown": "Markdown"
+  },
+  "momentum": {
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "awe": {
+    "loading": "正在加载智慧图谱...",
+    "decisions": "决策",
+    "principles": "原则",
+    "feedbackRate": "反馈",
+    "pendingCount": "{{count}} 待处理",
+    "validatedPrinciples": "已验证原则",
+    "showMore": "+{{count}} 更多",
+    "showLess": "显示较少",
+    "earlyStage": "AWE 还在学习中。在 5+ 个决策并获得反馈后，原则才会出现。",
+    "pendingNudge": "{{count}} 个决策等待结果反馈",
+    "momentum": {
+      "title": "智慧轨迹",
+      "decisionsTracked": "决策",
+      "principlesEarned": "原则",
+      "coverageLabel": "覆盖范围",
+      "pendingCta": "{{count}} 个决策等待反馈",
+      "earnedPrinciples": "已获得原则",
+      "evidenceCount": "{{count}} 条证据",
+      "daysAgo": "{{count}}d",
+      "loading": "正在加载智慧轨迹...",
+      "offline": "智慧引擎 (AWE) 尚未连接。其作用：将您的决策及其结果转化为指导 4DA 的校准原则。"
+    }
+  },
+  "trust": {
+    "empty": "尚无智能数据。使用 4DA 数天后可查看质量指标。",
+    "explanation": {
+      "good": "4DA 正确识别了重要信号 {{precision}}% 的时间。{{wins}} 个问题在变得紧急之前被捕获。",
+      "building": "4DA 正在建立其智能基线。当您与更多信号交互时，质量指标将变得更有意义。"
+    }
+  },
+  "comp": {
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml"
+    }
+  },
+  "digest": {
+    "topicPython": "Python",
+    "topicAI": "AI/ML",
+    "topicCloud": "Cloud/DevOps"
+  },
+  "blindspots": {
+    "title": "盲点指数",
+    "subtitle": "您监控不足的内容",
+    "score": {
+      "good": "覆盖范围良好",
+      "moderate": "覆盖存在中等差距",
+      "significant": "覆盖存在重大差距",
+      "critical": "关键盲点"
+    },
+    "uncovered": "未覆盖的依赖项",
+    "missed": "错过的智能",
+    "recommendations": "建议",
+    "empty": "未检测到盲点。您的堆栈覆盖率极佳。",
+    "loading": "正在分析您的覆盖范围..."
+  }
 }

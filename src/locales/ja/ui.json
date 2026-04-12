@@ -2772,5 +2772,296 @@
   "blindspots.recommendations": "Recommendations",
   "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
   "blindspots.loading": "Analyzing your coverage...",
-  "settings.llm.title": "AIプロバイダー"
+  "settings.llm.title": "AIプロバイダー",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "翻訳に問題を見つけました",
+      "feedbackLink": "改善を手伝う"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "llm": {
+      "apiKey": "APIキー"
+    },
+    "ai": {
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI",
+      "apiKey": "APIキー"
+    },
+    "license": {
+      "tierTeam": "チーム",
+      "lastVerified": "最終確認: {{date}}",
+      "recovery": {
+        "title": "ライセンスキーを紛失しましたか?",
+        "explanation": "Signalライセンスを購入したが、キーが見つからなくなった場合(再インストール後、またはシステムがリセットされた場合など)、ここで取得できます。",
+        "emailHint": "ライセンス購入時に使用したメールアドレスを入力してください。これはお支払いに関連付けられたメールアドレスです。",
+        "privacy": "ご登録のメールアドレスはライセンス検索のためにのみ4da.aiに送信されます。その他のデータは一切お客様のマシンから外に出ません。",
+        "retrieve": "ライセンスを取得",
+        "placeholder": "your@email.com",
+        "success": "ライセンスが復元され、アクティベートされました!",
+        "expired": "ライセンスの有効期限が切れています。4da.ai/signalで更新して新しいキーを取得してください。",
+        "networkError": "回復サーバーに接続できません。インターネット接続を確認してから再度お試しください。",
+        "rateLimited": "試行回数が多すぎます。もう一度試す前にお待ちください。"
+      }
+    },
+    "streets": {
+      "tierEnterprise": "エンタープライズ"
+    },
+    "attention": {
+      "title": "注意ダッシュボード"
+    }
+  },
+  "nav": {
+    "preemption": {
+      "label": "先制",
+      "subtitle": "問題が生じる前に重要なこと"
+    },
+    "blindspots": {
+      "label": "ブラインドスポット",
+      "subtitle": "監視していない箇所"
+    }
+  },
+  "preemption": {
+    "title": "先制レーダー",
+    "subtitle": "スタックの先制的インテリジェンス",
+    "empty": "現在のところ先制的��アラートはありません。スタックは健全です。",
+    "loading": "新興リスクをスキャン中...",
+    "summary": "{{critical}}件の重大、{{high}}件の高、合計{{total}}件のアラート",
+    "evidence": "証拠",
+    "affected": {
+      "projects": "影響を受けたプロジェクト",
+      "deps": "影響を受けた依存関係"
+    },
+    "confidence": "信頼度: {{value}}%",
+    "window": "予測ウィンドウ"
+  },
+  "results": {
+    "title": "Signal分析"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "チーム",
+    "enterprise": "エンタープライズ"
+  },
+  "onboarding": {
+    "trialHint": "すべてのSignal機能は14日間無料で利用できます。設定からいつでも試用を開始できます。",
+    "apiKeys": {
+      "title": "APIキー",
+      "openaiLabel": "OpenAI APIキー",
+      "anthropicLabel": "Anthropic APIキー",
+      "xApiLabel": "X / Twitter APIキー"
+    },
+    "setup": {
+      "yourExperience": "経験レベル",
+      "helpsScoring": "コンテンツをご自身のレベルに合わせるのに役立ちます"
+    },
+    "experience": {
+      "description": "テクノロジーにどのように関わっていますか?これにより、4DAは適切な深さでコンテンツを表示するのに役立ちます。",
+      "learning": {
+        "label": "学習",
+        "description": "新しいテクノロジーを学んでいて、チュートリアルを希望しています"
+      },
+      "building": {
+        "label": "構築",
+        "description": "積極的にプロジェクトを構築していて、実践的なコンテンツを希望しています"
+      },
+      "leading": {
+        "label": "リーダーシップ",
+        "description": "技術的な判断をリードしており、戦略的な洞察を希望しています"
+      },
+      "architecting": {
+        "label": "アーキテクチャ設計",
+        "description": "システムを設計しており、深い技術分析を希望しています"
+      }
+    }
+  },
+  "pro": {
+    "hint": "シグナル: {{feature}}"
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "エンタープライズ"
+    },
+    "webhooks": {
+      "enterprise": "エンタープライズ"
+    },
+    "org": {
+      "enterprise": "エンタープライズ"
+    }
+  },
+  "about": {
+    "fullName": "4 Dimensional Autonomy",
+    "stackValue": "Rust + React + SQLite",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "attributionCreatorName": "4DA Systems",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
+  },
+  "chapters": {
+    "health": {
+      "healthy": "{{healthy}}/{{total}} ソースがアクティブ",
+      "failing": "{{count}}/{{total}} ソースが失敗",
+      "idle": "ソースがアイドル状態 — 次回フェッチを待機中",
+      "sourceHealthy": "{{source}}: {{items}} アイテム、最後は {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: 最近のフェッチなし"
+    }
+  },
+  "toolkit": {
+    "scoringSandbox": {
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "techRadar": {
+    "title": "テックレーダー"
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama"
+    }
+  },
+  "dna": {
+    "markdown": "Markdown"
+  },
+  "momentum": {
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "loading": "知識グラフを読み込み中...",
+    "decisions": "決定事項",
+    "principles": "原則",
+    "feedbackRate": "フィードバック",
+    "pendingCount": "{{count}} 件保留中",
+    "validatedPrinciples": "検証済み原則",
+    "showMore": "+{{count}} 件以上",
+    "showLess": "表示を減らす",
+    "earlyStage": "AWEはまだ学習中です。原則は5件以上のフィードバック付き決定後に出現します。",
+    "pendingNudge": "{{count}} 件の決定が結果フィードバックを待機中",
+    "momentum": {
+      "title": "知識の軌跡",
+      "decisionsTracked": "決定事項",
+      "principlesEarned": "原則",
+      "coverageLabel": "カバレッジ",
+      "pendingCta": "{{count}}件のフィードバック待ち決定",
+      "earnedPrinciples": "獲得した原則",
+      "evidenceCount": "{{count}}件の証拠",
+      "daysAgo": "{{count}}日前",
+      "loading": "ウィズダム軌跡を読み込み中...",
+      "offline": "ウィズダムエンジン(AWE)はまだ接続されていません。その役割は、あなたの決定とその結果を4DAを操舵する校正済み原則に変換することです。",
+      "offlineHint": "セットアップについてはウィズダムタブを参照してください。",
+      "wellHighlights": "インテリジェンスを形成中",
+      "wellHighlightsHint": "現在ウィズダムウェルで最も信頼度の高いパターン。",
+      "pendingTitle": "結果フィードバック待ち",
+      "pendingMore": "ウィズダムタブに+{{count}}件以上",
+      "intelligenceProfile": "インテリジェンスプロフィール",
+      "itemsMonitored": "件の項目を監視中",
+      "sourcesActive": "件のソースが生成中",
+      "yourActions": "あなたのアクション",
+      "phase": {
+        "cold_start": "コールドスタート",
+        "accumulating": "蓄積中",
+        "compounding": "複合中",
+        "mature": "成熟"
+      }
+    },
+    "playbook": {
+      "title": "ウィズダムレゾナンス",
+      "reinforcement": "{{aligned}}個の関連トピックを跨ぐ{{count}}件の決定がこのレッスンを強化します",
+      "mastery": "習熟度推定"
+    },
+    "profile": {
+      "title": "ウィズダムDNA",
+      "decisionVelocity": "決定",
+      "principlesFormed": "原則",
+      "coverage": "カバレッジ",
+      "gapToImpact": "{{count}}件の保留中の決定を解決すると新しい原則が生成される可能性があります"
+    },
+    "console": {
+      "transmutation": "変換",
+      "wisdomWell": "ウィズダムウェル",
+      "calibration": "校正",
+      "feedbackQueue": "フィードバックキュー",
+      "totalDecisions": "総決定数",
+      "totalPrinciples": "原則",
+      "feedbackGiven": "フィードバック提供",
+      "coverageRate": "カバレッジ",
+      "healthStatus": "ヘルス",
+      "calibrationUnavailable": "校正データは利用できません",
+      "confirm": "確認",
+      "refute": "反論",
+      "unavailable": "AWEは利用できません",
+      "wellEmpty": "ウィズダムデータはまだありません。決定がフィードバックを蓄積すると原則が生まれます。",
+      "queueEmpty": "すべての決定にフィードバックが記録されています"
+    }
+  },
+  "console": {
+    "tab_trust": "信頼",
+    "tabDesc_trust": "インテリジェンス品質と先制対応の証明"
+  },
+  "trust": {
+    "title": "インテリジェンス品質",
+    "subtitle": "過去{{days}}日間",
+    "precision": "精度",
+    "actionRate": "アクション率",
+    "fpRate": "偽陽性率",
+    "caughtEarly": "早期に検出",
+    "avgLeadTime": "平均リードタイム {{days}}日",
+    "summary": "{{surfaced}} 件のシグナルが検出され、{{acted}} 件に対応、{{dismissed}} 件は却下されました",
+    "falsePositives": "{{count}} 件の誤検知",
+    "trend": {
+      "improving": "トレンド：改善中",
+      "stable": "トレンド：安定",
+      "declining": "トレンド：低下中"
+    },
+    "empty": "インテリジェンスデータはまだありません。品質メトリクスを確認するには、4DA を数日間使用してください。",
+    "explanation": {
+      "good": "4DA は {{precision}}% の確率で重要なシグナルを正しく特定しました。{{wins}} 件の問題は緊急になる前に検出されました。",
+      "building": "4DA はインテリジェンスベースラインを構築中です。より多くのシグナルと対話すると、品質メトリクスがより意味のあるものになります。"
+    }
+  },
+  "comp": {
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml"
+    }
+  },
+  "digest": {
+    "topicPython": "Python",
+    "topicAI": "AI/ML",
+    "topicCloud": "Cloud/DevOps"
+  },
+  "blindspots": {
+    "title": "ブラインドスポットインデックス",
+    "subtitle": "十分に監視していない箇所",
+    "score": {
+      "good": "良好なカバレッジ",
+      "moderate": "中程度のギャップ",
+      "significant": "顕著なギャップ",
+      "critical": "重大なブラインドスポット"
+    },
+    "uncovered": "カバーされていない依存関係",
+    "missed": "見落とされたインテリジェンス",
+    "recommendations": "推奨事項",
+    "empty": "ブラインドスポットは検出されませんでした。スタックカバレッジは優れています。",
+    "loading": "カバレッジを分析中..."
+  }
 }

@@ -2772,5 +2772,405 @@
   "blindspots.recommendations": "Recommendations",
   "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
   "blindspots.loading": "Analyzing your coverage...",
-  "settings.llm.title": "Provider IA"
+  "settings.llm.title": "Provider IA",
+  "analysis": {
+    "sourceError": "{{source}}: {{error}}"
+  },
+  "status": {
+    "online": "Online",
+    "offline": "Offline"
+  },
+  "settings": {
+    "locale": {
+      "feedbackHint": "Hai notato un problema di traduzione?",
+      "feedbackLink": "Aiutaci a migliorare"
+    },
+    "translation": {
+      "providerDeepL": "DeepL",
+      "providerGoogle": "Google Cloud",
+      "providerAzure": "Azure Translator"
+    },
+    "llm": {
+      "apiKey": "Chiave API"
+    },
+    "ai": {
+      "provider": "Provider",
+      "providerAnthropic": "Anthropic Claude",
+      "providerOpenAI": "OpenAI",
+      "apiKey": "Chiave API"
+    },
+    "dataHealth": {
+      "embeddings": "Embeddings"
+    },
+    "license": {
+      "tierTeam": "Team",
+      "recovery": {
+        "retrieve": "Recupera Licenza",
+        "placeholder": "tua@email.com"
+      }
+    },
+    "streets": {
+      "tierEnterprise": "Enterprise"
+    },
+    "health": {
+      "momentum": "Momentum"
+    },
+    "tabs": {
+      "team": "Team"
+    },
+    "digest": {
+      "password": "Password"
+    },
+    "team": {
+      "relay": "Relay",
+      "roleAdmin": "Admin"
+    }
+  },
+  "nav": {
+    "insights": "Momentum",
+    "playbook": "Playbook",
+    "coach": "Coach",
+    "console": "Console",
+    "preemption": {
+      "label": "Preemption",
+      "subtitle": "Ciò che conta prima che faccia male"
+    },
+    "blindspots": {
+      "label": "Punti Ciechi",
+      "subtitle": "Cosa non stai monitorando"
+    }
+  },
+  "preemption": {
+    "title": "Radar di Prevenzione",
+    "subtitle": "Intelligence predittiva per il tuo stack",
+    "empty": "Nessun avviso preventivo al momento. Il tuo stack è in buone condizioni.",
+    "loading": "Scansione dei rischi emergenti in corso...",
+    "summary": "{{critical}} critici, {{high}} alti, {{total}} avvisi totali",
+    "evidence": "Evidenza",
+    "affected": {
+      "projects": "Progetti interessati",
+      "deps": "Dipendenze interessate"
+    },
+    "confidence": "Confidenza: {{value}}%",
+    "window": "Finestra prevista"
+  },
+  "briefing": {
+    "viaModel": "tramite {{model}}",
+    "stack": "Stack",
+    "stackDeps": "Stack: {{deps}}"
+  },
+  "tier": {
+    "pro": "Signal",
+    "signal": "Signal",
+    "team": "Team",
+    "enterprise": "Enterprise"
+  },
+  "onboarding": {
+    "apiKeys": {
+      "title": "Chiavi API",
+      "bearerToken": "Bearer Token"
+    },
+    "setup": {
+      "yourExperience": "Livello di Esperienza",
+      "helpsScoring": "Aiuta a personalizzare i contenuti al tuo livello"
+    },
+    "experience": {
+      "description": "Come interagisci con la tecnologia? Questo aiuta 4DA a mostrare contenuti al giusto livello di dettaglio.",
+      "learning": {
+        "label": "Apprendimento",
+        "description": "Sto imparando nuove tecnologie e voglio tutorial"
+      },
+      "building": {
+        "label": "Costruzione",
+        "description": "Sto costruendo attivamente progetti e voglio contenuti pratici"
+      },
+      "leading": {
+        "label": "Leadership",
+        "description": "Guido le decisioni tecniche e voglio approfondimenti strategici"
+      },
+      "architecting": {
+        "label": "Architettura",
+        "description": "Progetto sistemi e voglio analisi tecniche approfondite"
+      }
+    },
+    "setupAi": {
+      "cloudLabel": "Cloud"
+    }
+  },
+  "commandRunner": {
+    "exit": "esci {{code}}"
+  },
+  "pro": {
+    "hint": "Segnale: {{feature}}"
+  },
+  "team": {
+    "dashboard": {
+      "title": "Team",
+      "intelligence": "Intelligence"
+    },
+    "roles": {
+      "admin": "Admin"
+    },
+    "intelligence": {
+      "tabs": {
+        "stack": "Stack"
+      }
+    }
+  },
+  "enterprise": {
+    "audit": {
+      "badge": "Enterprise"
+    },
+    "health": {
+      "relay": "Relay",
+      "database": "Database",
+      "embeddings": "Embeddings"
+    },
+    "webhooks": {
+      "title": "Webhooks",
+      "enterprise": "Enterprise"
+    },
+    "diagnostics": {
+      "check": {
+        "embeddings": "Embeddings",
+        "database": "Database",
+        "relay": "Team Relay",
+        "webhooks": "Webhooks"
+      }
+    },
+    "org": {
+      "enterprise": "Enterprise"
+    },
+    "sso": {
+      "title": "Single Sign-On (SSO)"
+    }
+  },
+  "ollama": {
+    "offline": "Ollama offline"
+  },
+  "firstRun": {
+    "stackInsight": "Stack Insight"
+  },
+  "about": {
+    "fullName": "4 Dimensional Autonomy",
+    "stack": "Stack",
+    "stackValue": "Rust + React + SQLite",
+    "framework": "Framework",
+    "frameworkValue": "Tauri 2.0",
+    "licenseValue": "FSL-1.1-Apache-2.0",
+    "privacyValue": "Local-First / BYOK",
+    "attributionCreatorName": "4DA Systems",
+    "attributionClaudeName": "Claude",
+    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
+  },
+  "chapters": {
+    "cat": {
+      "community": "Community",
+      "social": "Social"
+    },
+    "health": {
+      "healthy": "{{healthy}} di {{total}} fonti attive",
+      "failing": "{{count}} di {{total}} fonti non funzionanti",
+      "idle": "Fonti inattive — in attesa del prossimo caricamento",
+      "sourceHealthy": "{{source}}: {{items}} elementi, ultimo {{when}}",
+      "sourceFailing": "{{source}}: {{message}}",
+      "sourceIdle": "{{source}}: nessun caricamento recente"
+    }
+  },
+  "commandDeck": {
+    "git": {
+      "commit": "Commit",
+      "push": "Push"
+    }
+  },
+  "toolkit": {
+    "encoder": {
+      "output": "Output",
+      "header": "Intestazione",
+      "payload": "Payload"
+    },
+    "httpProbe": {
+      "headers": "Intestazioni"
+    },
+    "jsonViewer": {
+      "editor": "Editor",
+      "diff": "Diff"
+    },
+    "scoringSandbox": {
+      "sourceSandbox": "Sandbox",
+      "sourceHackerNews": "Hacker News",
+      "sourceReddit": "Reddit",
+      "sourceArxiv": "arXiv",
+      "sourceGitHub": "GitHub"
+    }
+  },
+  "digest": {
+    "title": "4DA DIGEST",
+    "topicPython": "Python",
+    "topicAI": "AI/ML",
+    "topicCloud": "Cloud/DevOps"
+  },
+  "techRadar": {
+    "title": "Tech Radar",
+    "weightStack": "Stack"
+  },
+  "results": {
+    "signal": {
+      "competitive_intel": "Intel"
+    },
+    "stackBadge": "Stack"
+  },
+  "search": {
+    "query": "Query"
+  },
+  "channels": {
+    "version": "v{{version}}"
+  },
+  "decisions": {
+    "type": {
+      "pattern": "Pattern"
+    }
+  },
+  "calibration": {
+    "label": {
+      "ollama": "Ollama",
+      "embeddings": "Embeddings"
+    }
+  },
+  "profile": {
+    "intelligence": "Intelligence",
+    "developerDna": "Developer DNA"
+  },
+  "dna": {
+    "title": "Developer DNA",
+    "markdown": "Markdown"
+  },
+  "momentum": {
+    "title": "Momentum",
+    "securityAlertDetail": "{{signal}}",
+    "windowExpiring": "{{title}}"
+  },
+  "sovereignProfile": {
+    "gpu": "GPU: {{tier}}",
+    "llm": "LLM: {{tier}}",
+    "cpu": "CPU: {{model}}"
+  },
+  "awe": {
+    "decisions": "Decisioni",
+    "principles": "Principi",
+    "feedbackRate": "Feedback",
+    "pendingCount": "{{count}} in sospeso",
+    "validatedPrinciples": "Principi Convalidati",
+    "showMore": "+{{count}} altri",
+    "showLess": "Mostra meno",
+    "momentum": {
+      "title": "Traiettoria della Saggezza",
+      "decisionsTracked": "Decisioni",
+      "principlesEarned": "Principi",
+      "coverageLabel": "Copertura",
+      "earnedPrinciples": "Principi Guadagnati",
+      "evidenceCount": "{{count}} prove",
+      "daysAgo": "{{count}}g",
+      "loading": "Caricamento traiettoria della saggezza...",
+      "offline": "Il motore di saggezza (AWE) non è ancora connesso. Il suo ruolo: trasformare le tue decisioni e i loro risultati in principi calibrati che guidano 4DA.",
+      "offlineHint": "Vedi la Scheda Saggezza per la configurazione.",
+      "wellHighlights": "Formazione dell'intelligence",
+      "wellHighlightsHint": "I pattern con la massima confidenza attualmente nel Pozzo della Saggezza.",
+      "pendingTitle": "In attesa di feedback sui risultati",
+      "pendingMore": "+{{count}} altri nella Scheda Saggezza",
+      "intelligenceProfile": "Profilo di intelligenza",
+      "itemsMonitored": "elementi monitorati",
+      "sourcesActive": "fonti che producono",
+      "yourActions": "le tue azioni",
+      "phase": {
+        "cold_start": "Avvio a freddo",
+        "accumulating": "Accumulo",
+        "compounding": "Composizione",
+        "mature": "Maturo"
+      }
+    },
+    "playbook": {
+      "title": "Risonanza della Saggezza",
+      "mastery": "Stima di padronanza"
+    },
+    "profile": {
+      "title": "DNA della Saggezza",
+      "decisionVelocity": "Decisioni",
+      "principlesFormed": "Principi",
+      "coverage": "Copertura"
+    },
+    "console": {
+      "transmutation": "Trasmutazione",
+      "wisdomWell": "Pozzo di Saggezza",
+      "calibration": "Calibrazione",
+      "feedbackQueue": "Coda di Feedback",
+      "totalDecisions": "Decisioni Totali",
+      "totalPrinciples": "Principi",
+      "feedbackGiven": "Feedback Fornito",
+      "coverageRate": "Copertura",
+      "healthStatus": "Salute",
+      "confirm": "Conferma",
+      "refute": "Confuta",
+      "unavailable": "AWE non è disponibile"
+    }
+  },
+  "console": {
+    "tab_trust": "Fiducia",
+    "tabDesc_trust": "Qualità dell'intelligenza e prova di prevenzione"
+  },
+  "trust": {
+    "title": "Qualità dell'Intelligenza",
+    "subtitle": "Ultimi {{days}} giorni",
+    "precision": "Precisione",
+    "actionRate": "Tasso di Azione",
+    "fpRate": "Tasso di FP",
+    "caughtEarly": "Rilevato Presto",
+    "avgLeadTime": "{{days}}g tempo di anticipo medio",
+    "summary": "{{surfaced}} segnali surfati, {{acted}} su cui è stata agita, {{dismissed}} scartati",
+    "falsePositives": "{{count}} falso positivo",
+    "trend": {
+      "improving": "Tendenza: migliorando",
+      "stable": "Tendenza: stabile",
+      "declining": "Tendenza: in declino"
+    },
+    "empty": "Nessun dato di intelligenza ancora. Usa 4DA per alcuni giorni per vedere le metriche di qualità.",
+    "explanation": {
+      "good": "4DA ha identificato correttamente segnali importanti nel {{precision}}% dei casi. {{wins}} problemi sono stati rilevati prima di diventare urgenti.",
+      "building": "4DA sta costruendo la sua baseline di intelligenza. Le metriche di qualità diventeranno più significative man mano che interagisci con più segnali."
+    }
+  },
+  "costs": {
+    "thProvider": "Provider"
+  },
+  "comp": {
+    "nav": {
+      "scoring": "Punteggio"
+    },
+    "privacy": {
+      "embeddingsLabel": "Embeddings"
+    },
+    "context": {
+      "pkgLabel": "package.json / Cargo.toml",
+      "docsLabel": "README / docs",
+      "gitLabel": "Cronologia Git"
+    },
+    "tradeoffs": {
+      "localLabel": "Locale-first"
+    }
+  },
+  "blindspots": {
+    "title": "Indice Punti Ciechi",
+    "subtitle": "Cosa non stai monitorando abbastanza bene",
+    "score": {
+      "good": "Buona copertura",
+      "moderate": "Lacune moderate",
+      "significant": "Lacune significative",
+      "critical": "Punti ciechi critici"
+    },
+    "uncovered": "Dipendenze Non Coperte",
+    "missed": "Intelligenza Persa",
+    "recommendations": "Raccomandazioni",
+    "empty": "Nessun punto cieco rilevato. La copertura del tuo stack è eccellente.",
+    "loading": "Analisi della tua copertura in corso..."
+  }
 }
