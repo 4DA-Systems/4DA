@@ -8,7 +8,10 @@ interface UpdateInfo {
 }
 
 function isLinux(): boolean {
-  return navigator.platform.toLowerCase().includes('linux');
+  const ua = navigator.userAgent?.toLowerCase() ?? '';
+  if (ua.includes('linux')) return true;
+  // Fallback to deprecated navigator.platform for older environments
+  return navigator.platform?.toLowerCase().includes('linux') ?? false;
 }
 
 export function useUpdateCheck() {
