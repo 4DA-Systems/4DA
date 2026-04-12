@@ -7,4 +7,10 @@ Name={{name}}
 Terminal=false
 Type=Application
 StartupWMClass=4DA Home
-Keywords=developer;intelligence;curation;signals;
+Keywords=developer;intelligence;curation;signals;privacy;local;
+MimeType=x-scheme-handler/4da;
+Actions=signal-terminal;
+
+[Desktop Action signal-terminal]
+Name=Open Signal Terminal
+Exec={{exec_dir}}/{{exec_name}} --signal-terminal

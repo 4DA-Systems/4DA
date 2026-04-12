@@ -986,15 +986,37 @@ static AWE_BINARY_PATH: std::sync::LazyLock<Option<String>> = std::sync::LazyLoc
         }
     }
 
-    // Priority 3: Developer machine hardcoded paths (development only)
-    let candidates = [
-        "D:\\runyourempire\\awe\\target\\release\\awe.exe",
-        "/d/runyourempire/awe/target/release/awe",
-    ];
-    for path in &candidates {
-        if validate_binary_path(path) {
-            info!(target: "4da::awe", path = path, "AWE binary resolved from dev candidate");
-            return Some(path.to_string());
+    // Priority 3: AWE_ROOT environment variable (cross-platform dev setup)
+    if let Ok(root) = std::env::var("AWE_ROOT") {
+        let ext = if cfg!(windows) { ".exe" } else { "" };
+        let p = PathBuf::from(&root)
+            .join("target")
+            .join("release")
+            .join(format!("awe{ext}"));
+        if validate_binary_path(p.to_str().unwrap_or_default()) {
+            info!(target: "4da::awe", path = %p.display(), "AWE binary found via AWE_ROOT");
+            return Some(p.to_string_lossy().to_string());
+        }
+    }
+
+    // Priority 4: Common relative paths from workspace root (canonicalized to absolute)
+    let workspace_candidates: &[&str] = if cfg!(windows) {
+        &[
+            "..\\awe\\target\\release\\awe.exe",
+            "..\\..\\runyourempire\\awe\\target\\release\\awe.exe",
+        ]
+    } else {
+        &[
+            "../awe/target/release/awe",
+            "../../runyourempire/awe/target/release/awe",
+        ]
+    };
+    for candidate in workspace_candidates {
+        if let Ok(abs) = std::fs::canonicalize(candidate) {
+            if validate_binary_path(abs.to_str().unwrap_or_default()) {
+                info!(target: "4da::awe", path = %abs.display(), "AWE binary found via relative path");
+                return Some(abs.to_string_lossy().to_string());
+            }
         }
     }
     None
