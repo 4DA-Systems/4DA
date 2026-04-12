@@ -430,7 +430,8 @@ fn find_missed_signals(
 
     // Populate `why_relevant` by actually looking for dep mentions in titles.
     for signal in &mut signals {
-        signal.why_relevant = compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
+        signal.why_relevant =
+            compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
     }
 
     Ok(signals)
@@ -823,12 +824,7 @@ mod tests {
         .unwrap();
     }
 
-    fn insert_source_item(
-        conn: &Connection,
-        title: &str,
-        score: f32,
-        days_ago: i64,
-    ) -> i64 {
+    fn insert_source_item(conn: &Connection, title: &str, score: f32, days_ago: i64) -> i64 {
         conn.execute(
             "INSERT INTO source_items (title, source_type, content, relevance_score, created_at)
              VALUES (?1, 'hackernews', 'content', ?2, datetime('now', ?3))",
@@ -857,7 +853,10 @@ mod tests {
         assert!(names.contains(&"react"));
         assert!(names.contains(&"typescript"));
         assert!(!names.contains(&"jest"), "dev dep must be excluded");
-        assert!(!names.contains(&"lodash"), "transitive dep must be excluded");
+        assert!(
+            !names.contains(&"lodash"),
+            "transitive dep must be excluded"
+        );
 
         // react appears in 2 projects — project list must aggregate
         let react = deps.iter().find(|d| d.package_name == "react").unwrap();
@@ -1029,7 +1028,10 @@ mod tests {
         // missed: avg 0.7, count_boost ≈ 0.6, → 0.7*0.7 + 0.6*0.3 = 0.67
         // score = 0.08*55 + 0.5*25 + 0.67*20 = 4.4 + 12.5 + 13.4 = 30.3
         let score = calculate_blind_spot_score(&uncovered, &stale, &missed, 100);
-        assert!(score > 0.0 && score < 100.0, "score must be in range, got {score}");
+        assert!(
+            score > 0.0 && score < 100.0,
+            "score must be in range, got {score}"
+        );
         assert!(
             score < 50.0,
             "moderate stack with medium risks should score under 50, got {score}"
@@ -1149,10 +1151,7 @@ mod tests {
         assert!(has_word_boundary_match("react is great", "react"));
         assert!(has_word_boundary_match("next.js is fine", "next")); // .js suffix allowed
         assert!(has_word_boundary_match("use serde.rs for json", "serde")); // .rs suffix allowed
-        assert!(!has_word_boundary_match(
-            "unexpected happens here",
-            "next"
-        )); // embedded in word
+        assert!(!has_word_boundary_match("unexpected happens here", "next")); // embedded in word
         assert!(!has_word_boundary_match("configuring app", "conf")); // substring of config
     }
 }
