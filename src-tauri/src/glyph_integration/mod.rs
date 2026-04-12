@@ -72,9 +72,9 @@
 //! See `docs/glyph/GEP-INTEGRATION.md` for the full honest verdict.
 
 #![allow(dead_code)] // Phase 2 audit-only: some paths are wired but not yet
-                    // routed from production code paths. They will be
-                    // activated in Phase 3 when the first opt-in agent
-                    // (gotcha-detector) begins emitting real envelopes.
+                     // routed from production code paths. They will be
+                     // activated in Phase 3 when the first opt-in agent
+                     // (gotcha-detector) begins emitting real envelopes.
 
 pub mod mcp_envelope;
 pub mod migration;
@@ -83,7 +83,7 @@ pub mod wisdom_bridge;
 
 pub use mcp_envelope::{ShadowEnvelopeBuilder, ShadowEnvelopeResult};
 pub use sqlite_audit_sink::SqliteAuditSink;
-pub use wisdom_bridge::{NoopAwe, NoopAck};
+pub use wisdom_bridge::{NoopAck, NoopAwe};
 
 /// Phase 2 audit-only mode sentinel. When this returns `true` the broker
 /// writes shadow envelopes without changing routing behaviour. When
