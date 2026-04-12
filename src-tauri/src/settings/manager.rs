@@ -203,7 +203,8 @@ impl SettingsManager {
         let has_plaintext_keys = !settings.llm.api_key.is_empty()
             || !settings.llm.openai_api_key.is_empty()
             || !settings.x_api_key.is_empty()
-            || !settings.license.license_key.is_empty();
+            || !settings.license.license_key.is_empty()
+            || !settings.translation.api_key.is_empty();
 
         if has_plaintext_keys {
             match keystore::migrate_from_plaintext(&settings) {
@@ -215,6 +216,7 @@ impl SettingsManager {
                         clean_settings.llm.api_key = String::new();
                         clean_settings.llm.openai_api_key = String::new();
                         clean_settings.x_api_key = String::new();
+                        clean_settings.translation.api_key = String::new();
                         if report.migrated.contains(&"license_key".to_string()) {
                             clean_settings.license.license_key = String::new();
                         }
@@ -266,6 +268,11 @@ impl SettingsManager {
                 settings.license.license_key = key;
             }
         }
+        if let Ok(Some(key)) = keystore::get_secret("translation_api_key") {
+            if !key.is_empty() {
+                settings.translation.api_key = key;
+            }
+        }
 
         Self {
             settings,
@@ -304,6 +311,13 @@ impl SettingsManager {
         }
         if keystore::has_secret("license_key") {
             disk_settings.license.license_key = String::new();
+        }
+        if keystore::has_secret("translation_api_key") {
+            disk_settings.translation.api_key = String::new();
+        }
+        // Team relay auth_token is a JWT — always strip from disk.
+        if let Some(ref mut relay) = disk_settings.team_relay {
+            relay.auth_token = None;
         }
 
         // License tier invariant: if a valid self-signed key is present, the tier
