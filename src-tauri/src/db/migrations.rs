@@ -1983,7 +1983,31 @@ impl Database {
                              -- Project relevance scoring: filter out example/demo/test projects
                              -- from intelligence surfaces (preemption, blind spots)
                              ALTER TABLE project_dependencies ADD COLUMN project_relevance REAL DEFAULT 1.0;
-                             CREATE INDEX IF NOT EXISTS idx_deps_relevance ON project_dependencies(project_relevance);",
+                             CREATE INDEX IF NOT EXISTS idx_deps_relevance ON project_dependencies(project_relevance);
+
+                             -- Retroactively set low relevance for known noise directory patterns.
+                             -- New ACE scans will compute proper relevance; this covers existing data.
+                             UPDATE project_dependencies SET project_relevance = 0.05
+                               WHERE project_path LIKE '%/example%'
+                                  OR project_path LIKE '%/demo%'
+                                  OR project_path LIKE '%/test/%'
+                                  OR project_path LIKE '%/tests/%'
+                                  OR project_path LIKE '%/tutorial%'
+                                  OR project_path LIKE '%/template%'
+                                  OR project_path LIKE '%/sample%'
+                                  OR project_path LIKE '%/fixture%'
+                                  OR project_path LIKE '%/benchmark%'
+                                  OR project_path LIKE '%\\example%'
+                                  OR project_path LIKE '%\\demo%'
+                                  OR project_path LIKE '%\\test\\%'
+                                  OR project_path LIKE '%\\tests\\%'
+                                  OR project_path LIKE '%\\tutorial%'
+                                  OR project_path LIKE '%\\template%'
+                                  OR project_path LIKE '%\\sample%'
+                                  OR project_path LIKE '%\\fixture%'
+                                  OR project_path LIKE '%\\benchmark%'
+                                  OR project_path LIKE '%workbench%'
+                                  OR project_path LIKE '%worktree%';",
                         )?;
                         info!(target: "4da::db", "Added content_type, cve_ids, project_relevance columns + indices");
                         Ok(())
