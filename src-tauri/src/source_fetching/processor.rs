@@ -170,6 +170,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     String,
                     Vec<f32>,
                     String,
+                    Option<String>,
+                    Option<String>,
                 )> = new_items_to_embed
                     .into_iter()
                     .zip(embeddings.into_iter())
@@ -179,6 +181,13 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                             (source_type, source_id, url, title, content, detected_lang),
                             embedding,
                         )| {
+                            let content_type = crate::entity_extraction::classify_for_storage(
+                                &title,
+                                &content,
+                                &source_type,
+                            );
+                            let cve_ids =
+                                crate::entity_extraction::extract_cve_ids(&title, &content);
                             (
                                 source_type,
                                 source_id,
@@ -187,6 +196,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                                 content,
                                 embedding,
                                 detected_lang,
+                                content_type,
+                                cve_ids,
                             )
                         },
                     )

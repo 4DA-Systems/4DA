@@ -155,15 +155,13 @@ Do NOT record the same decision in all three. Route by purpose. AWE is for decis
 **AWE binary:** `D:\runyourempire\awe\target\release\awe.exe`
 **Wisdom database:** `%APPDATA%\awe\wisdom.db` (87 decisions, 1 validated principle, compounding)
 
-## Glyph Envelope Protocol (GEP)
+## Airlock (Agent Safety Gates)
 
-GEP is a typed semantic envelope for inter-agent communication. It wraps natural-language payloads with a fixed 6-glyph header (source · confidence · action · domain · reversibility · risk) so broker routing becomes machine-trivial while payloads stay fully human-readable.
+Airlock is safety middleware for agent-to-agent communication. Every message between agents passes through 9 composable safety gates before delivery. Irreversible actions require human acknowledgement. Every message is logged in both machine-parseable and human-readable form.
 
-**Strong form only.** Glyphs are the envelope, NL is the payload. Agents still reason in natural language. GEP just labels what they emit.
-
-**Repository:** `D:\runyourempire\glyph` (standalone Rust workspace, Apache 2.0)
+**Repository:** `D:\runyourempire\glyph` (standalone Rust workspace, Apache 2.0) — GitHub repo rename to `airlock` pending
 **Dictionary:** 60 glyphs across 8 categories, hash-locked via blake3
-**Crates:** glyph-core, glyph-engine, glyph-compile, glyph-lift, glyph-safety, glyph-cli
+**Crates:** airlock-core, airlock-engine, airlock-compile, airlock-lift, airlock-safety, airlock-cli
 
 **9 safety gates** (all load-bearing, non-optional):
 
@@ -177,32 +175,17 @@ GEP is a typed semantic envelope for inter-agent communication. It wraps natural
 8. Dictionary version gate — hard mismatch error, no compatibility mode
 9. Semantic drift detector — weekly recompile of stored envelopes vs current dict
 
-**When to use GEP tools (once Phase 2 lands):**
-- Agents emit envelopes alongside NL for all inter-agent messages once opted in
-- Broker routes envelopes by glyph headers without LLM involvement
-- Destructive (`🔒`) or alerting (`🔴`) actions auto-trigger Wisdom Gate 2 + AWE
-- Audit log surfaces in the Compound Intelligence dashboard
-
 **Rollout phases:**
-- Phase 0 — spec + real Anthropic tokenizer measurement ✅ (CONDITIONAL PASS)
+- Phase 0 — spec + tokenizer measurement ✅ (compression claim retracted, safety gates are the value)
 - Phase 1 — Rust crate with 35 tests ✅
-- Phase 1.5 — Phase 2 integration harness crate (SqliteAuditSink, mocks, demo) ✅
-- Phase 2 — audit-only mode in 4DA (follow-up, drop harness into src-tauri/src/glyph_integration/)
-- Phase 3 — first opt-in agent (`gotcha-detector`)
-- Phase 4 — broker routing by glyph
+- Phase 1.5 — Integration harness (SqliteAuditSink, mocks, demo) ✅
+- Phase 2 — audit-only mode in 4DA (shadow envelopes, no agent behavior change)
+- Phase 3 — first opt-in agent emits real envelopes
+- Phase 4 — broker routing by typed headers
 - Phase 5 — safety hardening (real AWE + UI bridges)
 - Phase 6 — compound measurement + AWE feedback loop
 
-**Phase 0 full bake-off verdict (2026-04-12, claude-opus-4-6):**
-- v1.0.0 canonical glyph header: **28 tokens**
-- Best possible glyph form (raw concat `🌐◉➜⚙⟲🟡`): **17 tokens**
-- Space-separated NL (`web high implies infra partial caution`): **8 tokens**
-- **Plain English wins by more than 2× against the best glyph form.** BPE is trained on English words (each is 1 token); most emoji/math glyphs are 2-3 tokens. 32 of 60 glyphs already at the 2-3 token floor. No dictionary engineering fixes this.
-- **Compression claim FULLY RETRACTED.** GEP is typed routing + composable safety gates + dual-form audit + visual distinctiveness + steganography resistance. It is NOT a compression technology. Never lead with a compression number. The extra ~9 tokens/envelope costs ~$10/year at realistic 4DA volumes — a negligible premium for the real benefits.
-
-**Kill gates:** Phase 2 aborts if categorical coverage <50% or audit log growth excessive. The crate stays as reference material; the 4DA integration is reverted cleanly.
-
-**Docs in 4DA:** `docs/glyph/GEP-SPEC.md`, `GEP-SAFETY.md`, `GEP-INTEGRATION.md`, `GEP-ALPHABET.md`
+**Kill gates:** Phase 2 aborts if categorical coverage <50% or audit log growth excessive.
 **Canonical spec:** `D:\runyourempire\glyph\docs\SPEC.md` (dual-licensed CC-BY-4.0)
 
 ## Worktree Hygiene

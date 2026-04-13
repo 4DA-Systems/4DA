@@ -596,7 +596,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 54;
+        const TARGET_VERSION: i64 = 55;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1959,6 +1959,33 @@ impl Database {
                              CREATE INDEX IF NOT EXISTS idx_glyph_audit_envelope  ON glyph_audit(envelope_id);",
                         )?;
                         info!(target: "4da::db", "Created glyph_audit table + 4 indices (GEP Phase 2)");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // ── Phase 55: Intelligence pipeline accuracy overhaul ─────────
+            // Adds structured metadata columns to source_items for entity
+            // extraction at ingestion time (content type classification and
+            // CVE ID extraction) plus project relevance scoring.
+            if current_version < 55 {
+                Self::run_versioned_migration(
+                    &conn,
+                    54,
+                    55,
+                    "Phase 55: content_type + cve_ids columns + project_relevance",
+                    |c| {
+                        c.execute_batch(
+                            "ALTER TABLE source_items ADD COLUMN content_type TEXT DEFAULT NULL;
+                             ALTER TABLE source_items ADD COLUMN cve_ids TEXT DEFAULT NULL;
+                             CREATE INDEX IF NOT EXISTS idx_source_content_type ON source_items(content_type);
+
+                             -- Project relevance scoring: filter out example/demo/test projects
+                             -- from intelligence surfaces (preemption, blind spots)
+                             ALTER TABLE project_dependencies ADD COLUMN project_relevance REAL DEFAULT 1.0;
+                             CREATE INDEX IF NOT EXISTS idx_deps_relevance ON project_dependencies(project_relevance);",
+                        )?;
+                        info!(target: "4da::db", "Added content_type, cve_ids, project_relevance columns + indices");
                         Ok(())
                     },
                 )?;

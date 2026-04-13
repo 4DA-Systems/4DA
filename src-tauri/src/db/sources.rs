@@ -114,7 +114,7 @@ impl Database {
     }
 
     /// Batch upsert source items in a transaction (much faster than individual calls).
-    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang).
+    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang, content_type, cve_ids).
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
@@ -126,6 +126,8 @@ impl Database {
             String,
             Vec<f32>,
             String,
+            Option<String>,
+            Option<String>,
         )],
     ) -> SqliteResult<usize> {
         let conn = self.conn.lock();
@@ -136,18 +138,34 @@ impl Database {
                 "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
             )?;
             let mut update_stmt = tx.prepare_cached(
-                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, detected_lang = ?6, last_seen = datetime('now') WHERE id = ?7",
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, \
+                 embedding = ?5, detected_lang = ?6, \
+                 content_type = COALESCE(?7, source_items.content_type), \
+                 cve_ids = COALESCE(?8, source_items.cve_ids), \
+                 last_seen = datetime('now') WHERE id = ?9",
             )?;
             let mut update_vec_stmt =
                 tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
             let mut insert_stmt = tx.prepare_cached(
-                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, detected_lang, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
+                "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, \
+                 embedding, detected_lang, content_type, cve_ids, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))",
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
 
-            for (source_type, source_id, url, title, content, embedding, detected_lang) in items {
+            for (
+                source_type,
+                source_id,
+                url,
+                title,
+                content,
+                embedding,
+                detected_lang,
+                content_type,
+                cve_ids,
+            ) in items
+            {
                 let content_hash = hash_content_parts(&[title, content]);
                 let embedding_blob = embedding_to_blob(embedding);
 
@@ -163,6 +181,8 @@ impl Database {
                         content_hash,
                         embedding_blob,
                         detected_lang,
+                        content_type,
+                        cve_ids,
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
@@ -175,7 +195,9 @@ impl Database {
                         content,
                         content_hash,
                         embedding_blob,
-                        detected_lang
+                        detected_lang,
+                        content_type,
+                        cve_ids
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;

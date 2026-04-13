@@ -5,6 +5,7 @@
 //! keyword boosts, and source preferences for a technology stack.
 
 pub mod detection;
+pub mod negative_stack;
 pub mod profiles;
 pub mod scoring;
 

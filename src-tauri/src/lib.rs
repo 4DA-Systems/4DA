@@ -205,6 +205,7 @@ mod digest_config;
 mod digest_email;
 mod domain_profile;
 mod domain_profile_data;
+mod entity_extraction;
 // Silent-Failure Defense Layer 1 — typed wrappers for external boundaries.
 // See docs/strategy/SILENT-FAILURE-DEFENSE.md. Skeleton only in this commit.
 mod external;

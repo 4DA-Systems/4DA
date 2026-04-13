@@ -100,6 +100,10 @@ pub(crate) struct ScoringContext {
     pub taste_embedding: Option<Vec<f32>>,
     /// Topic-aware decay half-lives: topic -> half_life_hours
     pub topic_half_lives: HashMap<String, f32>,
+    /// Per-source engagement rates from autophagy analysis: source_type -> rate (0.0-1.0)
+    pub source_autopsies: HashMap<String, f32>,
+    /// Anti-pattern penalties from autophagy bias detection: source_type -> penalty (-0.15 to +0.20)
+    pub anti_pattern_penalties: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
     /// Topics with contradictory signals (both high affinity AND anti-topic).

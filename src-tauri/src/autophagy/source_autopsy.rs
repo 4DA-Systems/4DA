@@ -151,6 +151,43 @@ pub(crate) fn store_source_autopsies(
     Ok(())
 }
 
+/// Load the latest source autopsy data (per-source engagement rates).
+/// Returns map of source_type -> engagement_rate (0.0-1.0).
+///
+/// Reads only non-superseded rows from `digested_intelligence` where
+/// `digest_type = 'source_autopsy'`. Returns an empty map if no data exists
+/// yet (autophagy needs 7+ days of user interaction to produce results).
+pub fn load_source_autopsies(conn: &Connection) -> HashMap<String, f32> {
+    let mut result = HashMap::new();
+
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT subject, data FROM digested_intelligence
+         WHERE digest_type = 'source_autopsy' AND superseded_by IS NULL",
+    ) else {
+        return result;
+    };
+
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return result;
+    };
+
+    for row in rows.flatten() {
+        let (subject, data) = row;
+        // Parse JSON data to extract engagement_rate
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            if let Some(rate) = parsed.get("engagement_rate").and_then(|v| v.as_f64()) {
+                // Subject format: "source_type:topic" -- extract source_type
+                let source_type = subject.split(':').next().unwrap_or(&subject).to_string();
+                result.insert(source_type, rate as f32);
+            }
+        }
+    }
+
+    result
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -278,5 +315,72 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_load_source_autopsies_roundtrip() {
+        let conn = setup_test_db();
+
+        // Store two autopsies
+        let autopsies = vec![
+            super::super::SourceAutopsy {
+                source_type: "hackernews".to_string(),
+                topic: "hackernews".to_string(),
+                items_surfaced: 100,
+                items_engaged: 15,
+                engagement_rate: 0.15,
+            },
+            super::super::SourceAutopsy {
+                source_type: "arxiv".to_string(),
+                topic: "arxiv".to_string(),
+                items_surfaced: 50,
+                items_engaged: 30,
+                engagement_rate: 0.60,
+            },
+        ];
+        store_source_autopsies(&conn, &autopsies).expect("store");
+
+        // Load and verify
+        let loaded = load_source_autopsies(&conn);
+        assert_eq!(loaded.len(), 2);
+        assert!((loaded["hackernews"] - 0.15).abs() < 0.01);
+        assert!((loaded["arxiv"] - 0.60).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_load_source_autopsies_empty() {
+        let conn = setup_test_db();
+        let loaded = load_source_autopsies(&conn);
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn test_load_source_autopsies_superseded_excluded() {
+        let conn = setup_test_db();
+
+        // Store first batch
+        let autopsies_v1 = vec![super::super::SourceAutopsy {
+            source_type: "hackernews".to_string(),
+            topic: "hackernews".to_string(),
+            items_surfaced: 100,
+            items_engaged: 5,
+            engagement_rate: 0.05,
+        }];
+        store_source_autopsies(&conn, &autopsies_v1).expect("store v1");
+
+        // Store second batch (supersedes v1)
+        let autopsies_v2 = vec![super::super::SourceAutopsy {
+            source_type: "hackernews".to_string(),
+            topic: "hackernews".to_string(),
+            items_surfaced: 200,
+            items_engaged: 40,
+            engagement_rate: 0.20,
+        }];
+        store_source_autopsies(&conn, &autopsies_v2).expect("store v2");
+
+        // Should load only the latest (v2)
+        let loaded = load_source_autopsies(&conn);
+        assert_eq!(loaded.len(), 1);
+        assert!((loaded["hackernews"] - 0.20).abs() < 0.01);
     }
 }

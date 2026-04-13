@@ -199,6 +199,21 @@ fn has_is_direct_column(conn: &rusqlite::Connection) -> bool {
     .unwrap_or(false)
 }
 
+/// Check whether `project_dependencies` has the `project_relevance` column.
+///
+/// Added in Phase 55 migration. Pre-Phase-55 databases lack the column.
+/// When present, low-relevance projects (example/demo/test dirs) are excluded
+/// from preemption alerts.
+fn has_project_relevance_column(conn: &rusqlite::Connection) -> bool {
+    conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'project_relevance'",
+        [],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|count| count > 0)
+    .unwrap_or(false)
+}
+
 /// Fast-path replacement for `project_health::compute_all_project_health`
 /// (the O(N²) function that caused the timeout).
 ///
@@ -211,7 +226,7 @@ fn has_is_direct_column(conn: &rusqlite::Connection) -> bool {
 /// otherwise all non-dev deps. Last 30 days only. Deduped by
 /// (package_name, project_path) and capped at 20 via word-boundary post-filter.
 fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<PreemptionAlert>> {
-    // Runtime column detection for `is_direct`. Pre-Phase-53 DBs lack it —
+    // Runtime column detection for `is_direct`. Pre-Phase-53 DBs lack it --
     // we fall back to processing all non-dev deps in that case.
     let has_is_direct = has_is_direct_column(conn);
     let direct_filter = if has_is_direct {
@@ -220,14 +235,23 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         ""
     };
 
-    // Note: this query uses title-only LIKE matching (not content LIKE) —
+    // Runtime column detection for `project_relevance`. Pre-Phase-55 DBs
+    // lack it -- we skip the filter and process all deps in that case.
+    let has_relevance = has_project_relevance_column(conn);
+    let relevance_filter = if has_relevance {
+        "AND pd.project_relevance >= 0.15"
+    } else {
+        ""
+    };
+
+    // Note: this query uses title-only LIKE matching (not content LIKE) --
     // content LIKE on 23K rows with avg 669 chars is the slowest part of
     // the legacy path. Title-only is 10-30x faster and catches the same
     // "CVE-2026-XXXX affects react" headlines we care about.
     //
-    // Min package_name length 5 — avoids noise from 4-char generic names
+    // Min package_name length 5 -- avoids noise from 4-char generic names
     // ("conf", "cors", "http", "core") that would match too broadly.
-    // Dev deps always excluded — test/lint tools aren't runtime attack surface.
+    // Dev deps always excluded -- test/lint tools aren't runtime attack surface.
     // LIMIT 100 provides headroom for post-filter dedup to yield ~20 unique alerts.
     let sql = format!(
         "SELECT pd.project_path,
@@ -243,6 +267,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             AND LOWER(si.title) LIKE '%' || LOWER(pd.package_name) || '%'
         WHERE pd.is_dev = 0
           {direct_filter}
+          {relevance_filter}
           AND si.created_at >= datetime('now', '-30 days')
           AND (
               LOWER(si.title) LIKE '%cve%'
@@ -269,14 +294,13 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         ))
     })?;
 
-    // Dedup by (package_name, project_path) so a single affected package
-    // mentioned in 5 articles only produces ONE alert.
-    // Also post-filter by word-boundary matching to eliminate false positives
+    // Phase 1: Build raw alerts with word-boundary validation.
+    // Post-filter by word-boundary matching to eliminate false positives
     // where the package name is a substring of an unrelated word
     // (e.g. "conf" matching "config", "cors" matching unrelated contexts).
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     let mut seen: HashSet<(String, String)> = HashSet::new();
-    let mut alerts = Vec::new();
+    let mut raw_alerts = Vec::new();
 
     for row_result in rows {
         let (project_path, package_name, _ecosystem, title, url, created_at, source_type) =
@@ -359,7 +383,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             },
         ];
 
-        alerts.push(PreemptionAlert {
+        raw_alerts.push(PreemptionAlert {
             id: uuid::Uuid::new_v4().to_string(),
             alert_type,
             title: format!("{}: {}", project_name, truncate(&title, 80)),
@@ -373,12 +397,66 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             affected_projects: vec![project_path],
             affected_dependencies: vec![package_name],
             urgency,
-            confidence: 0.85,
+            // Dynamic confidence: scales with how many projects are affected
+            confidence: 0.70,
             predicted_window: None,
             suggested_actions,
             created_at: chrono::Utc::now().to_rfc3339(),
         });
     }
+
+    // Phase 2: Group alerts by CVE ID to collapse duplicates.
+    // The same CVE showing up across 10+ source items now merges into
+    // one alert with all affected projects/deps aggregated.
+    let mut cve_groups: HashMap<String, PreemptionAlert> = HashMap::new();
+    let mut non_cve_alerts: Vec<PreemptionAlert> = Vec::new();
+
+    for alert in raw_alerts {
+        let cve_id = crate::entity_extraction::extract_first_cve_id(&alert.title);
+
+        match cve_id {
+            Some(id) => {
+                if let Some(existing) = cve_groups.get_mut(&id) {
+                    // Merge: add this alert's projects and deps to the existing group
+                    for project in &alert.affected_projects {
+                        if !existing.affected_projects.contains(project) {
+                            existing.affected_projects.push(project.clone());
+                        }
+                    }
+                    for dep in &alert.affected_dependencies {
+                        if !existing.affected_dependencies.contains(dep) {
+                            existing.affected_dependencies.push(dep.clone());
+                        }
+                    }
+                    // Merge evidence
+                    for ev in &alert.evidence {
+                        if !existing.evidence.iter().any(|e| e.title == ev.title) {
+                            existing.evidence.push(ev.clone());
+                        }
+                    }
+                    // Recalculate confidence based on affected project count
+                    let proj_count = existing.affected_projects.len() as f32;
+                    existing.confidence = (0.70 + proj_count * 0.05).min(0.95);
+                } else {
+                    cve_groups.insert(id, alert);
+                }
+            }
+            None => {
+                non_cve_alerts.push(alert);
+            }
+        }
+    }
+
+    // Recalculate confidence for all CVE-grouped alerts
+    let mut alerts: Vec<PreemptionAlert> = cve_groups
+        .into_values()
+        .map(|mut a| {
+            let proj_count = a.affected_projects.len() as f32;
+            a.confidence = (0.70 + proj_count * 0.05).min(0.95);
+            a
+        })
+        .collect();
+    alerts.extend(non_cve_alerts);
 
     Ok(alerts)
 }
@@ -708,6 +786,7 @@ mod tests {
                 is_dev INTEGER DEFAULT 0,
                 is_direct INTEGER DEFAULT 1,
                 language TEXT NOT NULL DEFAULT 'unknown',
+                project_relevance REAL DEFAULT 1.0,
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(project_path, package_name)
             );
@@ -733,6 +812,79 @@ mod tests {
             params![title],
         )
         .unwrap();
+    }
+
+    fn insert_dep_with_relevance(
+        conn: &Connection,
+        project: &str,
+        pkg: &str,
+        direct: bool,
+        dev: bool,
+        relevance: f64,
+    ) {
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, is_direct, is_dev, language, project_relevance)
+             VALUES (?1, 'npm', ?2, ?3, ?4, 'javascript', ?5)",
+            params![project, pkg, direct as i32, dev as i32, relevance],
+        )
+        .unwrap();
+    }
+
+    // ─── Project relevance filtering ─────────────────────────────────
+
+    #[test]
+    fn low_relevance_projects_excluded_from_preemption() {
+        let conn = setup_test_db();
+        // High-relevance project (production) -- should produce an alert
+        insert_dep_with_relevance(&conn, "/proj/production", "react", true, false, 1.0);
+        // Low-relevance project (example dir) -- should be excluded
+        insert_dep_with_relevance(&conn, "/proj/example", "webpack", true, false, 0.1);
+        insert_item(&conn, "CVE-2026-5555 critical vulnerability in react");
+        insert_item(&conn, "CVE-2026-6666 critical vulnerability in webpack");
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+
+        // Only react from the production project should appear
+        assert_eq!(
+            alerts.len(),
+            1,
+            "low-relevance project deps should be excluded"
+        );
+        assert!(alerts[0]
+            .affected_dependencies
+            .contains(&"react".to_string()));
+    }
+
+    #[test]
+    fn borderline_relevance_included_in_preemption() {
+        let conn = setup_test_db();
+        // Exactly at the threshold (0.15) -- should be included
+        insert_dep_with_relevance(&conn, "/proj/borderline", "express", true, false, 0.15);
+        // Just below threshold -- should be excluded
+        insert_dep_with_relevance(&conn, "/proj/example", "fastify", true, false, 0.14);
+        insert_item(&conn, "security advisory for express framework");
+        insert_item(&conn, "security advisory for fastify framework");
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+
+        let express_alerts: Vec<_> = alerts
+            .iter()
+            .filter(|a| a.affected_dependencies.contains(&"express".to_string()))
+            .collect();
+        let fastify_alerts: Vec<_> = alerts
+            .iter()
+            .filter(|a| a.affected_dependencies.contains(&"fastify".to_string()))
+            .collect();
+        assert_eq!(
+            express_alerts.len(),
+            1,
+            "at-threshold dep should be included"
+        );
+        assert_eq!(
+            fastify_alerts.len(),
+            0,
+            "below-threshold dep should be excluded"
+        );
     }
 
     // ─── Fix 7: fast-path query filters correctly ─────────────────────

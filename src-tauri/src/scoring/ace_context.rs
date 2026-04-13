@@ -29,9 +29,12 @@ pub(crate) struct ACEContext {
     /// Used to give a slight freshness boost to content published during active coding hours.
     pub peak_hours: Vec<u8>,
     /// Per-tech scoring weight based on project source.
-    /// Primary project tech (same dir as CWD) → 0.85, secondary → 0.40.
+    /// Primary project tech (same dir as CWD) -> 0.85, secondary -> 0.40.
     /// Used by semantic scoring instead of flat 0.6 for all detected tech.
     pub tech_weights: HashMap<String, f32>,
+    /// Negative stack: Bayesian priors for technologies the user likely does NOT use.
+    /// Built from competing-tech inference + anti-topics. Applied undampened in scoring.
+    pub negative_stack: crate::stacks::negative_stack::NegativeStackContext,
 }
 
 /// Fetch ACE-discovered context for relevance scoring
