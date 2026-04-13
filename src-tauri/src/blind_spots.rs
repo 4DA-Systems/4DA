@@ -439,7 +439,82 @@ fn find_missed_signals(
     // — without dedup the same item shows 10+ times in the blind spot report.
     let signals = dedup_missed_signals(signals);
 
+    // Apply negative stack filtering at query time. This catches items that were
+    // scored by the old pipeline (before negative stack existed) and still have
+    // high relevance_score for technologies the user doesn't use.
+    let signals = filter_by_negative_stack(signals);
+
     Ok(signals)
+}
+
+/// Filter missed signals using the negative stack model.
+///
+/// Extracts topics from each signal's title, looks up the negative stack prior,
+/// and removes items whose primary technology has a strong negative prior (<= 0.30).
+/// This ensures Blind Spots immediately reflects the user's tech stack even for
+/// items scored before the negative stack was introduced.
+fn filter_by_negative_stack(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
+    // Build the negative stack context (same as scoring does)
+    let negative_stack = match build_blind_spot_negative_stack() {
+        Some(ctx) => ctx,
+        None => return signals, // No negative stack data → pass through
+    };
+
+    signals
+        .into_iter()
+        .filter(|signal| {
+            let topics = crate::extract_topics(&signal.title, "");
+            let prior = crate::stacks::negative_stack::lookup_prior(&negative_stack, &topics);
+            // Keep items where the negative prior is > 0.30 (not strongly suppressed)
+            prior > 0.30
+        })
+        .collect()
+}
+
+/// Build a negative stack context for blind spots filtering.
+/// Returns None if we can't load the required data.
+fn build_blind_spot_negative_stack() -> Option<crate::stacks::negative_stack::NegativeStackContext>
+{
+    use std::collections::HashSet;
+
+    let conn = crate::open_db_connection().ok()?;
+
+    // Load direct runtime deps
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT LOWER(package_name) FROM project_dependencies
+             WHERE is_dev = 0 AND is_direct = 1 AND project_relevance >= 0.15",
+        )
+        .ok()?;
+    let deps: HashSet<String> = stmt
+        .query_map([], |row| row.get::<_, String>(0))
+        .ok()?
+        .flatten()
+        .collect();
+
+    if deps.is_empty() {
+        return None; // No dep data → can't infer negative stack
+    }
+
+    // Load anti-topics with confidence
+    let anti_topics: Vec<(String, f32)> = match conn
+        .prepare("SELECT topic, confidence FROM anti_topics WHERE rejection_count >= 2")
+    {
+        Ok(mut stmt) => stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, f32>(1)?))
+            })
+            .ok()
+            .map(|rows| rows.flatten().collect())
+            .unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+
+    Some(crate::stacks::negative_stack::build_negative_stack(
+        &deps,
+        crate::competing_tech::COMPETING_TECH,
+        &anti_topics,
+    ))
 }
 
 /// Remove near-duplicate missed signals using Jaccard word overlap.

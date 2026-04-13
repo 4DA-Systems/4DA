@@ -271,8 +271,14 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
           AND si.created_at >= datetime('now', '-30 days')
           AND (
               LOWER(si.title) LIKE '%cve%'
+              OR LOWER(si.title) LIKE '%ghsa%'
               OR LOWER(si.title) LIKE '%vulnerab%'
-              OR LOWER(si.title) LIKE '%security%'
+              OR LOWER(si.title) LIKE '%security advisory%'
+              OR LOWER(si.title) LIKE '%security patch%'
+              OR LOWER(si.title) LIKE '%security update%'
+              OR LOWER(si.title) LIKE '%security flaw%'
+              OR LOWER(si.title) LIKE '%security issue%'
+              OR LOWER(si.title) LIKE '%security bug%'
               OR LOWER(si.title) LIKE '%breaking%'
               OR LOWER(si.title) LIKE '%deprecat%'
               OR LOWER(si.title) LIKE '%advisory%'
@@ -412,7 +418,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
     let mut non_cve_alerts: Vec<PreemptionAlert> = Vec::new();
 
     for alert in raw_alerts {
-        let cve_id = crate::entity_extraction::extract_first_cve_id(&alert.title);
+        let cve_id = crate::entity_extraction::extract_first_advisory_id(&alert.title);
 
         match cve_id {
             Some(id) => {
@@ -458,7 +464,56 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         .collect();
     alerts.extend(non_cve_alerts);
 
+    // Phase 3: Fuzzy title dedup — collapse near-identical alerts from
+    // different sources (same Reddit article from 8 subreddits, etc.).
+    // Uses Jaccard word overlap >0.65 as the similarity threshold.
+    let alerts = dedup_preemption_alerts(alerts);
+
     Ok(alerts)
+}
+
+/// Remove near-duplicate preemption alerts using Jaccard word overlap on titles.
+fn dedup_preemption_alerts(alerts: Vec<PreemptionAlert>) -> Vec<PreemptionAlert> {
+    use std::collections::HashSet;
+
+    let mut seen_titles: Vec<HashSet<String>> = Vec::new();
+    let mut deduped = Vec::new();
+
+    for alert in alerts {
+        let normalized: HashSet<String> = alert
+            .title
+            .to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == ' ' {
+                    c
+                } else {
+                    ' '
+                }
+            })
+            .collect::<String>()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+
+        if normalized.is_empty() {
+            deduped.push(alert);
+            continue;
+        }
+
+        let is_duplicate = seen_titles.iter().any(|seen| {
+            let intersection = seen.intersection(&normalized).count();
+            let union = seen.union(&normalized).count();
+            union > 0 && (intersection as f32 / union as f32) > 0.65
+        });
+
+        if !is_duplicate {
+            seen_titles.push(normalized);
+            deduped.push(alert);
+        }
+    }
+
+    deduped
 }
 
 // ============================================================================

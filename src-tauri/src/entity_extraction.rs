@@ -28,37 +28,43 @@ pub fn extract_cve_ids(title: &str, content: &str) -> Option<String> {
     }
 }
 
-/// Extract the first CVE ID from a string, or `None`.
+/// Extract the first security advisory ID from a string, or `None`.
 ///
-/// Used in preemption dedup to group alerts by CVE.
-pub fn extract_first_cve_id(text: &str) -> Option<String> {
+/// Matches both CVE IDs (`CVE-YYYY-NNNNN`) and GitHub Security Advisories
+/// (`GHSA-xxxx-xxxx-xxxx`). Used in preemption dedup to group alerts.
+pub fn extract_first_advisory_id(text: &str) -> Option<String> {
+    // Try CVE first (more common in titles)
+    if let Some(cve) = extract_first_cve_id_inner(text) {
+        return Some(cve);
+    }
+    // Then try GHSA
+    extract_first_ghsa_id(text)
+}
+
+/// Extract the first CVE ID from text.
+fn extract_first_cve_id_inner(text: &str) -> Option<String> {
     let bytes = text.as_bytes();
     let len = bytes.len();
     let mut i = 0;
 
     while i + 8 < len {
-        // Look for "CVE-" prefix (case-insensitive)
         if (bytes[i] == b'C' || bytes[i] == b'c')
             && (bytes[i + 1] == b'V' || bytes[i + 1] == b'v')
             && (bytes[i + 2] == b'E' || bytes[i + 2] == b'e')
             && bytes[i + 3] == b'-'
         {
-            // Expect 4 digits for year
             if bytes[i + 4].is_ascii_digit()
                 && bytes[i + 5].is_ascii_digit()
                 && bytes[i + 6].is_ascii_digit()
                 && bytes[i + 7].is_ascii_digit()
             {
-                // Must be followed by '-'
                 if i + 8 < len && bytes[i + 8] == b'-' {
-                    // Read the numeric suffix (4+ digits)
                     let suffix_start = i + 9;
                     let mut suffix_end = suffix_start;
                     while suffix_end < len && bytes[suffix_end].is_ascii_digit() {
                         suffix_end += 1;
                     }
                     if suffix_end - suffix_start >= 4 {
-                        // Normalize to uppercase
                         let cve = format!(
                             "CVE-{}-{}",
                             &text[i + 4..i + 8],
@@ -67,6 +73,48 @@ pub fn extract_first_cve_id(text: &str) -> Option<String> {
                         return Some(cve);
                     }
                 }
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Extract the first GHSA ID from text.
+/// Format: GHSA-xxxx-xxxx-xxxx where x is lowercase alphanumeric.
+fn extract_first_ghsa_id(text: &str) -> Option<String> {
+    let text_lower = text.to_lowercase();
+    let bytes = text_lower.as_bytes();
+    let len = bytes.len();
+    // GHSA-xxxx-xxxx-xxxx = 19 chars minimum
+    if len < 19 {
+        return None;
+    }
+    let mut i = 0;
+    while i + 19 <= len {
+        if bytes[i] == b'g'
+            && bytes[i + 1] == b'h'
+            && bytes[i + 2] == b's'
+            && bytes[i + 3] == b'a'
+            && bytes[i + 4] == b'-'
+        {
+            // Validate format: 4 alnum, dash, 4 alnum, dash, 4 alnum
+            let seg1 = &bytes[i + 5..i + 9];
+            let seg2 = &bytes[i + 10..i + 14];
+            let seg3 = &bytes[i + 15..i + 19];
+            if bytes[i + 9] == b'-'
+                && bytes[i + 14] == b'-'
+                && seg1.iter().all(|b| b.is_ascii_alphanumeric())
+                && seg2.iter().all(|b| b.is_ascii_alphanumeric())
+                && seg3.iter().all(|b| b.is_ascii_alphanumeric())
+            {
+                // Normalize to uppercase GHSA
+                return Some(format!(
+                    "GHSA-{}-{}-{}",
+                    std::str::from_utf8(seg1).unwrap_or(""),
+                    std::str::from_utf8(seg2).unwrap_or(""),
+                    std::str::from_utf8(seg3).unwrap_or("")
+                ));
             }
         }
         i += 1;
@@ -169,12 +217,37 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_first_cve_id() {
+    fn test_extract_first_advisory_id_cve() {
         assert_eq!(
-            extract_first_cve_id("Security: CVE-2025-4321 affects React"),
+            extract_first_advisory_id("Security: CVE-2025-4321 affects React"),
             Some("CVE-2025-4321".to_string())
         );
-        assert_eq!(extract_first_cve_id("No CVE here"), None);
+        assert_eq!(extract_first_advisory_id("No CVE here"), None);
+    }
+
+    #[test]
+    fn test_extract_first_advisory_id_ghsa() {
+        assert_eq!(
+            extract_first_advisory_id("[GHSA-2j53-2c28-gbv2] OpenClaw: Nostr inbound DMs"),
+            Some("GHSA-2j53-2c28-gbv2".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_ghsa_case_insensitive() {
+        assert_eq!(
+            extract_first_advisory_id("ghsa-abcd-ef12-3456 vulnerability"),
+            Some("GHSA-abcd-ef12-3456".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_cve_preferred_over_ghsa() {
+        // When both exist, CVE should be returned (it's checked first)
+        assert_eq!(
+            extract_first_advisory_id("CVE-2025-9999 aka GHSA-abcd-1234-5678"),
+            Some("CVE-2025-9999".to_string())
+        );
     }
 
     #[test]
