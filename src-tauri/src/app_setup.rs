@@ -271,10 +271,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         if should_persist {
             let mut settings = get_settings_manager().lock();
             let m = settings.get().monitoring.clone();
-            let _ = settings.set_monitoring_config(crate::settings::MonitoringConfig {
+            if let Err(e) = settings.set_monitoring_config(crate::settings::MonitoringConfig {
                 launch_at_startup: Some(false),
                 ..m
-            });
+            }) {
+                warn!(target: "4da::startup", error = %e, "Failed to persist default monitoring config");
+            }
             info!(target: "4da::startup", "First run: launch_at_startup defaulted to false (opt-in)");
         }
     }
@@ -750,7 +752,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     tauri::async_runtime::spawn(async move {
                         match crate::awe_synthesis::build_behavioral_context() {
                             Ok(ctx) => {
-                                let _ = crate::awe_synthesis::write_context_file(&ctx);
+                                if let Err(e) = crate::awe_synthesis::write_context_file(&ctx) {
+                                    warn!(target: "4da::awe", error = %e, "Failed to write AWE context file");
+                                }
                                 match crate::awe_synthesis::synthesize_daily_wisdom(&ctx).await {
                                     Ok(wisdom) => {
                                         info!(target: "4da::awe_synthesis", "Startup wisdom synthesis ready");
@@ -1328,7 +1332,9 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
             warn!(target: "4da::startup", "No dev directories found. User will need to configure manually");
             // Mark as completed so we don't keep trying
             let mut settings = get_settings_manager().lock();
-            let _ = settings.mark_auto_discovery_completed();
+            if let Err(e) = settings.mark_auto_discovery_completed() {
+                warn!(target: "4da::ace", error = %e, "Failed to mark auto-discovery completed");
+            }
         } else {
             // Phase 2: Deep scan for actual project directories
             info!(target: "4da::startup", dirs = discovered_dirs.len(), "Scanning directories for projects");
@@ -1354,7 +1360,9 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
                 if let Err(e) = settings.add_context_dirs(dirs_to_add.clone()) {
                     error!(target: "4da::startup", error = %e, "Failed to save discovered directories");
                 }
-                let _ = settings.mark_auto_discovery_completed();
+                if let Err(e) = settings.mark_auto_discovery_completed() {
+                    warn!(target: "4da::ace", error = %e, "Failed to mark auto-discovery completed");
+                }
             }
 
             let _ = app_handle.emit(

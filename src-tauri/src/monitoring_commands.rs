@@ -6,7 +6,7 @@
 use tauri::AppHandle;
 use tracing::{info, warn};
 
-use crate::error::Result;
+use crate::error::{Result, ResultExt};
 use crate::{get_monitoring_state, get_settings_manager, monitoring, settings};
 
 // ============================================================================
@@ -68,11 +68,11 @@ pub async fn set_monitoring_enabled(enabled: bool) -> Result<serde_json::Value> 
         let mut settings = get_settings_manager().lock();
         let interval = state.get_interval() / 60;
         let existing = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             enabled,
             interval_minutes: interval,
             ..existing
-        });
+        }).context("Failed to persist monitoring config")?;
     }
 
     info!(target: "4da::monitor", enabled = enabled, "Monitoring state persisted");
@@ -118,11 +118,11 @@ pub async fn set_monitoring_interval(minutes: u64) -> Result<serde_json::Value> 
     {
         let mut settings = get_settings_manager().lock();
         let existing = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             enabled: state.is_enabled(),
             interval_minutes: minutes,
             ..existing
-        });
+        }).context("Failed to persist monitoring config")?;
     }
 
     info!(target: "4da::monitor", interval_mins = minutes, "Interval persisted");
@@ -152,12 +152,12 @@ pub async fn set_notification_threshold(threshold: String) -> Result<serde_json:
         let mut settings = get_settings_manager().lock();
         let state = crate::get_monitoring_state();
         let existing = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             enabled: state.is_enabled(),
             interval_minutes: state.get_interval() / 60,
             notification_threshold: threshold.clone(),
             ..existing
-        });
+        }).context("Failed to persist monitoring config")?;
     }
 
     info!(target: "4da::monitor", threshold = %threshold, "Notification threshold updated");
@@ -268,10 +268,10 @@ pub async fn set_notification_style(style: String) -> Result<serde_json::Value> 
     {
         let mut settings = get_settings_manager().lock();
         let existing = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             notification_style: style.clone(),
             ..existing
-        });
+        }).context("Failed to persist monitoring config")?;
     }
 
     info!(target: "4da::monitor", style = %style, "Notification style updated");
@@ -288,10 +288,10 @@ pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
         let mut settings = get_settings_manager().lock();
         let state = crate::get_monitoring_state();
         let m = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             close_to_tray: Some(enabled),
             ..m
-        });
+        }).context("Failed to persist monitoring config")?;
         let _ = state; // keep reference alive
     }
 
@@ -335,10 +335,10 @@ pub async fn set_launch_at_startup(
     {
         let mut settings = get_settings_manager().lock();
         let m = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             launch_at_startup: Some(actual_enabled),
             ..m
-        });
+        }).context("Failed to persist monitoring config")?;
     }
 
     info!(target: "4da::settings",
@@ -379,10 +379,10 @@ pub async fn set_morning_briefing_enabled(enabled: bool) -> Result<serde_json::V
     {
         let mut settings = get_settings_manager().lock();
         let m = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             morning_briefing: Some(enabled),
             ..m
-        });
+        }).context("Failed to persist monitoring config")?;
     }
     info!(target: "4da::settings", morning_briefing = enabled, "Morning briefing updated");
     Ok(serde_json::json!({
@@ -420,10 +420,10 @@ pub async fn set_briefing_time(time: String) -> Result<serde_json::Value> {
     {
         let mut settings = get_settings_manager().lock();
         let m = settings.get().monitoring.clone();
-        let _ = settings.set_monitoring_config(settings::MonitoringConfig {
+        settings.set_monitoring_config(settings::MonitoringConfig {
             briefing_time: Some(validated.clone()),
             ..m
-        });
+        }).context("Failed to persist monitoring config")?;
     }
     info!(target: "4da::settings", briefing_time = %validated, "Briefing time updated");
     Ok(serde_json::json!({
