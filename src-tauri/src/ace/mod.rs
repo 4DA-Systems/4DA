@@ -352,7 +352,7 @@ impl ACE {
                                         format!("{:?}", signal.manifest_type).to_lowercase();
                                     let language = signal.manifest_type.language();
                                     for dep in &signal.dependencies {
-                                        let _ = crate::temporal::upsert_dependency(
+                                        if let Err(e) = crate::temporal::upsert_dependency(
                                             &conn,
                                             &project_path,
                                             &manifest_type,
@@ -362,10 +362,12 @@ impl ACE {
                                             true, // direct: from manifest [dependencies]
                                             language,
                                             relevance,
-                                        );
+                                        ) {
+                                            tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dependency");
+                                        }
                                     }
                                     for dep in &signal.dev_dependencies {
-                                        let _ = crate::temporal::upsert_dependency(
+                                        if let Err(e) = crate::temporal::upsert_dependency(
                                             &conn,
                                             &project_path,
                                             &manifest_type,
@@ -375,7 +377,9 @@ impl ACE {
                                             true, // direct: from manifest [dev-dependencies]
                                             language,
                                             relevance,
-                                        );
+                                        ) {
+                                            tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dev dependency");
+                                        }
                                     }
                                 }
                             }
@@ -581,11 +585,13 @@ impl ACE {
     /// Persist threshold to ACE kv_store
     pub fn store_threshold(&self, threshold: f32) {
         let conn = self.conn.lock();
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
              VALUES ('relevance_threshold', ?1, datetime('now'))",
             [threshold as f64],
-        );
+        ) {
+            tracing::warn!(target: "4da::ace", error = %e, threshold, "Failed to persist relevance threshold");
+        }
     }
 
     // ========================================================================
