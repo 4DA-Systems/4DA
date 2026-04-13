@@ -139,29 +139,31 @@ impl OsvSource {
     /// The OSV API requires a package name — cannot query by ecosystem alone.
     /// Uses well-known packages per ecosystem, augmented by ACE deps when available.
     async fn fetch_ecosystem_vulns(&self, ecosystem: &str) -> SourceResult<Vec<OsvVulnerability>> {
-        // Get packages to check: ACE deps first, then popular defaults
+        // Get packages to check: ACE deps when available, otherwise popular defaults
         let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem(ecosystem);
-        let default_packages: Vec<&str> = match ecosystem {
-            "npm" => vec!["express", "react", "next", "lodash", "axios", "webpack"],
-            "crates.io" => vec!["serde", "tokio", "reqwest", "axum", "clap", "anyhow"],
-            "PyPI" => vec![
-                "django", "flask", "requests", "numpy", "fastapi", "pydantic",
-            ],
-            "Go" => vec![
-                "golang.org/x/net",
-                "golang.org/x/crypto",
-                "github.com/gin-gonic/gin",
-            ],
-            "Maven" => vec![
-                "org.apache.logging.log4j:log4j-core",
-                "com.google.guava:guava",
-            ],
-            _ => vec![],
-        };
-        let packages: Vec<String> = if ace_packages.is_empty() {
-            default_packages.iter().map(|s| s.to_string()).collect()
+        let packages: Vec<String> = if !ace_packages.is_empty() {
+            // User has actual dependencies — query ONLY those, not generic popular packages
+            ace_packages.into_iter().take(15).collect()
         } else {
-            ace_packages.into_iter().take(10).collect()
+            // No ACE data yet — use sensible defaults for this ecosystem
+            let default_packages: Vec<&str> = match ecosystem {
+                "npm" => vec!["express", "react", "next", "lodash", "axios", "webpack"],
+                "crates.io" => vec!["serde", "tokio", "reqwest", "axum", "clap", "anyhow"],
+                "PyPI" => vec![
+                    "django", "flask", "requests", "numpy", "fastapi", "pydantic",
+                ],
+                "Go" => vec![
+                    "golang.org/x/net",
+                    "golang.org/x/crypto",
+                    "github.com/gin-gonic/gin",
+                ],
+                "Maven" => vec![
+                    "org.apache.logging.log4j:log4j-core",
+                    "com.google.guava:guava",
+                ],
+                _ => vec![],
+            };
+            default_packages.iter().map(|s| s.to_string()).collect()
         };
 
         let mut all_vulns = Vec::new();
@@ -298,6 +300,36 @@ impl Default for OsvSource {
 }
 
 // ============================================================================
+// ACE-based ecosystem filtering
+// ============================================================================
+
+/// Get the OSV ecosystem names for which the user has actual runtime
+/// dependencies tracked by ACE. Returns an empty vec when no ACE data
+/// is available (first run, no projects scanned).
+fn get_active_osv_ecosystems() -> Vec<String> {
+    // Maps (ACE lookup key, OSV ecosystem name).
+    // ACE uses "npm", "rust", "pypi", etc.; OSV uses "npm", "crates.io", "PyPI", etc.
+    let ecosystem_map: &[(&str, &str)] = &[
+        ("npm", "npm"),
+        ("rust", "crates.io"),
+        ("pypi", "PyPI"),
+        ("go", "Go"),
+        ("maven", "Maven"),
+        ("nuget", "NuGet"),
+        ("rubygems", "RubyGems"),
+        ("packagist", "Packagist"),
+    ];
+
+    ecosystem_map
+        .iter()
+        .filter(|(ace_key, _)| {
+            !crate::source_fetching::load_ace_packages_for_ecosystem(ace_key).is_empty()
+        })
+        .map(|(_, osv_eco)| osv_eco.to_string())
+        .collect()
+}
+
+// ============================================================================
 // Source Trait Implementation
 // ============================================================================
 
@@ -337,14 +369,21 @@ impl Source for OsvSource {
             return Err(SourceError::Disabled);
         }
 
-        info!("Fetching OSV.dev vulnerabilities (npm + crates.io)");
+        // Determine which ecosystems the user actually has dependencies in
+        let active_ecosystems = get_active_osv_ecosystems();
+        let ecosystems: Vec<&str> = if active_ecosystems.is_empty() {
+            // Fallback: no ACE data yet, query the two most common ecosystems
+            vec!["npm", "crates.io"]
+        } else {
+            active_ecosystems.iter().map(|s| s.as_str()).collect()
+        };
 
-        // Default fetch: query the two most common developer ecosystems
-        let primary_ecosystems = &["npm", "crates.io"];
+        info!(ecosystems = ?ecosystems, "Fetching OSV.dev vulnerabilities");
+
         let mut all_items = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
 
-        for eco in primary_ecosystems {
+        for eco in &ecosystems {
             match self.fetch_ecosystem_vulns(eco).await {
                 Ok(vulns) => {
                     info!(ecosystem = eco, count = vulns.len(), "Fetched OSV vulns");
@@ -372,16 +411,25 @@ impl Source for OsvSource {
             return Err(SourceError::Disabled);
         }
 
-        info!("Deep fetching OSV.dev across all default ecosystems");
+        // Only query ecosystems the user has dependencies in
+        let active_ecosystems = get_active_osv_ecosystems();
+        let ecosystems: Vec<&str> = if active_ecosystems.is_empty() {
+            // Fallback: no ACE data yet, use all defaults
+            DEFAULT_ECOSYSTEMS.to_vec()
+        } else {
+            active_ecosystems.iter().map(|s| s.as_str()).collect()
+        };
 
-        // Use the batch endpoint to query all default ecosystems at once
-        let vulns = match self.fetch_batch_vulns(DEFAULT_ECOSYSTEMS).await {
+        info!(ecosystems = ?ecosystems, "Deep fetching OSV.dev vulnerabilities");
+
+        // Use the batch endpoint to query ecosystems at once
+        let vulns = match self.fetch_batch_vulns(&ecosystems).await {
             Ok(v) => v,
             Err(e) => {
                 warn!(error = ?e, "Batch fetch failed, falling back to sequential");
                 // Fallback: query each ecosystem individually
                 let mut fallback_vulns = Vec::new();
-                for eco in DEFAULT_ECOSYSTEMS {
+                for eco in &ecosystems {
                     match self.fetch_ecosystem_vulns(eco).await {
                         Ok(v) => fallback_vulns.extend(v),
                         Err(e) => {

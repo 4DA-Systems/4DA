@@ -563,7 +563,23 @@ fn compute_quality_composite(
                     scoring_config::SOURCE_QUALITY_CAP_RANGE.1,
                 )
             });
-    let source_quality_mult = 1.0 + source_quality_boost;
+    let learned_source_mult = 1.0 + source_quality_boost;
+
+    // Blend learned source quality with autophagy engagement rate (if available)
+    let source_quality_mult =
+        if let Some(&engagement_rate) = ctx.source_autopsies.get(input.source_type) {
+            let autophagy_factor = if engagement_rate < 0.10 {
+                0.85 // Very low engagement -> mild penalty
+            } else if engagement_rate > 0.50 {
+                1.10 // High engagement -> mild boost
+            } else {
+                1.0 // Average engagement -> neutral
+            };
+            // Blend 50/50 with learned preference
+            (learned_source_mult * 0.5 + autophagy_factor * 0.5).clamp(0.80, 1.20)
+        } else {
+            learned_source_mult
+        };
 
     // Anti-topic multiplier
     let anti_mult = 1.0 - raw.anti_penalty;
@@ -642,39 +658,32 @@ fn compute_quality_composite(
             .unwrap_or(1.0)
     };
 
-    // Asymmetric dampening function
-    let dampen = |m: f32| {
-        if m < 1.0 {
-            1.0 + (m - 1.0) * scoring_config::DAMPENING_PENALTY_STRENGTH
-        } else {
-            1.0 + (m - 1.0) * scoring_config::DAMPENING_BOOST_STRENGTH
-        }
-    };
+    // Negative stack prior: Bayesian suppression for technologies user doesn't use.
+    // UNDAMPENED — full suppressive force (0.15 for competing-absent, 0.30 for anti-topics).
+    let negative_stack_prior =
+        crate::stacks::negative_stack::lookup_prior(&ctx.ace_ctx.negative_stack, &raw.topics);
 
-    // Domain-aware content_dna dampening
-    let content_dna_dampened = if content_dna_mult < 1.0
-        && raw.domain_relevance >= 1.0
-        && !ctx.domain_profile.is_empty()
-    {
-        1.0 + (content_dna_mult - 1.0) * scoring_config::DAMPENING_DOMAIN_AWARE_STRENGTH
-    } else {
-        dampen(content_dna_mult)
-    };
+    // NOTE: ecosystem_shift_mult, stack_competing_mult, and content_analysis_mult are
+    // still computed above for the return tuple (used by logging/diagnostics) but are
+    // intentionally excluded from the composite:
+    //   - ecosystem_shift_mult: rare fire, no isolated test coverage
+    //   - stack_competing_mult: redundant with competing_mult + negative_stack_prior
+    //   - content_analysis_mult: falls back to 1.0 on cache miss, expensive
 
-    // Single composite of ALL quality multipliers
-    let composite = dampen(competing_mult)
-        * dampen(content_quality.multiplier)
-        * content_dna_dampened
-        * dampen(novelty.multiplier)
-        * dampen(ecosystem_shift_mult)
-        * dampen(stack_competing_mult)
-        * dampen(sophistication_mult)
-        * dampen(content_analysis_mult)
-        * dampen(freshness)
-        * dampen(source_quality_mult)
-        * dampen(raw.affinity_mult)
+    // Full-strength multipliers — no dampening. Each multiplier expresses its
+    // complete signal. The confirmation gate (Phase 7) prevents score inflation;
+    // what changes is the FLOOR — bad items drop further, good items stay at ceiling.
+    let composite = competing_mult
+        * content_quality.multiplier
+        * content_dna_mult
+        * novelty.multiplier
+        * sophistication_mult
+        * freshness
+        * source_quality_mult
+        * raw.affinity_mult
         * anti_mult
-        * domain_quality_mult;
+        * domain_quality_mult
+        * negative_stack_prior;
 
     let quality_score = (relevance_score * composite).clamp(0.0, 1.0);
 
@@ -834,6 +843,14 @@ fn compute_boosts(
             0.0
         };
 
+    // Anti-pattern correction from autophagy bias detection
+    let anti_pattern_correction = ctx
+        .anti_pattern_penalties
+        .get(input.source_type)
+        .copied()
+        .unwrap_or(0.0)
+        .clamp(-0.10, 0.10);
+
     // Sum all boosts -> cap -> dampen -> add
     let total_raw = dep_boost
         + raw.stack_boost
@@ -842,6 +859,7 @@ fn compute_boosts(
         + window_boost
         + skill_gap_boost
         + calibration_correction
+        + anti_pattern_correction
         + raw.taste_boost;
 
     let total_capped = total_raw.clamp(BOOST_CAP_MIN, BOOST_CAP_MAX);

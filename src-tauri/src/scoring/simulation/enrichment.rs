@@ -175,6 +175,7 @@ pub(super) fn enrich_persona(
         dependency_info: base.ace_ctx.dependency_info.clone(),
         peak_hours: base.ace_ctx.peak_hours.clone(),
         tech_weights: base.ace_ctx.tech_weights.clone(),
+        negative_stack: base.ace_ctx.negative_stack.clone(),
     };
 
     // 2. Merge ACEContext enrichment fields

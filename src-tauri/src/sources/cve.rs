@@ -179,6 +179,35 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
 }
 
 // ============================================================================
+// ACE-based ecosystem filtering
+// ============================================================================
+
+/// Get the GitHub Advisory DB ecosystem names for which the user has actual
+/// runtime dependencies tracked by ACE. Returns an empty vec when no ACE
+/// data is available (first run, no projects scanned).
+fn get_user_ecosystems() -> Vec<String> {
+    // Maps (ACE lookup key, GitHub Advisory DB ecosystem name).
+    // ACE uses "rust", "pypi", etc.; GitHub uses "npm", "pip", "rust", etc.
+    let ecosystem_map: &[(&str, &str)] = &[
+        ("npm", "npm"),
+        ("rust", "rust"),
+        ("pypi", "pip"),
+        ("go", "go"),
+        ("maven", "maven"),
+        ("nuget", "nuget"),
+        ("rubygems", "rubygems"),
+    ];
+
+    ecosystem_map
+        .iter()
+        .filter(|(ace_key, _)| {
+            !crate::source_fetching::load_ace_packages_for_ecosystem(ace_key).is_empty()
+        })
+        .map(|(_, github_eco)| github_eco.to_string())
+        .collect()
+}
+
+// ============================================================================
 // Source trait implementation
 // ============================================================================
 
@@ -241,19 +270,53 @@ impl Source for CveSource {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
-        let advisories = fetch_github_advisories(None)
-            .await
-            .map_err(|e| SourceError::Network(e.to_string()))?;
-        let items = advisories_to_source_items(&advisories);
-        tracing::info!(target: "4da::sources", count = items.len(), "CVE: Fetched security advisories");
-        Ok(items.into_iter().take(self.config.max_items).collect())
+
+        // Filter by user's actual ecosystems when ACE data is available
+        let user_ecosystems = get_user_ecosystems();
+
+        if user_ecosystems.is_empty() {
+            // Fallback: no ACE data yet, fetch unfiltered (current behavior)
+            let advisories = fetch_github_advisories(None)
+                .await
+                .map_err(|e| SourceError::Network(e.to_string()))?;
+            let items = advisories_to_source_items(&advisories);
+            tracing::info!(target: "4da::sources", count = items.len(), "CVE: Fetched security advisories (unfiltered, no ACE data)");
+            return Ok(items.into_iter().take(self.config.max_items).collect());
+        }
+
+        let mut all_items = Vec::new();
+        for ecosystem in &user_ecosystems {
+            match fetch_github_advisories(Some(ecosystem)).await {
+                Ok(advisories) => {
+                    let items = advisories_to_source_items(&advisories);
+                    tracing::info!(target: "4da::sources", ecosystem = %ecosystem, count = items.len(), "CVE: Fetched advisories for ecosystem");
+                    all_items.extend(items);
+                }
+                Err(e) => {
+                    tracing::warn!(target: "4da::sources", ecosystem = %ecosystem, error = %e, "CVE: Failed to fetch advisories for ecosystem");
+                }
+            }
+        }
+        tracing::info!(target: "4da::sources", count = all_items.len(), ecosystems = ?user_ecosystems, "CVE: Fetched filtered security advisories");
+        Ok(all_items.into_iter().take(self.config.max_items).collect())
     }
 
     async fn fetch_items_deep(&self, items_per_category: usize) -> SourceResult<Vec<SourceItem>> {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
-        let ecosystems = ["npm", "pip", "go", "rubygems", "maven", "nuget", "rust"];
+
+        let user_ecosystems = get_user_ecosystems();
+        let ecosystems: Vec<String> = if user_ecosystems.is_empty() {
+            // Fallback: no ACE data yet, use all default ecosystems
+            vec!["npm", "pip", "go", "rubygems", "maven", "nuget", "rust"]
+                .into_iter()
+                .map(String::from)
+                .collect()
+        } else {
+            user_ecosystems
+        };
+
         let mut all_items = Vec::new();
         for eco in &ecosystems {
             match fetch_github_advisories(Some(eco)).await {
@@ -262,11 +325,11 @@ impl Source for CveSource {
                     all_items.extend(items.into_iter().take(items_per_category));
                 }
                 Err(e) => {
-                    tracing::warn!(target: "4da::sources", ecosystem = eco, error = %e, "CVE: Failed for ecosystem");
+                    tracing::warn!(target: "4da::sources", ecosystem = %eco, error = %e, "CVE: Failed for ecosystem");
                 }
             }
         }
-        tracing::info!(target: "4da::sources", count = all_items.len(), "CVE: Deep scan complete");
+        tracing::info!(target: "4da::sources", count = all_items.len(), ecosystems = ?ecosystems, "CVE: Deep scan complete");
         Ok(all_items)
     }
 

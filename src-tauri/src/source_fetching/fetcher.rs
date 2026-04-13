@@ -500,6 +500,13 @@ pub(crate) async fn fetch_all_sources(
                         embed_text,
                     ));
                 } else {
+                    let content_type = crate::entity_extraction::classify_for_storage(
+                        &clean_title,
+                        &clean_content,
+                        &item.source_type,
+                    );
+                    let cve_ids =
+                        crate::entity_extraction::extract_cve_ids(&clean_title, &clean_content);
                     items_to_insert.push((
                         item.source_type.clone(),
                         item.source_id.clone(),
@@ -508,6 +515,8 @@ pub(crate) async fn fetch_all_sources(
                         clean_content.clone(),
                         embedding.clone(),
                         detected_lang,
+                        content_type,
+                        cve_ids,
                     ));
                 }
                 all_items.push((item, embedding));
@@ -1002,6 +1011,13 @@ pub(crate) async fn fetch_all_sources_deep(
                 let is_fallback = embedding.iter().all(|&v| v == 0.0);
                 if !is_fallback {
                     let detected_lang = crate::language_detect::detect_language(&item.title);
+                    let content_type = crate::entity_extraction::classify_for_storage(
+                        &item.title,
+                        &item.content,
+                        &item.source_type,
+                    );
+                    let cve_ids =
+                        crate::entity_extraction::extract_cve_ids(&item.title, &item.content);
                     items_to_insert.push((
                         item.source_type.clone(),
                         item.source_id.clone(),
@@ -1010,6 +1026,8 @@ pub(crate) async fn fetch_all_sources_deep(
                         item.content.clone(),
                         embedding.clone(),
                         detected_lang,
+                        content_type,
+                        cve_ids,
                     ));
                 }
                 all_items.push((item, embedding));

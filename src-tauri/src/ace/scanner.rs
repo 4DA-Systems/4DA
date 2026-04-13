@@ -83,6 +83,9 @@ pub struct ProjectSignal {
     pub detected_at: String,
     /// Project-level license extracted from the manifest (e.g., "MIT", "Apache-2.0").
     pub project_license: Option<String>,
+    /// Relevance score (0.0..1.0) based on path patterns and git recency.
+    /// Example/demo/test directories get 0.1x; stale repos decay over time.
+    pub project_relevance: f32,
 }
 
 impl ProjectScanner {
@@ -329,6 +332,7 @@ impl ProjectScanner {
             dev_dependencies: Vec::new(),
             detected_at: chrono::Utc::now().to_rfc3339(),
             project_license: None,
+            project_relevance: compute_project_relevance(path),
         };
 
         match manifest_type {
@@ -689,6 +693,79 @@ impl Default for ProjectScanner {
 }
 
 // ============================================================================
+// Project Relevance Scoring
+// ============================================================================
+
+/// Compute relevance score for a project based on path patterns and git recency.
+/// Projects in example/demo/test directories or with no recent activity get low scores.
+pub(crate) fn compute_project_relevance(manifest_path: &Path) -> f32 {
+    let path_str = manifest_path.to_string_lossy().to_lowercase();
+
+    // Path pattern penalty: example/demo/test/tutorial directories -> 0.1x
+    let path_score = if path_str.contains("/example")
+        || path_str.contains("/demo")
+        || path_str.contains("/test/") // Not /testing/ -- that's different
+        || path_str.contains("/tests/")
+        || path_str.contains("/tutorial")
+        || path_str.contains("/template")
+        || path_str.contains("/sample")
+        || path_str.contains("/fixture")
+        || path_str.contains("/benchmark")
+        || path_str.contains("\\example")
+        || path_str.contains("\\demo")
+        || path_str.contains("\\test\\")
+        || path_str.contains("\\tests\\")
+        || path_str.contains("\\tutorial")
+        || path_str.contains("\\template")
+        || path_str.contains("\\sample")
+        || path_str.contains("\\fixture")
+        || path_str.contains("\\benchmark")
+    {
+        0.1
+    } else {
+        1.0
+    };
+
+    // Git recency: check for .git directory in parent chain
+    let recency_score = compute_git_recency(manifest_path);
+
+    (path_score * recency_score).clamp(0.0, 1.0)
+}
+
+/// Compute a recency score based on how recently the nearest git repository was modified.
+/// Returns 1.0 for active repos (< 7 days), decaying to 0.1 for stale repos (> 90 days).
+fn compute_git_recency(manifest_path: &Path) -> f32 {
+    // Walk up from manifest to find .git directory
+    let mut dir = manifest_path.parent();
+    while let Some(d) = dir {
+        let git_dir = d.join(".git");
+        if git_dir.exists() {
+            // Check HEAD modification time as proxy for last commit
+            let head_file = git_dir.join("HEAD");
+            if let Ok(metadata) = std::fs::metadata(&head_file) {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(elapsed) = modified.elapsed() {
+                        let days = elapsed.as_secs() as f32 / 86400.0;
+                        return if days < 7.0 {
+                            1.0
+                        } else if days < 30.0 {
+                            0.7
+                        } else if days < 90.0 {
+                            0.3
+                        } else {
+                            0.1
+                        };
+                    }
+                }
+            }
+            return 0.5; // git exists but can't read metadata
+        }
+        dir = d.parent();
+    }
+    0.5 // no git found, neutral
+}
+
+// ============================================================================
 // Helper Functions
 // ============================================================================
 
@@ -929,6 +1006,7 @@ pretty_assertions = "1.0"
             dev_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
+            project_relevance: 1.0,
         };
 
         scanner.parse_cargo_toml(content, &mut signal);
@@ -968,6 +1046,7 @@ pretty_assertions = "1.0"
             dev_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
+            project_relevance: 1.0,
         };
 
         scanner.parse_package_json(content, &mut signal);
@@ -1105,6 +1184,7 @@ axum = "0.7"
             dev_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
+            project_relevance: 1.0,
         };
 
         scanner.parse_cargo_toml(content, &mut signal);
@@ -1271,5 +1351,96 @@ serde = "1.0"
     fn test_parse_package_lock_json_invalid() {
         let packages = ProjectScanner::parse_package_lock_json("not valid json");
         assert!(packages.is_empty());
+    }
+
+    // ─── Project relevance scoring ──────────────────────────────────
+
+    #[test]
+    fn test_relevance_example_dirs_get_low_score() {
+        // Forward-slash paths (Unix style)
+        let path = PathBuf::from("/home/user/vercel-workflow/example/package.json");
+        let score = compute_project_relevance(&path);
+        assert!(
+            score <= 0.1,
+            "example dir should get low relevance, got {score}"
+        );
+
+        let path = PathBuf::from("/projects/demo/my-app/Cargo.toml");
+        let score = compute_project_relevance(&path);
+        assert!(
+            score <= 0.1,
+            "demo dir should get low relevance, got {score}"
+        );
+
+        let path = PathBuf::from("/projects/tutorial/react-basics/package.json");
+        let score = compute_project_relevance(&path);
+        assert!(
+            score <= 0.1,
+            "tutorial dir should get low relevance, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_relevance_backslash_paths_also_penalized() {
+        // Windows-style backslash paths
+        let path = PathBuf::from("C:\\Users\\dev\\example\\my-app\\package.json");
+        let score = compute_project_relevance(&path);
+        assert!(
+            score <= 0.1,
+            "Windows example dir should get low relevance, got {score}"
+        );
+
+        let path = PathBuf::from("D:\\projects\\test\\fixture\\package.json");
+        let score = compute_project_relevance(&path);
+        assert!(
+            score <= 0.1,
+            "Windows test+fixture dir should get low relevance, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_relevance_production_paths_not_penalized() {
+        // Normal production project paths should not be penalized by path score
+        let path = PathBuf::from("/home/user/my-production-app/Cargo.toml");
+        let score = compute_project_relevance(&path);
+        // Path score should be 1.0; git recency may vary (0.5 if no git found)
+        assert!(
+            score >= 0.3,
+            "production path should not be penalized, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_relevance_testing_not_penalized() {
+        // /testing/ should NOT be penalized (only /test/ and /tests/)
+        let path = PathBuf::from("/home/user/testing-framework/Cargo.toml");
+        let score = compute_project_relevance(&path);
+        assert!(
+            score >= 0.3,
+            "testing-framework should not be penalized, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_relevance_all_penalty_patterns() {
+        let penalty_patterns = vec![
+            "/example/",
+            "/demo/",
+            "/test/nested/",
+            "/tests/nested/",
+            "/tutorial/",
+            "/template/",
+            "/sample/",
+            "/fixture/",
+            "/benchmark/",
+        ];
+        for pattern in penalty_patterns {
+            let path = PathBuf::from(format!("/projects{pattern}Cargo.toml"));
+            let score = compute_project_relevance(&path);
+            assert!(
+                score <= 0.1,
+                "pattern '{pattern}' should get low relevance, got {score}"
+            );
+        }
     }
 }

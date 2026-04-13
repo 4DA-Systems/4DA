@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 /// Ecosystem map: (technology, &[its competitors])
-const COMPETING_TECH: &[(&str, &[&str])] = &[
+pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
     // Desktop frameworks
     ("tauri", &["electron", "nwjs", "neutralino", "wails", "cef"]),
     ("electron", &["tauri", "nwjs", "neutralino", "wails"]),

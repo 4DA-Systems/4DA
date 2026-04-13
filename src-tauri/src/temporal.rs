@@ -50,8 +50,12 @@ pub struct ProjectDependency {
 /// `is_direct` indicates whether this dependency is declared directly in a
 /// manifest file (`true`) or is a transitive dependency discovered from a
 /// lockfile (`false`). On conflict the `is_direct` value is only *upgraded*
-/// (transitive → direct) but never downgraded, so a lockfile upsert cannot
+/// (transitive -> direct) but never downgraded, so a lockfile upsert cannot
 /// demote a previously-seen direct dep.
+///
+/// `project_relevance` is a 0.0..1.0 score from ACE path/git analysis.
+/// Example/demo/test directories get low scores (0.1x). The column defaults
+/// to 1.0 in the schema, so existing rows and callers passing 1.0 are unaffected.
 pub fn upsert_dependency(
     conn: &rusqlite::Connection,
     project_path: &str,
@@ -61,13 +65,14 @@ pub fn upsert_dependency(
     is_dev: bool,
     is_direct: bool,
     language: &str,
+    project_relevance: f32,
 ) -> Result<()> {
     conn.execute(
-        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
+        "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, last_scanned)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
          ON CONFLICT(project_path, package_name)
-         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), last_scanned = datetime('now')",
-        params![project_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language],
+         DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), project_relevance = ?8, last_scanned = datetime('now')",
+        params![project_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance],
     )
     .context("Failed to upsert dependency")?;
     Ok(())
