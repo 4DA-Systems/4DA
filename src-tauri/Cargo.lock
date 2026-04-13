@@ -60,6 +60,65 @@ dependencies = [
 ]
 
 [[package]]
+name = "airlock-compile"
+version = "1.0.0"
+dependencies = [
+ "airlock-core",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "airlock-core"
+version = "1.0.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "toml 0.8.2",
+ "uuid",
+]
+
+[[package]]
+name = "airlock-engine"
+version = "1.0.0"
+dependencies = [
+ "airlock-core",
+ "chrono",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
+name = "airlock-lift"
+version = "1.0.0"
+dependencies = [
+ "airlock-core",
+ "chrono",
+ "once_cell",
+ "regex",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "airlock-safety"
+version = "1.0.0"
+dependencies = [
+ "airlock-compile",
+ "airlock-core",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "aligned"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1901,6 +1960,11 @@ dependencies = [
 name = "fourda"
 version = "1.0.0"
 dependencies = [
+ "airlock-compile",
+ "airlock-core",
+ "airlock-engine",
+ "airlock-lift",
+ "airlock-safety",
  "ammonia",
  "anyhow",
  "async-trait",
@@ -1917,11 +1981,6 @@ dependencies = [
  "fourda-macros",
  "futures",
  "getrandom 0.2.17",
- "glyph-compile",
- "glyph-core",
- "glyph-engine",
- "glyph-lift",
- "glyph-safety",
  "hex",
  "hkdf",
  "hmac",
@@ -2375,65 +2434,6 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
-
-[[package]]
-name = "glyph-compile"
-version = "1.0.0"
-dependencies = [
- "glyph-core",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "glyph-core"
-version = "1.0.0"
-dependencies = [
- "blake3",
- "chrono",
- "once_cell",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "toml 0.8.2",
- "uuid",
-]
-
-[[package]]
-name = "glyph-engine"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "glyph-core",
- "once_cell",
- "regex",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "uuid",
-]
-
-[[package]]
-name = "glyph-lift"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "glyph-core",
- "once_cell",
- "regex",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "glyph-safety"
-version = "1.0.0"
-dependencies = [
- "chrono",
- "glyph-compile",
- "glyph-core",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
-]
 
 [[package]]
 name = "gobject-sys"

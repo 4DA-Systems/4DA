@@ -337,39 +337,46 @@ impl ACE {
                                 }
                             }
 
-                            // Populate project_dependencies table for innovation features
-                            if let Ok(conn) = crate::open_db_connection() {
-                                let project_path = signal
-                                    .manifest_path
-                                    .parent()
-                                    .map(|p| p.to_string_lossy().to_string())
-                                    .unwrap_or_default();
-                                let manifest_type =
-                                    format!("{:?}", signal.manifest_type).to_lowercase();
-                                let language = signal.manifest_type.language();
-                                for dep in &signal.dependencies {
-                                    let _ = crate::temporal::upsert_dependency(
-                                        &conn,
-                                        &project_path,
-                                        &manifest_type,
-                                        dep,
-                                        None,
-                                        false,
-                                        true, // direct: from manifest [dependencies]
-                                        language,
-                                    );
-                                }
-                                for dep in &signal.dev_dependencies {
-                                    let _ = crate::temporal::upsert_dependency(
-                                        &conn,
-                                        &project_path,
-                                        &manifest_type,
-                                        dep,
-                                        None,
-                                        true,
-                                        true, // direct: from manifest [dev-dependencies]
-                                        language,
-                                    );
+                            // Populate project_dependencies table for innovation features.
+                            // Skip low-relevance projects (example/demo/test dirs)
+                            // to prevent irrelevant preemption alerts.
+                            let relevance = signal.project_relevance;
+                            if relevance >= 0.15 {
+                                if let Ok(conn) = crate::open_db_connection() {
+                                    let project_path = signal
+                                        .manifest_path
+                                        .parent()
+                                        .map(|p| p.to_string_lossy().to_string())
+                                        .unwrap_or_default();
+                                    let manifest_type =
+                                        format!("{:?}", signal.manifest_type).to_lowercase();
+                                    let language = signal.manifest_type.language();
+                                    for dep in &signal.dependencies {
+                                        let _ = crate::temporal::upsert_dependency(
+                                            &conn,
+                                            &project_path,
+                                            &manifest_type,
+                                            dep,
+                                            None,
+                                            false,
+                                            true, // direct: from manifest [dependencies]
+                                            language,
+                                            relevance,
+                                        );
+                                    }
+                                    for dep in &signal.dev_dependencies {
+                                        let _ = crate::temporal::upsert_dependency(
+                                            &conn,
+                                            &project_path,
+                                            &manifest_type,
+                                            dep,
+                                            None,
+                                            true,
+                                            true, // direct: from manifest [dev-dependencies]
+                                            language,
+                                            relevance,
+                                        );
+                                    }
                                 }
                             }
 

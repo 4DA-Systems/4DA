@@ -154,6 +154,7 @@ mod tests {
                 is_dev INTEGER DEFAULT 0,
                 is_direct INTEGER DEFAULT 1,
                 language TEXT NOT NULL DEFAULT 'unknown',
+                project_relevance REAL DEFAULT 1.0,
                 last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(project_path, package_name)
             );
@@ -202,6 +203,7 @@ mod tests {
             false,
             true,
             "rust",
+            1.0,
         )
         .unwrap();
         upsert_dependency(
@@ -213,6 +215,7 @@ mod tests {
             false,
             true,
             "rust",
+            1.0,
         )
         .unwrap();
 
@@ -242,6 +245,7 @@ mod tests {
             false,
             true,
             "rust",
+            1.0,
         )
         .unwrap();
         upsert_dependency(
@@ -253,6 +257,7 @@ mod tests {
             false,
             true,
             "rust",
+            1.0,
         )
         .unwrap();
 

@@ -434,7 +434,64 @@ fn find_missed_signals(
             compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
     }
 
+    // Deduplicate missed signals by normalized title similarity.
+    // The same CVE or topic can appear from multiple sources (HN, Reddit, RSS)
+    // — without dedup the same item shows 10+ times in the blind spot report.
+    let signals = dedup_missed_signals(signals);
+
     Ok(signals)
+}
+
+/// Remove near-duplicate missed signals using Jaccard word overlap.
+///
+/// Normalizes each title (lowercase, strip punctuation, split words) and
+/// skips any signal whose normalized title has >65% word overlap with
+/// an already-accepted signal. This catches cross-posts and rephrased
+/// duplicates (e.g. "CVE-2025-1234 in OpenSSL" vs "OpenSSL CVE-2025-1234").
+fn dedup_missed_signals(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
+    use std::collections::HashSet;
+
+    let mut seen_titles: Vec<HashSet<String>> = Vec::new();
+    let mut deduped = Vec::new();
+
+    for signal in signals {
+        let normalized: HashSet<String> = signal
+            .title
+            .to_lowercase()
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == ' ' {
+                    c
+                } else {
+                    ' '
+                }
+            })
+            .collect::<String>()
+            .split_whitespace()
+            .map(String::from)
+            .collect();
+
+        if normalized.is_empty() {
+            deduped.push(signal);
+            continue;
+        }
+
+        let is_duplicate = seen_titles.iter().any(|seen| {
+            if seen.is_empty() {
+                return false;
+            }
+            let intersection = seen.intersection(&normalized).count();
+            let union = seen.union(&normalized).count();
+            union > 0 && (intersection as f32 / union as f32) > 0.65
+        });
+
+        if !is_duplicate {
+            seen_titles.push(normalized);
+            deduped.push(signal);
+        }
+    }
+
+    deduped
 }
 
 /// Compute a concrete `why_relevant` string for a missed signal.

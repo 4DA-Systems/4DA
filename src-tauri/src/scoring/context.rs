@@ -58,7 +58,42 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         .flatten()
     };
 
-    let ace_ctx = get_ace_context();
+    let mut ace_ctx = get_ace_context();
+
+    // ── Build Negative Stack from direct runtime deps + competing tech ──
+    {
+        let direct_dep_names: std::collections::HashSet<String> = ace_ctx
+            .dependency_info
+            .iter()
+            .filter(|(_, info)| info.is_direct && !info.is_dev)
+            .map(|(name, _)| name.to_lowercase())
+            .collect();
+
+        let anti_topic_pairs: Vec<(String, f32)> = ace_ctx
+            .anti_topics
+            .iter()
+            .filter_map(|t| {
+                ace_ctx
+                    .anti_topic_confidence
+                    .get(t)
+                    .map(|&conf| (t.clone(), conf))
+            })
+            .collect();
+
+        ace_ctx.negative_stack = crate::stacks::negative_stack::build_negative_stack(
+            &direct_dep_names,
+            crate::competing_tech::COMPETING_TECH,
+            &anti_topic_pairs,
+        );
+
+        if !ace_ctx.negative_stack.priors.is_empty() {
+            tracing::debug!(target: "4da::scoring",
+                suppressed_count = ace_ctx.negative_stack.priors.len(),
+                "Negative stack built: {} technologies suppressed",
+                ace_ctx.negative_stack.priors.len()
+            );
+        }
+    }
 
     // Load session-aware work topics for intent scoring.
     // Uses gap-based session detection instead of a fixed 2h window:
@@ -104,6 +139,8 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         open_windows,
         calibration_deltas,
         topic_half_lives,
+        source_autopsies,
+        anti_pattern_penalties,
         sovereign_profile,
     ) = {
         let dp = crate::domain_profile::build_domain_profile(&shared_conn);
@@ -112,11 +149,14 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         let ow = crate::decision_advantage::get_open_windows(&shared_conn);
         let cd = crate::autophagy::load_calibration_deltas(&shared_conn);
         let thl = crate::autophagy::load_topic_decay_profiles(&shared_conn);
+        // Autophagy intelligence: per-source engagement rates and anti-pattern penalties
+        let sa = crate::autophagy::load_source_autopsies(&shared_conn);
+        let ap = crate::autophagy::load_anti_patterns(&shared_conn);
         // Unified profile (non-fatal if assembly fails)
         let sp = Some(crate::sovereign_developer_profile::assemble_profile(
             &shared_conn,
         ));
-        (dp, cs, ow, cd, thl, sp)
+        (dp, cs, ow, cd, thl, sa, ap, sp)
     };
 
     // ── ACE Auto-Enrichment: promote high-confidence detected tech into domain profile ──
@@ -312,6 +352,8 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         calibration_deltas,
         taste_embedding,
         topic_half_lives,
+        source_autopsies,
+        anti_pattern_penalties,
         contradicted_topics,
         sovereign_profile,
         dominant_persona,

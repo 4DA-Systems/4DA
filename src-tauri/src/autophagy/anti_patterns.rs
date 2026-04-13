@@ -6,6 +6,8 @@
 //! **Under-scored**: source_types where engaged items exist but total surfacing is low.
 //! The system may be filtering out valuable content.
 
+use std::collections::HashMap;
+
 use crate::error::{Result, ResultExt};
 use rusqlite::{params, Connection};
 use tracing::{debug, info, warn};
@@ -172,6 +174,42 @@ pub(crate) fn store_anti_patterns(
 
     debug!(target: "4da::autophagy", count = patterns.len(), "Stored anti-patterns");
     Ok(())
+}
+
+/// Load anti-pattern penalties (systematic scoring biases detected by autophagy).
+/// Returns map of source_type -> suggested_penalty (-0.15 to +0.20).
+///
+/// Reads only non-superseded rows from `digested_intelligence` where
+/// `digest_type = 'anti_pattern'`. The subject encodes "pattern_type:topic"
+/// (e.g. "over_scored:hackernews"). Returns an empty map if no data exists.
+pub fn load_anti_patterns(conn: &Connection) -> HashMap<String, f32> {
+    let mut result = HashMap::new();
+
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT subject, data FROM digested_intelligence
+         WHERE digest_type = 'anti_pattern' AND superseded_by IS NULL",
+    ) else {
+        return result;
+    };
+
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return result;
+    };
+
+    for row in rows.flatten() {
+        let (subject, data) = row;
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            if let Some(penalty) = parsed.get("suggested_penalty").and_then(|v| v.as_f64()) {
+                // Subject format: "pattern_type:topic" -- extract the topic (source_type)
+                let topic = subject.split(':').nth(1).unwrap_or(&subject).to_string();
+                result.insert(topic, penalty as f32);
+            }
+        }
+    }
+
+    result
 }
 
 // ============================================================================
@@ -344,5 +382,44 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_load_anti_patterns_roundtrip() {
+        let conn = setup_test_db();
+
+        let patterns = vec![
+            super::super::AntiPattern {
+                pattern_type: "over_scored".to_string(),
+                topic: "hackernews".to_string(),
+                avg_score: 0.02,
+                engagement_count: 1,
+                exposure_count: 50,
+                suggested_penalty: 0.03,
+            },
+            super::super::AntiPattern {
+                pattern_type: "under_scored".to_string(),
+                topic: "lobsters".to_string(),
+                avg_score: 0.66,
+                engagement_count: 4,
+                exposure_count: 6,
+                suggested_penalty: -0.12,
+            },
+        ];
+        store_anti_patterns(&conn, &patterns).expect("store");
+
+        let loaded = load_anti_patterns(&conn);
+        assert_eq!(loaded.len(), 2);
+        // Subject format is "over_scored:hackernews" -> topic extracted is "hackernews"
+        assert!((loaded["hackernews"] - 0.03).abs() < 0.01);
+        // Subject format is "under_scored:lobsters" -> topic extracted is "lobsters"
+        assert!((loaded["lobsters"] - (-0.12)).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_load_anti_patterns_empty() {
+        let conn = setup_test_db();
+        let loaded = load_anti_patterns(&conn);
+        assert!(loaded.is_empty());
     }
 }

@@ -116,6 +116,7 @@ fn process_cargo_lock(
                 dev_dependencies: Vec::new(),
                 detected_at: String::new(),
                 project_license: None,
+                project_relevance: 1.0, // lockfile processing uses default; relevance applied at manifest scan
             };
             scanner.parse_cargo_toml(&toml_content, &mut signal);
             let mut all = signal.dependencies;
@@ -181,6 +182,7 @@ fn process_package_lock(
                 dev_dependencies: Vec::new(),
                 detected_at: String::new(),
                 project_license: None,
+                project_relevance: 1.0, // lockfile processing uses default; relevance applied at manifest scan
             };
             scanner.parse_package_json(&pkg_content, &mut signal);
             let mut all = signal.dependencies;
