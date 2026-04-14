@@ -34,7 +34,7 @@ pub fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use crate::achievement_definitions::AchievementTier;
-    use crate::achievement_engine::{AchievementState, CounterState, ActivitySnapshot};
+    use crate::achievement_engine::{AchievementState, ActivitySnapshot, CounterState};
 
     #[test]
     fn test_game_state_serialization() {

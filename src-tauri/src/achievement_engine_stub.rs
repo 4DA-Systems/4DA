@@ -3,8 +3,8 @@
 
 //! Stub for `achievement_engine` module when "experimental" feature is disabled.
 
-use crate::db::Database;
 use crate::achievement_definitions::AchievementTier;
+use crate::db::Database;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

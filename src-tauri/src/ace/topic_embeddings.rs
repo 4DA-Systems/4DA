@@ -176,10 +176,12 @@ pub async fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) ->
             .is_ok()
         {
             // Insert into vec0 index
-            let _ = conn_guard.execute(
+            if let Err(e) = conn_guard.execute(
                 "INSERT OR REPLACE INTO topic_vec (rowid, embedding) VALUES (?1, ?2)",
                 rusqlite::params![id, embedding_blob],
-            );
+            ) {
+                tracing::warn!(target: "4da::ace", error = %e, topic = %topic, topic_id = id, "Failed to insert topic embedding into vec0 index");
+            }
             updated += 1;
             debug!(target: "ace::embedding", topic = %topic, "Generated embedding for topic");
         }

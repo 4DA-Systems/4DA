@@ -74,8 +74,37 @@ function extractTableColumns(sql) {
       const colMatch = line.match(/^(\w+)/);
       if (colMatch) {
         const col = colMatch[1].toLowerCase();
-        // Skip SQL keywords that aren't column names
-        if (!["create", "table", "if", "not", "exists", "insert", "into", "values", "select"].includes(col)) {
+        // Reject pure numbers (column names cannot start with a digit in SQL).
+        // These sneak in as fragments from DEFAULT 0, DEFAULT 1, etc. when a
+        // column definition wraps or contains commas inside a default expr.
+        if (/^\d+$/.test(col)) continue;
+        // Skip SQL keywords that aren't column names. Includes wrap-line
+        // tokens (DEFAULT, REFERENCES, AUTOINCREMENT, COLLATE, ON, CASCADE,
+        // NO, ACTION, SET, NULL, NOT) that can appear as the first token of
+        // a fragment when a column definition spans commas/lines.
+        if (
+          ![
+            "create",
+            "table",
+            "if",
+            "not",
+            "exists",
+            "insert",
+            "into",
+            "values",
+            "select",
+            "default",
+            "references",
+            "autoincrement",
+            "collate",
+            "on",
+            "cascade",
+            "no",
+            "action",
+            "set",
+            "null",
+          ].includes(col)
+        ) {
           columns.add(col);
         }
       }
