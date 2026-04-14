@@ -226,7 +226,7 @@ vi.mock('../../config/content-types', () => ({
   getContentTypeBadge: () => null,
 }));
 
-// Mock game-components and game-icons (used by AchievementsPanel, etc.)
+// Mock fourda-components and game-icons (used by AchievementsPanel, etc.)
 vi.mock('../../lib/fourda-components', () => ({
   registerFourdaComponent: vi.fn(() => Promise.resolve()),
 }));

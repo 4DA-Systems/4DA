@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 /**
- * Validates GAME Web Component .js files for syntax correctness.
+ * Validates 4DA Web Component .js files (src/lib/fourda-components/) for
+ * syntax correctness.
  *
- * NOTE: The GAME compiler that originally produced these files is retired —
- * components are now standalone pre-compiled Web Components with no build-time
- * dependency. This validator remains as a safety net for hand-edits to shader
- * code (e.g., the pentachoron visual tuning). It catches syntax errors and
+ * HISTORY: These components were originally produced by the GAME compiler
+ * (Generative Animation Matrix Engine). That compiler has been retired —
+ * GAME evolved into Glyph, then into Airlock (agent safety middleware),
+ * which is unrelated to visual rendering. The components remain as
+ * standalone pre-compiled Web Components with no build-time dependency.
+ *
+ * This validator is a safety net for hand-edits to shader code
+ * (e.g., pentachoron visual tuning). It catches syntax errors and
  * orphaned methods outside class bodies.
  *
  * Also run as part of: pnpm run validate
@@ -15,17 +20,17 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const GAME_DIR = path.join(__dirname, '..', 'src', 'lib', 'fourda-components');
+const COMPONENTS_DIR = path.join(__dirname, '..', 'src', 'lib', 'fourda-components');
 
-if (!fs.existsSync(GAME_DIR)) {
+if (!fs.existsSync(COMPONENTS_DIR)) {
   console.log('No fourda-components directory found, skipping.');
   process.exit(0);
 }
 
-const files = fs.readdirSync(GAME_DIR).filter(f => f.endsWith('.js'));
+const files = fs.readdirSync(COMPONENTS_DIR).filter(f => f.endsWith('.js'));
 
 if (files.length === 0) {
-  console.log('No GAME component files found.');
+  console.log('No component files found.');
   process.exit(0);
 }
 
@@ -33,7 +38,7 @@ let failed = 0;
 let passed = 0;
 
 for (const file of files) {
-  const filePath = path.join(GAME_DIR, file);
+  const filePath = path.join(COMPONENTS_DIR, file);
   try {
     // Syntax check via Node.js --check
     execSync(`node -c "${filePath}"`, { stdio: 'pipe' });
@@ -87,6 +92,6 @@ for (const file of files) {
 console.log(`\n${passed + failed} file(s) checked: ${passed} passed, ${failed} failed.`);
 
 if (failed > 0) {
-  console.error('\nGAME component validation failed. Fix the compiler output before committing.');
+  console.error('\nComponent validation failed. Fix syntax before committing.');
   process.exit(1);
 }

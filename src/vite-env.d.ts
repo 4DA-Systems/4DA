@@ -6,7 +6,7 @@ declare global {
   const __APP_VERSION__: string;
 }
 
-// GAME Web Component custom elements — augment React's JSX namespace
+// 4DA Web Component custom elements (fourda-*) — augment React's JSX namespace
 declare module 'react' {
   namespace JSX {
     interface IntrinsicElements {

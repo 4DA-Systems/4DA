@@ -23,7 +23,7 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
-// Mock game-components (OllamaStatus uses fourda-status-orb)
+// Mock fourda-components (OllamaStatus uses fourda-status-orb)
 vi.mock('../../lib/fourda-components', () => ({
   registerFourdaComponent: vi.fn(() => Promise.resolve()),
 }));
