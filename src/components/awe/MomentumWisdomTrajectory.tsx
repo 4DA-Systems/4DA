@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback, memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
-import { useGameComponent } from '../../hooks/use-game-component';
+import { useFourdaComponent } from '../../hooks/use-fourda-component';
 import { useAweLiveEvents } from '../../hooks/use-awe-live-events';
 import { cmd } from '../../lib/commands';
 import { BigStat, InsightRow, SourceBar, classifyPhase, computeInsights } from './momentum-wisdom-helpers';
@@ -28,7 +28,7 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
   const ctx = useAppStore(s => s.aweBehavioralContext);
   const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
 
-  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('fourda-momentum-field');
+  const { containerRef: gameRef, elementRef: gameEl } = useFourdaComponent('fourda-momentum-field');
 
   // --- Run Wisdom Now button state ---
   const [aweRunning, setAweRunning] = useState(false);

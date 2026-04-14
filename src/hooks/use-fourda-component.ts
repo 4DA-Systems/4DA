@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { registerGameComponent, type GameComponentTag } from '../lib/game-components';
+import { registerFourdaComponent, type FourdaComponentTag } from '../lib/fourda-components';
 
-export type GameElement = HTMLElement & { setParam?: (name: string, value: number) => void };
+export type FourdaElement = HTMLElement & { setParam?: (name: string, value: number) => void };
 
 /**
  * Detect if the user prefers reduced motion (accessibility).
@@ -21,9 +21,9 @@ function prefersReducedMotion(): boolean {
  * Returns containerRef (attach to a div), elementRef (for calling setParam),
  * and reducedMotion (true if animations are disabled).
  */
-export function useGameComponent(tag: GameComponentTag) {
+export function useFourdaComponent(tag: FourdaComponentTag) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const elementRef = useRef<GameElement | null>(null);
+  const elementRef = useRef<FourdaElement | null>(null);
   const [reducedMotion, setReducedMotion] = useState(prefersReducedMotion);
 
   // Listen for changes to reduced-motion preference
@@ -39,7 +39,7 @@ export function useGameComponent(tag: GameComponentTag) {
     // Don't mount GPU animations if user prefers reduced motion
     if (reducedMotion) return;
 
-    registerGameComponent(tag).then(() => {
+    registerFourdaComponent(tag).then(() => {
       if (!containerRef.current || elementRef.current) return;
       const el = document.createElement(tag);
       el.style.width = '100%';
@@ -47,7 +47,7 @@ export function useGameComponent(tag: GameComponentTag) {
       el.style.display = 'block';
       el.setAttribute('aria-hidden', 'true');
       containerRef.current.appendChild(el);
-      elementRef.current = el as GameElement;
+      elementRef.current = el as FourdaElement;
     });
     const container = containerRef.current;
     return () => {

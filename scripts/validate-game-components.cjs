@@ -15,10 +15,10 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const GAME_DIR = path.join(__dirname, '..', 'src', 'lib', 'game-components');
+const GAME_DIR = path.join(__dirname, '..', 'src', 'lib', 'fourda-components');
 
 if (!fs.existsSync(GAME_DIR)) {
-  console.log('No game-components directory found, skipping.');
+  console.log('No fourda-components directory found, skipping.');
   process.exit(0);
 }
 

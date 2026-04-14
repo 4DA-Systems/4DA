@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
-import { useGameComponent } from '../hooks/use-game-component';
+import { useFourdaComponent } from '../hooks/use-fourda-component';
 
 interface SourceInfo {
   type: string;
@@ -17,7 +17,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const fired = useRef(false);
   const [enabledSources, setEnabledSources] = useState<string[]>([]);
   const [autoStartPending, setAutoStartPending] = useState(!isBrowserMode);
-  const { containerRef: turingRef } = useGameComponent('fourda-turing-fire');
+  const { containerRef: turingRef } = useFourdaComponent('fourda-turing-fire');
 
   // Load actual configured sources from the backend
   useEffect(() => {

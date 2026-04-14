@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks/use-license';
-import { useGameComponent } from '../hooks/use-game-component';
-import { registerGameComponent } from '../lib/game-components';
+import { useFourdaComponent } from '../hooks/use-fourda-component';
+import { registerFourdaComponent } from '../lib/fourda-components';
 
 /** Analysis in progress — spinner + live progress */
 export function BriefingLoadingState() {
@@ -140,9 +140,9 @@ export function BriefingNoDataState() {
   const startAnalysis = useAppStore(s => s.startAnalysis);
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const embeddingMode = useAppStore(s => s.embeddingMode);
-  const { containerRef: turingRef } = useGameComponent('fourda-turing-fire');
+  const { containerRef: turingRef } = useFourdaComponent('fourda-turing-fire');
 
-  useEffect(() => { registerGameComponent('fourda-simplex-unfold'); }, []);
+  useEffect(() => { registerFourdaComponent('fourda-simplex-unfold'); }, []);
 
   return (
     <div className="relative bg-bg-primary rounded-lg">

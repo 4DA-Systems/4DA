@@ -4,7 +4,7 @@
 import { useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
-import { useGameComponent } from '../../hooks/use-game-component';
+import { useFourdaComponent } from '../../hooks/use-fourda-component';
 
 // ============================================================================
 // Constants
@@ -72,7 +72,7 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
   const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
 
   // GAME shader — must be called before any early returns (React hooks rule)
-  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('fourda-score-fingerprint');
+  const { containerRef: gameRef, elementRef: gameEl } = useFourdaComponent('fourda-score-fingerprint');
 
   useEffect(() => {
     void loadAweSummary();

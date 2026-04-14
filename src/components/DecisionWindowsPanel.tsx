@@ -2,7 +2,7 @@ import { useEffect, useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
-import { registerGameComponent } from '../lib/game-components';
+import { registerFourdaComponent } from '../lib/fourda-components';
 import type { DecisionWindow } from '../types/autophagy';
 
 const WINDOW_TYPE_CONFIG: Record<string, { label: string; color: string; border: string; bg: string }> = {
@@ -124,7 +124,7 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
     loadWindows();
   }, [loadWindows]);
 
-  useEffect(() => { registerGameComponent('fourda-decision-countdown'); }, []);
+  useEffect(() => { registerFourdaComponent('fourda-decision-countdown'); }, []);
 
   const openWindows = useMemo(
     () => (windows ?? []).filter(w => w.status === 'open').sort((a, b) => b.urgency - a.urgency),

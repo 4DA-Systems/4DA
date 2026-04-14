@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { registerGameComponent, type GameComponentTag } from '../../lib/game-components';
+import { registerFourdaComponent, type FourdaComponentTag } from '../../lib/fourda-components';
 
 interface GeometryEntry {
-  tag: GameComponentTag;
+  tag: FourdaComponentTag;
   name: string;
   vertices: number;
   edges: number;
@@ -66,7 +66,7 @@ const FAMILY: GeometryEntry[] = [
   },
 ];
 
-function GameElementCell({ tag, size }: { tag: string; size: number }) {
+function FourdaElementCell({ tag, size }: { tag: string; size: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const elRef = useRef<HTMLElement | null>(null);
   const sizeRef = useRef(size);
@@ -77,7 +77,7 @@ function GameElementCell({ tag, size }: { tag: string; size: number }) {
     const container = ref.current;
     if (container === null) return;
 
-    void registerGameComponent(tag as GameComponentTag).then(() => {
+    void registerFourdaComponent(tag as FourdaComponentTag).then(() => {
       if (cancelled) return;
       if (elRef.current !== null) return;
       const el = document.createElement(tag);
@@ -129,7 +129,7 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
           role="img"
           aria-label={geo.name}
         >
-          <GameElementCell tag={geo.tag} size={isExpanded ? 240 : 180} />
+          <FourdaElementCell tag={geo.tag} size={isExpanded ? 240 : 180} />
         </div>
       </div>
       {/* Label */}
@@ -162,12 +162,12 @@ export function GeometryShowcase() {
   const [showFamily, setShowFamily] = useState(false);
 
   useEffect(() => {
-    void Promise.allSettled(FOUNDATIONS.map(g => registerGameComponent(g.tag)));
+    void Promise.allSettled(FOUNDATIONS.map(g => registerFourdaComponent(g.tag)));
   }, []);
 
   useEffect(() => {
     if (showFamily) {
-      void Promise.allSettled(FAMILY.map(g => registerGameComponent(g.tag)));
+      void Promise.allSettled(FAMILY.map(g => registerFourdaComponent(g.tag)));
     }
   }, [showFamily]);
 
