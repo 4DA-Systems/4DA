@@ -65,6 +65,10 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
         check_macos_keychain(&mut issues);
     }
 
+    // Cross-platform cloud-sync detection (OneDrive/Google Drive/Dropbox).
+    // iCloud is handled inside check_icloud_interference on macOS.
+    check_cloud_sync_interference(&data_dir, &mut issues);
+
     // Log results
     if issues.is_empty() {
         info!(target: "4da::startup", "Health check passed: all systems nominal");
@@ -698,6 +702,127 @@ fn check_icloud_interference(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     }
 }
 
+// ============================================================================
+// Cross-platform cloud-sync detection (OneDrive, Google Drive, Dropbox)
+// ============================================================================
+//
+// SQLite in WAL mode + any eventually-consistent cloud syncer = corruption.
+// The syncer snapshots the main .db file while WAL still holds uncommitted
+// pages, then uploads a torn copy. On restore the WAL no longer matches and
+// the database is unrecoverable without a backup. Detection here is
+// substring-based (paths, env vars) and intentionally conservative: we emit
+// a Warning, not an Error, because some users deliberately place data in a
+// synced folder and tolerate the risk. iCloud is handled separately because
+// its path layout is macOS-specific and checked earlier.
+
+/// Which cloud-sync provider a path appears to live inside.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CloudSyncProvider {
+    OneDrive,
+    GoogleDrive,
+    Dropbox,
+}
+
+impl CloudSyncProvider {
+    fn display(self) -> &'static str {
+        match self {
+            Self::OneDrive => "OneDrive",
+            Self::GoogleDrive => "Google Drive",
+            Self::Dropbox => "Dropbox",
+        }
+    }
+}
+
+/// Return true if `path` appears to live inside a OneDrive-synced folder.
+///
+/// Detection order:
+/// 1. Path substring match for `\OneDrive\` or `\OneDrive -` (enterprise tenants
+///    expose folders like `OneDrive - Contoso`). Match is case-insensitive.
+/// 2. Environment variable `OneDrive` / `OneDriveCommercial` / `OneDriveConsumer`,
+///    if the data path starts with any of those (case-insensitive on Windows).
+fn detect_onedrive_path(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_lowercase();
+
+    // Path substring check works on both Windows (\\OneDrive\\) and any OS where
+    // a user has symlinked/mounted a OneDrive folder at a known name.
+    if lower.contains("\\onedrive\\")
+        || lower.contains("\\onedrive -")
+        || lower.contains("/onedrive/")
+        || lower.contains("/onedrive -")
+    {
+        return true;
+    }
+
+    // Environment variable check — OneDrive sets these on Windows. They point
+    // to the actual sync root, which may be on a non-default drive.
+    for var in ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"] {
+        if let Ok(root) = std::env::var(var) {
+            if root.is_empty() {
+                continue;
+            }
+            let root_lower = root.to_lowercase();
+            if !root_lower.is_empty() && lower.starts_with(&root_lower) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+/// Return true if `path` appears to live inside a Google Drive synced folder.
+fn detect_google_drive_path(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_lowercase();
+    lower.contains("\\google drive\\")
+        || lower.contains("\\googledrive\\")
+        || lower.contains("/google drive/")
+        || lower.contains("/googledrive/")
+        // Google Drive for Desktop (macOS) mounts under /Volumes/GoogleDrive
+        || lower.contains("/volumes/googledrive")
+}
+
+/// Return true if `path` appears to live inside a Dropbox synced folder.
+fn detect_dropbox_path(path: &Path) -> bool {
+    let lower = path.to_string_lossy().to_lowercase();
+    lower.contains("\\dropbox\\") || lower.contains("/dropbox/")
+}
+
+/// Detect which (if any) cloud-sync provider the data directory sits inside.
+/// Returns `None` when the path looks safely local.
+fn detect_cloud_sync(data_dir: &Path) -> Option<CloudSyncProvider> {
+    if detect_onedrive_path(data_dir) {
+        Some(CloudSyncProvider::OneDrive)
+    } else if detect_google_drive_path(data_dir) {
+        Some(CloudSyncProvider::GoogleDrive)
+    } else if detect_dropbox_path(data_dir) {
+        Some(CloudSyncProvider::Dropbox)
+    } else {
+        None
+    }
+}
+
+/// Push a health issue if the data directory is inside a known cloud-sync root.
+///
+/// Emitted as a Warning (not Error) because some users intentionally place
+/// data there. The message gives them the remediation (move the folder, or
+/// set `FOURDA_DB_PATH`).
+fn check_cloud_sync_interference(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    let Some(provider) = detect_cloud_sync(data_dir) else {
+        return;
+    };
+    let name = provider.display();
+    issues.push(HealthIssue {
+        component: "storage",
+        severity: HealthSeverity::Warning,
+        message: format!(
+            "Data directory appears to be inside {name}. Cloud-sync services can corrupt \
+             SQLite databases that use WAL mode by uploading torn snapshots. Move 4DA's \
+             data directory outside the {name} sync root, or set the FOURDA_DB_PATH \
+             environment variable to a local-only folder."
+        ),
+    });
+}
+
 /// Check if macOS Keychain is accessible (affects API key storage).
 #[cfg(target_os = "macos")]
 fn check_macos_keychain(issues: &mut Vec<HealthIssue>) {
@@ -770,4 +895,59 @@ pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
 #[tauri::command]
 pub(crate) fn get_diagnostic_report() -> DiagnosticReport {
     generate_diagnostic_report()
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod cloud_sync_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn detects_windows_onedrive_personal_path() {
+        let p = PathBuf::from("C:\\Users\\alice\\OneDrive\\4DA\\data");
+        assert!(detect_onedrive_path(&p));
+        assert_eq!(detect_cloud_sync(&p), Some(CloudSyncProvider::OneDrive));
+    }
+
+    #[test]
+    fn detects_windows_onedrive_enterprise_path() {
+        let p = PathBuf::from("C:\\Users\\alice\\OneDrive - Contoso\\4DA\\data");
+        assert!(detect_onedrive_path(&p));
+        assert_eq!(detect_cloud_sync(&p), Some(CloudSyncProvider::OneDrive));
+    }
+
+    #[test]
+    fn detects_google_drive_path() {
+        let windows = PathBuf::from("C:\\Users\\alice\\Google Drive\\4DA");
+        let mac_mount = PathBuf::from("/Volumes/GoogleDrive/My Drive/4DA");
+        assert!(detect_google_drive_path(&windows));
+        assert!(detect_google_drive_path(&mac_mount));
+        assert_eq!(
+            detect_cloud_sync(&windows),
+            Some(CloudSyncProvider::GoogleDrive)
+        );
+    }
+
+    #[test]
+    fn detects_dropbox_path() {
+        let p = PathBuf::from("C:\\Users\\alice\\Dropbox\\4DA");
+        assert!(detect_dropbox_path(&p));
+        assert_eq!(detect_cloud_sync(&p), Some(CloudSyncProvider::Dropbox));
+    }
+
+    #[test]
+    fn safe_local_path_is_not_flagged() {
+        let p = PathBuf::from("C:\\Users\\alice\\AppData\\Local\\4DA");
+        assert!(!detect_onedrive_path(&p));
+        assert!(!detect_google_drive_path(&p));
+        assert!(!detect_dropbox_path(&p));
+        assert_eq!(detect_cloud_sync(&p), None);
+
+        let unix = PathBuf::from("/home/alice/.local/share/4DA");
+        assert_eq!(detect_cloud_sync(&unix), None);
+    }
 }

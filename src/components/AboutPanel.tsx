@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 
@@ -12,6 +12,7 @@ const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').th
 export function AboutPanel() {
   const { t } = useTranslation();
   const setShowSettings = useAppStore(s => s.setShowSettings);
+  const [showLicenses, setShowLicenses] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -115,7 +116,7 @@ export function AboutPanel() {
             href="https://4da.ai/privacy"
             target="_blank"
             rel="noopener noreferrer"
-            onClick={(e) => { e.preventDefault(); import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy')); }}
+            onClick={(e) => { e.preventDefault(); void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/privacy')); }}
             className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
           >
             {t('about.privacyPolicy')}
@@ -125,13 +126,31 @@ export function AboutPanel() {
             href="https://4da.ai/terms"
             target="_blank"
             rel="noopener noreferrer"
-            onClick={(e) => { e.preventDefault(); import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms')); }}
+            onClick={(e) => { e.preventDefault(); void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/terms')); }}
             className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
           >
             {t('about.termsOfService')}
           </a>
+          <span className="text-text-muted text-[10px]">&middot;</span>
+          <button
+            type="button"
+            onClick={() => setShowLicenses(true)}
+            className="text-[10px] text-text-muted hover:text-text-secondary transition-colors underline underline-offset-2"
+          >
+            {t('about.thirdPartyLicenses', 'Third-Party Licenses')}
+          </button>
         </div>
       </div>
+
+      {showLicenses && (
+        <Suspense fallback={null}>
+          <ThirdPartyLicensesModal onClose={() => setShowLicenses(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }
+
+const ThirdPartyLicensesModal = lazy(() =>
+  import('./ThirdPartyLicensesModal').then(m => ({ default: m.ThirdPartyLicensesModal })),
+);

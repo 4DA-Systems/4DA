@@ -212,6 +212,7 @@ pub(crate) fn find_cross_project_deps(
 
 #[tauri::command]
 pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
+    crate::settings::require_signal_feature("get_tech_convergence")?;
     // Build project->tech map from ACE-detected projects (languages + frameworks)
     // detected_projects lives in the ACE database, not the main database
     let ace = crate::state::get_ace_engine()?;
@@ -255,6 +256,7 @@ pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
 
 #[tauri::command]
 pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value> {
+    crate::settings::require_signal_feature("get_project_health_comparison")?;
     // detected_projects lives in the ACE database, not the main database
     let ace = crate::state::get_ace_engine()?;
     let conn = ace.get_conn().lock();
@@ -289,6 +291,7 @@ pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value
 
 #[tauri::command]
 pub fn get_cross_project_dependencies() -> crate::error::Result<serde_json::Value> {
+    crate::settings::require_signal_feature("get_cross_project_dependencies")?;
     // detected_projects lives in the ACE database, not the main database
     let ace = crate::state::get_ace_engine()?;
     let conn = ace.get_conn().lock();

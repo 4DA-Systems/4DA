@@ -37,7 +37,7 @@ mod tests {
     use crate::achievement_engine::{AchievementState, ActivitySnapshot, CounterState};
 
     #[test]
-    fn test_game_state_serialization() {
+    fn test_activity_snapshot_serialization() {
         let state = ActivitySnapshot {
             counters: vec![CounterState {
                 counter_type: "scans".to_string(),
@@ -65,7 +65,7 @@ mod tests {
     }
 
     #[test]
-    fn test_game_state_empty() {
+    fn test_activity_snapshot_empty() {
         let state = ActivitySnapshot {
             counters: vec![],
             achievements: vec![],

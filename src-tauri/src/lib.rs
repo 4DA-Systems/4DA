@@ -245,6 +245,7 @@ mod llm;
 mod llm_judge;
 mod llm_stream;
 mod local_audit;
+mod log_retention;
 pub mod model_registry;
 mod monitoring;
 mod monitoring_briefing;
@@ -285,6 +286,8 @@ mod standing_queries_suggestions;
 mod startup_health;
 // Wave 5 — universal startup watchdog with crash trail and heartbeat
 mod startup_watchdog;
+// Single-instance file lock (belt-and-braces with tauri_plugin_single_instance)
+mod single_instance;
 mod suns;
 mod suns_commands;
 mod tech_convergence;
@@ -1046,6 +1049,8 @@ pub fn run() {
             trust_ledger::record_intelligence_feedback,
             trust_ledger::get_domain_precision_report,
             trust_ledger::get_false_positive_analysis,
+            // Diagnostic log reader (persistent log files)
+            log_retention::get_recent_logs,
         ])
         .setup(app_setup::setup_app)
         .build(tauri::generate_context!())

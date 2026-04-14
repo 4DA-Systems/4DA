@@ -33,7 +33,8 @@ fn validate_all_sql_queries() {
         src_dir.join("ace").join("embedding.rs"),
         src_dir.join("ace").join("watcher.rs"),
         src_dir.join("context_engine.rs"),
-        src_dir.join("game_engine.rs"),
+        // Renamed from game_engine.rs during the achievement-* refactor.
+        src_dir.join("achievement_engine.rs"),
     ];
 
     let mut schema = sql_check_standalone::schema_parser::SchemaInfo::default();

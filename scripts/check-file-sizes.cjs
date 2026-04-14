@@ -30,6 +30,7 @@ const EXCEPTIONS = {
   'src-tauri/src/sources/adapter_resilience_tests.rs': 'Resilience tests — 146 edge-case tests across all 10 source adapters',
   'src-tauri/src/scoring/pipeline_v2.rs':              'V2 scoring pipeline — 8-phase architecture with all signal extraction and combination',
   'src-tauri/src/sso.rs':                              'SSO module — enterprise feature-gated, OAuth/SAML auth + 33 tests',
+  'src-tauri/src/app_setup.rs':                        'App setup — Tauri setup() callback + pre-Tauri init + shutdown, all linear startup sequence',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all typed Tauri commands (280 with feature-gated variants)',

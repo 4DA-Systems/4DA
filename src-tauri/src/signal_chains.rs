@@ -630,6 +630,7 @@ pub fn get_signal_chains_predicted() -> Result<Vec<SignalChainWithPrediction>> {
 
 #[tauri::command]
 pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<()> {
+    crate::settings::require_signal_feature("resolve_signal_chain")?;
     let conn = crate::open_db_connection()?;
     let res = match resolution.as_str() {
         "resolved" => ChainResolution::Resolved,

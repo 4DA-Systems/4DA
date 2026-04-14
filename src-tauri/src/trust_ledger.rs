@@ -627,6 +627,8 @@ pub async fn record_intelligence_feedback(
 pub async fn get_domain_precision_report(
     days: Option<u32>,
 ) -> std::result::Result<Vec<DomainPrecision>, String> {
+    crate::settings::require_signal_feature("get_domain_precision_report")
+        .map_err(|e| e.to_string())?;
     get_domain_precision(days.unwrap_or(30)).map_err(|e| e.to_string())
 }
 
@@ -634,5 +636,7 @@ pub async fn get_domain_precision_report(
 pub async fn get_false_positive_analysis(
     days: Option<u32>,
 ) -> std::result::Result<FalsePositiveAnalysis, String> {
+    crate::settings::require_signal_feature("get_false_positive_analysis")
+        .map_err(|e| e.to_string())?;
     analyze_false_positives(days.unwrap_or(30)).map_err(|e| e.to_string())
 }

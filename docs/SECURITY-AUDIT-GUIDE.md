@@ -255,7 +255,8 @@ connect-src 'self'
   https://hacker-news.firebaseio.com
   https://export.arxiv.org
   https://www.reddit.com
-  https://api.github.com;
+  https://api.github.com
+  https://api.keygen.sh;
 font-src 'self' data:;
 frame-src 'none';
 object-src 'none';
@@ -266,10 +267,12 @@ base-uri 'self'
 - `frame-src: 'none'` -- No iframes allowed (blocks clickjacking and embedding attacks)
 - `object-src: 'none'` -- No Flash/Java/plugin embedding
 - `script-src: 'self'` -- No inline scripts, no external script sources
-- `connect-src` -- Explicit allowlist of external domains (only LLM providers and source APIs)
+- `connect-src` -- Explicit allowlist of external domains (only LLM providers, source APIs, and license validation)
 - `base-uri: 'self'` -- Prevents base tag injection
 
-**Note on `style-src 'unsafe-inline'`:** This is common in Tauri/React apps where CSS-in-JS is used. It does not enable script injection because `script-src` is restricted to `'self'`.
+**Note on `style-src 'unsafe-inline'`:** This is common in Tauri/React apps where CSS-in-JS is used. It does not enable script injection because `script-src` is restricted to `'self'`. The app has three hard dependencies on inline styles: (1) `index.html` carries an inline `<style>` block for flash-prevention that must load before external CSS, (2) `briefing.html` and `notification.html` use inline `style="display:none"` to gate sections before JS populates them, (3) React components use `style={{...}}` props extensively for dynamic values (animations, computed positions, opacity transitions) — React compiles these to DOM style attributes which CSP treats as inline styles. Moving to nonce-based `style-src` would require injecting per-load nonces into generated `<style>` tags AND refactoring components using `style={{}}`. Hash-based `style-src` cannot cover dynamic values. This is an accepted risk; the webview is a trusted local context with no cross-origin script execution.
+
+**Note on `api.keygen.sh`:** Added defensively for license validation. The Rust backend performs the actual Keygen API calls; this allowlist entry exists so that if the frontend ever queries directly (e.g., a diagnostic pane), it will not be silently blocked by CSP.
 
 **What a vulnerability would look like:**
 - `connect-src *` or `connect-src https:` (wildcard allowing connections to any HTTPS domain)
