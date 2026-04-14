@@ -54,8 +54,8 @@ export function PentachoronMark({ signal, size = 200 }: PentachoronMarkProps) {
     // 4D rotation: metabolism drives the w-axis rotation — the "thinking" dimension
     setParam('w_rotation', 0.15 + signal.metabolism * 0.25);
 
-    // Glow: base 1.2 (bright for small sizes), pulse brightens, errors dim
-    const glow = signal.error > 0.5 ? 0.5 : 1.2 + signal.pulse * 0.3 + signal.heat * 0.1;
+    // Glow: base 0.85 (professional, not mystical), pulse brightens, errors dim
+    const glow = signal.error > 0.5 ? 0.4 : 0.85 + signal.pulse * 0.25 + signal.heat * 0.08;
     setParam('glow_intensity', glow);
   }, [signal, setParam]);
 
