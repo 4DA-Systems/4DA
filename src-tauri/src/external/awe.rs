@@ -48,7 +48,13 @@
 //! 7. Wire `scripts/validate-boundary-calls.cjs` to fail on any new raw
 //!    `Command::new` for AWE outside `src-tauri/src/external/awe.rs`
 
-#![allow(dead_code)] // Skeleton — call sites migrate in a follow-up commit
+// Some methods (transmute, feedback, version) are defined as the full typed
+// API but don't have production call sites yet — one call site at a time is
+// being migrated from raw `Command::new("awe")` to `AweClient::*`. The first
+// migration (monitoring_briefing.rs::collect_awe_wisdom_signals → AweClient::wisdom)
+// landed in commit e36d266c+1; others are still TODO. Allow dead code until
+// the remaining call sites migrate.
+#![allow(dead_code)]
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -145,17 +151,16 @@ pub struct AweClientConfig {
 
 impl AweClientConfig {
     /// Construct a config from the standard binary path used elsewhere
-    /// in 4DA. Mirrors the lookup logic in `awe_commands.rs::get_awe_path`.
+    /// in 4DA. Delegates to `context_commands::find_awe_binary` so there
+    /// is a single source of truth for where `awe.exe` lives on a given
+    /// user's machine. Returns `None` if AWE is not installed / not
+    /// discoverable via the standard search paths.
     pub fn from_default_paths() -> Option<Self> {
-        // This stub mirrors the existing path-resolution logic. The real
-        // implementation should call into a shared helper once the call
-        // sites are migrated — we don't want two sources of truth for
-        // where awe.exe lives.
-        //
-        // For now, returning None forces the caller to supply the path
-        // explicitly, which prevents accidental use of this wrapper
-        // against an unresolved binary.
-        None
+        let path_str = crate::context_commands::find_awe_binary()?;
+        Some(Self {
+            binary_path: PathBuf::from(path_str),
+            default_timeout: Duration::from_secs(30),
+        })
     }
 }
 
@@ -287,14 +292,27 @@ impl AweClient {
         })
     }
 
-    /// `awe wisdom -d <domain>` — returns the wisdom-graph summary for
-    /// a domain. Used by `monitoring_briefing.rs` and `context_commands.rs`.
-    pub fn wisdom(&self, _domain: &str) -> Result<AweWisdomOutput, AweError> {
-        // TODO(external::awe migration): port from call sites.
-        Err(AweError::ParseError {
-            reason: "AweClient::wisdom is skeleton-only — call site migration pending".to_string(),
-            snippet: String::new(),
-        })
+    /// `awe wisdom --domain <domain>` — returns the wisdom-graph summary for
+    /// a domain as free-form text. Used by `monitoring_briefing.rs` and
+    /// `context_commands.rs` to populate briefing wisdom signals and context
+    /// recalls.
+    ///
+    /// This is the FIRST production method wired into the typed wrapper.
+    /// The call site migration is `monitoring_briefing.rs::collect_awe_wisdom_signals`
+    /// as of 2026-04-14. Other wisdom call sites will follow in subsequent
+    /// commits.
+    pub fn wisdom(&self, domain: &str) -> Result<AweWisdomOutput, AweError> {
+        if domain.is_empty() {
+            return Err(AweError::ParseError {
+                reason: "domain argument must not be empty".to_string(),
+                snippet: String::new(),
+            });
+        }
+        let raw_output = self.invoke(
+            &["wisdom", "--domain", domain],
+            Some(Duration::from_secs(15)),
+        )?;
+        Ok(AweWisdomOutput { raw_output })
     }
 
     /// `awe feedback --decision-id <id> --outcome <outcome>` — record
@@ -342,28 +360,47 @@ impl AweClient {
     /// 4. stdout must not contain any `KNOWN_ERROR_PATTERNS`
     /// 5. Return stdout as `String`
     fn invoke(&self, args: &[&str], timeout: Option<Duration>) -> Result<String, AweError> {
-        let _ = timeout; // Real implementation wires this to `wait-timeout` crate or async spawn
         let binary = &self.config.binary_path;
+        let timeout_secs = timeout.unwrap_or(self.config.default_timeout).as_secs();
 
-        // 1. Spawn
-        let output = Command::new(binary).args(args).output().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                AweError::BinaryNotFound {
-                    path: binary.clone(),
-                    reason: e.to_string(),
-                }
-            } else {
-                AweError::SpawnFailed {
-                    path: binary.clone(),
-                    source: e,
-                }
-            }
-        })?;
+        // Sanity: verify binary exists before we delegate. This gives us the
+        // typed `BinaryNotFound` variant instead of a generic spawn failure
+        // from the lower-level helper (which returns `Err(String)`).
+        if !binary.exists() {
+            return Err(AweError::BinaryNotFound {
+                path: binary.clone(),
+                reason: "binary path does not exist on disk".to_string(),
+            });
+        }
 
+        // Delegate to the proven `run_awe_with_timeout` helper in
+        // `context_commands`. That helper already implements:
+        //   - LLM env-var setup (ANTHROPIC_API_KEY / OPENAI_API_KEY /
+        //     AWE_OLLAMA_MODEL / AWE_OLLAMA_URL from settings)
+        //   - Spawn with piped stdout/stderr
+        //   - 100ms poll loop with timeout kill
+        //   - Exit-code check
+        //   - KNOWN_ERROR_PATTERNS scan on stdout AND stderr (same list
+        //     as `KNOWN_ERROR_PATTERNS` above; contract drift between the
+        //     two lists is caught by `contract_catches_known_error_pattern_in_stdout`
+        //     test below)
+        //
+        // All we do here is: build the Command, call the helper, then
+        // translate its `Err(String)` into our typed `AweError`.
+        let mut cmd = Command::new(binary);
+        cmd.args(args);
+
+        let output = crate::context_commands::run_awe_with_timeout(&mut cmd, timeout_secs)
+            .map_err(|msg| classify_helper_error(&msg, binary, args))?;
+
+        // The helper returns Ok only when exit was 0 AND no KNOWN_ERROR_PATTERNS
+        // matched. So the output here is guaranteed-clean by the time we get it.
+        // We still do a belt-and-suspenders exit-code check + pattern scan in
+        // case the helper's contract ever drifts.
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-        // 2. Exit code check
+        // 2. Exit code check (defense-in-depth)
         if !output.status.success() {
             return Err(AweError::ExitFailed {
                 code: output.status.code().unwrap_or(-1),
@@ -402,7 +439,68 @@ impl AweClient {
 }
 
 // ============================================================================
-// Tests — skeleton-level only (no real binary yet)
+// Internal: helper-error classification
+// ============================================================================
+
+/// Translate the `Err(String)` from `run_awe_with_timeout` into a typed
+/// `AweError` variant. The helper returns free-form error messages whose
+/// structure we can pattern-match to recover the original failure category.
+///
+/// This keeps the typed API surface clean while reusing the proven
+/// spawn/poll/timeout logic in `context_commands::run_awe_with_timeout`.
+fn classify_helper_error(msg: &str, binary: &std::path::Path, args: &[&str]) -> AweError {
+    // Timeout: helper emits "AWE timed out after Ns"
+    if let Some(rest) = msg.strip_prefix("AWE timed out after ") {
+        if let Some(secs_str) = rest.strip_suffix('s') {
+            if let Ok(secs) = secs_str.parse::<u64>() {
+                return AweError::Timeout {
+                    secs,
+                    args: args.iter().map(|s| (*s).to_string()).collect(),
+                };
+            }
+        }
+    }
+
+    // Silent failure detected by helper: "AWE silent failure: stdout/stderr contains 'X'"
+    if let Some(rest) = msg.strip_prefix("AWE silent failure:") {
+        // Extract the pattern from the single-quoted tail, if present.
+        let pattern = rest
+            .trim()
+            .rsplit_once('\'')
+            .and_then(|(before, _)| before.rsplit_once('\'').map(|(_, p)| p.to_string()))
+            .unwrap_or_else(|| rest.trim().to_string());
+        return AweError::KnownError {
+            pattern,
+            context: format!("helper detected silent failure: {msg}"),
+        };
+    }
+
+    // Spawn failure: "Failed to start AWE: <io error>"
+    if msg.starts_with("Failed to start AWE:") {
+        // If the io error includes "not found", classify as BinaryNotFound.
+        if msg.contains("not found") || msg.contains("cannot find") {
+            return AweError::BinaryNotFound {
+                path: binary.to_path_buf(),
+                reason: msg.to_string(),
+            };
+        }
+        return AweError::SpawnFailed {
+            path: binary.to_path_buf(),
+            source: std::io::Error::other(msg.to_string()),
+        };
+    }
+
+    // Fallback: ExitFailed with the string as stderr. Loses some fidelity
+    // but is preferable to inventing a category.
+    AweError::ExitFailed {
+        code: -1,
+        stderr: msg.to_string(),
+        stdout: String::new(),
+    }
+}
+
+// ============================================================================
+// Tests — mix of pure-unit and contract-guard tests
 // ============================================================================
 
 #[cfg(test)]
@@ -481,5 +579,80 @@ mod tests {
         assert_eq!(AweFeedbackOutcome::Confirmed.as_cli_arg(), "confirmed");
         assert_eq!(AweFeedbackOutcome::Refuted.as_cli_arg(), "refuted");
         assert_eq!(AweFeedbackOutcome::Partial.as_cli_arg(), "partial");
+    }
+
+    #[test]
+    fn wisdom_rejects_empty_domain() {
+        // Guard: empty domain would produce a meaningless `awe wisdom --domain ""`
+        // call that either no-ops or errors on AWE's side. Reject up front so
+        // the failure mode is a typed ParseError at the API boundary, not a
+        // surprise at the CLI layer.
+        let client = AweClient::new(AweClientConfig {
+            binary_path: PathBuf::from("/nonexistent/awe"),
+            default_timeout: Duration::from_secs(1),
+        });
+        let err = client.wisdom("").unwrap_err();
+        match err {
+            AweError::ParseError { reason, .. } => {
+                assert!(reason.contains("domain"));
+            }
+            other => panic!("expected ParseError for empty domain, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_helper_error_maps_timeout() {
+        let path = std::path::Path::new("/bin/awe");
+        let err = classify_helper_error("AWE timed out after 15s", path, &["wisdom"]);
+        match err {
+            AweError::Timeout { secs, args } => {
+                assert_eq!(secs, 15);
+                assert_eq!(args, vec!["wisdom".to_string()]);
+            }
+            other => panic!("expected Timeout, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_helper_error_maps_silent_failure() {
+        let path = std::path::Path::new("/bin/awe");
+        let err = classify_helper_error(
+            "AWE silent failure: stderr contains 'Unknown stage:'",
+            path,
+            &["transmute"],
+        );
+        match err {
+            AweError::KnownError { pattern, .. } => {
+                assert_eq!(pattern, "Unknown stage:");
+            }
+            other => panic!("expected KnownError, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn classify_helper_error_maps_spawn_not_found() {
+        let path = std::path::Path::new("/bin/awe");
+        let err =
+            classify_helper_error("Failed to start AWE: program not found", path, &["version"]);
+        match err {
+            AweError::BinaryNotFound { .. } => {}
+            other => panic!("expected BinaryNotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn wisdom_fails_cleanly_when_binary_missing() {
+        // End-to-end: the migrated call path should surface BinaryNotFound
+        // when the configured AWE binary doesn't exist on disk. Defends the
+        // monitoring_briefing migration's error-handling branch.
+        let client = AweClient::new(AweClientConfig {
+            binary_path: PathBuf::from("/definitely/does/not/exist/awe"),
+            default_timeout: Duration::from_secs(1),
+        });
+        let err = client.wisdom("software-engineering").unwrap_err();
+        match err {
+            AweError::BinaryNotFound { .. } => {}
+            other => panic!("expected BinaryNotFound, got {other:?}"),
+        }
     }
 }
