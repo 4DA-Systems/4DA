@@ -13,7 +13,7 @@
 <body>
   <h3 style="color: #D4AF37;">Pentachoron Icon Export</h3>
   <p class="info">The pentachoron rotates below. Click "Export Frame" to capture at the current angle.</p>
-  <game-pentachoron id="penta" style="width: 1024px; height: 1024px; display: block;"></game-pentachoron>
+  <fourda-pentachoron id="penta" style="width: 1024px; height: 1024px; display: block;"></fourda-pentachoron>
   <div style="display: flex; gap: 10px;">
     <button onclick="exportFrame()">Export 1024x1024 PNG</button>
     <button onclick="exportFrame512()">Export 512x512 PNG</button>
@@ -23,7 +23,7 @@
 
   <script type="module">
     // Load the pentachoron component
-    import('../src/lib/game-components/pentachoron.js');
+    import('../src/lib/fourda-components/pentachoron.js');
   </script>
   <script>
     // Wait for component to render

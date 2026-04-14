@@ -29,7 +29,7 @@ vi.mock('../../lib/commands', () => ({
   cmd: vi.fn(() => Promise.resolve(null)),
 }));
 
-// Stub the game-component hook so WebGPU isn't required
+// Stub the fourda-component hook so WebGPU isn't required
 vi.mock('../../hooks/use-fourda-component', () => ({
   useFourdaComponent: () => ({
     containerRef: { current: null },
