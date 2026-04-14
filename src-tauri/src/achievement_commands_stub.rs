@@ -7,7 +7,7 @@ use crate::error::Result;
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn get_game_state() -> Result<serde_json::Value> {
+pub fn get_achievement_state() -> Result<serde_json::Value> {
     Ok(serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null}))
 }
 

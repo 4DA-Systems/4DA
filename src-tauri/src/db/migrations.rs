@@ -1127,9 +1127,9 @@ impl Database {
                 })?;
             }
 
-            // Phase 20 migration: GAME Engine tables
+            // Phase 20 migration: achievement engine tables
             if current_version < 20 {
-                Self::run_versioned_migration(&conn, 19, 20, "Phase 20: GAME engine", |c| {
+                Self::run_versioned_migration(&conn, 19, 20, "Phase 20: achievement engine", |c| {
                     crate::achievement_engine::create_tables(c)
                 })?;
             }

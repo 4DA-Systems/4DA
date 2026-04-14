@@ -3,9 +3,9 @@ use crate::get_database;
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn get_game_state() -> Result<serde_json::Value> {
+pub fn get_achievement_state() -> Result<serde_json::Value> {
     let db = get_database()?;
-    let state = crate::achievement_engine::get_game_state(db);
+    let state = crate::achievement_engine::get_achievement_state(db);
     Ok(serde_json::to_value(state).unwrap_or_default())
 }
 
@@ -34,11 +34,11 @@ pub fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
 #[cfg(test)]
 mod tests {
     use crate::achievement_definitions::AchievementTier;
-    use crate::achievement_engine::{AchievementState, CounterState, GameState};
+    use crate::achievement_engine::{AchievementState, CounterState, ActivitySnapshot};
 
     #[test]
     fn test_game_state_serialization() {
-        let state = GameState {
+        let state = ActivitySnapshot {
             counters: vec![CounterState {
                 counter_type: "scans".to_string(),
                 value: 5,
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_game_state_empty() {
-        let state = GameState {
+        let state = ActivitySnapshot {
             counters: vec![],
             achievements: vec![],
             streak: 0,
