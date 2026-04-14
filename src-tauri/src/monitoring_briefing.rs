@@ -548,10 +548,12 @@ fn apply_novelty_filter(items: Vec<BriefingItem>, today: &str) -> (Vec<BriefingI
 /// Record briefing items in history for future novelty detection.
 fn record_briefing_items(conn: &rusqlite::Connection, items: &[BriefingItem], date: &str) {
     for item in items {
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT INTO briefing_item_history (item_title, source_type, briefing_date) VALUES (?1, ?2, ?3)",
             rusqlite::params![item.title, item.source_type, date],
-        );
+        ) {
+            tracing::warn!(target: "4da::monitor", error = %e, title = %item.title, "Failed to record briefing item history");
+        }
     }
 }
 

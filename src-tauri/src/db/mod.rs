@@ -301,10 +301,12 @@ impl Database {
     /// Log a security-relevant event to the audit table.
     pub fn log_security_event(&self, event_type: &str, details: &str, severity: &str) {
         let conn = self.conn.lock();
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT INTO security_audit_log (event_type, details, severity) VALUES (?1, ?2, ?3)",
             rusqlite::params![event_type, details, severity],
-        );
+        ) {
+            tracing::warn!(target: "4da::db", error = %e, event_type, severity, "Failed to write security audit log entry");
+        }
     }
 
     /// Query security audit log entries for compliance review.

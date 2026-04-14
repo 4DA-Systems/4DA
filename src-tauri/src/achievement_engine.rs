@@ -3,8 +3,8 @@
 //! Tracks user activity counters and unlocks achievements
 //! when thresholds are reached. Stores state in SQLite.
 
-use crate::db::Database;
 use crate::achievement_definitions::{all_achievements, AchievementTier};
+use crate::db::Database;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 

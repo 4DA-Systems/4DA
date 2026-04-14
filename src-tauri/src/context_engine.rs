@@ -214,11 +214,16 @@ impl ContextEngine {
         ")?;
 
         // Migration: add experience_level column if it doesn't exist
-        // Standard SQLite migration pattern — ignore "duplicate column" error
-        let _ = conn.execute(
+        // Standard SQLite migration pattern — "duplicate column" error is expected
+        if let Err(e) = conn.execute(
             "ALTER TABLE user_identity ADD COLUMN experience_level TEXT",
             [],
-        );
+        ) {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                tracing::warn!(target: "4da::context", error = %e, "Failed to add experience_level column (non-duplicate error)");
+            }
+        }
 
         info!(target: "4da::context", "Context engine tables initialized");
         Ok(())

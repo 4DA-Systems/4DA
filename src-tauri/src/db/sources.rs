@@ -848,10 +848,12 @@ impl Database {
                     )
                     .unwrap_or(false);
                 if stale {
-                    let _ = conn.execute(
+                    if let Err(e) = conn.execute(
                         "UPDATE source_health SET consecutive_failures = 0, status = 'error' WHERE source_type = ?1",
                         params![source_type],
-                    );
+                    ) {
+                        tracing::warn!(target: "4da::db", error = %e, source = source_type, "Failed to auto-reset circuit breaker");
+                    }
                     tracing::info!(target: "4da::health", source = source_type, "Circuit breaker auto-reset after cooldown");
                     false
                 } else {
