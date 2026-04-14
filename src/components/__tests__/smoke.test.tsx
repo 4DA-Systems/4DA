@@ -227,8 +227,8 @@ vi.mock('../../config/content-types', () => ({
 }));
 
 // Mock game-components and game-icons (used by AchievementsPanel, etc.)
-vi.mock('../../lib/game-components', () => ({
-  registerGameComponent: vi.fn(() => Promise.resolve()),
+vi.mock('../../lib/fourda-components', () => ({
+  registerFourdaComponent: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock('../../lib/game-icons', () => ({

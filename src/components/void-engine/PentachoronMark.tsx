@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import type { VoidSignal } from '../../types';
-import { registerGameComponent } from '../../lib/game-components';
+import { registerFourdaComponent } from '../../lib/fourda-components';
 
 interface PentachoronMarkProps {
   signal: VoidSignal;
@@ -21,7 +21,7 @@ export function PentachoronMark({ signal, size = 200 }: PentachoronMarkProps) {
 
   useEffect(() => {
     let cancelled = false;
-    registerGameComponent('fourda-pentachoron').then(() => {
+    registerFourdaComponent('fourda-pentachoron').then(() => {
       if (cancelled || !containerRef.current) return;
       const el = document.createElement('fourda-pentachoron');
       el.style.width = '100%';

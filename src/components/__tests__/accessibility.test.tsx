@@ -102,7 +102,7 @@ vi.mock('../../config/sources', () => ({
   getSourceFullName: (s: string) => s,
 }));
 vi.mock('../../config/content-types', () => ({ getContentTypeBadge: () => null }));
-vi.mock('../../lib/game-components', () => ({ registerGameComponent: vi.fn(() => Promise.resolve()) }));
+vi.mock('../../lib/fourda-components', () => ({ registerFourdaComponent: vi.fn(() => Promise.resolve()) }));
 vi.mock('../../lib/game-icons', () => ({ getGameIcon: () => null }));
 
 // --- Import components ---

@@ -1,6 +1,6 @@
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import type { VoidSignal } from '../../types';
-import { registerGameComponent } from '../../lib/game-components';
+import { registerFourdaComponent } from '../../lib/fourda-components';
 
 interface VoidHeartbeatProps {
   signal: VoidSignal;
@@ -21,7 +21,7 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   // Register the GAME component on mount
   useEffect(() => {
     let cancelled = false;
-    registerGameComponent('fourda-ambient-intelligence').then(() => {
+    registerFourdaComponent('fourda-ambient-intelligence').then(() => {
       if (cancelled || !containerRef.current) return;
       const el = document.createElement('fourda-ambient-intelligence');
       el.style.width = '100%';

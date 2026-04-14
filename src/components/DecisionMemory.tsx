@@ -2,7 +2,7 @@ import { useState, useEffect, memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
-import { useGameComponent } from '../hooks/use-game-component';
+import { useFourdaComponent } from '../hooks/use-fourda-component';
 import type { DeveloperDecision } from '../store/decisions-slice';
 import { DECISION_TYPES, STATUS_STYLES, EMPTY_FORM } from './decision-memory-constants';
 import type { NewDecisionForm } from './decision-memory-constants';
@@ -31,7 +31,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const removeTechDecision = useAppStore((s) => s.removeTechDecision);
   const addToast = useAppStore((s) => s.addToast);
 
-  const { containerRef: tetRef, elementRef: tetEl } = useGameComponent('fourda-tetrahedron');
+  const { containerRef: tetRef, elementRef: tetEl } = useFourdaComponent('fourda-tetrahedron');
 
   useEffect(() => {
     loadDecisions();

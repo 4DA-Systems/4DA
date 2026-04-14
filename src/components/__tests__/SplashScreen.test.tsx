@@ -24,8 +24,8 @@ vi.mock('../../utils/error-messages', () => ({
 }));
 
 // Mock game components
-vi.mock('../../lib/game-components', () => ({
-  registerGameComponent: vi.fn(() => Promise.resolve()),
+vi.mock('../../lib/fourda-components', () => ({
+  registerFourdaComponent: vi.fn(() => Promise.resolve()),
 }));
 
 // ---------------------------------------------------------------------------

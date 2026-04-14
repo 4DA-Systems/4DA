@@ -5,7 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
-import { useGameComponent } from '../hooks/use-game-component';
+import { useFourdaComponent } from '../hooks/use-fourda-component';
 import { reportError } from '../lib/error-reporter';
 import { formatLocalDate } from '../utils/format-date';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
@@ -71,7 +71,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
   const synthesisUnlistenRef = useRef<(() => void) | null>(null);
 
-  const { containerRef: ambientRef, elementRef: ambientElement } = useGameComponent('fourda-briefing-atmosphere');
+  const { containerRef: ambientRef, elementRef: ambientElement } = useFourdaComponent('fourda-briefing-atmosphere');
 
   useEffect(() => {
     const el = ambientElement.current;

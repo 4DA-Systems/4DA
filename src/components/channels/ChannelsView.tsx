@@ -5,10 +5,10 @@ import { useAppStore } from '../../store';
 import { ChannelCard } from './ChannelCard';
 import { ChannelContent } from './ChannelContent';
 import { CreateChannelModal } from './CreateChannelModal';
-import { useGameComponent } from '../../hooks/use-game-component';
+import { useFourdaComponent } from '../../hooks/use-fourda-component';
 
 function SourceVitals({ channelCount, activeCount }: { channelCount: number; activeCount: number }) {
-  const { containerRef, elementRef } = useGameComponent('fourda-source-vitals');
+  const { containerRef, elementRef } = useFourdaComponent('fourda-source-vitals');
 
   useEffect(() => {
     const health = channelCount > 0 ? activeCount / channelCount : 0;

@@ -121,8 +121,8 @@ vi.mock('./ContentTranslationProvider', () => ({
   }),
 }));
 
-vi.mock('../lib/game-components', () => ({
-  registerGameComponent: vi.fn(),
+vi.mock('../lib/fourda-components', () => ({
+  registerFourdaComponent: vi.fn(),
 }));
 
 // ---------------------------------------------------------------------------

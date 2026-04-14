@@ -1,5 +1,5 @@
 import { memo, useState, useEffect, useRef } from 'react';
-import { useGameComponent } from '../hooks/use-game-component';
+import { useFourdaComponent } from '../hooks/use-fourda-component';
 import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
 
@@ -11,7 +11,7 @@ const MILESTONES = [
 export const MilestoneOverlay = memo(function MilestoneOverlay() {
   const [active, setActive] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const { containerRef } = useGameComponent('fourda-celebration-burst');
+  const { containerRef } = useFourdaComponent('fourda-celebration-burst');
 
   // Check milestones on state changes
   const analysisComplete = useAppStore(s => s.appState.analysisComplete);
