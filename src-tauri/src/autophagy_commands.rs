@@ -144,7 +144,7 @@ pub async fn trigger_autophagy_cycle() -> Result<AutophagyCycleResult> {
     // GAME: track calibrations produced
     if cycle.calibrations_produced > 0 {
         if let Ok(db) = crate::get_database() {
-            let _unlocked = crate::game_engine::increment_counter(
+            let _unlocked = crate::achievement_engine::increment_counter(
                 db,
                 "calibrations",
                 cycle.calibrations_produced as u64,

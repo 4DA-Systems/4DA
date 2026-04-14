@@ -465,10 +465,10 @@ pub async fn set_user_role(app: AppHandle, role: Option<String>) -> Result<serde
     // GAME: track context setup + profile updates
     if role.is_some() {
         if let Ok(db) = crate::get_database() {
-            for a in crate::game_engine::increment_counter(db, "context", 1) {
+            for a in crate::achievement_engine::increment_counter(db, "context", 1) {
                 crate::events::emit_achievement_unlocked(&app, &a);
             }
-            for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
+            for a in crate::achievement_engine::increment_counter(db, "profile_updates", 1) {
                 crate::events::emit_achievement_unlocked(&app, &a);
             }
         }
@@ -499,7 +499,7 @@ pub async fn set_experience_level(
     // GAME: track profile updates
     if level.is_some() {
         if let Ok(db) = crate::get_database() {
-            for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
+            for a in crate::achievement_engine::increment_counter(db, "profile_updates", 1) {
                 crate::events::emit_achievement_unlocked(&app, &a);
             }
         }
@@ -524,10 +524,10 @@ pub async fn add_tech_stack(app: AppHandle, technology: String) -> Result<serde_
 
     // GAME: track context setup + profile updates
     if let Ok(db) = crate::get_database() {
-        for a in crate::game_engine::increment_counter(db, "context", 1) {
+        for a in crate::achievement_engine::increment_counter(db, "context", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
-        for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
+        for a in crate::achievement_engine::increment_counter(db, "profile_updates", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
     }
@@ -576,10 +576,10 @@ pub async fn add_interest(
 
     // GAME: track context setup + profile updates
     if let Ok(db) = crate::get_database() {
-        for a in crate::game_engine::increment_counter(db, "context", 1) {
+        for a in crate::achievement_engine::increment_counter(db, "context", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
-        for a in crate::game_engine::increment_counter(db, "profile_updates", 1) {
+        for a in crate::achievement_engine::increment_counter(db, "profile_updates", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
     }
@@ -669,7 +669,7 @@ pub async fn record_interaction(
     // GAME: track saves
     if action.to_lowercase() == "save" {
         if let Ok(db) = crate::get_database() {
-            for a in crate::game_engine::increment_counter(db, "saves", 1) {
+            for a in crate::achievement_engine::increment_counter(db, "saves", 1) {
                 crate::events::emit_achievement_unlocked(&app, &a);
             }
         }

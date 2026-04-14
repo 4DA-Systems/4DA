@@ -1130,7 +1130,7 @@ impl Database {
             // Phase 20 migration: GAME Engine tables
             if current_version < 20 {
                 Self::run_versioned_migration(&conn, 19, 20, "Phase 20: GAME engine", |c| {
-                    crate::game_engine::create_tables(c)
+                    crate::achievement_engine::create_tables(c)
                 })?;
             }
 

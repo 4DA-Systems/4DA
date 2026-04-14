@@ -262,7 +262,7 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
 
     // GAME: track briefing generation
     if let Ok(db) = crate::get_database() {
-        for a in crate::game_engine::increment_counter(db, "briefings", 1) {
+        for a in crate::achievement_engine::increment_counter(db, "briefings", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
     }

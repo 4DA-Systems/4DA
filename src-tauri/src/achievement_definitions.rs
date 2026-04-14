@@ -1,6 +1,6 @@
 //! Achievement definitions for the GAME Engine.
 //!
-//! Extracted from game_engine.rs to keep file sizes manageable.
+//! Extracted from achievement_engine.rs to keep file sizes manageable.
 //! Contains the AchievementTier enum and all 25 achievement definitions.
 
 use serde::{Deserialize, Serialize};

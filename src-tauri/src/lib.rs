@@ -212,21 +212,21 @@ mod external;
 pub mod extractors;
 mod free_briefing;
 #[cfg(feature = "experimental")]
-mod game_achievements;
+mod achievement_definitions;
 #[cfg(not(feature = "experimental"))]
-#[path = "game_achievements_stub.rs"]
-mod game_achievements;
+#[path = "achievement_definitions_stub.rs"]
+mod achievement_definitions;
 #[cfg(feature = "experimental")]
-mod game_commands;
+mod achievement_commands;
 #[cfg(not(feature = "experimental"))]
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
-#[path = "game_commands_stub.rs"]
-mod game_commands;
+#[path = "achievement_commands_stub.rs"]
+mod achievement_commands;
 #[cfg(feature = "experimental")]
-mod game_engine;
+mod achievement_engine;
 #[cfg(not(feature = "experimental"))]
-#[path = "game_engine_stub.rs"]
-mod game_engine;
+#[path = "achievement_engine_stub.rs"]
+mod achievement_engine;
 #[cfg(feature = "glyph_audit")]
 mod glyph_integration;
 mod health;
@@ -884,9 +884,9 @@ pub fn run() {
             content_translation_commands::get_translation_config,
             content_translation_commands::set_translation_config,
             // GAME Engine
-            game_commands::get_game_state,
-            game_commands::get_achievements,
-            game_commands::check_daily_streak,
+            achievement_commands::get_game_state,
+            achievement_commands::get_achievements,
+            achievement_commands::check_daily_streak,
             // Information Channels
             channel_commands::list_channels,
             channel_commands::get_channel,
