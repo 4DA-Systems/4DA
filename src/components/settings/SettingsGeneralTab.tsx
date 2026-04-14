@@ -7,6 +7,7 @@ import { DataHealthSection } from './DataHealthSection';
 import { SystemHealthSection } from './SystemHealthSection';
 import { DigestSection } from './DigestSection';
 import { CommunityIntelligenceSection } from './CommunityIntelligenceSection';
+import { PrivacySection } from './PrivacySection';
 
 interface SettingsGeneralTabProps {
   monitoring: any;
@@ -67,6 +68,10 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
 
         <PanelErrorBoundary name="Community Intelligence">
           <CommunityIntelligenceSection />
+        </PanelErrorBoundary>
+
+        <PanelErrorBoundary name="Privacy">
+          <PrivacySection />
         </PanelErrorBoundary>
       </div>
     </div>
