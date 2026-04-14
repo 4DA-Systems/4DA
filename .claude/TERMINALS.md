@@ -9,7 +9,21 @@
 
 ## Active Terminals
 
-<!-- No active terminals -->
+### T-GAME-RETIRE (claim)
+**Files**: src/lib/game-components/**, src/lib/game-components.ts, src/vite-env.d.ts,
+src/components/void-engine/PentachoronMark.tsx, src/components/void-engine/VoidHeartbeat.tsx,
+src/components/AboutPanel.tsx, src/components/BriefingEmptyStates.tsx, src/components/BriefingWarmupState.tsx,
+src/components/DecisionWindowsPanel.tsx, src/components/DecisionMemory.tsx, src/components/MilestoneOverlay.tsx,
+src/components/NaturalLanguageSearch.tsx, src/components/OllamaStatus.tsx, src/components/PlaybookView.tsx,
+src/components/ResultsView.tsx, src/components/first-run/LoadingState.tsx,
+src/components/awe/MomentumWisdomTrajectory.tsx, src/components/awe/ProfileWisdomDna.tsx,
+src/components/briefing/AttentionCards.tsx, src/components/channels/ChannelsView.tsx,
+src/components/geometry/GeometryShowcase.tsx,
+public/notification.js, public/emergence.js, public/test-emergence.html, public/test-game-notif.html,
+public/notif-critical.js, public/notif-digest.js, public/notif-high.js, public/notif-medium.js,
+package.json, scripts/validate-game-components.cjs
+**Commit Lock**: HELD
+**Work**: Two commits — (1) retire GAME compiler dead code + fix pentachoron visuals, (2) rename all `game-*` DOM tags to `fourda-*`
 
 ---
 

@@ -1,8 +1,9 @@
 /**
  * Lazy-load and register GAME Web Components.
  *
- * Each component is a self-contained Custom Element (WebGPU + WebGL2 fallback)
- * compiled from .game source by the GAME compiler.
+ * Each component is a self-contained Custom Element (WebGPU + WebGL2 fallback).
+ * The GAME compiler that originally produced these has been retired — these
+ * are now standalone, pre-compiled web components with no build-time dependency.
  *
  * Components are loaded on first use to avoid blocking the main bundle.
  */
@@ -11,29 +12,20 @@ let registered = false;
 
 const COMPONENTS = {
   'game-celebration-burst': () => import('./game-components/celebration-burst.js'),
-  'game-scan-ring': () => import('./game-components/scan-ring.js'),
   'game-status-orb': () => import('./game-components/status-orb.js'),
-  // boot-ring replaced by simplex-unfold in LoadingState (2026-03-22)
-  'game-boot-ring': () => import('./game-components/boot-ring.js'),
-  'game-engagement-bars': () => import('./game-components/engagement-bars.js'),
-  'game-achievement-progress': () => import('./game-components/achievement-progress.js'),
   'game-ambient-intelligence': () => import('./game-components/ambient-intelligence.js'),
   'game-score-fingerprint': () => import('./game-components/score-fingerprint.js'),
   'game-decision-countdown': () => import('./game-components/decision-countdown.js'),
-  'game-signal-waveform': () => import('./game-components/signal-waveform.js'),
-  'game-knowledge-depth': () => import('./game-components/knowledge-depth.js'),
   'game-source-vitals': () => import('./game-components/source-vitals.js'),
   'game-briefing-atmosphere': () => import('./game-components/briefing-atmosphere.js'),
   'game-playbook-pathway': () => import('./game-components/playbook-pathway.js'),
-  'game-radar-field': () => import('./game-components/radar-field.js'),
   'game-turing-fire': () => import('./game-components/turing-fire.js'),
-  'game-intelligence-banner': () => import('./game-components/intelligence-banner.js'),
   'game-tetrahedron': () => import('./game-components/tetrahedron.js'),
   'game-pentachoron': () => import('./game-components/pentachoron.js'),
   'game-icosahedron': () => import('./game-components/icosahedron.js'),
   'game-dodecahedron': () => import('./game-components/dodecahedron.js'),
-  'game-simplex-unfold': () => import('./game-components/simplex-unfold.js'),
   'game-compound-five-tetrahedra': () => import('./game-components/compound-five-tetrahedra.js'),
+  'game-simplex-unfold': () => import('./game-components/simplex-unfold.js'),
   'game-momentum-field': () => import('./game-components/momentum-field.js'),
   'game-logo-mark': () => import('./game-components/logo-mark.js'),
 } as const;
