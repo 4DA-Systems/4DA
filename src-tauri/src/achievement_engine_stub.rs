@@ -36,7 +36,7 @@ pub fn check_daily_streak(_db: &Database) -> Vec<AchievementUnlocked> {
 }
 
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
-pub fn get_game_state(_db: &Database) -> serde_json::Value {
+pub fn get_achievement_state(_db: &Database) -> serde_json::Value {
     serde_json::json!({"counters": [], "achievements": [], "streak": 0, "last_active": null})
 }
 

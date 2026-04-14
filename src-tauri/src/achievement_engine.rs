@@ -22,7 +22,7 @@ pub struct AchievementUnlocked {
 
 /// Game state returned to frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameState {
+pub struct ActivitySnapshot {
     pub counters: Vec<CounterState>,
     pub achievements: Vec<AchievementState>,
     pub streak: u32,
@@ -52,22 +52,22 @@ pub struct AchievementState {
 /// Create game tables in the database
 pub fn create_tables(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS game_counters (
+        "CREATE TABLE IF NOT EXISTS activity_counters (
             counter_type TEXT PRIMARY KEY,
             value INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE TABLE IF NOT EXISTS game_achievements (
+        CREATE TABLE IF NOT EXISTS achievements (
             id TEXT PRIMARY KEY,
             unlocked_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-        CREATE TABLE IF NOT EXISTS game_streak (
+        CREATE TABLE IF NOT EXISTS user_streak (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             current_streak INTEGER NOT NULL DEFAULT 0,
             last_active_date TEXT,
             longest_streak INTEGER NOT NULL DEFAULT 0
         );
-        INSERT OR IGNORE INTO game_streak (id, current_streak, last_active_date, longest_streak)
+        INSERT OR IGNORE INTO user_streak (id, current_streak, last_active_date, longest_streak)
             VALUES (1, 0, NULL, 0);",
     )?;
     Ok(())
@@ -84,7 +84,7 @@ pub fn check_daily_streak(db: &Database) -> Vec<AchievementUnlocked> {
 
     // Collect any newly-unlocked streak achievements that update_streak recorded
     // but that haven't been emitted as events yet. We re-check here because
-    // update_streak inserts into game_achievements but doesn't return unlocked info.
+    // update_streak inserts into achievements but doesn't return unlocked info.
     let streak = get_current_streak(&conn);
     let mut unlocked = Vec::new();
 
@@ -97,7 +97,7 @@ pub fn check_daily_streak(db: &Database) -> Vec<AchievementUnlocked> {
             // if it was inserted *this call* (unlocked_at within last 5 seconds)
             let recent: bool = conn
                 .query_row(
-                    "SELECT COUNT(*) > 0 FROM game_achievements
+                    "SELECT COUNT(*) > 0 FROM achievements
                      WHERE id = ?1 AND unlocked_at >= datetime('now', '-5 seconds')",
                     rusqlite::params![achievement.id],
                     |row| row.get(0),
@@ -133,7 +133,7 @@ pub fn increment_counter(
 
     // Update counter
     let new_value: u64 = match conn.query_row(
-        "INSERT INTO game_counters (counter_type, value, updated_at) VALUES (?1, ?2, datetime('now'))
+        "INSERT INTO activity_counters (counter_type, value, updated_at) VALUES (?1, ?2, datetime('now'))
          ON CONFLICT(counter_type) DO UPDATE SET value = value + ?2, updated_at = datetime('now')
          RETURNING value",
         rusqlite::params![counter_type, amount],
@@ -170,7 +170,7 @@ pub fn increment_counter(
             // Check if already unlocked
             let already: bool = conn
                 .query_row(
-                    "SELECT COUNT(*) > 0 FROM game_achievements WHERE id = ?1",
+                    "SELECT COUNT(*) > 0 FROM achievements WHERE id = ?1",
                     rusqlite::params![achievement.id],
                     |row| row.get(0),
                 )
@@ -179,7 +179,7 @@ pub fn increment_counter(
             if !already {
                 let now = chrono::Utc::now().to_rfc3339();
                 if let Err(e) = conn.execute(
-                    "INSERT INTO game_achievements (id, unlocked_at) VALUES (?1, ?2)",
+                    "INSERT INTO achievements (id, unlocked_at) VALUES (?1, ?2)",
                     rusqlite::params![achievement.id, now],
                 ) {
                     debug!(target: "4da::game", error = %e, "Failed to record achievement");
@@ -208,7 +208,7 @@ fn update_streak(conn: &rusqlite::Connection) {
 
     let last_active: Option<String> = conn
         .query_row(
-            "SELECT last_active_date FROM game_streak WHERE id = 1",
+            "SELECT last_active_date FROM user_streak WHERE id = 1",
             [],
             |row| row.get(0),
         )
@@ -227,14 +227,14 @@ fn update_streak(conn: &rusqlite::Connection) {
                     if diff == 1 {
                         // Consecutive day — increment streak
                         let _ = conn.execute(
-                            "UPDATE game_streak SET current_streak = current_streak + 1, last_active_date = ?1,
+                            "UPDATE user_streak SET current_streak = current_streak + 1, last_active_date = ?1,
                              longest_streak = MAX(longest_streak, current_streak + 1) WHERE id = 1",
                             rusqlite::params![today],
                         );
                     } else {
                         // Streak broken — reset to 1
                         let _ = conn.execute(
-                            "UPDATE game_streak SET current_streak = 1, last_active_date = ?1 WHERE id = 1",
+                            "UPDATE user_streak SET current_streak = 1, last_active_date = ?1 WHERE id = 1",
                             rusqlite::params![today],
                         );
                     }
@@ -244,7 +244,7 @@ fn update_streak(conn: &rusqlite::Connection) {
         None => {
             // First ever activity
             let _ = conn.execute(
-                "UPDATE game_streak SET current_streak = 1, last_active_date = ?1, longest_streak = 1 WHERE id = 1",
+                "UPDATE user_streak SET current_streak = 1, last_active_date = ?1, longest_streak = 1 WHERE id = 1",
                 rusqlite::params![today],
             );
         }
@@ -259,7 +259,7 @@ fn update_streak(conn: &rusqlite::Connection) {
         if streak >= achievement.threshold as u32 {
             let already: bool = conn
                 .query_row(
-                    "SELECT COUNT(*) > 0 FROM game_achievements WHERE id = ?1",
+                    "SELECT COUNT(*) > 0 FROM achievements WHERE id = ?1",
                     rusqlite::params![achievement.id],
                     |row| row.get(0),
                 )
@@ -267,7 +267,7 @@ fn update_streak(conn: &rusqlite::Connection) {
             if !already {
                 let now = chrono::Utc::now().to_rfc3339();
                 let _ = conn.execute(
-                    "INSERT INTO game_achievements (id, unlocked_at) VALUES (?1, ?2)",
+                    "INSERT INTO achievements (id, unlocked_at) VALUES (?1, ?2)",
                     rusqlite::params![achievement.id, now],
                 );
                 info!(target: "4da::game", id = %achievement.id, "Streak achievement unlocked!");
@@ -278,7 +278,7 @@ fn update_streak(conn: &rusqlite::Connection) {
 
 fn get_current_streak(conn: &rusqlite::Connection) -> u32 {
     conn.query_row(
-        "SELECT current_streak FROM game_streak WHERE id = 1",
+        "SELECT current_streak FROM user_streak WHERE id = 1",
         [],
         |row| row.get(0),
     )
@@ -286,13 +286,13 @@ fn get_current_streak(conn: &rusqlite::Connection) -> u32 {
 }
 
 /// Get the full game state
-pub fn get_game_state(db: &Database) -> GameState {
+pub fn get_achievement_state(db: &Database) -> ActivitySnapshot {
     let conn = db.conn.lock();
     let achievements_def = all_achievements();
 
     // Get all counters
     let mut counters = Vec::new();
-    if let Ok(mut stmt) = conn.prepare("SELECT counter_type, value FROM game_counters") {
+    if let Ok(mut stmt) = conn.prepare("SELECT counter_type, value FROM activity_counters") {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok(CounterState {
                 counter_type: row.get(0)?,
@@ -308,7 +308,7 @@ pub fn get_game_state(db: &Database) -> GameState {
     // Get unlocked achievement IDs
     let mut unlocked_map: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
-    if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM game_achievements") {
+    if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM achievements") {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         }) {
@@ -356,14 +356,14 @@ pub fn get_game_state(db: &Database) -> GameState {
 
     let last_active: Option<String> = conn
         .query_row(
-            "SELECT last_active_date FROM game_streak WHERE id = 1",
+            "SELECT last_active_date FROM user_streak WHERE id = 1",
             [],
             |row| row.get(0),
         )
         .ok()
         .flatten();
 
-    GameState {
+    ActivitySnapshot {
         counters,
         achievements,
         streak,
@@ -377,7 +377,7 @@ pub fn get_achievements(db: &Database) -> Vec<AchievementUnlocked> {
     let achievements_def = all_achievements();
     let mut result = Vec::new();
 
-    if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM game_achievements") {
+    if let Ok(mut stmt) = conn.prepare("SELECT id, unlocked_at FROM achievements") {
         if let Ok(rows) = stmt.query_map([], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         }) {
@@ -602,7 +602,7 @@ mod tests {
         increment_counter(&db, "discoveries", 3);
         increment_counter(&db, "saves", 1);
 
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
 
         let scan_counter = state
             .counters
@@ -633,7 +633,7 @@ mod tests {
     #[test]
     fn test_streak_starts_at_zero() {
         let db = game_db();
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
         assert_eq!(state.streak, 0, "Fresh DB streak should be 0");
         assert!(
             state.last_active.is_none(),
@@ -648,7 +648,7 @@ mod tests {
         // A scan triggers update_streak
         increment_counter(&db, "scans", 1);
 
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
         assert_eq!(state.streak, 1, "Streak should be 1 after first scan");
         assert!(state.last_active.is_some(), "last_active should be set");
     }
@@ -658,12 +658,12 @@ mod tests {
         let db = game_db();
 
         increment_counter(&db, "scans", 1);
-        let state1 = get_game_state(&db);
+        let state1 = get_achievement_state(&db);
         let streak_after_first = state1.streak;
 
         // Another scan on the same day should not change streak
         increment_counter(&db, "scans", 1);
-        let state2 = get_game_state(&db);
+        let state2 = get_achievement_state(&db);
         assert_eq!(
             state2.streak, streak_after_first,
             "Streak should not change for multiple scans on same day"
@@ -680,7 +680,7 @@ mod tests {
             .format("%Y-%m-%d")
             .to_string();
         conn.execute(
-            "UPDATE game_streak SET current_streak = 5, last_active_date = ?1 WHERE id = 1",
+            "UPDATE user_streak SET current_streak = 5, last_active_date = ?1 WHERE id = 1",
             rusqlite::params![three_days_ago],
         )
         .unwrap();
@@ -710,7 +710,7 @@ mod tests {
             .format("%Y-%m-%d")
             .to_string();
         conn.execute(
-            "UPDATE game_streak SET current_streak = 4, last_active_date = ?1 WHERE id = 1",
+            "UPDATE user_streak SET current_streak = 4, last_active_date = ?1 WHERE id = 1",
             rusqlite::params![yesterday],
         )
         .unwrap();
@@ -729,7 +729,7 @@ mod tests {
 
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
         conn.execute(
-            "UPDATE game_streak SET current_streak = 7, last_active_date = ?1 WHERE id = 1",
+            "UPDATE user_streak SET current_streak = 7, last_active_date = ?1 WHERE id = 1",
             rusqlite::params![today],
         )
         .unwrap();
@@ -750,7 +750,7 @@ mod tests {
             .format("%Y-%m-%d")
             .to_string();
         conn.execute(
-            "UPDATE game_streak SET current_streak = 9, last_active_date = ?1, longest_streak = 9 WHERE id = 1",
+            "UPDATE user_streak SET current_streak = 9, last_active_date = ?1, longest_streak = 9 WHERE id = 1",
             rusqlite::params![yesterday],
         )
         .unwrap();
@@ -759,7 +759,7 @@ mod tests {
 
         let longest: u32 = conn
             .query_row(
-                "SELECT longest_streak FROM game_streak WHERE id = 1",
+                "SELECT longest_streak FROM user_streak WHERE id = 1",
                 [],
                 |row| row.get(0),
             )
@@ -795,7 +795,7 @@ mod tests {
                 .format("%Y-%m-%d")
                 .to_string();
             conn.execute(
-                "UPDATE game_streak SET current_streak = 2, last_active_date = ?1 WHERE id = 1",
+                "UPDATE user_streak SET current_streak = 2, last_active_date = ?1 WHERE id = 1",
                 rusqlite::params![yesterday],
             )
             .unwrap();
@@ -824,7 +824,7 @@ mod tests {
                 .format("%Y-%m-%d")
                 .to_string();
             conn.execute(
-                "UPDATE game_streak SET current_streak = 2, last_active_date = ?1 WHERE id = 1",
+                "UPDATE user_streak SET current_streak = 2, last_active_date = ?1 WHERE id = 1",
                 rusqlite::params![yesterday],
             )
             .unwrap();
@@ -845,7 +845,7 @@ mod tests {
         let count: i64 = {
             let conn = db.conn.lock();
             conn.query_row(
-                "SELECT COUNT(*) FROM game_achievements WHERE id = 'streak_three'",
+                "SELECT COUNT(*) FROM achievements WHERE id = 'streak_three'",
                 [],
                 |row| row.get(0),
             )
@@ -855,14 +855,14 @@ mod tests {
     }
 
     // ========================================================================
-    // 6. get_game_state returns correct state
+    // 6. get_achievement_state returns correct state
     // ========================================================================
 
     #[test]
-    fn test_get_game_state_fresh_db() {
+    fn test_get_achievement_state_fresh_db() {
         let db = game_db();
 
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
         assert!(state.counters.is_empty(), "No counters on fresh DB");
         assert_eq!(state.streak, 0);
         assert!(state.last_active.is_none());
@@ -883,13 +883,13 @@ mod tests {
     }
 
     #[test]
-    fn test_get_game_state_after_increments() {
+    fn test_get_achievement_state_after_increments() {
         let db = game_db();
 
         increment_counter(&db, "scans", 5);
         increment_counter(&db, "discoveries", 2);
 
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
 
         // Check counters
         let scan_counter = state
@@ -954,7 +954,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get_game_state_streak_reflected_in_achievements() {
+    fn test_get_achievement_state_streak_reflected_in_achievements() {
         let db = game_db();
 
         // Set streak to 7
@@ -962,13 +962,13 @@ mod tests {
             let conn = db.conn.lock();
             let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
             conn.execute(
-                "UPDATE game_streak SET current_streak = 7, last_active_date = ?1 WHERE id = 1",
+                "UPDATE user_streak SET current_streak = 7, last_active_date = ?1 WHERE id = 1",
                 rusqlite::params![today],
             )
             .unwrap();
         }
 
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
         assert_eq!(state.streak, 7);
 
         // All streak achievements should have current = 7
@@ -982,9 +982,9 @@ mod tests {
     }
 
     #[test]
-    fn test_get_game_state_all_achievements_have_metadata() {
+    fn test_get_achievement_state_all_achievements_have_metadata() {
         let db = game_db();
-        let state = get_game_state(&db);
+        let state = get_achievement_state(&db);
 
         for a in &state.achievements {
             assert!(!a.id.is_empty(), "Achievement ID should not be empty");
