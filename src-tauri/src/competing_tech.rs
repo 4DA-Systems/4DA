@@ -30,6 +30,80 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
             "gin", "echo", "fastapi", "fiber",
         ],
     ),
+    // Meta-frameworks (Next.js user doesn't need Nuxt content and vice versa)
+    ("next", &["nuxt", "remix", "gatsby", "astro", "sveltekit"]),
+    ("nextjs", &["nuxt", "remix", "gatsby", "astro", "sveltekit"]),
+    (
+        "nuxt",
+        &["next", "nextjs", "remix", "gatsby", "astro", "sveltekit"],
+    ),
+    ("remix", &["next", "nextjs", "nuxt", "gatsby", "astro"]),
+    ("gatsby", &["next", "nextjs", "nuxt", "remix", "astro"]),
+    ("astro", &["next", "nextjs", "nuxt", "remix", "gatsby"]),
+    // CSS approaches
+    (
+        "tailwindcss",
+        &[
+            "styled-components",
+            "emotion",
+            "css-modules",
+            "bootstrap",
+            "material-ui",
+        ],
+    ),
+    (
+        "tailwind",
+        &[
+            "styled-components",
+            "emotion",
+            "css-modules",
+            "bootstrap",
+            "material-ui",
+        ],
+    ),
+    (
+        "styled-components",
+        &["tailwindcss", "tailwind", "emotion", "css-modules"],
+    ),
+    // ORMs / database clients
+    ("prisma", &["drizzle", "typeorm", "sequelize", "mongoose"]),
+    ("drizzle", &["prisma", "typeorm", "sequelize", "mongoose"]),
+    ("diesel", &["sqlx", "sea-orm"]),
+    ("sqlx", &["diesel", "sea-orm"]),
+    // Backend frameworks (Python)
+    (
+        "django",
+        &["flask", "fastapi", "express", "rails", "laravel", "spring"],
+    ),
+    (
+        "flask",
+        &["django", "fastapi", "express", "rails", "laravel"],
+    ),
+    (
+        "fastapi",
+        &["django", "flask", "express", "rails", "laravel"],
+    ),
+    // Backend frameworks (Node)
+    (
+        "express",
+        &[
+            "fastify", "koa", "hapi", "nest", "nestjs", "django", "flask", "rails",
+        ],
+    ),
+    ("fastify", &["express", "koa", "hapi", "nest", "nestjs"]),
+    // Backend frameworks (Ruby/PHP/Java)
+    (
+        "rails",
+        &["django", "laravel", "spring", "express", "fastapi"],
+    ),
+    (
+        "laravel",
+        &["django", "rails", "spring", "express", "fastapi"],
+    ),
+    (
+        "spring",
+        &["django", "rails", "laravel", "express", "fastapi"],
+    ),
     // Package managers
     ("pnpm", &["npm", "yarn"]),
     ("yarn", &["npm", "pnpm"]),
@@ -39,6 +113,17 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
     // Databases (when used as primary)
     ("sqlite", &["mongodb", "dynamodb", "couchdb"]),
     ("postgresql", &["mysql", "mariadb"]),
+    ("mongodb", &["postgresql", "mysql", "sqlite"]),
+    // Build tools
+    ("vite", &["webpack", "parcel", "rollup", "turbopack"]),
+    ("webpack", &["vite", "parcel", "rollup", "turbopack"]),
+    ("esbuild", &["webpack", "rollup", "parcel"]),
+    // Cloud platforms
+    ("vercel", &["netlify", "cloudflare", "aws"]),
+    ("netlify", &["vercel", "cloudflare"]),
+    // BaaS
+    ("supabase", &["firebase", "appwrite", "pocketbase"]),
+    ("firebase", &["supabase", "appwrite", "pocketbase"]),
     // Type systems
     ("typescript", &["flow", "rescript"]),
     // Backend languages (when article is about a different backend entirely)
