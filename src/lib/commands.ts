@@ -671,7 +671,7 @@ interface CommandMap {
   clear_telemetry: { params: Record<string, never>; result: void };
 
   // -- GAME Engine --
-  get_game_state: { params: Record<string, never>; result: GameState };
+  get_achievement_state: { params: Record<string, never>; result: ActivitySnapshot };
   get_achievements: { params: Record<string, never>; result: AchievementUnlocked[] };
   check_daily_streak: { params: Record<string, never>; result: AchievementUnlocked[] };
 
@@ -882,8 +882,8 @@ interface ContextStats {
   has_role: boolean;
 }
 
-/** Game engine state (mirrors Rust GameState) */
-interface GameState {
+/** Game engine state (mirrors Rust ActivitySnapshot) */
+interface ActivitySnapshot {
   counters: Array<{ counter_type: string; value: number }>;
   achievements: Array<{
     id: string;
@@ -2170,7 +2170,7 @@ export type {
   SourceInfo,
   ElectricityCostResult,
   ContextStats,
-  GameState,
+  ActivitySnapshot,
   AchievementUnlocked,
   StartupHealthIssue,
   // Source Plugin API (Phase 7)

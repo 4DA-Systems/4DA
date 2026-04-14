@@ -884,7 +884,7 @@ pub fn run() {
             content_translation_commands::get_translation_config,
             content_translation_commands::set_translation_config,
             // GAME Engine
-            achievement_commands::get_game_state,
+            achievement_commands::get_achievement_state,
             achievement_commands::get_achievements,
             achievement_commands::check_daily_streak,
             // Information Channels
