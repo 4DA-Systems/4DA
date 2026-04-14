@@ -184,15 +184,20 @@ fn extract_salient_terms(text: &str) -> Vec<String> {
     };
     for token in &tokens {
         let stripped = token.trim_matches(|c: char| !c.is_alphanumeric());
-        if stripped.is_empty() {
-            flush(&mut cap_run, &mut out, &mut seen);
-            continue;
-        }
-        let first = stripped.chars().next().unwrap();
-        if first.is_uppercase() && stripped.len() > 1 && !is_stopword(stripped) {
-            cap_run.push(stripped);
-        } else {
-            flush(&mut cap_run, &mut out, &mut seen);
+        // Match on the first character via `chars().next()` rather than
+        // unwrap-after-empty-check so clippy's unwrap_used lint is happy
+        // without sacrificing readability.
+        match stripped.chars().next() {
+            None => {
+                flush(&mut cap_run, &mut out, &mut seen);
+            }
+            Some(first) => {
+                if first.is_uppercase() && stripped.len() > 1 && !is_stopword(stripped) {
+                    cap_run.push(stripped);
+                } else {
+                    flush(&mut cap_run, &mut out, &mut seen);
+                }
+            }
         }
     }
     flush(&mut cap_run, &mut out, &mut seen);
@@ -206,7 +211,10 @@ fn extract_salient_terms(text: &str) -> Vec<String> {
             continue;
         }
         let mut chars = stripped.chars();
-        let first = chars.next().unwrap();
+        // Short-circuit on empty first — prior len < 5 guard means we
+        // should never hit this, but let-else is the idiomatic way to
+        // avoid clippy's unwrap_used lint.
+        let Some(first) = chars.next() else { continue };
         if !first.is_uppercase() {
             continue;
         }
