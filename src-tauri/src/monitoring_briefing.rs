@@ -667,24 +667,37 @@ fn detect_escalating_chains() -> Vec<ChainSummary> {
 ///
 /// Fetches validated principles and anti-patterns from the Wisdom Graph.
 /// These provide decision context from accumulated project experience.
+///
+/// **First production use of the `external::awe::AweClient` typed wrapper.**
+/// Migrated from raw `Command::new("awe")` on 2026-04-14 as part of the
+/// Silent-Failure Defense Layer 1 rollout. See
+/// `docs/strategy/SILENT-FAILURE-DEFENSE.md` for the architecture and
+/// `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` for the
+/// bugs this wrapper defends against by construction.
 fn recall_awe_wisdom() -> Vec<WisdomSignal> {
-    let awe_path = match crate::context_commands::find_awe_binary() {
-        Some(p) => p,
+    // Resolve config via the typed wrapper's single source of truth. Returns
+    // None if AWE is not installed / discoverable — same semantics as the
+    // old `find_awe_binary()` check, just routed through the wrapper so the
+    // caller depends on one abstraction instead of two.
+    let client = match crate::external::awe::AweClientConfig::from_default_paths() {
+        Some(cfg) => crate::external::awe::AweClient::new(cfg),
         None => return vec![],
     };
 
-    let output = match crate::context_commands::run_awe_with_timeout(
-        std::process::Command::new(&awe_path).args(["wisdom", "--domain", "software-engineering"]),
-        15,
-    ) {
+    let wisdom_output = match client.wisdom("software-engineering") {
         Ok(o) => o,
         Err(e) => {
+            // The typed wrapper has already done the KNOWN_ERROR_PATTERNS
+            // scan + exit-code check + timeout handling. Any error here is
+            // already categorized (BinaryNotFound / Timeout / KnownError /
+            // ExitFailed / ParseError / SpawnFailed) — we just log and
+            // gracefully degrade the briefing.
             tracing::warn!(target: "4da::briefing", error = %e, "AWE wisdom recall failed for briefing");
             return vec![];
         }
     };
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = wisdom_output.raw_output;
     let mut signals = Vec::new();
     let mut current_type = "";
 
