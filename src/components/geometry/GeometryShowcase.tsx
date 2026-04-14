@@ -16,7 +16,7 @@ interface GeometryEntry {
 // Architecturally grounded — each maps to verifiable system properties
 const FOUNDATIONS: GeometryEntry[] = [
   {
-    tag: 'game-tetrahedron',
+    tag: 'fourda-tetrahedron',
     name: 'Tetrahedron',
     vertices: 4, edges: 6, dimension: '3D',
     role: 'Foundation',
@@ -24,7 +24,7 @@ const FOUNDATIONS: GeometryEntry[] = [
     verify: '.ai/INVARIANTS.md',
   },
   {
-    tag: 'game-pentachoron',
+    tag: 'fourda-pentachoron',
     name: 'Pentachoron',
     vertices: 5, edges: 10, dimension: '4D',
     role: 'Identity',
@@ -32,7 +32,7 @@ const FOUNDATIONS: GeometryEntry[] = [
     verify: 'src-tauri/src/ace/',
   },
   {
-    tag: 'game-simplex-unfold',
+    tag: 'fourda-simplex-unfold',
     name: 'Simplex Unfold',
     vertices: 5, edges: 10, dimension: '0D\u20264D',
     role: 'Emergence',
@@ -43,7 +43,7 @@ const FOUNDATIONS: GeometryEntry[] = [
 // Geometric family — visual identity completing the Platonic solid set
 const FAMILY: GeometryEntry[] = [
   {
-    tag: 'game-icosahedron',
+    tag: 'fourda-icosahedron',
     name: 'Icosahedron',
     vertices: 12, edges: 30, dimension: '3D',
     role: 'Network',
@@ -51,14 +51,14 @@ const FAMILY: GeometryEntry[] = [
     verify: 'docs/strategy/TEAM-RELAY-ARCHITECTURE.md',
   },
   {
-    tag: 'game-dodecahedron',
+    tag: 'fourda-dodecahedron',
     name: 'Dodecahedron',
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Dual',
     description: 'The icosahedron\u2019s mathematical dual \u2014 same 30 edges, pentagons where triangles were. Every Platonic solid has a dual. 4DA\u2019s visual language honours the full family.',
   },
   {
-    tag: 'game-compound-five-tetrahedra',
+    tag: 'fourda-compound-five-tetrahedra',
     name: 'Compound of Five',
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Bridge',

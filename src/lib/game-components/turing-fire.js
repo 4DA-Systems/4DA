@@ -503,7 +503,7 @@ class TuringFire extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-turing-fire: no WebGPU or WebGL2 support');
+        console.warn('fourda-turing-fire: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -543,5 +543,5 @@ class TuringFire extends HTMLElement {
   }
 }
 
-customElements.define('game-turing-fire', TuringFire);
+customElements.define('fourda-turing-fire', TuringFire);
 })();

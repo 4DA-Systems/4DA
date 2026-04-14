@@ -681,7 +681,7 @@ class SimplexUnfold extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-simplex-unfold: no WebGPU or WebGL2 support');
+        console.warn('fourda-simplex-unfold: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -706,5 +706,5 @@ class SimplexUnfold extends HTMLElement {
   }
 }
 
-customElements.define('game-simplex-unfold', SimplexUnfold);
+customElements.define('fourda-simplex-unfold', SimplexUnfold);
 })();

@@ -92,7 +92,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const [showHint, setShowHint] = useState(false);
   const hintRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { registerGameComponent('game-status-orb'); }, []);
+  useEffect(() => { registerGameComponent('fourda-status-orb'); }, []);
 
   // Close hint on outside click
   useEffect(() => {
@@ -154,7 +154,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
         title={errorMsg ?? label}
       >
         {config.animate ? (
-          <game-status-orb
+          <fourda-status-orb
             style={{ width: '10px', height: '10px', flexShrink: 0 }}
             aria-hidden="true"
             ref={(el: HTMLElement | null) => {

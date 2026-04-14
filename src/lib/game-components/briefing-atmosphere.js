@@ -889,7 +889,7 @@ class BriefingAtmosphere extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-briefing-atmosphere: no WebGPU or WebGL2 support');
+        console.warn('fourda-briefing-atmosphere: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -924,5 +924,5 @@ class BriefingAtmosphere extends HTMLElement {
   }
 }
 
-customElements.define('game-briefing-atmosphere', BriefingAtmosphere);
+customElements.define('fourda-briefing-atmosphere', BriefingAtmosphere);
 })();

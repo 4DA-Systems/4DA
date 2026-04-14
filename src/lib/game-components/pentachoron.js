@@ -604,7 +604,7 @@ class Pentachoron extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-pentachoron: no WebGPU or WebGL2 support');
+        console.warn('fourda-pentachoron: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -629,5 +629,5 @@ class Pentachoron extends HTMLElement {
   }
 }
 
-customElements.define('game-pentachoron', Pentachoron);
+customElements.define('fourda-pentachoron', Pentachoron);
 })();

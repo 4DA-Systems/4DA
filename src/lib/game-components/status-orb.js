@@ -729,7 +729,7 @@ class StatusOrb extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-status-orb: no WebGPU or WebGL2 support');
+        console.warn('fourda-status-orb: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -764,5 +764,5 @@ class StatusOrb extends HTMLElement {
   }
 }
 
-customElements.define('game-status-orb', StatusOrb);
+customElements.define('fourda-status-orb', StatusOrb);
 })();

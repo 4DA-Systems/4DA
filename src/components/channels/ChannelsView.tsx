@@ -8,7 +8,7 @@ import { CreateChannelModal } from './CreateChannelModal';
 import { useGameComponent } from '../../hooks/use-game-component';
 
 function SourceVitals({ channelCount, activeCount }: { channelCount: number; activeCount: number }) {
-  const { containerRef, elementRef } = useGameComponent('game-source-vitals');
+  const { containerRef, elementRef } = useGameComponent('fourda-source-vitals');
 
   useEffect(() => {
     const health = channelCount > 0 ? activeCount / channelCount : 0;

@@ -887,7 +887,7 @@ class CelebrationBurst extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-celebration-burst: no WebGPU or WebGL2 support');
+        console.warn('fourda-celebration-burst: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -922,5 +922,5 @@ class CelebrationBurst extends HTMLElement {
   }
 }
 
-customElements.define('game-celebration-burst', CelebrationBurst);
+customElements.define('fourda-celebration-burst', CelebrationBurst);
 })();

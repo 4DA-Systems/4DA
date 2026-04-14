@@ -714,7 +714,7 @@ class Icosahedron extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-icosahedron: no WebGPU or WebGL2 support');
+        console.warn('fourda-icosahedron: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -739,5 +739,5 @@ class Icosahedron extends HTMLElement {
   }
 }
 
-customElements.define('game-icosahedron', Icosahedron);
+customElements.define('fourda-icosahedron', Icosahedron);
 })();

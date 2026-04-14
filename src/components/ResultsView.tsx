@@ -24,7 +24,7 @@ export function ResultsView({
 }: ResultsViewProps) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
-  useEffect(() => { registerGameComponent('game-tetrahedron'); }, []);
+  useEffect(() => { registerGameComponent('fourda-tetrahedron'); }, []);
   // Data selectors (may change, use useShallow)
   const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
     useShallow((s) => ({
@@ -281,7 +281,7 @@ export function ResultsView({
               ) : (
                 <>
                   <div className="w-16 h-16 mx-auto mb-4 rounded-xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
-                    <game-tetrahedron style={{ width: '64px', height: '64px', display: 'block' }} />
+                    <fourda-tetrahedron style={{ width: '64px', height: '64px', display: 'block' }} />
                   </div>
                   <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
                   <p className="text-sm text-text-muted mb-3">

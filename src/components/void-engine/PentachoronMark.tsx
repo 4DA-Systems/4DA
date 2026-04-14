@@ -21,9 +21,9 @@ export function PentachoronMark({ signal, size = 200 }: PentachoronMarkProps) {
 
   useEffect(() => {
     let cancelled = false;
-    registerGameComponent('game-pentachoron').then(() => {
+    registerGameComponent('fourda-pentachoron').then(() => {
       if (cancelled || !containerRef.current) return;
-      const el = document.createElement('game-pentachoron');
+      const el = document.createElement('fourda-pentachoron');
       el.style.width = '100%';
       el.style.height = '100%';
       el.style.display = 'block';

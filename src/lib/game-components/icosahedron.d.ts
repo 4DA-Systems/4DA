@@ -31,7 +31,7 @@ interface GameIcosahedronElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-icosahedron': GameIcosahedronElement;
+    'fourda-icosahedron': GameIcosahedronElement;
   }
 }
 
