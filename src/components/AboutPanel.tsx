@@ -4,7 +4,7 @@ import { useAppStore } from '../store';
 
 // Static imports — custom elements are defined at module load time,
 // BEFORE React renders. No async, no race conditions, no effects needed.
-import '../lib/game-components/logo-mark.js';
+import '../lib/fourda-components/logo-mark.js';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
 const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').then(m => ({ default: m.ConfigDiagnostics })));

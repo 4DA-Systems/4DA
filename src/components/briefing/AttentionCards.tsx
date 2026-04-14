@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { formatScore } from '../../utils/score';
 import { isSafeUrl } from '../../utils/sanitize-html';
-import { useGameComponent } from '../../hooks/use-game-component';
+import { useFourdaComponent } from '../../hooks/use-fourda-component';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
@@ -100,7 +100,7 @@ const AttentionCard = memo(function AttentionCard({
   const source = item.source_type || 'hackernews';
 
   // GAME score fingerprint — unique visual identity per item
-  const { containerRef: fpRef, elementRef: fpElRef } = useGameComponent('fourda-score-fingerprint');
+  const { containerRef: fpRef, elementRef: fpElRef } = useFourdaComponent('fourda-score-fingerprint');
 
   useEffect(() => {
     const el = fpElRef.current;

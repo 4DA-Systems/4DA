@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { VoidEngine } from '../void-engine/VoidEngine';
 import { getStageNarration } from '../../utils/first-run-messages';
-import { registerGameComponent } from '../../lib/game-components';
+import { registerFourdaComponent } from '../../lib/fourda-components';
 import type { Phase, ScanSummary } from './utils';
 
 // ============================================================================
@@ -152,7 +152,7 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
-  useEffect(() => { registerGameComponent('fourda-simplex-unfold'); }, []);
+  useEffect(() => { registerFourdaComponent('fourda-simplex-unfold'); }, []);
 
   // Estimated time remaining — initialized from parent's source-count estimate
   // Uses a ref-based counter to avoid infinite timer chains in test environments

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
-import { registerGameComponent } from '../lib/game-components';
+import { registerFourdaComponent } from '../lib/fourda-components';
 
 // ============================================================================
 // Types
@@ -92,7 +92,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const [showHint, setShowHint] = useState(false);
   const hintRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { registerGameComponent('fourda-status-orb'); }, []);
+  useEffect(() => { registerFourdaComponent('fourda-status-orb'); }, []);
 
   // Close hint on outside click
   useEffect(() => {

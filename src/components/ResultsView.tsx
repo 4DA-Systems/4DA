@@ -11,7 +11,7 @@ import { ALL_SOURCE_IDS } from '../config/sources';
 import { SourceCategoryFilter } from './SourceCategoryFilter';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
-import { registerGameComponent } from '../lib/game-components';
+import { registerFourdaComponent } from '../lib/fourda-components';
 
 interface ResultsViewProps {
   newItemIds: Set<number>;
@@ -24,7 +24,7 @@ export function ResultsView({
 }: ResultsViewProps) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
-  useEffect(() => { registerGameComponent('fourda-tetrahedron'); }, []);
+  useEffect(() => { registerFourdaComponent('fourda-tetrahedron'); }, []);
   // Data selectors (may change, use useShallow)
   const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
     useShallow((s) => ({

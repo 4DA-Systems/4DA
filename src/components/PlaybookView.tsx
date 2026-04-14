@@ -8,12 +8,12 @@ import { SovereignProfile } from './playbook/SovereignProfile';
 import { StreetHealthBadge } from './playbook/StreetHealthBadge';
 import { TemplateLibrary } from './playbook/TemplateLibrary';
 import { PlaybookSidebar } from './playbook/PlaybookSidebar';
-import { useGameComponent } from '../hooks/use-game-component';
+import { useFourdaComponent } from '../hooks/use-fourda-component';
 import PlaybookLessonList from './playbook/PlaybookLessonList';
 import { PlaybookWisdomResonance } from './awe/PlaybookWisdomResonance';
 
 function PlaybookPathway({ progress, streak }: { progress: number; streak: number }) {
-  const { containerRef, elementRef } = useGameComponent('fourda-playbook-pathway');
+  const { containerRef, elementRef } = useFourdaComponent('fourda-playbook-pathway');
 
   useEffect(() => {
     elementRef.current?.setParam?.('progress', progress);

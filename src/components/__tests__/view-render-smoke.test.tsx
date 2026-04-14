@@ -30,8 +30,8 @@ vi.mock('../../lib/commands', () => ({
 }));
 
 // Stub the game-component hook so WebGPU isn't required
-vi.mock('../../hooks/use-game-component', () => ({
-  useGameComponent: () => ({
+vi.mock('../../hooks/use-fourda-component', () => ({
+  useFourdaComponent: () => ({
     containerRef: { current: null },
     elementRef: { current: null },
   }),
