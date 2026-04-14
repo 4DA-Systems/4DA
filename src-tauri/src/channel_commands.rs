@@ -186,7 +186,7 @@ pub async fn create_custom_channel(
     info!(target: "4da::channels", slug = %slug, id, "Created custom channel");
 
     // GAME: track channel creation
-    for a in crate::game_engine::increment_counter(db, "channels", 1) {
+    for a in crate::achievement_engine::increment_counter(db, "channels", 1) {
         crate::events::emit_achievement_unlocked(&app, &a);
     }
 

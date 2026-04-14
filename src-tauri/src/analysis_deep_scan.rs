@@ -10,7 +10,7 @@ use crate::stacks;
 use futures::FutureExt;
 
 use crate::{
-    analysis_rerank, emit_progress, game_engine, get_analysis_abort, get_analysis_state,
+    analysis_rerank, emit_progress, achievement_engine, get_analysis_abort, get_analysis_state,
     get_database, monitoring, open_db_connection, source_fetching, truncate_utf8, SourceRelevance,
 };
 
@@ -109,13 +109,13 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
                 // GAME: track scan, discoveries, and source diversity
                 if let Ok(db) = crate::get_database() {
                     // Increment scan counter
-                    for a in game_engine::increment_counter(db, "scans", 1) {
+                    for a in achievement_engine::increment_counter(db, "scans", 1) {
                         crate::events::emit_achievement_unlocked(&app, &a);
                     }
                     // Increment discoveries counter
                     if relevant_count > 0 {
                         for a in
-                            game_engine::increment_counter(db, "discoveries", relevant_count as u64)
+                            achievement_engine::increment_counter(db, "discoveries", relevant_count as u64)
                         {
                             crate::events::emit_achievement_unlocked(&app, &a);
                         }
@@ -125,7 +125,7 @@ pub(crate) async fn run_deep_initial_scan(app: AppHandle) -> Result<()> {
                         results.iter().map(|r| r.source_type.as_str()).collect();
                     if source_types.len() >= 3 {
                         for a in
-                            game_engine::increment_counter(db, "sources", source_types.len() as u64)
+                            achievement_engine::increment_counter(db, "sources", source_types.len() as u64)
                         {
                             crate::events::emit_achievement_unlocked(&app, &a);
                         }

@@ -90,7 +90,7 @@ pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> 
 
     // GAME: track taste test completion
     if let Ok(db) = crate::get_database() {
-        for a in crate::game_engine::increment_counter(db, "taste_tests", 1) {
+        for a in crate::achievement_engine::increment_counter(db, "taste_tests", 1) {
             crate::events::emit_achievement_unlocked(&app, &a);
         }
     }

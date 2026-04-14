@@ -5,14 +5,14 @@ use tauri::AppHandle;
 #[tauri::command]
 pub fn get_game_state() -> Result<serde_json::Value> {
     let db = get_database()?;
-    let state = crate::game_engine::get_game_state(db);
+    let state = crate::achievement_engine::get_game_state(db);
     Ok(serde_json::to_value(state).unwrap_or_default())
 }
 
 #[tauri::command]
 pub fn get_achievements() -> Result<serde_json::Value> {
     let db = get_database()?;
-    let achievements = crate::game_engine::get_achievements(db);
+    let achievements = crate::achievement_engine::get_achievements(db);
     Ok(serde_json::to_value(achievements).unwrap_or_default())
 }
 
@@ -20,7 +20,7 @@ pub fn get_achievements() -> Result<serde_json::Value> {
 #[tauri::command]
 pub fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
     let db = get_database()?;
-    let unlocked = crate::game_engine::check_daily_streak(db);
+    let unlocked = crate::achievement_engine::check_daily_streak(db);
     for a in &unlocked {
         crate::events::emit_achievement_unlocked(&app, a);
     }
@@ -33,8 +33,8 @@ pub fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
 
 #[cfg(test)]
 mod tests {
-    use crate::game_achievements::AchievementTier;
-    use crate::game_engine::{AchievementState, CounterState, GameState};
+    use crate::achievement_definitions::AchievementTier;
+    use crate::achievement_engine::{AchievementState, CounterState, GameState};
 
     #[test]
     fn test_game_state_serialization() {
