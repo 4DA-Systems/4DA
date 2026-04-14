@@ -270,8 +270,8 @@ interface CommandMap {
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 
   // -- Settings & Configuration --
-  get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean } };
-  set_privacy_config: { params: { llm_content_level?: string; cloud_llm_disclosure_accepted?: boolean }; result: void };
+  get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; crash_reporting_opt_in: boolean } };
+  set_privacy_config: { params: { llm_content_level?: string; cloud_llm_disclosure_accepted?: boolean; crash_reporting_opt_in?: boolean }; result: void };
   get_settings: { params: Record<string, never>; result: Settings };
   get_llm_usage: { params: Record<string, never>; result: { used: number; limit: number; limit_reached: boolean; unlimited: boolean; cost_used_cents: number; cost_limit_cents: number; cost_limit_reached: boolean } };
   set_llm_provider: { params: { provider: string; apiKey: string; model: string; baseUrl: string | null; openaiApiKey?: string | null }; result: void };

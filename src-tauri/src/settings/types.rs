@@ -565,6 +565,12 @@ pub struct PrivacyConfig {
     /// Must be true before cloud providers (Anthropic/OpenAI) can be used.
     #[serde(default)]
     pub cloud_llm_disclosure_accepted: bool,
+    /// Whether the user has opted in to anonymous crash reporting via Sentry.
+    /// Default: false. User must explicitly enable in Settings.
+    /// Privacy-stripped: no PII, no file paths with usernames, no API keys,
+    /// no license keys. See `src/lib/sentry-init.ts` for scrubbing rules.
+    #[serde(default)]
+    pub crash_reporting_opt_in: bool,
 }
 
 fn default_llm_content_level() -> String {
@@ -576,6 +582,7 @@ impl Default for PrivacyConfig {
         Self {
             llm_content_level: default_llm_content_level(),
             cloud_llm_disclosure_accepted: false,
+            crash_reporting_opt_in: false,
         }
     }
 }
