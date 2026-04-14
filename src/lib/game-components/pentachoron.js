@@ -117,8 +117,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         v[i] = rot_yz(v[i], time * aspd * 0.382);
     }
 
-    // Breathing projection — pentachoron inhales/exhales in 4D
-    let breath = sin(time * 0.4) * 0.15;
+    // Breathing projection — subtle 4D depth variation (reduced for professional feel)
+    let breath = sin(time * 0.4) * 0.04;
 
     // Double projection: 4D -> 3D -> 2D
     var p: array<vec2<f32>, 5>;
@@ -143,8 +143,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
     min_d = min(min_d, min(d24, d34));
 
-    // Depth-weighted halo — edges closer in w-space glow brighter
-    let hk = 18.0;
+    // Depth-weighted halo — tightened falloff for crisp technical appearance
+    let hk = 28.0;
     var halo_sum = exp(-d01 * hk) * (wdepth[0] + wdepth[1]) * 0.5
                  + exp(-d02 * hk) * (wdepth[0] + wdepth[2]) * 0.5
                  + exp(-d03 * hk) * (wdepth[0] + wdepth[3]) * 0.5
@@ -164,22 +164,22 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if (vd < min_vd) { min_vd = vd; min_vw = wdepth[i]; }
     }
 
-    // Anti-aliased edge core + depth halo + vertex glow
+    // Anti-aliased edge core + tightened halo + precise vertex dots
     let edge_w = 0.022 + 0.012 * min_vw;
     let aa = fwidth(min_d);
     let core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
-    let halo = halo_sum * 0.25;
-    let vtx_w = 0.040;
+    let halo = halo_sum * 0.12;
+    let vtx_w = 0.025;
     let vtx_aa = fwidth(min_vd);
     let vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-            + exp(-min_vd * 35.0) * 0.5 * min_vw;
+            + exp(-min_vd * 50.0) * 0.35 * min_vw;
     let total = (core + halo + vtx) * u.glow_intensity;
 
-    // 4DA gold palette with white-hot bloom
-    let gold = vec3<f32>(0.831, 0.686, 0.216);
-    let hot = vec3<f32>(1.0, 0.95, 0.85);
-    let color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, vec3<f32>(0.0), vec3<f32>(1.0));
-    let alpha = clamp(total * 1.5, 0.0, 1.0);
+    // 4DA platinum-gold palette — technical precision, not mystical warmth
+    let gold = vec3<f32>(0.78, 0.72, 0.45);
+    let hot = vec3<f32>(1.0, 0.97, 0.9);
+    let color = clamp(gold * total + hot * max(total - 0.6, 0.0) * 0.15, vec3<f32>(0.0), vec3<f32>(1.0));
+    let alpha = clamp(total * 1.2, 0.0, 1.0);
     return vec4<f32>(color * alpha, alpha);
 }
 `;
@@ -273,7 +273,7 @@ void main(){
         v[i] = rot_yz(v[i], time * spd * 0.382);
     }
 
-    float breath = sin(time * 0.4) * 0.15;
+    float breath = sin(time * 0.4) * 0.04;
 
     vec2 p[5];
     float wdepth[5];
@@ -296,7 +296,7 @@ void main(){
     float min_d = min(min(min(d01, d02), min(d03, d04)), min(min(d12, d13), min(d14, d23)));
     min_d = min(min_d, min(d24, d34));
 
-    float hk = 18.0;
+    float hk = 28.0;
     float halo_sum = exp(-d01*hk) * (wdepth[0]+wdepth[1])*0.5
                    + exp(-d02*hk) * (wdepth[0]+wdepth[2])*0.5
                    + exp(-d03*hk) * (wdepth[0]+wdepth[3])*0.5
@@ -318,17 +318,17 @@ void main(){
     float edge_w = 0.022 + 0.012 * min_vw;
     float aa = fwidth(min_d);
     float core = (1.0 - smoothstep(edge_w - aa, edge_w + aa, min_d)) * 0.8 * min_vw;
-    float halo = halo_sum * 0.25;
-    float vtx_w = 0.040;
+    float halo = halo_sum * 0.12;
+    float vtx_w = 0.025;
     float vtx_aa = fwidth(min_vd);
     float vtx = (1.0 - smoothstep(vtx_w - vtx_aa, vtx_w + vtx_aa, min_vd)) * min_vw
-              + exp(-min_vd * 35.0) * 0.5 * min_vw;
+              + exp(-min_vd * 50.0) * 0.35 * min_vw;
     float total = (core + halo + vtx) * u_p_glow_intensity;
 
-    vec3 gold = vec3(0.831, 0.686, 0.216);
-    vec3 hot = vec3(1.0, 0.95, 0.85);
-    vec3 color = clamp(gold * total + hot * max(total - 0.45, 0.0) * 0.7, 0.0, 1.0);
-    float alpha = clamp(total * 1.5, 0.0, 1.0);
+    vec3 gold = vec3(0.78, 0.72, 0.45);
+    vec3 hot = vec3(1.0, 0.97, 0.9);
+    vec3 color = clamp(gold * total + hot * max(total - 0.6, 0.0) * 0.15, 0.0, 1.0);
+    float alpha = clamp(total * 1.2, 0.0, 1.0);
     fragColor = vec4(color * alpha, alpha);
 }
 `;

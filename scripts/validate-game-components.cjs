@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Validates GAME compiler output files for syntax correctness.
+ * Validates GAME Web Component .js files for syntax correctness.
  *
- * The GAME compiler (Generative Animation Matrix Engine) generates Web Components
- * with WebGPU + WebGL renderers. A known codegen bug can emit class methods
- * AFTER the class closing brace, breaking the build.
+ * NOTE: The GAME compiler that originally produced these files is retired —
+ * components are now standalone pre-compiled Web Components with no build-time
+ * dependency. This validator remains as a safety net for hand-edits to shader
+ * code (e.g., the pentachoron visual tuning). It catches syntax errors and
+ * orphaned methods outside class bodies.
  *
- * Run after every GAME compile: node scripts/validate-game-components.cjs
- * Also run as part of: pnpm run validate:all
+ * Also run as part of: pnpm run validate
  */
 
 const fs = require('fs');
