@@ -33,10 +33,10 @@ html, body {
 }
 
 /* ========================================================================
-   GAME Atmosphere Layer — subtle living texture behind the card
+   Atmosphere Layer — subtle living texture behind the card
    ======================================================================== */
 
-.game-layer {
+.atmosphere-layer {
   position: absolute;
   inset: 0;
   border-radius: 0;
@@ -47,8 +47,8 @@ html, body {
   z-index: 0;
 }
 
-.game-layer.active {
-  opacity: var(--game-opacity, 1);
+.atmosphere-layer.active {
+  opacity: var(--atmosphere-opacity, 1);
 }
 
 /* ========================================================================
@@ -117,16 +117,16 @@ html, body {
   transform: scale(1) translateY(0);
 }
 
-/* When GAME is rendering the card, make CSS card transparent.
-   GAME handles the card body, border, and sweep via GPU.
+/* When atmospheric effect is rendering, make CSS card transparent.
+   The effect handles the card body, border, and sweep via GPU.
    CSS card becomes a transparent text container only. */
-.notification-card.game-active {
+.notification-card.atmosphere-active {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
 }
-.notification-card.game-active::before,
-.notification-card.game-active::after {
+.notification-card.atmosphere-active::before,
+.notification-card.atmosphere-active::after {
   display: none !important;
 }
 
@@ -434,7 +434,7 @@ html, body {
 
 @media (prefers-reduced-motion: reduce) {
   .notification-card,
-  .game-layer {
+  .atmosphere-layer {
     transition: none !important;
   }
   .notification-card.visible {
