@@ -9,17 +9,11 @@
 
 ## Active Terminals
 
-### T-BRIEFING-FLAGSHIP — Morning briefing flagship quality pass
-- **Status**: working
-- **Since**: 2026-04-15
-- **Scope**: fix 4 identified issues (synthesis hallucination, poor source quality, dedupe-after-synthesis, structure ambiguity) + flagship extras (groundedness validator, golden tests, quality telemetry)
-- **Files**:
-  - src-tauri/src/briefing_quality.rs (NEW — item-level quality gate)
-  - src-tauri/src/briefing_groundedness.rs (NEW — post-synthesis hallucination detector)
-  - src-tauri/src/monitoring_briefing.rs (rewrite synthesis prompt + wire gates + dedupe)
-  - src-tauri/src/lib.rs (+2 module declarations only)
-  - src/components/BriefingView.tsx (show synthesis separately from bullet list)
-- **NOT touching**: any other file
+<!-- T-BRIEFING-FLAGSHIP (done 2026-04-15):
+     Commits: 7839ba86 (quality gate + groundedness + prompt rewrite + dedupe),
+              9b214124 (UI abstention rendering — snapshot path),
+              85dcb337 (end-to-end pipeline tests + free-briefing abstention).
+     Net: 2760/2760 Rust tests, 1237/1237 frontend tests, zero regressions. -->
 
 ---
 
