@@ -987,6 +987,7 @@ fn calculate_blind_spot_score(
 
 #[tauri::command]
 pub async fn get_blind_spots() -> std::result::Result<BlindSpotReport, String> {
+    crate::settings::require_signal_feature("get_blind_spots").map_err(|e| e.to_string())?;
     generate_blind_spot_report().map_err(|e| e.to_string())
 }
 
