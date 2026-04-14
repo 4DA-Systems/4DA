@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>4DA Notification</title>
   <link rel="stylesheet" href="/notification.css">
-  <!-- Shared GAME renderer runtime (preloaded for speed) -->
-  <link rel="preload" href="/game-runtime.js" as="script">
-  <!-- GAME card components loaded lazily by notification.js when first needed -->
+  <!-- Shared 4DA component runtime (preloaded for speed) -->
+  <link rel="preload" href="/fourda-runtime.js" as="script">
+  <!-- Card components loaded lazily by notification.js when first needed -->
 </head>
 <body>
   <div id="notification" class="notification-window" role="status" aria-live="polite">
-    <!-- GAME atmosphere layer -->
-    <div id="game-layer" class="game-layer"></div>
+    <!-- Atmosphere layer -->
+    <div id="atmosphere-layer" class="atmosphere-layer"></div>
 
     <!-- Content card -->
     <div id="card" class="notification-card">

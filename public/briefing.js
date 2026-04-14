@@ -9,7 +9,7 @@ var AUTO_DISMISS_MS = 60000;
 // ---------------------------------------------------------------------------
 
 var card = document.getElementById('card');
-var gameLayer = document.getElementById('game-layer');
+var atmosphereLayer = document.getElementById('atmosphere-layer');
 var briefingDate = document.getElementById('briefing-date');
 var itemsList = document.getElementById('items-list');
 var chainsSection = document.getElementById('chains-section');
@@ -277,7 +277,7 @@ function showBriefing(data) {
   card.classList.remove('visible', 'exiting');
   requestAnimationFrame(function () {
     card.classList.add('visible');
-    gameLayer.classList.add('active');
+    atmosphereLayer.classList.add('active');
   });
   startDismissTimer();
 }
@@ -294,7 +294,7 @@ function startDismissTimer() {
 function hideBriefing() {
   clearTimeout(dismissTimer);
   card.classList.add('exiting');
-  gameLayer.classList.remove('active');
+  atmosphereLayer.classList.remove('active');
   setTimeout(function () {
     card.classList.remove('visible', 'exiting');
     emitTauri('briefing-hidden');
