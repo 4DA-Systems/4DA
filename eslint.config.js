@@ -188,7 +188,7 @@ export default [
       '*.config.js',
       '*.config.ts',
       'scripts/**',
-      'src/lib/game-components/**',
+      'src/lib/fourda-components/**',
     ],
   },
 ];

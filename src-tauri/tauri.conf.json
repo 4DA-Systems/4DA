@@ -32,7 +32,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:11434 https://hacker-news.firebaseio.com https://export.arxiv.org https://www.reddit.com https://api.github.com; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api.anthropic.com https://api.openai.com http://localhost:11434 https://hacker-news.firebaseio.com https://export.arxiv.org https://www.reddit.com https://api.github.com https://api.keygen.sh; font-src 'self' data:; frame-src 'none'; object-src 'none'; base-uri 'self'"
     }
   },
   "plugins": {
@@ -91,7 +91,7 @@
       "signCommand": "powershell -NoProfile -File ..\\scripts\\sign-windows.ps1 %1",
       "nsis": {
         "displayLanguageSelector": false,
-        "installerIcon": "../icons/icon.ico",
+        "installerIcon": "icons/icon.ico",
         "headerImage": null,
         "sidebarImage": null
       }

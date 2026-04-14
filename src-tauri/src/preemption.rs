@@ -806,6 +806,7 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
 
 #[tauri::command]
 pub async fn get_preemption_alerts() -> std::result::Result<PreemptionFeed, String> {
+    crate::settings::require_signal_feature("get_preemption_alerts").map_err(|e| e.to_string())?;
     get_preemption_feed().map_err(|e| e.to_string())
 }
 
