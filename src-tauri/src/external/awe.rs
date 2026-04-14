@@ -208,6 +208,44 @@ pub struct AweWisdomOutput {
     pub raw_output: String,
 }
 
+/// One entry in the decision history returned by `AweClient::history`.
+/// Mirrors the JSON shape emitted by `awe history --json`.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AweHistoryEntry {
+    /// Server-assigned decision ID (`dc_<uuid>`). The authoritative
+    /// identifier for feedback and retriage operations. Never client-minted.
+    pub id: String,
+    /// The statement (articulated decision) text.
+    #[serde(default)]
+    pub statement: String,
+    /// Domain tag (e.g. "software-engineering").
+    #[serde(default)]
+    pub domain: String,
+    /// Optional confidence at articulation time, if AWE records one.
+    #[serde(default)]
+    pub confidence: Option<f32>,
+    /// ISO-8601 timestamp if AWE includes one.
+    #[serde(default)]
+    pub created_at: Option<String>,
+}
+
+/// Output of `AweClient::quick_check` — a fast pre-decision sanity
+/// scan. Returns the raw structured output AWE emits; callers parse
+/// further as needed.
+#[derive(Debug, Clone)]
+pub struct AweQuickCheckOutput {
+    pub raw_output: String,
+}
+
+/// Output of `AweClient::consequence_scan` — 1st/2nd/3rd-order
+/// consequences + reversibility score for an irreversible action.
+/// Returns the raw structured output; callers parse for the specific
+/// fields they need.
+#[derive(Debug, Clone)]
+pub struct AweConsequenceScanOutput {
+    pub raw_output: String,
+}
+
 /// Feedback outcome for `AweClient::feedback`. Mirrors the AWE CLI's
 /// feedback subcommand vocabulary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -254,21 +292,54 @@ impl AweClient {
         Ok(AweVersionOutput { version })
     }
 
-    /// `awe transmute --statement <text>` — runs a statement through
-    /// the full wisdom-graph pipeline. Returns the REAL server-assigned
-    /// decision ID, round-tripped via `awe history --limit 1 --json`
-    /// after the transmute (defends against Bug #2).
+    /// `awe --version` — fast sanity check that the binary exists and
+    /// runs. Called by the Layer 4 cold-boot smoke test. Typically <100ms.
+    ///
+    /// (Already documented above; kept at this location so the method
+    /// stays with the other methods for code navigation.)
+
+    /// `awe transmute --statement <text> [--stages s1,s2,...]` — runs a
+    /// statement through the full wisdom-graph pipeline. Returns the
+    /// **server-assigned** decision ID, round-tripped via
+    /// `awe history --limit 1 --json` after the transmute (defends
+    /// against Bug #2 by construction — callers cannot accidentally use
+    /// a client-minted ID).
     ///
     /// `stages` may be empty (AWE auto-prepends `Receive`) or a subset
     /// of the explicit stage names AWE recognizes. It **MUST NOT**
-    /// contain the string `"receive"` — that's Bug #1.
+    /// contain the string `"receive"` — that's Bug #1, guarded up front.
+    ///
+    /// # Failure modes
+    /// - `AweError::KnownError{ pattern: "Unknown stage:", ... }` if any
+    ///   stage in `stages` is `"receive"` (Bug #1 regression guard).
+    /// - `AweError::ParseError` if the transmute succeeded but
+    ///   `awe history --limit 1` returned no entries OR did not contain
+    ///   a matching statement (unlikely race unless another AWE process
+    ///   transmutes between calls — which is the scenario Bug #2
+    ///   specifically guards against).
+    /// - Standard propagation of BinaryNotFound / Timeout / ExitFailed
+    ///   from the underlying `invoke` call.
     pub fn transmute(
         &self,
-        _statement: &str,
-        _stages: &[&str],
+        statement: &str,
+        stages: &[&str],
     ) -> Result<AweTransmuteOutput, AweError> {
-        // Guard: reject known-bad stage arguments up front (Bug #1).
-        for s in _stages {
+        // Input guard: empty / whitespace-only statements waste tokens
+        // and produce meaningless output. Same guard `cmd_transmute`
+        // applies internally, but rejecting here surfaces the failure
+        // as a typed `ParseError` at the API boundary.
+        if statement.trim().is_empty() {
+            return Err(AweError::ParseError {
+                reason: "transmute statement cannot be empty or whitespace-only".to_string(),
+                snippet: statement.to_string(),
+            });
+        }
+
+        // Bug #1 guard: `receive` cannot be passed as an explicit stage.
+        // AWE auto-prepends Receive and rejects it as an explicit arg
+        // with "Unknown stage: receive" in stderr. The AweClient refuses
+        // to construct this call.
+        for s in stages {
             if s.eq_ignore_ascii_case("receive") {
                 return Err(AweError::KnownError {
                     pattern: "Unknown stage:".to_string(),
@@ -279,16 +350,29 @@ impl AweClient {
             }
         }
 
-        // TODO(external::awe migration): port the call-site logic from
-        // awe_commands.rs::transmute_internal. This is a skeleton method
-        // that documents the contract; the real implementation follows
-        // once the migration commit is cut. Returning NotImplemented-ish
-        // ParseError for now so accidental use during the skeleton window
-        // surfaces a loud error rather than a silent no-op.
-        Err(AweError::ParseError {
-            reason: "AweClient::transmute is skeleton-only — call site migration pending"
-                .to_string(),
-            snippet: String::new(),
+        // Build the arg vector. Stages (if any) are joined with commas
+        // per the AWE CLI grammar: `--stages interrogate,articulate`.
+        let stages_joined;
+        let mut args: Vec<&str> = vec!["transmute", "--statement", statement];
+        if !stages.is_empty() {
+            stages_joined = stages.join(",");
+            args.push("--stages");
+            args.push(&stages_joined);
+        }
+        args.push("--json");
+
+        let raw_json = self.invoke(&args, Some(Duration::from_secs(60)))?;
+
+        // Bug #2 defense: round-trip the decision ID through
+        // `awe history --limit 1 --json` and match by statement text.
+        // Protects against the class of bugs where 4DA was creating
+        // local `ux_<timestamp>` IDs and assuming they matched AWE's
+        // server-assigned `dc_<uuid>` IDs.
+        let decision_id = self.lookup_decision_id_by_statement(statement)?;
+
+        Ok(AweTransmuteOutput {
+            decision_id,
+            raw_json,
         })
     }
 
@@ -318,27 +402,138 @@ impl AweClient {
     /// `awe feedback --decision-id <id> --outcome <outcome>` — record
     /// feedback against a decision. `decision_id` MUST be a real
     /// server-assigned `dc_` identifier obtained from a prior
-    /// `transmute` or `history` call (Bug #2).
+    /// `transmute` or `history` call (Bug #2 guard).
+    ///
+    /// # Failure modes
+    /// - `AweError::KnownError{ pattern: "client-minted ID", ... }` if
+    ///   the ID doesn't start with `dc_`. This is the Bug #2 regression
+    ///   guard — prevents the class of bugs where 4DA minted local IDs
+    ///   and assumed they matched AWE's server-assigned ones.
+    /// - Standard propagation of BinaryNotFound / Timeout / ExitFailed.
     pub fn feedback(&self, decision_id: &str, outcome: AweFeedbackOutcome) -> Result<(), AweError> {
-        // Guard: reject client-minted IDs (Bug #2). Real AWE decision
-        // IDs start with `dc_`; client-minted ones historically used
-        // `ux_<timestamp>`.
+        // Bug #2 guard: reject client-minted IDs. Real AWE decision
+        // IDs start with `dc_` (server-assigned UUIDv7). Client-minted
+        // IDs historically used `ux_<timestamp>` and silently no-op'd
+        // against the wisdom graph.
         if !decision_id.starts_with("dc_") {
             return Err(AweError::KnownError {
                 pattern: "client-minted ID".to_string(),
                 context: format!(
                     "feedback called with non-AWE decision ID `{decision_id}` — IDs MUST \
                      start with `dc_` (server-assigned). Round-trip through \
-                     `history --limit 1 --json` to get the real ID."
+                     `transmute` / `history --limit 1 --json` to get the real ID."
                 ),
             });
         }
-        let _ = outcome; // will be used by the real implementation
-                         // TODO(external::awe migration): port from call sites.
+
+        let outcome_arg = outcome.as_cli_arg();
+        let _stdout = self.invoke(
+            &[
+                "feedback",
+                "--decision-id",
+                decision_id,
+                "--outcome",
+                outcome_arg,
+            ],
+            Some(Duration::from_secs(10)),
+        )?;
+
+        // AWE feedback returns a confirmation line on stdout but we
+        // don't currently parse it for a typed output. Silence is
+        // success — the `invoke` helper already verified exit code + no
+        // KNOWN_ERROR_PATTERNS in output.
+        Ok(())
+    }
+
+    /// `awe history --limit <n> --json` — returns the N most recent
+    /// decisions in the wisdom graph. Used by callers that need to
+    /// round-trip a server-assigned ID, enumerate recent decisions, or
+    /// build a decision browser UI.
+    ///
+    /// # Failure modes
+    /// - `AweError::ParseError` if stdout doesn't parse as a JSON array.
+    /// - Standard propagation.
+    pub fn history(&self, limit: usize) -> Result<Vec<AweHistoryEntry>, AweError> {
+        let limit_str = limit.to_string();
+        let stdout = self.invoke(
+            &["history", "--limit", &limit_str, "--json"],
+            Some(Duration::from_secs(10)),
+        )?;
+
+        serde_json::from_str::<Vec<AweHistoryEntry>>(&stdout).map_err(|e| AweError::ParseError {
+            reason: format!("history --json did not parse as Vec<AweHistoryEntry>: {e}"),
+            snippet: stdout.chars().take(300).collect::<String>(),
+        })
+    }
+
+    /// `awe quick-check --statement <text>` — lightweight pre-decision
+    /// sanity scan. Faster than `transmute` (~2-5s), good for
+    /// low-stakes decisions that don't need the full pipeline.
+    ///
+    /// Returns the raw structured output AWE emits; callers parse
+    /// further as needed.
+    pub fn quick_check(&self, statement: &str) -> Result<AweQuickCheckOutput, AweError> {
+        if statement.trim().is_empty() {
+            return Err(AweError::ParseError {
+                reason: "quick_check statement cannot be empty or whitespace-only".to_string(),
+                snippet: statement.to_string(),
+            });
+        }
+
+        let raw_output = self.invoke(
+            &["quick-check", "--statement", statement],
+            Some(Duration::from_secs(15)),
+        )?;
+        Ok(AweQuickCheckOutput { raw_output })
+    }
+
+    /// `awe consequence-scan --statement <text>` — models the 1st, 2nd,
+    /// and 3rd-order consequences of an action, with reversibility
+    /// scoring. Use before any irreversible action (destructive ops,
+    /// architectural changes, published releases, communications that
+    /// can't be unsent).
+    ///
+    /// Typical runtime: 10-30s (full LLM pipeline for consequence
+    /// modeling). Timeout default: 60s.
+    pub fn consequence_scan(&self, statement: &str) -> Result<AweConsequenceScanOutput, AweError> {
+        if statement.trim().is_empty() {
+            return Err(AweError::ParseError {
+                reason: "consequence_scan statement cannot be empty or whitespace-only".to_string(),
+                snippet: statement.to_string(),
+            });
+        }
+
+        let raw_output = self.invoke(
+            &["consequence-scan", "--statement", statement],
+            Some(Duration::from_secs(60)),
+        )?;
+        Ok(AweConsequenceScanOutput { raw_output })
+    }
+
+    /// Look up a decision by statement text, returning its server-assigned
+    /// ID. Called immediately after `transmute` to implement the Bug #2
+    /// round-trip defense.
+    ///
+    /// Match strategy: exact statement-string match on the most recent 3
+    /// history entries. If there are multiple matches (same statement
+    /// transmuted multiple times), return the most recent. If no match,
+    /// returns `AweError::ParseError` — this is the failure mode Bug #2
+    /// was specifically guarding against.
+    fn lookup_decision_id_by_statement(&self, statement: &str) -> Result<String, AweError> {
+        let history = self.history(3)?;
+        let trimmed = statement.trim();
+        for entry in history {
+            if entry.statement.trim() == trimmed {
+                return Ok(entry.id);
+            }
+        }
         Err(AweError::ParseError {
-            reason: "AweClient::feedback is skeleton-only — call site migration pending"
-                .to_string(),
-            snippet: String::new(),
+            reason: format!(
+                "transmute succeeded but no matching statement found in history --limit 3 \
+                 — possible concurrent transmute by another AWE client, or AWE did not \
+                 persist the statement as expected"
+            ),
+            snippet: trimmed.chars().take(100).collect::<String>(),
         })
     }
 
@@ -654,5 +849,113 @@ mod tests {
             AweError::BinaryNotFound { .. } => {}
             other => panic!("expected BinaryNotFound, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn transmute_rejects_empty_statement() {
+        let client = AweClient::new(AweClientConfig {
+            binary_path: PathBuf::from("/nonexistent/awe"),
+            default_timeout: Duration::from_secs(1),
+        });
+        let err = client.transmute("", &[]).unwrap_err();
+        match err {
+            AweError::ParseError { reason, .. } => {
+                assert!(reason.contains("empty"));
+            }
+            other => panic!("expected ParseError for empty statement, got {other:?}"),
+        }
+        let err2 = client.transmute("   \n\t  ", &[]).unwrap_err();
+        match err2 {
+            AweError::ParseError { .. } => {}
+            other => panic!("expected ParseError for whitespace-only, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn quick_check_rejects_empty_statement() {
+        let client = AweClient::new(AweClientConfig {
+            binary_path: PathBuf::from("/nonexistent/awe"),
+            default_timeout: Duration::from_secs(1),
+        });
+        assert!(matches!(
+            client.quick_check("").unwrap_err(),
+            AweError::ParseError { .. }
+        ));
+    }
+
+    #[test]
+    fn consequence_scan_rejects_empty_statement() {
+        // consequence_scan is for irreversible actions — garbage input
+        // would burn expensive LLM tokens on a meaningless call. Reject
+        // at the API boundary before the subprocess spawns.
+        let client = AweClient::new(AweClientConfig {
+            binary_path: PathBuf::from("/nonexistent/awe"),
+            default_timeout: Duration::from_secs(1),
+        });
+        assert!(matches!(
+            client.consequence_scan("").unwrap_err(),
+            AweError::ParseError { .. }
+        ));
+    }
+
+    #[test]
+    fn history_entry_deserializes_minimal_json() {
+        // Guard: AWE CLI evolution may add fields to the history JSON.
+        // The AweHistoryEntry struct MUST be forward-compatible — only
+        // `id` is required; statement/domain/confidence/created_at all
+        // default if absent.
+        let minimal = r#"{"id":"dc_01h9abc"}"#;
+        let entry: AweHistoryEntry =
+            serde_json::from_str(minimal).expect("minimal history JSON must parse");
+        assert_eq!(entry.id, "dc_01h9abc");
+        assert_eq!(entry.statement, "");
+        assert_eq!(entry.domain, "");
+        assert!(entry.confidence.is_none());
+        assert!(entry.created_at.is_none());
+    }
+
+    #[test]
+    fn history_entry_deserializes_full_json() {
+        let full = r#"{
+            "id": "dc_01h9xyz",
+            "statement": "SQLite is the right choice for desktop apps",
+            "domain": "software-engineering",
+            "confidence": 0.87,
+            "created_at": "2026-04-15T09:30:00Z"
+        }"#;
+        let entry: AweHistoryEntry = serde_json::from_str(full).expect("full history JSON parses");
+        assert_eq!(entry.id, "dc_01h9xyz");
+        assert_eq!(
+            entry.statement,
+            "SQLite is the right choice for desktop apps"
+        );
+        assert_eq!(entry.domain, "software-engineering");
+        assert_eq!(entry.confidence, Some(0.87));
+        assert_eq!(entry.created_at.as_deref(), Some("2026-04-15T09:30:00Z"));
+    }
+
+    #[test]
+    fn awe_client_has_complete_method_surface() {
+        // Meta-assertion: AweClient exposes every method the Silent-Failure
+        // Defense architecture requires for full AWE coverage. If a method
+        // is removed in a refactor, this test catches it.
+        //
+        // The method signatures here are the contract — changing them
+        // requires updating the AWE-DOMINATION-THESIS.md strategy doc.
+        fn _has_methods() {
+            let _: fn(&AweClient, &str) -> Result<AweWisdomOutput, AweError> = AweClient::wisdom;
+            let _: fn(&AweClient, &str, &[&str]) -> Result<AweTransmuteOutput, AweError> =
+                AweClient::transmute;
+            let _: fn(&AweClient, &str, AweFeedbackOutcome) -> Result<(), AweError> =
+                AweClient::feedback;
+            let _: fn(&AweClient, usize) -> Result<Vec<AweHistoryEntry>, AweError> =
+                AweClient::history;
+            let _: fn(&AweClient, &str) -> Result<AweQuickCheckOutput, AweError> =
+                AweClient::quick_check;
+            let _: fn(&AweClient, &str) -> Result<AweConsequenceScanOutput, AweError> =
+                AweClient::consequence_scan;
+            let _: fn(&AweClient) -> Result<AweVersionOutput, AweError> = AweClient::version;
+        }
+        // If the module compiles, the contract is intact.
     }
 }
