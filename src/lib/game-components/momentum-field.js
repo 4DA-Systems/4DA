@@ -994,7 +994,7 @@ class MomentumField extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-momentum-field: no WebGPU or WebGL2 support');
+        console.warn('fourda-momentum-field: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -1057,5 +1057,5 @@ class MomentumField extends HTMLElement {
   }
 }
 
-customElements.define('game-momentum-field', MomentumField);
+customElements.define('fourda-momentum-field', MomentumField);
 })();

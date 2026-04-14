@@ -843,7 +843,7 @@ class DecisionCountdown extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-decision-countdown: no WebGPU or WebGL2 support');
+        console.warn('fourda-decision-countdown: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -876,5 +876,5 @@ class DecisionCountdown extends HTMLElement {
   }
 }
 
-customElements.define('game-decision-countdown', DecisionCountdown);
+customElements.define('fourda-decision-countdown', DecisionCountdown);
 })();

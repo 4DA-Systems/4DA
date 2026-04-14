@@ -31,7 +31,7 @@ interface GamePentachoronElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-pentachoron': GamePentachoronElement;
+    'fourda-pentachoron': GamePentachoronElement;
   }
 }
 

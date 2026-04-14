@@ -107,10 +107,10 @@ function escapeHtml(str) {
 
 /** GAME card components — full GPU-rendered card with occlude blend. */
 var GAME_CARD_TAGS = {
-  critical: 'game-notif-card-critical',
-  high: 'game-notif-card-high',
-  medium: 'game-notif-card-medium',
-  low: 'game-notif-card-low',
+  critical: 'fourda-notif-card-critical',
+  high: 'fourda-notif-card-high',
+  medium: 'fourda-notif-card-medium',
+  low: 'fourda-notif-card-low',
 };
 var GAME_CARD_SCRIPTS = {
   critical: '/notif-card-critical.js',

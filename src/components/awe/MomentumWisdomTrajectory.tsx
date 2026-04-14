@@ -28,7 +28,7 @@ export const MomentumWisdomTrajectory = memo(function MomentumWisdomTrajectory()
   const ctx = useAppStore(s => s.aweBehavioralContext);
   const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
 
-  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-momentum-field');
+  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('fourda-momentum-field');
 
   // --- Run Wisdom Now button state ---
   const [aweRunning, setAweRunning] = useState(false);

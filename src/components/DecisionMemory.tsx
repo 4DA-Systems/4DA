@@ -31,7 +31,7 @@ export const DecisionMemory = memo(function DecisionMemory() {
   const removeTechDecision = useAppStore((s) => s.removeTechDecision);
   const addToast = useAppStore((s) => s.addToast);
 
-  const { containerRef: tetRef, elementRef: tetEl } = useGameComponent('game-tetrahedron');
+  const { containerRef: tetRef, elementRef: tetEl } = useGameComponent('fourda-tetrahedron');
 
   useEffect(() => {
     loadDecisions();

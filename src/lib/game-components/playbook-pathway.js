@@ -885,7 +885,7 @@ class PlaybookPathway extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-playbook-pathway: no WebGPU or WebGL2 support');
+        console.warn('fourda-playbook-pathway: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -920,5 +920,5 @@ class PlaybookPathway extends HTMLElement {
   }
 }
 
-customElements.define('game-playbook-pathway', PlaybookPathway);
+customElements.define('fourda-playbook-pathway', PlaybookPathway);
 })();

@@ -600,7 +600,7 @@ class Dodecahedron extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-dodecahedron: no WebGPU or WebGL2 support');
+        console.warn('fourda-dodecahedron: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -625,5 +625,5 @@ class Dodecahedron extends HTMLElement {
   }
 }
 
-customElements.define('game-dodecahedron', Dodecahedron);
+customElements.define('fourda-dodecahedron', Dodecahedron);
 })();

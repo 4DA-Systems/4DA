@@ -17,7 +17,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const fired = useRef(false);
   const [enabledSources, setEnabledSources] = useState<string[]>([]);
   const [autoStartPending, setAutoStartPending] = useState(!isBrowserMode);
-  const { containerRef: turingRef } = useGameComponent('game-turing-fire');
+  const { containerRef: turingRef } = useGameComponent('fourda-turing-fire');
 
   // Load actual configured sources from the backend
   useEffect(() => {

@@ -27,7 +27,7 @@ interface GameLogoMarkElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-logo-mark': GameLogoMarkElement;
+    'fourda-logo-mark': GameLogoMarkElement;
   }
 }
 

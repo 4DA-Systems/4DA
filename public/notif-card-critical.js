@@ -535,7 +535,7 @@ class NotifCardCritical extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-notif-card-critical: no WebGPU or WebGL2 support');
+        console.warn('fourda-notif-card-critical: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -592,5 +592,5 @@ class NotifCardCritical extends HTMLElement {
   }
 }
 
-customElements.define('game-notif-card-critical', NotifCardCritical);
+customElements.define('fourda-notif-card-critical', NotifCardCritical);
 })();

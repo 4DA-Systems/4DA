@@ -10,7 +10,7 @@ interface VoidHeartbeatProps {
 /**
  * Ambient heartbeat indicator for 4DA.
  *
- * Uses the compiled `<game-ambient-intelligence>` GAME component for rendering.
+ * Uses the compiled `<fourda-ambient-intelligence>` GAME component for rendering.
  * Maps VoidSignal properties to shader uniforms via setParam().
  * Falls back to CSS if the GAME component fails to load.
  */
@@ -21,9 +21,9 @@ export function VoidHeartbeat({ signal, size = 200 }: VoidHeartbeatProps) {
   // Register the GAME component on mount
   useEffect(() => {
     let cancelled = false;
-    registerGameComponent('game-ambient-intelligence').then(() => {
+    registerGameComponent('fourda-ambient-intelligence').then(() => {
       if (cancelled || !containerRef.current) return;
-      const el = document.createElement('game-ambient-intelligence');
+      const el = document.createElement('fourda-ambient-intelligence');
       el.style.width = '100%';
       el.style.height = '100%';
       el.style.display = 'block';

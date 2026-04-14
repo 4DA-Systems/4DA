@@ -11,7 +11,7 @@ const MILESTONES = [
 export const MilestoneOverlay = memo(function MilestoneOverlay() {
   const [active, setActive] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const { containerRef } = useGameComponent('game-celebration-burst');
+  const { containerRef } = useGameComponent('fourda-celebration-burst');
 
   // Check milestones on state changes
   const analysisComplete = useAppStore(s => s.appState.analysisComplete);

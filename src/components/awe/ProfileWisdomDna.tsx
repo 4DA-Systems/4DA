@@ -72,7 +72,7 @@ export const ProfileWisdomDna = memo(function ProfileWisdomDna() {
   const loadBehavioralContext = useAppStore(s => s.loadBehavioralContext);
 
   // GAME shader — must be called before any early returns (React hooks rule)
-  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('game-score-fingerprint');
+  const { containerRef: gameRef, elementRef: gameEl } = useGameComponent('fourda-score-fingerprint');
 
   useEffect(() => {
     void loadAweSummary();

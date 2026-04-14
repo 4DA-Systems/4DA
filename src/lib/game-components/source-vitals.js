@@ -883,7 +883,7 @@ class SourceVitals extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-source-vitals: no WebGPU or WebGL2 support');
+        console.warn('fourda-source-vitals: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -918,5 +918,5 @@ class SourceVitals extends HTMLElement {
   }
 }
 
-customElements.define('game-source-vitals', SourceVitals);
+customElements.define('fourda-source-vitals', SourceVitals);
 })();

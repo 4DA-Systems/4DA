@@ -13,7 +13,7 @@ import PlaybookLessonList from './playbook/PlaybookLessonList';
 import { PlaybookWisdomResonance } from './awe/PlaybookWisdomResonance';
 
 function PlaybookPathway({ progress, streak }: { progress: number; streak: number }) {
-  const { containerRef, elementRef } = useGameComponent('game-playbook-pathway');
+  const { containerRef, elementRef } = useGameComponent('fourda-playbook-pathway');
 
   useEffect(() => {
     elementRef.current?.setParam?.('progress', progress);

@@ -22,7 +22,7 @@ export function AboutPanel() {
           role="img"
           aria-label={t('about.logoAlt')}
         >
-          <game-logo-mark style={{ width: '112px', height: '112px', display: 'block' }} />
+          <fourda-logo-mark style={{ width: '112px', height: '112px', display: 'block' }} />
         </div>
         <h3 className="text-xl font-semibold text-white">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>

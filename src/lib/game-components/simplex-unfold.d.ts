@@ -31,7 +31,7 @@ interface GameSimplexUnfoldElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-simplex-unfold': GameSimplexUnfoldElement;
+    'fourda-simplex-unfold': GameSimplexUnfoldElement;
   }
 }
 

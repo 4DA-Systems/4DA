@@ -71,7 +71,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
   const hasAnalysisRun = analysisComplete || lastAnalyzedAt !== null;
   const synthesisUnlistenRef = useRef<(() => void) | null>(null);
 
-  const { containerRef: ambientRef, elementRef: ambientElement } = useGameComponent('game-briefing-atmosphere');
+  const { containerRef: ambientRef, elementRef: ambientElement } = useGameComponent('fourda-briefing-atmosphere');
 
   useEffect(() => {
     const el = ambientElement.current;
