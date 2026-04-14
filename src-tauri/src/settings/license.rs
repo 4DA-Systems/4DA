@@ -196,8 +196,20 @@ fn maybe_revalidate_license() {
 // Feature Tier Gating
 // ============================================================================
 
-/// Signal-gated features list
+/// Signal-gated features list.
+///
+/// Registry / inventory of every Tauri command that requires Signal tier.
+/// The enforcement itself happens via `require_signal_feature("name")` at the
+/// top of each command — the name passed in is only used for error messaging
+/// and auditing; tier checking is independent of this list. Keeping the list
+/// accurate lets the frontend query gating status up-front (via
+/// `is_signal_feature_available`) and lets the license audit compare intent
+/// vs enforcement.
+///
+/// When adding a gate to a new command, append its name here.
+/// See `docs/strategy/LICENSE-GATING-AUDIT-2026-04-15.md` for the full audit.
 pub const SIGNAL_FEATURES: &[&str] = &[
+    // Intelligence panels (original)
     "get_attention_report",
     "get_knowledge_gaps",
     "get_signal_chains",
@@ -209,6 +221,21 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     "get_decision_signals",
     "synthesize_search",
     "standing_queries",
+    // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
+    "get_blind_spots",
+    "get_preemption_alerts",
+    "resolve_signal_chain",
+    "get_decision_health_report",
+    // Cross-project intelligence
+    "get_tech_convergence",
+    "get_project_health_comparison",
+    "get_cross_project_dependencies",
+    // Accuracy / intelligence reporting
+    "get_accuracy_report",
+    "get_intelligence_report",
+    // Trust ledger analytics
+    "get_domain_precision_report",
+    "get_false_positive_analysis",
 ];
 
 /// Check if the current user has Signal (or Team/Enterprise) tier access.

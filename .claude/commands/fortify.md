@@ -141,7 +141,7 @@ For each critical system, determine test status AND test quality. Use Grep on ea
 | 14 | ACE topic embeddings | `src/ace/topic_embeddings.rs` | Same |
 | 15 | Signals engine | `src/signals.rs` | Same |
 | 16 | Utils (shared) | `src/utils.rs` | Same |
-| 17 | Game engine | `src/game_engine.rs` | Same |
+| 17 | Achievement engine | `src/achievement_engine.rs` | Same |
 | 18 | Events | `src/events.rs` | Same |
 
 Report: `N/18 critical systems tested` with per-system status and test count.

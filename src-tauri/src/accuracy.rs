@@ -190,6 +190,7 @@ pub(crate) fn record_weekly_accuracy(conn: &rusqlite::Connection) -> anyhow::Res
 
 #[tauri::command]
 pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+    crate::settings::require_signal_feature("get_accuracy_report")?;
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
     let conn = crate::get_database()?.conn.lock();
 
@@ -230,6 +231,7 @@ pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde
 
 #[tauri::command]
 pub fn get_intelligence_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+    crate::settings::require_signal_feature("get_intelligence_report")?;
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
     let conn = crate::get_database()?.conn.lock();
 

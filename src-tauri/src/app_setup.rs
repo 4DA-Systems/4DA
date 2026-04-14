@@ -18,6 +18,78 @@ use crate::{
     signal_terminal, source_fetching::fill_cache_background, standing_queries, void_engine,
 };
 
+/// Process-lifetime holder for the single-instance lock. Set once in
+/// `initialize_pre_tauri` and kept alive until process exit so the Drop impl
+/// on `InstanceLock` fires during normal shutdown.
+static INSTANCE_LOCK: once_cell::sync::OnceCell<
+    parking_lot::Mutex<Option<crate::single_instance::InstanceLock>>,
+> = once_cell::sync::OnceCell::new();
+
+/// Crash-loop status captured during pre-Tauri init. Read by `setup_app`
+/// after the `AppHandle` exists so we can emit frontend events.
+static STARTUP_CRASH_STATUS: once_cell::sync::OnceCell<crate::startup_watchdog::CrashLoopStatus> =
+    once_cell::sync::OnceCell::new();
+
+/// Pre-Tauri correctness gate: acquire the single-instance lock and detect
+/// crash loops. Split out of `initialize_pre_tauri` to keep that function
+/// under file-size budget.
+///
+/// Single-instance: belt-and-braces with `tauri_plugin_single_instance` —
+/// the plugin's callback handles "focus existing window" UX but runs only
+/// after the Tauri builder is set up. This file lock rejects duplicate
+/// launches BEFORE any DB open, preventing SQLite WAL corruption from two
+/// processes racing on the same data directory. IO errors are non-fatal;
+/// AlreadyRunning exits the process with a friendly message.
+///
+/// Crash-loop: reads the previous session's exit state (via `.running`
+/// marker inspected in `begin_startup_watch`) and a persisted crash history.
+/// If the recent crash rate breaches the Critical threshold, sets the
+/// safe-mode flag and arms the `startup-crash-loop-critical` event for
+/// later emission from `setup_app` once the AppHandle exists.
+fn acquire_instance_and_detect_crash_loop() {
+    use crate::state::get_db_path;
+
+    let Some(dir) = get_db_path().parent().map(std::path::Path::to_path_buf) else {
+        warn!(target: "4da::startup", "Could not resolve data dir for pre-Tauri correctness gates");
+        return;
+    };
+
+    // Single-instance lock.
+    match crate::single_instance::acquire_instance_lock(&dir) {
+        Ok(lock) => {
+            let cell = INSTANCE_LOCK.get_or_init(|| parking_lot::Mutex::new(None));
+            *cell.lock() = Some(lock);
+            info!(target: "4da::startup", "Single-instance lock acquired");
+        }
+        Err(crate::single_instance::InstanceError::AlreadyRunning(pid)) => {
+            error!(target: "4da::startup", running_pid = pid,
+                "Another 4DA instance is already running — this process will exit");
+            eprintln!(
+                "\n4DA is already running (pid {pid}).\n\
+                 Check your system tray for the existing window, or wait a few seconds\n\
+                 if you just closed it (lock cleanup takes a moment)."
+            );
+            std::process::exit(0);
+        }
+        Err(e) => {
+            warn!(target: "4da::startup", error = %e,
+                "Single-instance lock I/O error — continuing anyway (non-fatal)");
+        }
+    }
+
+    // Crash-loop detection.
+    let prev_crashed = crate::startup_watchdog::previous_session_crashed();
+    let status = crate::startup_watchdog::check_crash_loop(&dir, prev_crashed);
+    let _ = STARTUP_CRASH_STATUS.set(status);
+}
+
+/// Process-lifetime holder for the non-blocking file-log worker. Dropping it
+/// flushes pending records and stops the worker thread. We stash it in a
+/// `OnceCell` so `initialize_pre_tauri` can return without the guard going
+/// out of scope (which would silently disable file logging).
+static LOG_FILE_GUARD: once_cell::sync::OnceCell<tracing_appender::non_blocking::WorkerGuard> =
+    once_cell::sync::OnceCell::new();
+
 /// Pre-Tauri initialization: logging, threshold, database, context engine, source registry.
 ///
 /// Must be called before `tauri::Builder` is constructed.
@@ -25,17 +97,45 @@ pub(crate) fn initialize_pre_tauri() {
     use crate::state::{
         get_context_dir, get_context_engine, get_relevance_threshold, get_source_registry,
     };
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::{fmt, EnvFilter};
 
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
-        )
-        .init();
-
-    // Initialize runtime paths (must happen before any path resolution)
+    // Initialize runtime paths BEFORE tracing so the file appender can use
+    // data_dir. RuntimePaths::init emits one `info!` that predates subscriber
+    // install — that one line is lost, but the paths are restamped in the
+    // banner below.
     crate::runtime_paths::RuntimePaths::init();
+
+    // Daily-rotated file appender under data_dir/logs. The WorkerGuard is
+    // stashed in LOG_FILE_GUARD so records from background tasks flush during
+    // shutdown.
+    let log_dir = crate::log_retention::log_dir();
+    let file_appender =
+        tracing_appender::rolling::daily(&log_dir, crate::log_retention::LOG_FILE_STEM);
+    let (file_writer, file_guard) = tracing_appender::non_blocking(file_appender);
+    // OnceCell::set only errors if already set (cannot happen: runs exactly once).
+    let _ = LOG_FILE_GUARD.set(file_guard);
+
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info"));
+
+    // stderr layer: keeps developer-visible output (coloured in TTY).
+    let stderr_layer = fmt::layer().with_writer(std::io::stderr);
+    // file layer: ANSI off so log files stay grep-friendly.
+    let file_layer = fmt::layer().with_ansi(false).with_writer(file_writer);
+
+    // try_init returns Err if a subscriber is already installed (tests, repeat
+    // runs via hot-reload). Ignore silently — file logging will be missing in
+    // that edge case but the app still starts.
+    let _ = tracing_subscriber::registry()
+        .with(env_filter)
+        .with(stderr_layer)
+        .with(file_layer)
+        .try_init();
+
+    // Prune log files older than the retention window (best-effort).
+    crate::log_retention::cleanup_old_logs();
 
     // Install crash guard BEFORE any secrets are loaded — zeroizes sensitive
     // memory in the panic hook so crash dumps don't leak API keys.
@@ -45,6 +145,12 @@ pub(crate) fn initialize_pre_tauri() {
     // This records the startup clock used by phase budget enforcement and
     // inspects crash-trail markers from the previous session.
     crate::startup_watchdog::begin_startup_watch();
+
+    // Pre-Tauri correctness gates: single-instance lock + crash-loop detection.
+    // Both are infallible-from-caller's-perspective (AlreadyRunning exits the
+    // process immediately; everything else either succeeds or degrades
+    // gracefully). See `acquire_instance_and_detect_crash_loop` for detail.
+    acquire_instance_and_detect_crash_loop();
 
     // Verify binary integrity (code signature, size sanity, permissions).
     // Runs after crash guard so any panics are handled. Logs only — never blocks.
@@ -218,6 +324,40 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Record app start time for diagnostics uptime tracking
     crate::diagnostics::record_start_time();
+
+    // Surface crash-loop status to the frontend. The actual detection ran
+    // in `initialize_pre_tauri`; here we only emit the event now that we
+    // have an AppHandle. The frontend listens for:
+    //   - startup-crash-loop-warning: show a dismissible banner
+    //   - startup-crash-loop-critical: show full recovery UI; safe mode
+    //     is already engaged on the backend (see startup_watchdog::is_safe_mode).
+    if let Some(status) = STARTUP_CRASH_STATUS.get() {
+        match *status {
+            crate::startup_watchdog::CrashLoopStatus::Warning(count) => {
+                let _ = app.emit(
+                    "startup-crash-loop-warning",
+                    serde_json::json!({
+                        "recent_crashes": count,
+                        "window_minutes": 5,
+                    }),
+                );
+                info!(target: "4da::startup", count, "Emitted startup-crash-loop-warning");
+            }
+            crate::startup_watchdog::CrashLoopStatus::Critical(count) => {
+                let _ = app.emit(
+                    "startup-crash-loop-critical",
+                    serde_json::json!({
+                        "recent_crashes": count,
+                        "window_seconds": 60,
+                        "safe_mode": true,
+                    }),
+                );
+                warn!(target: "4da::startup", count,
+                    "Emitted startup-crash-loop-critical — running in safe mode");
+            }
+            crate::startup_watchdog::CrashLoopStatus::Normal => {}
+        }
+    }
 
     // Start Signal Terminal HTTP server (requires Tokio runtime from Tauri)
     signal_terminal::start_signal_terminal();
