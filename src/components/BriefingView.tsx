@@ -211,11 +211,26 @@ export const BriefingView = memo(function BriefingView() {
               <h2 className="text-[9px] font-semibold tracking-[0.12em] text-text-muted uppercase">{t('briefing.intelligenceBriefing')}</h2>
             </div>
             <div className="p-5 space-y-4">
-              {morningBriefSynthesis && (
+              {/* Synthesis — abstention-aware rendering (see briefing-synthesis-helpers.ts) */}
+              {isAbstentionSynthesis(morningBriefSynthesis) ? (
+                <div className="py-6 text-center space-y-2">
+                  <p className="text-xs text-text-muted italic">
+                    {parseAbstention(morningBriefSynthesis ?? '').headline}
+                  </p>
+                  {parseAbstention(morningBriefSynthesis ?? '').telemetry != null && (
+                    <p className="text-[9px] font-mono text-text-muted/60">
+                      {parseAbstention(morningBriefSynthesis ?? '').telemetry}
+                    </p>
+                  )}
+                </div>
+              ) : morningBriefSynthesis ? (
                 <div className="pb-3 mb-1 border-b border-border">
+                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
+                    {t('briefing.synthesis', 'Synthesis')}
+                  </h3>
                   <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
                 </div>
-              )}
+              ) : null}
               {freeBriefing.wisdom_signals && freeBriefing.wisdom_signals.length > 0 && (
                 <div>
                   <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">{t('briefing.sectionWisdom')}</h3>
