@@ -17,7 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const COMPONENT_DIR = path.join(__dirname, '..', 'src', 'lib', 'game-components');
+const COMPONENT_DIR = path.join(__dirname, '..', 'src', 'lib', 'fourda-components');
 
 // Platonic geometry components to validate
 const COMPONENTS = [

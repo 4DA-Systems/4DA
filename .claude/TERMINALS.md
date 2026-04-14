@@ -9,15 +9,7 @@
 
 ## Active Terminals
 
-### T-GAME-PURGE (claim)
-**Files**: src/lib/game-components/**, src/lib/game-components.ts, src/hooks/use-game-component.ts,
-src/**/*.tsx, src/**/*.ts (all consumers), public/notification.*, public/briefing.*,
-src/App.css, scripts/validate-game-components.cjs, package.json, src/vite-env.d.ts,
-src-tauri/src/game_engine.rs, src-tauri/src/game_achievements.rs, src-tauri/src/game_commands.rs,
-src-tauri/src/game_engine_stub.rs, src-tauri/src/game_achievements_stub.rs,
-src-tauri/src/lib.rs, src-tauri/src/db/migrations.rs, src-tauri/src/*.rs (all consumers)
-**Commit Lock**: HELD
-**Work**: 5-commit full purge of game-* references — frontend module/CSS, Rust modules, DB schema, IPC commands, build tooling. Pre-launch, no users, safe to edit migration in place.
+<!-- No active terminals -->
 
 ---
 
