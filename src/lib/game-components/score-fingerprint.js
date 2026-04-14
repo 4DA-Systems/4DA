@@ -861,7 +861,7 @@ class ScoreFingerprint extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-score-fingerprint: no WebGPU or WebGL2 support');
+        console.warn('fourda-score-fingerprint: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -898,5 +898,5 @@ class ScoreFingerprint extends HTMLElement {
   }
 }
 
-customElements.define('game-score-fingerprint', ScoreFingerprint);
+customElements.define('fourda-score-fingerprint', ScoreFingerprint);
 })();

@@ -360,7 +360,7 @@ class GameRenderer {
       const [vInfo, fInfo] = await Promise.all([vMod.getCompilationInfo(), fMod.getCompilationInfo()]);
       const hasError = [...vInfo.messages, ...fInfo.messages].some(m => m.type === 'error');
       if (hasError) {
-        console.error('game-logo-mark: shader compilation failed');
+        console.error('fourda-logo-mark: shader compilation failed');
         this.device.destroy();
         this.device = null;
         return false;
@@ -391,7 +391,7 @@ class GameRenderer {
       });
       return true;
     } catch (err) {
-      console.warn('game-logo-mark: WebGPU init failed:', err);
+      console.warn('fourda-logo-mark: WebGPU init failed:', err);
       if (this.device) { this.device.destroy(); this.device = null; }
       return false;
     }
@@ -600,7 +600,7 @@ class LogoMark extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-logo-mark: no WebGPU or WebGL2 support');
+        console.warn('fourda-logo-mark: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -651,5 +651,5 @@ class LogoMark extends HTMLElement {
   }
 }
 
-customElements.define('game-logo-mark', LogoMark);
+customElements.define('fourda-logo-mark', LogoMark);
 })();

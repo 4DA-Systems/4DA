@@ -544,7 +544,7 @@ class Tetrahedron extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-tetrahedron: no WebGPU or WebGL2 support');
+        console.warn('fourda-tetrahedron: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -569,5 +569,5 @@ class Tetrahedron extends HTMLElement {
   }
 }
 
-customElements.define('game-tetrahedron', Tetrahedron);
+customElements.define('fourda-tetrahedron', Tetrahedron);
 })();

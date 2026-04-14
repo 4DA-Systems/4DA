@@ -402,7 +402,7 @@ class NotifCardMedium extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-notif-card-medium: no WebGPU or WebGL2 support');
+        console.warn('fourda-notif-card-medium: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -459,5 +459,5 @@ class NotifCardMedium extends HTMLElement {
   }
 }
 
-customElements.define('game-notif-card-medium', NotifCardMedium);
+customElements.define('fourda-notif-card-medium', NotifCardMedium);
 })();

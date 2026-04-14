@@ -959,7 +959,7 @@ class AmbientIntelligence extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-ambient-intelligence: no WebGPU or WebGL2 support');
+        console.warn('fourda-ambient-intelligence: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -1010,5 +1010,5 @@ class AmbientIntelligence extends HTMLElement {
   }
 }
 
-customElements.define('game-ambient-intelligence', AmbientIntelligence);
+customElements.define('fourda-ambient-intelligence', AmbientIntelligence);
 })();

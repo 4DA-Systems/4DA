@@ -100,7 +100,7 @@ const AttentionCard = memo(function AttentionCard({
   const source = item.source_type || 'hackernews';
 
   // GAME score fingerprint — unique visual identity per item
-  const { containerRef: fpRef, elementRef: fpElRef } = useGameComponent('game-score-fingerprint');
+  const { containerRef: fpRef, elementRef: fpElRef } = useGameComponent('fourda-score-fingerprint');
 
   useEffect(() => {
     const el = fpElRef.current;

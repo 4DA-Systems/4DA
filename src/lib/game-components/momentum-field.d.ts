@@ -18,18 +18,18 @@ interface GameAudioBridge {
 }
 
 /**
- * `<game-momentum-field>` Web Component
+ * `<fourda-momentum-field>` Web Component
  *
  * A self-contained WebGPU/WebGL2 shader component.
  *
  * @example
  * ```html
- * <game-momentum-field trend_warm_r="0" trend_warm_g="0" advantage="0.5"></game-momentum-field>
+ * <fourda-momentum-field trend_warm_r="0" trend_warm_g="0" advantage="0.5"></fourda-momentum-field>
  * ```
  *
  * @example
  * ```typescript
- * const el = document.querySelector('game-momentum-field')!;
+ * const el = document.querySelector('fourda-momentum-field')!;
    * el.trend_warm_r = 0;
    * el.trend_warm_g = 0;
  * ```
@@ -67,7 +67,7 @@ interface GameMomentumFieldElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-momentum-field': GameMomentumFieldElement;
+    'fourda-momentum-field': GameMomentumFieldElement;
   }
 }
 

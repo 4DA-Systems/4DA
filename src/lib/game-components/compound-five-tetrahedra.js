@@ -646,7 +646,7 @@ class CompoundFiveTetrahedra extends HTMLElement {
       if (gl.init()) {
         this._renderer = gl;
       } else {
-        console.warn('game-compound-five-tetrahedra: no WebGPU or WebGL2 support');
+        console.warn('fourda-compound-five-tetrahedra: no WebGPU or WebGL2 support');
         return;
       }
     }
@@ -671,5 +671,5 @@ class CompoundFiveTetrahedra extends HTMLElement {
   }
 }
 
-customElements.define('game-compound-five-tetrahedra', CompoundFiveTetrahedra);
+customElements.define('fourda-compound-five-tetrahedra', CompoundFiveTetrahedra);
 })();

@@ -152,7 +152,7 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
-  useEffect(() => { registerGameComponent('game-simplex-unfold'); }, []);
+  useEffect(() => { registerGameComponent('fourda-simplex-unfold'); }, []);
 
   // Estimated time remaining — initialized from parent's source-count estimate
   // Uses a ref-based counter to avoid infinite timer chains in test environments
@@ -219,7 +219,7 @@ export function LoadingState({
 
       {phase === 'preparing' && (
         <div className="w-[120px] h-[120px] mx-auto mb-3 opacity-80">
-          <game-simplex-unfold style={{ width: '120px', height: '120px', display: 'block' }} />
+          <fourda-simplex-unfold style={{ width: '120px', height: '120px', display: 'block' }} />
         </div>
       )}
 

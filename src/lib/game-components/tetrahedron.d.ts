@@ -29,7 +29,7 @@ interface GameTetrahedronElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-tetrahedron': GameTetrahedronElement;
+    'fourda-tetrahedron': GameTetrahedronElement;
   }
 }
 

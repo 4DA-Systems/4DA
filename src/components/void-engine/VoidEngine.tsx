@@ -14,8 +14,8 @@ interface VoidEngineProps {
  * Production component: WebGPU/WebGL2 animation driven by real backend events.
  *
  * Variants:
- * - 'ambient' (default): game-ambient-intelligence — organic pulse shader
- * - 'pentachoron': game-pentachoron — 4D wireframe rotating with golden-ratio speeds
+ * - 'ambient' (default): fourda-ambient-intelligence — organic pulse shader
+ * - 'pentachoron': fourda-pentachoron — 4D wireframe rotating with golden-ratio speeds
  */
 export function VoidEngine({ size = 200, variant = 'ambient' }: VoidEngineProps) {
   const signal = useVoidSignals();

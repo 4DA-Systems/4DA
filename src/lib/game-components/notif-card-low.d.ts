@@ -18,18 +18,18 @@ interface GameAudioBridge {
 }
 
 /**
- * `<game-notif-card-low>` Web Component
+ * `<fourda-notif-card-low>` Web Component
  *
  * A self-contained WebGPU/WebGL2 shader component.
  *
  * @example
  * ```html
- * <game-notif-card-low intensity="1" hover="0"></game-notif-card-low>
+ * <fourda-notif-card-low intensity="1" hover="0"></fourda-notif-card-low>
  * ```
  *
  * @example
  * ```typescript
- * const el = document.querySelector('game-notif-card-low')!;
+ * const el = document.querySelector('fourda-notif-card-low')!;
    * el.intensity = 1;
    * el.hover = 0;
  * ```
@@ -61,7 +61,7 @@ interface GameNotifCardLowElement extends HTMLElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'game-notif-card-low': GameNotifCardLowElement;
+    'fourda-notif-card-low': GameNotifCardLowElement;
   }
 }
 
