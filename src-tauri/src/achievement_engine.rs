@@ -4,7 +4,7 @@
 //! when thresholds are reached. Stores state in SQLite.
 
 use crate::db::Database;
-use crate::game_achievements::{all_achievements, AchievementTier};
+use crate::achievement_definitions::{all_achievements, AchievementTier};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
 
@@ -404,7 +404,7 @@ pub fn get_achievements(db: &Database) -> Vec<AchievementUnlocked> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::game_achievements::AchievementTier;
+    use crate::achievement_definitions::AchievementTier;
     use crate::test_utils::test_db;
 
     // ========================================================================

@@ -1,7 +1,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! Stub for `game_commands` module when "experimental" feature is disabled.
+//! Stub for `achievement_commands` module when "experimental" feature is disabled.
 
 use crate::error::Result;
 use tauri::AppHandle;
