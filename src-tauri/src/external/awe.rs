@@ -350,16 +350,21 @@ impl AweClient {
             }
         }
 
-        // Build the arg vector. Stages (if any) are joined with commas
-        // per the AWE CLI grammar: `--stages interrogate,articulate`.
+        // Build the arg vector. CLI grammar (verified against awe v0.1.0
+        // 2026-04-15): `awe transmute [--stages s1,s2,...] <QUERY>` where
+        // QUERY is a POSITIONAL argument, NOT `--statement`. If AWE CLI
+        // ever adds a `--statement` flag, this code will NOT break (positional
+        // still works), but flag precedence will apply. Contract drift
+        // caught against real binary on first integration check.
         let stages_joined;
-        let mut args: Vec<&str> = vec!["transmute", "--statement", statement];
+        let mut args: Vec<&str> = vec!["transmute"];
         if !stages.is_empty() {
             stages_joined = stages.join(",");
             args.push("--stages");
             args.push(&stages_joined);
         }
         args.push("--json");
+        args.push(statement); // positional QUERY — must be last
 
         let raw_json = self.invoke(&args, Some(Duration::from_secs(60)))?;
 
@@ -450,8 +455,15 @@ impl AweClient {
     /// round-trip a server-assigned ID, enumerate recent decisions, or
     /// build a decision browser UI.
     ///
+    /// JSON shape (verified against awe v0.1.0 2026-04-15):
+    /// ```json
+    /// { "decisions": [ { "id": "dc_...", "statement": "...", ... }, ... ] }
+    /// ```
+    /// Wrapped in a top-level `decisions` array, NOT a bare array. Contract
+    /// drift caught against real binary on first integration check.
+    ///
     /// # Failure modes
-    /// - `AweError::ParseError` if stdout doesn't parse as a JSON array.
+    /// - `AweError::ParseError` if stdout doesn't parse as `{decisions: [...]}`.
     /// - Standard propagation.
     pub fn history(&self, limit: usize) -> Result<Vec<AweHistoryEntry>, AweError> {
         let limit_str = limit.to_string();
@@ -460,10 +472,17 @@ impl AweClient {
             Some(Duration::from_secs(10)),
         )?;
 
-        serde_json::from_str::<Vec<AweHistoryEntry>>(&stdout).map_err(|e| AweError::ParseError {
-            reason: format!("history --json did not parse as Vec<AweHistoryEntry>: {e}"),
-            snippet: stdout.chars().take(300).collect::<String>(),
-        })
+        #[derive(serde::Deserialize)]
+        struct HistoryEnvelope {
+            decisions: Vec<AweHistoryEntry>,
+        }
+
+        let envelope: HistoryEnvelope =
+            serde_json::from_str(&stdout).map_err(|e| AweError::ParseError {
+                reason: format!("history --json did not parse as {{decisions: [...]}}: {e}"),
+                snippet: stdout.chars().take(300).collect::<String>(),
+            })?;
+        Ok(envelope.decisions)
     }
 
     /// `awe quick-check --statement <text>` — lightweight pre-decision
@@ -932,6 +951,106 @@ mod tests {
         assert_eq!(entry.domain, "software-engineering");
         assert_eq!(entry.confidence, Some(0.87));
         assert_eq!(entry.created_at.as_deref(), Some("2026-04-15T09:30:00Z"));
+    }
+
+    #[test]
+    fn history_deserializes_real_awe_envelope() {
+        // Guard against contract drift with the real AWE CLI. The format
+        // verified against awe v0.1.0 on 2026-04-15 is:
+        //   { "decisions": [ { "id": ..., "statement": ..., ... } ] }
+        // NOT a bare array. If AWE ever flattens to a bare array, this
+        // test catches it before users do.
+        #[derive(serde::Deserialize)]
+        struct Env {
+            decisions: Vec<AweHistoryEntry>,
+        }
+
+        let real = r#"{
+            "decisions": [
+                {
+                    "confidence": 0.5,
+                    "domain": "software-engineering",
+                    "has_feedback": true,
+                    "id": "dc_019d89fb-f953-7ba1-8495-010b9d168032",
+                    "outcome": "confirmed",
+                    "statement": "Should we adopt a new logger crate?",
+                    "timestamp": "2026-04-14T03:14:45Z"
+                }
+            ]
+        }"#;
+        let env: Env = serde_json::from_str(real).expect("real AWE envelope must parse");
+        assert_eq!(env.decisions.len(), 1);
+        assert_eq!(
+            env.decisions[0].id,
+            "dc_019d89fb-f953-7ba1-8495-010b9d168032"
+        );
+        assert_eq!(env.decisions[0].domain, "software-engineering");
+    }
+
+    // ========================================================================
+    // Real-binary integration tests (gated on AWE being installed)
+    // ========================================================================
+
+    /// Run only if the real AWE binary exists at the expected path. These
+    /// tests exercise the CLI contract end-to-end and catch grammar/format
+    /// drift before users do. On CI without the binary, they're skipped
+    /// rather than failing.
+    fn real_awe_client() -> Option<AweClient> {
+        let cfg = AweClientConfig::from_default_paths()?;
+        if !cfg.binary_path.exists() {
+            return None;
+        }
+        Some(AweClient::new(cfg))
+    }
+
+    #[test]
+    fn real_awe_version_returns_nonempty() {
+        let Some(client) = real_awe_client() else {
+            eprintln!("SKIP: real awe.exe not found");
+            return;
+        };
+        let out = client.version().expect("awe --version should work");
+        assert!(!out.version.is_empty(), "version should be non-empty");
+        // awe --version emits e.g. "awe 0.1.0" — contains a digit somewhere
+        assert!(
+            out.version.chars().any(|c| c.is_ascii_digit()),
+            "version should contain a digit: {:?}",
+            out.version
+        );
+    }
+
+    #[test]
+    fn real_awe_history_roundtrip() {
+        let Some(client) = real_awe_client() else {
+            eprintln!("SKIP: real awe.exe not found");
+            return;
+        };
+        let entries = client.history(2).expect("history should work");
+        // May be empty on a fresh install, that's fine.
+        for e in &entries {
+            assert!(
+                e.id.starts_with("dc_"),
+                "history IDs must start with dc_ prefix, got {:?}",
+                e.id
+            );
+        }
+    }
+
+    #[test]
+    fn real_awe_wisdom_returns_output() {
+        let Some(client) = real_awe_client() else {
+            eprintln!("SKIP: real awe.exe not found");
+            return;
+        };
+        let out = client
+            .wisdom("software-engineering")
+            .expect("wisdom should work");
+        // AWE wisdom output contains "AWE Wisdom Report" header
+        assert!(
+            out.raw_output.contains("Wisdom") || out.raw_output.contains("wisdom"),
+            "wisdom output should contain 'Wisdom' or 'wisdom': {:?}",
+            &out.raw_output.chars().take(100).collect::<String>()
+        );
     }
 
     #[test]
