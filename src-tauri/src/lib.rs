@@ -226,6 +226,8 @@ mod achievement_engine;
 mod achievement_engine;
 mod briefing_dedupe;
 mod briefing_groundedness;
+#[cfg(test)]
+mod briefing_pipeline_tests;
 mod briefing_quality;
 mod external;
 pub mod extractors;
