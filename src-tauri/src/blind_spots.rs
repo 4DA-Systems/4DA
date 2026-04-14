@@ -447,39 +447,178 @@ fn find_missed_signals(
     Ok(signals)
 }
 
-/// Filter missed signals using the negative stack model.
+/// Filter missed signals using two-layer stack awareness.
 ///
-/// Extracts topics from each signal's title, looks up the negative stack prior,
-/// and removes items whose primary technology has a strong negative prior (<= 0.30).
-/// This ensures Blind Spots immediately reflects the user's tech stack even for
-/// items scored before the negative stack was introduced.
+/// Layer 1: Negative stack (competing-absent) — suppresses Vue for React users, etc.
+/// Layer 2: Dependency-absence — for each technology-like topic extracted from the
+///          title, checks whether the user has it as a direct dep. Items where ALL
+///          recognized technology topics are absent from user deps get filtered.
+///
+/// This ensures Blind Spots only shows content about technologies the user actually
+/// uses, without needing every technology pair to be in the competing-tech graph.
 fn filter_by_negative_stack(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
-    // Build the negative stack context (same as scoring does)
-    let negative_stack = match build_blind_spot_negative_stack() {
-        Some(ctx) => ctx,
-        None => return signals, // No negative stack data → pass through
+    use std::collections::HashSet;
+
+    // Load user's direct runtime deps
+    let user_deps = match load_user_direct_deps() {
+        Some(deps) if !deps.is_empty() => deps,
+        _ => return signals, // No dep data → can't filter
     };
+
+    // Also build competing-tech negative stack for Layer 1
+    let negative_stack = build_negative_stack_from_deps(&user_deps);
+
+    // Technology-like topics that could map to package names.
+    // These are topics from extract_topics() that represent specific technologies
+    // (not generic concepts like "performance", "testing", "security").
+    // If a topic is in this set, it's checkable against user deps.
+    static TECH_TOPICS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
+        [
+            // Frontend frameworks
+            "react",
+            "vue",
+            "angular",
+            "svelte",
+            "solid",
+            "qwik",
+            "preact",
+            // Meta-frameworks
+            "next",
+            "nextjs",
+            "nuxt",
+            "remix",
+            "gatsby",
+            "astro",
+            // Backend frameworks
+            "express",
+            "fastify",
+            "koa",
+            "hapi",
+            "nest",
+            "nestjs",
+            "django",
+            "flask",
+            "fastapi",
+            "laravel",
+            "rails",
+            "spring",
+            "gin",
+            "fiber",
+            "echo",
+            // Rust ecosystem
+            "axum",
+            "actix",
+            "tokio",
+            "reqwest",
+            "serde",
+            "warp",
+            "rocket",
+            "hyper",
+            "tower",
+            "tonic",
+            "tauri",
+            "diesel",
+            "sqlx",
+            // Desktop/build
+            "electron",
+            "vite",
+            "webpack",
+            "esbuild",
+            "rollup",
+            "turbopack",
+            "parcel",
+            // CSS
+            "tailwind",
+            "tailwindcss",
+            "bootstrap",
+            // ORMs / DB clients
+            "prisma",
+            "drizzle",
+            "sequelize",
+            "typeorm",
+            "mongoose",
+            // Databases
+            "postgresql",
+            "postgres",
+            "mysql",
+            "mongodb",
+            "redis",
+            "sqlite",
+            // Cloud / infra
+            "vercel",
+            "netlify",
+            "supabase",
+            "firebase",
+            "cloudflare",
+            // Runtimes
+            "node",
+            "deno",
+            "bun",
+            // Languages (only check if specific enough)
+            "rust",
+            "python",
+            "typescript",
+            "golang",
+            // Package managers
+            "pnpm",
+            "yarn",
+            "npm",
+            "cargo",
+            "pip",
+            // Mobile
+            "flutter",
+        ]
+        .into_iter()
+        .collect()
+    });
 
     signals
         .into_iter()
         .filter(|signal| {
             let topics = crate::extract_topics(&signal.title, "");
-            let prior = crate::stacks::negative_stack::lookup_prior(&negative_stack, &topics);
-            // Keep items where the negative prior is > 0.30 (not strongly suppressed)
-            prior > 0.30
+
+            // Layer 1: Competing-tech negative stack
+            if let Some(ref ns) = negative_stack {
+                let prior = crate::stacks::negative_stack::lookup_prior(ns, &topics);
+                if prior <= 0.30 {
+                    return false; // Strong competing-absent suppression
+                }
+            }
+
+            // Layer 2: Dependency-absence check
+            // Extract technology-specific topics from the title
+            let tech_topics: Vec<&String> = topics
+                .iter()
+                .filter(|t| TECH_TOPICS.contains(t.as_str()))
+                .collect();
+
+            if tech_topics.is_empty() {
+                // No technology-specific topics detected — keep the item
+                // (it's about generic concepts like "performance", "testing", etc.)
+                return true;
+            }
+
+            // Check if ANY tech topic is in user's deps
+            let has_user_dep = tech_topics.iter().any(|topic| {
+                user_deps.contains(topic.as_str())
+                    // Also check common aliases: "next" → "next", "nextjs" → "next"
+                    || user_deps.contains(&topic.replace("js", ""))
+                    || user_deps.contains(&format!("@types/{topic}"))
+            });
+
+            // Keep item only if at least one tech topic matches user's stack
+            has_user_dep
         })
         .collect()
 }
 
-/// Build a negative stack context for blind spots filtering.
-/// Returns None if we can't load the required data.
-fn build_blind_spot_negative_stack() -> Option<crate::stacks::negative_stack::NegativeStackContext>
-{
+use once_cell::sync::Lazy;
+
+/// Load user's direct runtime deps as a lowercase HashSet.
+fn load_user_direct_deps() -> Option<std::collections::HashSet<String>> {
     use std::collections::HashSet;
 
     let conn = crate::open_db_connection().ok()?;
-
-    // Load direct runtime deps
     let mut stmt = conn
         .prepare(
             "SELECT DISTINCT LOWER(package_name) FROM project_dependencies
@@ -492,11 +631,15 @@ fn build_blind_spot_negative_stack() -> Option<crate::stacks::negative_stack::Ne
         .flatten()
         .collect();
 
-    if deps.is_empty() {
-        return None; // No dep data → can't infer negative stack
-    }
+    Some(deps)
+}
 
-    // Load anti-topics with confidence
+/// Build negative stack from loaded deps.
+fn build_negative_stack_from_deps(
+    deps: &std::collections::HashSet<String>,
+) -> Option<crate::stacks::negative_stack::NegativeStackContext> {
+    let conn = crate::open_db_connection().ok()?;
+
     let anti_topics: Vec<(String, f32)> = match conn
         .prepare("SELECT topic, confidence FROM anti_topics WHERE rejection_count >= 2")
     {
@@ -511,7 +654,7 @@ fn build_blind_spot_negative_stack() -> Option<crate::stacks::negative_stack::Ne
     };
 
     Some(crate::stacks::negative_stack::build_negative_stack(
-        &deps,
+        deps,
         crate::competing_tech::COMPETING_TECH,
         &anti_topics,
     ))
