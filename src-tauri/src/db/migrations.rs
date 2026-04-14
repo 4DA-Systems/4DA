@@ -453,10 +453,12 @@ impl Database {
         let duration_ms = start.elapsed().as_millis() as i64;
 
         // Record in migration_history (non-fatal if this fails)
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "INSERT INTO migration_history (from_version, to_version, executed_at, duration_ms, success) VALUES (?1, ?2, datetime('now'), ?3, ?4)",
             params![from_version, to_version, duration_ms, result.is_ok() as i32],
-        );
+        ) {
+            tracing::warn!(target: "4da::db", error = %e, from_version, to_version, "Failed to record migration in migration_history");
+        }
 
         match &result {
             Ok(()) => {
@@ -1129,9 +1131,13 @@ impl Database {
 
             // Phase 20 migration: achievement engine tables
             if current_version < 20 {
-                Self::run_versioned_migration(&conn, 19, 20, "Phase 20: achievement engine", |c| {
-                    crate::achievement_engine::create_tables(c)
-                })?;
+                Self::run_versioned_migration(
+                    &conn,
+                    19,
+                    20,
+                    "Phase 20: achievement engine",
+                    |c| crate::achievement_engine::create_tables(c),
+                )?;
             }
 
             // Phase 21 migration: Content Personalization cache + read state

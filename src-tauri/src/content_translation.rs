@@ -251,11 +251,13 @@ fn get_cached(content_hash: &str, target_lang: &str) -> Option<String> {
 
     if let Ok(ref _text) = result {
         // Update last_used_at and use_count
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "UPDATE translation_cache SET last_used_at = strftime('%s', 'now'), use_count = use_count + 1
              WHERE content_hash = ?1 AND target_lang = ?2",
             rusqlite::params![content_hash, target_lang],
-        );
+        ) {
+            tracing::warn!(target: "4da::translation", error = %e, hash = content_hash, lang = target_lang, "Failed to update translation cache usage stats");
+        }
         debug!(target: "4da::i18n", hash = content_hash, lang = target_lang, "Translation cache hit");
     }
 
@@ -277,7 +279,7 @@ fn cache_translation(
     };
     let conn = db.conn.lock();
 
-    let _ = conn.execute(
+    if let Err(e) = conn.execute(
         "INSERT INTO translation_cache (content_hash, source_lang, target_lang, source_text, translated_text, provider)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(content_hash, target_lang) DO UPDATE SET
@@ -286,7 +288,9 @@ fn cache_translation(
              last_used_at = strftime('%s', 'now'),
              use_count = use_count + 1",
         rusqlite::params![hash, source_lang, target_lang, source_text, translated_text, provider],
-    );
+    ) {
+        tracing::warn!(target: "4da::translation", error = %e, hash = hash, target_lang = target_lang, "Failed to cache translation");
+    }
 }
 
 // ============================================================================

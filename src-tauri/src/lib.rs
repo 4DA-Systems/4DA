@@ -208,14 +208,6 @@ mod domain_profile_data;
 mod entity_extraction;
 // Silent-Failure Defense Layer 1 — typed wrappers for external boundaries.
 // See docs/strategy/SILENT-FAILURE-DEFENSE.md. Skeleton only in this commit.
-mod external;
-pub mod extractors;
-mod free_briefing;
-#[cfg(feature = "experimental")]
-mod achievement_definitions;
-#[cfg(not(feature = "experimental"))]
-#[path = "achievement_definitions_stub.rs"]
-mod achievement_definitions;
 #[cfg(feature = "experimental")]
 mod achievement_commands;
 #[cfg(not(feature = "experimental"))]
@@ -223,10 +215,18 @@ mod achievement_commands;
 #[path = "achievement_commands_stub.rs"]
 mod achievement_commands;
 #[cfg(feature = "experimental")]
+mod achievement_definitions;
+#[cfg(not(feature = "experimental"))]
+#[path = "achievement_definitions_stub.rs"]
+mod achievement_definitions;
+#[cfg(feature = "experimental")]
 mod achievement_engine;
 #[cfg(not(feature = "experimental"))]
 #[path = "achievement_engine_stub.rs"]
 mod achievement_engine;
+mod external;
+pub mod extractors;
+mod free_briefing;
 #[cfg(feature = "glyph_audit")]
 mod glyph_integration;
 mod health;

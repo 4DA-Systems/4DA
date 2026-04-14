@@ -144,10 +144,12 @@ impl Database {
         ).unwrap_or(0);
 
         // Clean orphaned embeddings (belt-and-suspenders with cleanup_old_items)
-        let _ = tx.execute(
+        if let Err(e) = tx.execute(
             "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
             [],
-        );
+        ) {
+            tracing::warn!(target: "4da::db", error = %e, "Failed to clean orphaned source_vec embeddings during deep clean");
+        }
 
         info!(
             target: "4da::db",
@@ -396,14 +398,18 @@ impl Database {
             "DELETE FROM source_items WHERE last_seen < datetime('now', ?1)",
             params![format!("-{} days", max_age_days)],
         )?;
-        let _ = conn.execute(
+        if let Err(e) = conn.execute(
             "DELETE FROM feedback WHERE source_item_id NOT IN (SELECT id FROM source_items)",
             [],
-        );
-        let _ = conn.execute(
+        ) {
+            tracing::warn!(target: "4da::db", error = %e, "Failed to clean orphaned feedback rows during cleanup_old_items");
+        }
+        if let Err(e) = conn.execute(
             "DELETE FROM source_vec WHERE rowid NOT IN (SELECT id FROM source_items)",
             [],
-        );
+        ) {
+            tracing::warn!(target: "4da::db", error = %e, "Failed to clean orphaned source_vec rows during cleanup_old_items");
+        }
         Ok(deleted)
     }
 

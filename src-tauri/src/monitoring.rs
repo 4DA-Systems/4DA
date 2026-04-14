@@ -687,11 +687,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                 // GAME: track calibrations produced
                                 if cycle.calibrations_produced > 0 {
                                     if let Ok(db) = crate::get_database() {
-                                        let _unlocked = crate::achievement_engine::increment_counter(
-                                            db,
-                                            "calibrations",
-                                            cycle.calibrations_produced as u64,
-                                        );
+                                        let _unlocked =
+                                            crate::achievement_engine::increment_counter(
+                                                db,
+                                                "calibrations",
+                                                cycle.calibrations_produced as u64,
+                                            );
                                     }
                                 }
                             }
@@ -940,7 +941,9 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         match crate::awe_synthesis::build_behavioral_context() {
                             Ok(ctx) => {
                                 // Write context file for AWE CLI
-                                let _ = crate::awe_synthesis::write_context_file(&ctx);
+                                if let Err(e) = crate::awe_synthesis::write_context_file(&ctx) {
+                                    tracing::warn!(target: "4da::awe", error = %e, "Failed to write AWE behavioral context file");
+                                }
                                 // Synthesize wisdom via LLM
                                 match crate::awe_synthesis::synthesize_daily_wisdom(&ctx).await {
                                     Ok(wisdom) => {
