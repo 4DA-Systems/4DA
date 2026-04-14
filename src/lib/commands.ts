@@ -605,6 +605,7 @@ interface CommandMap {
   // -- Startup Health --
   get_startup_health: { params: Record<string, never>; result: StartupHealthIssue[] };
   get_diagnostic_report: { params: Record<string, never>; result: DiagnosticReport };
+  get_recent_logs: { params: { lines: number }; result: string };
 
   // -- Capabilities --
   get_capability_states: { params: Record<string, never>; result: Record<string, { state: string; reason?: string; since?: string; fallback?: string; remediation?: string }> };
