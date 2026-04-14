@@ -224,6 +224,9 @@ mod achievement_engine;
 #[cfg(not(feature = "experimental"))]
 #[path = "achievement_engine_stub.rs"]
 mod achievement_engine;
+mod briefing_dedupe;
+mod briefing_groundedness;
+mod briefing_quality;
 mod external;
 pub mod extractors;
 mod free_briefing;

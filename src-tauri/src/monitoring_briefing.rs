@@ -211,9 +211,15 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // Fire it. The already-fired-today check prevents double delivery.
 
     // 4. Get top relevant items from in-memory analysis state or DB
-    //    Language firewall: only show items matching user's language
+    //    Language firewall: only show items matching user's language.
+    //    Briefing-quality firewall: reject garbled/marketing/clickbait
+    //      titles that made it past the source-fetch gate but would
+    //      visibly degrade a featured surface. See briefing_quality.rs.
+    //    Intra-batch fuzzy dedupe: collapse near-duplicate titles (e.g.
+    //      "React 19.2.3 released" on HN + Reddit) to the highest-scoring
+    //      variant so the brief doesn't echo itself.
     let user_lang = crate::i18n::get_user_language();
-    let items: Vec<BriefingItem> = {
+    let raw_items: Vec<BriefingItem> = {
         let analysis_state = crate::get_analysis_state().lock();
         if let Some(ref results) = analysis_state.results {
             results
@@ -221,7 +227,10 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 .filter(|r| r.relevant && !r.excluded)
                 .filter(|r| r.detected_lang == user_lang) // Language gate
                 .filter(|r| r.top_score >= 0.15) // Score gate — no 0% items
-                .take(8) // 8 items for center-screen briefing (was 5 for toast)
+                // Pull a bigger pool so the briefing-quality + dedupe gates
+                // have headroom to filter without starving the brief below
+                // its target size. 25 → ~8 after rejections is realistic.
+                .take(25)
                 .map(|r| BriefingItem {
                     title: r.title.clone(),
                     source_type: r.source_type.clone(),
@@ -240,7 +249,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             // or vacation still get a briefing from their last active session.
             if let Ok(db) = crate::get_database() {
                 let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-                db.get_relevant_items_since(period_start, 0.15, 8, &user_lang)
+                db.get_relevant_items_since(period_start, 0.15, 25, &user_lang)
                     .ok()
                     .map(|db_items| {
                         db_items
@@ -264,6 +273,33 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             }
         }
     };
+
+    // Apply briefing-quality gate — drops garbled/marketing/clickbait titles.
+    let quality_filtered: Vec<BriefingItem> = raw_items
+        .into_iter()
+        .filter(|item| {
+            match crate::briefing_quality::is_briefing_worthy(&item.title, &item.source_type) {
+                Ok(()) => true,
+                Err(reason) => {
+                    tracing::debug!(
+                        target: "4da::briefing",
+                        title = %item.title,
+                        source = %item.source_type,
+                        reject_reason = reason.as_str(),
+                        "briefing-quality gate rejected item"
+                    );
+                    false
+                }
+            }
+        })
+        .collect();
+
+    // Apply intra-batch fuzzy dedupe — collapses semantic duplicates.
+    // See `briefing_dedupe.rs` for the similarity rules and thresholds.
+    let deduped = crate::briefing_dedupe::dedupe_briefing_items(quality_filtered);
+
+    // Finally cap at the widget's display budget.
+    let items: Vec<BriefingItem> = deduped.into_iter().take(8).collect();
 
     if items.is_empty() {
         return None;
@@ -946,24 +982,41 @@ pub(crate) async fn synthesize_morning_briefing(
 
     let system_prompt = r#"You are 4DA's Intelligence Synthesis Engine. Produce a concise morning intelligence briefing for a developer. This appears as a desktop widget — every word must earn its place.
 
-Format as plain text with these sections:
+GROUNDING RULES (ABSOLUTE — VIOLATION = BRIEFING REJECTED):
+- Every proper noun, product name, version number, and technology term you mention MUST appear verbatim (or as a near-spelling) in at least one numbered input item, its description, or the "affects" list.
+- You may NOT invent technologies, versions, vendors, frameworks, CVE numbers, or migration targets.
+- You may NOT reference companies, products, or tools that were not in the input items.
+- If a signal seems to warrant advice but you lack specific grounding for a recommendation, omit the advice rather than invent one.
+- Do NOT paraphrase by substituting a "similar-sounding" technology name. If the input says "TanStack Start", write TanStack Start — not Stripe, not Vite, not another project.
+
+ABSTENTION RULES:
+- If the input items are incoherent, off-topic, or too low-signal to synthesize a briefing worth reading, respond with ONLY this single line: "Low signal — no noteworthy intelligence overnight."
+- If the input items are all marketing, off-topic, or junk, use the abstention line above.
+- If fewer than 2 items pass your internal "is this actually signal-worthy?" check, use abstention.
+- Abstention is a FEATURE, not a failure. A short honest brief beats a padded hallucinated one.
+
+FORMAT (when NOT abstaining):
+Plain text, these sections exactly:
 
 SITUATION
-One paragraph (2-3 sentences). What changed overnight? Lead with the most important signal.
+One paragraph (2-3 sentences). What changed overnight? Lead with the most important signal. Reference specific item numbers in brackets, e.g. "Tokio released a security advisory [3]."
 
 PRIORITY
-1-3 items. What demands attention today? Be specific — name exact technology, version, or project affected.
+1-3 items. What demands attention today? Each line MUST include the item number reference [n] and name a specific technology from that item.
 
 PATTERN
-One sentence connecting signals across sources, if a pattern exists. Skip entirely if nothing connects.
+One sentence connecting signals across sources, if a pattern actually exists in the input. Skip this section entirely (omit the header) if nothing connects.
 
-Rules:
-- Reference the user's tech stack and projects by name
-- Be precise: "tokio 1.38 security advisory" not "a security issue"
-- If nothing is urgent, say "Your stack is quiet overnight"
-- Maximum 120 words — this is a widget, not a report
-- No markdown, no bullet markers, use plain dashes for lists
-- Start with content directly — no meta-text like "here is your briefing""#;
+HARD LIMITS:
+- Maximum 120 words total.
+- No markdown, no bullet markers, use plain dashes for lists.
+- No meta-text like "here is your briefing" — start directly with SITUATION.
+- Reference the user's tech stack by name only if that tech literally appears in an input item.
+
+SELF-CHECK before responding:
+1. Does every proper noun / version / product in my draft appear in the input items? If not, remove it.
+2. Is my advice supported by a specific input item? If not, remove the advice.
+3. Is there at least one non-trivial signal here? If not, emit the abstention line."#;
 
     // Append language instruction for non-English users
     let lang = crate::i18n::get_user_language();
@@ -1000,21 +1053,79 @@ Rules:
     }];
 
     let start = std::time::Instant::now();
-    match llm_client.complete(&full_system_prompt, messages).await {
-        Ok(response) => {
-            tracing::info!(
-                target: "4da::briefing",
-                tokens = response.input_tokens + response.output_tokens,
-                elapsed_ms = start.elapsed().as_millis(),
-                "Morning brief synthesis complete"
-            );
-            Ok(response.content)
-        }
+    let response = match llm_client.complete(&full_system_prompt, messages).await {
+        Ok(r) => r,
         Err(e) => {
             tracing::warn!(target: "4da::briefing", error = %e, "Morning brief synthesis failed");
-            Err(format!("LLM synthesis failed: {e}"))
+            return Err(format!("LLM synthesis failed: {e}"));
         }
+    };
+
+    tracing::info!(
+        target: "4da::briefing",
+        tokens = response.input_tokens + response.output_tokens,
+        elapsed_ms = start.elapsed().as_millis(),
+        "Morning brief synthesis complete"
+    );
+
+    // --- Post-synthesis groundedness check ---------------------------------
+    // Even with strict prompting, LLMs sometimes hallucinate. This
+    // validator extracts proper nouns / versions from the output and
+    // verifies each appears in the source corpus. If the output is
+    // significantly ungrounded, we fall back to a safe abstention.
+    //
+    // A real production hallucination this catches (Screenshot_1976):
+    //   "Recommend update of your strategy for non-test architecture,
+    //    including a 5+ year migration from VAR and Stripe"
+    // Neither "VAR" nor "Stripe" appeared in any item that day.
+    let corpus: Vec<String> = briefing
+        .items
+        .iter()
+        .map(|i| {
+            let mut c = i.title.clone();
+            if let Some(d) = &i.description {
+                c.push(' ');
+                c.push_str(d);
+            }
+            for dep in &i.matched_deps {
+                c.push(' ');
+                c.push_str(dep);
+            }
+            c
+        })
+        .collect();
+
+    let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
+
+    // The threshold is conservative — require 65% of salient terms to
+    // be grounded. Anything below suggests the LLM invented content.
+    const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
+
+    if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
+        tracing::warn!(
+            target: "4da::briefing",
+            confidence = report.confidence,
+            total_terms = report.total_terms,
+            ungrounded_count = report.ungrounded_terms.len(),
+            ungrounded_sample = ?report.ungrounded_terms.iter().take(5).collect::<Vec<_>>(),
+            "Morning brief synthesis failed groundedness check — falling back to abstention"
+        );
+        return Ok(format!(
+            "Low signal — no noteworthy intelligence overnight.\n\n\
+             ({} items scanned, synthesis skipped: {} ungrounded terms detected)",
+            briefing.items.len(),
+            report.ungrounded_terms.len()
+        ));
     }
+
+    tracing::info!(
+        target: "4da::briefing",
+        confidence = report.confidence,
+        total_terms = report.total_terms,
+        "Groundedness check passed"
+    );
+
+    Ok(response.content)
 }
 
 // ============================================================================
