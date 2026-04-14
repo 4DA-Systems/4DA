@@ -73,6 +73,7 @@ data/.stalled
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
 !.env.example
+!.env.local.example
 
 # ONNX models
 src-tauri/models/

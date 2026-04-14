@@ -324,14 +324,17 @@ pub async fn get_privacy_config() -> Result<serde_json::Value> {
         "llm_content_level": settings.privacy.llm_content_level,
         "proxy_url": settings.network.proxy_url,
         "cloud_llm_disclosure_accepted": settings.privacy.cloud_llm_disclosure_accepted,
+        "crash_reporting_opt_in": settings.privacy.crash_reporting_opt_in,
     }))
 }
 
-/// Update privacy settings (content level and/or disclosure acceptance).
+/// Update privacy settings (content level, disclosure acceptance, and/or
+/// crash reporting opt-in).
 #[tauri::command]
 pub async fn set_privacy_config(
     llm_content_level: Option<String>,
     cloud_llm_disclosure_accepted: Option<bool>,
+    crash_reporting_opt_in: Option<bool>,
 ) -> Result<()> {
     if let Some(ref level) = llm_content_level {
         validate_input_length(level, "llm_content_level", 20)?;
@@ -349,6 +352,9 @@ pub async fn set_privacy_config(
     }
     if let Some(accepted) = cloud_llm_disclosure_accepted {
         guard.get_mut().privacy.cloud_llm_disclosure_accepted = accepted;
+    }
+    if let Some(opt_in) = crash_reporting_opt_in {
+        guard.get_mut().privacy.crash_reporting_opt_in = opt_in;
     }
     guard.save().map_err(|e| {
         crate::error::FourDaError::Config(format!("Failed to save privacy config: {e}"))
