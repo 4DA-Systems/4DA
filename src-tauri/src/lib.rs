@@ -268,6 +268,7 @@ mod probes_corpus;
 mod probes_engine;
 mod project_health;
 mod project_health_dimensions;
+mod prompt_safety;
 pub mod query;
 pub(crate) mod runtime_paths;
 mod scheduler_state;

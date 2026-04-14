@@ -9,6 +9,14 @@
 
 ## Active Terminals
 
+<!-- T-INTEL-MESH (done 2026-04-15):
+     Commits:
+       29250000 — feat(privacy): opt-in Sentry crash reporting with aggressive scrubbing
+       252be640 — feat(onboarding): pre-warm Ollama gate before first deep-scan embedding
+       [pending] — feat(mesh): Phase 1 injection hardening + Intelligence Mesh design doc
+     AWE transmute recorded: dc_019d8d0c-c376-75c1-bfac-40397ff2157c (reversibility 65%, act_now=false — patience).
+     Full pivot is 6-7 weeks; this session landed Phase 1 only. -->
+
 <!-- T-BRIEFING-FLAGSHIP (done 2026-04-15):
      Commits: 7839ba86 (quality gate + groundedness + prompt rewrite + dedupe),
               9b214124 (UI abstention rendering — snapshot path),
