@@ -233,6 +233,48 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
         info!(target: "4da::analysis", context_chunks = cached_context_count, "Context indexed");
     }
 
+    // Step 1.5: Pre-warm gate for Ollama. If the user's configured provider
+    // is Ollama, wait up to 30 seconds for the background warm task to
+    // complete (spawned at startup from `app_setup.rs`). This prevents the
+    // first batch of embeddings inside `fetch_all_sources_deep` from hitting
+    // a cold model and waiting 30-60 seconds mid-fetch.
+    //
+    // We wait ONLY if:
+    //   - provider is ollama (other providers have no cold-start issue)
+    //   - a model name is configured
+    // And we ALWAYS proceed after the timeout, warm or not — the wait is
+    // an optimization, not a requirement. See
+    // `docs/strategy/ONBOARDING-LOAD-TIME.md` Part 4.1 for the full
+    // architectural context.
+    {
+        let settings_mgr = crate::get_settings_manager();
+        let (provider, model) = {
+            let guard = settings_mgr.lock();
+            let s = guard.get();
+            (s.llm.provider.clone(), s.llm.model.clone())
+        };
+        if provider == "ollama" && !model.is_empty() {
+            emit_progress(app, "warm", 0.03, "Preparing AI provider...", 0, 0);
+            let warmed =
+                crate::ollama::wait_for_warm(&model, std::time::Duration::from_secs(30)).await;
+            if warmed {
+                info!(
+                    target: "4da::analysis",
+                    model = %model,
+                    "Ollama model warm — embedding will start hot"
+                );
+            } else {
+                // Not a failure — proceed. The first batch will pay cold-start
+                // cost but subsequent batches will be warm.
+                info!(
+                    target: "4da::analysis",
+                    model = %model,
+                    "Ollama warm gate timed out after 30s — proceeding with cold-start risk"
+                );
+            }
+        }
+    }
+
     // Step 2: DEEP fetch from all sources (100 items per category = 500-1500 total)
     emit_progress(
         app,

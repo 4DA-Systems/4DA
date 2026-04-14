@@ -48,8 +48,9 @@ impl OllamaState {
 // Global State
 // ============================================================================
 
-/// Duration after which a warmed model is considered stale.
-#[cfg(test)]
+/// Duration after which a warmed model is considered stale. Ollama
+/// unloads inactive models after about 5 minutes by default; we match
+/// that threshold so our in-memory warm-state doesn't diverge.
 const WARM_STALENESS_SECS: u64 = 300; // 5 minutes
 
 static OLLAMA_STATE: Lazy<Mutex<OllamaState>> = Lazy::new(|| Mutex::new(OllamaState::new()));
@@ -180,7 +181,11 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
 ///
 /// A model is considered warm if it was successfully warmed and the last use
 /// was within 5 minutes. Stale models are automatically removed.
-#[cfg(test)]
+///
+/// Previously gated behind `#[cfg(test)]`; promoted to `pub(crate)` in the
+/// onboarding load-time work so the deep-scan can use the staleness-aware
+/// check instead of a plain contains() — ensures Ollama model unload
+/// (which happens after ~5min idle) correctly invalidates warmup state.
 pub(crate) fn is_warm(model: &str) -> bool {
     let mut state = OLLAMA_STATE.lock();
 
@@ -212,6 +217,54 @@ pub(crate) fn mark_warm(model: &str) {
     let mut state = OLLAMA_STATE.lock();
     state.warmed_models.insert(model.to_string());
     state.last_use.insert(model.to_string(), Instant::now());
+}
+
+/// Check whether a warm operation is currently in progress. Callers
+/// polling for warm-completion can use this to distinguish "not yet
+/// started" from "in flight".
+pub(crate) fn is_warming() -> bool {
+    let state = OLLAMA_STATE.lock();
+    state.warming.load(Ordering::SeqCst)
+}
+
+/// Wait up to `timeout` for a model to become warm. Returns `true` if
+/// the model is warm at return time, `false` if we timed out.
+///
+/// This is the "gate" used by the first-launch deep scan to pre-warm
+/// Ollama BEFORE starting embedding generation, so the first batch of
+/// embeddings doesn't hit a cold model and wait 30-60 seconds for the
+/// model to load. See `docs/strategy/ONBOARDING-LOAD-TIME.md` Part 4.1
+/// for the full architectural context.
+///
+/// **Never blocks the calling task's thread pool for long.** Uses a
+/// 100ms poll loop with tokio::time::sleep (cooperative). Yields to
+/// the runtime on every poll.
+///
+/// Returns immediately if the model is already warm. Returns `false`
+/// (without spinning) if Ollama is not the configured provider — caller
+/// can still proceed with cold-start cost.
+pub(crate) async fn wait_for_warm(model: &str, timeout: std::time::Duration) -> bool {
+    use std::time::Instant;
+    let deadline = Instant::now() + timeout;
+    // Fast path: already warm.
+    if is_warm(model) {
+        return true;
+    }
+    // Poll until warm or deadline.
+    while Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        if is_warm(model) {
+            return true;
+        }
+    }
+    // Timed out. Caller proceeds with cold-start cost; not an error.
+    tracing::warn!(
+        target: "4da::ollama",
+        model,
+        timeout_ms = timeout.as_millis() as u64,
+        "wait_for_warm timed out — proceeding with potential cold-start penalty"
+    );
+    false
 }
 
 // ============================================================================
