@@ -598,7 +598,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 56;
+        const TARGET_VERSION: i64 = 57;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2079,6 +2079,60 @@ impl Database {
                 )?;
             }
 
+            // ── Phase 57: Intelligence Mesh calibration samples table ──────
+            // Phase 5b.2 (The Filter) needs per-signal persistence so the
+            // fitter can pair advisor judgments with downstream user
+            // interactions and derive binary labels. Provenance captures
+            // MODEL identity per judged item but NOT the score the advisor
+            // gave — without the score we can't fit a curve. This table
+            // is the fitter's input; one row per AdvisorSignal emitted by
+            // the rerank loop.
+            //
+            // The table is append-only at stamp time. `processed_at` is
+            // NULL until a fit run consumes the row; once set, the sample
+            // has contributed to at least one curve and won't be refit.
+            //
+            // Sample age: the fitter waits a minimum window (e.g. 24h)
+            // from created_at before considering a row paired, because
+            // InteractionPattern classification needs dwell + scroll
+            // telemetry that only arrives on item close.
+            if current_version < 57 {
+                Self::run_versioned_migration(
+                    &conn,
+                    56,
+                    57,
+                    "Phase 57: Intelligence Mesh calibration samples table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS calibration_samples (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                source_item_id INTEGER NOT NULL,
+                                model_identity_hash TEXT NOT NULL,
+                                task TEXT NOT NULL,
+                                prompt_version TEXT NOT NULL,
+                                raw_score REAL NOT NULL,
+                                confidence REAL NOT NULL,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                processed_at TEXT
+                             );
+                             -- Pairing join: sample → interactions on (source_item_id, time window).
+                             CREATE INDEX IF NOT EXISTS idx_cal_samples_item
+                               ON calibration_samples(source_item_id, created_at);
+                             -- Fitter's candidate-set scan: unfit rows per (model, task).
+                             CREATE INDEX IF NOT EXISTS idx_cal_samples_unfit
+                               ON calibration_samples(model_identity_hash, task, processed_at);
+                             CREATE INDEX IF NOT EXISTS idx_cal_samples_created
+                               ON calibration_samples(created_at);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created calibration_samples table + 3 indices (Intelligence Mesh Phase 5b.2)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -2936,19 +2990,91 @@ mod tests {
         }
     }
 
-    /// Phase 56 lifts TARGET_VERSION to 56. Verify the test DB reached it.
+    /// Phase 57 lifts TARGET_VERSION to 57. Verify the test DB reached it.
     #[test]
-    fn test_phase_56_schema_version_reached() {
+    fn test_phase_57_schema_version_reached() {
         let db = test_db();
         let conn = db.conn.lock();
         let version: i64 = conn
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap();
         assert!(
-            version >= 56,
-            "schema_version should be >= 56 after migration; got {}",
+            version >= 57,
+            "schema_version should be >= 57 after migration; got {}",
             version
         );
+    }
+
+    /// Phase 57: calibration_samples table + indices present.
+    #[test]
+    fn test_phase_57_calibration_samples_table_and_indexes() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Table exists.
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='calibration_samples'",
+                [],
+                |row| row.get::<_, i64>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+        assert!(
+            table_exists,
+            "calibration_samples table should exist after migration"
+        );
+
+        // Expected columns all present.
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('calibration_samples')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for col in [
+            "id",
+            "source_item_id",
+            "model_identity_hash",
+            "task",
+            "prompt_version",
+            "raw_score",
+            "confidence",
+            "created_at",
+            "processed_at",
+        ] {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "calibration_samples column '{}' missing; got {:?}",
+                col,
+                cols
+            );
+        }
+
+        // All 3 indices present.
+        let mut stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='calibration_samples'",
+            )
+            .unwrap();
+        let indexes: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for idx in [
+            "idx_cal_samples_item",
+            "idx_cal_samples_unfit",
+            "idx_cal_samples_created",
+        ] {
+            assert!(
+                indexes.iter().any(|i| i == idx),
+                "calibration_samples index '{}' missing; got {:?}",
+                idx,
+                indexes
+            );
+        }
     }
 
     #[test]

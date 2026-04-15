@@ -54,6 +54,34 @@ export interface Recommendation {
 }
 
 // ============================================================================
+// Intelligence Mesh — Calibration Curve Fitter (Phase 5b.2)
+// ============================================================================
+//
+// One entry per (model_identity, task) pair that was considered for a
+// fit. The UI can render "last fit" tables showing which models/tasks
+// got a curve and which were skipped (and why).
+
+export interface CurveFitSummary {
+  model_identity_hash: string;
+  provider: string;
+  model: string;
+  task: string;
+  samples_scanned: number;
+  samples_labeled: number;
+  curve_saved: boolean;
+  curve_id: string | null;
+  brier_score: number | null;
+  ece: number | null;
+  skipped_reason: string | null;
+}
+
+export interface CurveFitReport {
+  total_candidates: number;
+  curves_produced: number;
+  fits: CurveFitSummary[];
+}
+
+// ============================================================================
 // Taste Test Calibration
 // ============================================================================
 

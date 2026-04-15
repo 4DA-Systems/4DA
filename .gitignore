@@ -65,6 +65,9 @@ data/model_registry.json
 data/briefing_snapshot.json
 data/briefing_snapshot.json.tmp
 
+# Calibration curves (runtime state — fit from user interactions, per-machine)
+data/calibrations/
+
 # Startup watchdog markers (Sovereign Cold Boot — runtime state)
 data/.running
 data/.healthy
