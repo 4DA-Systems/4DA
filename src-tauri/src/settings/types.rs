@@ -248,6 +248,38 @@ impl Default for SerendipityConfig {
     }
 }
 
+/// Feed composition floors — Intelligence Mesh Gap 3.
+///
+/// Enforces minimum representation of stretch + horizon content in the
+/// top-N of every feed, preventing filter-bubble collapse over time.
+/// Pure reordering (no score modification) — see
+/// `scoring::composition::enforce_composition_floors`.
+///
+/// Default 70/20/10 matches the "mostly comfort, some stretch, a little
+/// horizon" ratio recommended by the Intelligence Mesh design (see
+/// docs/strategy/INTELLIGENCE-MESH.md). Percentages need not sum to 100
+/// strictly; the remainder is absorbed by the comfort bucket.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedCompositionConfig {
+    pub enabled: bool,
+    pub top_n: u32,
+    pub comfort_pct: u8,
+    pub stretch_pct: u8,
+    pub horizon_pct: u8,
+}
+
+impl Default for FeedCompositionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            top_n: 20,
+            comfort_pct: 70,
+            stretch_pct: 20,
+            horizon_pct: 10,
+        }
+    }
+}
+
 /// Audio briefing configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioBriefingConfig {
@@ -656,6 +688,9 @@ pub struct Settings {
     /// Serendipity engine (anti-bubble)
     #[serde(default)]
     pub serendipity: SerendipityConfig,
+    /// Feed composition floors (comfort/stretch/horizon ratios for top-N)
+    #[serde(default)]
+    pub feed_composition: FeedCompositionConfig,
     /// Audio briefing
     #[serde(default)]
     pub audio_briefing: AudioBriefingConfig,
@@ -896,6 +931,7 @@ impl Default for Settings {
             github_languages: vec![],
             predictive: PredictiveConfig::default(),
             serendipity: SerendipityConfig::default(),
+            feed_composition: FeedCompositionConfig::default(),
             audio_briefing: AudioBriefingConfig::default(),
             health_radar: HealthRadarConfig::default(),
             attention: AttentionConfig::default(),
