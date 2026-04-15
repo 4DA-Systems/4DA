@@ -147,6 +147,7 @@ mod tests {
             min_embedding_score: (-1.0_f32).clamp(0.0, 1.0),
             daily_token_limit: 1,
             daily_cost_limit_cents: 1,
+            reconciler_enabled: true,
         };
         assert!(config.enabled);
         assert_eq!(config.max_items_per_batch, 1);

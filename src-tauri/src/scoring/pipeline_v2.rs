@@ -1412,6 +1412,7 @@ pub(crate) fn score_item(
         signal_strength_bonus: strength_bonus,
         content_analysis_mult,
         advisor_signals: Vec::new(),
+        disagreement: None,
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
