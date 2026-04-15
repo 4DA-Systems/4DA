@@ -9,7 +9,19 @@
 
 ## Active Terminals
 
-<!-- T-INTEL-MESH (done 2026-04-15):
+<!-- T-INTEL-MESH Phase 3 (done 2026-04-15):
+     Provenance substrate landed.
+     - Phase 56 DB migration: provenance table + 4 indexes
+     - new module src-tauri/src/provenance.rs (Provenance, ModelIdentity,
+       ArtifactKind, record/batch/query helpers; 14 unit tests)
+     - new struct AdvisorSignal + advisor_signals field on ScoreBreakdown
+     - analysis_rerank.rs stamps advisor signals + persists provenance
+     - llm_judge.rs: PROMPT_VERSION constant exposed
+     - ts-rs bindings: AdvisorSignal, Provenance, ArtifactKind,
+       ModelIdentity all generated
+     Tests: 458 scoring + 26 provenance + 31 rerank + 2 migration = all green -->
+
+<!-- T-INTEL-MESH Phase 1 (done 2026-04-15):
      Commits:
        29250000 — feat(privacy): opt-in Sentry crash reporting with aggressive scrubbing
        252be640 — feat(onboarding): pre-warm Ollama gate before first deep-scan embedding

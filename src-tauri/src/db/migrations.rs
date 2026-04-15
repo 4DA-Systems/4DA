@@ -598,7 +598,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 55;
+        const TARGET_VERSION: i64 = 56;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2021,6 +2021,64 @@ impl Database {
                 )?;
             }
 
+            // ── Phase 56: Intelligence Mesh provenance table ─────────────
+            // Pre-launch architectural pivot (see docs/strategy/INTELLIGENCE-
+            // MESH.md §5.3). Every AI-influenced artifact — relevance score,
+            // LLM rerank adjustment, summary, briefing, translation, embed —
+            // gets a provenance row recording which model/prompt/calibration
+            // produced it. This unlocks:
+            //   • Receipts ("Why this score?" UI panel)
+            //   • Drift detection when a model's behavior changes
+            //   • Safe migration across model swaps (compound-learning
+            //     respects provenance cohorts)
+            //   • Shadow-arena peer comparisons (shadow_peer_id)
+            //
+            // The table is additive. No existing data changes. Artifacts
+            // produced before this migration are simply un-stamped; when a
+            // later pass re-scores them, new provenance is recorded. We
+            // intentionally do NOT backfill fake provenance rows — absence
+            // of a row means "unknown / pre-mesh", which is honest.
+            if current_version < 56 {
+                Self::run_versioned_migration(
+                    &conn,
+                    55,
+                    56,
+                    "Phase 56: Intelligence Mesh provenance table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS provenance (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                artifact_kind TEXT NOT NULL,
+                                artifact_id TEXT NOT NULL,
+                                model_identity_hash TEXT NOT NULL,
+                                provider TEXT NOT NULL,
+                                model TEXT NOT NULL,
+                                prompt_version TEXT,
+                                calibration_id TEXT,
+                                task TEXT NOT NULL,
+                                temperature REAL,
+                                raw_response_hash TEXT,
+                                shadow_peer_id INTEGER,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_provenance_artifact
+                               ON provenance(artifact_kind, artifact_id);
+                             CREATE INDEX IF NOT EXISTS idx_provenance_model
+                               ON provenance(model_identity_hash);
+                             CREATE INDEX IF NOT EXISTS idx_provenance_created_at
+                               ON provenance(created_at);
+                             CREATE INDEX IF NOT EXISTS idx_provenance_task
+                               ON provenance(task);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created provenance table + 4 indices (Intelligence Mesh Phase 3)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -2798,6 +2856,98 @@ mod tests {
             result.is_ok(),
             "Second migrate() call failed: {:?}",
             result.err()
+        );
+    }
+
+    /// Phase 56: Intelligence Mesh provenance table exists after migration,
+    /// has the expected schema, and has the expected indexes.
+    #[test]
+    fn test_phase_56_provenance_table_and_indexes() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Table exists.
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='provenance'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            table_exists,
+            "provenance table should exist after migration"
+        );
+
+        // Expected columns present.
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('provenance')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        let expected_cols = [
+            "id",
+            "artifact_kind",
+            "artifact_id",
+            "model_identity_hash",
+            "provider",
+            "model",
+            "prompt_version",
+            "calibration_id",
+            "task",
+            "temperature",
+            "raw_response_hash",
+            "shadow_peer_id",
+            "created_at",
+        ];
+        for col in expected_cols {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "provenance column '{}' missing; got {:?}",
+                col,
+                cols
+            );
+        }
+
+        // All four indexes created.
+        let mut idx_stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='provenance'")
+            .unwrap();
+        let indexes: Vec<String> = idx_stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for idx in [
+            "idx_provenance_artifact",
+            "idx_provenance_model",
+            "idx_provenance_created_at",
+            "idx_provenance_task",
+        ] {
+            assert!(
+                indexes.iter().any(|i| i == idx),
+                "provenance index '{}' missing; got {:?}",
+                idx,
+                indexes
+            );
+        }
+    }
+
+    /// Phase 56 lifts TARGET_VERSION to 56. Verify the test DB reached it.
+    #[test]
+    fn test_phase_56_schema_version_reached() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 56,
+            "schema_version should be >= 56 after migration; got {}",
+            version
         );
     }
 
