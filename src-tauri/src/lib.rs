@@ -239,6 +239,7 @@ mod health_commands;
 mod http_client;
 mod indexed_documents_commands;
 mod integrity;
+mod intelligence_core;
 mod intelligence_history;
 mod intelligence_packs;
 mod ipc_guard;
