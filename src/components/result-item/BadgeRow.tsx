@@ -4,6 +4,7 @@ import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance } from '../../types';
 import { getContentTypeBadge } from '../../config/content-types';
 import { useAppStore } from '../../store';
+import { JudgesSplitBadge } from './JudgesSplitBadge';
 
 interface BadgeRowProps {
   item: SourceRelevance;
@@ -124,6 +125,7 @@ export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
           </span>
         ) : null;
       })()}
+      <JudgesSplitBadge disagreement={item.score_breakdown?.disagreement} />
     </>
   );
 });
