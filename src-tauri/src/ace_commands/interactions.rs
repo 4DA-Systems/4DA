@@ -32,13 +32,31 @@ pub async fn ace_record_interaction(
     let action = match action_type.as_str() {
         "click" => {
             let dwell_time = action_data
+                .as_ref()
                 .and_then(|d| {
                     d.get("dwell_time_seconds")
                         .and_then(serde_json::Value::as_u64)
                 })
                 .unwrap_or(0);
+            // Optional interaction pattern classified by the frontend.
+            // Serialized as snake_case string matching InteractionPattern's
+            // serde rename. Unknown values fall back to None (legacy scoring).
+            let pattern = action_data.as_ref().and_then(|d| {
+                d.get("pattern")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|s| match s {
+                        "bounced" => Some(ace::InteractionPattern::Bounced),
+                        "scanned" => Some(ace::InteractionPattern::Scanned),
+                        "engaged" => Some(ace::InteractionPattern::Engaged),
+                        "completed" => Some(ace::InteractionPattern::Completed),
+                        "reread" => Some(ace::InteractionPattern::Reread),
+                        "abandoned" => Some(ace::InteractionPattern::Abandoned),
+                        _ => None,
+                    })
+            });
             ace::BehaviorAction::Click {
                 dwell_time_seconds: dwell_time,
+                pattern,
             }
         }
         "save" => ace::BehaviorAction::Save,
