@@ -142,6 +142,50 @@ pub struct ScoreBreakdown {
     /// Adjusts score based on technical depth and audience level.
     #[serde(default = "default_quality_mult")]
     pub content_analysis_mult: f32,
+    /// Intelligence Mesh advisory signals (Phase 3+). Each entry is an
+    /// opinion from an LLM advisor with its own provenance stamp. The
+    /// deterministic pipeline remains authoritative — advisors CANNOT
+    /// set the score directly. Reconciliation (Phase 2) bounds the
+    /// advisor adjustment to ±0.15 and surfaces disagreements as UI
+    /// signals rather than blending them into the scalar.
+    ///
+    /// Empty on the current 50/50-blend code path; populated as mesh
+    /// phases roll out. See `docs/strategy/INTELLIGENCE-MESH.md` §3.
+    #[serde(default)]
+    pub advisor_signals: Vec<AdvisorSignal>,
+}
+
+/// One advisor's opinion on an artifact, stamped with provenance.
+///
+/// Advisors are LLM sensors in the Intelligence Mesh. They produce a raw
+/// score (their native 1-5 or 0-1 output) plus a `normalized_score`
+/// (the same value mapped onto the canonical 0-1 scale via that model's
+/// calibration curve). If calibration is absent the two are equal and
+/// `calibration_id` is the `PRE_MESH_CALIBRATION_ID` sentinel.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct AdvisorSignal {
+    /// Provider + model identity (not the full hash — UI-friendly).
+    pub provider: String,
+    pub model: String,
+    /// Task this signal pertains to: "judge", "rerank", "summarize", etc.
+    pub task: String,
+    /// Advisor's raw confidence or score (0.0-1.0 after normalization
+    /// to that scale; some providers output 1-5 which the caller
+    /// normalizes before storing here).
+    pub raw_score: f32,
+    /// Calibrated score on the canonical 0-1 scale. Equal to `raw_score`
+    /// when no calibration curve has been computed for this model+task.
+    pub normalized_score: f32,
+    /// Confidence in the signal itself (distinct from the score value).
+    /// 0.0 means "no judgment was produced"; 1.0 means "high confidence".
+    pub confidence: f32,
+    /// Human-readable rationale, if the advisor produced one.
+    pub reason: Option<String>,
+    /// Prompt version used to elicit the signal, e.g. "judge-v1-2026-04-15".
+    pub prompt_version: Option<String>,
+    /// Calibration curve applied (or `PRE_MESH_CALIBRATION_ID` sentinel).
+    pub calibration_id: Option<String>,
 }
 
 pub(crate) fn default_freshness() -> f32 {

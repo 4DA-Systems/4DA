@@ -30,6 +30,15 @@ use crate::prompt_safety::wrap_untrusted_item;
 use crate::settings::LLMProvider;
 use tracing::debug;
 
+/// Stable version identifier for the judge's prompt. Bump whenever the
+/// rubric, delimiting rules, or output schema change in a way that would
+/// invalidate a prior model's calibration curve. Stored on every
+/// `AdvisorSignal` and `Provenance` row produced by this judge so that
+/// post-hoc analysis can filter by prompt cohort.
+///
+/// Versioning convention: `judge-v{N}-{YYYY-MM-DD}`.
+pub const PROMPT_VERSION: &str = "judge-v1-2026-04-15";
+
 /// The relevance judge uses an LLM to determine true relevance
 pub struct RelevanceJudge {
     client: LLMClient,
