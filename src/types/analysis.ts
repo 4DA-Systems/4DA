@@ -95,6 +95,32 @@ export interface ScoreBreakdown {
   signal_strength_bonus?: number;
   /** Content analysis multiplier from cached LLM pre-analysis (0.55-1.15, default 1.0) */
   content_analysis_mult?: number;
+  /** Intelligence Mesh Phase 3: one entry per advisor that evaluated this item.
+   *  Rust: src-tauri/src/types.rs#AdvisorSignal → ts-rs bindings/AdvisorSignal.ts */
+  advisor_signals?: AdvisorSignal[];
+  /** Intelligence Mesh Phase 2: set when pipeline and advisor(s) disagreed.
+   *  The pipeline score is always authoritative — this flag is informative. */
+  disagreement?: DisagreementKind | null;
+}
+
+/** Why pipeline and advisor(s) disagreed. Always a UI signal, never a score override. */
+export type DisagreementKind =
+  | 'AdvisorSkeptical'
+  | 'AdvisorEnthusiastic'
+  | 'AdvisorsInternal';
+
+/** One advisor's opinion on an item, stamped with provenance.
+ *  Mirrors src-tauri/bindings/bindings/AdvisorSignal.ts. */
+export interface AdvisorSignal {
+  provider: string;
+  model: string;
+  task: string;
+  raw_score: number;
+  normalized_score: number;
+  confidence: number;
+  reason: string | null;
+  prompt_version: string | null;
+  calibration_id: string | null;
 }
 
 export interface AnalysisProgress {
