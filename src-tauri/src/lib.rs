@@ -163,6 +163,7 @@ mod blind_spots;
 mod boot_context;
 mod briefing_snapshot;
 mod briefing_window;
+mod calibration;
 mod calibration_commands;
 mod calibration_probes;
 pub mod capabilities;
