@@ -153,6 +153,33 @@ pub struct ScoreBreakdown {
     /// phases roll out. See `docs/strategy/INTELLIGENCE-MESH.md` §3.
     #[serde(default)]
     pub advisor_signals: Vec<AdvisorSignal>,
+    /// Phase 2: reconciler disagreement flag. Set when the pipeline and
+    /// an advisor (or two advisors) produced normalized scores that
+    /// differed by more than the disagreement threshold (0.30 by default).
+    /// This item stays in the pipeline-authoritative rank but the UI
+    /// surfaces it as "judges split" — a killer feature no titan can
+    /// easily copy because their architecture has one model, not a mesh.
+    ///
+    /// `None` means agreement or no advisor opinion was produced.
+    #[serde(default)]
+    pub disagreement: Option<DisagreementKind>,
+}
+
+/// Describes why pipeline and advisor(s) disagreed about an item.
+///
+/// Surfaced to the UI as a "judges split" badge. Always a *signal*, never
+/// an override — the pipeline's score stands; the flag just tells the
+/// reader that judgment on this item is contested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub enum DisagreementKind {
+    /// Pipeline rated the item relevant; the advisor(s) rated it much lower.
+    AdvisorSkeptical,
+    /// Pipeline rated the item low; the advisor(s) rated it much higher.
+    AdvisorEnthusiastic,
+    /// Two advisors disagreed with each other. (Reserved for the
+    /// multi-advisor ensemble case; not produced by Phase 2.)
+    AdvisorsInternal,
 }
 
 /// One advisor's opinion on an artifact, stamped with provenance.

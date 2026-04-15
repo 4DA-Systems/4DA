@@ -9,6 +9,31 @@
 
 ## Active Terminals
 
+_No active terminals._
+
+<!-- T-INTEL-MESH Phase 2 (done 2026-04-15, recovered after host crash):
+     Decoupled the 50/50 blend via the reconciler (Layer 3 of the mesh).
+     Pipeline is now authoritative; advisors bounded to ±0.15 adjustment.
+     Disagreement (|pipeline - advisor| > 0.30) surfaces as a UI flag,
+     never an override. No hard rejects in the reconciler path.
+     - new module src-tauri/src/reconciler.rs (295 lines, 15 unit tests
+       including cap boundaries, multi-advisor ensemble, disagreement
+       threshold exclusive/inclusive, constants-vs-design-doc guards)
+     - new types: DisagreementKind enum + disagreement field on
+       ScoreBreakdown (ts-rs exports generated)
+     - analysis_rerank.rs forks on settings.rerank.reconciler_enabled
+       (default true). Legacy 50/50 + hard-reject path retained for
+       A/B and rollback. New path uses reconciler, tallies skeptical
+       disagreements as "rejected" for telemetry.
+     - settings: reconciler_enabled flag with serde back-compat
+     - test harness fix: settings_commands_tests.rs RerankConfig literal
+       updated for the new field
+     Tests: 15 reconciler + 6 rerank + 23 scoring::pipeline all green.
+     2810 lib tests compile clean.
+     Recovery context: host crashed mid-session before commit; files
+     were intact on disk. Recovery session verified, regenerated bindings,
+     and shipped. -->
+
 <!-- T-INTEL-MESH Phase 3 (done 2026-04-15):
      Provenance substrate landed.
      - Phase 56 DB migration: provenance table + 4 indexes

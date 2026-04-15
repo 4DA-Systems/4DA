@@ -271,6 +271,7 @@ mod project_health_dimensions;
 mod prompt_safety;
 pub mod provenance;
 pub mod query;
+mod reconciler;
 pub(crate) mod runtime_paths;
 mod scheduler_state;
 mod scoring;
