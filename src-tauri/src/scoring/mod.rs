@@ -6,6 +6,7 @@ pub(crate) mod authority;
 #[cfg(test)]
 mod benchmark;
 mod calibration;
+mod composition;
 mod context;
 mod dedup;
 mod dependencies;
@@ -30,6 +31,7 @@ pub(crate) use affinity::{
 };
 pub(crate) use analyzer::{run_background_analysis, run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::{calibrate_score, compute_interest_score};
+pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::build_scoring_context;
 pub(crate) use dedup::{
     compute_serendipity_candidates, dedup_results, fuzzy_dedup_results, sort_results,
