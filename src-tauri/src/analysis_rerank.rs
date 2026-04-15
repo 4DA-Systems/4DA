@@ -210,17 +210,40 @@ pub(crate) async fn apply_llm_reranking(
     let inner_core: Box<dyn crate::intelligence_core::IntelligenceCore> =
         Box::new(crate::intelligence_core::LlmJudgeCore::new(llm_settings));
     let identity_hash = inner_core.identity().hash();
-    // Drift-aware load: returns None (pass-through) if the stored curve's
-    // prompt_version no longer matches the core's current prompt_version.
-    // Model-hash drift is handled implicitly by identity_hash filename —
-    // a swapped model looks up a different file.
-    let loaded_curve = crate::calibration_store::load_current_curve(
+    // Drift-aware load: returns None-curve (pass-through) if the stored
+    // curve's prompt_version no longer matches the core's current
+    // prompt_version. Model-hash drift is handled implicitly by the
+    // identity_hash filename — a swapped model looks up a different file.
+    //
+    // Phase 5b.2+ drift alarm: when drift is detected, emit a Tauri
+    // event so the UI can toast the user ("Your llama3.2 calibration
+    // expired — recalibrating from next 50 feedback events"). Without
+    // this, drift invalidation is silent and users never know their
+    // model's scoring semantics changed underneath them.
+    let curve_load = crate::calibration_store::load_current_curve_detailed(
         &identity_hash,
         "judge",
         inner_core.prompt_version(),
     );
+    if let Some(drift) = &curve_load.drift {
+        if let Err(e) = tauri::Emitter::emit(app, "calibration-drift", drift) {
+            tracing::debug!(
+                target: "4da::rerank",
+                error = %e,
+                "Failed to emit calibration-drift event (non-fatal)"
+            );
+        }
+        tracing::warn!(
+            target: "4da::rerank",
+            curve_id = %drift.curve_id,
+            task = %drift.task,
+            stored_prompt = %drift.stored_prompt_version,
+            current_prompt = %drift.current_prompt_version,
+            "Calibration curve invalidated by prompt drift — emitted UI event"
+        );
+    }
     let core: Box<dyn crate::intelligence_core::IntelligenceCore> = Box::new(
-        crate::calibration::CalibratedCore::new(inner_core, loaded_curve),
+        crate::calibration::CalibratedCore::new(inner_core, curve_load.curve),
     );
     let advisor_identity = core.identity();
     let advisor_prompt_version = core.prompt_version();
@@ -325,6 +348,7 @@ pub(crate) async fn apply_llm_reranking(
             let advisor_signal = crate::types::AdvisorSignal {
                 provider: advisor_identity.provider.clone(),
                 model: advisor_identity.model.clone(),
+                identity_hash: Some(identity_hash.clone()),
                 task: "judge".to_string(),
                 raw_score: judgment.confidence,
                 normalized_score: judgment.confidence, // No calibration yet (Phase 5)

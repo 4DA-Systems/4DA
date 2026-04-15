@@ -15,6 +15,14 @@ export type AdvisorSignal = {
  */
 provider: string, model: string, 
 /**
+ * Full SHA-256 identity hash (provider:model:base_url). Supplied so
+ * the receipts UI can look up the matching calibration curve via
+ * `get_calibration_curve_status` without reconstructing the hash
+ * client-side. Optional for backward compat with stored signals
+ * that predate Phase 7c.
+ */
+identity_hash: string | null, 
+/**
  * Task this signal pertains to: "judge", "rerank", "summarize", etc.
  */
 task: string, 

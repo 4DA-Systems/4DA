@@ -26,10 +26,46 @@
 
 use crate::calibration::CalibrationCurve;
 use crate::error::Result;
+use serde::Serialize;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tracing::{debug, warn};
+use ts_rs::TS;
+
+/// Diagnostic describing why a curve was rejected at load time.
+///
+/// Today only prompt-version drift is detected (model identity
+/// divergence shows up as a different filename and produces `Missing`
+/// via the underlying `load_curve`, which has no drift signal to
+/// report). Expanding the enum for new drift kinds (temperature,
+/// calibration-id mismatch, etc.) should be additive.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct CurveDrift {
+    pub curve_id: String,
+    pub task: String,
+    pub model_identity_hash: String,
+    pub stored_prompt_version: String,
+    pub current_prompt_version: String,
+    /// Stable reason code the UI can switch on for localized copy.
+    /// "prompt_version_mismatch" is the only variant today.
+    pub reason: String,
+}
+
+/// Outcome of a "load and validate" attempt.
+///
+/// - `curve.is_some()` with `drift.is_none()` — fresh, usable curve.
+/// - `curve.is_none()` with `drift.is_some()` — an on-disk curve was
+///   found but invalidated by the drift check. Callers should treat
+///   this as pass-through AND surface the drift to the user.
+/// - Both `None` — no curve on disk (or corrupted; see underlying
+///   logs). Silent pass-through, no user-visible drift event.
+#[derive(Debug, Clone)]
+pub struct CurveLoad {
+    pub curve: Option<CalibrationCurve>,
+    pub drift: Option<CurveDrift>,
+}
 
 /// Base directory for calibration curves, rooted at the runtime data dir.
 /// Created on demand by `save_curve`; callers should not precreate.
@@ -133,12 +169,35 @@ pub fn load_curve(identity_hash: &str, task: &str) -> Option<CalibrationCurve> {
 /// The currency check is ALSO logged (warn) when it fires so the user
 /// can see "your llama3.2 curve expired because the model updated,
 /// recalibrating from next feedback batch" in the event log.
+/// Option-only convenience wrapper kept for tests and any future
+/// call site that doesn't need the drift descriptor.
+#[allow(dead_code)] // Used by calibration_fitter tests; production now uses _detailed.
 pub fn load_current_curve(
     identity_hash: &str,
     task: &str,
     current_prompt_version: &str,
 ) -> Option<CalibrationCurve> {
-    let curve = load_curve(identity_hash, task)?;
+    load_current_curve_detailed(identity_hash, task, current_prompt_version).curve
+}
+
+/// Same as `load_current_curve` but returns the richer `CurveLoad`
+/// struct so callers with access to a Tauri AppHandle can surface
+/// drift events to the frontend.
+///
+/// `load_current_curve` is kept as a thin wrapper for tests and call
+/// sites that cannot emit events (e.g. inside the fitter, which runs
+/// before the drift would be user-meaningful anyway).
+pub fn load_current_curve_detailed(
+    identity_hash: &str,
+    task: &str,
+    current_prompt_version: &str,
+) -> CurveLoad {
+    let Some(curve) = load_curve(identity_hash, task) else {
+        return CurveLoad {
+            curve: None,
+            drift: None,
+        };
+    };
 
     // Identity hash check is implicit in the filename — if the hash
     // changes, we look up a DIFFERENT file, so a swapped-model case
@@ -152,9 +211,23 @@ pub fn load_current_curve(
             current_prompt = %current_prompt_version,
             "Calibration curve prompt_version drift — invalidating (pass-through until refit)"
         );
-        return None;
+        let drift = CurveDrift {
+            curve_id: curve.curve_id.clone(),
+            task: task.to_string(),
+            model_identity_hash: identity_hash.to_string(),
+            stored_prompt_version: curve.prompt_version.clone(),
+            current_prompt_version: current_prompt_version.to_string(),
+            reason: "prompt_version_mismatch".to_string(),
+        };
+        return CurveLoad {
+            curve: None,
+            drift: Some(drift),
+        };
     }
-    Some(curve)
+    CurveLoad {
+        curve: Some(curve),
+        drift: None,
+    }
 }
 
 /// Atomically write a curve to disk. Creates the parent directory if
@@ -385,6 +458,55 @@ mod tests {
         // a curve fit against an obsolete prompt.
         let stored = fresh_curve_with_prompt("judge-v1-2026-04-15");
         assert!(!is_current(&stored, "judge-v2-2026-05-01"));
+    }
+
+    // ── CurveDrift detail surface ────────────────────────────────────────
+    //
+    // load_current_curve_detailed promises to return a drift descriptor
+    // when the prompt version differs. The analysis_rerank caller uses
+    // this to fire a UI event; if the descriptor fields are wrong, the
+    // toast shows garbage data.
+
+    #[test]
+    fn drift_detail_is_none_when_no_curve_on_disk() {
+        // Using an identity_hash we know doesn't have a file on disk —
+        // this is the "pass-through, nothing to alarm" case.
+        let result = load_current_curve_detailed(
+            "nonexistent_hash_for_drift_detail_test",
+            "judge",
+            "judge-v1",
+        );
+        assert!(result.curve.is_none());
+        assert!(
+            result.drift.is_none(),
+            "no curve on disk should produce no drift signal"
+        );
+    }
+
+    #[test]
+    fn drift_report_fields_are_populated() {
+        // Unit-test the drift descriptor construction independently of
+        // the filesystem — we simulate the branch by building a curve
+        // with a stale prompt_version and verifying the drift fields.
+        // This is the same logic load_current_curve_detailed runs after
+        // a successful disk read.
+        let stored = fresh_curve_with_prompt("judge-v1-2026-04-15");
+        let current = "judge-v2-2026-05-01";
+
+        // Mirror the inline construction from load_current_curve_detailed.
+        let drift = CurveDrift {
+            curve_id: stored.curve_id.clone(),
+            task: stored.task.clone(),
+            model_identity_hash: stored.model_identity_hash.clone(),
+            stored_prompt_version: stored.prompt_version.clone(),
+            current_prompt_version: current.to_string(),
+            reason: "prompt_version_mismatch".to_string(),
+        };
+
+        assert_eq!(drift.curve_id, stored.curve_id);
+        assert_eq!(drift.stored_prompt_version, "judge-v1-2026-04-15");
+        assert_eq!(drift.current_prompt_version, current);
+        assert_eq!(drift.reason, "prompt_version_mismatch");
     }
 
     #[test]

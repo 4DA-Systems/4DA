@@ -222,6 +222,7 @@ pub(crate) fn mark_warm(model: &str) {
 /// Check whether a warm operation is currently in progress. Callers
 /// polling for warm-completion can use this to distinguish "not yet
 /// started" from "in flight".
+#[allow(dead_code)] // Reserved for the pending warm-in-progress UI surface.
 pub(crate) fn is_warming() -> bool {
     let state = OLLAMA_STATE.lock();
     state.warming.load(Ordering::SeqCst)

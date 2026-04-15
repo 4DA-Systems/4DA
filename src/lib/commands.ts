@@ -18,7 +18,7 @@ import type {
   SourceRelevance,
   ScoreBreakdown,
 } from '../types/analysis';
-import type { CalibrationResult, CurveFitReport, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
+import type { CalibrationResult, CurveFitReport, CurveStatus, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
 import type {
   Settings,
   MonitoringStatus,
@@ -294,6 +294,9 @@ interface CommandMap {
   // feedback, fits an equal-width bucket curve per (model, task), saves
   // to disk. Skipped pairs surface a reason in the returned report.
   fit_calibration_curves_now: { params: Record<string, never>; result: CurveFitReport };
+  // Look up the calibration curve status for a specific (model, task)
+  // pair. Null means no curve on disk yet (advisor is pre-mesh).
+  get_calibration_curve_status: { params: { identityHash: string; task: string; currentPromptVersion: string }; result: CurveStatus | null };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
   set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; registration_failed?: boolean; message: string } };
   get_launch_at_startup: { params: Record<string, never>; result: boolean };

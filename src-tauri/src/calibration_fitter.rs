@@ -945,6 +945,7 @@ mod tests {
                 let sig = AdvisorSignal {
                     provider: "ollama".into(),
                     model: "llama3.2".into(),
+                    identity_hash: None,
                     task: "judge".into(),
                     raw_score: raw,
                     normalized_score: raw,

@@ -287,6 +287,7 @@ mod tests {
         AdvisorSignal {
             provider: "ollama".into(),
             model: "llama3.2".into(),
+            identity_hash: None,
             task: task.into(),
             raw_score: raw,
             normalized_score: raw,
