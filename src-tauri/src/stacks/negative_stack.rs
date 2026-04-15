@@ -19,8 +19,8 @@ pub struct NegativeStackContext {
 /// - Everything else -> 1.0 (neutral)
 ///
 /// Bounded to direct deps only — transitive deps don't create negative inferences.
-pub fn build_negative_stack(
-    user_direct_deps: &HashSet<String>,
+pub fn build_negative_stack<S: std::hash::BuildHasher>(
+    user_direct_deps: &HashSet<String, S>,
     competing_pairs: &[(&str, &[&str])],
     anti_topics: &[(String, f32)], // (topic, confidence)
 ) -> NegativeStackContext {

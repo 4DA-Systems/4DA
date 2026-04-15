@@ -292,11 +292,10 @@ impl AweClient {
         Ok(AweVersionOutput { version })
     }
 
-    /// `awe --version` — fast sanity check that the binary exists and
-    /// runs. Called by the Layer 4 cold-boot smoke test. Typically <100ms.
-    ///
-    /// (Already documented above; kept at this location so the method
-    /// stays with the other methods for code navigation.)
+    // `awe --version` — fast sanity check that the binary exists and
+    // runs. Called by the Layer 4 cold-boot smoke test. Typically <100ms.
+    // (Documented alongside the implementation above; this marker keeps
+    // method navigation readable.)
 
     /// `awe transmute --statement <text> [--stages s1,s2,...]` — runs a
     /// statement through the full wisdom-graph pipeline. Returns the
@@ -547,11 +546,10 @@ impl AweClient {
             }
         }
         Err(AweError::ParseError {
-            reason: format!(
-                "transmute succeeded but no matching statement found in history --limit 3 \
+            reason: "transmute succeeded but no matching statement found in history --limit 3 \
                  — possible concurrent transmute by another AWE client, or AWE did not \
                  persist the statement as expected"
-            ),
+                .to_string(),
             snippet: trimmed.chars().take(100).collect::<String>(),
         })
     }

@@ -1,6 +1,8 @@
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { AdvisorSignal, DisagreementKind } from '../../types/analysis';
+import { cmd } from '../../lib/commands';
+import { CalibrationStatusBadge } from './CalibrationStatusBadge';
 
 interface AdvisorPanelProps {
   /** Zero or more advisor opinions stamped with provenance. */
@@ -29,7 +31,14 @@ interface AdvisorPanelProps {
  *   - Uncalibrated advisors carry a "pre-mesh" tag (Phase 5 calibration
  *     will replace this sentinel with a real curve ID).
  */
-const PRE_MESH_CALIBRATION = 'pre-mesh-unknown';
+/** Refit-button state machine. Kept explicit to avoid two-boolean
+ *  combinations that silently allow a double-fire. */
+type RefitState =
+  | { kind: 'idle' }
+  | { kind: 'running' }
+  | { kind: 'success'; count: number }
+  | { kind: 'empty' }
+  | { kind: 'error' };
 
 export const AdvisorPanel = memo(function AdvisorPanel({
   advisorSignals,
@@ -37,6 +46,26 @@ export const AdvisorPanel = memo(function AdvisorPanel({
 }: AdvisorPanelProps) {
   const { t } = useTranslation();
   const signals = advisorSignals ?? [];
+  const [refit, setRefit] = useState<RefitState>({ kind: 'idle' });
+
+  const handleRefit = useCallback(async () => {
+    setRefit({ kind: 'running' });
+    try {
+      const report = await cmd('fit_calibration_curves_now');
+      if (report.curves_produced > 0) {
+        setRefit({ kind: 'success', count: report.curves_produced });
+      } else {
+        setRefit({ kind: 'empty' });
+      }
+    } catch {
+      setRefit({ kind: 'error' });
+    }
+    // Auto-clear the status chip after 4s so the button returns to its
+    // quiet state. The calibration-curves-updated event (emitted by the
+    // backend on any successful fit run) will repaint the badges live.
+    window.setTimeout(() => setRefit({ kind: 'idle' }), 4000);
+  }, []);
+
   if (signals.length === 0 && !disagreement) return null;
 
   const disagreementText = (() => {
@@ -70,6 +99,52 @@ export const AdvisorPanel = memo(function AdvisorPanel({
             {t('scoreDrawer.split')}
           </span>
         )}
+        {/* Right-aligned refit control. The scheduled fit runs daily on
+            its own — this is the "I want one NOW" escape hatch. We keep
+            it subtle (text-only, small) so it doesn't compete with the
+            primary advisor rows for attention. */}
+        {signals.length > 0 && (
+          <div className="ml-auto flex items-center gap-1.5">
+            {refit.kind === 'success' && (
+              <span
+                className="text-[9px] text-emerald-400/80 uppercase"
+                data-testid="refit-status"
+                data-refit-state="success"
+              >
+                {t('scoreDrawer.refitSuccess', { count: refit.count })}
+              </span>
+            )}
+            {refit.kind === 'empty' && (
+              <span
+                className="text-[9px] text-text-muted"
+                data-testid="refit-status"
+                data-refit-state="empty"
+              >
+                {t('scoreDrawer.refitNoCurves')}
+              </span>
+            )}
+            {refit.kind === 'error' && (
+              <span
+                className="text-[9px] text-red-400/80 uppercase"
+                data-testid="refit-status"
+                data-refit-state="error"
+              >
+                {t('scoreDrawer.refitFailed')}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleRefit}
+              disabled={refit.kind === 'running'}
+              className="text-[10px] px-1.5 py-0.5 rounded border border-border/50 bg-bg-tertiary/30 hover:bg-bg-tertiary/70 text-text-secondary hover:text-text-primary transition disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="refit-button"
+            >
+              {refit.kind === 'running'
+                ? t('scoreDrawer.refitInProgress')
+                : t('scoreDrawer.refit')}
+            </button>
+          </div>
+        )}
       </div>
 
       {disagreementText && (
@@ -86,8 +161,6 @@ export const AdvisorPanel = memo(function AdvisorPanel({
           {signals.map((sig, idx) => {
             const normalizedPct = Math.round(sig.normalized_score * 100);
             const confidencePct = Math.round(sig.confidence * 100);
-            const uncalibrated =
-              !sig.calibration_id || sig.calibration_id === PRE_MESH_CALIBRATION;
             return (
               <li
                 key={`${sig.provider}-${sig.model}-${idx}`}
@@ -101,14 +174,16 @@ export const AdvisorPanel = memo(function AdvisorPanel({
                     <span className="text-xs text-text-secondary font-mono truncate">
                       {sig.provider}/{sig.model}
                     </span>
-                    {uncalibrated && (
-                      <span
-                        className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400/80 uppercase"
-                        title={t('scoreDrawer.preMeshTooltip')}
-                      >
-                        {t('scoreDrawer.preMesh')}
-                      </span>
-                    )}
+                    {/* CalibrationStatusBadge handles the full state
+                        machine: pre-mesh / calibrated / stale. It also
+                        listens for calibration-curves-updated so the
+                        user sees the transition when a fit completes. */}
+                    <CalibrationStatusBadge
+                      identityHash={sig.identity_hash}
+                      task={sig.task}
+                      promptVersion={sig.prompt_version}
+                      calibrationId={sig.calibration_id}
+                    />
                   </div>
                   <span className="text-xs font-mono text-white flex-shrink-0">
                     {normalizedPct}%

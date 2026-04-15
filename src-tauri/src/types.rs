@@ -195,6 +195,13 @@ pub struct AdvisorSignal {
     /// Provider + model identity (not the full hash — UI-friendly).
     pub provider: String,
     pub model: String,
+    /// Full SHA-256 identity hash (provider:model:base_url). Supplied so
+    /// the receipts UI can look up the matching calibration curve via
+    /// `get_calibration_curve_status` without reconstructing the hash
+    /// client-side. Optional for backward compat with stored signals
+    /// that predate Phase 7c.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity_hash: Option<String>,
     /// Task this signal pertains to: "judge", "rerank", "summarize", etc.
     pub task: String,
     /// Advisor's raw confidence or score (0.0-1.0 after normalization
