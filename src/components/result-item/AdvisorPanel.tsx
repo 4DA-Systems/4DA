@@ -134,7 +134,9 @@ export const AdvisorPanel = memo(function AdvisorPanel({
             )}
             <button
               type="button"
-              onClick={handleRefit}
+              onClick={() => {
+                void handleRefit();
+              }}
               disabled={refit.kind === 'running'}
               className="text-[10px] px-1.5 py-0.5 rounded border border-border/50 bg-bg-tertiary/30 hover:bg-bg-tertiary/70 text-text-secondary hover:text-text-primary transition disabled:opacity-50 disabled:cursor-not-allowed"
               data-testid="refit-button"
@@ -147,7 +149,7 @@ export const AdvisorPanel = memo(function AdvisorPanel({
         )}
       </div>
 
-      {disagreementText && (
+      {disagreementText != null && disagreementText !== '' && (
         <p
           className="text-xs text-text-secondary italic"
           data-testid="advisor-panel-disagreement"
@@ -193,7 +195,7 @@ export const AdvisorPanel = memo(function AdvisorPanel({
                   <span>
                     {t('scoreDrawer.advisorConfidence', { pct: confidencePct })}
                   </span>
-                  {sig.prompt_version && (
+                  {sig.prompt_version != null && sig.prompt_version !== '' && (
                     <span
                       className="font-mono truncate"
                       title={t('scoreDrawer.promptVersionTooltip')}
@@ -202,7 +204,7 @@ export const AdvisorPanel = memo(function AdvisorPanel({
                     </span>
                   )}
                 </div>
-                {sig.reason && (
+                {sig.reason != null && sig.reason !== '' && (
                   <p
                     className="text-[11px] text-text-secondary mt-1"
                     data-testid="advisor-reason"
