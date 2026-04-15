@@ -114,6 +114,10 @@ export type DisagreementKind =
 export interface AdvisorSignal {
   provider: string;
   model: string;
+  /** SHA-256 identity hash — used to look up the matching calibration
+   *  curve via get_calibration_curve_status. Optional for backward
+   *  compat with signals stamped before Phase 7c. */
+  identity_hash?: string | null;
   task: string;
   raw_score: number;
   normalized_score: number;

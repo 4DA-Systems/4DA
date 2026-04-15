@@ -1131,6 +1131,86 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     crate::startup_watchdog::write_heartbeat();
     crate::startup_watchdog::start_heartbeat();
 
+    // ========================================================================
+    // Calibration Fitter Scheduler (Intelligence Mesh Phase 5b.3)
+    // ========================================================================
+    // The Filter (calibration_fitter) is authored to be idempotent and
+    // cheap — pure local SQL + bucketing, no LLM or network. Running it
+    // daily keeps the per-model calibration curves current without user
+    // effort. Manual trigger (`fit_calibration_curves_now` Tauri command)
+    // remains available from the UI for users who want to force a refit.
+    //
+    // Boot grace: 5 minutes. Long enough that cold-boot noise (DB
+    // migrations, ACE scanning, briefing synthesis) doesn't race with
+    // the first fit, short enough that users who open + close the app
+    // quickly still get a fit within their session.
+    //
+    // Cadence: 24h between ticks. Calibration curves at 50-sample
+    // minimum don't meaningfully move at sub-daily resolution; hourly
+    // ticks would waste cycles for no user-visible benefit.
+    //
+    // Gating: if no (model, task) pair has enough unprocessed samples,
+    // the fitter reports "skipped" per pair and writes no curves — the
+    // scheduler logs the zero-curve outcome at debug and moves on.
+    // There's no separate "is it worth running?" pre-check because
+    // fit_calibration_curves_now already self-gates cheaply.
+    {
+        let app_for_cal = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+            // Boot grace: let the rest of startup finish before spinning
+            // up the first fit. Prevents lock contention on DB during the
+            // first 5 minutes when other tasks are aggressively reading.
+            tokio::time::sleep(std::time::Duration::from_secs(5 * 60)).await;
+
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 3600));
+            // First tick: fires immediately after the sleep (tokio default).
+            // Subsequent ticks: aligned 24h apart. If the app is suspended
+            // mid-tick, Tokio catches up on wake — we don't over-fit
+            // because each sample only processes once (processed_at flip).
+            loop {
+                interval.tick().await;
+                match crate::calibration_commands::fit_calibration_curves_now().await {
+                    Ok(report) => {
+                        if report.curves_produced > 0 {
+                            info!(
+                                target: "4da::calibration",
+                                candidates = report.total_candidates,
+                                curves_produced = report.curves_produced,
+                                "Scheduled calibration fit produced curves"
+                            );
+                            // Notify UI that curves refreshed so any
+                            // open receipts panel can reload.
+                            if let Err(e) = tauri::Emitter::emit(
+                                &app_for_cal,
+                                "calibration-curves-updated",
+                                &report,
+                            ) {
+                                debug!(
+                                    target: "4da::calibration",
+                                    error = %e,
+                                    "Failed to emit calibration-curves-updated (non-fatal)"
+                                );
+                            }
+                        } else {
+                            debug!(
+                                target: "4da::calibration",
+                                candidates = report.total_candidates,
+                                "Scheduled calibration fit produced no curves"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            target: "4da::calibration",
+                            error = %e,
+                            "Scheduled calibration fit failed (non-fatal)"
+                        );
+                    }
+                }
+            }
+        });
+    }
+
     // Sovereign Cold Boot — setup_app fully done. All remaining work is
     // either background tasks or scheduler ticks. The user should already
     // have a window with the cached briefing visible at this point.

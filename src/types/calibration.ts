@@ -81,6 +81,31 @@ export interface CurveFitReport {
   fits: CurveFitSummary[];
 }
 
+// Curve status surfaced to the receipts UI. Returned by
+// `get_calibration_curve_status`; null means "no curve on disk".
+export interface CurveStatus {
+  curve_id: string;
+  task: string;
+  prompt_version: string;
+  brier_score: number;
+  ece: number;
+  sample_count: number;
+  created_at: string; // RFC3339
+  age_days: number;
+  is_stale: boolean;
+}
+
+// Drift descriptor emitted on the `calibration-drift` event when the
+// rerank loop loads a curve whose prompt_version no longer matches.
+export interface CurveDriftEvent {
+  curve_id: string;
+  task: string;
+  model_identity_hash: string;
+  stored_prompt_version: string;
+  current_prompt_version: string;
+  reason: string;
+}
+
 // ============================================================================
 // Taste Test Calibration
 // ============================================================================

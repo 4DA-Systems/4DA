@@ -160,6 +160,7 @@ mod tests {
         AdvisorSignal {
             provider: "ollama".to_string(),
             model: "llama3.2".to_string(),
+            identity_hash: None,
             task: "judge".to_string(),
             raw_score: normalized,
             normalized_score: normalized,

@@ -604,3 +604,69 @@ pub async fn fit_calibration_curves_now() -> Result<CurveFitReport> {
         fits,
     })
 }
+
+// ============================================================================
+// Phase 7c — Calibration status surface for receipts UI
+// ============================================================================
+
+/// Compact summary of a calibration curve, suitable for rendering in the
+/// advisor receipts panel. `None` from `get_calibration_curve_status` means
+/// "no curve on disk for this (model, task)" — UI should show the
+/// "pre-mesh" tag. Drift is handled separately via the `calibration-drift`
+/// event; once a curve drifts, `get_calibration_curve_status` will still
+/// return its metadata (so the UI can show "fit 3 days ago, now stale —
+/// recalibrating"), but the mesh has already invalidated it at read time.
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct CurveStatus {
+    pub curve_id: String,
+    pub task: String,
+    pub prompt_version: String,
+    pub brier_score: f32,
+    pub ece: f32,
+    pub sample_count: u32,
+    /// RFC3339 timestamp of fit.
+    pub created_at: String,
+    /// Rounded days since the fit. The UI renders this as "3d ago".
+    pub age_days: u32,
+    /// True when the curve on disk was fit against a different
+    /// prompt_version than the current advisor uses. The apply layer
+    /// has invalidated it; receipts should show "stale, refitting".
+    pub is_stale: bool,
+}
+
+/// Look up the calibration curve for a specific (model, task) pair.
+/// Returns `None` when no curve is on disk — the UI should show the
+/// "pre-mesh-unknown" sentinel rather than fail.
+///
+/// `current_prompt_version` is supplied by the caller so the command can
+/// mark the curve stale when the advisor's prompt has moved on. The
+/// frontend typically derives this from the AdvisorSignal being rendered.
+#[tauri::command]
+pub async fn get_calibration_curve_status(
+    identity_hash: String,
+    task: String,
+    current_prompt_version: String,
+) -> Result<Option<CurveStatus>> {
+    let Some(curve) = crate::calibration_store::load_curve(&identity_hash, &task) else {
+        return Ok(None);
+    };
+
+    let is_stale = curve.prompt_version != current_prompt_version;
+    let age_days = {
+        let delta = chrono::Utc::now() - curve.created_at;
+        delta.num_days().max(0) as u32
+    };
+
+    Ok(Some(CurveStatus {
+        curve_id: curve.curve_id,
+        task: curve.task,
+        prompt_version: curve.prompt_version,
+        brier_score: curve.brier_score,
+        ece: curve.ece,
+        sample_count: curve.sample_count,
+        created_at: curve.created_at.to_rfc3339(),
+        age_days,
+        is_stale,
+    }))
+}

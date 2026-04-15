@@ -638,6 +638,7 @@ pub fn run() {
             settings_commands::set_privacy_config,
             calibration_commands::run_calibration,
             calibration_commands::fit_calibration_curves_now,
+            calibration_commands::get_calibration_curve_status,
             // Taste Test Calibration
             taste_test_commands::taste_test_start,
             taste_test_commands::taste_test_respond,

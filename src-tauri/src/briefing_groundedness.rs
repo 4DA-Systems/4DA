@@ -42,6 +42,9 @@ use std::collections::HashSet;
 pub struct GroundednessReport {
     pub confidence: f32,
     pub total_terms: usize,
+    /// Count of salient terms matched against the source corpus. Surfaced
+    /// to the receipts UI as the numerator of the grounding fraction.
+    #[allow(dead_code)] // Surfaced via Debug + future receipts panel.
     pub grounded_terms: usize,
     pub ungrounded_terms: Vec<String>,
 }
@@ -135,7 +138,7 @@ fn extract_salient_terms(text: &str) -> Vec<String> {
             continue;
         };
 
-        let mut end = start + if is_digit_start { 0 } else { 1 };
+        let mut end = start + usize::from(!is_digit_start);
         let mut saw_dot = false;
         while end < chars.len() && (chars[end].is_ascii_digit() || chars[end] == '.') {
             if chars[end] == '.' {
