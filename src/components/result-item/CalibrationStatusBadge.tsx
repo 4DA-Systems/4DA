@@ -55,15 +55,26 @@ export const CalibrationStatusBadge = memo(function CalibrationStatusBadge({
   // making the backend call. This matters for correctness AND cost:
   // an advisor batch of 20 items would otherwise trigger 20 lookups
   // per item, and every one would return None.
+  // Explicit null/empty handling (not truthy-coercion) so lint strict-
+  // boolean-expressions is happy AND the intent is unambiguous.
   const canFetch =
-    !!identityHash &&
-    !!task &&
-    !!promptVersion &&
-    !!calibrationId &&
+    identityHash != null &&
+    identityHash !== '' &&
+    task != null &&
+    task !== '' &&
+    promptVersion != null &&
+    promptVersion !== '' &&
+    calibrationId != null &&
+    calibrationId !== '' &&
     calibrationId !== PRE_MESH_CALIBRATION;
 
   useEffect(() => {
-    if (!canFetch || !identityHash || !task || !promptVersion) {
+    if (
+      !canFetch ||
+      identityHash == null ||
+      task == null ||
+      promptVersion == null
+    ) {
       setStatus(null);
       setLoaded(true);
       return;
@@ -71,7 +82,7 @@ export const CalibrationStatusBadge = memo(function CalibrationStatusBadge({
 
     let cancelled = false;
 
-    const fetchStatus = async () => {
+    const fetchStatus = async (): Promise<void> => {
       try {
         const s = await cmd('get_calibration_curve_status', {
           identityHash,
@@ -92,18 +103,20 @@ export const CalibrationStatusBadge = memo(function CalibrationStatusBadge({
       }
     };
 
-    fetchStatus();
+    void fetchStatus();
 
     // Live refresh: when a scheduled or manual refit lands, refetch
     // so the "fit 2d ago" text doesn't go stale and the "recalibrating"
     // tag clears.
     const unlistenPromise = listen('calibration-curves-updated', () => {
-      if (!cancelled) fetchStatus();
+      if (!cancelled) void fetchStatus();
     });
 
     return () => {
       cancelled = true;
-      unlistenPromise.then(u => u()).catch(() => {});
+      void unlistenPromise.then(u => {
+        u();
+      }).catch(() => {});
     };
   }, [canFetch, identityHash, task, promptVersion]);
 
