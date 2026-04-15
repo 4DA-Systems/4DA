@@ -250,8 +250,18 @@ pub(crate) async fn apply_llm_reranking(
         return None;
     }
 
+    // Legacy-path counters (reconciler_enabled=false): judgment.relevant
+    // hard-accepts/hard-rejects. Zero in the reconciler path.
     let mut confirmed = 0usize;
     let mut rejected = 0usize;
+    // Reconciler-path counters (reconciler_enabled=true): honest breakdown
+    // of how the bounded adjustment played out. Nothing is "rejected" in
+    // this path — the worst an advisor can do is push an item down by the
+    // ±ADVISOR_ADJUSTMENT_CAP (0.15).
+    let mut reconciled_agreed = 0usize;
+    let mut reconciled_skeptical = 0usize;
+    let mut reconciled_enthusiastic = 0usize;
+    let mut reconciled_internal = 0usize;
 
     // Collect provenance rows for batch-insert after the judgment loop.
     // This records one row per judged item so compound-learning, receipts,
@@ -330,17 +340,22 @@ pub(crate) async fn apply_llm_reranking(
                     result.explanation = Some(judgment.reasoning.clone());
                 }
 
-                // Tally for telemetry: count items where the advisor
-                // pushed the item down significantly as "skeptical",
-                // everything else as "confirmed" (since nothing is
-                // hard-rejected in the reconciler path).
-                if matches!(
-                    reconciled.disagreement,
-                    Some(crate::types::DisagreementKind::AdvisorSkeptical)
-                ) {
-                    rejected += 1;
-                } else {
-                    confirmed += 1;
+                // Honest telemetry: bucket by disagreement kind. No item is
+                // "rejected" in this path — items the advisor dislikes are
+                // surfaced at pipeline_score - 0.15, still visible, still
+                // in the feed. Operators reading logs must not read a
+                // "skeptical" count as "filtered out".
+                match reconciled.disagreement {
+                    None => reconciled_agreed += 1,
+                    Some(crate::types::DisagreementKind::AdvisorSkeptical) => {
+                        reconciled_skeptical += 1
+                    }
+                    Some(crate::types::DisagreementKind::AdvisorEnthusiastic) => {
+                        reconciled_enthusiastic += 1
+                    }
+                    Some(crate::types::DisagreementKind::AdvisorsInternal) => {
+                        reconciled_internal += 1
+                    }
                 }
             } else {
                 // ── Legacy path: 50/50 blend + hard reject ────────────
@@ -405,8 +420,18 @@ pub(crate) async fn apply_llm_reranking(
         settings.record_usage(total_input + total_output, cost);
     }
 
+    // Separate log shapes per path so downstream parsers don't need to
+    // reconcile two different meanings for the same field. Every field is
+    // zero in the path that doesn't apply — one line covers both cases.
     info!(target: "4da::rerank",
         judged = all_judgments.len(),
+        reconciler_enabled = rerank_config.reconciler_enabled,
+        // Reconciler-path buckets
+        agreed = reconciled_agreed,
+        skeptical = reconciled_skeptical,
+        enthusiastic = reconciled_enthusiastic,
+        internal_disagreement = reconciled_internal,
+        // Legacy-path buckets
         confirmed = confirmed,
         rejected = rejected,
         batches = total_batches,
