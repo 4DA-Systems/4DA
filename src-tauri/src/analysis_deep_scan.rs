@@ -778,6 +778,26 @@ pub(crate) async fn run_multi_source_analysis_impl(
     );
     analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
+    // Feed composition floors — Intelligence Mesh Gap 3. Reorders the
+    // top-N items to guarantee minimum stretch + horizon representation
+    // (prevents filter-bubble collapse). Pure reordering, no score
+    // changes. Controlled by `settings.feed_composition.enabled`; when
+    // disabled or when no stretch/horizon candidates exist, the function
+    // is a no-op.
+    {
+        let settings = crate::get_settings_manager().lock();
+        let fc = &settings.get().feed_composition;
+        if fc.enabled {
+            let cfg = scoring::FloorConfig {
+                top_n: fc.top_n as usize,
+                comfort_pct: fc.comfort_pct,
+                stretch_pct: fc.stretch_pct,
+                horizon_pct: fc.horizon_pct,
+            };
+            scoring::enforce_composition_floors(&mut results, &cfg);
+        }
+    }
+
     // Narration: scoring complete
     {
         let narr_relevant = results.iter().filter(|r| r.relevant && !r.excluded).count();
