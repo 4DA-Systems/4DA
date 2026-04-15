@@ -186,19 +186,17 @@ pub(crate) async fn apply_llm_reranking(
         settings.get().llm.clone()
     };
 
-    // Capture the advisor's identity once, up front. We use this to stamp
-    // every AdvisorSignal and every row written to the `provenance` table
-    // for this rerank pass. See `docs/strategy/INTELLIGENCE-MESH.md` §5.
-    let advisor_identity = {
-        let mut id =
-            crate::provenance::ModelIdentity::new(&llm_settings.provider, &llm_settings.model);
-        if let Some(base_url) = llm_settings.base_url.as_deref().filter(|s| !s.is_empty()) {
-            id = id.with_base_url(base_url);
-        }
-        id
-    };
-
-    let judge = crate::llm::RelevanceJudge::new(llm_settings);
+    // Construct the advisory core. It carries its own ModelIdentity and
+    // prompt_version so every AdvisorSignal and provenance row this rerank
+    // pass writes share a single source of truth. Intelligence Mesh Phase 4
+    // — the trait exists so Phases 5 (calibration wrap) and 6 (shadow arena)
+    // can swap the impl without re-plumbing this loop.
+    // See `docs/strategy/INTELLIGENCE-MESH.md` §2 Layer 2.
+    let core: Box<dyn crate::intelligence_core::IntelligenceCore> =
+        Box::new(crate::intelligence_core::LlmJudgeCore::new(llm_settings));
+    let advisor_identity = core.identity();
+    let advisor_prompt_version = core.prompt_version();
+    let advisor_calibration_id = core.calibration_id();
 
     // Split into batches of 8 for better LLM accuracy
     const LLM_BATCH_SIZE: usize = 8;
@@ -234,11 +232,15 @@ pub(crate) async fn apply_llm_reranking(
             total_candidates,
         );
 
-        match judge.judge_batch(&context_summary, batch.clone()).await {
-            Ok((judgments, input_tokens, output_tokens)) => {
-                total_input += input_tokens;
-                total_output += output_tokens;
-                all_judgments.extend(judgments);
+        let req = crate::intelligence_core::JudgeRequest {
+            context_summary: context_summary.clone(),
+            items: batch.clone(),
+        };
+        match core.judge(req).await {
+            Ok(validated) => {
+                total_input += validated.value.input_tokens;
+                total_output += validated.value.output_tokens;
+                all_judgments.extend(validated.value.judgments);
             }
             Err(e) => {
                 warn!(target: "4da::rerank", batch = batch_idx, error = %e, "LLM batch failed, continuing");
@@ -298,8 +300,8 @@ pub(crate) async fn apply_llm_reranking(
                 } else {
                     Some(judgment.reasoning.clone())
                 },
-                prompt_version: Some(crate::llm_judge::PROMPT_VERSION.to_string()),
-                calibration_id: Some(crate::provenance::PRE_MESH_CALIBRATION_ID.to_string()),
+                prompt_version: Some(advisor_prompt_version.to_string()),
+                calibration_id: advisor_calibration_id.clone(),
             };
 
             if let Some(ref mut breakdown) = result.score_breakdown {
@@ -320,7 +322,7 @@ pub(crate) async fn apply_llm_reranking(
                     &advisor_identity,
                     "judge",
                 )
-                .with_prompt_version(crate::llm_judge::PROMPT_VERSION),
+                .with_prompt_version(advisor_prompt_version),
             );
 
             if rerank_config.reconciler_enabled {
@@ -416,7 +418,7 @@ pub(crate) async fn apply_llm_reranking(
     // Track token usage for daily limits
     {
         let mut settings = get_settings_manager().lock();
-        let cost = judge.estimate_cost_cents(total_input, total_output);
+        let cost = core.estimate_cost_cents(total_input, total_output);
         settings.record_usage(total_input + total_output, cost);
     }
 
