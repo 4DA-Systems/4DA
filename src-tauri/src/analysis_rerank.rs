@@ -210,7 +210,15 @@ pub(crate) async fn apply_llm_reranking(
     let inner_core: Box<dyn crate::intelligence_core::IntelligenceCore> =
         Box::new(crate::intelligence_core::LlmJudgeCore::new(llm_settings));
     let identity_hash = inner_core.identity().hash();
-    let loaded_curve = crate::calibration_store::load_curve(&identity_hash, "judge");
+    // Drift-aware load: returns None (pass-through) if the stored curve's
+    // prompt_version no longer matches the core's current prompt_version.
+    // Model-hash drift is handled implicitly by identity_hash filename —
+    // a swapped model looks up a different file.
+    let loaded_curve = crate::calibration_store::load_current_curve(
+        &identity_hash,
+        "judge",
+        inner_core.prompt_version(),
+    );
     let core: Box<dyn crate::intelligence_core::IntelligenceCore> = Box::new(
         crate::calibration::CalibratedCore::new(inner_core, loaded_curve),
     );
