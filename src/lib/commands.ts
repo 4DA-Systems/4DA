@@ -18,7 +18,7 @@ import type {
   SourceRelevance,
   ScoreBreakdown,
 } from '../types/analysis';
-import type { CalibrationResult, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
+import type { CalibrationResult, CurveFitReport, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
 import type {
   Settings,
   MonitoringStatus,
@@ -289,6 +289,11 @@ interface CommandMap {
   import_env_key: { params: { provider: string }; result: string };
   validate_api_key: { params: { provider: string; key: string; baseUrl?: string | null }; result: { valid: boolean; format_ok: boolean; connection_ok: boolean; error: string | null; model_access: string[] } };
   run_calibration: { params: Record<string, never>; result: CalibrationResult };
+  // Intelligence Mesh Phase 5b.2 — per-model calibration curve fitter.
+  // Scans persisted advisor signals, pairs with InteractionPattern +
+  // feedback, fits an equal-width bucket curve per (model, task), saves
+  // to disk. Skipped pairs surface a reason in the returned report.
+  fit_calibration_curves_now: { params: Record<string, never>; result: CurveFitReport };
   set_close_to_tray: { params: { enabled: boolean }; result: void };
   set_launch_at_startup: { params: { enabled: boolean }; result: { launch_at_startup: boolean; registration_failed?: boolean; message: string } };
   get_launch_at_startup: { params: Record<string, never>; result: boolean };
