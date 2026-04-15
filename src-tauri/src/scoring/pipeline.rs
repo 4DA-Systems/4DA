@@ -727,8 +727,9 @@ pub(crate) fn score_item(
         necessity_reason: None,
         necessity_category: None,
         necessity_urgency: None,
-        signal_strength_bonus: 0.0, // V1 pipeline: no strength bonus
-        content_analysis_mult: 1.0, // V1 pipeline: no content analysis
+        signal_strength_bonus: 0.0,  // V1 pipeline: no strength bonus
+        content_analysis_mult: 1.0,  // V1 pipeline: no content analysis
+        advisor_signals: Vec::new(), // Phase 3: populated by Phase 2 rerank decoupling
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):
