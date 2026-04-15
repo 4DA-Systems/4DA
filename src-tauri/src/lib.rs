@@ -166,6 +166,7 @@ mod briefing_window;
 mod calibration;
 mod calibration_commands;
 mod calibration_probes;
+mod calibration_store;
 pub mod capabilities;
 mod channel_changelog;
 mod channel_commands;

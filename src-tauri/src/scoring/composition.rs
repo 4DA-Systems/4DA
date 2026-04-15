@@ -47,11 +47,19 @@ pub enum FeedBucket {
 /// Configuration for composition floors. Percentages sum to 100; the
 /// implementation does NOT enforce that — callers picking non-summing
 /// configs just get approximately what they ask for.
+///
+/// `comfort_pct` is kept on the struct for settings roundtrip and UI
+/// display even though the algorithm derives comfort from
+/// `top_n - stretch - horizon` so rounding slack lands in comfort
+/// automatically. Exposing it lets the settings UI show the three
+/// ratios symmetrically.
 #[derive(Debug, Clone)]
 pub struct FloorConfig {
     /// How many items to compose. Items past this index are untouched.
     pub top_n: usize,
     /// Target fraction of top-N that should be Comfort items.
+    /// Read by settings/UI; algorithm derives from remainder.
+    #[allow(dead_code)]
     pub comfort_pct: u8,
     /// Target fraction that should be Stretch items.
     pub stretch_pct: u8,

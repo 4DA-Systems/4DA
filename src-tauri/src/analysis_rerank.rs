@@ -192,8 +192,28 @@ pub(crate) async fn apply_llm_reranking(
     // — the trait exists so Phases 5 (calibration wrap) and 6 (shadow arena)
     // can swap the impl without re-plumbing this loop.
     // See `docs/strategy/INTELLIGENCE-MESH.md` §2 Layer 2.
-    let core: Box<dyn crate::intelligence_core::IntelligenceCore> =
+    // Phase 5b.1 — calibration persistence wire-through.
+    //
+    // Construction order:
+    //   1. Build the raw LlmJudgeCore (wraps the legacy RelevanceJudge)
+    //   2. Compute its identity hash + look up a persisted curve for
+    //      (identity_hash, "judge")
+    //   3. Wrap with CalibratedCore. When no curve exists, CalibratedCore
+    //      is a transparent pass-through — matches pre-mesh behavior
+    //      exactly, so zero risk. When a curve exists, it applies and
+    //      overrides calibration_id on each Validated response.
+    //
+    // The fitter that PRODUCES curves (Phase 5b.2) is not yet built, so in
+    // practice every rerank today is pass-through. This commit lands the
+    // architectural wire so 5b.2 becomes "add a fitter", not "wire a
+    // fitter + refactor the whole rerank loop."
+    let inner_core: Box<dyn crate::intelligence_core::IntelligenceCore> =
         Box::new(crate::intelligence_core::LlmJudgeCore::new(llm_settings));
+    let identity_hash = inner_core.identity().hash();
+    let loaded_curve = crate::calibration_store::load_curve(&identity_hash, "judge");
+    let core: Box<dyn crate::intelligence_core::IntelligenceCore> = Box::new(
+        crate::calibration::CalibratedCore::new(inner_core, loaded_curve),
+    );
     let advisor_identity = core.identity();
     let advisor_prompt_version = core.prompt_version();
     let advisor_calibration_id = core.calibration_id();
