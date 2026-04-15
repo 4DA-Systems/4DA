@@ -1,6 +1,6 @@
 //! Post-scoring quality processing — LLM reranking, digest generation, and dedup utilities.
 
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{emit_progress, get_database, get_settings_manager, scoring, SourceRelevance};
 
@@ -185,6 +185,19 @@ pub(crate) async fn apply_llm_reranking(
         let settings = get_settings_manager().lock();
         settings.get().llm.clone()
     };
+
+    // Capture the advisor's identity once, up front. We use this to stamp
+    // every AdvisorSignal and every row written to the `provenance` table
+    // for this rerank pass. See `docs/strategy/INTELLIGENCE-MESH.md` §5.
+    let advisor_identity = {
+        let mut id =
+            crate::provenance::ModelIdentity::new(&llm_settings.provider, &llm_settings.model);
+        if let Some(base_url) = llm_settings.base_url.as_deref().filter(|s| !s.is_empty()) {
+            id = id.with_base_url(base_url);
+        }
+        id
+    };
+
     let judge = crate::llm::RelevanceJudge::new(llm_settings);
 
     // Split into batches of 8 for better LLM accuracy
@@ -240,12 +253,21 @@ pub(crate) async fn apply_llm_reranking(
     let mut confirmed = 0usize;
     let mut rejected = 0usize;
 
+    // Collect provenance rows for batch-insert after the judgment loop.
+    // This records one row per judged item so compound-learning, receipts,
+    // and drift-detection can reason about which model/prompt produced each
+    // rerank adjustment. Intelligence Mesh Phase 3.
+    let mut provenance_rows: Vec<crate::provenance::Provenance> =
+        Vec::with_capacity(all_judgments.len());
+
     for judgment in &all_judgments {
         if let Some(result) = results
             .iter_mut()
             .find(|r| r.id.to_string() == judgment.item_id)
         {
-            // Store LLM score and reason in breakdown
+            // Store LLM score and reason in breakdown (legacy fields retained
+            // for existing UI code; the authoritative source going forward is
+            // the `advisor_signals` vector stamped below).
             if let Some(ref mut breakdown) = result.score_breakdown {
                 breakdown.llm_score = Some(judgment.confidence * 5.0); // Map back to 1-5
                 breakdown.llm_reason = if judgment.reasoning.is_empty() {
@@ -253,10 +275,46 @@ pub(crate) async fn apply_llm_reranking(
                 } else {
                     Some(judgment.reasoning.clone())
                 };
+
+                // Phase 3: push a provenance-stamped advisor signal. The
+                // deterministic pipeline remains authoritative — this signal
+                // is a sensor reading, not a scalar override. Phase 2 will
+                // strip the 50/50 blend below and rely exclusively on the
+                // reconciler reading these signals. Until then we populate
+                // the vector alongside the legacy fields so dependent code
+                // can migrate incrementally.
+                breakdown.advisor_signals.push(crate::types::AdvisorSignal {
+                    provider: advisor_identity.provider.clone(),
+                    model: advisor_identity.model.clone(),
+                    task: "judge".to_string(),
+                    raw_score: judgment.confidence,
+                    normalized_score: judgment.confidence, // No calibration yet (Phase 5)
+                    confidence: judgment.confidence,
+                    reason: if judgment.reasoning.is_empty() {
+                        None
+                    } else {
+                        Some(judgment.reasoning.clone())
+                    },
+                    prompt_version: Some(crate::llm_judge::PROMPT_VERSION.to_string()),
+                    calibration_id: Some(crate::provenance::PRE_MESH_CALIBRATION_ID.to_string()),
+                });
             }
 
+            // Queue a persisted provenance row for this judgment.
+            provenance_rows.push(
+                crate::provenance::Provenance::new(
+                    crate::provenance::ArtifactKind::Rerank,
+                    judgment.item_id.clone(),
+                    &advisor_identity,
+                    "judge",
+                )
+                .with_prompt_version(crate::llm_judge::PROMPT_VERSION),
+            );
+
             if judgment.relevant {
-                // LLM confirms — balanced blend (50/50) to respect pipeline scoring
+                // LLM confirms — balanced blend (50/50) to respect pipeline
+                // scoring. Phase 2 of the Intelligence Mesh will strip this
+                // blend and route through the reconciler instead.
                 let blended =
                     (result.top_score * 0.50 + judgment.confidence * 0.50).clamp(0.0, 1.0);
                 // Gate-respect: if item had weak signal confirmation (<2 signals),
@@ -280,6 +338,29 @@ pub(crate) async fn apply_llm_reranking(
                 result.top_score *= 0.15;
                 result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
                 rejected += 1;
+            }
+        }
+    }
+
+    // Persist provenance rows. Non-fatal on failure: a DB error here should
+    // not fail the rerank pass that already produced valid results.
+    if !provenance_rows.is_empty() {
+        let conn = db.conn.lock();
+        match crate::provenance::record_batch(&conn, &provenance_rows) {
+            Ok(ids) => {
+                debug!(
+                    target: "4da::rerank",
+                    count = ids.len(),
+                    "Recorded {} rerank provenance rows",
+                    ids.len()
+                );
+            }
+            Err(e) => {
+                warn!(
+                    target: "4da::rerank",
+                    error = %e,
+                    "Failed to record rerank provenance (non-fatal)"
+                );
             }
         }
     }
