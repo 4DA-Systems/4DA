@@ -222,12 +222,17 @@ pub async fn set_rerank_config(
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
+    // Preserve reconciler_enabled from the current config — this setting is
+    // managed separately (not exposed via this command) and defaults to true
+    // for new installs. See `docs/strategy/INTELLIGENCE-MESH.md` §5.2.
+    let existing_reconciler = guard.get().rerank.reconciler_enabled;
     let config = RerankConfig {
         enabled,
         max_items_per_batch: max_items.clamp(1, 1000),
         min_embedding_score: min_score.clamp(0.0, 1.0),
         daily_token_limit: daily_token_limit.max(1),
         daily_cost_limit_cents: daily_cost_limit.max(1),
+        reconciler_enabled: existing_reconciler,
     };
 
     guard.set_rerank_config(config)?;

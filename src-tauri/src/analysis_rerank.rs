@@ -268,6 +268,30 @@ pub(crate) async fn apply_llm_reranking(
             // Store LLM score and reason in breakdown (legacy fields retained
             // for existing UI code; the authoritative source going forward is
             // the `advisor_signals` vector stamped below).
+            //
+            // `pipeline_score` is captured HERE (before any adjustment) so
+            // the reconciler operates on the pure pipeline output, not a
+            // mutated score. This matters because we may call this loop
+            // multiple times in future (multi-advisor) and each advisor
+            // must adjust off the same baseline.
+            let pipeline_score = result.top_score;
+
+            let advisor_signal = crate::types::AdvisorSignal {
+                provider: advisor_identity.provider.clone(),
+                model: advisor_identity.model.clone(),
+                task: "judge".to_string(),
+                raw_score: judgment.confidence,
+                normalized_score: judgment.confidence, // No calibration yet (Phase 5)
+                confidence: judgment.confidence,
+                reason: if judgment.reasoning.is_empty() {
+                    None
+                } else {
+                    Some(judgment.reasoning.clone())
+                },
+                prompt_version: Some(crate::llm_judge::PROMPT_VERSION.to_string()),
+                calibration_id: Some(crate::provenance::PRE_MESH_CALIBRATION_ID.to_string()),
+            };
+
             if let Some(ref mut breakdown) = result.score_breakdown {
                 breakdown.llm_score = Some(judgment.confidence * 5.0); // Map back to 1-5
                 breakdown.llm_reason = if judgment.reasoning.is_empty() {
@@ -275,29 +299,7 @@ pub(crate) async fn apply_llm_reranking(
                 } else {
                     Some(judgment.reasoning.clone())
                 };
-
-                // Phase 3: push a provenance-stamped advisor signal. The
-                // deterministic pipeline remains authoritative — this signal
-                // is a sensor reading, not a scalar override. Phase 2 will
-                // strip the 50/50 blend below and rely exclusively on the
-                // reconciler reading these signals. Until then we populate
-                // the vector alongside the legacy fields so dependent code
-                // can migrate incrementally.
-                breakdown.advisor_signals.push(crate::types::AdvisorSignal {
-                    provider: advisor_identity.provider.clone(),
-                    model: advisor_identity.model.clone(),
-                    task: "judge".to_string(),
-                    raw_score: judgment.confidence,
-                    normalized_score: judgment.confidence, // No calibration yet (Phase 5)
-                    confidence: judgment.confidence,
-                    reason: if judgment.reasoning.is_empty() {
-                        None
-                    } else {
-                        Some(judgment.reasoning.clone())
-                    },
-                    prompt_version: Some(crate::llm_judge::PROMPT_VERSION.to_string()),
-                    calibration_id: Some(crate::provenance::PRE_MESH_CALIBRATION_ID.to_string()),
-                });
+                breakdown.advisor_signals.push(advisor_signal.clone());
             }
 
             // Queue a persisted provenance row for this judgment.
@@ -311,33 +313,61 @@ pub(crate) async fn apply_llm_reranking(
                 .with_prompt_version(crate::llm_judge::PROMPT_VERSION),
             );
 
-            if judgment.relevant {
-                // LLM confirms — balanced blend (50/50) to respect pipeline
-                // scoring. Phase 2 of the Intelligence Mesh will strip this
-                // blend and route through the reconciler instead.
-                let blended =
-                    (result.top_score * 0.50 + judgment.confidence * 0.50).clamp(0.0, 1.0);
-                // Gate-respect: if item had weak signal confirmation (<2 signals),
-                // cap LLM-boosted score to prevent overriding the confirmation gate
-                let signal_count = result
-                    .score_breakdown
-                    .as_ref()
-                    .map_or(0, |b| b.signal_count);
-                result.top_score = if signal_count < 2 {
-                    blended.min(0.55)
-                } else {
-                    blended
-                };
+            if rerank_config.reconciler_enabled {
+                // ── Phase 2 path: bounded reconciler ──────────────────
+                // Pipeline is authoritative. Advisor can adjust by at most
+                // ±ADVISOR_ADJUSTMENT_CAP (0.15). Disagreement becomes a
+                // UI signal, never a score override. NO hard rejects.
+                let signals = std::slice::from_ref(&advisor_signal);
+                let reconciled = crate::reconciler::reconcile(pipeline_score, signals);
+                result.top_score = reconciled.final_rank;
+
+                if let Some(ref mut breakdown) = result.score_breakdown {
+                    breakdown.disagreement = reconciled.disagreement;
+                }
+
                 if !judgment.reasoning.is_empty() {
                     result.explanation = Some(judgment.reasoning.clone());
                 }
-                confirmed += 1;
+
+                // Tally for telemetry: count items where the advisor
+                // pushed the item down significantly as "skeptical",
+                // everything else as "confirmed" (since nothing is
+                // hard-rejected in the reconciler path).
+                if matches!(
+                    reconciled.disagreement,
+                    Some(crate::types::DisagreementKind::AdvisorSkeptical)
+                ) {
+                    rejected += 1;
+                } else {
+                    confirmed += 1;
+                }
             } else {
-                // LLM says not relevant — hard reject
-                result.relevant = false;
-                result.top_score *= 0.15;
-                result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
-                rejected += 1;
+                // ── Legacy path: 50/50 blend + hard reject ────────────
+                // Retained behind settings.rerank.reconciler_enabled=false
+                // for debugging and A/B comparison during rollout.
+                if judgment.relevant {
+                    let blended =
+                        (pipeline_score * 0.50 + judgment.confidence * 0.50).clamp(0.0, 1.0);
+                    let signal_count = result
+                        .score_breakdown
+                        .as_ref()
+                        .map_or(0, |b| b.signal_count);
+                    result.top_score = if signal_count < 2 {
+                        blended.min(0.55)
+                    } else {
+                        blended
+                    };
+                    if !judgment.reasoning.is_empty() {
+                        result.explanation = Some(judgment.reasoning.clone());
+                    }
+                    confirmed += 1;
+                } else {
+                    result.relevant = false;
+                    result.top_score *= 0.15;
+                    result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
+                    rejected += 1;
+                }
             }
         }
     }

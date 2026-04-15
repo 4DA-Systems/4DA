@@ -123,6 +123,20 @@ pub struct RerankConfig {
     pub daily_token_limit: u64,
     /// Daily cost limit in cents (0 = unlimited)
     pub daily_cost_limit_cents: u64,
+    /// Intelligence Mesh Phase 2: when true, reconcile advisor signals
+    /// via the bounded-adjustment reconciler (pipeline authoritative,
+    /// advisor bounded to ±0.15) and emit disagreement flags for the UI.
+    /// When false, use the legacy 50/50 blend + hard-reject path.
+    ///
+    /// Default: true (pre-launch — no deployed users to surprise). The
+    /// flag exists so we can bisect behavior diffs during the pivot and
+    /// fall back instantly if a post-launch regression surfaces.
+    #[serde(default = "default_reconciler_enabled")]
+    pub reconciler_enabled: bool,
+}
+
+fn default_reconciler_enabled() -> bool {
+    true
 }
 
 impl Default for RerankConfig {
@@ -133,6 +147,7 @@ impl Default for RerankConfig {
             min_embedding_score: 0.20,
             daily_token_limit: 2_000_000, // 2M — accommodates analysis + translation
             daily_cost_limit_cents: 500,  // $5.00/day — generous for cloud, irrelevant for Ollama
+            reconciler_enabled: true,
         }
     }
 }
