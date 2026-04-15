@@ -165,7 +165,9 @@ mod briefing_snapshot;
 mod briefing_window;
 mod calibration;
 mod calibration_commands;
+mod calibration_fitter;
 mod calibration_probes;
+mod calibration_samples;
 mod calibration_store;
 pub mod capabilities;
 mod channel_changelog;
@@ -635,6 +637,7 @@ pub fn run() {
             settings_commands::get_privacy_config,
             settings_commands::set_privacy_config,
             calibration_commands::run_calibration,
+            calibration_commands::fit_calibration_curves_now,
             // Taste Test Calibration
             taste_test_commands::taste_test_start,
             taste_test_commands::taste_test_respond,

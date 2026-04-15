@@ -429,3 +429,178 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         grade_a_requirements,
     }
 }
+
+// ============================================================================
+// Phase 5b.2 — Calibration Curve Fitter Command
+// ============================================================================
+//
+// `run_calibration` above is the 4-dimension RIG calibration (persona
+// F1 / separation / grade computation). That's scoring-quality diagnostics.
+//
+// `fit_calibration_curves_now` below is a DIFFERENT calibration: the
+// Intelligence Mesh per-model calibration curve fitter. It scans
+// persisted advisor signals from past rerank runs, pairs each with the
+// user's subsequent InteractionPattern, and produces a curve that maps
+// the advisor's raw confidence to the observed positive rate.
+//
+// Keeping both commands in the same file because they share the
+// "calibration" namespace in the UI, even though the algorithms are
+// independent. The UI surfaces them as "Scoring quality" and "Model
+// calibration" in separate panels.
+
+/// One entry per (model_identity, task) pair that was considered for a
+/// fit. Returned by `fit_calibration_curves_now` as a summary so the UI
+/// can render a "last fit" table ("llama3.2 / judge: 142 samples → fit,
+/// Brier 0.14" or "qwen / judge: 8 samples → skipped, need 50").
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct CurveFitSummary {
+    pub model_identity_hash: String,
+    pub provider: String,
+    pub model: String,
+    pub task: String,
+    pub samples_scanned: u32,
+    pub samples_labeled: u32,
+    pub curve_saved: bool,
+    pub curve_id: Option<String>,
+    pub brier_score: Option<f32>,
+    pub ece: Option<f32>,
+    pub skipped_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct CurveFitReport {
+    pub total_candidates: u32,
+    pub curves_produced: u32,
+    pub fits: Vec<CurveFitSummary>,
+}
+
+/// Trigger a calibration fit across every (model, task) pair that has
+/// produced advisor signals. One curve per pair; pairs with insufficient
+/// data are skipped with a reason rather than failing the whole run.
+///
+/// The fitter is safe to call any time — it only processes samples
+/// older than 24h and marks them processed after, so back-to-back
+/// invocations don't over-count the same sample.
+///
+/// Invoked manually from the UI today. A scheduled cadence (daily) is
+/// Phase 5b.3 work (not in this commit).
+#[tauri::command]
+pub async fn fit_calibration_curves_now() -> Result<CurveFitReport> {
+    let db = crate::get_database()?;
+
+    // Discover candidate (identity_hash, task) pairs from samples.
+    // A pair is a candidate if there's at least one unprocessed sample
+    // older than MIN_AGE_HOURS — otherwise even an optimistic fit would
+    // skip it. Deriving the list from samples rather than from a static
+    // config is load-bearing: a user who swaps models gets an immediate
+    // new pair to fit against without code changes.
+    let candidates: Vec<(String, String, String, String)> = {
+        let conn = db.conn.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT DISTINCT cs.model_identity_hash, cs.task, p.provider, p.model
+                 FROM calibration_samples cs
+                 LEFT JOIN provenance p
+                   ON p.model_identity_hash = cs.model_identity_hash
+                   AND p.task = cs.task
+                 WHERE cs.processed_at IS NULL
+                   AND cs.created_at <= datetime('now', ?1)
+                 GROUP BY cs.model_identity_hash, cs.task",
+            )
+            .context("Failed to prepare candidate-pairs query")?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![format!(
+                    "-{} hours",
+                    crate::calibration_fitter::MIN_AGE_HOURS
+                )],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                        r.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                    ))
+                },
+            )
+            .context("Failed to execute candidate-pairs query")?;
+        rows.filter_map(std::result::Result::ok).collect()
+    };
+
+    let total_candidates = candidates.len() as u32;
+    let mut fits = Vec::with_capacity(candidates.len());
+    let mut curves_produced = 0u32;
+
+    for (identity_hash, task, provider, model) in candidates {
+        // The prompt_version the FITTER uses must match the CURRENT
+        // advisor's prompt_version — a curve fit against a stale prompt
+        // would be invalidated by load_current_curve anyway. We read
+        // the prompt_version from the most recent sample for the pair;
+        // that's the version under which those signals were produced
+        // and also the version a drift-aware reader expects to match.
+        //
+        // If the current advisor has since moved to a newer prompt,
+        // load_current_curve will (correctly) reject this curve and
+        // the next fit run (over newer samples) produces a current one.
+        let prompt_version: String = {
+            let conn = db.conn.lock();
+            conn.query_row(
+                "SELECT prompt_version FROM calibration_samples
+                 WHERE model_identity_hash = ?1 AND task = ?2
+                   AND processed_at IS NULL
+                 ORDER BY created_at DESC LIMIT 1",
+                rusqlite::params![identity_hash, task],
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|_| "unknown".to_string())
+        };
+
+        let report = {
+            let conn = db.conn.lock();
+            crate::calibration_fitter::fit_and_save(&conn, &identity_hash, &task, &prompt_version)
+                .context("Fit-and-save failed")?
+        };
+
+        let (curve_saved, curve_id, brier, ece) = match &report.curve {
+            Some(c) => (
+                true,
+                Some(c.curve_id.clone()),
+                Some(c.brier_score),
+                Some(c.ece),
+            ),
+            None => (false, None, None, None),
+        };
+        if curve_saved {
+            curves_produced += 1;
+        }
+
+        fits.push(CurveFitSummary {
+            model_identity_hash: identity_hash,
+            provider,
+            model,
+            task,
+            samples_scanned: report.samples_scanned as u32,
+            samples_labeled: report.samples_labeled as u32,
+            curve_saved,
+            curve_id,
+            brier_score: brier,
+            ece,
+            skipped_reason: report.skipped_reason,
+        });
+    }
+
+    tracing::info!(
+        target: "4da::calibration",
+        total_candidates,
+        curves_produced,
+        "Calibration curve fit run complete"
+    );
+
+    Ok(CurveFitReport {
+        total_candidates,
+        curves_produced,
+        fits,
+    })
+}

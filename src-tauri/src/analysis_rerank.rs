@@ -300,6 +300,12 @@ pub(crate) async fn apply_llm_reranking(
     let mut provenance_rows: Vec<crate::provenance::Provenance> =
         Vec::with_capacity(all_judgments.len());
 
+    // Phase 5b.2: calibration samples — one row per (source_item, signal).
+    // Paired later with interactions/feedback by the fitter to derive
+    // binary labels and fit a calibration curve.
+    let mut calibration_samples_batch: Vec<(i64, crate::types::AdvisorSignal)> =
+        Vec::with_capacity(all_judgments.len());
+
     for judgment in &all_judgments {
         if let Some(result) = results
             .iter_mut()
@@ -352,6 +358,15 @@ pub(crate) async fn apply_llm_reranking(
                 )
                 .with_prompt_version(advisor_prompt_version),
             );
+
+            // Phase 5b.2: queue a calibration sample. Provenance records
+            // WHICH model judged the item; this table records WHAT score
+            // it gave — the fitter needs the score to produce a curve.
+            // We use `result.id` (the source_items row id) rather than
+            // `judgment.item_id` (the string form) so the fitter can
+            // join directly to `interactions.source_item_id` without
+            // parsing.
+            calibration_samples_batch.push((result.id as i64, advisor_signal.clone()));
 
             if rerank_config.reconciler_enabled {
                 // ── Phase 2 path: bounded reconciler ──────────────────
@@ -417,24 +432,74 @@ pub(crate) async fn apply_llm_reranking(
         }
     }
 
-    // Persist provenance rows. Non-fatal on failure: a DB error here should
-    // not fail the rerank pass that already produced valid results.
-    if !provenance_rows.is_empty() {
+    // Persist provenance rows + calibration samples under a single lock
+    // acquisition. Non-fatal on failure: DB errors here should not fail
+    // the rerank pass that already produced valid results.
+    if !provenance_rows.is_empty() || !calibration_samples_batch.is_empty() {
         let conn = db.conn.lock();
-        match crate::provenance::record_batch(&conn, &provenance_rows) {
-            Ok(ids) => {
+
+        if !provenance_rows.is_empty() {
+            match crate::provenance::record_batch(&conn, &provenance_rows) {
+                Ok(ids) => {
+                    debug!(
+                        target: "4da::rerank",
+                        count = ids.len(),
+                        "Recorded {} rerank provenance rows",
+                        ids.len()
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        target: "4da::rerank",
+                        error = %e,
+                        "Failed to record rerank provenance (non-fatal)"
+                    );
+                }
+            }
+        }
+
+        // Stamp calibration samples grouped by source_item_id so the
+        // helper transaction covers each item's signals atomically. In
+        // practice today the vector is 1-signal-per-item (single advisor);
+        // this grouping is future-proof for the multi-advisor case.
+        if !calibration_samples_batch.is_empty() {
+            let identity_hash = advisor_identity.hash();
+            let mut total_stamped = 0usize;
+            let mut errored = 0usize;
+
+            // Partition by source_item_id.
+            let mut by_item: std::collections::BTreeMap<i64, Vec<crate::types::AdvisorSignal>> =
+                std::collections::BTreeMap::new();
+            for (item_id, sig) in calibration_samples_batch.drain(..) {
+                by_item.entry(item_id).or_default().push(sig);
+            }
+
+            for (item_id, sigs) in by_item {
+                match crate::calibration_samples::stamp_signals(
+                    &conn,
+                    item_id,
+                    &identity_hash,
+                    &sigs,
+                ) {
+                    Ok(n) => total_stamped += n,
+                    Err(e) => {
+                        errored += 1;
+                        warn!(
+                            target: "4da::rerank",
+                            source_item_id = item_id,
+                            error = %e,
+                            "Failed to stamp calibration samples (non-fatal)"
+                        );
+                    }
+                }
+            }
+
+            if total_stamped > 0 || errored > 0 {
                 debug!(
                     target: "4da::rerank",
-                    count = ids.len(),
-                    "Recorded {} rerank provenance rows",
-                    ids.len()
-                );
-            }
-            Err(e) => {
-                warn!(
-                    target: "4da::rerank",
-                    error = %e,
-                    "Failed to record rerank provenance (non-fatal)"
+                    stamped = total_stamped,
+                    errored,
+                    "Stamped calibration samples"
                 );
             }
         }
