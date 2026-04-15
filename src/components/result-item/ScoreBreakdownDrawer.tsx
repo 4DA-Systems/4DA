@@ -6,6 +6,7 @@ import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import type { ScoreBreakdown, SourceRelevance } from '../../types';
 import { extractFactors, FACTOR_DESCRIPTIONS } from './score-breakdown/factor-utils';
 import { FactorGroup } from './score-breakdown/FactorGroup';
+import { AdvisorPanel } from './AdvisorPanel';
 
 interface ScoreBreakdownDrawerProps {
   breakdown: ScoreBreakdown;
@@ -150,6 +151,12 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             )}
           </span>
         </div>
+
+        {/* Advisor panel — Intelligence Mesh Phase 7b receipts */}
+        <AdvisorPanel
+          advisorSignals={breakdown.advisor_signals}
+          disagreement={breakdown.disagreement}
+        />
 
         {/* Boost factors */}
         {boosts.length > 0 && (
