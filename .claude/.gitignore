@@ -12,6 +12,7 @@ memory.db
 # Runtime state files (written by hooks, never committed)
 analyzer-state.json
 wisdom/
+scheduled_tasks.lock
 
 # Session archives (local only)
 sessions/
