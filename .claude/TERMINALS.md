@@ -9,19 +9,36 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 5 — Knowledge Decay + Signal Chains)
-**Started:** 2026-04-17
-**Prior commits:** cd5e31c8, 11a9fc41, 7f873d42, 223d810e, e1dde0f4, 3f553e2f.
-**Scope:** Collapse KnowledgeGap + SignalChainWithPrediction to canonical EvidenceItem.
-**Files claimed:**
-- `src-tauri/src/knowledge_decay.rs` (EDIT)
-- `src-tauri/src/signal_chains.rs` (EDIT)
-- `src/components/KnowledgeGapsPanel.tsx` (EDIT)
-- `src/lib/commands.ts` (EDIT)
-- `src/types/innovation.ts` (EDIT — type alias to EvidenceFeed if needed)
-**Commit Lock:** HELD at end of phase
+_No active terminals._
 
-_No other active terminals._
+<!-- T-INTEL-RECON (Phases 0-5 done 2026-04-17, session pause):
+     Intelligence Reconciliation — collapse phase COMPLETE.
+
+     Phase 0 cd5e31c8 — plan lock
+     Phase 1 11a9fc41 — dead code purge (19 files)
+     Phase 2 7f873d42 — EvidenceItem canonical type
+     Phase 3 223d810e — Preemption → EvidenceFeed
+     Phase 4 e1dde0f4 — Blind Spots → EvidenceFeed (with score)
+     Phase 5 60fb25c9 — Knowledge Decay + Signal Chains → EvidenceFeed
+
+     Four lenses emit canonical EvidenceItem. Legacy types remain
+     internally where still needed (monitoring_briefing, preemption's
+     own detect_chains usage). IPC boundary is 100% canonical.
+
+     Test totals (Rust / Frontend):
+       Phase 0:  2933 / 1257
+       Phase 5: 3035 / 1276 (+102 Rust, +19 FE)
+
+     Next (Phase 6): AWE Context Bridge — DeveloperContext 5→17 fields
+     populated from 4DA's actual data. Unblocks meaningful AWE
+     transmutations for downstream phases.
+-->
+
+**Note to next session:** there are 13 unclaimed files accumulating from
+other terminals/sessions (CLAUDE.md, content_dna.rs, lib.rs, source_reputation.rs,
+SourceConfigPanel.tsx, SourcePreview.tsx, source-input-parser.{ts,test.ts},
+tauri.conf.json, ui.json, 02-landing-page-copy.md, faq.html, index.njk).
+Not T-INTEL-RECON's claim. Owner should commit or discard before more work lands.
 
 <!-- T-INTEL-RECON (Phases 0-4 done 2026-04-17, session pause):
      Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe,
