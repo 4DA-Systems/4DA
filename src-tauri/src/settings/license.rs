@@ -239,13 +239,17 @@ pub const SIGNAL_FEATURES: &[&str] = &[
 ];
 
 /// Check if the current user has Signal (or Team/Enterprise) tier access.
-/// Returns true for "signal", "team", "enterprise", legacy "pro", or an active trial.
+/// Returns true for "signal", "team", "enterprise", legacy "pro", an active trial,
+/// or dev_unlock_all in debug builds.
 /// Triggers periodic re-validation to catch settings.json manipulation.
 pub fn is_signal() -> bool {
     maybe_revalidate_license();
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
+    if cfg!(debug_assertions) && license.dev_unlock_all {
+        return true;
+    }
     is_paid_tier(license.tier.as_str()) || is_trial_active(license)
 }
 
@@ -335,6 +339,11 @@ pub fn require_signal_feature(feature: &str) -> Result<()> {
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let license = &guard.get().license;
+    // Dev unlock: `"dev_unlock_all": true` in settings.json bypasses all gates.
+    // Only effective in debug builds — release builds ignore this field.
+    if cfg!(debug_assertions) && license.dev_unlock_all {
+        return Ok(());
+    }
     if is_signal_feature_available(feature, license) {
         Ok(())
     } else {

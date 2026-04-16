@@ -43,6 +43,7 @@ mod tests {
             license_key: String::new(),
             activated_at: None,
             trial_started_at: None,
+            dev_unlock_all: false,
         };
         assert!(!is_trial_active(&license));
         let status = get_trial_status(&license);
@@ -51,10 +52,11 @@ mod tests {
 
         // Active trial
         let license = LicenseConfig {
-            tier: license.tier.clone(),
-            license_key: license.license_key.clone(),
-            activated_at: license.activated_at.clone(),
+            tier: "free".to_string(),
+            license_key: String::new(),
+            activated_at: None,
             trial_started_at: Some(chrono::Utc::now().to_rfc3339()),
+            dev_unlock_all: false,
         };
         assert!(is_trial_active(&license));
         let status = get_trial_status(&license);
@@ -64,10 +66,11 @@ mod tests {
         // Expired trial (must exceed TRIAL_DURATION_DAYS which is 14)
         let expired = chrono::Utc::now() - chrono::Duration::days(15);
         let license = LicenseConfig {
-            tier: license.tier.clone(),
-            license_key: license.license_key.clone(),
-            activated_at: license.activated_at.clone(),
+            tier: "free".to_string(),
+            license_key: String::new(),
+            activated_at: None,
             trial_started_at: Some(expired.to_rfc3339()),
+            dev_unlock_all: false,
         };
         assert!(!is_trial_active(&license));
         let status = get_trial_status(&license);
@@ -82,6 +85,7 @@ mod tests {
             license_key: String::new(),
             activated_at: None,
             trial_started_at: None,
+            dev_unlock_all: false,
         };
         // Signal-gated features should be blocked for free users
         assert!(!is_signal_feature_available("get_attention_report", &free));
@@ -89,18 +93,20 @@ mod tests {
 
         let signal = LicenseConfig {
             tier: "signal".to_string(),
-            license_key: free.license_key.clone(),
-            activated_at: free.activated_at.clone(),
-            trial_started_at: free.trial_started_at.clone(),
+            license_key: String::new(),
+            activated_at: None,
+            trial_started_at: None,
+            dev_unlock_all: false,
         };
         assert!(is_signal_feature_available("get_attention_report", &signal));
 
         // Legacy "pro" tier should still work
         let legacy_pro = LicenseConfig {
             tier: "pro".to_string(),
-            license_key: free.license_key.clone(),
-            activated_at: free.activated_at.clone(),
-            trial_started_at: free.trial_started_at.clone(),
+            license_key: String::new(),
+            activated_at: None,
+            trial_started_at: None,
+            dev_unlock_all: false,
         };
         assert!(is_signal_feature_available(
             "get_attention_report",
@@ -115,6 +121,7 @@ mod tests {
             license_key: String::new(),
             activated_at: None,
             trial_started_at: None,
+            dev_unlock_all: false,
         };
         // Briefing features use BYOK model — available to all users
         assert!(is_signal_feature_available("generate_ai_briefing", &free));
@@ -132,6 +139,7 @@ mod tests {
             license_key: "4DA-test-key-abc123".to_string(),
             activated_at: Some(activated.clone()),
             trial_started_at: None,
+            dev_unlock_all: false,
         };
 
         let json = serde_json::to_string(&original).expect("serialize LicenseConfig");

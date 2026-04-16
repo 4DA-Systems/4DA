@@ -338,6 +338,11 @@ pub struct LicenseConfig {
     /// ISO timestamp when the free trial started (set on first launch)
     #[serde(default)]
     pub trial_started_at: Option<String>,
+    /// Developer testing flag — unlocks all Signal features without a license key.
+    /// Set `"dev_unlock_all": true` in settings.json to test paid features locally.
+    /// Has no effect in release builds (only works with debug_assertions).
+    #[serde(default)]
+    pub dev_unlock_all: bool,
 }
 
 impl std::fmt::Debug for LicenseConfig {
@@ -371,6 +376,7 @@ impl Default for LicenseConfig {
             license_key: String::new(),
             activated_at: None,
             trial_started_at: None,
+            dev_unlock_all: false,
         }
     }
 }
