@@ -759,15 +759,23 @@ pub(crate) fn score_item(
             ) {
                 Some(mut c) => {
                     // Dependency-aware priority escalation:
-                    // Security + non-dev dependency match → Critical
+                    // Security + STRONG non-dev dep match (>= 0.40) → Critical
                     // Breaking change + newer version → High
+                    // The 0.40 threshold requires the full package name OR 2+ subterms.
                     if !matched_deps.is_empty() {
-                        let has_non_dev_dep = matched_deps.iter().any(|d| !d.is_dev);
-                        if c.signal_type == signals::SignalType::SecurityAlert && has_non_dev_dep {
+                        let has_strong_dep = matched_deps
+                            .iter()
+                            .any(|d| !d.is_dev && d.confidence >= 0.40);
+                        if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                             c.priority = signals::SignalPriority::Critical;
+                            let best_dep = matched_deps
+                                .iter()
+                                .filter(|d| !d.is_dev)
+                                .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
+                                .unwrap_or(&matched_deps[0]);
                             c.action = format!(
                                 "Critical: Security issue affects your dependency {}",
-                                matched_deps[0].package_name
+                                best_dep.package_name
                             );
                         } else if c.signal_type == signals::SignalType::BreakingChange
                             && matched_deps

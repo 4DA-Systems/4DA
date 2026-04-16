@@ -73,6 +73,10 @@ data/.running
 data/.healthy
 data/.stalled
 
+# Crash loop protection + single-instance lock (runtime state)
+data/.crash_history.json
+data/.process.lock
+
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
 !.env.example
