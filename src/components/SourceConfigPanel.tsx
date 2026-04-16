@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { reportError } from '../lib/error-reporter';
 import { translateError } from '../utils/error-messages';
+import { parseSourceInput } from '../utils/source-input-parser';
+import { SourcePreview } from './settings/SourcePreview';
 
 interface SourceConfigPanelProps {
   onStatusChange: (status: string) => void;
@@ -47,18 +49,53 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
     loadSources();
   }, [loadSources]);
 
-  const addRssFeed = async () => {
-    const url = newRssFeed.trim();
-    if (!url) return;
+  // Parse the RSS input into a normalized shape. The parser handles
+  // "www.foo.com" → "https://www.foo.com", YouTube URLs, @handles, etc.
+  const rssParsed = useMemo(
+    () => (newRssFeed.trim().length > 0 ? parseSourceInput(newRssFeed) : null),
+    [newRssFeed],
+  );
+  const [rssPreviewOpen, setRssPreviewOpen] = useState(false);
+
+  const confirmRssAdd = async () => {
+    if (!rssParsed) return;
+    // Route by detected kind — one smart input handles multiple source types.
     try {
-      await cmd('set_rss_feeds', { feeds: [...rssFeeds, url] });
-      setRssFeeds((f) => [...f, url]);
+      if (rssParsed.kind === 'rss') {
+        await cmd('set_rss_feeds', { feeds: [...rssFeeds, rssParsed.value] });
+        setRssFeeds((f) => [...f, rssParsed.value]);
+        onStatusChange(t('sources.rss.added'));
+      } else if (rssParsed.kind === 'youtube-channel-id' || rssParsed.kind === 'youtube-handle') {
+        await cmd('set_youtube_channels', { channels: [...youtubeChannels, rssParsed.value] });
+        setYoutubeChannels((c) => [...c, rssParsed.value]);
+        onStatusChange(t('sources.youtube.added'));
+      } else if (rssParsed.kind === 'twitter-handle') {
+        await cmd('set_twitter_handles', { handles: [...twitterHandles, rssParsed.value] });
+        setTwitterHandles((h) => [...h, rssParsed.value]);
+        onStatusChange(t('sources.twitter.added'));
+      } else if (rssParsed.kind === 'github-languages') {
+        const langs = rssParsed.value.split(',').map((l) => l.trim().toLowerCase()).filter(Boolean);
+        const updated = Array.from(new Set([...githubLanguages, ...langs]));
+        await cmd('set_github_languages', { languages: updated });
+        setGithubLanguages(updated);
+        onStatusChange(t('sources.github.added'));
+      }
       setNewRssFeed('');
-      onStatusChange(t('sources.rss.added'));
+      setRssPreviewOpen(false);
       setTimeout(() => onStatusChange(''), 2000);
     } catch (error) {
       onStatusChange(`Error: ${translateError(error)}`);
     }
+  };
+
+  const addRssFeed = () => {
+    if (!rssParsed || rssParsed.kind === 'unknown') {
+      onStatusChange(t('sources.rss.unrecognized', 'Paste a URL, @handle, or comma-separated language list'));
+      setTimeout(() => onStatusChange(''), 3000);
+      return;
+    }
+    // Open the preview — the user confirms from there.
+    setRssPreviewOpen(true);
   };
 
   const removeRssFeed = async (url: string) => {
@@ -193,16 +230,29 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
 
       {expanded && (
         <div className="mt-3 space-y-3">
-          {/* RSS Feeds */}
+          {/* RSS Feeds (smart input — also handles YouTube/Twitter/langs) */}
           <div>
-            <label className="text-xs text-text-secondary block mb-1.5">{t('sources.rss.label')}</label>
+            <label className="text-xs text-text-secondary block mb-1.5">
+              {t('sources.rss.label')}
+              <span className="text-text-muted ms-1 font-normal">
+                {t('sources.rss.smartHint', '— URL, @handle, or language list')}
+              </span>
+            </label>
             <div className="flex gap-2 mb-1.5">
               <input
                 type="text"
                 value={newRssFeed}
-                onChange={(e) => setNewRssFeed(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addRssFeed()}
-                placeholder="https://example.com/feed.xml"
+                onChange={(e) => {
+                  setNewRssFeed(e.target.value);
+                  if (rssPreviewOpen) setRssPreviewOpen(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addRssFeed();
+                  }
+                }}
+                placeholder="blog.deno.com · @Fireship · rust, typescript"
                 className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
@@ -212,6 +262,18 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 {t('action.add')}
               </button>
             </div>
+            {rssPreviewOpen && rssParsed && (
+              <SourcePreview
+                parsed={rssParsed}
+                onConfirm={() => {
+                  void confirmRssAdd();
+                }}
+                onCancel={() => {
+                  setRssPreviewOpen(false);
+                  setNewRssFeed('');
+                }}
+              />
+            )}
             {rssFeeds.length > 0 ? (
               <div className="space-y-1 max-h-24 overflow-y-auto">
                 {rssFeeds.map((feed) => (
