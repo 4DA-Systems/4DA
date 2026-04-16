@@ -159,6 +159,8 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod awe_bridge;
 mod awe_commands;
+/// Intelligence Reconciliation Phase 9 — precedent-enrichment spine.
+mod awe_spine;
 mod awe_synthesis;
 mod blind_spots;
 mod boot_context;
