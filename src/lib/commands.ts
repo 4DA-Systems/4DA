@@ -74,50 +74,19 @@ import type {
   CompletenessReport,
 } from '../types';
 import type { PersonalizedLesson as PersonalizedLessonType } from '../types/personalization';
-
+import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 
 // ============================================================================
-// Preemption & Intelligence Types (Phase 1.1)
+// Preemption & Intelligence Types — Intelligence Reconciliation Phase 3
 // ============================================================================
-
-type AlertUrgency = 'critical' | 'high' | 'medium' | 'watch';
-type PreemptionType = 'SecurityAdvisory' | 'BreakingChange' | 'MigrationWindow' | 'EcosystemShift' | 'MaintainerDecline' | 'KnowledgeBlindSpot';
-
-interface AlertEvidence {
-  source: string;
-  title: string;
-  url: string | null;
-  freshness_days: number;
-  relevance_score: number;
-}
-
-interface SuggestedAction {
-  action_type: string;
-  label: string;
-  description: string;
-}
-
-interface PreemptionAlert {
-  id: string;
-  alert_type: PreemptionType;
-  title: string;
-  explanation: string;
-  evidence: AlertEvidence[];
-  affected_projects: string[];
-  affected_dependencies: string[];
-  urgency: AlertUrgency;
-  confidence: number;
-  predicted_window: string | null;
-  suggested_actions: SuggestedAction[];
-  created_at: string;
-}
-
-interface PreemptionFeed {
-  alerts: PreemptionAlert[];
-  total: number;
-  critical_count: number;
-  high_count: number;
-}
+//
+// 2026-04-17: `get_preemption_alerts` now returns the canonical `EvidenceFeed`
+// of `EvidenceItem`s (imported from the Rust bindings). The legacy local
+// declarations of `PreemptionAlert`, `PreemptionFeed`, `AlertEvidence`,
+// `SuggestedAction`, `PreemptionType`, and `AlertUrgency` were deleted;
+// Rust-side `PreemptionAlert` is still used by `monitoring_briefing.rs` and
+// its own ts-rs binding file remains for that path. Doctrine rule 1: one
+// canonical type per concept.
 
 interface UncoveredDep {
   name: string;
@@ -501,7 +470,9 @@ interface CommandMap {
   get_attention_report: { params: { periodDays: number }; result: AttentionReport };
 
   // -- Preemption & Blind Spots --
-  get_preemption_alerts: { params: Record<string, never>; result: PreemptionFeed };
+  // Phase 3 (2026-04-17): returns the canonical EvidenceFeed envelope
+  // of EvidenceItems. Preemption lens filters by lens_hints.preemption.
+  get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: BlindSpotReport };
 
   // -- Trust Ledger --

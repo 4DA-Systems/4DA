@@ -9,7 +9,19 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 3 — Preemption → EvidenceItem)
+**Started:** 2026-04-17
+**Prior commits:** cd5e31c8 (Phase 0), 11a9fc41 (Phase 1), 7f873d42 (Phase 2).
+**Scope:** Collapse `PreemptionAlert` to emit `Vec<EvidenceItem>` at the command boundary.
+**Files claimed:**
+- `src-tauri/src/preemption.rs` (EDIT — add `into_evidence_item()`)
+- `src-tauri/src/preemption/command.rs` or module's `get_preemption_alerts` (EDIT — return `Vec<EvidenceItem>`)
+- `src-tauri/bindings/bindings/PreemptionAlert.ts` (STAYS — legacy type retained internally)
+- `src/components/preemption/PreemptionView.tsx` (EDIT — consume `EvidenceItem[]`)
+- `src/store/preemption-slice.ts` (EDIT — typed as `EvidenceItem`)
+- preemption tests (EDIT where applicable)
+**Done when:** PreemptionView renders identically from `EvidenceItem`, all tests green.
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-2 done 2026-04-16, paused for session review):
      Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe,
