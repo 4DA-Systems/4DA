@@ -9,18 +9,22 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 7 — Git Decision Miner)
-**Started:** 2026-04-17
-**Prior RECON commits:** cd5e31c8, 11a9fc41, 7f873d42, 223d810e, e1dde0f4, 60fb25c9, 31fa095d.
-**Scope:** Mine user's local git history for decision-shaped commits.
-Populates AWE Wisdom Graph with personal priors so Day-0 transmutations
-return meaningful precedents instead of empty cold-start.
+### T-INTEL-RECON (Phase 8 — Curated Domain Corpus)
+**Started:** 2026-04-17 (same session)
+**Prior RECON commits:** 0-6 + Phase 7 68e18a37.
+**Scope:** Ship a hand-annotated corpus of common developer decisions
+(framework, DB, testing, deploy, state mgmt, etc.) bundled in the app
+so users with light git history still get useful precedents on Day 0.
+**Design:** ~30 decisions to start (incremental — 200 is the v1 goal,
+but we ship what's quality-vetted, not what's padded). Same
+SeededDecision shape as git miner output; loaded via same seeder.
 **Files claimed:**
-- `src-tauri/src/git_decision_miner.rs` (NEW)
-- `src-tauri/src/lib.rs` (EDIT — mod declaration + tauri command reg)
-- Tests
-**Done when:** `cargo test git_decision_miner::` green; a smoke run on
-the 4DA repo extracts ≥5 decisions with inferred outcomes.
+- `data/seed/decisions.jsonl` (NEW)
+- `src-tauri/src/seed_corpus.rs` (NEW — loader + embed)
+- `src-tauri/src/lib.rs` (EDIT — mod + command reg)
+- `src/lib/commands.ts` (EDIT)
+**Done when:** tests load ≥20 decisions from the bundled corpus,
+all pass SeededDecision schema, domain coverage ≥6 categories.
 **Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-6 + 2 hygiene recoveries done 2026-04-17):
