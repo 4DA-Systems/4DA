@@ -9,19 +9,30 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 3 — Preemption → EvidenceItem)
-**Started:** 2026-04-17
-**Prior commits:** cd5e31c8 (Phase 0), 11a9fc41 (Phase 1), 7f873d42 (Phase 2).
-**Scope:** Collapse `PreemptionAlert` to emit `Vec<EvidenceItem>` at the command boundary.
-**Files claimed:**
-- `src-tauri/src/preemption.rs` (EDIT — add `into_evidence_item()`)
-- `src-tauri/src/preemption/command.rs` or module's `get_preemption_alerts` (EDIT — return `Vec<EvidenceItem>`)
-- `src-tauri/bindings/bindings/PreemptionAlert.ts` (STAYS — legacy type retained internally)
-- `src/components/preemption/PreemptionView.tsx` (EDIT — consume `EvidenceItem[]`)
-- `src/store/preemption-slice.ts` (EDIT — typed as `EvidenceItem`)
-- preemption tests (EDIT where applicable)
-**Done when:** PreemptionView renders identically from `EvidenceItem`, all tests green.
-**Commit Lock:** HELD at end of phase
+_No active terminals._
+
+<!-- T-INTEL-RECON (Phases 0-4 done 2026-04-17, session pause):
+     Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe,
+     one EvidenceItem canonical type.
+
+     Phase 0 cd5e31c8 — plan lock (3 strategy docs + doctrine)
+     Phase 1 11a9fc41 — dead code purge (19 files, Momentum + 5 AWE panels)
+     Phase 2 7f873d42 — EvidenceItem canonical type + materializer trait
+     Phase 3 223d810e — Preemption emits EvidenceFeed of EvidenceItems
+     Phase 4 e1dde0f4 — Blind Spots emits EvidenceFeed (score on feed.score)
+
+     Test deltas per phase (frontend → Rust):
+       Baseline:  1257 → 2933
+       Phase 2:   1257 → 2969 (+36 evidence tests)
+       Phase 3:   1257 → 2984 (+12 preemption conversion + 3 feed)
+       Phase 4:   1276 → 3019 (+19 FE blindspot bucket, +8 RS conversion, +3 evidence)
+
+     Next (Phase 5): Knowledge Decay + Signal Chains collapse.
+     KnowledgeGap + MissedItem → EvidenceItem { kind: Gap | MissedSignal }
+     SignalChainWithPrediction → EvidenceItem { kind: Chain }
+     Wire into existing KnowledgeGapsPanel and its command.
+-->
+
 
 <!-- T-INTEL-RECON (Phases 0-2 done 2026-04-16, paused for session review):
      Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe,
