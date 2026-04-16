@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
+import { formatScore } from '../utils/score';
 import { BriefingSkeleton } from './briefing/BriefingSkeleton';
 import { BriefingContentPanel } from './briefing/BriefingContentPanel';
 import { PersonalizeNudge } from './briefing/PersonalizeNudge';
@@ -174,7 +175,7 @@ export const BriefingView = memo(function BriefingView() {
                             {item.sourceType}
                           </span>
                           <span className="text-[9px] font-mono text-text-muted">
-                            {Math.round(item.score * 100)}%
+                            {formatScore(item.score)}
                           </span>
                         </div>
                       </a>
