@@ -45,7 +45,7 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
   return (
     <div className="bg-bg-secondary rounded-lg border border-border p-5">
       <div className="flex items-baseline gap-3 mb-3">
-        <span className={`text-3xl font-semibold tabular-nums ${tier.color}`}>{score}</span>
+        <span className={`text-3xl font-semibold tabular-nums ${tier.color}`}>{Math.round(score)}</span>
         <span className="text-text-muted text-sm">/100</span>
         <span className={`text-sm ${tier.color}`}>{t(tier.labelKey)}</span>
       </div>
@@ -181,7 +181,7 @@ const MissedSignals = memo(function MissedSignals({ signals }: { signals: NonNul
               )}
             </div>
             <div className="flex items-center gap-2 text-xs text-text-muted">
-              <span>{t('blindspots.missed.relevance', { score: signal.relevance_score.toFixed(2) })}</span>
+              <span>{t('blindspots.missed.relevance', { score: `${Math.round(signal.relevance_score * 100)}%` })}</span>
               <span>{'\u00B7'}</span>
               <span>{signal.source_type}</span>
               <span>{'\u00B7'}</span>
