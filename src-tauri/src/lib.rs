@@ -157,6 +157,7 @@ mod autophagy;
 // Wave 4 — adapt cold-boot grace period to launch context
 mod autophagy_commands;
 mod autophagy_pulse;
+mod awe_bridge;
 mod awe_commands;
 mod awe_synthesis;
 mod blind_spots;
