@@ -30,23 +30,25 @@ function persistDisclosure(data: PersistedDisclosure): void {
   } catch { /* ignore quota errors */ }
 }
 
-type ViewId = 'briefing' | 'chapters' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots';
+type ViewId = 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots';
 
 // CANONICAL SOURCE: What setActiveView will ACCEPT per tier.
 // MUST stay in sync with TIER_VIEWS in src/components/ViewTabBar.tsx.
 // Exported for the consistency test at src/components/__tests__/tier-views-consistency.test.ts.
 // If they diverge, tabs show up visually but clicking them silently fails.
+// 2026-04-16 — Intelligence Reconciliation: removed 'insights' (Momentum deleted)
+// and 'chapters' (CategoryChapterView merged into Results).
 export const UI_SLICE_TIER_VIEWS: Record<ViewTier, ViewId[]> = {
-  core: ['briefing', 'chapters', 'results', 'playbook'],
-  explorer: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights'],
-  invested: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
-  power: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+  core: ['briefing', 'results', 'playbook'],
+  explorer: ['briefing', 'preemption', 'blindspots', 'results', 'playbook'],
+  invested: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console'],
+  power: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const TIER_ORDER: ViewTier[] = ['core', 'explorer', 'invested', 'power'];
 
 const TIER_UPGRADE_MESSAGES: Partial<Record<ViewTier, string>> = {
-  explorer: 'New views unlocked: Insights',
+  explorer: 'New views unlocked: Preemption & Blind Spots',
   invested: 'New views unlocked: Saved & Profile',
   power: 'All views unlocked: Toolkit & System',
 };

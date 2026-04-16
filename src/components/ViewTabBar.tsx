@@ -5,16 +5,14 @@ import { useAppStore } from '../store';
 import { trackEvent } from '../hooks/use-telemetry';
 import type { ViewTier } from '../store/types';
 
-type ViewId = 'briefing' | 'chapters' | 'results' | 'preemption' | 'blindspots' | 'profile' | 'insights' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
+type ViewId = 'briefing' | 'results' | 'preemption' | 'blindspots' | 'profile' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
 
 const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'preemption', labelKey: 'nav.preemption.label', subtitleKey: 'nav.preemption.subtitle', activeColor: 'bg-red-500/20 text-red-400' },
   { id: 'blindspots', labelKey: 'nav.blindspots.label', subtitleKey: 'nav.blindspots.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
-  { id: 'chapters', labelKey: 'nav.chapters', subtitleKey: 'nav.chapters.subtitle', activeColor: 'bg-indigo-500/20 text-indigo-400' },
   { id: 'results', labelKey: 'nav.results', subtitleKey: 'nav.results.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'playbook', labelKey: 'nav.playbook', subtitleKey: 'nav.playbook.subtitle', activeColor: 'bg-yellow-500/20 text-yellow-400' },
-  { id: 'insights', labelKey: 'nav.insights', subtitleKey: 'nav.insights.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
   { id: 'saved', labelKey: 'nav.saved', subtitleKey: 'nav.saved.subtitle', activeColor: 'bg-green-500/20 text-green-400' },
   { id: 'profile', labelKey: 'nav.profile', subtitleKey: 'nav.profile.subtitle', activeColor: 'bg-white/10 text-white' },
   { id: 'console', labelKey: 'nav.console', subtitleKey: 'nav.console.subtitle', activeColor: 'bg-emerald-500/20 text-emerald-400' },
@@ -25,24 +23,26 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
 // CANONICAL SOURCE: The list of views visible per tier.
 // MUST stay in sync with TIER_VIEWS in src/store/ui-slice.ts.
 // Exported for the consistency test at src/components/__tests__/tier-views-consistency.test.ts.
+// 2026-04-16 — Intelligence Reconciliation: removed 'insights' (Momentum, deleted)
+// and 'chapters' (CategoryChapterView, deleted — merged into Results).
+// Evidence lens lands in a later phase; no placeholder tab in the interim.
 export const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
-  core: ['briefing', 'chapters', 'results', 'playbook'],
-  explorer: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights'],
-  invested: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console'],
-  power: ['briefing', 'preemption', 'blindspots', 'chapters', 'results', 'playbook', 'insights', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+  core: ['briefing', 'results', 'playbook'],
+  explorer: ['briefing', 'preemption', 'blindspots', 'results', 'playbook'],
+  invested: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console'],
+  power: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const BADGE_COLORS: Partial<Record<ViewId, string>> = {
   briefing: 'bg-orange-400',
   results: 'bg-orange-400',
   profile: 'bg-amber-400',
-  insights: 'bg-amber-400',
   saved: 'bg-green-400',
 };
 
 export const ViewTabBar = memo(function ViewTabBar() {
   const { t } = useTranslation();
-  const { activeView, resultsCount, windows, profilePct, viewTier, showAllViews, savedCount, wisdomCount } = useAppStore(
+  const { activeView, resultsCount, windows, profilePct, viewTier, showAllViews, savedCount } = useAppStore(
     useShallow((s) => ({
       activeView: s.activeView,
       resultsCount: s.appState.relevanceResults.length,
@@ -51,7 +51,6 @@ export const ViewTabBar = memo(function ViewTabBar() {
       viewTier: s.viewTier,
       showAllViews: s.showAllViews,
       savedCount: Object.values(s.feedbackGiven).filter(f => f === 'save').length,
-      wisdomCount: (s.decisionWindows ?? []).filter(w => w.status === 'open').length,
     })),
   );
   const setActiveView = useAppStore(s => s.setActiveView);
@@ -61,11 +60,9 @@ export const ViewTabBar = memo(function ViewTabBar() {
     if (resultsCount > 0) b.results = true;
     if ((windows ?? []).some(w => w.status === 'open')) b.briefing = true;
     if (profilePct != null && profilePct < 50) b.profile = true;
-    // New notification badges with counts
-    if (wisdomCount > 0) b.insights = wisdomCount;
     if (savedCount > 0) b.saved = savedCount;
     return b;
-  }, [resultsCount, windows, profilePct, wisdomCount, savedCount]);
+  }, [resultsCount, windows, profilePct, savedCount]);
 
   const visibleTabs = useMemo(() => {
     if (showAllViews) return TABS;

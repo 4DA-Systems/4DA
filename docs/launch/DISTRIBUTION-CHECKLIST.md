@@ -30,9 +30,12 @@
 - [ ] Download page with platform detection
 
 ### SmartScreen Reputation
-- [ ] Seed 50+ trusted Windows downloads before public launch
-- [ ] Document SmartScreen bypass in getting started guide
-- [ ] SSL.com EV cert — awaiting org validation
+- [ ] Seed 50+ trusted Windows downloads before public launch (organic reputation build)
+- [x] Document Windows install guide — `docs/launch/WINDOWS-INSTALL.md` (linked from Getting Started + Releases page)
+- [x] Cross-referenced from `docs/GETTING_STARTED.md`
+- [ ] Publish SHA-256 + minisign `.sig` alongside every GitHub Release asset
+- [ ] Add download page banner on 4da.ai with one-line SmartScreen note + "Verify this file" link
+- [ ] **SSL.com EV cert — deferred.** Launch proceeds with verify-by-hash strategy. Auto-updater delivers signed build silently once cert lands.
 
 ## Launch Day Assets
 

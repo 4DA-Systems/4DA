@@ -2,12 +2,11 @@ import { memo, useEffect, useMemo } from 'react';
 import { PulseSummary } from './PulseSummary';
 import { AttentionCards } from './AttentionCards';
 import { IntelligenceFeed } from './IntelligenceFeed';
-import { BriefingWisdomSignal } from '../awe/BriefingWisdomSignal';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance, SourceHealthStatus, FeedbackAction } from '../../types';
 import type { BriefingState } from '../../store/types';
 
-type ActiveView = 'briefing' | 'results' | 'saved' | 'insights' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console';
+type ActiveView = 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console';
 
 interface BriefingContentPanelProps {
   briefing: BriefingState;
@@ -96,9 +95,6 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
         onRecordClick={onRecordClick}
         onViewAll={() => setActiveView('results')}
       />
-
-      {/* Zone 4: AWE Wisdom — pattern-matched signals */}
-      <BriefingWisdomSignal signals={signalItems} />
     </>
   );
 });

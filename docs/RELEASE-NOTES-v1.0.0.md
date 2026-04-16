@@ -20,6 +20,14 @@
 | macOS | Coming soon |
 | Linux | Coming soon |
 
+Every release publishes **SHA-256 checksums** and a **minisign signature** alongside each asset. Verify before running if you want stronger assurance than code signing alone provides — see the [Windows install guide](launch/WINDOWS-INSTALL.md) for the one-line PowerShell command.
+
+### Windows: first-run note
+
+Because 4DA is a newly released app, Windows SmartScreen will prompt for confirmation on first launch (**"Windows protected your PC"**). Click **More info → Run anyway**. This is expected for new releases; SmartScreen reputation builds automatically as downloads accumulate. Signed Windows builds will be delivered silently via the auto-updater when Extended Validation certification completes.
+
+The [Windows install guide](launch/WINDOWS-INSTALL.md) covers SHA-256 verification, minisign signature validation, auto-updates, and antivirus edge cases.
+
 ## Quick Start
 
 1. Download and install

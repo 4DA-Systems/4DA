@@ -11,7 +11,6 @@ import { ResultsView } from './ResultsView';
 // Lazy-loaded views — each only loads when navigated to
 const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m.BriefingView })));
 const SavedItemsView = lazy(() => import('./SavedItemsView').then(m => ({ default: m.SavedItemsView })));
-const Momentum = lazy(() => import('./Momentum').then(m => ({ default: m.Momentum })));
 const SovereignDeveloperProfile = lazy(() => import('./SovereignDeveloperProfile').then(m => ({ default: m.SovereignDeveloperProfile })));
 const ToolkitView = lazy(() => import('./toolkit/ToolkitView').then(m => ({ default: m.ToolkitView })));
 const PlaybookView = lazy(() => import('./PlaybookView').then(m => ({ default: m.PlaybookView })));
@@ -20,7 +19,6 @@ const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m
 const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })));
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
 const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
-const CategoryChapterView = lazy(() => import('./CategoryChapterView').then(m => ({ default: m.CategoryChapterView })));
 const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
 const BlindSpotsView = lazy(() => import('./blindspots/BlindSpotsView'));
 
@@ -35,7 +33,6 @@ const VIEW_LABEL_KEYS: Record<string, string> = {
   blindspots: 'nav.blindspots.label',
   results: 'nav.results',
   profile: 'nav.profile',
-  insights: 'nav.insights',
   saved: 'nav.saved',
   toolkit: 'nav.toolkit',
   playbook: 'nav.playbook',
@@ -85,10 +82,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         <ViewErrorBoundary viewName="Profile">
           <SovereignDeveloperProfile />
         </ViewErrorBoundary>
-      ) : activeView === 'insights' ? (
-        <ViewErrorBoundary viewName="Momentum">
-          <Momentum />
-        </ViewErrorBoundary>
       ) : activeView === 'saved' ? (
         <ViewErrorBoundary viewName="Saved">
           <SavedItemsView />
@@ -108,10 +101,6 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'calibrate' ? (
         <ViewErrorBoundary viewName="System">
           <CalibrationView />
-        </ViewErrorBoundary>
-      ) : activeView === 'chapters' ? (
-        <ViewErrorBoundary viewName="Chapters">
-          <CategoryChapterView />
         </ViewErrorBoundary>
       ) : (
         <ViewErrorBoundary viewName="Results">
