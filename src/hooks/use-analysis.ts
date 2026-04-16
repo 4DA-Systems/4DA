@@ -233,6 +233,12 @@ export function useAnalysis(
           );
         }),
 
+        listen<{ task: string; reason: string }>('calibration-drift', (event) => {
+          useAppStore.getState().addToast('info',
+            i18n.t('analysis.calibrationDrift', { task: event.payload.task }),
+          );
+        }),
+
         listen<{
           narration_type: string;
           message: string;
