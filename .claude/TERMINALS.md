@@ -9,7 +9,21 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 6 — AWE Context Bridge)
+**Started:** 2026-04-17 (same session, post-hygiene cleanup)
+**Hygiene:** 13 unclaimed files resolved in 94551289 (brand copy) + 8a085554 (source reputation).
+**Prior RECON commits:** cd5e31c8, 11a9fc41, 7f873d42, 223d810e, e1dde0f4, 60fb25c9, 702222c0.
+**Scope:** Bridge 4DA's actual user context into AWE transmutations.
+This 4DA-side is lightweight: build a `DeveloperContext` payload from
+ACE + decision_memory + knowledge_decay and ensure `run_awe_transmute`
+passes it via `--context_file`. Full 17-field Rust-side struct expansion
+in AWE itself is out of scope for this phase (that's the AWE repo);
+this phase ships the bridge, not the receiver.
+**Files claimed:**
+- `src-tauri/src/context_commands.rs` or wherever `run_awe_transmute` lives
+- Possibly new `src-tauri/src/awe_bridge.rs`
+- Tests
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-5 done 2026-04-17, session pause):
      Intelligence Reconciliation — collapse phase COMPLETE.
