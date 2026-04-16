@@ -320,10 +320,17 @@ pub struct EvidenceFeed {
     pub total: usize,
     pub critical_count: usize,
     pub high_count: usize,
+
+    /// Optional 0–100 lens-specific health score. Populated by lenses that
+    /// have a meaningful aggregate state — e.g. Blind Spots uses this for
+    /// the coverage index. `None` for lenses where a single number is
+    /// meaningless (e.g. Preemption: alerts are individual, not an
+    /// aggregate). UIs that show a score MUST tooltip its definition.
+    pub score: Option<f32>,
 }
 
 impl EvidenceFeed {
-    /// Build a feed from items, computing the summary counts.
+    /// Build a feed from items, computing the summary counts. No score.
     pub fn from_items(items: Vec<EvidenceItem>) -> Self {
         let total = items.len();
         let critical_count = items
@@ -336,6 +343,14 @@ impl EvidenceFeed {
             total,
             critical_count,
             high_count,
+            score: None,
         }
+    }
+
+    /// Build a feed from items with a lens-specific 0–100 aggregate score.
+    pub fn from_items_with_score(items: Vec<EvidenceItem>, score: f32) -> Self {
+        let mut feed = Self::from_items(items);
+        feed.score = Some(score.clamp(0.0, 100.0));
+        feed
     }
 }

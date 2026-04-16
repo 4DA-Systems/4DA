@@ -7,4 +7,12 @@ import type { EvidenceItem } from "./EvidenceItem";
  * without traversing the items list). Emitted by `get_preemption_alerts`,
  * `get_blind_spots`, and Phase 12's Evidence lens command.
  */
-export type EvidenceFeed = { items: Array<EvidenceItem>, total: number, critical_count: number, high_count: number, };
+export type EvidenceFeed = { items: Array<EvidenceItem>, total: number, critical_count: number, high_count: number, 
+/**
+ * Optional 0–100 lens-specific health score. Populated by lenses that
+ * have a meaningful aggregate state — e.g. Blind Spots uses this for
+ * the coverage index. `None` for lenses where a single number is
+ * meaningless (e.g. Preemption: alerts are individual, not an
+ * aggregate). UIs that show a score MUST tooltip its definition.
+ */
+score: number | null, };

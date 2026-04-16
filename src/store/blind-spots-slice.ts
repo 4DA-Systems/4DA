@@ -1,39 +1,19 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
 import { cmd } from '../lib/commands';
+import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 
-// Types match CommandMap in commands.ts
-interface BlindSpotReport {
-  overall_score: number;
-  uncovered_dependencies: Array<{
-    name: string;
-    dep_type: string;
-    projects_using: string[];
-    days_since_last_signal: number;
-    available_signal_count: number;
-    risk_level: string;
-  }>;
-  stale_topics: Array<{
-    topic: string;
-    last_engagement_days: number;
-    active_deps_in_topic: number;
-    missed_signal_count: number;
-  }>;
-  missed_signals: Array<{
-    item_id: number;
-    title: string;
-    url: string | null;
-    source_type: string;
-    relevance_score: number;
-    created_at: string;
-    why_relevant: string;
-  }>;
-  recommendations: Array<{ action: string; reason: string; priority: string }>;
-  generated_at: string;
-}
+// ============================================================================
+// Intelligence Reconciliation — Phase 4 (2026-04-17)
+// ============================================================================
+// The slice now holds the canonical `EvidenceFeed`. The legacy 4-shape
+// `BlindSpotReport` is gone at the command boundary; `feed.score` carries
+// the overall coverage index, items carry the former uncovered_dependencies /
+// stale_topics / missed_signals / recommendations fused into EvidenceItem
+// shape.
 
 export interface BlindSpotsSlice {
-  blindSpotReport: BlindSpotReport | null;
+  blindSpotReport: EvidenceFeed | null;
   blindSpotsLoading: boolean;
   blindSpotsError: string | null;
   loadBlindSpots: () => Promise<void>;
