@@ -226,10 +226,18 @@ function checkTestCoverage(changedFiles, fileChanges) {
     .map(f => f.file)
     .filter(f => /\.(ts|tsx)$/.test(f) && !f.includes('.test.'));
 
-  // Tests deleted without their source being deleted = regression
+  // Tests deleted without their source being deleted = regression.
+  // Handle both co-located tests (Foo.tsx + Foo.test.tsx) and __tests__/
+  // subdir convention (components/Foo.tsx + components/__tests__/Foo.test.tsx).
   const orphanedTestDeletions = deletedTests.filter(testFile => {
     const baseName = testFile.replace(/\.test\.(ts|tsx)$/, '');
-    return !deletedSources.some(src => src.replace(/\.(ts|tsx)$/, '') === baseName);
+    // Derive the "sibling path" that would exist if the test is in __tests__/.
+    // e.g. src/components/__tests__/Foo → src/components/Foo
+    const siblingPath = baseName.replace(/\/__tests__\//, '/');
+    return !deletedSources.some(src => {
+      const srcBase = src.replace(/\.(ts|tsx)$/, '');
+      return srcBase === baseName || srcBase === siblingPath;
+    });
   });
 
   if (orphanedTestDeletions.length > 0) {
