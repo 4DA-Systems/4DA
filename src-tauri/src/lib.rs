@@ -296,6 +296,7 @@ mod signal_terminal_pages;
 mod signals;
 mod source_config;
 mod source_fetching;
+mod source_reputation;
 pub mod sources;
 mod standing_queries;
 mod standing_queries_evaluation;
