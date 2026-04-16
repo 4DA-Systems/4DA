@@ -9,32 +9,20 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 1 — Dead Code Purge)
-**Started:** 2026-04-16
-**Scope:** Intelligence Reconciliation — delete Momentum + AWE UI panels + vanity components.
-**Files claimed (Phase 1):**
-- `src/components/Momentum.tsx` (DELETE)
-- `src/components/momentum/*` (DELETE tree)
-- `src/components/awe/MomentumWisdomTrajectory.tsx` (DELETE)
-- `src/components/awe/BriefingWisdomSignal.tsx` (DELETE)
-- `src/components/awe/PlaybookWisdomResonance.tsx` (DELETE)
-- `src/components/awe/ProfileWisdomDna.tsx` (DELETE)
-- `src/components/awe/ResultDecisionBacklink.tsx` (DELETE)
-- `src/components/awe/momentum-wisdom-helpers.tsx` (DELETE)
-- `src/components/CompoundAdvantageScore.tsx` (DELETE)
-- `src/components/IntelligenceProfileCard.tsx` (DELETE)
-- `src/components/CategoryChapterView.tsx` (DELETE)
-- Consumers (EDIT to remove imports):
-  - `src/components/briefing/BriefingContentPanel.tsx`
-  - `src/components/PlaybookView.tsx`
-  - `src/components/SovereignDeveloperProfile.tsx`
-  - `src/components/result-item/ResultItemExpanded.tsx`
-  - `src/components/ViewRouter.tsx`
-  - `src/components/ViewTabBar.tsx`
-- Tests (DELETE):
-  - `src/components/__tests__/IntelligenceProfileCard.test.tsx`
-  - `src/components/__tests__/CategoryChapterView.test.tsx` (if exists)
-  - CompoundAdvantageScore tests in `accessibility.test.tsx`
+### T-INTEL-RECON (Phase 2 — EvidenceItem Canonical Type)
+**Started:** 2026-04-16 (continuing same session)
+**Phase 0 commit:** cd5e31c8 (plan lock)
+**Phase 1 commit:** 11a9fc41 (dead code purge, 19 files deleted, 1257/1257 tests green)
+**Scope:** Define canonical EvidenceItem type + EvidenceMaterializer trait. No deletions; pure addition.
+**Files claimed (Phase 2):**
+- `src-tauri/src/evidence/mod.rs` (NEW)
+- `src-tauri/src/evidence/types.rs` (NEW — struct + enums)
+- `src-tauri/src/evidence/materializer.rs` (NEW — trait)
+- `src-tauri/src/evidence/validate.rs` (NEW — runtime validation per schema)
+- `src-tauri/src/evidence/tests.rs` (NEW — roundtrip + validation tests)
+- `src-tauri/src/lib.rs` (EDIT — `mod evidence;`)
+- `src-tauri/Cargo.toml` (EDIT only if new deps needed)
+**Done when:** `cargo test -p fourda evidence::` green, TS bindings generate.
 **Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-MESH Phase 2 (done 2026-04-15, recovered after host crash):
