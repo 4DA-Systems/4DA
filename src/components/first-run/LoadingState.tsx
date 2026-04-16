@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { VoidEngine } from '../void-engine/VoidEngine';
+import { BrandMark } from '../void-engine/BrandMark';
 import { getStageNarration } from '../../utils/first-run-messages';
 import { registerFourdaComponent } from '../../lib/fourda-components';
 import type { Phase, ScanSummary } from './utils';
@@ -24,7 +24,7 @@ function IntelligencePreview({ summary }: { summary: ScanSummary }) {
   return (
     <div className="text-center px-8 max-w-md animate-fade-in">
       <div className="mb-6">
-        <VoidEngine size={80} />
+        <BrandMark size={80} />
       </div>
 
       <h2 className="text-xl font-medium text-white mb-2">
@@ -191,7 +191,7 @@ export function LoadingState({
     return (
       <div className="text-center px-8 max-w-md animate-fade-in">
         <div className="mb-6">
-          <VoidEngine size={80} />
+          <BrandMark size={80} />
         </div>
         <h2 className="text-xl font-medium text-white mb-2">
           {t('firstRun.preparingIntelligence')}
@@ -214,7 +214,7 @@ export function LoadingState({
   return (
     <div className="text-center px-8 max-w-md">
       <div className="mb-6">
-        <VoidEngine size={80} />
+        <BrandMark size={80} />
       </div>
 
       {phase === 'preparing' && (

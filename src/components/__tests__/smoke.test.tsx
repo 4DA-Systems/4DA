@@ -262,7 +262,7 @@ import { CompoundAdvantageScore } from '../CompoundAdvantageScore';
 import { AutophagyInsights } from '../AutophagyInsights';
 import { LearnedBehaviorPanel } from '../LearnedBehaviorPanel';
 import { SplashScreen } from '../SplashScreen';
-import { VoidHeartbeat } from '../void-engine/VoidHeartbeat';
+import { BrandMark } from '../void-engine/BrandMark';
 // ---------------------------------------------------------------------------
 // Shared test data
 // ---------------------------------------------------------------------------
@@ -521,9 +521,9 @@ const SMOKE_COMPONENTS: Array<{
     render: () => <SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />,
   },
   {
-    name: 'VoidHeartbeat (default signal)',
+    name: 'BrandMark (default signal)',
     render: () => (
-      <VoidHeartbeat
+      <BrandMark
         signal={{
           pulse: 0, heat: 0, burst: 0, morph: 0, error: 0,
           staleness: 0, item_count: 0, signal_intensity: 0,
