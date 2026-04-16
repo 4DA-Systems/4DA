@@ -1,30 +1,17 @@
 import { useVoidSignals } from '../../hooks/use-void-signals';
-import { VoidHeartbeat } from './VoidHeartbeat';
 import { PentachoronMark } from './PentachoronMark';
-
-export type VoidEngineVariant = 'ambient' | 'pentachoron';
 
 interface VoidEngineProps {
   size?: number;
-  variant?: VoidEngineVariant;
 }
 
 /**
- * Void Engine - renders the signal-aware heartbeat glow.
- * Production component: WebGPU/WebGL2 animation driven by real backend events.
+ * Void Engine — renders the signal-responsive pentachoron at large sizes.
  *
- * Variants:
- * - 'ambient' (default): fourda-ambient-intelligence — organic pulse shader
- * - 'pentachoron': fourda-pentachoron — 4D wireframe rotating with golden-ratio speeds
+ * Used in GeometryShowcase and similar contexts where the full 4D wireframe
+ * is displayed at 200px+. For app bar / small brand mark usage, use BrandMark instead.
  */
-export function VoidEngine({ size = 200, variant = 'ambient' }: VoidEngineProps) {
+export function VoidEngine({ size = 200 }: VoidEngineProps) {
   const signal = useVoidSignals();
-
-  if (variant === 'pentachoron') {
-    return <PentachoronMark signal={signal} size={size} />;
-  }
-
-  return (
-    <VoidHeartbeat signal={signal} size={size} />
-  );
+  return <PentachoronMark signal={signal} size={size} />;
 }
