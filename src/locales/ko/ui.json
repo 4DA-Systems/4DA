@@ -65,7 +65,7 @@
   "analysis.digestGenerated": "다이제스트 생성: {{count}}개 항목",
   "analysis.sourceError": "{{source}}: {{error}}",
   "analysis.stackDetected": "스택 자동 감지: {{stack}}. 스코어링이 일치하는 소스를 우선합니다.",
-${translations[ko]}
+  "analysis.calibrationDrift": "{{task}}의 캘리브레이션 곡선이 만료됨 — 다음 상호작용에서 재보정합니다.",
   "analysis.keyboardTriggered": "분석 시작됨",
   "appbar.searchPlaceholder": "인텔리전스 검색...",
   "appbar.analyzing": "분석 중...",
