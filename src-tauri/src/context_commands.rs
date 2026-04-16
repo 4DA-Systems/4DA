@@ -514,22 +514,18 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
         _ => {} // structured is default
     }
 
-    // Inject developer profile context for personalized wisdom
+    // Inject developer context for personalized wisdom.
+    // Intelligence Reconciliation — Phase 6 (2026-04-17): the pre-Phase-6
+    // bridge carried 5 thin fields; the full 17-field payload now assembled
+    // in `awe_bridge::assemble_developer_context` lets AWE reason about the
+    // rig, scale, history, and gaps — not just the stack. AWE's own
+    // decision_count + feedback_coverage come from its wisdom graph, so
+    // we pass 0 here and let AWE fill them in.
     let ctx_path = std::env::temp_dir().join("awe_dev_ctx.json");
     if let Ok(conn) = crate::open_db_connection() {
         let profile = crate::sovereign_developer_profile::assemble_profile(&conn);
-        let dev_ctx = serde_json::json!({
-            "primary_stack": profile.stack.primary_stack,
-            "adjacent_tech": profile.stack.adjacent_tech,
-            "domain_concerns": [],
-            "infrastructure_summary": format!(
-                "{} RAM, GPU: {}, {}",
-                profile.infrastructure.ram.get("total").map_or("unknown", std::string::String::as_str),
-                profile.infrastructure.gpu_tier,
-                profile.infrastructure.os.get("name").map_or("unknown OS", std::string::String::as_str),
-            ),
-            "identity_summary": profile.identity_summary,
-        });
+        let dev_ctx =
+            crate::awe_bridge::assemble_developer_context(&conn, &profile, 0, 0.0);
         if let Ok(json) = serde_json::to_string(&dev_ctx) {
             if std::fs::write(&ctx_path, &json).is_ok() {
                 args.push("--context-file".into());
