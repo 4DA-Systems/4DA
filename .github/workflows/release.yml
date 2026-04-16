@@ -163,6 +163,11 @@ jobs:
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
+          # Explicit — tauri-action generates and merges latest.json across
+          # matrix jobs when updater signing is configured. The updater
+          # endpoint in tauri.conf.json (releases/latest/download/latest.json)
+          # depends on this file existing on every release.
+          includeUpdaterJson: true
 
       - name: Place AWE sidecar in bundle
         shell: bash
@@ -356,6 +361,47 @@ jobs:
           else
             echo "::warning::No per-platform SHASUMS256 files found — consolidated file not created."
           fi
+
+      - name: Verify release artifacts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          TAG="${GITHUB_REF#refs/tags/}"
+
+          # Collect asset names once; reuse for each check.
+          ASSETS=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          echo "Release assets:"
+          echo "$ASSETS" | sed 's/^/  - /'
+
+          # Required artifacts — fail the release if any are missing.
+          REQUIRED=(
+            "latest.json"
+            "SHASUMS256.txt"
+          )
+
+          MISSING=()
+          for NAME in "${REQUIRED[@]}"; do
+            if ! echo "$ASSETS" | grep -qx "$NAME"; then
+              MISSING+=("$NAME")
+            fi
+          done
+
+          # Desirable-but-not-fatal: at least one installer per platform.
+          # We warn on absence, don't fail — partial releases can still be useful.
+          for PATTERN in "\\.exe$" "\\.dmg$" "\\.AppImage$"; do
+            if ! echo "$ASSETS" | grep -qE "$PATTERN"; then
+              echo "::warning::No asset matches $PATTERN — platform coverage incomplete."
+            fi
+          done
+
+          if [[ ${#MISSING[@]} -gt 0 ]]; then
+            echo "::error::Release is missing required artifacts:"
+            printf '  - %s\n' "${MISSING[@]}"
+            exit 1
+          fi
+          echo "All required artifacts present."
 
       - name: Publish release
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7

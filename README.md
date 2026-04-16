@@ -14,11 +14,13 @@
 
 ---
 
-4DA scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs 2+ independent signals to survive. Everything else is rejected.
+**4DA reads the internet for developers — privately, locally — and gets sharper every day.**
+
+It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs 2+ independent signals to survive. Everything else is rejected.
 
 Typical rejection rate: **99%+**. What's left is yours.
 
-Privacy-first. Runs locally. Zero telemetry. BYOK. Your data never leaves your machine.
+Privacy-first. Runs locally. Zero telemetry. BYOK. Your data never leaves your machine. It learns from how you engage with what it shows you — yesterday's noise becomes tomorrow's signal.
 
 <p align="center">
   <img src="site/screenshots/feed-signals.png" alt="Scored feed with signal classification and relevance tags" width="800" />
@@ -97,7 +99,15 @@ These are good tools that solve different problems. 4DA solves a specific one: s
 | **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 | **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 
-Every release publishes SHA-256 checksums and a minisign signature — verify before running.
+Every release publishes `SHASUMS256.txt` (all platforms, canonical) plus per-file `<artifact>.sha256` sidecars. Verify before running:
+
+```bash
+# Bash (macOS/Linux/Git-Bash):  compare against SHASUMS256.txt
+sha256sum -c SHASUMS256.txt --ignore-missing
+
+# PowerShell (Windows):  compute and compare one file
+Get-FileHash -Algorithm SHA256 .\4DA-Setup-1.0.0.exe
+```
 
 > **Windows users:** because 4DA is a new release, SmartScreen will prompt on first launch. Click **More info → Run anyway**. Signed Windows builds deliver silently via the auto-updater once EV certification completes. See the [Windows install guide](docs/launch/WINDOWS-INSTALL.md) for verification steps.
 
