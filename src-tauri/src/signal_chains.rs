@@ -9,6 +9,10 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::error::Result;
+use crate::evidence::{
+    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
+    EvidenceKind, LensHints, Urgency,
+};
 
 // ============================================================================
 // Types
@@ -603,6 +607,138 @@ pub struct SignalChainWithPrediction {
     pub prediction: ChainPrediction,
 }
 
+// ============================================================================
+// EvidenceItem conversion (Intelligence Reconciliation — Phase 5)
+// ============================================================================
+
+fn priority_str_to_urgency(priority: &str) -> Urgency {
+    match priority {
+        "critical" => Urgency::Critical,
+        "high" => Urgency::High,
+        "medium" => Urgency::Medium,
+        _ => Urgency::Watch,
+    }
+}
+
+fn truncate_chain_title(s: &str) -> String {
+    s.trim_end_matches('.').chars().take(120).collect()
+}
+
+fn truncate_chain_note(s: &str) -> String {
+    s.chars().take(200).collect()
+}
+
+fn chain_link_to_citation(link: &ChainLink) -> EvidenceCitation {
+    let freshness_days =
+        chrono::NaiveDateTime::parse_from_str(&link.timestamp, "%Y-%m-%d %H:%M:%S")
+            .map(|dt| {
+                let secs = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
+                (secs as f32 / 86_400.0).max(0.0)
+            })
+            .unwrap_or(0.0);
+    EvidenceCitation {
+        source: link.signal_type.clone(),
+        title: truncate_chain_title(&link.title),
+        url: None,
+        freshness_days,
+        relevance_note: truncate_chain_note(&link.description),
+    }
+}
+
+impl SignalChainWithPrediction {
+    /// Convert to the canonical `EvidenceItem` with `kind: Chain`.
+    /// Maps chain's overall_priority → urgency; the prediction's forecast
+    /// becomes the explanation; links become citations. Lens hints:
+    /// preemption + evidence (chains are forward-looking but also
+    /// compound evidence of a developing pattern).
+    pub fn to_evidence_item(&self) -> EvidenceItem {
+        let title = truncate_chain_title(&format!("Chain: {}", self.chain.chain_name));
+        let explanation = if self.prediction.forecast.is_empty() {
+            self.chain.suggested_action.clone()
+        } else {
+            self.prediction.forecast.clone()
+        };
+
+        // Build citations from chain links (cap at 5 for scannable payload).
+        let evidence: Vec<EvidenceCitation> = if self.chain.links.is_empty() {
+            // Synthesize an inferred citation for the schema.
+            vec![EvidenceCitation {
+                source: "signal-chain-detector".to_string(),
+                title: truncate_chain_title(&self.chain.chain_name),
+                url: None,
+                freshness_days: 0.0,
+                relevance_note: truncate_chain_note("no concrete links yet"),
+            }]
+        } else {
+            self.chain
+                .links
+                .iter()
+                .take(5)
+                .map(chain_link_to_citation)
+                .collect()
+        };
+
+        // Extract affected deps from the chain_name heuristically: chain
+        // names often include the dep ("tokio — CVE + ripout + patch").
+        // Leave empty when ambiguous.
+        let affected_deps: Vec<String> = self
+            .chain
+            .chain_name
+            .split(|c: char| !c.is_alphanumeric() && c != '-')
+            .filter(|s| s.len() >= 3 && s.len() <= 40)
+            .take(3)
+            .map(str::to_lowercase)
+            .collect();
+
+        let suggested_actions = if self.chain.suggested_action.is_empty() {
+            vec![EvidenceAction {
+                action_id: "investigate".to_string(),
+                label: "Investigate".to_string(),
+                description: "Review the signal chain's development.".to_string(),
+            }]
+        } else {
+            vec![
+                EvidenceAction {
+                    action_id: "investigate".to_string(),
+                    label: "Investigate".to_string(),
+                    description: self.chain.suggested_action.clone(),
+                },
+                EvidenceAction {
+                    action_id: "snooze_7d".to_string(),
+                    label: "Snooze 7 days".to_string(),
+                    description: "Pause this chain from surfacing for a week.".to_string(),
+                },
+            ]
+        };
+
+        EvidenceItem {
+            id: format!("sc_{}", self.chain.id),
+            kind: EvidenceKind::Chain,
+            title,
+            explanation,
+            confidence: Confidence::heuristic(
+                (self.prediction.confidence as f32).clamp(0.0, 1.0),
+            ),
+            urgency: priority_str_to_urgency(&self.chain.overall_priority),
+            reversibility: None,
+            evidence,
+            affected_projects: Vec::new(),
+            affected_deps,
+            suggested_actions,
+            precedents: Vec::new(),
+            refutation_condition: None,
+            lens_hints: LensHints {
+                briefing: false,
+                preemption: true,
+                blind_spots: false,
+                evidence: true,
+            },
+            created_at: chrono::Utc::now().timestamp_millis(),
+            expires_at: None,
+        }
+    }
+}
+
 #[tauri::command]
 pub fn get_signal_chains() -> Result<Vec<SignalChain>> {
     crate::settings::require_signal_feature("get_signal_chains")?;
@@ -612,20 +748,37 @@ pub fn get_signal_chains() -> Result<Vec<SignalChain>> {
 
 /// Get signal chains with lifecycle predictions (Signal-gated)
 #[tauri::command]
-pub fn get_signal_chains_predicted() -> Result<Vec<SignalChainWithPrediction>> {
+pub fn get_signal_chains_predicted() -> Result<EvidenceFeed> {
     crate::settings::require_signal_feature("get_signal_chains_predicted")?;
     let conn = crate::open_db_connection()?;
     let chains = detect_chains(&conn)?;
-    Ok(chains
+    let items: Vec<EvidenceItem> = chains
         .into_iter()
-        .map(|c| {
+        .filter_map(|c| {
             let prediction = predict_chain_lifecycle(&c);
-            SignalChainWithPrediction {
+            if c.resolution != ChainResolution::Open {
+                return None;
+            }
+            let wrapped = SignalChainWithPrediction {
                 chain: c,
                 prediction,
+            };
+            let item = wrapped.to_evidence_item();
+            match crate::evidence::validate_item(&item) {
+                Ok(()) => Some(item),
+                Err(e) => {
+                    tracing::warn!(
+                        target: "4da::evidence::validate",
+                        id = %item.id,
+                        error = %e,
+                        "dropped signal-chain item failing schema validation"
+                    );
+                    None
+                }
             }
         })
-        .collect())
+        .collect();
+    Ok(EvidenceFeed::from_items(items))
 }
 
 #[tauri::command]
@@ -639,4 +792,140 @@ pub fn resolve_signal_chain(chain_id: String, resolution: String) -> Result<()> 
         _ => ChainResolution::Open,
     };
     resolve_chain(&conn, &chain_id, res)
+}
+
+// ============================================================================
+// Tests — EvidenceItem conversion (Intelligence Reconciliation — Phase 5)
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_link(signal_type: &str, title: &str) -> ChainLink {
+        ChainLink {
+            signal_type: signal_type.to_string(),
+            source_item_id: 1,
+            title: title.to_string(),
+            timestamp: "2026-04-15 12:00:00".to_string(),
+            description: format!("Signal from {signal_type}"),
+        }
+    }
+
+    fn sample_chain_with_prediction() -> SignalChainWithPrediction {
+        SignalChainWithPrediction {
+            chain: SignalChain {
+                id: "chain_tokio_cve".to_string(),
+                chain_name: "tokio CVE disclosure + patch sequence".to_string(),
+                links: vec![
+                    sample_link("cve", "CVE-2026-1234 disclosed"),
+                    sample_link("blog", "Tokio maintainers respond"),
+                    sample_link("release", "Tokio 1.37 released with fix"),
+                ],
+                overall_priority: "high".to_string(),
+                resolution: ChainResolution::Open,
+                suggested_action: "Upgrade tokio to 1.37 immediately.".to_string(),
+                confidence: 0.78,
+                created_at: "2026-04-15 00:00:00".to_string(),
+                updated_at: "2026-04-17 00:00:00".to_string(),
+            },
+            prediction: ChainPrediction {
+                phase: ChainPhase::Escalating,
+                intervals_hours: vec![36.0, 24.0, 12.0],
+                acceleration: -0.3,
+                predicted_next_hours: Some(8.0),
+                confidence: 0.72,
+                forecast: "Escalating — expect patch guidance within the day.".to_string(),
+            },
+        }
+    }
+
+    #[test]
+    fn chain_maps_to_chain_kind() {
+        let item = sample_chain_with_prediction().to_evidence_item();
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Chain);
+    }
+
+    #[test]
+    fn chain_priority_maps_to_urgency() {
+        let mut c = sample_chain_with_prediction();
+        c.chain.overall_priority = "critical".to_string();
+        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::Critical);
+        c.chain.overall_priority = "high".to_string();
+        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::High);
+        c.chain.overall_priority = "medium".to_string();
+        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::Medium);
+        c.chain.overall_priority = "low".to_string();
+        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::Watch);
+    }
+
+    #[test]
+    fn chain_forecast_is_explanation() {
+        let item = sample_chain_with_prediction().to_evidence_item();
+        assert!(item.explanation.contains("Escalating"));
+    }
+
+    #[test]
+    fn chain_falls_back_to_suggested_action_when_no_forecast() {
+        let mut c = sample_chain_with_prediction();
+        c.prediction.forecast.clear();
+        let item = c.to_evidence_item();
+        assert_eq!(item.explanation, "Upgrade tokio to 1.37 immediately.");
+    }
+
+    #[test]
+    fn chain_citations_built_from_links() {
+        let item = sample_chain_with_prediction().to_evidence_item();
+        assert_eq!(item.evidence.len(), 3);
+        assert_eq!(item.evidence[0].source, "cve");
+    }
+
+    #[test]
+    fn chain_without_links_synthesizes_citation() {
+        let mut c = sample_chain_with_prediction();
+        c.chain.links.clear();
+        let item = c.to_evidence_item();
+        assert_eq!(item.evidence.len(), 1);
+        assert_eq!(item.evidence[0].source, "signal-chain-detector");
+    }
+
+    #[test]
+    fn chain_caps_citations_at_5() {
+        let mut c = sample_chain_with_prediction();
+        c.chain.links = (0..10)
+            .map(|i| sample_link("hn", &format!("link #{i}")))
+            .collect();
+        let item = c.to_evidence_item();
+        assert_eq!(item.evidence.len(), 5);
+    }
+
+    #[test]
+    fn chain_lens_hints_preemption_and_evidence() {
+        let item = sample_chain_with_prediction().to_evidence_item();
+        assert!(item.lens_hints.preemption);
+        assert!(item.lens_hints.evidence);
+        assert!(!item.lens_hints.briefing);
+        assert!(!item.lens_hints.blind_spots);
+    }
+
+    #[test]
+    fn chain_passes_schema_validation() {
+        let item = sample_chain_with_prediction().to_evidence_item();
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn chain_confidence_clamps_out_of_range() {
+        let mut c = sample_chain_with_prediction();
+        c.prediction.confidence = 1.5;
+        let item = c.to_evidence_item();
+        assert!(item.confidence.value >= 0.0 && item.confidence.value <= 1.0);
+    }
+
+    #[test]
+    fn chain_extracts_affected_deps_from_name() {
+        let item = sample_chain_with_prediction().to_evidence_item();
+        // "tokio CVE disclosure + patch sequence" → tokens ≥3 chars
+        assert!(item.affected_deps.iter().any(|d| d == "tokio"));
+    }
 }
