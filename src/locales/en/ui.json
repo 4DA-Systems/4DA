@@ -1,6 +1,8 @@
 {
   "app.title": "4DA",
   "app.tagline": "All signal. No feed.",
+  "app.description": "4DA reads the internet for developers — privately, locally — and gets sharper every day.",
+  "app.descriptionLong": "It learns from how you engage with what it shows you. Yesterday's noise becomes tomorrow's signal.",
   "app.skipToContent": "Skip to main content",
   "app.viewChanged": "Navigated to {{view}}",
   "header.settings": "Settings",
@@ -549,7 +551,7 @@
   "browser.hint": "Run <code>npm run tauri dev</code> or launch the installed app.",
   "onboarding.welcome.title": "Welcome to 4DA",
   "onboarding.welcome.tagline": "All signal. No feed.",
-  "onboarding.welcome.description": "4DA discovers what you care about from your projects and surfaces relevant content from across the internet - before you know you need it.",
+  "onboarding.welcome.description": "4DA reads the internet for developers — privately, locally — and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal.",
   "onboarding.welcome.privateTitle": "100% Private",
   "onboarding.welcome.privateDesc": "All processing happens locally",
   "onboarding.welcome.autonomousTitle": "Autonomous",
