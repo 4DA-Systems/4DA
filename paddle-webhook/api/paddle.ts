@@ -5,17 +5,22 @@
  * Deploy as a Vercel serverless function.
  *
  * Flow:
- *   1. Customer buys Signal tier on Paddle checkout
+ *   1. Customer buys Signal tier on Paddle checkout (pass email via custom_data)
  *   2. Paddle fires subscription.created webhook → this endpoint
- *   3. This endpoint creates a Keygen license with tier metadata
- *   4. Paddle emails the license key to the customer (via fulfillment)
- *   5. Customer pastes key in 4DA → Keygen validates → Signal tier unlocked
+ *   3. This endpoint checks for existing license (idempotency), creates one if new
+ *   4. This endpoint emails the license key + activation deep link to the customer
+ *   5. Customer clicks "Activate in 4DA" → 4da://activate?key=... → Signal unlocked
  *
  * Environment variables (set in Vercel dashboard):
  *   PADDLE_WEBHOOK_SECRET  — from Paddle dashboard → Notifications → Secret
  *   KEYGEN_ACCOUNT_ID      — "runyourempirehq"
- *   KEYGEN_PRODUCT_TOKEN   — from Keygen dashboard → API Tokens
+ *   KEYGEN_PRODUCT_TOKEN   — from Keygen dashboard → API Tokens (admin or product)
  *   KEYGEN_POLICY_ID       — the Keygen policy for Signal tier licenses
+ *   RESEND_API_KEY         — from Resend dashboard → API Keys (optional but recommended)
+ *   RESEND_FROM_EMAIL      — e.g. "4DA <licenses@4da.ai>" (required if RESEND_API_KEY set)
+ *
+ * If RESEND_* is not set, the license is still created — you'll need to deliver
+ * it via Paddle's custom fulfillment or a manual follow-up. Logs show the key.
  */
 
 import { createHmac, timingSafeEqual } from "crypto";
@@ -46,6 +51,14 @@ interface KeygenLicense {
     key: string;
     status: string;
     metadata: Record<string, string>;
+  };
+}
+
+interface PaddleCustomer {
+  data: {
+    id: string;
+    email: string;
+    name?: string;
   };
 }
 
@@ -88,14 +101,44 @@ function verifyPaddleSignature(
 
 const KEYGEN_BASE = "https://api.keygen.sh/v1/accounts";
 
+/** Look up an existing license by Paddle subscription ID. Returns null if not found. */
+async function findKeygenLicenseBySubscription(
+  accountId: string,
+  token: string,
+  paddleSubscriptionId: string
+): Promise<KeygenLicense | null> {
+  const url = `${KEYGEN_BASE}/${accountId}/licenses?metadata[paddleSubscriptionId]=${paddleSubscriptionId}&limit=1`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/vnd.api+json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) return null;
+
+  const json = await response.json();
+  const licenses = json.data as KeygenLicense[];
+  return licenses.length > 0 ? licenses[0] ?? null : null;
+}
+
 async function createKeygenLicense(
   accountId: string,
   token: string,
   policyId: string,
   paddleSubscriptionId: string,
-  paddleCustomerId: string
+  paddleCustomerId: string,
+  customerEmail: string | null
 ): Promise<KeygenLicense> {
   const url = `${KEYGEN_BASE}/${accountId}/licenses`;
+
+  const metadata: Record<string, string> = {
+    paddleSubscriptionId,
+    paddleCustomerId,
+    tier: "signal",
+  };
+  if (customerEmail) metadata.customerEmail = customerEmail;
 
   const response = await fetch(url, {
     method: "POST",
@@ -107,13 +150,7 @@ async function createKeygenLicense(
     body: JSON.stringify({
       data: {
         type: "licenses",
-        attributes: {
-          metadata: {
-            paddleSubscriptionId,
-            paddleCustomerId,
-            tier: "signal",
-          },
-        },
+        attributes: { metadata },
         relationships: {
           policy: {
             data: { type: "policies", id: policyId },
@@ -139,7 +176,6 @@ async function suspendKeygenLicense(
   token: string,
   paddleSubscriptionId: string
 ): Promise<void> {
-  // Find the license by Paddle subscription ID metadata
   const searchUrl = `${KEYGEN_BASE}/${accountId}/licenses?metadata[paddleSubscriptionId]=${paddleSubscriptionId}`;
 
   const searchResponse = await fetch(searchUrl, {
@@ -232,6 +268,122 @@ async function revokeKeygenLicense(
 }
 
 // ---------------------------------------------------------------------------
+// Customer email resolution
+// ---------------------------------------------------------------------------
+
+/** Fetch customer email from Paddle API as fallback when custom_data doesn't have it. */
+async function fetchPaddleCustomerEmail(
+  paddleApiKey: string | undefined,
+  customerId: string
+): Promise<string | null> {
+  if (!paddleApiKey) return null;
+  try {
+    const response = await fetch(
+      `https://api.paddle.com/customers/${customerId}`,
+      { headers: { Authorization: `Bearer ${paddleApiKey}` } }
+    );
+    if (!response.ok) return null;
+    const json = (await response.json()) as PaddleCustomer;
+    return json.data?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Email delivery (Resend)
+// ---------------------------------------------------------------------------
+
+function buildLicenseEmailHtml(licenseKey: string): string {
+  const activateUrl = `4da://activate?key=${encodeURIComponent(licenseKey)}`;
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Your 4DA Signal license</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 40px auto; color: #1a1a1a; line-height: 1.55;">
+  <h1 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Welcome to 4DA Signal</h1>
+  <p style="color: #555; margin-top: 0;">Your license key is below. Keep it somewhere safe — you'll need it to activate Signal on each device you install 4DA on.</p>
+
+  <div style="background: #f5f5f5; border: 1px solid #e5e5e5; border-radius: 8px; padding: 20px; margin: 24px 0; font-family: 'SF Mono', Consolas, monospace; font-size: 14px; word-break: break-all;">
+    ${licenseKey}
+  </div>
+
+  <p style="margin-bottom: 24px;">
+    <a href="${activateUrl}" style="display: inline-block; background: #D4AF37; color: #0A0A0A; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+      Activate in 4DA
+    </a>
+  </p>
+
+  <p style="color: #666; font-size: 13px;">
+    If the button doesn't work, open 4DA, go to <strong>Settings → License</strong>, and paste your key.
+  </p>
+
+  <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;">
+
+  <p style="color: #666; font-size: 13px;">
+    Need help? Reply to this email or visit
+    <a href="https://4da.ai/support" style="color: #1a1a1a;">4da.ai/support</a>.
+  </p>
+
+  <p style="color: #999; font-size: 12px; margin-top: 24px;">
+    4DA Systems Pty Ltd · ACN 696 078 841<br>
+    This email was sent because you purchased a Signal subscription.
+  </p>
+</body>
+</html>`;
+}
+
+function buildLicenseEmailText(licenseKey: string): string {
+  return [
+    "Welcome to 4DA Signal",
+    "",
+    "Your license key:",
+    licenseKey,
+    "",
+    "Activate in 4DA:",
+    `4da://activate?key=${encodeURIComponent(licenseKey)}`,
+    "",
+    "If the deep link doesn't work, open 4DA, go to Settings → License,",
+    "and paste your key.",
+    "",
+    "Need help? Reply to this email or visit https://4da.ai/support",
+    "",
+    "— 4DA Systems Pty Ltd (ACN 696 078 841)",
+  ].join("\n");
+}
+
+async function sendLicenseEmail(
+  apiKey: string,
+  fromEmail: string,
+  toEmail: string,
+  licenseKey: string
+): Promise<void> {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: fromEmail,
+      to: toEmail,
+      subject: "Your 4DA Signal license",
+      html: buildLicenseEmailHtml(licenseKey),
+      text: buildLicenseEmailText(licenseKey),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `Resend send failed (${response.status}): ${errorBody}`
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Webhook handler
 // ---------------------------------------------------------------------------
 
@@ -246,9 +398,13 @@ export default async function handler(req: Request): Promise<Response> {
   const policyId = process.env.KEYGEN_POLICY_ID;
 
   if (!secret || !accountId || !token || !policyId) {
-    console.error("Missing environment variables");
+    console.error("Missing required environment variables");
     return new Response("Server configuration error", { status: 500 });
   }
+
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const resendFromEmail = process.env.RESEND_FROM_EMAIL;
+  const paddleApiKey = process.env.PADDLE_API_KEY;
 
   const rawBody = await req.text();
   const signature = req.headers.get("paddle-signature");
@@ -266,52 +422,121 @@ export default async function handler(req: Request): Promise<Response> {
 
   const subscriptionId = event.data.id;
   const customerId = event.data.customer_id;
+  const notificationId = event.notification_id;
 
   try {
     switch (event.event_type) {
-      // New subscription — create license
+      // New subscription — create license (idempotent) + email
       case "subscription.created":
       case "subscription.activated": {
-        const license = await createKeygenLicense(
+        // Idempotency: skip if license already exists for this subscription.
+        // Paddle retries on 5xx, so this webhook can be delivered multiple times.
+        const existing = await findKeygenLicenseBySubscription(
           accountId,
           token,
-          policyId,
-          subscriptionId,
-          customerId
+          subscriptionId
         );
-        console.log(
-          `License created: ${license.attributes.key} for subscription ${subscriptionId}`
-        );
+
+        let license: KeygenLicense;
+        if (existing) {
+          license = existing;
+          console.log(
+            `[${notificationId}] License already exists for ${subscriptionId}: ${license.attributes.key}`
+          );
+        } else {
+          // Resolve customer email: custom_data first, then Paddle API fallback
+          let customerEmail = event.data.custom_data?.email ?? null;
+          if (!customerEmail) {
+            customerEmail = await fetchPaddleCustomerEmail(
+              paddleApiKey,
+              customerId
+            );
+          }
+
+          license = await createKeygenLicense(
+            accountId,
+            token,
+            policyId,
+            subscriptionId,
+            customerId,
+            customerEmail
+          );
+          console.log(
+            `[${notificationId}] License created: ${license.attributes.key} for ${subscriptionId}`
+          );
+        }
+
+        // Email the license key. Non-fatal: if email fails, the license is
+        // still valid and the customer can retrieve it from Paddle's support
+        // channel or a manual lookup.
+        if (resendApiKey && resendFromEmail) {
+          const emailTo =
+            license.attributes.metadata.customerEmail ||
+            event.data.custom_data?.email ||
+            (await fetchPaddleCustomerEmail(paddleApiKey, customerId));
+
+          if (emailTo) {
+            try {
+              await sendLicenseEmail(
+                resendApiKey,
+                resendFromEmail,
+                emailTo,
+                license.attributes.key
+              );
+              console.log(
+                `[${notificationId}] License emailed to ${emailTo}`
+              );
+            } catch (emailError) {
+              console.error(
+                `[${notificationId}] Email send failed: ${emailError}. License key: ${license.attributes.key}`
+              );
+            }
+          } else {
+            console.warn(
+              `[${notificationId}] No customer email resolved — skipping send. License key: ${license.attributes.key}`
+            );
+          }
+        } else {
+          console.warn(
+            `[${notificationId}] Resend not configured — license key not emailed automatically. Key: ${license.attributes.key}`
+          );
+        }
         break;
       }
 
-      // Payment failed or subscription paused — suspend license
       case "subscription.past_due":
       case "subscription.paused": {
         await suspendKeygenLicense(accountId, token, subscriptionId);
-        console.log(`License suspended for subscription ${subscriptionId}`);
+        console.log(
+          `[${notificationId}] License suspended for ${subscriptionId}`
+        );
         break;
       }
 
-      // Subscription resumed — reinstate license
       case "subscription.resumed": {
         await reinstateKeygenLicense(accountId, token, subscriptionId);
-        console.log(`License reinstated for subscription ${subscriptionId}`);
+        console.log(
+          `[${notificationId}] License reinstated for ${subscriptionId}`
+        );
         break;
       }
 
-      // Subscription canceled — revoke license
       case "subscription.canceled": {
         await revokeKeygenLicense(accountId, token, subscriptionId);
-        console.log(`License revoked for subscription ${subscriptionId}`);
+        console.log(
+          `[${notificationId}] License revoked for ${subscriptionId}`
+        );
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${event.event_type}`);
+        console.log(
+          `[${notificationId}] Unhandled event type: ${event.event_type}`
+        );
     }
   } catch (error) {
-    console.error(`Webhook processing error: ${error}`);
+    console.error(`[${notificationId}] Processing error: ${error}`);
+    // Return 500 so Paddle retries. Idempotency keeps this safe.
     return new Response("Processing error", { status: 500 });
   }
 
