@@ -9,23 +9,34 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 8 — Curated Domain Corpus)
-**Started:** 2026-04-17 (same session)
-**Prior RECON commits:** 0-6 + Phase 7 68e18a37.
-**Scope:** Ship a hand-annotated corpus of common developer decisions
-(framework, DB, testing, deploy, state mgmt, etc.) bundled in the app
-so users with light git history still get useful precedents on Day 0.
-**Design:** ~30 decisions to start (incremental — 200 is the v1 goal,
-but we ship what's quality-vetted, not what's padded). Same
-SeededDecision shape as git miner output; loaded via same seeder.
-**Files claimed:**
-- `data/seed/decisions.jsonl` (NEW)
-- `src-tauri/src/seed_corpus.rs` (NEW — loader + embed)
-- `src-tauri/src/lib.rs` (EDIT — mod + command reg)
-- `src/lib/commands.ts` (EDIT)
-**Done when:** tests load ≥20 decisions from the bundled corpus,
-all pass SeededDecision schema, domain coverage ≥6 categories.
-**Commit Lock:** HELD at end of phase
+_No active terminals._
+
+<!-- T-INTEL-RECON (Phases 0-8 + 2 hygiene recoveries done 2026-04-17):
+     Intelligence Reconciliation + Cold Start complete.
+
+     Session commits:
+       cd5e31c8 — Phase 0 plan lock
+       11a9fc41 — Phase 1 dead code purge (19 files)
+       7f873d42 — Phase 2 EvidenceItem canonical type
+       223d810e — Phase 3 Preemption → EvidenceFeed
+       e1dde0f4 — Phase 4 Blind Spots → EvidenceFeed
+       60fb25c9 — Phase 5 Knowledge Decay + Signal Chains → EvidenceFeed
+       702222c0 — mid-session lock release
+       94551289 — hygiene: brand tagline rollout (5 files)
+       8a085554 — hygiene: source reputation feature (8 files)
+       31fa095d — Phase 6 AWE Context Bridge (5 → 17 fields)
+       fe99ae68 — lock release
+       68e18a37 — Phase 7 Git Decision Miner (Cold Start Layer 1)
+       62fce050 — Phase 8 Curated Seed Corpus (Cold Start Layer 2)
+
+     Rust test deltas (intelligence scope):
+       Phase 0 baseline: 2933
+       After Phase 8:    3099 (+166 tests net)
+
+     Next (Phase 9): AWE Spine Wiring — every EvidenceItem gets its
+     explanation + calibrated confidence + precedent lookup from AWE,
+     not hand-rolled in each materializer. -->
+
 
 <!-- T-INTEL-RECON (Phases 0-6 + 2 hygiene recoveries done 2026-04-17):
      Intelligence Reconciliation — collapse phase + bridge complete.
