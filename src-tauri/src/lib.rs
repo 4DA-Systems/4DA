@@ -243,6 +243,8 @@ pub mod extractors;
 mod free_briefing;
 #[cfg(feature = "glyph_audit")]
 mod glyph_integration;
+/// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
+mod git_decision_miner;
 mod health;
 mod health_commands;
 mod http_client;
@@ -614,6 +616,8 @@ pub fn run() {
             context_commands::run_awe_feedback,
             context_commands::run_awe_recall,
             context_commands::run_awe_calibration,
+            // Intelligence Reconciliation Phase 7 — Git decision miner.
+            git_decision_miner::mine_git_decisions,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
             context_commands::generate_cli_briefing,
