@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { BrandMark } from '../void-engine/BrandMark';
 import { getCelebrationMessage } from '../../utils/first-run-messages';
 import { getSourceFullName } from '../../config/sources';
+import { formatScore } from '../../utils/score';
 
 interface TopSignal {
   title: string;
@@ -143,7 +144,7 @@ export function CelebrationState({
               ? t('firstRun.topMatchStack', 'Matches your stack')
               : t('firstRun.topMatch')}
             {topSignal.top_score != null && (
-              <span className="ms-2 text-text-muted normal-case">{(topSignal.top_score).toFixed(2)}</span>
+              <span className="ms-2 text-text-muted normal-case">{formatScore(topSignal.top_score)}</span>
             )}
             {topSignal.source_type && (
               <span className="ms-2 text-text-muted normal-case">{getSourceFullName(topSignal.source_type)}</span>
