@@ -38,6 +38,7 @@ mod tests {
             license_key: FAKE_LICENSE_KEY.to_string(),
             activated_at: Some("2026-01-01T00:00:00Z".to_string()),
             trial_started_at: None,
+            dev_unlock_all: false,
         };
         s
     }
