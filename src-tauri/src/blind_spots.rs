@@ -1322,7 +1322,7 @@ pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
         items.push(recommendation_to_evidence_item(r, idx));
     }
 
-    let validated: Vec<EvidenceItem> = items
+    let mut validated: Vec<EvidenceItem> = items
         .into_iter()
         .filter(|item| match crate::evidence::validate_item(item) {
             Ok(()) => true,
@@ -1337,6 +1337,8 @@ pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
             }
         })
         .collect();
+    // Phase 9 — attach precedents via the AWE spine.
+    crate::awe_spine::enrich_items(&mut validated);
 
     EvidenceFeed::from_items_with_score(validated, report.overall_score)
 }
