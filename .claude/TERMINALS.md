@@ -9,15 +9,33 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 0 — Plan Lock)
+### T-INTEL-RECON (Phase 1 — Dead Code Purge)
 **Started:** 2026-04-16
-**Scope:** Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe, one EvidenceItem type.
-**Files claimed (Phase 0 — docs only):**
-- `docs/strategy/INTELLIGENCE-RECONCILIATION.md` (NEW)
-- `docs/strategy/EVIDENCE-ITEM-SCHEMA.md` (NEW)
-- `.claude/rules/intelligence-doctrine.md` (NEW)
-- `.claude/TERMINALS.md` (this entry)
-**Commit Lock:** released after Phase 0 commit
+**Scope:** Intelligence Reconciliation — delete Momentum + AWE UI panels + vanity components.
+**Files claimed (Phase 1):**
+- `src/components/Momentum.tsx` (DELETE)
+- `src/components/momentum/*` (DELETE tree)
+- `src/components/awe/MomentumWisdomTrajectory.tsx` (DELETE)
+- `src/components/awe/BriefingWisdomSignal.tsx` (DELETE)
+- `src/components/awe/PlaybookWisdomResonance.tsx` (DELETE)
+- `src/components/awe/ProfileWisdomDna.tsx` (DELETE)
+- `src/components/awe/ResultDecisionBacklink.tsx` (DELETE)
+- `src/components/awe/momentum-wisdom-helpers.tsx` (DELETE)
+- `src/components/CompoundAdvantageScore.tsx` (DELETE)
+- `src/components/IntelligenceProfileCard.tsx` (DELETE)
+- `src/components/CategoryChapterView.tsx` (DELETE)
+- Consumers (EDIT to remove imports):
+  - `src/components/briefing/BriefingContentPanel.tsx`
+  - `src/components/PlaybookView.tsx`
+  - `src/components/SovereignDeveloperProfile.tsx`
+  - `src/components/result-item/ResultItemExpanded.tsx`
+  - `src/components/ViewRouter.tsx`
+  - `src/components/ViewTabBar.tsx`
+- Tests (DELETE):
+  - `src/components/__tests__/IntelligenceProfileCard.test.tsx`
+  - `src/components/__tests__/CategoryChapterView.test.tsx` (if exists)
+  - CompoundAdvantageScore tests in `accessibility.test.tsx`
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-MESH Phase 2 (done 2026-04-15, recovered after host crash):
      Decoupled the 50/50 blend via the reconciler (Layer 3 of the mesh).

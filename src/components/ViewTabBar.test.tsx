@@ -39,9 +39,10 @@ describe('ViewTabBar', () => {
     setMockState({});
     render(<ViewTabBar />);
     expect(screen.getByRole('tablist')).toBeInTheDocument();
-    // Tabs: briefing, preemption, blindspots, chapters, results, playbook, insights, saved, profile, console, toolkit, calibrate
+    // Tabs: briefing, preemption, blindspots, results, playbook, saved, profile, console, toolkit, calibrate
+    // (Intelligence Reconciliation 2026-04-16 removed 'insights' + 'chapters')
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(12);
+    expect(tabs.length).toBe(10);
   });
 
   it('marks the active view tab as selected', () => {
@@ -55,25 +56,25 @@ describe('ViewTabBar', () => {
     setMockState({});
     render(<ViewTabBar />);
 
-    const insightsTab = screen.getByText('nav.insights');
-    fireEvent.click(insightsTab);
-    expect(setActiveViewMock).toHaveBeenCalledWith('insights');
+    const playbookTab = screen.getByText('nav.playbook');
+    fireEvent.click(playbookTab);
+    expect(setActiveViewMock).toHaveBeenCalledWith('playbook');
   });
 
   it('shows only core tabs when viewTier is core and showAllViews is false', () => {
     setMockState({ viewTier: 'core', showAllViews: false });
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    // core tier: briefing, chapters, results, playbook
-    expect(tabs.length).toBe(4);
+    // core tier: briefing, results, playbook
+    expect(tabs.length).toBe(3);
   });
 
   it('shows explorer tabs when viewTier is explorer and showAllViews is false', () => {
     setMockState({ viewTier: 'explorer', showAllViews: false });
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    // explorer tier: briefing, preemption, blindspots, chapters, results, playbook, insights
-    expect(tabs.length).toBe(7);
+    // explorer tier: briefing, preemption, blindspots, results, playbook
+    expect(tabs.length).toBe(5);
   });
 
   it('shows badge indicator when results have items', () => {

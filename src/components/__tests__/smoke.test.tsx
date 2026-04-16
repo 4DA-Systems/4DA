@@ -258,7 +258,6 @@ import { StreetsEngineLink } from '../result-item/StreetsEngineLink';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from '../BriefingEmptyStates';
 import { SignalsPanel } from '../SignalsPanel';
 import { OllamaStatus } from '../OllamaStatus';
-import { CompoundAdvantageScore } from '../CompoundAdvantageScore';
 import { AutophagyInsights } from '../AutophagyInsights';
 import { LearnedBehaviorPanel } from '../LearnedBehaviorPanel';
 import { SplashScreen } from '../SplashScreen';
@@ -483,10 +482,6 @@ const SMOKE_COMPONENTS: Array<{
   {
     name: 'OllamaStatus (ollama provider)',
     render: () => <OllamaStatus provider="ollama" />,
-  },
-  {
-    name: 'CompoundAdvantageScore (null advantage)',
-    render: () => <CompoundAdvantageScore />,
   },
   {
     name: 'AutophagyInsights',

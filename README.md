@@ -97,6 +97,10 @@ These are good tools that solve different problems. 4DA solves a specific one: s
 | **macOS** | [`.dmg` (Apple Silicon & Intel)](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 | **Linux** | [`.AppImage` / `.deb`](https://github.com/runyourempire/4DA/releases/latest) | Yes |
 
+Every release publishes SHA-256 checksums and a minisign signature — verify before running.
+
+> **Windows users:** because 4DA is a new release, SmartScreen will prompt on first launch. Click **More info → Run anyway**. Signed Windows builds deliver silently via the auto-updater once EV certification completes. See the [Windows install guide](docs/launch/WINDOWS-INSTALL.md) for verification steps.
+
 Or install the **MCP server** for Claude Code / Cursor:
 ```bash
 npx @4da/mcp-server

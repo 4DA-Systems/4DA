@@ -88,10 +88,10 @@ describe('ui-slice', () => {
       expect(useAppStore.getState().activeView).toBe('saved');
     });
 
-    it('changes active view to insights', () => {
+    it('changes active view to preemption', () => {
       useAppStore.setState({ viewTier: 'explorer' });
-      useAppStore.getState().setActiveView('insights');
-      expect(useAppStore.getState().activeView).toBe('insights');
+      useAppStore.getState().setActiveView('preemption');
+      expect(useAppStore.getState().activeView).toBe('preemption');
     });
 
     it('changes active view to toolkit', () => {
@@ -112,11 +112,11 @@ describe('ui-slice', () => {
     });
 
     it('blocks navigation to views above current tier', () => {
-      useAppStore.setState({ viewTier: 'core' });
-      useAppStore.getState().setActiveView('insights');
+      useAppStore.setState({ viewTier: 'core', activeView: 'briefing' });
+      useAppStore.getState().setActiveView('preemption');
       expect(useAppStore.getState().activeView).toBe('briefing');
 
-      useAppStore.setState({ viewTier: 'explorer' });
+      useAppStore.setState({ viewTier: 'explorer', activeView: 'briefing' });
       useAppStore.getState().setActiveView('saved');
       expect(useAppStore.getState().activeView).toBe('briefing');
     });

@@ -111,7 +111,6 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import { ViewTabBar } from '../ViewTabBar';
 import { SplashScreen } from '../SplashScreen';
 import { DecisionMemory } from '../DecisionMemory';
-import { CompoundAdvantageScore } from '../CompoundAdvantageScore';
 import { AutophagyInsights } from '../AutophagyInsights';
 describe('Accessibility: ConfidenceIndicator', () => {
   it('has no a11y violations with confidence value', async () => {
@@ -159,14 +158,6 @@ describe('Accessibility: SplashScreen', () => {
 describe('Accessibility: DecisionMemory', () => {
   it('has no a11y violations in empty state', async () => {
     const { container } = render(<DecisionMemory />);
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-});
-
-describe('Accessibility: CompoundAdvantageScore', () => {
-  it('has no a11y violations in null state', async () => {
-    const { container } = render(<CompoundAdvantageScore />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
   });
