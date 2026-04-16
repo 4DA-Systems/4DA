@@ -128,6 +128,34 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "table",
     "notify",
     "scraper",
+    // Common verbs / nouns that are also package-name subterms.
+    // e.g. "extract" appears in pdf-extract but also in "how to extract data".
+    "extract",
+    "build",
+    "fetch",
+    "patch",
+    "trace",
+    "stream",
+    "check",
+    "parse",
+    "cache",
+    "event",
+    "mount",
+    "frame",
+    "layer",
+    "block",
+    "merge",
+    "split",
+    "match",
+    "drive",
+    "print",
+    "write",
+    "guard",
+    "probe",
+    "relay",
+    "apply",
+    "chain",
+    "local",
     // Generic tech stems — subterms of compound package names that are too
     // broad on their own. Only match when used with language context nearby.
     "cert",
@@ -224,18 +252,42 @@ fn is_ambiguous_dep_name(term: &str) -> bool {
     COMMON_ENGLISH_WORDS.contains(&term)
 }
 
+/// Major framework/ecosystem names that are too broad as subterms.
+/// "react" appearing in "sentry-react" should NOT match every React article.
+/// The full compound name ("sentry-react") still matches — only the bare
+/// subterm is suppressed to prevent false-positive escalation.
+const ECOSYSTEM_NAMES: &[&str] = &[
+    "react", "vue", "angular", "svelte", "solid", "next", "nuxt", "astro",
+    "node", "deno", "bun", "express", "django", "flask", "rails",
+    "tauri", "electron", "rust", "python", "java", "swift", "kotlin",
+    "webpack", "vite", "esbuild", "rollup", "parcel",
+    "postgres", "mysql", "redis", "mongo", "sqlite",
+    "docker", "kubernetes",
+];
+
+/// Check if a term is a major ecosystem name that shouldn't be used as a
+/// compound-package subterm (only applies when splitting multi-part names).
+fn is_ecosystem_subterm(term: &str) -> bool {
+    ECOSYSTEM_NAMES.contains(&term)
+}
+
 /// Extract searchable terms from a package name.
-/// Multi-part names are split into meaningful subterms.
+/// Multi-part names are split into meaningful subterms, but ecosystem names
+/// (react, vue, rust, etc.) are excluded as subterms to prevent false positives.
+/// The full normalized name always matches — only bare subterms are filtered.
 pub(crate) fn extract_search_terms(name: &str) -> Vec<String> {
     let normalized = normalize_package_name(name);
+    let is_compound = normalized.contains('-');
     let mut terms = vec![normalized.clone()];
 
     // Split on hyphens for multi-part names
     let parts: Vec<&str> = normalized.split('-').filter(|p| p.len() >= 3).collect();
 
-    // Add the full normalized name's parts if they're specific enough
+    // Add subterms if they're specific enough AND not a major ecosystem name.
+    // "sentry-react" → keep "sentry", drop "react" (ecosystem name as subterm).
+    // "react" as a standalone package (not compound) is kept as-is.
     for part in &parts {
-        if !is_ambiguous_dep_name(part) {
+        if !is_ambiguous_dep_name(part) && !(is_compound && is_ecosystem_subterm(part)) {
             terms.push(part.to_string());
         }
     }
@@ -529,10 +581,13 @@ mod tests {
     fn test_extract_search_terms_multi_part() {
         let terms = extract_search_terms("react-router-dom");
         assert!(terms.contains(&"react-router-dom".to_string()));
-        assert!(terms.contains(&"react".to_string()));
+        // "react" is an ecosystem name — excluded as subterm of compound packages
+        assert!(
+            !terms.contains(&"react".to_string()),
+            "'react' is an ecosystem name, should be excluded as subterm of react-router-dom"
+        );
         assert!(terms.contains(&"router".to_string()));
-        // "dom" is only 3 chars — but is_ambiguous_dep_name checks COMMON_ENGLISH_WORDS
-        // "dom" is NOT in the list, but len <= 3 → ambiguous → filtered out
+        // "dom" is only 3 chars → ambiguous → filtered out
         assert!(!terms.contains(&"dom".to_string()));
     }
 
@@ -541,12 +596,58 @@ mod tests {
         let terms = extract_search_terms("@tanstack/react-query");
         assert!(terms.contains(&"tanstack-react-query".to_string()));
         assert!(terms.contains(&"tanstack".to_string()));
-        assert!(terms.contains(&"react".to_string()));
-        // "query" is a generic tech stem (matches SQL/GraphQL/database content)
-        // and is intentionally excluded. The full name + "tanstack" + "react"
-        // are sufficient to identify TanStack Query content without false
-        // positives from the word "query" appearing in unrelated advisories.
+        // "react" is an ecosystem name — excluded as subterm of compound packages
+        assert!(
+            !terms.contains(&"react".to_string()),
+            "'react' is an ecosystem name, should be excluded as subterm of @tanstack/react-query"
+        );
+        // "query" is a generic tech stem — also excluded
         assert!(!terms.contains(&"query".to_string()));
+    }
+
+    #[test]
+    fn test_extract_search_terms_ecosystem_guard_sentry_react() {
+        // This is the exact case that caused the false positive:
+        // @sentry/react should NOT have "react" as a subterm
+        let terms = extract_search_terms("@sentry/react");
+        assert!(terms.contains(&"sentry-react".to_string()));
+        assert!(terms.contains(&"sentry".to_string()));
+        assert!(
+            !terms.contains(&"react".to_string()),
+            "'react' is an ecosystem name, should NOT be a subterm of @sentry/react"
+        );
+    }
+
+    #[test]
+    fn test_extract_search_terms_standalone_ecosystem_kept() {
+        // "react" as a standalone (non-compound) package IS kept
+        let terms = extract_search_terms("react");
+        assert!(terms.contains(&"react".to_string()));
+        assert_eq!(terms.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_search_terms_pdf_extract_no_extract_subterm() {
+        // "extract" is now in COMMON_ENGLISH_WORDS → ambiguous → excluded
+        let terms = extract_search_terms("pdf-extract");
+        assert!(terms.contains(&"pdf-extract".to_string()));
+        // "pdf" is 3 chars → ambiguous
+        assert!(!terms.contains(&"pdf".to_string()));
+        // "extract" is now in COMMON_ENGLISH_WORDS → ambiguous
+        assert!(
+            !terms.contains(&"extract".to_string()),
+            "'extract' should be excluded as a common English word"
+        );
+        // Only the full compound name matches
+        assert_eq!(terms.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_is_now_ambiguous() {
+        assert!(
+            is_ambiguous_dep_name("extract"),
+            "'extract' should be treated as ambiguous (common English word)"
+        );
     }
 
     #[test]
@@ -956,5 +1057,108 @@ mod tests {
             ratio < 0.7 && ratio > 0.3,
             "Transitive/direct ratio ({ratio}) should be near 0.5"
         );
+    }
+
+    #[test]
+    fn test_sentry_react_no_false_positive_on_generic_react_vuln() {
+        // A general React vulnerability article should NOT match @sentry/react
+        // with high confidence — the ecosystem guard prevents "react" subterm.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "sentry-react".to_string(),
+            DepInfo {
+                package_name: "@sentry/react".to_string(),
+                version: Some("10.48.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: extract_search_terms("@sentry/react"),
+            },
+        );
+
+        let (matches, _score) = match_dependencies(
+            "Critical Security Vulnerability in React Server Components – React",
+            "A denial-of-service vulnerability was found in React Server Components. \
+             All React 18+ users should patch immediately.",
+            &["react".to_string(), "security".to_string()],
+            &ace_ctx,
+        );
+
+        // With ecosystem guard, "react" subterm is excluded from sentry-react.
+        // Only the full "sentry-react" or "sentry" terms can match.
+        // Neither appears in this article → no match (or very low confidence).
+        if !matches.is_empty() {
+            assert!(
+                matches[0].confidence < 0.40,
+                "sentry-react should NOT have high confidence ({}) on a generic React article",
+                matches[0].confidence
+            );
+        }
+    }
+
+    #[test]
+    fn test_pdf_extract_no_false_positive_on_generic_extraction() {
+        // "Security advisory for Cargo" mentioning "extract" generically
+        // should NOT match pdf-extract with high confidence.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "pdf-extract".to_string(),
+            DepInfo {
+                package_name: "pdf-extract".to_string(),
+                version: Some("0.7.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: extract_search_terms("pdf-extract"),
+            },
+        );
+
+        let (matches, _score) = match_dependencies(
+            "Security advisory for Cargo",
+            "A vulnerability allows attackers to extract sensitive data from \
+             cargo build artifacts. Update your Cargo installation.",
+            &["cargo".to_string(), "security".to_string()],
+            &ace_ctx,
+        );
+
+        // With "extract" now in COMMON_ENGLISH_WORDS, it requires language context.
+        // The word "extract" in "extract sensitive data" has no nearby package/crate
+        // context → should not match.
+        if !matches.is_empty() {
+            assert!(
+                matches[0].confidence < 0.40,
+                "pdf-extract should NOT have high confidence ({}) when 'extract' is used generically",
+                matches[0].confidence
+            );
+        }
+    }
+
+    #[test]
+    fn test_pdf_extract_matches_when_explicitly_mentioned() {
+        // When "pdf-extract" as a full name appears, it SHOULD match.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "pdf-extract".to_string(),
+            DepInfo {
+                package_name: "pdf-extract".to_string(),
+                version: Some("0.7.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: extract_search_terms("pdf-extract"),
+            },
+        );
+
+        let (matches, score) = match_dependencies(
+            "Critical vulnerability in pdf-extract crate",
+            "The pdf-extract Rust crate has a buffer overflow. Update to 0.8.",
+            &["pdf-extract".to_string()],
+            &ace_ctx,
+        );
+
+        assert!(!matches.is_empty(), "Full name 'pdf-extract' should match");
+        assert!(
+            matches[0].confidence >= 0.40,
+            "Full name match should have high confidence ({})",
+            matches[0].confidence
+        );
+        assert!(score > 0.0, "Score should be positive");
     }
 }
