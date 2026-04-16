@@ -14,18 +14,27 @@ This is expected, and you have the right tools to verify the download is genuine
 
 Download the latest `4DA-Setup-*.exe` from the [Releases page](https://github.com/runyourempire/4DA/releases/latest). The download page also lists:
 
-- **SHA-256 checksum** — the exact fingerprint of the installer file.
-- **Signature file** — a cryptographic signature you can verify against our public updater key.
+- **`SHASUMS256.txt`** — a single canonical file listing the SHA-256 of every artifact in the release. Download this alongside the installer.
+- **`<installer>.exe.sha256`** — a per-file sidecar with just the hash for your installer, convenient for one-line verification.
+- **`<installer>.exe.sig`** — a minisign signature you can verify against the project's public key for even stronger assurance.
 
 ### 2. Verify the download (recommended)
 
-Open PowerShell in the folder containing the downloaded installer:
+Download `SHASUMS256.txt` from the Releases page into the same folder as the installer, then run one of these in PowerShell:
 
 ```powershell
+# Option A — compute and compare yourself
 Get-FileHash -Algorithm SHA256 .\4DA-Setup-1.0.0.exe
+# Then visually compare the output hash to the line for this file in SHASUMS256.txt.
 ```
 
-Compare the output against the `SHA-256` value shown on the Releases page. If they match byte-for-byte, the file is genuine. If they don't match, **do not run it** — re-download from the Releases page.
+```bash
+# Option B — if you have Git Bash or WSL, verify every file at once
+sha256sum -c SHASUMS256.txt --ignore-missing
+# Each line prints `<file>: OK` on a match. Any `FAILED` means a corrupt or tampered file.
+```
+
+If the hash matches byte-for-byte, the file is genuine. If it doesn't match, **do not run it** — re-download from the Releases page.
 
 ### 3. Run the installer
 
