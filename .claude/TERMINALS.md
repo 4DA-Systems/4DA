@@ -9,7 +9,24 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 9 — AWE Spine Wiring)
+**Started:** 2026-04-17
+**Prior RECON commits:** Phases 0-8 shipped (16 commits total incl. locks).
+**Scope:** Every EvidenceItem gets precedents attached via the local
+reasoning spine. Precedents drawn from the merged cold-start pool
+(git miner + curated corpus). Full AWE transmute is deferred to
+Phase 10 (Confession Box) — too slow for per-item inline calls.
+**Files claimed:**
+- `src-tauri/src/awe_spine.rs` (NEW — precedent index + matcher)
+- `src-tauri/src/preemption.rs` (EDIT — enrich output)
+- `src-tauri/src/blind_spots.rs` (EDIT — enrich output)
+- `src-tauri/src/knowledge_decay.rs` (EDIT — enrich output)
+- `src-tauri/src/signal_chains.rs` (EDIT — enrich output)
+- `src-tauri/src/lib.rs` (EDIT — mod)
+**Done when:** every EvidenceItem returned by a lens command carries
+≥0 precedents (non-cold-start cases ≥1). Similarity scoring
+deterministic + tested. No per-item latency regression.
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-8 + 2 hygiene recoveries done 2026-04-17):
      Intelligence Reconciliation + Cold Start complete.

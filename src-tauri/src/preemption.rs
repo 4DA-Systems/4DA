@@ -933,7 +933,7 @@ impl PreemptionAlert {
 pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_preemption_alerts").map_err(|e| e.to_string())?;
     let feed = get_preemption_feed().map_err(|e| e.to_string())?;
-    let items: Vec<EvidenceItem> = feed
+    let mut items: Vec<EvidenceItem> = feed
         .alerts
         .iter()
         .map(|a| a.to_evidence_item())
@@ -950,6 +950,8 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
             }
         })
         .collect();
+    // Phase 9 — attach precedents via the AWE spine.
+    crate::awe_spine::enrich_items(&mut items);
     Ok(EvidenceFeed::from_items(items))
 }
 
