@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::error::Result;
+use crate::evidence::{
+    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
+    EvidenceKind, LensHints, Urgency,
+};
 
 // ============================================================================
 // Types
@@ -582,14 +586,151 @@ fn severity_rank(severity: &GapSeverity) -> u8 {
 }
 
 // ============================================================================
+// EvidenceItem conversion (Intelligence Reconciliation — Phase 5)
+// ============================================================================
+
+fn gap_severity_to_urgency(s: &GapSeverity) -> Urgency {
+    match s {
+        GapSeverity::Critical => Urgency::Critical,
+        GapSeverity::High => Urgency::High,
+        GapSeverity::Medium => Urgency::Medium,
+        GapSeverity::Low => Urgency::Watch,
+    }
+}
+
+fn truncate_gap_title(s: &str) -> String {
+    s.trim_end_matches('.').chars().take(120).collect()
+}
+
+fn truncate_gap_note(s: &str) -> String {
+    s.chars().take(200).collect()
+}
+
+fn missed_item_to_citation(m: &MissedItem) -> EvidenceCitation {
+    let freshness_days =
+        chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
+            .map(|dt| {
+                let secs = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
+                (secs as f32 / 86_400.0).max(0.0)
+            })
+            .unwrap_or(0.0);
+    EvidenceCitation {
+        source: m.source_type.clone(),
+        title: truncate_gap_title(&m.title),
+        url: m.url.clone(),
+        freshness_days,
+        relevance_note: truncate_gap_note(&format!(
+            "missed item #{} for dependency gap",
+            m.item_id
+        )),
+    }
+}
+
+impl KnowledgeGap {
+    /// Convert a legacy `KnowledgeGap` into the canonical `EvidenceItem`.
+    /// Used by `get_knowledge_gaps` (command boundary) and callable from
+    /// any future lens that wants gap-shaped evidence.
+    pub fn to_evidence_item(&self) -> EvidenceItem {
+        let title = truncate_gap_title(&format!("Knowledge gap: {}", self.dependency));
+
+        let days_phrase = if self.days_since_last_engagement >= 999 {
+            "never engaged with signals for this dep".to_string()
+        } else {
+            format!(
+                "{} day{} since last engagement",
+                self.days_since_last_engagement,
+                if self.days_since_last_engagement == 1 { "" } else { "s" }
+            )
+        };
+        let explanation = format!(
+            "{} ({}). {}. {} missed {}.",
+            self.dependency,
+            self.version.as_deref().unwrap_or("no version"),
+            days_phrase,
+            self.missed_items.len(),
+            if self.missed_items.len() == 1 { "signal" } else { "signals" },
+        );
+
+        // Build citations from missed items; cap at top 5 to keep the
+        // payload scannable and to guarantee at least one citation
+        // (required by schema for user-surfaced kinds).
+        let evidence: Vec<EvidenceCitation> = if self.missed_items.is_empty() {
+            // Synthesize an inferred citation so the schema's
+            // "evidence required" rule holds even when there are no
+            // concrete missed items yet.
+            vec![EvidenceCitation {
+                source: "dep-coverage".to_string(),
+                title: truncate_gap_title(&format!("{} engagement gap", self.dependency)),
+                url: None,
+                freshness_days: self.days_since_last_engagement as f32,
+                relevance_note: truncate_gap_note("no engagement recorded"),
+            }]
+        } else {
+            self.missed_items
+                .iter()
+                .take(5)
+                .map(missed_item_to_citation)
+                .collect()
+        };
+
+        EvidenceItem {
+            id: format!("kg_{}", self.dependency),
+            kind: EvidenceKind::Gap,
+            title,
+            explanation,
+            confidence: Confidence::heuristic(0.7),
+            urgency: gap_severity_to_urgency(&self.gap_severity),
+            reversibility: None,
+            evidence,
+            affected_projects: vec![self.project_path.clone()],
+            affected_deps: vec![self.dependency.clone()],
+            suggested_actions: vec![EvidenceAction {
+                action_id: "investigate".to_string(),
+                label: "Investigate".to_string(),
+                description: "Review missed signals for this dependency.".to_string(),
+            }],
+            precedents: Vec::new(),
+            refutation_condition: None,
+            lens_hints: LensHints {
+                briefing: false,
+                preemption: false,
+                blind_spots: true,
+                evidence: true,
+            },
+            created_at: chrono::Utc::now().timestamp_millis(),
+            expires_at: None,
+        }
+    }
+}
+
+// ============================================================================
 // Tauri Commands
 // ============================================================================
 
+/// Returns the canonical `EvidenceFeed` for the Knowledge Gaps view.
+/// Schema-validates every item; violators drop with a structured log.
 #[tauri::command]
-pub fn get_knowledge_gaps() -> Result<Vec<KnowledgeGap>> {
+pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
     crate::settings::require_signal_feature("get_knowledge_gaps")?;
     let conn = crate::open_db_connection()?;
-    detect_knowledge_gaps(&conn)
+    let gaps = detect_knowledge_gaps(&conn)?;
+    let items: Vec<EvidenceItem> = gaps
+        .iter()
+        .map(|g| g.to_evidence_item())
+        .filter(|item| match crate::evidence::validate_item(item) {
+            Ok(()) => true,
+            Err(e) => {
+                tracing::warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = %e,
+                    "dropped knowledge-gap item failing schema validation"
+                );
+                false
+            }
+        })
+        .collect();
+    Ok(EvidenceFeed::from_items(items))
 }
 // ============================================================================
 // Tests
@@ -666,5 +807,108 @@ mod tests {
             "Unexpected behavior in Node",
             "next"
         ));
+    }
+
+    // ========================================================================
+    // EvidenceItem conversion tests (Intelligence Reconciliation — Phase 5)
+    // ========================================================================
+
+    fn sample_gap() -> KnowledgeGap {
+        KnowledgeGap {
+            dependency: "tokio".to_string(),
+            version: Some("1.36.0".to_string()),
+            project_path: "/proj/a".to_string(),
+            missed_items: vec![
+                MissedItem {
+                    item_id: 1,
+                    title: "Tokio async runtime v1.36 released".to_string(),
+                    url: Some("https://example.test/1".to_string()),
+                    source_type: "hn".to_string(),
+                    created_at: "2026-04-10 10:00:00".to_string(),
+                },
+                MissedItem {
+                    item_id: 2,
+                    title: "CVE-2026-1234 affects tokio 1.x".to_string(),
+                    url: None,
+                    source_type: "github-advisory".to_string(),
+                    created_at: "2026-04-15 12:00:00".to_string(),
+                },
+            ],
+            gap_severity: GapSeverity::Critical,
+            days_since_last_engagement: 30,
+        }
+    }
+
+    #[test]
+    fn knowledge_gap_maps_to_gap_kind() {
+        let item = sample_gap().to_evidence_item();
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
+    }
+
+    #[test]
+    fn knowledge_gap_severity_maps_to_urgency() {
+        let mut g = sample_gap();
+        g.gap_severity = GapSeverity::Critical;
+        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::Critical);
+        g.gap_severity = GapSeverity::High;
+        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::High);
+        g.gap_severity = GapSeverity::Medium;
+        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::Medium);
+        g.gap_severity = GapSeverity::Low;
+        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::Watch);
+    }
+
+    #[test]
+    fn knowledge_gap_citations_taken_from_missed_items() {
+        let item = sample_gap().to_evidence_item();
+        assert_eq!(item.evidence.len(), 2);
+        assert_eq!(item.evidence[0].source, "hn");
+        assert_eq!(item.evidence[1].source, "github-advisory");
+    }
+
+    #[test]
+    fn knowledge_gap_with_no_missed_items_synthesizes_citation() {
+        let mut g = sample_gap();
+        g.missed_items.clear();
+        let item = g.to_evidence_item();
+        assert_eq!(item.evidence.len(), 1);
+        assert_eq!(item.evidence[0].source, "dep-coverage");
+    }
+
+    #[test]
+    fn knowledge_gap_caps_citations_at_5() {
+        let mut g = sample_gap();
+        g.missed_items = (0..10)
+            .map(|i| MissedItem {
+                item_id: i,
+                title: format!("article #{i}"),
+                url: None,
+                source_type: "hn".to_string(),
+                created_at: "2026-04-10 10:00:00".to_string(),
+            })
+            .collect();
+        let item = g.to_evidence_item();
+        assert_eq!(item.evidence.len(), 5);
+    }
+
+    #[test]
+    fn knowledge_gap_tags_blind_spots_and_evidence_lenses() {
+        let item = sample_gap().to_evidence_item();
+        assert!(item.lens_hints.blind_spots);
+        assert!(item.lens_hints.evidence);
+        assert!(!item.lens_hints.preemption);
+        assert!(!item.lens_hints.briefing);
+    }
+
+    #[test]
+    fn knowledge_gap_passes_schema_validation() {
+        assert!(crate::evidence::validate_item(&sample_gap().to_evidence_item()).is_ok());
+    }
+
+    #[test]
+    fn knowledge_gap_affected_projects_and_deps_populated() {
+        let item = sample_gap().to_evidence_item();
+        assert_eq!(item.affected_projects, vec!["/proj/a".to_string()]);
+        assert_eq!(item.affected_deps, vec!["tokio".to_string()]);
     }
 }

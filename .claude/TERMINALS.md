@@ -9,7 +9,19 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 5 — Knowledge Decay + Signal Chains)
+**Started:** 2026-04-17
+**Prior commits:** cd5e31c8, 11a9fc41, 7f873d42, 223d810e, e1dde0f4, 3f553e2f.
+**Scope:** Collapse KnowledgeGap + SignalChainWithPrediction to canonical EvidenceItem.
+**Files claimed:**
+- `src-tauri/src/knowledge_decay.rs` (EDIT)
+- `src-tauri/src/signal_chains.rs` (EDIT)
+- `src/components/KnowledgeGapsPanel.tsx` (EDIT)
+- `src/lib/commands.ts` (EDIT)
+- `src/types/innovation.ts` (EDIT — type alias to EvidenceFeed if needed)
+**Commit Lock:** HELD at end of phase
+
+_No other active terminals._
 
 <!-- T-INTEL-RECON (Phases 0-4 done 2026-04-17, session pause):
      Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe,
