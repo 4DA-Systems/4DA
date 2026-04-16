@@ -384,6 +384,8 @@ fn find_missed_signals(
         return Ok(Vec::new()); // No meaningful "missed" window
     }
 
+    // Fetch more than 15 initially so the priority-aware post-sort has room
+    // to promote security items and filter out old blog posts before trimming.
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score, si.created_at
          FROM source_items si
@@ -398,7 +400,7 @@ fn find_missed_signals(
            AND i.item_id IS NULL
            AND ue.id IS NULL
          ORDER BY si.relevance_score DESC
-         LIMIT 15",
+         LIMIT 40",
         days = days,
         feed_window = FEED_WINDOW_DAYS
     );
@@ -444,7 +446,93 @@ fn find_missed_signals(
     // high relevance_score for technologies the user doesn't use.
     let signals = filter_by_negative_stack(signals);
 
+    // Priority-aware ranking: security advisories + breaking changes surface
+    // above generic blog posts, even if they score slightly lower on relevance.
+    // Old blog posts (>10 days) are capped at 3 slots so the list doesn't
+    // become a stale-blog archive.
+    let signals = rank_by_missed_priority(signals);
+
     Ok(signals)
+}
+
+/// Re-rank missed signals so high-urgency content surfaces above opinion/blog
+/// content, even when relevance scores are similar. Also caps older non-urgent
+/// content so the panel stays focused on recent-enough material.
+fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
+    const FINAL_LIMIT: usize = 15;
+    const OLD_BLOG_CAP: usize = 3;
+    const OLD_DAYS_THRESHOLD: i64 = 10;
+
+    // Classify each signal's priority tier based on title text.
+    // We don't have content_type stored on MissedSignal, so we re-run a quick
+    // title-only check for security / breaking-change / version markers.
+    fn priority_tier(title: &str) -> u8 {
+        let t = title.to_lowercase();
+        // Tier 4 (highest): security advisories
+        if t.contains("cve-") || t.contains("vulnerability") || t.contains("security advisory")
+            || t.contains("rce") || t.contains("zero-day") || t.contains("zeroday")
+            || t.contains("exploit")
+        {
+            return 4;
+        }
+        // Tier 3: breaking changes / deprecations
+        if t.contains("breaking change") || t.contains("deprecated") || t.contains("end of life")
+            || t.contains("eol") || t.contains("migration guide") || t.contains("drops support")
+        {
+            return 3;
+        }
+        // Tier 2: package-registry updates & named releases
+        if t.starts_with("npm:") || t.starts_with("cargo:") || t.starts_with("pypi:")
+            || t.contains("released") || t.contains("announcing")
+        {
+            return 2;
+        }
+        // Tier 1: everything else (blog posts, Q&A, discussions)
+        1
+    }
+
+    fn age_days(created_at: &str) -> i64 {
+        chrono::DateTime::parse_from_rfc3339(created_at)
+            .ok()
+            .or_else(|| chrono::NaiveDateTime::parse_from_str(created_at, "%Y-%m-%d %H:%M:%S")
+                .ok()
+                .map(|ndt| ndt.and_utc().fixed_offset()))
+            .map(|dt| (chrono::Utc::now() - dt.with_timezone(&chrono::Utc)).num_days())
+            .unwrap_or(0)
+    }
+
+    // Sort by (priority_tier DESC, relevance DESC).
+    signals.sort_by(|a, b| {
+        let tier_a = priority_tier(&a.title);
+        let tier_b = priority_tier(&b.title);
+        tier_b
+            .cmp(&tier_a)
+            .then_with(|| {
+                b.relevance_score
+                    .partial_cmp(&a.relevance_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+    });
+
+    // Cap Tier 1 (generic blog) items older than OLD_DAYS_THRESHOLD to OLD_BLOG_CAP.
+    let mut kept = Vec::with_capacity(FINAL_LIMIT);
+    let mut old_tier1_count = 0;
+    for s in signals {
+        if kept.len() >= FINAL_LIMIT {
+            break;
+        }
+        let tier = priority_tier(&s.title);
+        let age = age_days(&s.created_at);
+        if tier == 1 && age > OLD_DAYS_THRESHOLD {
+            if old_tier1_count >= OLD_BLOG_CAP {
+                continue;
+            }
+            old_tier1_count += 1;
+        }
+        kept.push(s);
+    }
+
+    kept
 }
 
 /// Filter missed signals using two-layer stack awareness.
