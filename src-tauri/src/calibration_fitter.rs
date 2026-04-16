@@ -225,8 +225,14 @@ fn load_interactions_in_window(
     let Some(created_at) = sample.created_at else {
         return Ok(Vec::new());
     };
-    let window_start = created_at.to_rfc3339();
-    let window_end = (created_at + chrono::Duration::hours(PAIRING_WINDOW_HOURS)).to_rfc3339();
+    // Format as SQLite-native datetime (YYYY-MM-DD HH:MM:SS) — NOT
+    // RFC 3339.  The interactions table stores timestamps via SQLite's
+    // datetime('now', ...) which omits the 'T' separator and timezone
+    // suffix.  A BETWEEN on mismatched formats silently matches nothing.
+    let window_start = created_at.format("%Y-%m-%d %H:%M:%S").to_string();
+    let window_end = (created_at + chrono::Duration::hours(PAIRING_WINDOW_HOURS))
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
 
     let mut stmt = conn.prepare(
         "SELECT action_type, action_data
