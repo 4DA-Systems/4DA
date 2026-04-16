@@ -88,46 +88,12 @@ import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFee
 // its own ts-rs binding file remains for that path. Doctrine rule 1: one
 // canonical type per concept.
 
-interface UncoveredDep {
-  name: string;
-  dep_type: string;
-  projects_using: string[];
-  days_since_last_signal: number;
-  available_signal_count: number;
-  risk_level: string;
-}
-
-interface StaleTopic {
-  topic: string;
-  last_engagement_days: number;
-  active_deps_in_topic: number;
-  missed_signal_count: number;
-}
-
-interface MissedSignal {
-  item_id: number;
-  title: string;
-  url: string | null;
-  source_type: string;
-  relevance_score: number;
-  created_at: string;
-  why_relevant: string;
-}
-
-interface BlindSpotRecommendation {
-  action: string;
-  reason: string;
-  priority: string;
-}
-
-interface BlindSpotReport {
-  overall_score: number;
-  uncovered_dependencies: UncoveredDep[];
-  stale_topics: StaleTopic[];
-  missed_signals: MissedSignal[];
-  recommendations: BlindSpotRecommendation[];
-  generated_at: string;
-}
+// BlindSpotReport + 4-shape decomposition (UncoveredDep, StaleTopic,
+// MissedSignal, BlindSpotRecommendation) removed from the TS layer
+// 2026-04-17 per Intelligence Reconciliation Phase 4. `get_blind_spots`
+// now returns `EvidenceFeed` of `EvidenceItem`s with the coverage index
+// riding on `feed.score`. Rust-side struct is retained internally for
+// `monitoring_briefing.rs` but no longer crosses the IPC boundary.
 
 interface TrustSummary {
   period_days: number;
@@ -470,10 +436,11 @@ interface CommandMap {
   get_attention_report: { params: { periodDays: number }; result: AttentionReport };
 
   // -- Preemption & Blind Spots --
-  // Phase 3 (2026-04-17): returns the canonical EvidenceFeed envelope
-  // of EvidenceItems. Preemption lens filters by lens_hints.preemption.
+  // Phase 3 & 4 (2026-04-17): both return the canonical EvidenceFeed
+  // envelope. Preemption's feed.score is None; Blind Spots' feed.score
+  // carries the 0-100 coverage index.
   get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
-  get_blind_spots: { params: Record<string, never>; result: BlindSpotReport };
+  get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
 
   // -- Trust Ledger --
   get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
@@ -1419,12 +1386,20 @@ interface HttpHistoryEntry {
   created_at: string;
 }
 
+interface FeedTestItem {
+  title: string;
+  url: string;
+  published_at: string | null;
+  content_preview: string;
+}
+
 interface FeedTestResult {
-  valid: boolean;
-  title: string | null;
+  feed_title: string | null;
+  format: string;
   item_count: number;
-  error: string | null;
-  sample_titles: string[];
+  items: FeedTestItem[];
+  fetch_duration_ms: number;
+  errors: string[];
 }
 
 interface SandboxScoreResult {
