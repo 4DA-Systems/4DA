@@ -65,6 +65,7 @@
   "analysis.digestGenerated": "Digest generated: {{count}} items",
   "analysis.sourceError": "{{source}}: {{error}}",
   "analysis.stackDetected": "Auto-detected your stack: {{stack}}. Scoring will prioritize matching sources.",
+  "analysis.calibrationDrift": "Calibration curve expired for {{task}} — recalibrating from your next interactions.",
   "analysis.keyboardTriggered": "Analysis started",
   "appbar.searchPlaceholder": "Search intelligence...",
   "appbar.analyzing": "Analyzing...",
