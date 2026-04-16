@@ -98,7 +98,7 @@
     },
     "publisher": "4DA Systems Pty Ltd",
     "copyright": "Copyright (c) 2025-2026 4DA Systems Pty Ltd. All rights reserved.",
-    "shortDescription": "Privacy-first developer intelligence",
-    "longDescription": "4DA surfaces developer-relevant content from across the internet, scored against your actual codebase. Privacy-first, local-first, zero configuration."
+    "shortDescription": "4DA reads the internet for developers — privately, locally — and gets sharper every day.",
+    "longDescription": "4DA reads the internet for developers — privately, locally — and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal. Runs entirely on your machine. Zero telemetry. BYOK."
   }
 }

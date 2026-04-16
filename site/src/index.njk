@@ -1,6 +1,6 @@
 ---
-title: "4DA -- All signal. No feed. Developer intelligence scored against your codebase."
-description: "4DA scores content from 20+ sources against your actual codebase using 5-axis relevance scoring. Privacy-first. Runs locally. BYOK. Most content is rejected."
+title: "4DA -- Reads the internet for developers. Privately, locally, sharper every day."
+description: "4DA reads the internet for developers -- privately, locally -- and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal."
 permalink: "/index.html"
 ---
 {% extends "base.njk" %}
@@ -11,7 +11,7 @@ permalink: "/index.html"
 
   <!-- Open Graph -->
   <meta property="og:title" content="4DA -- All signal. No feed.">
-  <meta property="og:description" content="Developer intelligence that scores content from 20+ sources against your actual codebase. Privacy-first. Runs 100% locally. Free tier with full scoring engine.">
+  <meta property="og:description" content="4DA reads the internet for developers -- privately, locally -- and gets sharper every day. Learns from how you engage, so yesterday's noise becomes tomorrow's signal.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai">
   <meta property="og:image" content="https://4da.ai/og-image.png">
@@ -20,7 +20,7 @@ permalink: "/index.html"
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="4DA -- All signal. No feed.">
-  <meta name="twitter:description" content="5-axis relevance scoring against your codebase. 20+ sources. Aggressive noise rejection. Privacy-first. Free.">
+  <meta name="twitter:description" content="Reads the internet for developers -- privately, locally -- and gets sharper every day.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <!-- Structured Data -->
@@ -31,7 +31,7 @@ permalink: "/index.html"
     "name": "4DA",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
-    "description": "Privacy-first developer intelligence. Scores content from 20+ sources against your codebase using 5-axis relevance scoring.",
+    "description": "4DA reads the internet for developers -- privately, locally -- and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal.",
     "offers": [
       { "@type": "Offer", "price": "0", "priceCurrency": "USD", "description": "Free -- all 20+ sources, full scoring engine, AI briefings (BYOK), STREETS Playbook (7 modules)" },
       { "@type": "Offer", "price": "12", "priceCurrency": "USD", "description": "Signal -- compound intelligence: Developer DNA, Signal Chains, Knowledge Gaps, Score Autopsy, Attention Analytics" }
@@ -877,8 +877,9 @@ permalink: "/index.html"
       <img src="hero-sun.jpg" alt="4DA" class="hero-logo" width="72" height="72">
       <div class="hero-label">Developer Intelligence</div>
       <h1>All signal.<br><span>No feed.</span></h1>
-      <p>Your codebase decides what's relevant. Everything else is rejected.</p>
-      <p style="font-size:15px; color:var(--text-muted); max-width:520px; margin:8px auto 48px;">Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow, Lobsters, Bluesky, and 12+ more &mdash; scored on 5 axes against your actual stack. 2+ signals required to pass.</p>
+      <p>4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day.</p>
+      <p style="font-size:15px; color:var(--text-muted); max-width:560px; margin:8px auto 16px;">Your codebase decides what's relevant. Everything else is rejected. It learns from how you engage with what it shows you &mdash; yesterday's noise becomes tomorrow's signal.</p>
+      <p style="font-size:14px; color:var(--text-muted); max-width:520px; margin:0 auto 48px;">Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow, Lobsters, Bluesky, and 12+ more &mdash; scored on 5 axes against your actual stack. 2+ signals required to pass.</p>
       <div class="hero-buttons">
         <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="hero-download">Download for Free</a>
         <a href="https://www.npmjs.com/package/@4da/mcp-server" class="btn btn-secondary"><span class="mono">npx</span> MCP Server</a>
@@ -1258,6 +1259,14 @@ npx <span class="string">@4da/mcp-server</span>
       <div class="section-label">FAQ</div>
       <h2>Common questions</h2>
       <div class="faq-list">
+        <details>
+          <summary>What is 4DA in one sentence?</summary>
+          <div class="faq-answer"><strong>4DA reads the internet for developers &mdash; privately, locally &mdash; and gets sharper every day.</strong> It's a Tauri 2.0 desktop app that scans 20+ sources, scores everything against your actual codebase, and rejects the 99% that isn't for you.</div>
+        </details>
+        <details>
+          <summary>How does it get sharper?</summary>
+          <div class="faq-answer">It learns from how you engage with what it shows you. Items you complete, save, or share strengthen related signals; items you bounce or dismiss weaken them. Yesterday's noise becomes tomorrow's signal. All learning happens locally on your machine &mdash; nothing leaves your computer.</div>
+        </details>
         <details>
           <summary>How is this different from daily.dev or Feedly?</summary>
           <div class="faq-answer">daily.dev personalizes by engagement (what you click). Feedly aggregates by subscription (what feeds you add). 4DA scores by relevance to your actual codebase -- your Cargo.toml, package.json, and Git activity define the filter. It's categorically different: project-aware scoring instead of behavioral or topical filtering.</div>
