@@ -9,7 +9,15 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 0 — Plan Lock)
+**Started:** 2026-04-16
+**Scope:** Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe, one EvidenceItem type.
+**Files claimed (Phase 0 — docs only):**
+- `docs/strategy/INTELLIGENCE-RECONCILIATION.md` (NEW)
+- `docs/strategy/EVIDENCE-ITEM-SCHEMA.md` (NEW)
+- `.claude/rules/intelligence-doctrine.md` (NEW)
+- `.claude/TERMINALS.md` (this entry)
+**Commit Lock:** released after Phase 0 commit
 
 <!-- T-INTEL-MESH Phase 2 (done 2026-04-15, recovered after host crash):
      Decoupled the 50/50 blend via the reconciler (Layer 3 of the mesh).
