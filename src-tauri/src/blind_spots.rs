@@ -13,6 +13,10 @@ use tracing::warn;
 use ts_rs::TS;
 
 use crate::error::Result;
+use crate::evidence::{
+    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
+    EvidenceKind, LensHints, Urgency,
+};
 
 // ============================================================================
 // Types
@@ -1070,13 +1074,286 @@ fn calculate_blind_spot_score(
 }
 
 // ============================================================================
+// EvidenceItem conversion (Intelligence Reconciliation — Phase 4)
+// ============================================================================
+//
+// Blind Spots historically produced four parallel shapes (UncoveredDep,
+// StaleTopic, MissedSignal, BlindSpotRecommendation) plus a scalar health
+// score. All four collapse into `EvidenceItem` variants; the score rides
+// on `EvidenceFeed.score`.
+
+fn risk_level_to_urgency(risk_level: &str) -> Urgency {
+    match risk_level {
+        "critical" => Urgency::Critical,
+        "high" => Urgency::High,
+        "medium" => Urgency::Medium,
+        _ => Urgency::Watch,
+    }
+}
+
+fn priority_to_urgency(priority: &str) -> Urgency {
+    match priority {
+        "high" => Urgency::High,
+        "medium" => Urgency::Medium,
+        _ => Urgency::Watch,
+    }
+}
+
+fn truncate_title(s: &str) -> String {
+    // Schema: ≤ 120 chars, no trailing period.
+    s.trim_end_matches('.').chars().take(120).collect()
+}
+
+fn truncate_note(s: &str) -> String {
+    // Citation relevance_note schema cap: 200 chars.
+    s.chars().take(200).collect()
+}
+
+fn now_millis() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
+    let title = truncate_title(&format!("Uncovered dependency: {}", d.name));
+    let explanation = format!(
+        "{} used in {} project{}. Last signal {} days ago. {} available signal{} unseen.",
+        d.name,
+        d.projects_using.len(),
+        if d.projects_using.len() == 1 { "" } else { "s" },
+        d.days_since_last_signal,
+        d.available_signal_count,
+        if d.available_signal_count == 1 { "" } else { "s" },
+    );
+
+    // Synthesize at least one inferred citation so the schema's
+    // "evidence required for user-surfaced kinds" rule holds. Real
+    // citations land in Phase 9 via the AWE spine.
+    let citation = EvidenceCitation {
+        source: format!("dep-coverage:{}", d.dep_type),
+        title: truncate_title(&format!("{} coverage gap", d.name)),
+        url: None,
+        freshness_days: d.days_since_last_signal as f32,
+        relevance_note: truncate_note(&format!(
+            "{} signals available, none engaged with",
+            d.available_signal_count
+        )),
+    };
+
+    EvidenceItem {
+        id: format!("bs_uncov_{}_{}", d.dep_type, d.name),
+        kind: EvidenceKind::Gap,
+        title,
+        explanation,
+        confidence: Confidence::heuristic(0.7),
+        urgency: risk_level_to_urgency(&d.risk_level),
+        reversibility: None,
+        evidence: vec![citation],
+        affected_projects: d.projects_using.clone(),
+        affected_deps: vec![d.name.clone()],
+        suggested_actions: vec![EvidenceAction {
+            action_id: "investigate".to_string(),
+            label: "Investigate".to_string(),
+            description: "Review the unseen signals for this dependency.".to_string(),
+        }],
+        precedents: Vec::new(),
+        refutation_condition: None,
+        lens_hints: LensHints::blind_spots_only(),
+        created_at: now_millis(),
+        expires_at: None,
+    }
+}
+
+fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
+    let title = truncate_title(&format!("Stale topic: {}", t.topic));
+    let explanation = format!(
+        "No engagement in {} day{}. {} active dep{} in this topic. {} signal{} missed.",
+        t.last_engagement_days,
+        if t.last_engagement_days == 1 { "" } else { "s" },
+        t.active_deps_in_topic,
+        if t.active_deps_in_topic == 1 { "" } else { "s" },
+        t.missed_signal_count,
+        if t.missed_signal_count == 1 { "" } else { "s" },
+    );
+
+    let citation = EvidenceCitation {
+        source: "attention-report".to_string(),
+        title: truncate_title(&format!("{} engagement gap", t.topic)),
+        url: None,
+        freshness_days: t.last_engagement_days as f32,
+        relevance_note: truncate_note(&format!(
+            "{} active deps, {} missed signals",
+            t.active_deps_in_topic, t.missed_signal_count
+        )),
+    };
+
+    // Stale topics are lower urgency than specific uncovered deps: no
+    // named CVE, just attention drift.
+    let urgency = if t.missed_signal_count >= 5 && t.last_engagement_days >= 14 {
+        Urgency::Medium
+    } else {
+        Urgency::Watch
+    };
+
+    EvidenceItem {
+        id: format!("bs_stale_{}", t.topic),
+        kind: EvidenceKind::Gap,
+        title,
+        explanation,
+        confidence: Confidence::heuristic(0.6),
+        urgency,
+        reversibility: None,
+        evidence: vec![citation],
+        affected_projects: Vec::new(),
+        affected_deps: Vec::new(),
+        suggested_actions: vec![EvidenceAction {
+            action_id: "investigate".to_string(),
+            label: "Investigate".to_string(),
+            description: "Look at recent signals for this topic.".to_string(),
+        }],
+        precedents: Vec::new(),
+        refutation_condition: None,
+        lens_hints: LensHints::blind_spots_only(),
+        created_at: now_millis(),
+        expires_at: None,
+    }
+}
+
+fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
+    let title = truncate_title(&m.title);
+    let citation = EvidenceCitation {
+        source: m.source_type.clone(),
+        title: truncate_title(&m.title),
+        url: m.url.clone(),
+        freshness_days: chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
+            .map(|dt| {
+                let diff = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
+                (diff as f32 / 86_400.0).max(0.0)
+            })
+            .unwrap_or(0.0),
+        relevance_note: truncate_note(&m.why_relevant),
+    };
+
+    // Missed signals come with a 0-1 relevance_score from upstream; map
+    // into Urgency via coarse thresholds. The schema's Urgency scale is
+    // not about relevance per se, but this is the cleanest mapping
+    // while we're pre-AWE-spine.
+    let urgency = if m.relevance_score >= 0.8 {
+        Urgency::High
+    } else if m.relevance_score >= 0.6 {
+        Urgency::Medium
+    } else {
+        Urgency::Watch
+    };
+
+    EvidenceItem {
+        id: format!("bs_missed_{}", m.item_id),
+        kind: EvidenceKind::MissedSignal,
+        title,
+        explanation: m.why_relevant.clone(),
+        confidence: Confidence::heuristic(m.relevance_score.clamp(0.0, 1.0)),
+        urgency,
+        reversibility: None,
+        evidence: vec![citation],
+        affected_projects: Vec::new(),
+        affected_deps: Vec::new(),
+        // MissedSignal is informational; schema doesn't require actions
+        // for this kind.
+        suggested_actions: Vec::new(),
+        precedents: Vec::new(),
+        refutation_condition: None,
+        lens_hints: LensHints::blind_spots_only(),
+        created_at: now_millis(),
+        expires_at: None,
+    }
+}
+
+fn recommendation_to_evidence_item(r: &BlindSpotRecommendation, idx: usize) -> EvidenceItem {
+    let title = truncate_title(&r.action);
+    // Recommendations are actionable alerts in canonical form — actions are
+    // not items, but "do this to close a gap" is classic Alert kind.
+    let citation = EvidenceCitation {
+        source: "blind-spot-analyzer".to_string(),
+        title: truncate_title(&r.reason),
+        url: None,
+        freshness_days: 0.0,
+        relevance_note: truncate_note(&r.reason),
+    };
+
+    EvidenceItem {
+        id: format!("bs_rec_{idx}"),
+        kind: EvidenceKind::Alert,
+        title,
+        explanation: r.reason.clone(),
+        confidence: Confidence::heuristic(0.55),
+        urgency: priority_to_urgency(&r.priority),
+        reversibility: None,
+        evidence: vec![citation],
+        affected_projects: Vec::new(),
+        affected_deps: Vec::new(),
+        suggested_actions: vec![EvidenceAction {
+            action_id: "acknowledge".to_string(),
+            label: "Acknowledge".to_string(),
+            description: "Mark this recommendation as reviewed.".to_string(),
+        }],
+        precedents: Vec::new(),
+        refutation_condition: None,
+        lens_hints: LensHints::blind_spots_only(),
+        created_at: now_millis(),
+        expires_at: None,
+    }
+}
+
+/// Convert a legacy `BlindSpotReport` into the canonical `EvidenceFeed`.
+/// Every item is schema-validated; validation failures drop the offending
+/// item with a structured log rather than breaking the feed.
+pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
+    let mut items: Vec<EvidenceItem> = Vec::new();
+
+    for d in &report.uncovered_dependencies {
+        items.push(uncovered_dep_to_evidence_item(d));
+    }
+    for t in &report.stale_topics {
+        items.push(stale_topic_to_evidence_item(t));
+    }
+    for m in &report.missed_signals {
+        items.push(missed_signal_to_evidence_item(m));
+    }
+    for (idx, r) in report.recommendations.iter().enumerate() {
+        items.push(recommendation_to_evidence_item(r, idx));
+    }
+
+    let validated: Vec<EvidenceItem> = items
+        .into_iter()
+        .filter(|item| match crate::evidence::validate_item(item) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = %e,
+                    "dropped blind-spot item failing schema validation"
+                );
+                false
+            }
+        })
+        .collect();
+
+    EvidenceFeed::from_items_with_score(validated, report.overall_score)
+}
+
+// ============================================================================
 // Tauri Command
 // ============================================================================
 
+/// Returns the canonical `EvidenceFeed` for the Blind Spots lens, with the
+/// legacy coverage score carried on `feed.score`. Internal
+/// `generate_blind_spot_report` still produces the legacy struct (shared
+/// with telemetry code paths) and converts at the boundary.
 #[tauri::command]
-pub async fn get_blind_spots() -> std::result::Result<BlindSpotReport, String> {
+pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_blind_spots").map_err(|e| e.to_string())?;
-    generate_blind_spot_report().map_err(|e| e.to_string())
+    let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
+    Ok(blind_spot_report_to_feed(&report))
 }
 
 // ============================================================================
@@ -1517,5 +1794,143 @@ mod tests {
         assert!(has_word_boundary_match("use serde.rs for json", "serde")); // .rs suffix allowed
         assert!(!has_word_boundary_match("unexpected happens here", "next")); // embedded in word
         assert!(!has_word_boundary_match("configuring app", "conf")); // substring of config
+    }
+
+    // ========================================================================
+    // EvidenceItem conversion tests (Intelligence Reconciliation — Phase 4)
+    // ========================================================================
+
+    fn uncov_sample() -> UncoveredDep {
+        UncoveredDep {
+            name: "tokio".into(),
+            dep_type: "cargo".into(),
+            projects_using: vec!["/proj/a".into(), "/proj/b".into()],
+            days_since_last_signal: 21,
+            available_signal_count: 4,
+            risk_level: "critical".into(),
+        }
+    }
+
+    fn stale_sample() -> StaleTopic {
+        StaleTopic {
+            topic: "async-rust".into(),
+            last_engagement_days: 30,
+            active_deps_in_topic: 3,
+            missed_signal_count: 7,
+        }
+    }
+
+    fn missed_sample() -> MissedSignal {
+        MissedSignal {
+            item_id: 42,
+            title: "Critical Tokio 1.x vulnerability disclosed".into(),
+            url: Some("https://example.test/post/42".into()),
+            source_type: "hn".into(),
+            relevance_score: 0.9,
+            created_at: "2026-04-10 14:30:00".into(),
+            why_relevant: "Matches tokio in 2 of your projects".into(),
+        }
+    }
+
+    fn rec_sample() -> BlindSpotRecommendation {
+        BlindSpotRecommendation {
+            action: "Set up a watch for Rust security advisories".into(),
+            reason: "You have 4 uncovered Rust dependencies".into(),
+            priority: "high".into(),
+        }
+    }
+
+    fn report_sample() -> BlindSpotReport {
+        BlindSpotReport {
+            overall_score: 68.0,
+            uncovered_dependencies: vec![uncov_sample()],
+            stale_topics: vec![stale_sample()],
+            missed_signals: vec![missed_sample()],
+            recommendations: vec![rec_sample()],
+            generated_at: "2026-04-17 00:00:00".into(),
+        }
+    }
+
+    #[test]
+    fn uncovered_dep_maps_to_gap_kind() {
+        let item = uncovered_dep_to_evidence_item(&uncov_sample());
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
+        assert!(item.affected_deps.contains(&"tokio".to_string()));
+        assert_eq!(item.affected_projects.len(), 2);
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn stale_topic_maps_to_gap_kind() {
+        let item = stale_topic_to_evidence_item(&stale_sample());
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
+        // 30 days + 7 missed → Medium urgency
+        assert_eq!(item.urgency, crate::evidence::Urgency::Medium);
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn missed_signal_maps_to_missed_signal_kind() {
+        let item = missed_signal_to_evidence_item(&missed_sample());
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::MissedSignal);
+        assert_eq!(item.urgency, crate::evidence::Urgency::High);
+        assert_eq!(item.evidence.len(), 1);
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn recommendation_maps_to_alert_kind() {
+        let item = recommendation_to_evidence_item(&rec_sample(), 0);
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Alert);
+        assert_eq!(item.urgency, crate::evidence::Urgency::High);
+        assert!(!item.suggested_actions.is_empty());
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn report_converts_to_feed_with_score() {
+        let feed = blind_spot_report_to_feed(&report_sample());
+        // 1 uncovered + 1 stale + 1 missed + 1 recommendation
+        assert_eq!(feed.total, 4);
+        assert_eq!(feed.score, Some(68.0));
+        assert_eq!(feed.critical_count, 1); // uncovered "critical"
+        // high_count: high-priority recommendation + high-urgency missed
+        assert_eq!(feed.high_count, 2);
+    }
+
+    #[test]
+    fn empty_report_produces_empty_feed() {
+        let report = BlindSpotReport {
+            overall_score: 0.0,
+            uncovered_dependencies: vec![],
+            stale_topics: vec![],
+            missed_signals: vec![],
+            recommendations: vec![],
+            generated_at: String::new(),
+        };
+        let feed = blind_spot_report_to_feed(&report);
+        assert_eq!(feed.total, 0);
+        assert_eq!(feed.score, Some(0.0));
+    }
+
+    #[test]
+    fn all_items_pass_schema_validation() {
+        let feed = blind_spot_report_to_feed(&report_sample());
+        for it in &feed.items {
+            assert!(crate::evidence::validate_item(it).is_ok(),
+                "item {} failed validation", it.id);
+        }
+    }
+
+    #[test]
+    fn all_items_tagged_with_blind_spots_lens() {
+        let feed = blind_spot_report_to_feed(&report_sample());
+        for it in &feed.items {
+            assert!(it.lens_hints.blind_spots);
+            assert!(!it.lens_hints.preemption);
+            assert!(!it.lens_hints.briefing);
+            assert!(!it.lens_hints.evidence);
+        }
     }
 }

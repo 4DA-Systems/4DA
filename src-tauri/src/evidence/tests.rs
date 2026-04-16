@@ -308,3 +308,19 @@ fn evidence_feed_empty_has_zero_counts() {
     assert_eq!(feed.critical_count, 0);
     assert_eq!(feed.high_count, 0);
 }
+
+#[test]
+fn evidence_feed_without_score_is_none() {
+    let feed = EvidenceFeed::from_items(vec![]);
+    assert_eq!(feed.score, None);
+}
+
+#[test]
+fn evidence_feed_with_score_clamps_to_0_100() {
+    let under = EvidenceFeed::from_items_with_score(vec![], -12.0);
+    let over = EvidenceFeed::from_items_with_score(vec![], 150.0);
+    let in_range = EvidenceFeed::from_items_with_score(vec![], 42.5);
+    assert_eq!(under.score, Some(0.0));
+    assert_eq!(over.score, Some(100.0));
+    assert_eq!(in_range.score, Some(42.5));
+}

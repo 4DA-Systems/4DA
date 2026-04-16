@@ -1,10 +1,12 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { memo, useEffect, useRef, useCallback } from 'react';
+import { memo, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
+import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
+import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 
 const SCORE_TIERS = [
@@ -14,29 +16,22 @@ const SCORE_TIERS = [
   { max: 100, color: 'text-red-400', bg: 'bg-red-500', labelKey: 'blindspots.score.critical' },
 ] as const;
 
-const RISK_COLORS: Record<string, string> = {
+const URGENCY_COLORS: Record<Urgency, string> = {
   critical: 'text-red-400',
   high: 'text-orange-400',
   medium: 'text-yellow-400',
-  low: 'text-blue-400',
-};
-
-const PRIORITY_STYLES: Record<string, string> = {
-  high: 'text-red-400 bg-red-500/10 border-red-500/20',
-  medium: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
-  low: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+  watch: 'text-blue-400',
 };
 
 function getScoreTier(score: number) {
   return SCORE_TIERS.find(t => score <= t.max) ?? SCORE_TIERS[3];
 }
 
-function formatDaysAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(diff / 86_400_000);
-  if (days === 0) return 'today';
-  if (days === 1) return '1 day ago';
-  return `${days} days ago`;
+/** Extract the plain topic/dep name for telemetry. Prefer affected_deps[0]
+ * when present (uncovered-dep items) otherwise the title. */
+function topicFromItem(item: EvidenceItem): string {
+  if (item.affected_deps.length > 0) return item.affected_deps[0]!;
+  return item.title;
 }
 
 const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
@@ -45,7 +40,9 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
   return (
     <div className="bg-bg-secondary rounded-lg border border-border p-5">
       <div className="flex items-baseline gap-3 mb-3">
-        <span className={`text-3xl font-semibold tabular-nums ${tier.color}`}>{Math.round(score)}</span>
+        <span className={`text-3xl font-semibold tabular-nums ${tier.color}`}>
+          {Math.round(score)}
+        </span>
         <span className="text-text-muted text-sm">/100</span>
         <span className={`text-sm ${tier.color}`}>{t(tier.labelKey)}</span>
       </div>
@@ -59,66 +56,58 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
   );
 });
 
-const UncoveredDeps = memo(function UncoveredDeps({ deps }: { deps: NonNullable<ReturnType<typeof useAppStore.getState>['blindSpotReport']>['uncovered_dependencies'] }) {
+const UncoveredDepsSection = memo(function UncoveredDepsSection({ items }: { items: EvidenceItem[] }) {
   const { t } = useTranslation();
   const surfacedRef = useRef(new Set<string>());
 
-  // Record surfaced for uncovered deps on first render
   useEffect(() => {
-    for (const dep of deps) {
-      if (!surfacedRef.current.has(dep.name)) {
-        surfacedRef.current.add(dep.name);
+    for (const it of items) {
+      if (!surfacedRef.current.has(it.id)) {
+        surfacedRef.current.add(it.id);
         recordTrustEvent({
           eventType: 'surfaced',
-          sourceType: dep.dep_type,
-          topic: dep.name,
+          sourceType: 'gap',
+          topic: topicFromItem(it),
           notes: 'blind_spot_uncovered_dep',
         });
       }
     }
-  }, [deps]);
+  }, [items]);
 
-  if (deps.length === 0) return null;
+  if (items.length === 0) return null;
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border">
         <h3 className="text-sm font-medium text-white">
-          {t('blindspots.uncovered')} ({deps.length})
+          {t('blindspots.uncovered')} ({items.length})
         </h3>
       </div>
       <div className="divide-y divide-border">
-        {deps.map((dep) => (
+        {items.map((it) => (
           <div
-            key={dep.name}
+            key={it.id}
             className="px-5 py-4 cursor-pointer hover:bg-bg-tertiary/50 transition-colors"
             onClick={() => {
               recordTrustEvent({
                 eventType: 'acted_on',
-                sourceType: dep.dep_type,
-                topic: dep.name,
+                sourceType: 'gap',
+                topic: topicFromItem(it),
                 notes: 'blind_spot_dep_click',
               });
             }}
           >
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-white">{dep.name}</span>
-              <span className="text-[10px] text-text-muted px-1.5 py-0.5 bg-bg-tertiary rounded">
-                {dep.dep_type}
-              </span>
-              {dep.projects_using.length > 0 && (
+              <span className="text-sm font-medium text-white">{topicFromItem(it)}</span>
+              {it.affected_projects.length > 0 && (
                 <span className="text-[10px] text-text-muted">
-                  {dep.projects_using.length} {dep.projects_using.length === 1 ? 'project' : 'projects'}
+                  {it.affected_projects.length} {it.affected_projects.length === 1 ? 'project' : 'projects'}
                 </span>
               )}
-              <span className={`ms-auto text-[10px] px-1.5 py-0.5 rounded ${RISK_COLORS[dep.risk_level] ?? 'text-text-muted'}`}>
-                {dep.risk_level}
+              <span className={`ms-auto text-[10px] px-1.5 py-0.5 rounded ${URGENCY_COLORS[it.urgency]}`}>
+                {it.urgency}
               </span>
             </div>
-            <p className="text-xs text-text-muted">
-              {t('blindspots.uncovered.days', { days: dep.days_since_last_signal })}
-              {' \u00B7 '}
-              {t('blindspots.uncovered.available', { count: dep.available_signal_count })}
-            </p>
+            <p className="text-xs text-text-muted">{it.explanation}</p>
           </div>
         ))}
       </div>
@@ -126,78 +115,88 @@ const UncoveredDeps = memo(function UncoveredDeps({ deps }: { deps: NonNullable<
   );
 });
 
-const MissedSignals = memo(function MissedSignals({ signals }: { signals: NonNullable<ReturnType<typeof useAppStore.getState>['blindSpotReport']>['missed_signals'] }) {
+const MissedSignalsSection = memo(function MissedSignalsSection({ items }: { items: EvidenceItem[] }) {
   const { t } = useTranslation();
-  const surfacedRef = useRef(new Set<number>());
+  const surfacedRef = useRef(new Set<string>());
 
-  // Record surfaced for all missed signals on first render
   useEffect(() => {
-    for (const signal of signals) {
-      if (!surfacedRef.current.has(signal.item_id)) {
-        surfacedRef.current.add(signal.item_id);
+    for (const it of items) {
+      if (!surfacedRef.current.has(it.id)) {
+        surfacedRef.current.add(it.id);
         recordTrustEvent({
           eventType: 'surfaced',
-          signalId: String(signal.item_id),
-          sourceType: signal.source_type,
-          topic: signal.title,
+          signalId: it.id,
+          sourceType: 'missed_signal',
+          topic: it.title,
           notes: 'blind_spot_missed_signal',
         });
       }
     }
-  }, [signals]);
+  }, [items]);
 
-  if (signals.length === 0) return null;
+  if (items.length === 0) return null;
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
       <div className="px-5 py-4 border-b border-border">
         <h3 className="text-sm font-medium text-white">
-          {t('blindspots.missed')} ({signals.length})
+          {t('blindspots.missed')} ({items.length})
         </h3>
       </div>
       <div className="divide-y divide-border">
-        {signals.map((signal) => (
-          <div key={signal.item_id} className="px-5 py-4">
-            <div className="mb-1">
-              {signal.url ? (
-                <a
-                  href={signal.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-white hover:text-amber-400 transition-colors"
-                  onClick={() => {
-                    recordTrustEvent({
-                      eventType: 'acted_on',
-                      signalId: String(signal.item_id),
-                      sourceType: signal.source_type,
-                      topic: signal.title,
-                      notes: 'blind_spot_click',
-                    });
-                  }}
-                >
-                  {signal.title}
-                </a>
-              ) : (
-                <span className="text-sm text-white">{signal.title}</span>
+        {items.map((it) => {
+          const primaryCitation = it.evidence[0];
+          return (
+            <div key={it.id} className="px-5 py-4">
+              <div className="mb-1">
+                {primaryCitation?.url ? (
+                  <a
+                    href={primaryCitation.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-white hover:text-amber-400 transition-colors"
+                    onClick={() => {
+                      recordTrustEvent({
+                        eventType: 'acted_on',
+                        signalId: it.id,
+                        sourceType: 'missed_signal',
+                        topic: it.title,
+                        notes: 'blind_spot_click',
+                      });
+                    }}
+                  >
+                    {it.title}
+                  </a>
+                ) : (
+                  <span className="text-sm text-white">{it.title}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <span>{t('blindspots.missed.relevance', { score: it.confidence.value.toFixed(2) })}</span>
+                {primaryCitation && (
+                  <>
+                    <span>·</span>
+                    <span>{primaryCitation.source}</span>
+                    <span>·</span>
+                    <span>
+                      {primaryCitation.freshness_days <= 0
+                        ? 'today'
+                        : `${Math.round(primaryCitation.freshness_days)}d ago`}
+                    </span>
+                  </>
+                )}
+              </div>
+              {it.explanation && (
+                <p className="text-[11px] text-text-secondary mt-1">{it.explanation}</p>
               )}
             </div>
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <span>{t('blindspots.missed.relevance', { score: `${Math.round(signal.relevance_score * 100)}%` })}</span>
-              <span>{'\u00B7'}</span>
-              <span>{signal.source_type}</span>
-              <span>{'\u00B7'}</span>
-              <span>{formatDaysAgo(signal.created_at)}</span>
-            </div>
-            {signal.why_relevant && (
-              <p className="text-[11px] text-text-secondary mt-1">{signal.why_relevant}</p>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 });
 
-const Recommendations = memo(function Recommendations({ items }: { items: NonNullable<ReturnType<typeof useAppStore.getState>['blindSpotReport']>['recommendations'] }) {
+const RecommendationsSection = memo(function RecommendationsSection({ items }: { items: EvidenceItem[] }) {
   const { t } = useTranslation();
   if (items.length === 0) return null;
   return (
@@ -206,16 +205,19 @@ const Recommendations = memo(function Recommendations({ items }: { items: NonNul
         <h3 className="text-sm font-medium text-white">{t('blindspots.recommendations')}</h3>
       </div>
       <div className="p-4 space-y-2">
-        {items.map((rec, i) => {
-          const style = PRIORITY_STYLES[rec.priority] ?? PRIORITY_STYLES.low;
+        {items.map((it) => {
+          const style =
+            it.urgency === 'high' ? 'text-red-400 bg-red-500/10 border-red-500/20'
+            : it.urgency === 'medium' ? 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
+            : 'text-blue-400 bg-blue-500/10 border-blue-500/20';
           return (
-            <div key={i} className={`px-4 py-3 rounded-lg border ${style}`}>
+            <div key={it.id} className={`px-4 py-3 rounded-lg border ${style}`}>
               <div className="flex items-center gap-2">
-                <span className="text-sm">{rec.action}</span>
-                <span className="ms-auto text-[10px] uppercase font-medium">{rec.priority}</span>
+                <span className="text-sm">{it.title}</span>
+                <span className="ms-auto text-[10px] uppercase font-medium">{it.urgency}</span>
               </div>
-              {rec.reason && (
-                <p className="text-[11px] text-text-secondary mt-1">{rec.reason}</p>
+              {it.explanation && (
+                <p className="text-[11px] text-text-secondary mt-1">{it.explanation}</p>
               )}
             </div>
           );
@@ -244,6 +246,25 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     loadBlindSpots();
   }, [loadBlindSpots]);
 
+  // Bucket items by the underlying legacy concept (preserved via id prefix
+  // in the Rust materializer) so this view's UX remains unchanged while
+  // the backend emits a single canonical feed.
+  const buckets = useMemo(() => {
+    const uncovered: EvidenceItem[] = [];
+    const missed: EvidenceItem[] = [];
+    const recommendations: EvidenceItem[] = [];
+    for (const it of report?.items ?? []) {
+      if (it.id.startsWith('bs_uncov_') || it.id.startsWith('bs_stale_')) {
+        uncovered.push(it);
+      } else if (it.id.startsWith('bs_missed_')) {
+        missed.push(it);
+      } else if (it.id.startsWith('bs_rec_')) {
+        recommendations.push(it);
+      }
+    }
+    return { uncovered, missed, recommendations };
+  }, [report]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-text-secondary text-sm">
@@ -271,10 +292,11 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     );
   }
 
+  const score = report.score ?? 0;
   const hasContent =
-    report.uncovered_dependencies.length > 0 ||
-    report.missed_signals.length > 0 ||
-    report.recommendations.length > 0;
+    buckets.uncovered.length > 0 ||
+    buckets.missed.length > 0 ||
+    buckets.recommendations.length > 0;
 
   return (
     <div className="space-y-4 pb-8">
@@ -283,7 +305,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <p className="text-sm text-text-muted">{t('blindspots.subtitle')}</p>
       </div>
 
-      <ScoreBar score={report.overall_score} />
+      <ScoreBar score={score} />
 
       {!hasContent ? (
         <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
@@ -291,9 +313,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         </div>
       ) : (
         <>
-          <UncoveredDeps deps={report.uncovered_dependencies} />
-          <MissedSignals signals={report.missed_signals} />
-          <Recommendations items={report.recommendations} />
+          <UncoveredDepsSection items={buckets.uncovered} />
+          <MissedSignalsSection items={buckets.missed} />
+          <RecommendationsSection items={buckets.recommendations} />
         </>
       )}
     </div>
