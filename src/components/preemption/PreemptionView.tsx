@@ -5,7 +5,8 @@ import { useEffect, useRef, useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
-import type { PreemptionAlert, PreemptionUrgency } from '../../store/preemption-slice';
+import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
+import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 
 // ============================================================================
@@ -13,7 +14,7 @@ import { recordTrustEvent } from '../../lib/trust-feedback';
 // ============================================================================
 
 const URGENCY_CONFIG: Record<
-  PreemptionUrgency,
+  Urgency,
   { color: string; bg: string; border: string; dot: string; label: string }
 > = {
   critical: {
@@ -46,7 +47,7 @@ const URGENCY_CONFIG: Record<
   },
 };
 
-const URGENCY_ORDER: PreemptionUrgency[] = ['critical', 'high', 'medium', 'watch'];
+const URGENCY_ORDER: Urgency[] = ['critical', 'high', 'medium', 'watch'];
 
 // Evidence items beyond this count are hidden behind a "Show all" toggle.
 const EVIDENCE_COLLAPSE_THRESHOLD = 2;
@@ -75,6 +76,12 @@ function truncateAt(text: string, limit: number): string {
   return `${lastSpace > limit - 40 ? cut.slice(0, lastSpace) : cut}…`;
 }
 
+/** Item `kind` is the canonical `EvidenceKind` variant; stringify it for
+ * telemetry continuity with pre-Phase-3 data (where `alert_type` was used). */
+function kindAsSourceType(item: EvidenceItem): string {
+  return typeof item.kind === 'string' ? item.kind : String(item.kind);
+}
+
 // ============================================================================
 // Sub-components
 // ============================================================================
@@ -82,7 +89,7 @@ function truncateAt(text: string, limit: number): string {
 const EvidenceList = memo(function EvidenceList({
   evidence,
 }: {
-  evidence: PreemptionAlert['evidence'];
+  evidence: EvidenceItem['evidence'];
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -144,13 +151,13 @@ const EvidenceList = memo(function EvidenceList({
 });
 
 const AffectedChips = memo(function AffectedChips({
-  alert,
+  item,
 }: {
-  alert: PreemptionAlert;
+  item: EvidenceItem;
 }) {
   const { t } = useTranslation();
-  const hasProjects = alert.affected_projects.length > 0;
-  const hasDeps = alert.affected_dependencies.length > 0;
+  const hasProjects = item.affected_projects.length > 0;
+  const hasDeps = item.affected_deps.length > 0;
   if (!hasProjects && !hasDeps) return null;
 
   return (
@@ -160,8 +167,8 @@ const AffectedChips = memo(function AffectedChips({
           <span className="shrink-0 text-[10px] font-medium text-text-muted uppercase tracking-wider w-16">
             {t('preemption.affected.projects')}
           </span>
-          <span className="text-text-secondary truncate" title={alert.affected_projects.join(', ')}>
-            {alert.affected_projects.join(', ')}
+          <span className="text-text-secondary truncate" title={item.affected_projects.join(', ')}>
+            {item.affected_projects.join(', ')}
           </span>
         </div>
       )}
@@ -171,7 +178,7 @@ const AffectedChips = memo(function AffectedChips({
             {t('preemption.affected.deps')}
           </span>
           <div className="flex flex-wrap gap-1">
-            {alert.affected_dependencies.slice(0, 6).map((dep) => (
+            {item.affected_deps.slice(0, 6).map((dep) => (
               <span
                 key={dep}
                 className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary border border-border"
@@ -179,9 +186,9 @@ const AffectedChips = memo(function AffectedChips({
                 {dep}
               </span>
             ))}
-            {alert.affected_dependencies.length > 6 && (
+            {item.affected_deps.length > 6 && (
               <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] text-text-muted">
-                +{alert.affected_dependencies.length - 6}
+                +{item.affected_deps.length - 6}
               </span>
             )}
           </div>
@@ -191,34 +198,35 @@ const AffectedChips = memo(function AffectedChips({
   );
 });
 
-const AlertCard = memo(function AlertCard({
-  alert,
+const ItemCard = memo(function ItemCard({
+  item,
   surfacedRef,
 }: {
-  alert: PreemptionAlert;
+  item: EvidenceItem;
   surfacedRef: React.RefObject<Set<string>>;
 }) {
   const { t } = useTranslation();
   const [explanationExpanded, setExplanationExpanded] = useState(false);
-  const cfg = URGENCY_CONFIG[alert.urgency] ?? URGENCY_CONFIG.watch;
+  const cfg = URGENCY_CONFIG[item.urgency] ?? URGENCY_CONFIG.watch;
+  const sourceType = kindAsSourceType(item);
 
-  // Record surfaced event once per alert
+  // Record surfaced event once per item
   useEffect(() => {
-    if (!surfacedRef.current!.has(alert.id)) {
-      surfacedRef.current!.add(alert.id);
+    if (!surfacedRef.current!.has(item.id)) {
+      surfacedRef.current!.add(item.id);
       recordTrustEvent({
         eventType: 'surfaced',
-        alertId: alert.id,
-        sourceType: alert.alert_type,
-        topic: alert.title,
+        alertId: item.id,
+        sourceType,
+        topic: item.title,
       });
     }
-  }, [alert.id, alert.alert_type, alert.title, surfacedRef]);
+  }, [item.id, sourceType, item.title, surfacedRef]);
 
-  const needsTruncation = alert.explanation.length > EXPLANATION_MAX_LENGTH;
+  const needsTruncation = item.explanation.length > EXPLANATION_MAX_LENGTH;
   const displayedExplanation = needsTruncation && !explanationExpanded
-    ? truncateAt(alert.explanation, EXPLANATION_MAX_LENGTH)
-    : alert.explanation;
+    ? truncateAt(item.explanation, EXPLANATION_MAX_LENGTH)
+    : item.explanation;
 
   return (
     <article className={`rounded-lg border ${cfg.border} ${cfg.bg} overflow-hidden`}>
@@ -232,10 +240,15 @@ const AlertCard = memo(function AlertCard({
             {cfg.label}
           </span>
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-white leading-snug">
-            {alert.title}
+            {item.title}
           </h3>
-          <span className="shrink-0 text-[10px] font-mono tabular-nums text-text-muted">
-            {Math.round(alert.confidence * 100)}%
+          <span
+            className="shrink-0 text-[10px] font-mono tabular-nums text-text-muted"
+            title={`Confidence provenance: ${item.confidence.provenance}${
+              item.confidence.sample_size ? ` (n=${item.confidence.sample_size})` : ''
+            }`}
+          >
+            {Math.round(item.confidence.value * 100)}%
           </span>
         </div>
       </header>
@@ -243,36 +256,30 @@ const AlertCard = memo(function AlertCard({
       {/* Body */}
       <div className="px-4 pb-4">
         {/* Explanation */}
-        <p className="text-xs text-text-secondary leading-relaxed">
-          {displayedExplanation}
-          {needsTruncation && (
-            <button
-              type="button"
-              onClick={() => { setExplanationExpanded(v => !v); }}
-              className="ms-1 text-text-muted hover:text-text-secondary underline-offset-2 hover:underline"
-            >
-              {explanationExpanded
-                ? t('preemption.explanation.collapse', 'less')
-                : t('preemption.explanation.expand', 'more')}
-            </button>
-          )}
-        </p>
-
-        <AffectedChips alert={alert} />
-        <EvidenceList evidence={alert.evidence} />
-
-        {/* Predicted window */}
-        {alert.predicted_window && (
-          <div className="mt-3 text-[11px] text-text-muted">
-            <span className="text-text-muted">{t('preemption.window')}:</span>{' '}
-            <span className="text-text-secondary">{alert.predicted_window}</span>
-          </div>
+        {item.explanation && (
+          <p className="text-xs text-text-secondary leading-relaxed">
+            {displayedExplanation}
+            {needsTruncation && (
+              <button
+                type="button"
+                onClick={() => { setExplanationExpanded(v => !v); }}
+                className="ms-1 text-text-muted hover:text-text-secondary underline-offset-2 hover:underline"
+              >
+                {explanationExpanded
+                  ? t('preemption.explanation.collapse', 'less')
+                  : t('preemption.explanation.expand', 'more')}
+              </button>
+            )}
+          </p>
         )}
 
+        <AffectedChips item={item} />
+        <EvidenceList evidence={item.evidence} />
+
         {/* Action buttons */}
-        {alert.suggested_actions.length > 0 && (
+        {item.suggested_actions.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
-            {alert.suggested_actions.map((action, i) => (
+            {item.suggested_actions.map((action, i) => (
               <button
                 key={i}
                 type="button"
@@ -280,12 +287,10 @@ const AlertCard = memo(function AlertCard({
                 title={action.description}
                 onClick={() => {
                   recordTrustEvent({
-                    eventType: action.label.toLowerCase().includes('dismiss')
-                      ? 'dismissed'
-                      : 'acted_on',
-                    alertId: alert.id,
-                    sourceType: alert.alert_type,
-                    topic: alert.title,
+                    eventType: action.action_id === 'dismiss' ? 'dismissed' : 'acted_on',
+                    alertId: item.id,
+                    sourceType,
+                    topic: item.title,
                     notes: action.label,
                   });
                 }}
@@ -321,8 +326,8 @@ const PreemptionView = memo(function PreemptionView() {
     void loadPreemption();
   }, [loadPreemption]);
 
-  // Sort alerts by urgency priority (critical first)
-  const sortedAlerts = (feed?.alerts ?? []).slice().sort(
+  // Sort items by urgency priority (critical first)
+  const sortedItems = (feed?.items ?? []).slice().sort(
     (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
   );
 
@@ -349,7 +354,7 @@ const PreemptionView = memo(function PreemptionView() {
       )}
 
       {/* Empty state */}
-      {feed && sortedAlerts.length === 0 && (
+      {feed && sortedItems.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-3">
             <span className="text-green-400 text-lg">&#x2713;</span>
@@ -359,7 +364,7 @@ const PreemptionView = memo(function PreemptionView() {
       )}
 
       {/* Alert list */}
-      {feed && sortedAlerts.length > 0 && (
+      {feed && sortedItems.length > 0 && (
         <>
           {/* Summary bar */}
           <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-bg-secondary border border-border">
@@ -382,10 +387,10 @@ const PreemptionView = memo(function PreemptionView() {
             </span>
           </div>
 
-          {/* Alert cards */}
+          {/* Item cards */}
           <div className="space-y-4">
-            {sortedAlerts.map(alert => (
-              <AlertCard key={alert.id} alert={alert} surfacedRef={surfacedRef} />
+            {sortedItems.map(item => (
+              <ItemCard key={item.id} item={item} surfacedRef={surfacedRef} />
             ))}
           </div>
         </>

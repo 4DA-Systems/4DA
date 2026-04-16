@@ -34,8 +34,8 @@ mod tests;
 pub use materializer::{EvidenceMaterializer, MaterializeContext};
 #[allow(unused_imports)]
 pub use types::{
-    Action, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceItem, EvidenceKind,
-    LensHints, PrecedentOutcome, PrecedentRef, Urgency, ACTION_IDS,
+    Action, Confidence, ConfidenceProvenance, EvidenceCitation, EvidenceFeed, EvidenceItem,
+    EvidenceKind, LensHints, PrecedentOutcome, PrecedentRef, Urgency, ACTION_IDS,
 };
 #[allow(unused_imports)]
 pub use validate::{validate_item, ValidationError};
