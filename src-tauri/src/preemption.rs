@@ -12,6 +12,10 @@ use tracing::warn;
 use ts_rs::TS;
 
 use crate::error::Result;
+use crate::evidence::{
+    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
+    EvidenceKind, LensHints, Urgency,
+};
 use crate::knowledge_decay::GapSeverity;
 use crate::signal_chains::ChainResolution;
 
@@ -801,13 +805,152 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
 }
 
 // ============================================================================
+// EvidenceItem conversion (Intelligence Reconciliation — Phase 3)
+// ============================================================================
+//
+// `PreemptionAlert` is the pre-reconciliation shape. The Tauri command now
+// emits canonical `EvidenceItem`s via `EvidenceFeed`. Internal callers
+// (e.g. `monitoring_briefing.rs`) still use `PreemptionAlert` until their
+// own materializers land in later phases.
+
+fn alert_urgency_to_canonical(u: &AlertUrgency) -> Urgency {
+    match u {
+        AlertUrgency::Critical => Urgency::Critical,
+        AlertUrgency::High => Urgency::High,
+        AlertUrgency::Medium => Urgency::Medium,
+        AlertUrgency::Watch => Urgency::Watch,
+    }
+}
+
+/// Map the legacy `action_type` string onto a canonical action_id. Legacy
+/// values were a free-text convention; canonical ids are enumerated in
+/// `evidence::types::ACTION_IDS`. Unknown values fall back to "acknowledge".
+fn map_action_id(legacy: &str) -> &'static str {
+    match legacy {
+        "dismiss" => "dismiss",
+        "watch" => "snooze_7d",
+        "investigate" => "investigate",
+        "review_decision" => "brief_this",
+        _ => "acknowledge",
+    }
+}
+
+fn suggested_action_to_canonical(a: &SuggestedAction) -> EvidenceAction {
+    EvidenceAction {
+        action_id: map_action_id(&a.action_type).to_string(),
+        label: a.label.clone(),
+        description: a.description.clone(),
+    }
+}
+
+fn alert_evidence_to_citation(e: &AlertEvidence) -> EvidenceCitation {
+    // Cap relevance_note at 200 chars per EvidenceItem schema rule.
+    let note = format!("relevance {:.2}", e.relevance_score);
+    EvidenceCitation {
+        source: e.source.clone(),
+        title: e.title.clone(),
+        url: e.url.clone(),
+        freshness_days: e.freshness_days,
+        relevance_note: note,
+    }
+}
+
+fn preemption_kind_to_canonical(t: &PreemptionType) -> EvidenceKind {
+    match t {
+        PreemptionType::KnowledgeBlindSpot => EvidenceKind::Gap,
+        _ => EvidenceKind::Alert,
+    }
+}
+
+impl PreemptionAlert {
+    /// Convert to the canonical `EvidenceItem` for lens consumption.
+    /// Used by `get_preemption_alerts` (command boundary).
+    pub fn to_evidence_item(&self) -> EvidenceItem {
+        // `created_at` is an ISO-8601 SQLite datetime string; convert to
+        // Unix millis. On parse failure fall back to "now" — never break
+        // a user-facing item on a timestamp quirk.
+        let created_at = chrono::NaiveDateTime::parse_from_str(&self.created_at, "%Y-%m-%d %H:%M:%S")
+            .map(|dt| dt.and_utc().timestamp_millis())
+            .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
+
+        // Always title the item with the alert's own title; trim any
+        // trailing period per schema rule.
+        let title = self
+            .title
+            .trim_end_matches('.')
+            .chars()
+            .take(120)
+            .collect::<String>();
+
+        let kind = preemption_kind_to_canonical(&self.alert_type);
+        let evidence: Vec<EvidenceCitation> = self
+            .evidence
+            .iter()
+            .map(alert_evidence_to_citation)
+            .collect();
+
+        let suggested_actions: Vec<EvidenceAction> = self
+            .suggested_actions
+            .iter()
+            .map(suggested_action_to_canonical)
+            .collect();
+
+        EvidenceItem {
+            id: self.id.clone(),
+            kind,
+            title,
+            explanation: self.explanation.clone(),
+            // Preemption uses a bare f32 confidence; provenance is
+            // heuristic until AWE spine is wired in Phase 9.
+            confidence: Confidence::heuristic(self.confidence.clamp(0.0, 1.0)),
+            urgency: alert_urgency_to_canonical(&self.urgency),
+            // Reversibility is not computed by preemption — leave None.
+            reversibility: None,
+            evidence,
+            affected_projects: self.affected_projects.clone(),
+            affected_deps: self.affected_dependencies.clone(),
+            suggested_actions,
+            precedents: Vec::new(),
+            refutation_condition: None,
+            lens_hints: LensHints::preemption_only(),
+            created_at,
+            expires_at: None,
+        }
+    }
+}
+
+// ============================================================================
 // Tauri Command
 // ============================================================================
 
+/// Returns the canonical `EvidenceFeed` for the Preemption lens.
+/// Internally still produces `PreemptionAlert`s (same ranking, same content)
+/// and converts at the boundary — lossless for the UI, and lets
+/// `monitoring_briefing.rs` continue to use the legacy shape until its own
+/// phase. In dev builds the output is schema-validated; validation failures
+/// drop the offending item with a log rather than breaking the feed.
 #[tauri::command]
-pub async fn get_preemption_alerts() -> std::result::Result<PreemptionFeed, String> {
+pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_preemption_alerts").map_err(|e| e.to_string())?;
-    get_preemption_feed().map_err(|e| e.to_string())
+    let feed = get_preemption_feed().map_err(|e| e.to_string())?;
+    let items: Vec<EvidenceItem> = feed
+        .alerts
+        .iter()
+        .map(|a| a.to_evidence_item())
+        .filter(|item| match crate::evidence::validate_item(item) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(
+                    target: "4da::evidence::validate",
+                    id = %item.id,
+                    error = %e,
+                    "dropped preemption item failing schema validation"
+                );
+                false
+            }
+        })
+        .collect();
+    Ok(EvidenceFeed::from_items(items))
 }
 
 // ============================================================================
@@ -1112,5 +1255,168 @@ mod tests {
             1,
             "should find the webpack alert via fallback"
         );
+    }
+
+    // ========================================================================
+    // EvidenceItem conversion tests (Intelligence Reconciliation — Phase 3)
+    // ========================================================================
+
+    fn sample_alert() -> PreemptionAlert {
+        PreemptionAlert {
+            id: "p_sec_webpack".to_string(),
+            alert_type: PreemptionType::SecurityAdvisory,
+            title: "CVE-2026-9999 affects webpack".to_string(),
+            explanation: "A critical vulnerability was reported.".to_string(),
+            evidence: vec![AlertEvidence {
+                source: "hn".to_string(),
+                title: "CVE-2026-9999 webpack critical vulnerability".to_string(),
+                url: Some("https://news.ycombinator.com/item?id=1".to_string()),
+                freshness_days: 5.0,
+                relevance_score: 0.82,
+            }],
+            affected_projects: vec!["/proj/a".to_string()],
+            affected_dependencies: vec!["webpack".to_string()],
+            urgency: AlertUrgency::Critical,
+            confidence: 0.77,
+            predicted_window: Some("within 7 days".to_string()),
+            suggested_actions: vec![SuggestedAction {
+                action_type: "investigate".to_string(),
+                label: "Investigate".to_string(),
+                description: "Review the advisory for affected versions.".to_string(),
+            }],
+            created_at: "2026-04-17 09:30:00".to_string(),
+        }
+    }
+
+    #[test]
+    fn to_evidence_item_maps_urgency() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
+    }
+
+    #[test]
+    fn to_evidence_item_maps_security_advisory_to_alert_kind() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Alert);
+    }
+
+    #[test]
+    fn to_evidence_item_maps_knowledge_blindspot_to_gap_kind() {
+        let mut alert = sample_alert();
+        alert.alert_type = PreemptionType::KnowledgeBlindSpot;
+        let item = alert.to_evidence_item();
+        assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
+    }
+
+    #[test]
+    fn to_evidence_item_maps_legacy_action_types() {
+        let mut alert = sample_alert();
+        alert.suggested_actions = vec![
+            SuggestedAction {
+                action_type: "watch".to_string(),
+                label: "Watch".to_string(),
+                description: "".to_string(),
+            },
+            SuggestedAction {
+                action_type: "review_decision".to_string(),
+                label: "Review".to_string(),
+                description: "".to_string(),
+            },
+            SuggestedAction {
+                action_type: "investigate".to_string(),
+                label: "Look".to_string(),
+                description: "".to_string(),
+            },
+            SuggestedAction {
+                action_type: "dismiss".to_string(),
+                label: "X".to_string(),
+                description: "".to_string(),
+            },
+            SuggestedAction {
+                action_type: "unknown_legacy".to_string(),
+                label: "?".to_string(),
+                description: "".to_string(),
+            },
+        ];
+        let item = alert.to_evidence_item();
+        let ids: Vec<&str> = item
+            .suggested_actions
+            .iter()
+            .map(|a| a.action_id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["snooze_7d", "brief_this", "investigate", "dismiss", "acknowledge"]
+        );
+    }
+
+    #[test]
+    fn to_evidence_item_sets_preemption_lens_hint() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        assert!(item.lens_hints.preemption);
+        assert!(!item.lens_hints.briefing);
+        assert!(!item.lens_hints.blind_spots);
+        assert!(!item.lens_hints.evidence);
+    }
+
+    #[test]
+    fn to_evidence_item_strips_trailing_period_from_title() {
+        let mut alert = sample_alert();
+        alert.title = "Something will break.".to_string();
+        let item = alert.to_evidence_item();
+        assert_eq!(item.title, "Something will break");
+    }
+
+    #[test]
+    fn to_evidence_item_caps_title_at_120_chars() {
+        let mut alert = sample_alert();
+        alert.title = "x".repeat(200);
+        let item = alert.to_evidence_item();
+        assert_eq!(item.title.len(), 120);
+    }
+
+    #[test]
+    fn to_evidence_item_passes_schema_validation() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        assert!(crate::evidence::validate_item(&item).is_ok());
+    }
+
+    #[test]
+    fn to_evidence_item_marks_confidence_heuristic_provenance() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        assert_eq!(
+            item.confidence.provenance,
+            crate::evidence::ConfidenceProvenance::Heuristic
+        );
+    }
+
+    #[test]
+    fn to_evidence_item_clamps_confidence_into_range() {
+        let mut alert = sample_alert();
+        alert.confidence = 1.5; // Out-of-range legacy value
+        let item = alert.to_evidence_item();
+        assert!(item.confidence.value >= 0.0 && item.confidence.value <= 1.0);
+    }
+
+    #[test]
+    fn to_evidence_item_includes_citations() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        assert_eq!(item.evidence.len(), 1);
+        assert_eq!(item.evidence[0].source, "hn");
+        assert!(item.evidence[0].url.is_some());
+    }
+
+    #[test]
+    fn to_evidence_item_parses_created_at() {
+        let alert = sample_alert();
+        let item = alert.to_evidence_item();
+        // 2026-04-17 09:30:00 UTC → must be a real millis value
+        assert!(item.created_at > 1_700_000_000_000);
     }
 }

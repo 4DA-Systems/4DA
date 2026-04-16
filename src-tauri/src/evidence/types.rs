@@ -304,3 +304,38 @@ impl LensHints {
         }
     }
 }
+
+// ============================================================================
+// EvidenceFeed — feed-level envelope emitted by lens-backing commands
+// ============================================================================
+
+/// Standard envelope every lens-backing command returns. Carries the items
+/// plus precomputed summary counts (so the UI can render a summary bar
+/// without traversing the items list). Emitted by `get_preemption_alerts`,
+/// `get_blind_spots`, and Phase 12's Evidence lens command.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export, export_to = "bindings/")]
+pub struct EvidenceFeed {
+    pub items: Vec<EvidenceItem>,
+    pub total: usize,
+    pub critical_count: usize,
+    pub high_count: usize,
+}
+
+impl EvidenceFeed {
+    /// Build a feed from items, computing the summary counts.
+    pub fn from_items(items: Vec<EvidenceItem>) -> Self {
+        let total = items.len();
+        let critical_count = items
+            .iter()
+            .filter(|i| i.urgency == Urgency::Critical)
+            .count();
+        let high_count = items.iter().filter(|i| i.urgency == Urgency::High).count();
+        Self {
+            items,
+            total,
+            critical_count,
+            high_count,
+        }
+    }
+}
