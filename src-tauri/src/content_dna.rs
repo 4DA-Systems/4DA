@@ -149,6 +149,38 @@ pub fn classify_content_for_source(
     classify_content(title, content)
 }
 
+/// Source-aware classifier with reputation uplift/penalty.
+///
+/// Runs the standard `classify_content_for_source` and then multiplies the
+/// content-type multiplier by the per-source reputation multiplier. This is
+/// how user-added feeds (RSS URLs, YouTube handles) get differentiated from
+/// generic sources: a known-good blog gets a 1.30x uplift on top of its
+/// content type, while a generic aggregator stays at 1.0x.
+///
+/// `source_identifier` is the per-item provenance string:
+///   - RSS: the `feed_url` from the item metadata
+///   - YouTube: the channel ID or @handle
+///   - Twitter: the handle (without @)
+///   - Built-in sources: fall through to the source_type (no per-source override)
+///
+/// Returns (content_type, combined_multiplier) where combined is clamped to
+/// [0.15, 1.70] so a clickbait × bad-source combination can't go lower than a
+/// hiring post would and a security-advisory × top-tier-source can't exceed
+/// reasonable bounds.
+pub fn classify_content_for_source_with_reputation(
+    title: &str,
+    content: &str,
+    source_type: &str,
+    source_identifier: Option<&str>,
+) -> (ContentType, f32) {
+    let (ct, content_mult) = classify_content_for_source(title, content, source_type);
+    let reputation_mult = source_identifier
+        .map(crate::source_reputation::get_curated_prior)
+        .unwrap_or(1.0);
+    let combined = (content_mult * reputation_mult).clamp(0.15, 1.70);
+    (ct, combined)
+}
+
 /// Classify content into a type and return (type, utility_multiplier).
 /// Checked in priority order — first match wins.
 pub fn classify_content(title: &str, content: &str) -> (ContentType, f32) {
@@ -705,6 +737,69 @@ mod tests {
         );
         assert_eq!(ct, ContentType::Clickbait);
         assert_eq!(mult, 0.25);
+    }
+
+    // ========================================================================
+    // Reputation-aware classifier tests
+    // ========================================================================
+
+    #[test]
+    fn test_reputation_uplifts_known_good_source() {
+        // Deno blog is in the curated prior list at 1.30x.
+        // A Discussion-type post from there should multiply.
+        let (ct, mult) = classify_content_for_source_with_reputation(
+            "Some discussion about web standards",
+            "body...",
+            "rss",
+            Some("https://blog.deno.com/posts/1"),
+        );
+        assert_eq!(ct, ContentType::Discussion);
+        // Base Discussion = 1.0, reputation = 1.30, combined = 1.30
+        assert!((mult - 1.30).abs() < 0.01, "expected ~1.30, got {mult}");
+    }
+
+    #[test]
+    fn test_reputation_penalty_stacks_with_clickbait() {
+        // Clickbait from a low-signal domain should be doubly penalized.
+        let (ct, mult) = classify_content_for_source_with_reputation(
+            "He just did something you won't believe!",
+            "body...",
+            "rss",
+            Some("https://techcrunch.com/article"),
+        );
+        assert_eq!(ct, ContentType::Clickbait);
+        // Clickbait 0.25 * techcrunch 0.75 = 0.1875 → clamped at 0.15 floor
+        assert!(mult <= 0.25, "penalty should stack, got {mult}");
+    }
+
+    #[test]
+    fn test_reputation_unknown_source_is_neutral() {
+        // A random unknown domain gets 1.0 prior = no change vs plain classifier.
+        let (ct_a, mult_a) = classify_content_for_source_with_reputation(
+            "Announcing Foo 1.0",
+            "",
+            "rss",
+            Some("https://random-blog.example.com/post"),
+        );
+        let (ct_b, mult_b) = classify_content_for_source(
+            "Announcing Foo 1.0",
+            "",
+            "rss",
+        );
+        assert_eq!(ct_a, ct_b);
+        assert!((mult_a - mult_b).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_reputation_combined_clamped_to_range() {
+        // Even a 1.30x source with a 1.30x content type is capped at 1.70
+        let (_, mult) = classify_content_for_source_with_reputation(
+            "CVE-2026-1234: Critical vulnerability",
+            "security advisory content",
+            "rss",
+            Some("https://blog.rust-lang.org/post"),
+        );
+        assert!(mult <= 1.70, "combined multiplier should not exceed 1.70, got {mult}");
     }
 
     #[test]
