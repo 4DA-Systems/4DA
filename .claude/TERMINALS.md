@@ -9,7 +9,19 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 7 — Git Decision Miner)
+**Started:** 2026-04-17
+**Prior RECON commits:** cd5e31c8, 11a9fc41, 7f873d42, 223d810e, e1dde0f4, 60fb25c9, 31fa095d.
+**Scope:** Mine user's local git history for decision-shaped commits.
+Populates AWE Wisdom Graph with personal priors so Day-0 transmutations
+return meaningful precedents instead of empty cold-start.
+**Files claimed:**
+- `src-tauri/src/git_decision_miner.rs` (NEW)
+- `src-tauri/src/lib.rs` (EDIT — mod declaration + tauri command reg)
+- Tests
+**Done when:** `cargo test git_decision_miner::` green; a smoke run on
+the 4DA repo extracts ≥5 decisions with inferred outcomes.
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-6 + 2 hygiene recoveries done 2026-04-17):
      Intelligence Reconciliation — collapse phase + bridge complete.

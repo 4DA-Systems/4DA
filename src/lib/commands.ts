@@ -424,6 +424,11 @@ interface CommandMap {
   // flow via EvidenceItem with kind=Gap.
   get_knowledge_gaps: { params: Record<string, never>; result: EvidenceFeed };
 
+  // -- Git Decision Miner (Phase 7 — Cold Start Layer 1) --
+  // Scans user's configured context_dirs for decision-shaped commits.
+  // Returns a JSON string: { summary: MineSummary, jsonl_path: string }.
+  mine_git_decisions: { params: Record<string, never>; result: string };
+
   // -- Signal Chains --
   // Phase 5 (2026-04-17): get_signal_chains_predicted returns canonical
   // EvidenceFeed (kind=Chain). Raw get_signal_chains still returns the
