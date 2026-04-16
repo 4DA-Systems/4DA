@@ -9,21 +9,33 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 2 — EvidenceItem Canonical Type)
-**Started:** 2026-04-16 (continuing same session)
-**Phase 0 commit:** cd5e31c8 (plan lock)
-**Phase 1 commit:** 11a9fc41 (dead code purge, 19 files deleted, 1257/1257 tests green)
-**Scope:** Define canonical EvidenceItem type + EvidenceMaterializer trait. No deletions; pure addition.
-**Files claimed (Phase 2):**
-- `src-tauri/src/evidence/mod.rs` (NEW)
-- `src-tauri/src/evidence/types.rs` (NEW — struct + enums)
-- `src-tauri/src/evidence/materializer.rs` (NEW — trait)
-- `src-tauri/src/evidence/validate.rs` (NEW — runtime validation per schema)
-- `src-tauri/src/evidence/tests.rs` (NEW — roundtrip + validation tests)
-- `src-tauri/src/lib.rs` (EDIT — `mod evidence;`)
-- `src-tauri/Cargo.toml` (EDIT only if new deps needed)
-**Done when:** `cargo test -p fourda evidence::` green, TS bindings generate.
-**Commit Lock:** HELD at end of phase
+_No active terminals._
+
+<!-- T-INTEL-RECON (Phases 0-2 done 2026-04-16, paused for session review):
+     Intelligence Reconciliation — 12→5 tab collapse, AWE→spine reframe,
+     one EvidenceItem canonical type.
+
+     Phase 0 commit cd5e31c8 — plan lock:
+       - docs/strategy/INTELLIGENCE-RECONCILIATION.md
+       - docs/strategy/EVIDENCE-ITEM-SCHEMA.md
+       - .claude/rules/intelligence-doctrine.md
+       - CLAUDE.md pointer
+     Phase 1 commit 11a9fc41 — dead code purge:
+       - 19 files deleted (Momentum tab, 5 AWE UI panels, 2 vanity
+         components, CategoryChapterView, related tests)
+       - 12→10 tab model (removed 'insights' + 'chapters')
+       - 1257/1257 frontend tests green
+     Phase 2 commit 7f873d42 — EvidenceItem canonical type:
+       - src-tauri/src/evidence/ (5 files, ~900 LOC)
+       - EvidenceMaterializer async trait
+       - Runtime schema validator
+       - 36/36 evidence:: tests green
+       - 10 ts-rs bindings exported
+
+     Next (Phase 3): collapse preemption.rs PreemptionAlert → EvidenceItem,
+     refactor PreemptionView.tsx to consume canonical type. Done-when:
+     Preemption tab visually identical, backed by shared type. -->
+
 
 <!-- T-INTEL-MESH Phase 2 (done 2026-04-15, recovered after host crash):
      Decoupled the 50/50 blend via the reconciler (Layer 3 of the mesh).
