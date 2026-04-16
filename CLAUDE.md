@@ -2,7 +2,14 @@
 
 ## What Is 4DA
 
-4DA (4 Dimensional Autonomy) is a Tauri 2.0 desktop app that surfaces developer-relevant content from the internet — privately, locally, with zero configuration.
+**4DA reads the internet for developers — privately, locally — and gets sharper every day.**
+
+That's the one-sentence description. Use it verbatim in marketing, onboarding, about dialogs, and any
+surface where someone asks "what is 4DA?". The follow-up beat (held in reserve, used when asked
+"how does it get sharper?") is: *It learns from how you engage with what it shows you. Yesterday's noise
+becomes tomorrow's signal.*
+
+4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that promise.
 
 **Stack:** Rust backend + React/TypeScript frontend + SQLite (with sqlite-vec for vector search)
 **Dev server:** localhost:4444 | **Package manager:** pnpm
