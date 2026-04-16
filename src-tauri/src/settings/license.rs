@@ -158,6 +158,11 @@ fn maybe_revalidate_license() {
     let mut guard = manager.lock();
     let mut license = guard.get().license.clone();
 
+    // Dev unlock: preserve tier in debug builds with flag set.
+    if cfg!(debug_assertions) && license.dev_unlock_all {
+        return;
+    }
+
     if is_paid_tier(license.tier.as_str())
         && !is_trial_active(&license)
         && !has_license_key_available(&mut license)
@@ -257,10 +262,24 @@ pub fn is_signal() -> bool {
 /// If tier claims "signal"/"team"/"enterprise" but no valid license key exists
 /// (checked in memory, keychain, and validation cache), reset tier to "free".
 /// Also initializes the periodic re-validation timestamp.
+///
+/// Dev bypass: in debug builds with `dev_unlock_all: true`, the tier is
+/// preserved without needing a license key. Release builds ignore this flag.
 pub fn validate_license_on_startup() {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
     let mut license = guard.get().license.clone();
+
+    // Dev unlock: skip validation entirely in debug builds with the flag set.
+    // This keeps the tier set to whatever the user chose in settings.json.
+    if cfg!(debug_assertions) && license.dev_unlock_all {
+        info!(
+            target: "4da::license",
+            tier = %license.tier,
+            "Dev unlock active — skipping license validation, tier preserved"
+        );
+        return;
+    }
 
     // If tier is paid but no license key is set, reset to free
     if is_paid_tier(license.tier.as_str())

@@ -21,6 +21,10 @@ pub enum ContentType {
     HelpRequest,
     Hiring,
     Discussion,
+    /// Clickbait: "He just crawled through hell...", "You won't believe...",
+    /// vague pronouns, hyperbolic modifiers. Heavy penalty — these should
+    /// almost never reach high confidence.
+    Clickbait,
 }
 
 impl ContentType {
@@ -36,6 +40,7 @@ impl ContentType {
             "help_request" => Some(Self::HelpRequest),
             "hiring" => Some(Self::Hiring),
             "discussion" => Some(Self::Discussion),
+            "clickbait" => Some(Self::Clickbait),
             _ => None,
         }
     }
@@ -52,6 +57,7 @@ impl ContentType {
             ContentType::HelpRequest => "help_request",
             ContentType::Hiring => "hiring",
             ContentType::Discussion => "discussion",
+            ContentType::Clickbait => "clickbait",
         }
     }
 
@@ -69,6 +75,10 @@ impl ContentType {
             ContentType::Question => 0.65,
             ContentType::HelpRequest => 0.50,
             ContentType::Hiring => 0.30,
+            // Clickbait: heavy penalty. YouTube drama, vague pronouns,
+            // hyperbolic modifiers — these poison the high-confidence band
+            // if they score well on other axes.
+            ContentType::Clickbait => 0.25,
         }
     }
 }
@@ -124,6 +134,14 @@ pub fn classify_content_for_source(
                 return (ContentType::BreakingChange, 1.25);
             }
         }
+
+        // Clickbait override for any source — even if the manifest says
+        // "discussion" or "show_and_tell", a clickbait title should be
+        // suppressed. Critical for YouTube (default Discussion 1.0x).
+        if is_clickbait(&title.to_lowercase()) {
+            return (ContentType::Clickbait, ContentType::Clickbait.multiplier());
+        }
+
         return (ct.clone(), mult);
     }
 
@@ -136,6 +154,14 @@ pub fn classify_content_for_source(
 pub fn classify_content(title: &str, content: &str) -> (ContentType, f32) {
     let title_lower = title.to_lowercase();
     let content_lower_start: String = content.chars().take(500).collect::<String>().to_lowercase();
+
+    // 0. Clickbait (check before security — a CVE article isn't written in
+    //    clickbait form, so this won't cross-contaminate. But "He just
+    //    crawled through HELL to fix security" would wrongly pass as security.)
+    //    Clickbait is suppressed hard (0.25x multiplier) regardless of topic.
+    if is_clickbait(&title_lower) {
+        return (ContentType::Clickbait, ContentType::Clickbait.multiplier());
+    }
 
     // 1. Security Advisory (highest priority — urgent)
     if is_security(&title_lower, &content_lower_start) {
@@ -202,6 +228,100 @@ pub fn classify_content(title: &str, content: &str) -> (ContentType, f32) {
         ContentType::Discussion,
         ContentType::Discussion.multiplier(),
     )
+}
+
+/// Detects clickbait title patterns — the kind of YouTube thumbnail language
+/// that poisons a developer feed. Senior devs close the tab instantly when
+/// they see "He just crawled through hell..." ranked as high-confidence signal.
+///
+/// Patterns checked:
+/// - Vague-pronoun openers ("He just", "She just", "They just", "This guy", "This dev")
+/// - Hyperbolic reaction words ("shocked", "insane", "crazy", "absolute", "mind-blowing")
+/// - Clickbait phrases ("you won't believe", "will shock you", "nobody is talking about")
+/// - Excessive question/emphasis ("?!?", "!!!")
+/// - ALL CAPS fragments (WHY, HELL, CRAZY, INSANE, SHOCKING)
+///
+/// The detector is intentionally conservative — false negatives are fine,
+/// false positives on real technical content are not.
+fn is_clickbait(title: &str) -> bool {
+    // Vague-pronoun openers — a technical title names the subject.
+    // "He just X...", "She just Y...", "This guy Z..." — all clickbait shapes.
+    let vague_openers = [
+        "he just ",
+        "she just ",
+        "they just ",
+        "this guy ",
+        "this dev ",
+        "this developer ",
+        "this programmer ",
+        "this engineer ",
+        "this person ",
+        "watch him ",
+        "watch her ",
+        "watch this ",
+    ];
+    if vague_openers.iter().any(|p| title.starts_with(p)) {
+        return true;
+    }
+
+    // Hyperbolic/emotional reaction words — a technical writeup doesn't need them.
+    let hyperbolic = [
+        "you won't believe",
+        "you wont believe",
+        "will shock you",
+        "will blow your mind",
+        "mind-blowing",
+        "mind blowing",
+        "nobody is talking about",
+        "no one is talking about",
+        "what happens next",
+        "you'll never guess",
+        "youll never guess",
+        "absolute madlad",
+        "absolute mad lad",
+        "absolute unit",
+        "absolutely insane",
+        "goes insane",
+        "went insane",
+        "goes viral",
+        "went viral",
+        "shocking truth",
+        "the truth about",
+        "secret trick",
+        "one weird trick",
+    ];
+    if hyperbolic.iter().any(|p| title.contains(p)) {
+        return true;
+    }
+
+    // Multi-punctuation (clickbait thumbnails: "?!?", "!!!", "?!")
+    if title.contains("?!") || title.contains("!!!") || title.contains("!?") {
+        return true;
+    }
+
+    // ALL-CAPS emotional fragments — technical titles use code identifiers,
+    // not screaming. Count 5+ letter ALL-CAPS word occurrences that aren't
+    // technical terms (CPU, GPU, API, JSON, HTML, CSS, HTTP, HTTPS, etc.).
+    //
+    // NOTE: The caller passes a lowercase string, so this check cannot detect
+    // caps directly. Instead, we check for common clickbait caps-words by
+    // their lowercase form paired with emotional context.
+    let caps_emotional = [
+        " hell ",
+        "through hell",
+        "into hell",
+        "from hell",
+        " wtf ",
+        " omg ",
+        " lmao ",
+        " lol ",
+        " wth ",
+    ];
+    if caps_emotional.iter().any(|p| title.contains(p)) {
+        return true;
+    }
+
+    false
 }
 
 fn is_security(title: &str, content_start: &str) -> bool {
@@ -494,6 +614,97 @@ mod tests {
         let (ct, mult) = classify_content("CVE-2025-1234: Critical RCE in OpenSSL", "");
         assert_eq!(ct, ContentType::SecurityAdvisory);
         assert_eq!(mult, 1.30);
+    }
+
+    // ========================================================================
+    // Clickbait detection tests — the screenshot offender class
+    // ========================================================================
+
+    #[test]
+    fn test_clickbait_he_just_pattern() {
+        // The exact screenshot offender
+        let (ct, mult) = classify_content(
+            "He just crawled through hell to fix the browser...",
+            "",
+        );
+        assert_eq!(ct, ContentType::Clickbait);
+        assert_eq!(mult, 0.25);
+    }
+
+    #[test]
+    fn test_clickbait_vague_pronoun_openers() {
+        for title in &[
+            "She just solved a decade-old bug",
+            "They just shipped the biggest update",
+            "This guy built Linux in a weekend",
+            "This dev made something incredible",
+            "Watch him fix this in 10 minutes",
+        ] {
+            let (ct, _) = classify_content(title, "");
+            assert_eq!(ct, ContentType::Clickbait, "Should flag: {title}");
+        }
+    }
+
+    #[test]
+    fn test_clickbait_hyperbolic_phrases() {
+        for title in &[
+            "You won't believe what this CLI can do",
+            "The shocking truth about async/await",
+            "One weird trick to speed up your build",
+            "This framework goes viral overnight",
+        ] {
+            let (ct, _) = classify_content(title, "");
+            assert_eq!(ct, ContentType::Clickbait, "Should flag: {title}");
+        }
+    }
+
+    #[test]
+    fn test_clickbait_punctuation_spam() {
+        let (ct, _) = classify_content("Did they really break the API?!?", "");
+        assert_eq!(ct, ContentType::Clickbait);
+    }
+
+    #[test]
+    fn test_clickbait_caps_emotional() {
+        let (ct, _) = classify_content("I went through hell debugging this", "");
+        assert_eq!(ct, ContentType::Clickbait);
+    }
+
+    #[test]
+    fn test_clickbait_does_not_flag_legit_security() {
+        // A real CVE article should NOT be flagged as clickbait
+        let (ct, _) = classify_content(
+            "CVE-2025-55184: React Server Components DoS Vulnerability",
+            "",
+        );
+        assert_eq!(ct, ContentType::SecurityAdvisory);
+    }
+
+    #[test]
+    fn test_clickbait_does_not_flag_legit_announcements() {
+        // Real announcements should pass through
+        for title in &[
+            "Announcing Rust 1.94.0",
+            "React 19 is now available",
+            "Bun 2.0: Faster, Smaller, More Standard",
+            "Show HN: My Weekend Project",
+        ] {
+            let (ct, _) = classify_content(title, "");
+            assert_ne!(ct, ContentType::Clickbait, "Should NOT flag: {title}");
+        }
+    }
+
+    #[test]
+    fn test_clickbait_via_source_aware_classifier() {
+        // YouTube items normally default to Discussion (1.0x) — the clickbait
+        // override should still kick in via classify_content_for_source.
+        let (ct, mult) = classify_content_for_source(
+            "He just crawled through hell to fix the browser...",
+            "video transcript...",
+            "youtube",
+        );
+        assert_eq!(ct, ContentType::Clickbait);
+        assert_eq!(mult, 0.25);
     }
 
     #[test]

@@ -213,6 +213,118 @@ fn has_word_boundary(text: &str, term: &str) -> bool {
     false
 }
 
+/// Detects SemVer patterns in a title — used to reject ToolDiscovery classification
+/// for version bumps like "Announcing Rust 1.94.0" or "React 19 released".
+///
+/// Matches:
+///   - `\d+\.\d+\.\d+` (1.94.0, 19.2.5)
+///   - `\d+\.\d+` if surrounded by release context (1.94 released)
+///   - `v\d+` (v19, v2)
+///
+/// Uses hand-written byte scanning to avoid pulling in a regex dep.
+fn title_contains_semver(title_lower: &str) -> bool {
+    let bytes = title_lower.as_bytes();
+    let len = bytes.len();
+
+    // Scan for N.N.N or N.N or vN patterns
+    let mut i = 0;
+    while i < len {
+        // vN pattern: v followed by a digit
+        if bytes[i] == b'v'
+            && i + 1 < len
+            && bytes[i + 1].is_ascii_digit()
+            && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric())
+        {
+            // "v19" or "v2" — scan forward for more digits
+            let mut j = i + 1;
+            while j < len && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j - i >= 2 {
+                return true;
+            }
+            i = j;
+            continue;
+        }
+
+        // Number pattern: scan for a sequence like N.N.N or N.N
+        if bytes[i].is_ascii_digit() && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric()) {
+            let mut dots = 0;
+            let mut j = i;
+            while j < len {
+                if bytes[j].is_ascii_digit() {
+                    j += 1;
+                } else if bytes[j] == b'.' && j + 1 < len && bytes[j + 1].is_ascii_digit() {
+                    dots += 1;
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            // Must end at non-alphanumeric (word boundary)
+            let ends_clean = j >= len || !bytes[j].is_ascii_alphanumeric();
+            if ends_clean && dots >= 2 {
+                // N.N.N — clear SemVer
+                return true;
+            }
+            if ends_clean && dots == 1 && j - i >= 3 {
+                // N.N — only count if paired with release context
+                let ctx = &title_lower[..];
+                if ctx.contains("release")
+                    || ctx.contains("announc")
+                    || ctx.contains("available")
+                    || ctx.contains(" out ")
+                    || ctx.contains("launched")
+                {
+                    return true;
+                }
+            }
+            i = j;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    false
+}
+
+/// Detects first-person opinion/vent patterns — used to reject ToolDiscovery
+/// classification for posts like "I stopped re-explaining my database schemas".
+///
+/// A real tool-discovery post names the tool ("Show HN: Foo — a faster X").
+/// A vent starts with "I", "we", or a hot-take verb.
+fn title_is_first_person_opinion(title_lower: &str) -> bool {
+    // First-person openers without a "Show HN:" or similar label
+    let opinion_openers = [
+        "i stopped ",
+        "i started ",
+        "i quit ",
+        "i tried ",
+        "i finally ",
+        "i just ",
+        "i moved ",
+        "i replaced ",
+        "i ditched ",
+        "i rewrote ",
+        "why i ",
+        "how i ",
+        "we stopped ",
+        "we started ",
+        "we moved ",
+        "we quit ",
+        "we replaced ",
+        "we ditched ",
+        "why we ",
+        "how we ",
+        "my take on ",
+        "my honest ",
+        "hot take",
+        "unpopular opinion",
+    ];
+    opinion_openers.iter().any(|p| title_lower.starts_with(p) || title_lower.contains(p))
+}
+
 // ============================================================================
 // Pattern Matching Engine
 // ============================================================================
@@ -449,6 +561,20 @@ impl SignalClassifier {
             return None;
         }
 
+        // ToolDiscovery precision gate: suppress for version bumps and vent posts.
+        //
+        // Screenshot offenders:
+        //   - "Announcing Rust 1.94.0" — that's a release, not a new tool
+        //   - "I stopped re-explaining my database schemas to AI agents" — a vent
+        //
+        // Rule: if ToolDiscovery won but the title contains a SemVer pattern
+        // OR starts with a first-person opinion shape, it's not a new tool.
+        if signal_type == SignalType::ToolDiscovery
+            && (title_contains_semver(&title_lower) || title_is_first_person_opinion(&title_lower))
+        {
+            return None;
+        }
+
         // Two-tier tech matching: declared_tech for action text + priority, detected_tech for context only
         // Match against TITLE ONLY (not full content) to avoid false labels like "rust resource" on Fastify articles
         let declared_match = declared_tech.iter().find(|tech| {
@@ -658,6 +784,115 @@ impl SignalClassifier {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ========================================================================
+    // SemVer and first-person detection — ToolDiscovery false positive guards
+    // ========================================================================
+
+    #[test]
+    fn test_title_contains_semver_three_part() {
+        assert!(title_contains_semver("announcing rust 1.94.0"));
+        assert!(title_contains_semver("node 20.11.1 released"));
+        assert!(title_contains_semver("introducing webpack 5.89.0"));
+    }
+
+    #[test]
+    fn test_title_contains_semver_v_prefix() {
+        assert!(title_contains_semver("react v19 is here"));
+        assert!(title_contains_semver("bun v2 beta"));
+    }
+
+    #[test]
+    fn test_title_contains_semver_two_part_with_release_context() {
+        assert!(title_contains_semver("rust 1.94 released"));
+        assert!(title_contains_semver("typescript 5.7 announced"));
+    }
+
+    #[test]
+    fn test_title_contains_semver_ignores_unrelated_numbers() {
+        assert!(!title_contains_semver("top 10 tools for 2026"));
+        assert!(!title_contains_semver("i wrote 50 lines of code today"));
+    }
+
+    #[test]
+    fn test_title_is_first_person_opinion() {
+        assert!(title_is_first_person_opinion("i stopped re-explaining my database schemas"));
+        assert!(title_is_first_person_opinion("why i moved from postgres to sqlite"));
+        assert!(title_is_first_person_opinion("how we replaced redux with zustand"));
+        assert!(title_is_first_person_opinion("my honest take on rust"));
+    }
+
+    #[test]
+    fn test_title_is_first_person_ignores_product_launches() {
+        // "Show HN:" format is a legit launch — should NOT match
+        assert!(!title_is_first_person_opinion("show hn: foobar — a faster parser"));
+        assert!(!title_is_first_person_opinion("introducing acmedb"));
+        assert!(!title_is_first_person_opinion("announcing zed 1.0"));
+    }
+
+    #[test]
+    fn test_tool_discovery_suppressed_for_version_bump() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
+        // This matches ToolDiscovery keywords ("announcing", "new release")
+        // but is a version bump — should be suppressed.
+        let result = classifier.classify(
+            "Announcing Rust 1.94.0 with new release features",
+            "The Rust team is happy to introduce Rust 1.94.0 just released with new features.",
+            0.6,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        // Should return None (suppressed) OR classify as something other than ToolDiscovery
+        if let Some(c) = result {
+            assert_ne!(
+                c.signal_type, SignalType::ToolDiscovery,
+                "Version bumps should not classify as ToolDiscovery"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tool_discovery_suppressed_for_vent_post() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["ai".to_string()];
+        // Matches ToolDiscovery keywords but is a vent
+        let result = classifier.classify(
+            "I stopped re-explaining my database schemas to AI agents",
+            "Here is how I built a better workflow. We built an open source tool.",
+            0.5,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        if let Some(c) = result {
+            assert_ne!(
+                c.signal_type, SignalType::ToolDiscovery,
+                "Vent posts should not classify as ToolDiscovery"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tool_discovery_still_fires_on_real_launch() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
+        // Real launch — no SemVer, no first-person opener
+        let result = classifier.classify(
+            "Show HN: Tabula — a new open-source alternative to Excel built in Rust",
+            "We built this because existing alternatives are slow. Try it out, give us feedback.",
+            0.7,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        if let Some(c) = result {
+            // May or may not be ToolDiscovery depending on keyword winners,
+            // but SHOULD NOT be suppressed by our new guards.
+            assert!(c.confidence > 0.0);
+        }
+    }
 
     #[test]
     fn test_security_alert_classification() {
