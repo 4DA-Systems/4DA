@@ -101,18 +101,25 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
 
         {/* Right: badges + actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Summary badges */}
+          {/* Summary badge — single pill, no more rel/top redundancy */}
           {summaryBadges && isComplete && (
-            <div className="flex items-center gap-1">
-              <span className="px-1.5 py-0.5 text-[10px] bg-green-500/10 text-green-400 rounded font-mono">
-                {summaryBadges.relevantCount} rel
-              </span>
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] bg-bg-tertiary/60 text-text-secondary rounded font-mono border border-border"
+              title={t('header.summaryTooltip', '{{rel}} relevant items this session · {{top}} top-scored', {
+                rel: summaryBadges.relevantCount,
+                top: summaryBadges.topCount,
+              })}
+            >
+              <span className="text-green-400">{summaryBadges.relevantCount}</span>
+              <span className="text-text-muted">relevant</span>
               {summaryBadges.topCount > 0 && (
-                <span className="px-1.5 py-0.5 text-[10px] bg-orange-500/10 text-orange-400 rounded font-mono">
-                  {summaryBadges.topCount} top
-                </span>
+                <>
+                  <span className="text-text-muted">·</span>
+                  <span className="text-orange-400">{summaryBadges.topCount}</span>
+                  <span className="text-text-muted">top</span>
+                </>
               )}
-            </div>
+            </span>
           )}
 
           {/* Analyze button */}
