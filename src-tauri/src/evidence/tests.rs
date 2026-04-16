@@ -277,3 +277,34 @@ fn lens_hints_preemption_only() {
     assert!(h.preemption);
     assert!(!h.briefing && !h.blind_spots && !h.evidence);
 }
+
+// --- EvidenceFeed --------------------------------------------------------------
+
+fn item_with_urgency(u: Urgency) -> EvidenceItem {
+    let mut it = good_alert();
+    it.urgency = u;
+    it
+}
+
+#[test]
+fn evidence_feed_counts_by_urgency() {
+    let items = vec![
+        item_with_urgency(Urgency::Critical),
+        item_with_urgency(Urgency::Critical),
+        item_with_urgency(Urgency::High),
+        item_with_urgency(Urgency::Medium),
+        item_with_urgency(Urgency::Watch),
+    ];
+    let feed = EvidenceFeed::from_items(items);
+    assert_eq!(feed.total, 5);
+    assert_eq!(feed.critical_count, 2);
+    assert_eq!(feed.high_count, 1);
+}
+
+#[test]
+fn evidence_feed_empty_has_zero_counts() {
+    let feed = EvidenceFeed::from_items(vec![]);
+    assert_eq!(feed.total, 0);
+    assert_eq!(feed.critical_count, 0);
+    assert_eq!(feed.high_count, 0);
+}

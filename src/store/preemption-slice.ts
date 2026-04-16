@@ -1,55 +1,31 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
 import { cmd } from '../lib/commands';
+import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
+import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
+import type { Urgency } from '../../src-tauri/bindings/bindings/Urgency';
 
 // ============================================================================
-// Types (mirrors CommandMap definitions in commands.ts)
+// Types
 // ============================================================================
+//
+// Intelligence Reconciliation — Phase 3 (2026-04-17):
+// The slice now holds the canonical EvidenceFeed (EvidenceItem[] + summary
+// counts). Legacy shape aliases are exported for any lingering consumers,
+// but new code should import from the canonical bindings directly.
 
-export interface PreemptionEvidence {
-  source: string;
-  title: string;
-  url: string | null;
-  freshness_days: number;
-  relevance_score: number;
-}
-
-export interface PreemptionAction {
-  action_type: string;
-  label: string;
-  description: string;
-}
-
-export type PreemptionUrgency = 'critical' | 'high' | 'medium' | 'watch';
-
-export interface PreemptionAlert {
-  id: string;
-  alert_type: string;
-  title: string;
-  explanation: string;
-  evidence: PreemptionEvidence[];
-  affected_projects: string[];
-  affected_dependencies: string[];
-  urgency: PreemptionUrgency;
-  confidence: number;
-  predicted_window: string | null;
-  suggested_actions: PreemptionAction[];
-  created_at: string;
-}
-
-export interface PreemptionFeed {
-  alerts: PreemptionAlert[];
-  total: number;
-  critical_count: number;
-  high_count: number;
-}
+export type PreemptionUrgency = Urgency;
+export type PreemptionAlert = EvidenceItem;
+export type PreemptionEvidence = EvidenceItem['evidence'][number];
+export type PreemptionAction = EvidenceItem['suggested_actions'][number];
+export type { EvidenceFeed as PreemptionFeed };
 
 // ============================================================================
 // Slice Interface
 // ============================================================================
 
 export interface PreemptionSlice {
-  preemptionFeed: PreemptionFeed | null;
+  preemptionFeed: EvidenceFeed | null;
   preemptionLoading: boolean;
   preemptionError: string | null;
   loadPreemption: () => Promise<void>;
