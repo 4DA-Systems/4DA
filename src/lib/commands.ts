@@ -42,9 +42,7 @@ import type {
   ItemSummary,
 } from '../types/sources';
 import type {
-  KnowledgeGap,
   SignalChain,
-  SignalChainWithPrediction,
   ProjectHealth,
   AttentionReport,
   DeveloperDna,
@@ -421,11 +419,17 @@ interface CommandMap {
   get_document_content: { params: { documentId: number }; result: DocumentContentResponse };
 
   // -- Knowledge Gaps --
-  get_knowledge_gaps: { params: Record<string, never>; result: KnowledgeGap[] };
+  // Phase 5 (2026-04-17): returns canonical EvidenceFeed. Legacy KnowledgeGap
+  // type is still imported by a handful of pre-Phase-5 consumers; items now
+  // flow via EvidenceItem with kind=Gap.
+  get_knowledge_gaps: { params: Record<string, never>; result: EvidenceFeed };
 
   // -- Signal Chains --
+  // Phase 5 (2026-04-17): get_signal_chains_predicted returns canonical
+  // EvidenceFeed (kind=Chain). Raw get_signal_chains still returns the
+  // legacy SignalChain[] for lower-level accessors not yet migrated.
   get_signal_chains: { params: Record<string, never>; result: SignalChain[] };
-  get_signal_chains_predicted: { params: Record<string, never>; result: SignalChainWithPrediction[] };
+  get_signal_chains_predicted: { params: Record<string, never>; result: EvidenceFeed };
   resolve_signal_chain: { params: { chainId: string; resolution: string }; result: void };
 
   // -- Score Autopsy --
