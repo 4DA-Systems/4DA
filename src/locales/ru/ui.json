@@ -65,7 +65,7 @@
   "analysis.digestGenerated": "Дайджест сгенерирован: {{count}} элементов",
   "analysis.sourceError": "{{source}}: {{error}}",
   "analysis.stackDetected": "Автоматически обнаружен ваш стек: {{stack}}. Оценка будет приоритизировать соответствующие источники.",
-${translations[ru]}
+  "analysis.calibrationDrift": "Кривая калибровки для {{task}} устарела — перекалибровка на основе ваших следующих взаимодействий.",
   "analysis.keyboardTriggered": "Анализ запущен",
   "appbar.searchPlaceholder": "Поиск по аналитике...",
   "appbar.analyzing": "Анализ...",
