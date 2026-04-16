@@ -223,6 +223,69 @@ jobs:
           cp "$BIN" "$NAME"
           gh release upload "$TAG" "$NAME" --clobber
 
+      - name: Generate SHA-256 checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          TAG="${GITHUB_REF#refs/tags/}"
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+          CHECKSUMS_FILE="SHASUMS256-${{ matrix.target }}.txt"
+
+          # Platform-aware hasher: macOS ships `shasum`, Linux + Windows (git-bash)
+          # have `sha256sum`. Both produce identical `<hash>  <file>` output.
+          if command -v sha256sum >/dev/null 2>&1; then
+            HASHER="sha256sum"
+          else
+            HASHER="shasum -a 256"
+          fi
+
+          > "$CHECKSUMS_FILE"
+
+          # Hash all installer artifacts produced by the Tauri bundler.
+          # Ignore update bundles (.tar.gz / .zip with matching .sig) — those are
+          # verified by Tauri's updater via the minisign signature, not SHA-256.
+          if [[ -d "$BUNDLE_DIR" ]]; then
+            find "$BUNDLE_DIR" -type f \( \
+              -name "*.exe" -o \
+              -name "*.msi" -o \
+              -name "*.dmg" -o \
+              -name "*.AppImage" -o \
+              -name "*.deb" -o \
+              -name "*.rpm" \
+            \) | while read f; do
+              NAME=$(basename "$f")
+              HASH_LINE=$($HASHER "$f" | awk '{print $1}')
+              echo "${HASH_LINE}  ${NAME}" >> "$CHECKSUMS_FILE"
+              # Per-file sidecar — users can run `sha256sum -c <file>.sha256`
+              echo "${HASH_LINE}  ${NAME}" > "${f}.sha256"
+              gh release upload "$TAG" "${f}.sha256" --clobber
+            done
+          fi
+
+          # Also hash the CLI binary uploaded earlier in this job.
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            CLI_NAME="4da-cli-${{ matrix.target }}.exe"
+          else
+            CLI_NAME="4da-cli-${{ matrix.target }}"
+          fi
+          if [[ -f "$CLI_NAME" ]]; then
+            HASH_LINE=$($HASHER "$CLI_NAME" | awk '{print $1}')
+            echo "${HASH_LINE}  ${CLI_NAME}" >> "$CHECKSUMS_FILE"
+            echo "${HASH_LINE}  ${CLI_NAME}" > "${CLI_NAME}.sha256"
+            gh release upload "$TAG" "${CLI_NAME}.sha256" --clobber
+          fi
+
+          # Upload the consolidated per-platform checksum file.
+          gh release upload "$TAG" "$CHECKSUMS_FILE" --clobber
+
+          # Mirror to job summary so it's visible in the GitHub Actions UI.
+          echo "## SHA-256 Checksums (${{ matrix.label }})" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat "$CHECKSUMS_FILE" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate Rust SBOM
         if: matrix.label == 'Windows'
         shell: bash
@@ -267,6 +330,33 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Consolidate SHA-256 checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          TAG="${GITHUB_REF#refs/tags/}"
+          mkdir -p shasums && cd shasums
+
+          # Download every per-platform SHASUMS256-*.txt produced by the matrix.
+          # Tolerate missing files (one matrix arm might have failed); we still
+          # want the aggregate to reflect what shipped.
+          for ASSET in $(gh release view "$TAG" --json assets -q '.assets[].name' | grep '^SHASUMS256-'); do
+            gh release download "$TAG" -p "$ASSET" --clobber
+          done
+
+          # Produce a single SHASUMS256.txt sorted by filename.
+          # Format: `<hash>  <file>` — compatible with `sha256sum -c`.
+          if ls SHASUMS256-*.txt >/dev/null 2>&1; then
+            cat SHASUMS256-*.txt | sort -k2 > SHASUMS256.txt
+            echo "Consolidated checksums:"
+            cat SHASUMS256.txt
+            gh release upload "$TAG" SHASUMS256.txt --clobber
+          else
+            echo "::warning::No per-platform SHASUMS256 files found — consolidated file not created."
+          fi
+
       - name: Publish release
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         with:
