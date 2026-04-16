@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-import { VoidEngine } from '../void-engine/VoidEngine';
+import { BrandMark } from '../void-engine/BrandMark';
 import { getCelebrationMessage } from '../../utils/first-run-messages';
 import { getSourceFullName } from '../../config/sources';
 
@@ -67,7 +67,7 @@ export function CelebrationState({
   return (
     <div className="text-center px-8 max-w-lg">
       <div className="mb-6">
-        <VoidEngine size={80} />
+        <BrandMark size={80} />
       </div>
 
       {/* Intelligence Activated header */}

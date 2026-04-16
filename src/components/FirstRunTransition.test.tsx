@@ -31,10 +31,10 @@ vi.mock('react-i18next', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// VoidEngine mock — renders a simple div instead of canvas/WebGL
+// BrandMark mock — renders a simple div instead of SVG
 // ---------------------------------------------------------------------------
-vi.mock('./void-engine/VoidEngine', () => ({
-  VoidEngine: ({ size }: { size?: number }) => <div data-testid="void-engine" style={{ width: size, height: size }} />,
+vi.mock('./void-engine/BrandMark', () => ({
+  BrandMark: ({ size }: { size?: number }) => <div data-testid="brand-mark" style={{ width: size, height: size }} />,
 }));
 
 // ---------------------------------------------------------------------------
@@ -308,14 +308,14 @@ describe('FirstRunTransition', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 8. VoidEngine renders in loading states
+  // 8. BrandMark renders in loading states
   // -------------------------------------------------------------------------
-  it('renders VoidEngine in loading phase', async () => {
+  it('renders BrandMark in loading phase', async () => {
     await act(async () => {
       render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
-    expect(screen.getByTestId('void-engine')).toBeDefined();
+    expect(screen.getByTestId('brand-mark')).toBeDefined();
   });
 
   // -------------------------------------------------------------------------

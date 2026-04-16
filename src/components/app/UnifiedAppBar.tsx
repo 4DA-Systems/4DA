@@ -3,7 +3,8 @@
 
 import { memo, Suspense, lazy } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VoidEngine } from '../void-engine/VoidEngine';
+import { BrandMark } from '../void-engine/BrandMark';
+import { useVoidSignals } from '../../hooks/use-void-signals';
 import { OllamaStatus } from '../OllamaStatus';
 import { SystemHealthDot } from '../SystemHealthDot';
 import { cmd } from '../../lib/commands';
@@ -47,6 +48,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
   embeddingStatus,
 }: UnifiedAppBarProps) {
   const { t } = useTranslation();
+  const voidSignal = useVoidSignals();
 
   const isLoading = state.loading;
   const isComplete = state.analysisComplete && !isLoading;
@@ -76,7 +78,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         {/* Left: VoidEngine + status */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden" aria-hidden="true">
-            <VoidEngine size={36} variant="pentachoron" />
+            <BrandMark signal={voidSignal} size={36} />
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />
