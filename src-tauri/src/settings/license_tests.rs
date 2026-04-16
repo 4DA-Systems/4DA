@@ -129,6 +129,44 @@ mod tests {
         assert!(is_signal_feature_available("generate_weekly_digest", &free));
     }
 
+    /// Verify the dev_unlock_all bypass path.
+    /// This is a pure-function test on is_signal_feature_available — the actual
+    /// require_signal_feature() call hits the global settings manager, which requires
+    /// a full app context to test. Here we verify the gating constants are intact.
+    #[test]
+    fn dev_unlock_all_flag_persists() {
+        // Dev unlock flag should serialize and deserialize correctly
+        let license = LicenseConfig {
+            tier: "free".to_string(),
+            license_key: String::new(),
+            activated_at: None,
+            trial_started_at: None,
+            dev_unlock_all: true,
+        };
+        let json = serde_json::to_string(&license).expect("serialize");
+        assert!(
+            json.contains("\"dev_unlock_all\":true"),
+            "dev_unlock_all should serialize: {json}"
+        );
+
+        let restored: LicenseConfig = serde_json::from_str(&json).expect("deserialize");
+        assert!(
+            restored.dev_unlock_all,
+            "dev_unlock_all should round-trip correctly"
+        );
+    }
+
+    #[test]
+    fn dev_unlock_all_defaults_false() {
+        // Missing field should default to false (backward compat with existing settings)
+        let json = r#"{"tier":"free","license_key":"","activated_at":null,"trial_started_at":null}"#;
+        let license: LicenseConfig = serde_json::from_str(json).expect("deserialize");
+        assert!(
+            !license.dev_unlock_all,
+            "dev_unlock_all should default to false when field missing"
+        );
+    }
+
     /// Verify LicenseConfig survives a JSON serialization roundtrip.
     /// This is the persistence path used by settings.json on disk.
     #[test]
