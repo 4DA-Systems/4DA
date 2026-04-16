@@ -429,6 +429,10 @@ interface CommandMap {
   // Returns a JSON string: { summary: MineSummary, jsonl_path: string }.
   mine_git_decisions: { params: Record<string, never>; result: string };
 
+  // -- Seed Corpus (Phase 8 — Cold Start Layer 2) --
+  // Returns CorpusStats as JSON { total, by_outcome, domains_covered }.
+  get_seed_corpus_stats: { params: Record<string, never>; result: string };
+
   // -- Signal Chains --
   // Phase 5 (2026-04-17): get_signal_chains_predicted returns canonical
   // EvidenceFeed (kind=Chain). Raw get_signal_chains still returns the

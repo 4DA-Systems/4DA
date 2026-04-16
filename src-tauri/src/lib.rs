@@ -245,6 +245,8 @@ mod free_briefing;
 mod glyph_integration;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
+/// Intelligence Reconciliation Phase 8 — Cold Start Layer 2 (curated corpus).
+mod seed_corpus;
 mod health;
 mod health_commands;
 mod http_client;
@@ -618,6 +620,8 @@ pub fn run() {
             context_commands::run_awe_calibration,
             // Intelligence Reconciliation Phase 7 — Git decision miner.
             git_decision_miner::mine_git_decisions,
+            // Intelligence Reconciliation Phase 8 — Curated corpus.
+            seed_corpus::get_seed_corpus_stats,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
             context_commands::generate_cli_briefing,

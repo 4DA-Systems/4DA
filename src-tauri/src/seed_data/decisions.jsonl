@@ -1,0 +1,50 @@
+{"statement":"Adopted TypeScript","verb":"adopt","subject":"typescript","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Rust","verb":"adopt","subject":"rust","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Go","verb":"adopt","subject":"go","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Python","verb":"adopt","subject":"python","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted React","verb":"adopt","subject":"react","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Vue","verb":"adopt","subject":"vue","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Svelte","verb":"adopt","subject":"svelte","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Migrated to Next.js","verb":"migrate","subject":"next.js","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Migrated to Remix","verb":"migrate","subject":"remix","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Astro","verb":"adopt","subject":"astro","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Tauri","verb":"adopt","subject":"tauri","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Replaced Electron with Tauri","verb":"replace","subject":"electron","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted PostgreSQL","verb":"adopt","subject":"postgresql","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted SQLite for local-first","verb":"adopt","subject":"sqlite","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Replaced MongoDB with PostgreSQL","verb":"replace","subject":"mongodb","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted DynamoDB","verb":"adopt","subject":"dynamodb","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Redis for caching","verb":"adopt","subject":"redis","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Migrated to Vitest","verb":"migrate","subject":"vitest","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Jest","verb":"adopt","subject":"jest","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Playwright for e2e","verb":"adopt","subject":"playwright","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Migrated to Vite","verb":"migrate","subject":"vite","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Replaced Webpack with Vite","verb":"replace","subject":"webpack","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted esbuild","verb":"adopt","subject":"esbuild","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Zustand","verb":"adopt","subject":"zustand","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Replaced Redux with Zustand","verb":"replace","subject":"redux","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Jotai","verb":"adopt","subject":"jotai","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted tokio","verb":"adopt","subject":"tokio","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted async-std","verb":"adopt","subject":"async-std","outcome":"refuted","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Turborepo","verb":"adopt","subject":"turborepo","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted pnpm workspaces","verb":"adopt","subject":"pnpm-workspaces","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Nx","verb":"adopt","subject":"nx","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Vercel","verb":"adopt","subject":"vercel","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Cloudflare Workers","verb":"adopt","subject":"cloudflare-workers","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Docker","verb":"adopt","subject":"docker","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Migrated to pnpm","verb":"migrate","subject":"pnpm","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted yarn","verb":"adopt","subject":"yarn","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted GraphQL","verb":"adopt","subject":"graphql","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted tRPC","verb":"adopt","subject":"trpc","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Drizzle ORM","verb":"adopt","subject":"drizzle","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Prisma","verb":"adopt","subject":"prisma","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Tailwind CSS","verb":"adopt","subject":"tailwind","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted shadcn/ui","verb":"adopt","subject":"shadcn","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Biome","verb":"adopt","subject":"biome","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Replaced ESLint with Biome","verb":"replace","subject":"eslint","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Bun","verb":"adopt","subject":"bun","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Deno","verb":"adopt","subject":"deno","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Migrated to Kubernetes","verb":"migrate","subject":"kubernetes","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Supabase","verb":"adopt","subject":"supabase","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Neon","verb":"adopt","subject":"neon","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
+{"statement":"Adopted Planetscale","verb":"adopt","subject":"planetscale","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
