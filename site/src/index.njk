@@ -977,11 +977,11 @@ permalink: "/index.html"
       <div class="nav-brand">4DA</div>
       <div class="nav-links" id="nav-links">
         <a href="#gallery">Demos</a>
-        <a href="#how-it-works">How It Works</a>
-        <a href="#features">Features</a>
         <a href="#pricing">Pricing</a>
+        <a href="#how-it-works">How It Works</a>
+        <a href="#mcp-trust">MCP</a>
         <a href="streets.html" style="color:var(--accent);">STREETS</a>
-        <a href="#download" class="nav-cta">Download</a>
+        <a href="#pricing" class="nav-cta">Download</a>
       </div>
       <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu">
         <span></span><span></span><span></span>
@@ -989,7 +989,7 @@ permalink: "/index.html"
     </div>
   </nav>
 
-  <!-- Hero -->
+  <!-- 1. Hero -->
   <header class="hero">
     <div class="container">
       <img src="hero-sun.jpg" alt="4DA" class="hero-logo" width="72" height="72">
@@ -1046,7 +1046,7 @@ permalink: "/index.html"
     </div>
   </section>
 
-  <!-- Screenshot Gallery -->
+  <!-- 2. Gallery — See It In Action -->
   <section class="gallery" id="gallery">
     <div class="container">
       <div class="gallery-header">
@@ -1129,59 +1129,90 @@ permalink: "/index.html"
 
   <hr class="divider">
 
-  <!-- What You Get -->
-  <section class="showcase">
-    <div class="container">
-      <div class="showcase-header">
-        <div class="section-label">What You Get</div>
-        <h2>Intelligence, not information</h2>
+  <!-- 3. Pricing + Download -->
+  <section id="pricing" class="reveal">
+    <div class="container" style="text-align: center;">
+      <div class="section-label">Pricing</div>
+      <h2>Free means free. No expiration. No catch.</h2>
+      <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">The free tier is a complete product. Most individual developers will never need more.</p>
+      <div class="pricing-grid">
+        <div class="pricing-card">
+          <h3>Free</h3>
+          <div class="pricing-price">$0 <span>forever</span></div>
+          <div class="pricing-note">No credit card. No account. No expiration.</div>
+          <ul class="pricing-features">
+            <li>All 20+ content sources</li>
+            <li>Full 5-axis scoring engine</li>
+            <li>AI daily briefings + weekly digest</li>
+            <li>Multi-signal confirmation gate</li>
+            <li>Auto context discovery (ACE)</li>
+            <li>STREETS Playbook (all 7 modules)</li>
+            <li>Behavior learning</li>
+            <li>MCP server (33 tools)</li>
+            <li>CLI binary</li>
+            <li>Unlimited use</li>
+          </ul>
+          <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:24px;" id="pricing-download-free">Download Free</a>
+        </div>
+        <div class="pricing-card recommended">
+          <h3>Signal</h3>
+          <div class="pricing-price">$12 <span>/month</span></div>
+          <div class="pricing-note">Or $99/year. BYOK -- you bring your own API key.</div>
+          <ul class="pricing-features">
+            <li>Everything in Free, plus:</li>
+            <li>Signal tab intelligence (Key Signals + analytics)</li>
+            <li>Score Autopsy (5-axis breakdown)</li>
+            <li>Developer DNA profiling</li>
+            <li>Signal chain analysis</li>
+            <li>Knowledge gap detection</li>
+            <li>Semantic shift tracking</li>
+            <li>Attention analytics</li>
+            <li>Standing queries</li>
+            <li>Priority support</li>
+          </ul>
+          <a href="/signal#pricing" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:24px; border-color:var(--accent); color:var(--accent);">Subscribe to Signal</a>
+          <p style="font-size:11px; color:var(--text-muted); margin-top:8px; text-align:center;">45-day free trial included. Download to start.</p>
+        </div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
-        <div class="feature-card">
-          <div class="feature-tag">scoring</div>
-          <h3>Scored Feed</h3>
-          <p>Every item scored on 5 axes against your codebase. See exactly why something matters to you.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-tag">identity</div>
-          <h3>Developer DNA</h3>
-          <p>Your tech stack, dependencies, and interests as a shareable profile. Exportable as SVG badge.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-tag">briefing</div>
-          <h3>Daily Briefing</h3>
-          <p>AI-synthesized digest of what matters today. Signal chains show cause and effect across sources.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-tag">transparency</div>
-          <h3>Score Autopsy</h3>
-          <p>Click any item to see the full 5-axis breakdown. Understand every scoring decision.</p>
-        </div>
+
+      <!-- Download table integrated into pricing -->
+      <div style="margin-top: 56px; text-align: left;">
+        <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 4px;">Download</h3>
+        <p style="font-size: 15px; color: var(--text-secondary); margin-bottom: 16px;">Pre-built binaries with auto-updates. No Rust toolchain required.</p>
+        <table class="download-table">
+          <thead>
+            <tr>
+              <th>Platform</th>
+              <th>Format</th>
+              <th>Auto-updates</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="platform-name">Windows</td>
+              <td><a href="https://github.com/runyourempire/4DA/releases/latest">.exe installer (NSIS)</a></td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <td class="platform-name">macOS</td>
+              <td><a href="https://github.com/runyourempire/4DA/releases/latest">.dmg (Apple Silicon + Intel)</a></td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <td class="platform-name">Linux</td>
+              <td><a href="https://github.com/runyourempire/4DA/releases/latest">.AppImage / .deb</a></td>
+              <td>Yes</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px;">Windows: if SmartScreen warns on first run, click "More info" then "Run anyway" &mdash; the app is safe, code-signing is in progress.</p>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- Problem -->
-  <section class="reveal">
-    <div class="container">
-      <div class="section-label">The Problem</div>
-      <h2>Staying current is a full-time job</h2>
-      <ul class="problem-list">
-        <li>You skim 500+ articles a day and still miss the security advisory for a package you actually use.</li>
-        <li>You read three "intro to X" posts about tech you already know while the arXiv paper relevant to your project scrolls past unseen.</li>
-        <li>Your dependency ships a breaking change. You find out when production breaks.</li>
-      </ul>
-      <div class="problem-amplify">
-        <p>The average developer spends 2+ hours daily on content consumption. Signal-to-noise ratio: less than 2%. That's 500+ hours a year reading things that don't matter to your work.</p>
-      </div>
-    </div>
-  </section>
-
-  <hr class="divider">
-
-  <!-- How It Works -->
+  <!-- 4. How It Works + Features (merged) -->
   <section id="how-it-works" class="reveal">
     <div class="container">
       <div class="section-label">How It Works</div>
@@ -1210,36 +1241,9 @@ permalink: "/index.html"
       <div class="pipeline-result">
         An item needs <strong>2+ independent signals</strong> to pass the confirmation gate. Everything else is rejected.
       </div>
-      <div class="pipeline-details">
-        <div class="pipeline-detail">
-          <h4>Context Axis</h4>
-          <p>KNN embedding similarity against your codebase profile via sqlite-vec vectors.</p>
-        </div>
-        <div class="pipeline-detail">
-          <h4>Interest Axis</h4>
-          <p>Keyword + semantic alignment with your declared and observed interests.</p>
-        </div>
-        <div class="pipeline-detail">
-          <h4>ACE Axis</h4>
-          <p>Does this involve your active technologies, frameworks, and architecture patterns?</p>
-        </div>
-        <div class="pipeline-detail">
-          <h4>Dependency Axis</h4>
-          <p>Direct match against your installed packages. Version bumps, CVEs, deprecations.</p>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <hr class="divider">
-
-  <!-- Features -->
-  <section id="features" class="reveal">
-    <div class="container">
-      <div class="section-label">Features</div>
-      <h2>Everything noise reduction needs</h2>
-      <p class="subtitle">Every feature exists to reduce noise and surface what actually matters to your work.</p>
-      <div class="features-grid">
+      <!-- Feature cards -->
+      <div class="features-grid" style="margin-top: 48px;">
         <div class="feature-card">
           <div class="feature-tag">scoring</div>
           <h3>5-Axis Scoring</h3>
@@ -1256,78 +1260,18 @@ permalink: "/index.html"
           <p>Scans your Cargo.toml, package.json, go.mod, and Git activity to build a graduated domain profile of your technology identity.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-tag">integration</div>
-          <h3>MCP Integration</h3>
-          <p>33 intelligence tools for Claude Code, Cursor, and any MCP-compatible host. Briefings, signal chains, knowledge gaps, and project health in your editor.</p>
-        </div>
-        <div class="feature-card">
           <div class="feature-tag">learning</div>
           <h3>Behavior Learning</h3>
           <p>Learns from your save and dismiss actions with 30-day exponential decay. Scoring improves continuously as you use it.</p>
         </div>
-        <div class="feature-card">
-          <div class="feature-tag">cli</div>
-          <h3>CLI Binary</h3>
-          <p>Terminal-native access to your intelligence feed. Scriptable, composable, and designed for developers who live in the terminal.</p>
-        </div>
       </div>
     </div>
   </section>
 
   <hr class="divider">
 
-  <!-- Pricing -->
-  <section id="pricing" class="reveal">
-    <div class="container" style="text-align: center;">
-      <div class="section-label">Pricing</div>
-      <h2>Free means free. No expiration. No catch.</h2>
-      <p class="subtitle" style="margin: 0 auto 48px; text-align: center;">The free tier is a complete product. Most individual developers will never need more.</p>
-      <div class="pricing-grid">
-        <div class="pricing-card">
-          <h3>Free</h3>
-          <div class="pricing-price">$0 <span>forever</span></div>
-          <div class="pricing-note">No credit card. No account. No expiration.</div>
-          <ul class="pricing-features">
-            <li>All 20+ content sources</li>
-            <li>Full 5-axis scoring engine</li>
-            <li>AI daily briefings + weekly digest</li>
-            <li>Multi-signal confirmation gate</li>
-            <li>Auto context discovery (ACE)</li>
-            <li>STREETS Playbook (all 7 modules)</li>
-            <li>Behavior learning</li>
-            <li>MCP server (33 tools)</li>
-            <li>CLI binary</li>
-            <li>Unlimited use</li>
-          </ul>
-          <a href="#download" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:24px;">Download Free</a>
-        </div>
-        <div class="pricing-card recommended">
-          <h3>Signal</h3>
-          <div class="pricing-price">$12 <span>/month</span></div>
-          <div class="pricing-note">Or $99/year. BYOK -- you bring your own API key.</div>
-          <ul class="pricing-features">
-            <li>Everything in Free, plus:</li>
-            <li>Signal tab intelligence (Key Signals + analytics)</li>
-            <li>Score Autopsy (5-axis breakdown)</li>
-            <li>Developer DNA profiling</li>
-            <li>Signal chain analysis</li>
-            <li>Knowledge gap detection</li>
-            <li>Semantic shift tracking</li>
-            <li>Attention analytics</li>
-            <li>Standing queries</li>
-            <li>Priority support</li>
-          </ul>
-          <a href="/signal#pricing" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:24px; border-color:var(--accent); color:var(--accent);">Subscribe to Signal</a>
-          <p style="font-size:11px; color:var(--text-muted); margin-top:8px; text-align:center;">45-day free trial included. <a href="#download" style="color:var(--text-muted); text-decoration:underline;">Download</a> to start.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <hr class="divider">
-
-  <!-- MCP Integration -->
-  <section class="reveal">
+  <!-- 5. MCP + Trust (merged) -->
+  <section id="mcp-trust" class="reveal">
     <div class="container">
       <div class="section-label">MCP Integration</div>
       <h2>Your AI assistant gets signal too</h2>
@@ -1357,33 +1301,29 @@ npx <span class="string">@4da/mcp-server</span>
 }</pre>
         </div>
       </div>
-    </div>
-  </section>
 
-  <hr class="divider">
-
-  <!-- Trust / Risk Reversal -->
-  <section class="reveal">
-    <div class="container">
-      <div class="section-label">Trust</div>
-      <h2>Built for developers who read the source</h2>
-      <p class="subtitle">No trust-us claims. Verify everything yourself.</p>
-      <div class="trust-grid">
-        <div class="trust-card">
-          <h3>Free means free</h3>
-          <p>No credit card. No account. No expiration. The full scoring engine with all 20+ sources, AI briefings via your own API key, and the complete STREETS Playbook, forever. Signal features include a 45-day trial.</p>
-        </div>
-        <div class="trust-card">
-          <h3>Source available</h3>
-          <p>FSL-1.1-Apache-2.0 license. Read every line. Converts to Apache 2.0 after 2 years.</p>
-        </div>
-        <div class="trust-card">
-          <h3>Data stays local</h3>
-          <p>We architecturally cannot see your data because we never receive it. No cloud. No sync. No server.</p>
-        </div>
-        <div class="trust-card">
-          <h3>Clean uninstall</h3>
-          <p>Delete the app, delete the data folder. Nothing persists. No residual cloud storage.</p>
+      <!-- Trust cards -->
+      <div style="margin-top: 64px;">
+        <div class="section-label">Trust</div>
+        <h2 style="margin-bottom: 20px;">Built for developers who read the source</h2>
+        <p class="subtitle">No trust-us claims. Verify everything yourself.</p>
+        <div class="trust-grid">
+          <div class="trust-card">
+            <h3>Free means free</h3>
+            <p>No credit card. No account. No expiration. The full scoring engine with all 20+ sources, AI briefings via your own API key, and the complete STREETS Playbook, forever. Signal features include a 45-day trial.</p>
+          </div>
+          <div class="trust-card">
+            <h3>Source available</h3>
+            <p>FSL-1.1-Apache-2.0 license. Read every line. Converts to Apache 2.0 after 2 years.</p>
+          </div>
+          <div class="trust-card">
+            <h3>Data stays local</h3>
+            <p>We architecturally cannot see your data because we never receive it. No cloud. No sync. No server.</p>
+          </div>
+          <div class="trust-card">
+            <h3>Clean uninstall</h3>
+            <p>Delete the app, delete the data folder. Nothing persists. No residual cloud storage.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -1391,7 +1331,7 @@ npx <span class="string">@4da/mcp-server</span>
 
   <hr class="divider">
 
-  <!-- FAQ -->
+  <!-- 6. FAQ -->
   <section class="reveal">
     <div class="container">
       <div class="section-label">FAQ</div>
@@ -1439,84 +1379,23 @@ npx <span class="string">@4da/mcp-server</span>
 
   <hr class="divider">
 
-  <!-- Download -->
-  <section id="download" class="reveal">
-    <div class="container">
-      <div class="section-label">Download</div>
-      <h2>Get started in under 3 minutes</h2>
-      <p class="subtitle">Pre-built binaries with auto-updates. No Rust toolchain required.</p>
-      <table class="download-table">
-        <thead>
-          <tr>
-            <th>Platform</th>
-            <th>Format</th>
-            <th>Auto-updates</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td class="platform-name">Windows</td>
-            <td><a href="https://github.com/runyourempire/4DA/releases/latest">.exe installer (NSIS)</a></td>
-            <td>Yes</td>
-          </tr>
-          <tr>
-            <td class="platform-name">macOS</td>
-            <td><a href="https://github.com/runyourempire/4DA/releases/latest">.dmg (Apple Silicon + Intel)</a></td>
-            <td>Yes</td>
-          </tr>
-          <tr>
-            <td class="platform-name">Linux</td>
-            <td><a href="https://github.com/runyourempire/4DA/releases/latest">.AppImage / .deb</a></td>
-            <td>Yes</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- STREETS Promo -->
-  <section class="streets-promo reveal">
-    <div class="container">
-      <div class="section-label">The Playbook</div>
-      <h2>4DA is the radar. STREETS is the playbook.</h2>
-      <p class="subtitle">4DA surfaces the signal. STREETS teaches you to convert it into revenue. 8 engines. 7 modules. All free inside 4DA.</p>
-      <div class="streets-cols">
-        <div class="streets-col">
-          <h3>What STREETS Teaches</h3>
-          <p>A complete income framework for developers. Turn your local LLMs, API keys, and full-stack skills into diversified revenue streams -- without quitting your job.</p>
-          <div class="streets-engines">
-            <span>Digital Products</span>
-            <span>Micro-SaaS</span>
-            <span>API Products</span>
-            <span>Consulting</span>
-            <span>Content</span>
-            <span>Automation</span>
-            <span>Open Source+</span>
-            <span>Data Products</span>
-          </div>
-        </div>
-        <div class="streets-col">
-          <h3>The 4DA + STREETS Flywheel</h3>
-          <p>4DA spots a trending niche in your stack. STREETS gives you the launch framework. You ship in 2 weeks. 4DA monitors the market. STREETS tells you when to scale or pivot. Revenue compounds. Intelligence sharpens.</p>
-          <p style="margin-top: 16px; color: var(--accent); font-size: 13px; font-family: 'JetBrains Mono', monospace;">Every module. Every lesson. Free inside 4DA. For the streets.</p>
-        </div>
-      </div>
-      <a href="streets.html" class="btn btn-primary">Explore STREETS -- All 7 Modules Free</a>
-    </div>
-  </section>
-
-  <!-- Final CTA -->
+  <!-- 7. Final CTA -->
   <section class="final-cta reveal">
     <div class="container">
       <h2>Stop reading everything.<br>Start knowing what matters.</h2>
       <p>Your codebase already knows what's relevant. Let it decide.</p>
       <a href="https://github.com/runyourempire/4DA/releases/latest" class="btn btn-primary" id="final-download">Download 4DA -- Free</a>
       <div class="trust-line">No account &middot; No credit card &middot; No telemetry &middot; ~15MB download</div>
-      <form class="email-capture" id="notify-form">
-        <input type="email" placeholder="you@example.com" aria-label="Email address" required>
-        <button type="submit">Notify Me</button>
-      </form>
-      <p id="notify-status" style="font-size:12px; color:var(--text-muted); margin-top:8px;">Get notified about updates. No spam.</p>
+
+      <!-- STREETS compact callout -->
+      <div style="margin-top: 48px; padding: 24px 28px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); display: inline-block; text-align: center; max-width: 560px;">
+        <p style="font-size: 15px; color: var(--text-secondary); margin: 0 0 4px; line-height: 1.6;">4DA surfaces the signal. <strong style="color: var(--text);">STREETS</strong> teaches you to convert it into revenue. 7 modules, all free inside 4DA.</p>
+        <a href="streets.html" style="font-family: 'JetBrains Mono', monospace; font-size: 13px;">Explore the STREETS Playbook &rarr;</a>
+      </div>
+
+      <div style="margin-top: 32px;">
+        <p style="font-size: 13px; color: var(--text-muted);">Questions? <a href="mailto:support@4da.ai" style="color: var(--text-muted); text-decoration: underline;">support@4da.ai</a></p>
+      </div>
     </div>
   </section>
 
@@ -1534,8 +1413,9 @@ npx <span class="string">@4da/mcp-server</span>
           <a href="https://github.com/runyourempire/4DA/releases">Changelog</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
-          <a href="#" onclick="$crisp.push(['do', 'chat:open']); return false;">Support</a>
+          <a href="mailto:support@4da.ai">Support</a>
           <a href="https://x.com/runyourempire" aria-label="X / Twitter">X</a>
+          <!-- TODO: verify Discord invite link is active before launch -->
           <a href="https://discord.gg/4da" aria-label="Discord">Discord</a>
           <span style="color:var(--text-muted);font-size:12px;">FSL-1.1-Apache-2.0</span>
         </div>
@@ -1704,49 +1584,7 @@ npx <span class="string">@4da/mcp-server</span>
       // Track download clicks
       [heroBtn, finalBtn].forEach(function(btn) {
         if (btn) btn.addEventListener('click', function() {
-          posthog.capture('download_clicked', { platform: platform, button: btn.id });
-        });
-      });
-    })();
-
-    // Email notify form
-    (function() {
-      var form = document.getElementById('notify-form');
-      var status = document.getElementById('notify-status');
-      if (!form) return;
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        var input = form.querySelector('input[type="email"]');
-        var btn = form.querySelector('button');
-        var email = input.value.trim();
-        if (!email) return;
-        btn.disabled = true;
-        btn.textContent = '...';
-        fetch('/api/notify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.ok) {
-            status.textContent = "You're in. We'll keep you posted.";
-            status.style.color = '#22C55E';
-            posthog.capture('email_subscribed', { source: 'landing' });
-            posthog.identify(email);
-            input.value = '';
-          } else {
-            status.textContent = data.error || 'Something went wrong.';
-            status.style.color = '#EF4444';
-          }
-        })
-        .catch(function() {
-          status.textContent = 'Network error. Try again.';
-          status.style.color = '#EF4444';
-        })
-        .finally(function() {
-          btn.disabled = false;
-          btn.textContent = 'Notify Me';
+          if (typeof posthog !== 'undefined') posthog.capture('download_clicked', { platform: platform, button: btn.id });
         });
       });
     })();
