@@ -125,7 +125,7 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
             for chain in &chains {
                 let prediction = crate::signal_chains::predict_chain_lifecycle(chain);
                 if prediction.confidence > 0.4 && chain.resolution == ChainResolution::Open {
-                    alerts.push(chain_to_alert(chain, &prediction));
+                    alerts.push(chain_to_alert(chain, &prediction, &conn));
                 }
             }
         }
@@ -526,6 +526,7 @@ fn dedup_preemption_alerts(alerts: Vec<PreemptionAlert>) -> Vec<PreemptionAlert>
 fn chain_to_alert(
     chain: &crate::signal_chains::SignalChain,
     prediction: &crate::signal_chains::ChainPrediction,
+    conn: &rusqlite::Connection,
 ) -> PreemptionAlert {
     use crate::signal_chains::ChainPhase;
 
@@ -552,10 +553,18 @@ fn chain_to_alert(
         .iter()
         .map(|link| {
             let freshness = freshness_from_timestamp(&link.timestamp);
+            let url: Option<String> = conn
+                .query_row(
+                    "SELECT url FROM source_items WHERE id = ?1",
+                    rusqlite::params![link.source_item_id],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
             AlertEvidence {
                 source: link.signal_type.clone(),
                 title: link.title.clone(),
-                url: None,
+                url,
                 freshness_days: freshness,
                 relevance_score: chain.confidence as f32,
             }
