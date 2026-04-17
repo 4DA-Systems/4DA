@@ -67,9 +67,10 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
               <p className={`text-sm truncate ${isActive ? 'text-white font-medium' : 'text-text-secondary'}`}>
                 {t(`streets:streets.module.${modId}`)}
               </p>
-              <p className="text-[10px] text-text-muted">
-                {lessonCount} {lessonCount !== 1 ? t('streets:streets.lessons').toLowerCase() : t('streets:streets.lesson').toLowerCase()}
-                {pct > 0 && pct < 100 && ` - ${Math.round(pct)}%`}
+              <p className="text-[10px] text-text-muted truncate">
+                {pct > 0 && pct < 100
+                  ? `${Math.round(pct)}% \u00B7 ${lessonCount} ${lessonCount !== 1 ? t('streets:streets.lessons').toLowerCase() : t('streets:streets.lesson').toLowerCase()}`
+                  : t(`streets:streets.sidebar.${modId}`)}
               </p>
             </div>
             {pct >= 100 && <CheckIcon />}
