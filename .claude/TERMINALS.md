@@ -9,7 +9,24 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 11 — Commitment Contract)
+**Started:** 2026-04-17
+**Prior RECON commits:** Phases 0-10 shipped.
+**Scope:** When user clicks Accept on a Decision Brief, prompt for a
+refutation condition. Store in DB. Background watcher matches incoming
+source items against stored conditions and surfaces Refutation
+EvidenceItems when matched. AWE holds itself accountable.
+**Files claimed:**
+- `src-tauri/src/commitment_contracts.rs` (NEW — storage + watcher)
+- `src-tauri/src/lib.rs` (EDIT — mod + command + migration)
+- `src-tauri/src/db/migrations.rs` (EDIT — new table)
+- `src/components/decision-brief/CommitmentPrompt.tsx` (NEW)
+- `src/components/decision-brief/ConfessionBox.tsx` (EDIT — wire Accept)
+- `src/lib/commands.ts` (EDIT — new commands)
+**Done when:** Accept → prompt → condition stored → later source item
+matching the condition surfaces a Refutation card. Full round-trip
+tested.
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-10 done 2026-04-17):
      Intelligence Reconciliation — Phases 0-10 shipped in one session.

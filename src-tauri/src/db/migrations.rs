@@ -598,7 +598,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 57;
+        const TARGET_VERSION: i64 = 58;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2127,6 +2127,44 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Created calibration_samples table + 3 indices (Intelligence Mesh Phase 5b.2)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // ── Phase 58: Commitment Contracts (Intelligence Reconciliation Phase 11) ──
+            // Stores the user's "refutation conditions" — what would convince
+            // them a decision was wrong. A background watcher monitors incoming
+            // source items against these conditions and flips the contract's
+            // status when a match fires.
+            if current_version < 58 {
+                Self::run_versioned_migration(
+                    &conn,
+                    57,
+                    58,
+                    "Phase 58: Commitment Contracts (Intelligence Reconciliation)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS commitment_contracts (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                decision_statement TEXT NOT NULL,
+                                refutation_condition TEXT NOT NULL,
+                                subject TEXT NOT NULL DEFAULT '',
+                                status TEXT NOT NULL DEFAULT 'active',
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                triggered_at TEXT,
+                                trigger_item_id INTEGER,
+                                FOREIGN KEY (trigger_item_id) REFERENCES source_items(id)
+                             );
+                             CREATE INDEX IF NOT EXISTS idx_contracts_status
+                               ON commitment_contracts(status);
+                             CREATE INDEX IF NOT EXISTS idx_contracts_subject
+                               ON commitment_contracts(subject);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created commitment_contracts table + 2 indices (Intelligence Reconciliation Phase 11)"
                         );
                         Ok(())
                     },
