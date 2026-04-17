@@ -41,6 +41,7 @@
         "schemes": ["4da"]
       }
     },
+    "opener": {},
     "updater": {
       "endpoints": [
         "https://github.com/runyourempire/4DA/releases/latest/download/latest.json"
