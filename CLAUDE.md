@@ -138,16 +138,23 @@ The Momentum tab is **being deleted**. AWE becomes infrastructure, not a feature
 
 ## Document Hygiene (Planning-Doc Protocol)
 
-Internal planning / strategy / audit / checklist / roadmap docs **must not live at the repo root.** The pre-commit gate (`scripts/check-doc-location.cjs`) rejects commits that try. Full framework: `.claude/rules/document-hygiene.md`.
+Internal planning / strategy / audit / checklist / roadmap docs **must not live at the repo root** or in tracked subdirectories without being on the allowlist. The pre-commit gate (`scripts/check-doc-location.cjs`) rejects commits that try. Full framework: `.claude/rules/document-hygiene.md`.
 
-Before writing any `*.md` at repo root whose name contains `PLAN`, `STRATEGY`, `AUDIT`, `CHECKLIST`, `ROADMAP`, `TRAJECTORY`, `VIRAL`, `LAUNCH`, `FORTIFICATION`, `EXECUTION`, `ASCENT`, `BATTLE`, `MASTER`, `BARRIER`, `IMPROVEMENTS`, `CRITICAL`, `DEVELOPER-OS`, `NOTIFICATION-INTELLIGENCE`, `INTELLIGENCE-CONSOLE`, `whats-next`, `NEXT-STEPS`, `MISSION_`, `SHIP_`, `FIRST-CONTACT`:
+**Layered system:**
+- **Allowlist source of truth**: `scripts/doc-allowlist.json` — per-directory lists of what may be tracked.
+- **Pre-commit gate**: `scripts/check-doc-location.cjs` — blocks root-pattern violations, mixed-dir violations, and PII.
+- **On-demand audit**: `pnpm run audit:public-ready` — runs over ALL tracked files, required before flipping the repo public.
+
+**Planning-doc protocol for Claude.** Before writing any `*.md` whose name contains `PLAN`, `STRATEGY`, `AUDIT`, `CHECKLIST`, `ROADMAP`, `TRAJECTORY`, `VIRAL`, `LAUNCH`, `FORTIFICATION`, `EXECUTION`, `ASCENT`, `BATTLE`, `MASTER`, `BARRIER`, `IMPROVEMENTS`, `CRITICAL`, `DEVELOPER-OS`, `NOTIFICATION-INTELLIGENCE`, `INTELLIGENCE-CONSOLE`, `whats-next`, `NEXT-STEPS`, `MISSION_`, `SHIP_`, `FIRST-CONTACT`:
 
 1. **Default**: use TodoWrite + in-conversation reasoning — no file.
 2. If a persistent doc is needed: write to `.claude/plans/` (gitignored, never leaks).
-3. Curated strategy docs go to `docs/strategy/` **only after explicit user approval per-file**.
-4. Never write such docs at repo root. If the gate says a doc belongs there, it's wrong — move it.
+3. Curated docs go to `docs/strategy/` **only after** (a) explicit user approval per-file AND (b) addition to `scripts/doc-allowlist.json`. Same for `.ai/`.
+4. Never write such docs at repo root, to `.ai/`, or to a mixed dir without updating the allowlist.
 
-Public-facing root `.md` allowlist: `README CHANGELOG LICENSE CONTRIBUTING CODE_OF_CONDUCT SECURITY CLAUDE AGENTS CONVENTIONS TRADEMARKS CLA LINUX NETWORK`. Escape hatch for genuine public docs that match a block pattern: add `<!-- public-ok: <reason> -->` to the first 10 lines.
+**PII** (`runyourempirehq@gmail.com`, `4dasystems@gmail.com`) must never enter tracked content. Use role-based aliases (`hello@4da.ai`). Business-statutory info (ABN, ACN, TM serials) is fine on legal pages only.
+
+**Escape hatches** (for root + mixed-dir rules, NOT for PII): add `<!-- public-ok: <reason> -->` to the first 10 lines, or add the filename to `scripts/doc-allowlist.json`.
 
 ## AWE Integration (Artificial Wisdom Engine)
 

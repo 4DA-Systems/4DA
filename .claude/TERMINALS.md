@@ -9,7 +9,23 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-PUBLIC-READY — Public Release Hardening
+**Started**: 2026-04-18
+**Status**: committing
+**Commit Lock**: HELD
+**Files**:
+- .gitignore
+- .husky/pre-commit
+- CLAUDE.md
+- .claude/rules/document-hygiene.md
+- scripts/check-doc-location.cjs
+- scripts/public-readiness-audit.cjs (new)
+- scripts/doc-allowlist.json (new)
+- package.json (pnpm script)
+- .ai/** (triage + move internal plan/audit docs)
+- docs/strategy/** (triage + move internal strategy docs)
+- docs/EMAIL-FORWARDING-SETUP.md, docs/SHOPIFY-VERIFICATION.md, docs/RELEASE-RUNBOOK.md, docs/RELEASE-READINESS.md, docs/LAUNCH-PIPELINE.md (move — contain personal info)
+- merch-print-ready/** (entire dir — not source code)
 
 <!-- T-DOC-HYGIENE done (c677362b 2026-04-18). Six-layer Document Hygiene
      framework: location doctrine, gitignore patterns, pre-commit gate,
