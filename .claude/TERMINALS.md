@@ -9,7 +9,17 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-DOC-HYGIENE — Document Hygiene Framework
+**Started**: 2026-04-18
+**Status**: committing
+**Commit Lock**: HELD
+**Files**:
+- .gitignore
+- .husky/pre-commit
+- CLAUDE.md
+- scripts/check-doc-location.cjs (new)
+- .claude/rules/document-hygiene.md (new)
+- All repo-root *PLAN*.md / *STRATEGY*.md / *AUDIT*.md / *CHECKLIST*.md / whats-next.md (untrack + move to .claude/plans/archive-2026-04-18/)
 
 <!-- T-INTEL-RECON Phase 13b done (5d19f6c4). All 5 visual QA issues
      fixed: buttons functional, template killed, confidence honest,
