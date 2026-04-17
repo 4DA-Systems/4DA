@@ -23,7 +23,7 @@ Typical rejection rate: **99%+**. What's left is yours.
 Privacy-first. Runs locally. Zero telemetry. BYOK. Your data never leaves your machine. It learns from how you engage with what it shows you — yesterday's noise becomes tomorrow's signal.
 
 <p align="center">
-  <img src="site/screenshots/feed-signals.png" alt="Scored feed with signal classification and relevance tags" width="800" />
+  <img src="site/screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream scored against your stack" width="800" />
 </p>
 
 ---
@@ -300,21 +300,33 @@ Reads from the same database as the desktop app. No extra setup.
 ## Screenshots
 
 <p align="center">
-  <img src="site/screenshots/intelligence-briefing.png" alt="Intelligence Briefing" width="800" />
+  <img src="site/screenshots/01-brief.png" alt="Brief tab" width="800" />
   <br />
-  <em>Intelligence Briefing — AI-generated daily summary with curated top picks</em>
+  <em>Brief — today's top picks and live signal stream scored against your stack</em>
 </p>
 
 <p align="center">
-  <img src="site/screenshots/score-autopsy.png" alt="Score Autopsy" width="800" />
+  <img src="site/screenshots/02-preemption.png" alt="Preemption Radar" width="800" />
   <br />
-  <em>Score Autopsy — see exactly why an item scored the way it did</em>
+  <em>Preemption — forward-looking intelligence: CVEs, breaking changes, dependency risks</em>
 </p>
 
 <p align="center">
-  <img src="site/screenshots/insights-tech-radar.png" alt="Tech Radar and Decision Memory" width="800" />
+  <img src="site/screenshots/03-blind-spots.png" alt="Blind Spot Index" width="800" />
   <br />
-  <em>Tech Radar, Decision Memory, and Developer DNA</em>
+  <em>Blind Spots — coverage gaps and high-relevance items you never saw</em>
+</p>
+
+<p align="center">
+  <img src="site/screenshots/04-signal.png" alt="Signal tab" width="800" />
+  <br />
+  <em>Signal — the items that earn their place, confirmed through 2+ independent axes</em>
+</p>
+
+<p align="center">
+  <img src="site/screenshots/05-playbook.png" alt="STREETS Playbook" width="800" />
+  <br />
+  <em>Playbook — the STREETS sovereignty playbook built in, seven modules, always free</em>
 </p>
 
 ---

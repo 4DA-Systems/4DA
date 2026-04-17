@@ -278,6 +278,124 @@ permalink: "/index.html"
       display: block;
       border-radius: var(--radius) var(--radius) 0 0;
     }
+    .gallery-item-trigger {
+      appearance: none;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      width: 100%;
+      display: block;
+      cursor: zoom-in;
+      color: inherit;
+      text-align: left;
+      font: inherit;
+    }
+    .gallery-item-trigger:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .gallery-item-trigger .zoom-hint {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(10, 10, 10, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(6px);
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      padding: 6px 10px;
+      border-radius: 6px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .gallery-item:hover .zoom-hint { opacity: 1; }
+    /* Lightbox */
+    .lightbox {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 5, 5, 0.94);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 24px;
+      cursor: zoom-out;
+    }
+    .lightbox.open { display: flex; }
+    .lightbox-stage {
+      position: relative;
+      max-width: min(1600px, 96vw);
+      max-height: 92vh;
+      cursor: default;
+    }
+    .lightbox-stage img {
+      display: block;
+      max-width: 100%;
+      max-height: 92vh;
+      width: auto;
+      height: auto;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+    }
+    .lightbox-caption {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .lightbox-close {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      appearance: none;
+      background: rgba(20, 20, 20, 0.9);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .lightbox-close:hover { border-color: #fff; }
+    .lightbox-nav {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      appearance: none;
+      background: rgba(20, 20, 20, 0.9);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .lightbox-nav:hover { border-color: #fff; }
+    .lightbox-prev { left: 20px; }
+    .lightbox-next { right: 20px; }
+    @media (max-width: 640px) {
+      .lightbox { padding: 12px; }
+      .lightbox-close { top: 12px; right: 12px; width: 36px; height: 36px; }
+      .lightbox-nav { width: 36px; height: 36px; font-size: 16px; }
+      .lightbox-prev { left: 8px; }
+      .lightbox-next { right: 8px; }
+    }
     .gallery-caption {
       padding: 16px 20px;
       display: flex;
@@ -945,40 +1063,66 @@ permalink: "/index.html"
       </div>
       <div class="gallery-grid">
         <div class="gallery-item visible" data-category="brief">
-          <img src="screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream" loading="lazy" width="1080" height="auto">
-          <div class="gallery-caption">
-            <span class="caption-tag">Brief</span>
-            <p>Your daily intelligence briefing. Top picks surface what matters most, backed by a live signal stream scored against your stack.</p>
-          </div>
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/01-brief.png" data-lightbox-caption="Brief — today's top picks and live signal stream" aria-label="Expand Brief screenshot">
+            <img src="screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream" loading="lazy" width="1080" height="auto">
+            <span class="zoom-hint">Click to expand</span>
+            <div class="gallery-caption">
+              <span class="caption-tag">Brief</span>
+              <p>Your daily intelligence briefing. Top picks surface what matters most, backed by a live signal stream scored against your stack.</p>
+            </div>
+          </button>
         </div>
         <div class="gallery-item visible" data-category="preemption">
-          <img src="screenshots/02-preemption.png" alt="4DA Preemption Radar — CVE alerts for your dependencies" loading="lazy" width="1080" height="auto">
-          <div class="gallery-caption">
-            <span class="caption-tag">Preemption</span>
-            <p>Forward-looking intelligence for your stack. CVEs, breaking changes, and dependency risks surfaced before they hit you.</p>
-          </div>
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/02-preemption.png" data-lightbox-caption="Preemption — CVEs and dependency risks surfaced early" aria-label="Expand Preemption screenshot">
+            <img src="screenshots/02-preemption.png" alt="4DA Preemption Radar — CVE alerts for your dependencies" loading="lazy" width="1080" height="auto">
+            <span class="zoom-hint">Click to expand</span>
+            <div class="gallery-caption">
+              <span class="caption-tag">Preemption</span>
+              <p>Forward-looking intelligence for your stack. CVEs, breaking changes, and dependency risks surfaced before they hit you.</p>
+            </div>
+          </button>
         </div>
         <div class="gallery-item visible" data-category="blind-spots">
-          <img src="screenshots/03-blind-spots.png" alt="4DA Blind Spot Index — coverage gaps and missed intelligence" loading="lazy" width="1080" height="auto">
-          <div class="gallery-caption">
-            <span class="caption-tag">Blind Spots</span>
-            <p>What you're not watching well enough. Coverage gaps, low-engagement topics, and high-relevance items you never saw.</p>
-          </div>
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/03-blind-spots.png" data-lightbox-caption="Blind Spots — coverage gaps you never saw" aria-label="Expand Blind Spots screenshot">
+            <img src="screenshots/03-blind-spots.png" alt="4DA Blind Spot Index — coverage gaps and missed intelligence" loading="lazy" width="1080" height="auto">
+            <span class="zoom-hint">Click to expand</span>
+            <div class="gallery-caption">
+              <span class="caption-tag">Blind Spots</span>
+              <p>What you're not watching well enough. Coverage gaps, low-engagement topics, and high-relevance items you never saw.</p>
+            </div>
+          </button>
         </div>
         <div class="gallery-item visible" data-category="signal">
-          <img src="screenshots/04-signal.png" alt="4DA Signal tab — key signals you would have missed" loading="lazy" width="1080" height="auto">
-          <div class="gallery-caption">
-            <span class="caption-tag">Signal</span>
-            <p>The items that earn their place. Confirmed through 2+ independent axes, classified by type, ready for action.</p>
-          </div>
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/04-signal.png" data-lightbox-caption="Signal — confirmed key signals across 2+ axes" aria-label="Expand Signal screenshot">
+            <img src="screenshots/04-signal.png" alt="4DA Signal tab — key signals you would have missed" loading="lazy" width="1080" height="auto">
+            <span class="zoom-hint">Click to expand</span>
+            <div class="gallery-caption">
+              <span class="caption-tag">Signal</span>
+              <p>The items that earn their place. Confirmed through 2+ independent axes, classified by type, ready for action.</p>
+            </div>
+          </button>
         </div>
         <div class="gallery-item visible" data-category="playbook">
-          <img src="screenshots/05-playbook.png" alt="4DA Playbook tab — STREETS sovereignty playbook" loading="lazy" width="1080" height="auto">
-          <div class="gallery-caption">
-            <span class="caption-tag">Playbook</span>
-            <p>The STREETS playbook built in — seven modules that turn your dev rig into a sovereign business asset. Free, always.</p>
-          </div>
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/05-playbook.png" data-lightbox-caption="Playbook — STREETS sovereignty modules built in" aria-label="Expand Playbook screenshot">
+            <img src="screenshots/05-playbook.png" alt="4DA Playbook tab — STREETS sovereignty playbook" loading="lazy" width="1080" height="auto">
+            <span class="zoom-hint">Click to expand</span>
+            <div class="gallery-caption">
+              <span class="caption-tag">Playbook</span>
+              <p>The STREETS playbook built in — seven modules that turn your dev rig into a sovereign business asset. Free, always.</p>
+            </div>
+          </button>
         </div>
+      </div>
+
+      <!-- Lightbox modal -->
+      <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot preview" aria-hidden="true">
+        <button type="button" class="lightbox-nav lightbox-prev" id="lightbox-prev" aria-label="Previous screenshot">&larr;</button>
+        <div class="lightbox-stage">
+          <img id="lightbox-img" src="" alt="">
+          <div class="lightbox-caption" id="lightbox-caption"></div>
+        </div>
+        <button type="button" class="lightbox-nav lightbox-next" id="lightbox-next" aria-label="Next screenshot">&rarr;</button>
+        <button type="button" class="lightbox-close" id="lightbox-close" aria-label="Close">&times;</button>
       </div>
     </div>
   </section>
@@ -1430,6 +1574,80 @@ npx <span class="string">@4da/mcp-server</span>
             }
           });
         });
+      });
+    })();
+
+    // Screenshot lightbox
+    (function() {
+      var lightbox = document.getElementById('lightbox');
+      if (!lightbox) return;
+      var imgEl = document.getElementById('lightbox-img');
+      var capEl = document.getElementById('lightbox-caption');
+      var closeBtn = document.getElementById('lightbox-close');
+      var prevBtn = document.getElementById('lightbox-prev');
+      var nextBtn = document.getElementById('lightbox-next');
+      var triggers = Array.prototype.slice.call(document.querySelectorAll('[data-lightbox-src]'));
+      var currentIdx = 0;
+      var lastFocus = null;
+
+      function visibleTriggers() {
+        return triggers.filter(function(t) {
+          var item = t.closest('.gallery-item');
+          return !item || item.classList.contains('visible');
+        });
+      }
+
+      function show(idx) {
+        var list = visibleTriggers();
+        if (!list.length) return;
+        currentIdx = ((idx % list.length) + list.length) % list.length;
+        var t = list[currentIdx];
+        imgEl.src = t.getAttribute('data-lightbox-src');
+        imgEl.alt = t.getAttribute('aria-label') || '';
+        capEl.textContent = t.getAttribute('data-lightbox-caption') || '';
+      }
+
+      function open(trigger) {
+        lastFocus = document.activeElement;
+        var list = visibleTriggers();
+        var idx = list.indexOf(trigger);
+        show(idx >= 0 ? idx : 0);
+        lightbox.classList.add('open');
+        lightbox.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+        closeBtn.focus();
+      }
+
+      function close() {
+        lightbox.classList.remove('open');
+        lightbox.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+        imgEl.src = '';
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+      }
+
+      triggers.forEach(function(t) {
+        t.addEventListener('click', function(e) {
+          e.preventDefault();
+          open(t);
+        });
+      });
+
+      closeBtn.addEventListener('click', close);
+      prevBtn.addEventListener('click', function(e) { e.stopPropagation(); show(currentIdx - 1); });
+      nextBtn.addEventListener('click', function(e) { e.stopPropagation(); show(currentIdx + 1); });
+
+      // Click outside stage closes
+      lightbox.addEventListener('click', function(e) {
+        if (e.target === lightbox) close();
+      });
+
+      // Keyboard: Esc / arrows
+      document.addEventListener('keydown', function(e) {
+        if (!lightbox.classList.contains('open')) return;
+        if (e.key === 'Escape') close();
+        else if (e.key === 'ArrowRight') show(currentIdx + 1);
+        else if (e.key === 'ArrowLeft') show(currentIdx - 1);
       });
     })();
 
