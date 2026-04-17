@@ -9,23 +9,20 @@
 
 ## Active Terminals
 
-### T-PUBLIC-READY — Public Release Hardening
-**Started**: 2026-04-18
-**Status**: committing
-**Commit Lock**: HELD
-**Files**:
-- .gitignore
-- .husky/pre-commit
-- CLAUDE.md
-- .claude/rules/document-hygiene.md
-- scripts/check-doc-location.cjs
-- scripts/public-readiness-audit.cjs (new)
-- scripts/doc-allowlist.json (new)
-- package.json (pnpm script)
-- .ai/** (triage + move internal plan/audit docs)
-- docs/strategy/** (triage + move internal strategy docs)
-- docs/EMAIL-FORWARDING-SETUP.md, docs/SHOPIFY-VERIFICATION.md, docs/RELEASE-RUNBOOK.md, docs/RELEASE-READINESS.md, docs/LAUNCH-PIPELINE.md (move — contain personal info)
-- merch-print-ready/** (entire dir — not source code)
+_No active terminals._
+
+<!-- T-PUBLIC-READY done (a3301906 + filter-repo → da8c87fa, 2026-04-18).
+     Document Hygiene v2: mixed-dir allowlist + PII gate + public-readiness
+     audit. Moved 120+ internal docs from .ai/, docs/strategy/,
+     docs/marketing/, docs/ ops, merch-print-ready/. History purged.
+     Force-pushed to origin. pnpm run audit:public-ready passes clean. -->
+
+<!-- T-DOC-HYGIENE done (c677362b → filter-repo → 90c5d934, 2026-04-18).
+     v1 framework: 6 layers, 30 legacy plan docs purged from root. -->
+
+<!-- T-INTEL-RECON Phase 13b done (5d19f6c4). All 5 visual QA issues
+     fixed: buttons functional, template killed, confidence honest,
+     Evidence tab unique, naming fixed. App running live with fixes. -->
 
 <!-- T-DOC-HYGIENE done (c677362b 2026-04-18). Six-layer Document Hygiene
      framework: location doctrine, gitignore patterns, pre-commit gate,
