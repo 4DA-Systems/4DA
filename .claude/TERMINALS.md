@@ -9,18 +9,11 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 13a — Hardening: auto-seed + monitoring + unwrap)
-**Started:** 2026-04-17
-**Scope:** Fix all gaps identified in honest assessment. Auto-seed at
-startup, background refutation scanning, unwrap() elimination, i18n
-propagation, decision persistence.
-**Files claimed:**
-- `src-tauri/src/app_setup.rs` (EDIT — auto-seed hook)
-- `src-tauri/src/monitoring.rs` (EDIT — refutation scan)
-- All Phase 2-11 Rust files (EDIT — unwrap elimination)
-- `src/locales/*/ui.json` (EDIT — i18n propagation)
-- `src/components/decision-brief/ConfessionBox.tsx` (EDIT — persist decisions)
-**Commit Lock:** HELD at end
+_No active terminals._
+
+<!-- T-INTEL-RECON Phase 13a done (7e41aae0). All 5 gaps from honest
+     assessment addressed: auto-seed, monitoring, persistence, i18n, unwrap.
+     Phase 13b = visual QA (founder soak). Phase 14 = ship. -->
 
 <!-- T-INTEL-RECON (Phases 0-12 done 2026-04-17):
      Intelligence Reconciliation — 12 of 14 phases shipped.
