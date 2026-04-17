@@ -9,23 +9,23 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 9 — AWE Spine Wiring)
+### T-INTEL-RECON (Phase 10 — Confession Box + Decision Brief)
 **Started:** 2026-04-17
-**Prior RECON commits:** Phases 0-8 shipped (16 commits total incl. locks).
-**Scope:** Every EvidenceItem gets precedents attached via the local
-reasoning spine. Precedents drawn from the merged cold-start pool
-(git miner + curated corpus). Full AWE transmute is deferred to
-Phase 10 (Confession Box) — too slow for per-item inline calls.
+**Prior RECON commits:** Phases 0-9 shipped.
+**Scope:** The first new user-facing AWE surface. Global `⌘.`/`Ctrl+.`
+shortcut opens a single-input modal. User types one-sentence decision;
+modal calls `run_awe_transmute` (which carries Phase-6 context bridge);
+result renders as a canonical DecisionBrief card (restated decision,
+assumptions, reversibility, precedents, verdict).
 **Files claimed:**
-- `src-tauri/src/awe_spine.rs` (NEW — precedent index + matcher)
-- `src-tauri/src/preemption.rs` (EDIT — enrich output)
-- `src-tauri/src/blind_spots.rs` (EDIT — enrich output)
-- `src-tauri/src/knowledge_decay.rs` (EDIT — enrich output)
-- `src-tauri/src/signal_chains.rs` (EDIT — enrich output)
-- `src-tauri/src/lib.rs` (EDIT — mod)
-**Done when:** every EvidenceItem returned by a lens command carries
-≥0 precedents (non-cold-start cases ≥1). Similarity scoring
-deterministic + tested. No per-item latency regression.
+- `src/components/decision-brief/ConfessionBox.tsx` (NEW modal)
+- `src/components/decision-brief/DecisionBrief.tsx` (NEW card)
+- `src/hooks/use-confession-shortcut.ts` (NEW keyboard hook)
+- `src/App.tsx` or root: mount ConfessionBox
+- Tests for brief parser + hook
+**Done when:** ⌘. opens the modal from any tab; typing a decision
+returns a brief within 10s; brief renders all 5 sections; ESC closes;
+shortcut is keyboard-accessible + screen-reader labeled.
 **Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-8 + 2 hygiene recoveries done 2026-04-17):

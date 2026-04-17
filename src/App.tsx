@@ -31,6 +31,9 @@ const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => 
 const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
 const FrameworkPage = lazy(() => import('./components/FrameworkPage').then(m => ({ default: m.FrameworkPage })));
 const ComparisonPage = lazy(() => import('./components/ComparisonPage').then(m => ({ default: m.ComparisonPage })));
+// Intelligence Reconciliation Phase 10 — Confession Box (global ⌘. modal).
+const ConfessionBox = lazy(() => import('./components/decision-brief/ConfessionBox').then(m => ({ default: m.ConfessionBox })));
+import { useConfessionShortcut } from './hooks/use-confession-shortcut';
 import {
   useSettings,
   useMonitoring,
@@ -66,6 +69,9 @@ function App() {
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [showFramework, setShowFramework] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  // Phase 10 — Confession Box global modal.
+  const [showConfession, setShowConfession] = useState(false);
+  useConfessionShortcut(useCallback(() => setShowConfession(v => !v), []));
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const newItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [analysisPulse, setAnalysisPulse] = useState(false);
@@ -410,6 +416,15 @@ function App() {
               <SettingsModal
                 onClose={() => setShowSettings(false)}
               />
+            </ViewErrorBoundary>
+          </Suspense>
+        )}
+
+        {/* Confession Box — Phase 10. Global ⌘. / Ctrl+. */}
+        {showConfession && (
+          <Suspense fallback={null}>
+            <ViewErrorBoundary viewName="ConfessionBox" onReset={() => setShowConfession(false)}>
+              <ConfessionBox open={showConfession} onClose={() => setShowConfession(false)} />
             </ViewErrorBoundary>
           </Suspense>
         )}
