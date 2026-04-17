@@ -15,10 +15,11 @@ interface StreetHealthScore {
   top_action: string;
 }
 
-const TREND_ICONS: Record<string, { symbol: string; color: string }> = {
+const TREND_ICONS: Record<string, { symbol: string; color: string; label?: string }> = {
   improving: { symbol: '\u25B2', color: '#22C55E' },
   stable: { symbol: '\u25CF', color: '#A0A0A0' },
   declining: { symbol: '\u25BC', color: '#EF4444' },
+  starting: { symbol: '\u2726', color: '#D4AF37', label: 'getting started' },
 };
 
 export function StreetHealthBadge() {
@@ -34,7 +35,12 @@ export function StreetHealthBadge() {
   if (!streetHealth) return null;
 
   const pct = Math.round(streetHealth.overall * 100);
-  const trendInfo = (TREND_ICONS[streetHealth.trend] ?? TREND_ICONS.stable)!;
+  // Rec #2: Override "declining" to "starting" when progress is low.
+  // A new user can't decline from zero — calling early state "declining"
+  // is punitive. Below 20% we show an encouraging "getting started" state.
+  const effectiveTrend =
+    pct < 20 && streetHealth.trend === 'declining' ? 'starting' : streetHealth.trend;
+  const trendInfo = (TREND_ICONS[effectiveTrend] ?? TREND_ICONS.stable)!;
   const scoreColor =
     pct >= 70 ? '#22C55E' : pct >= 40 ? '#D4AF37' : '#EF4444';
 
@@ -61,7 +67,7 @@ export function StreetHealthBadge() {
                 {t('playbook.health.title')}
               </span>
               <span className="text-xs" style={{ color: trendInfo.color }}>
-                {trendInfo.symbol} {streetHealth.trend}
+                {trendInfo.symbol} {trendInfo.label ?? effectiveTrend}
               </span>
             </div>
             <p className="text-xs mt-0.5" style={{ color: '#8A8A8A' }}>

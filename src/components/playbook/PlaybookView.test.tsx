@@ -168,9 +168,23 @@ describe('PlaybookView', () => {
     expect(mockLoadProgress).toHaveBeenCalledTimes(1);
   });
 
-  it('shows empty state with start button when no module is selected', () => {
+  it('auto-opens Module S on first visit when zero progress', () => {
+    // Rec #5: when a new user lands on the Playbook tab with zero
+    // progress, the empty state is bypassed — Module S loads directly.
+    setStore({
+      playbookModules: [{ id: 'S', lesson_count: 8 }],
+      playbookProgress: { overall_percentage: 0, modules: [] },
+    });
     render(<PlaybookView />);
-    expect(screen.getByText(/streets:streets\.selectModuleDescription/)).toBeInTheDocument();
+    expect(mockLoadContent).toHaveBeenCalledWith('S');
+  });
+
+  it('shows empty state when modules have not loaded yet', () => {
+    // Edge case: modules array is empty (fetch in flight). The empty
+    // state should render as fallback since auto-open requires modules.
+    setStore({ playbookModules: [], playbookProgress: null });
+    render(<PlaybookView />);
+    expect(screen.getByText(/streets:streets\.emptyState\.headline/)).toBeInTheDocument();
     expect(screen.getByText('streets:streets.startWith')).toBeInTheDocument();
   });
 
@@ -269,7 +283,7 @@ describe('PlaybookView', () => {
 
     // Empty state content should not be visible
     expect(screen.queryByText('streets:streets.startWith')).not.toBeInTheDocument();
-    expect(screen.queryByText(/streets:streets\.selectModuleDescription/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/streets:streets\.emptyState\.headline/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -376,9 +390,21 @@ describe('PlaybookView', () => {
     expect(screen.queryByTestId('sovereign-profile')).not.toBeInTheDocument();
   });
 
-  it('shows StreetHealthBadge in content area', () => {
+  it('shows StreetHealthBadge when progress >= 15%', () => {
+    // Rec #1: badge is hidden below 15% to avoid punishing new users.
+    setStore({
+      playbookProgress: { overall_percentage: 20, modules: [] },
+    });
     render(<PlaybookView />);
     expect(screen.getByTestId('street-health-badge')).toBeInTheDocument();
+  });
+
+  it('hides StreetHealthBadge when progress is low', () => {
+    setStore({
+      playbookProgress: { overall_percentage: 5, modules: [] },
+    });
+    render(<PlaybookView />);
+    expect(screen.queryByTestId('street-health-badge')).not.toBeInTheDocument();
   });
 
 });
