@@ -1,0 +1,53 @@
+{
+  "_doc": "Doc allowlist for scripts/check-doc-location.cjs and scripts/public-readiness-audit.cjs. Lists files that are explicitly OK to be tracked in 'mixed' directories (where some files are public-OK and others are private).",
+  "_version": 1,
+  "_updated": "2026-04-18",
+
+  "root": {
+    "_comment": "Repo-root *.md files that are public-facing. Anything else matching a block pattern at root is rejected by the gate.",
+    "files": [
+      "README.md",
+      "CHANGELOG.md",
+      "LICENSE",
+      "LICENSE.md",
+      "NOTICE",
+      "CONTRIBUTING.md",
+      "CODE_OF_CONDUCT.md",
+      "SECURITY.md",
+      "CLAUDE.md",
+      "AGENTS.md",
+      "CONVENTIONS.md",
+      "TRADEMARKS.md",
+      "CLA.md",
+      "LINUX.md",
+      "NETWORK.md"
+    ]
+  },
+
+  ".ai/": {
+    "_comment": "Architecture references only. Audits, plans, debt logs, launch-blocking docs belong in .claude/plans/ (gitignored).",
+    "files": [
+      "ARCHITECTURE.md",
+      "INVARIANTS.md",
+      "WISDOM.md",
+      "WISDOM-REFERENCE.md",
+      "AI_ENGINEERING_CONTRACT.md",
+      "RULES.md",
+      "TASK_TEMPLATE.md"
+    ]
+  },
+
+  "docs/strategy/": {
+    "_comment": "Architecture protocols and canonical schemas only. Pricing/tier plans, playbooks, trajectories, audits belong in .claude/plans/.",
+    "files": [
+      "MUSE-ARCHITECTURE.md",
+      "MUSE-CONTEXT-PROTOCOL.md",
+      "MUSE-STRATEGY.md",
+      "EVIDENCE-ITEM-SCHEMA.md",
+      "INTELLIGENCE-RECONCILIATION.md",
+      "INTELLIGENCE-MESH.md",
+      "TEAM-RELAY-ARCHITECTURE.md",
+      "SILENT-FAILURE-DEFENSE.md"
+    ]
+  }
+}

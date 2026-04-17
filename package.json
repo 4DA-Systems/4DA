@@ -42,6 +42,7 @@
     "i18n:add-lang": "node scripts/i18n-sync.cjs add-lang",
     "i18n:sync": "node scripts/i18n-sync.cjs",
     "validate:all": "pnpm run i18n:types && pnpm run validate && pnpm run validate:rust && pnpm run validate:mcp && pnpm run validate:translations",
+    "audit:public-ready": "node scripts/public-readiness-audit.cjs",
     "generate:knowledge": "node scripts/generate-knowledge.cjs",
     "sentinel": "node scripts/sentinel-scan.cjs",
     "sentinel:quick": "node scripts/sentinel-scan.cjs --quick",
