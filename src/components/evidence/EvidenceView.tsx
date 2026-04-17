@@ -181,6 +181,9 @@ const CommitmentsSection = memo(function CommitmentsSection({
 // Hero CTA — the main content when the page is empty
 // ============================================================================
 
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
+const SHORTCUT_LABEL = isMac ? '⌘.' : 'Ctrl+.';
+
 const WisdomCta = memo(function WisdomCta() {
   const { t } = useTranslation();
   return (
@@ -193,7 +196,7 @@ const WisdomCta = memo(function WisdomCta() {
           {t('evidence.ctaTitle')}
         </h3>
         <p className="text-sm text-text-secondary mt-2 max-w-md mx-auto leading-relaxed">
-          Press <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border text-xs font-mono text-accent-gold">⌘.</kbd> anywhere
+          Press <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border text-xs font-mono text-accent-gold">{SHORTCUT_LABEL}</kbd> anywhere
           to consult the Wisdom engine on a decision you are weighing. Your decisions, commitments, and
           their outcomes will appear here as proof that 4DA is compounding your judgment.
         </p>
