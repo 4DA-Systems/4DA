@@ -9,7 +9,25 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-INTEL-RECON (Phase 12 — Evidence Tab)
+**Started:** 2026-04-17
+**Prior RECON commits:** Phases 0-11 shipped.
+**Scope:** Build the Evidence tab that replaces the old Momentum slot.
+Three sections, fixed:
+  1. This Week — honest one-line claim with real numbers
+  2. Active Commitments — open Commitment Contracts + refutation status
+  3. Recent Items — latest EvidenceItems from all lenses
+No vanity metrics. No gauges. Every number informs an action.
+**Files claimed:**
+- `src/components/evidence/EvidenceView.tsx` (NEW)
+- `src/components/ViewRouter.tsx` (EDIT — add evidence route)
+- `src/components/ViewTabBar.tsx` (EDIT — add evidence tab)
+- `src/store/types.ts` (EDIT — add 'evidence' to ViewId)
+- `src/store/ui-slice.ts` (EDIT — add to tier views)
+**Done when:** Evidence tab renders real data from commitment contracts
++ preemption + blind spots feeds. No empty-state pseudo-gauges. All
+tests green.
+**Commit Lock:** HELD at end of phase
 
 <!-- T-INTEL-RECON (Phases 0-11 done 2026-04-17):
      Intelligence Reconciliation — 11 of 14 phases shipped.
