@@ -2,15 +2,10 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 /**
- * Evidence Tab — Intelligence Reconciliation Phase 12 (2026-04-17).
+ * Evidence Tab — Intelligence Reconciliation Phase 12+13 (2026-04-17).
  *
- * The tab where 4DA proves — with timestamps and real items — that it's
- * working and that it's learning you. Replaces the old Momentum page.
- *
- * Three sections, fixed:
- *   1. This Week — honest one-line claim with real numbers
- *   2. Active Commitments — open Commitment Contracts + status
- *   3. Recent Intelligence — latest EvidenceItems from all lenses
+ * The tab where 4DA proves it's working and that it's learning you.
+ * Three sections when populated; a focused CTA when empty.
  *
  * Per Intelligence Doctrine rule 3: no vanity metrics. Every number
  * on screen informs an action or proves a claim.
@@ -39,16 +34,16 @@ interface CommitmentContract {
 // Helpers
 // ============================================================================
 
+function contractAge(createdAt: string): number {
+  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
+}
+
 function daysAgo(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
   const d = Math.floor(diff / 86_400_000);
   if (d === 0) return 'today';
   if (d === 1) return '1 day ago';
   return `${d} days ago`;
-}
-
-function contractAge(createdAt: string): number {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
 }
 
 // ============================================================================
@@ -70,7 +65,7 @@ const ThisWeekSection = memo(function ThisWeekSection({
   return (
     <section className="bg-bg-secondary rounded-lg border border-border p-5">
       <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3">
-        {t('evidence.thisWeek', 'This week')}
+        {t('evidence.thisWeek')}
       </h2>
       {total === 0 && contractCount === 0 ? (
         <p className="text-sm text-text-secondary">
@@ -123,7 +118,7 @@ const CommitmentCard = memo(function CommitmentCard({
         <div className="flex-1 min-w-0">
           <p className="text-sm text-white">{contract.decision_statement}</p>
           <p className="text-xs text-text-muted mt-1">
-            Refutation watch: <span className="text-text-secondary italic">{contract.refutation_condition}</span>
+            Watching for: <span className="text-text-secondary italic">{contract.refutation_condition}</span>
           </p>
           <div className="flex items-center gap-3 mt-2 text-[10px] text-text-muted">
             <span>{age === 0 ? 'today' : `${age}d ago`}</span>
@@ -161,24 +156,13 @@ const CommitmentsSection = memo(function CommitmentsSection({
   const triggered = contracts.filter(c => c.status === 'triggered');
   const all = [...triggered, ...active];
 
-  if (all.length === 0) {
-    return (
-      <section className="bg-bg-secondary rounded-lg border border-border p-5">
-        <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3">
-          {t('evidence.commitments', 'Commitment Contracts')}
-        </h2>
-        <p className="text-xs text-text-muted">
-          {t('evidence.noCommitments', 'No active commitments. Accept a Decision Brief (⌘.) to set one.')}
-        </p>
-      </section>
-    );
-  }
+  if (all.length === 0) return null;
 
   return (
     <section>
       <div className="flex items-center justify-between mb-3 px-1">
         <h2 className="text-[10px] text-text-muted uppercase tracking-wider">
-          {t('evidence.commitments', 'Commitment Contracts')}
+          {t('evidence.commitments')}
         </h2>
         <span className="text-[10px] text-text-muted tabular-nums">
           {active.length} watching{triggered.length > 0 && ` · ${triggered.length} triggered`}
@@ -194,13 +178,51 @@ const CommitmentsSection = memo(function CommitmentsSection({
 });
 
 // ============================================================================
+// Hero CTA — the main content when the page is empty
+// ============================================================================
+
+const WisdomCta = memo(function WisdomCta() {
+  const { t } = useTranslation();
+  return (
+    <section className="bg-bg-secondary rounded-lg border border-accent-gold/20 p-8 text-center space-y-4">
+      <div className="w-14 h-14 rounded-full bg-accent-gold/10 border border-accent-gold/30 flex items-center justify-center mx-auto">
+        <span className="text-accent-gold text-xl" aria-hidden="true">◇</span>
+      </div>
+      <div>
+        <h3 className="text-base font-medium text-white">
+          {t('evidence.ctaTitle')}
+        </h3>
+        <p className="text-sm text-text-secondary mt-2 max-w-md mx-auto leading-relaxed">
+          Press <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border text-xs font-mono text-accent-gold">⌘.</kbd> anywhere
+          to consult the Wisdom engine on a decision you are weighing. Your decisions, commitments, and
+          their outcomes will appear here as proof that 4DA is compounding your judgment.
+        </p>
+      </div>
+      <div className="flex justify-center gap-6 pt-2 text-[10px] text-text-muted">
+        <div className="text-center">
+          <div className="text-lg font-semibold text-white tabular-nums">0</div>
+          <div>decisions</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-semibold text-white tabular-nums">0</div>
+          <div>commitments</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-semibold text-white tabular-nums">0</div>
+          <div>outcomes</div>
+        </div>
+      </div>
+    </section>
+  );
+});
+
+// ============================================================================
 // Main View
 // ============================================================================
 
 const EvidenceView = memo(function EvidenceView() {
   const { t } = useTranslation();
   const [contracts, setContracts] = useState<CommitmentContract[]>([]);
-  const [decisions, setDecisions] = useState<Array<{ subject: string; decision: string; rationale: string | null; confidence: number; created_at: string }>>([]);
   const [preemptionCount, setPreemptionCount] = useState(0);
   const [blindSpotCount, setBlindSpotCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -212,7 +234,6 @@ const EvidenceView = memo(function EvidenceView() {
       cmd('get_preemption_alerts'),
       cmd('get_blind_spots'),
       cmd('check_refutations', { hours: 168 }),
-      cmd('get_decisions', { decisionType: 'wisdom_brief', status: 'all', limit: 10 }),
     ]);
 
     if (results[0]!.status === 'fulfilled') {
@@ -226,10 +247,6 @@ const EvidenceView = memo(function EvidenceView() {
     if (results[2]!.status === 'fulfilled') {
       const feed = results[2]!.value as unknown as EvidenceFeed;
       setBlindSpotCount(feed.total);
-    }
-    if (results[4]!.status === 'fulfilled') {
-      const raw = results[4]!.value;
-      setDecisions(Array.isArray(raw) ? raw as typeof decisions : []);
     }
 
     setLoading(false);
@@ -247,11 +264,12 @@ const EvidenceView = memo(function EvidenceView() {
   }, []);
 
   const activeContracts = contracts.filter(c => c.status !== 'dismissed');
+  const hasContracts = activeContracts.length > 0;
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-text-secondary text-sm">
-        {t('evidence.loading', 'Loading evidence...')}
+        {t('evidence.loading')}
       </div>
     );
   }
@@ -260,10 +278,10 @@ const EvidenceView = memo(function EvidenceView() {
     <div className="space-y-5 pb-8" role="tabpanel" id="view-panel-evidence">
       <header>
         <h1 className="text-xl font-semibold text-white tracking-tight">
-          {t('evidence.title', 'Evidence')}
+          {t('evidence.title')}
         </h1>
         <p className="text-sm text-text-muted mt-1">
-          {t('evidence.subtitle', 'Proof that 4DA is working and learning you.')}
+          {t('evidence.subtitle')}
         </p>
       </header>
 
@@ -273,47 +291,15 @@ const EvidenceView = memo(function EvidenceView() {
         contractCount={activeContracts.filter(c => c.status === 'active').length}
       />
 
-      <CommitmentsSection
-        contracts={activeContracts}
-        onDismiss={handleDismiss}
-      />
-
-      {/* Accepted decisions from the Confession Box */}
-      {decisions.length > 0 && (
-        <section>
-          <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3 px-1">
-            {t('evidence.decisions', 'Your Decisions')}
-          </h2>
-          <div className="space-y-2">
-            {decisions.map((d, i) => (
-              <div key={i} className="rounded-lg border border-border bg-bg-tertiary/20 px-4 py-3">
-                <p className="text-sm text-white">{d.decision}</p>
-                {d.rationale && (
-                  <p className="text-xs text-text-muted mt-1 italic">{d.rationale}</p>
-                )}
-                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-text-muted">
-                  <span>{d.subject}</span>
-                  <span>·</span>
-                  <span className="tabular-nums">{Math.round(d.confidence * 100)}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+      {hasContracts && (
+        <CommitmentsSection
+          contracts={activeContracts}
+          onDismiss={handleDismiss}
+        />
       )}
 
-      {/* Call to action when no decisions yet */}
-      {decisions.length === 0 && activeContracts.length === 0 && (
-        <section className="bg-bg-secondary rounded-lg border border-accent-gold/20 p-6 text-center">
-          <span className="text-accent-gold text-lg" aria-hidden="true">◇</span>
-          <p className="text-sm text-text-secondary mt-2">
-            {t('evidence.ctaTitle', 'Start building your decision history')}
-          </p>
-          <p className="text-xs text-text-muted mt-1">
-            {t('evidence.ctaHint', 'Press ⌘. (or Ctrl+.) anywhere to consult the Wisdom engine on a decision you are weighing.')}
-          </p>
-        </section>
-      )}
+      {/* Hero CTA — the page's purpose when no decisions/contracts yet */}
+      <WisdomCta />
     </div>
   );
 });
