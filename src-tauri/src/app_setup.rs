@@ -568,6 +568,37 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // Intelligence Reconciliation Phase 13 — Auto-seed on first launch.
+    // Runs the git decision miner against configured context_dirs to populate
+    // AWE's Wisdom Graph with personal priors. Non-blocking, best-effort.
+    // The curated corpus (Phase 8) is already compiled into the binary and
+    // available via load_corpus() without a startup step.
+    tauri::async_runtime::spawn(async {
+        let repos = crate::get_context_dirs();
+        if repos.is_empty() {
+            info!(target: "4da::startup", "Git decision miner: no context dirs configured — skipping auto-seed");
+            return;
+        }
+        let (decisions, summary) = crate::git_decision_miner::mine_many(&repos, 5, 200);
+        if summary.decisions_found > 0 {
+            info!(
+                target: "4da::startup",
+                repos = summary.repos_scanned,
+                decisions = summary.decisions_found,
+                confirmed = summary.confirmed,
+                "Git decision miner: auto-seed complete"
+            );
+            let jsonl_path = std::env::temp_dir().join("awe_git_seeded.jsonl");
+            let lines: Vec<String> = decisions
+                .iter()
+                .filter_map(|d| serde_json::to_string(d).ok())
+                .collect();
+            let _ = std::fs::write(&jsonl_path, lines.join("\n"));
+        } else {
+            info!(target: "4da::startup", "Git decision miner: no decisions found in {} repos", summary.repos_scanned);
+        }
+    });
+
     // One-time startup data cleanup: purge bloated tables that accumulate dead rows.
     // Non-blocking, non-fatal — runs in background to avoid slowing startup.
     tauri::async_runtime::spawn(async {

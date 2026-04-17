@@ -507,6 +507,31 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // Commitment Contract refutation scan — hourly (Intelligence Reconciliation Phase 13)
+            // Piggybacks on the hourly tick; checks the last 24h of source items
+            // against active refutation conditions. Fires Refutation EvidenceItems
+            // when a match is found. Non-fatal on all error paths.
+            if now - last_anomaly < 2 {
+                if let Ok(conn) = crate::open_db_connection() {
+                    match crate::commitment_contracts::scan_for_refutations(&conn, 24) {
+                        Ok(triggered) if !triggered.is_empty() => {
+                            info!(
+                                target: "4da::monitor",
+                                count = triggered.len(),
+                                "Commitment contract refutation(s) triggered"
+                            );
+                            if let Err(e) = app.emit("commitment-contract-triggered", &triggered) {
+                                tracing::warn!("Failed to emit commitment-contract-triggered: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(target: "4da::monitor", error = %e, "Refutation scan failed (non-fatal)");
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
             // CVE scan — Developer Immune System (every 30 minutes)
             let last_cve = state.last_cve_scan.load(Ordering::Relaxed);
             if now - last_cve >= CVE_SCAN_INTERVAL {
