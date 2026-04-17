@@ -5,13 +5,12 @@ import { useAppStore } from '../store';
 import { trackEvent } from '../hooks/use-telemetry';
 import type { ViewTier } from '../store/types';
 
-type ViewId = 'briefing' | 'results' | 'preemption' | 'blindspots' | 'evidence' | 'profile' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
+type ViewId = 'briefing' | 'results' | 'preemption' | 'blindspots' | 'profile' | 'saved' | 'toolkit' | 'playbook' | 'calibrate' | 'console';
 
 const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'preemption', labelKey: 'nav.preemption.label', subtitleKey: 'nav.preemption.subtitle', activeColor: 'bg-red-500/20 text-red-400' },
   { id: 'blindspots', labelKey: 'nav.blindspots.label', subtitleKey: 'nav.blindspots.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
-  { id: 'evidence', labelKey: 'nav.evidence', subtitleKey: 'nav.evidence.subtitle', activeColor: 'bg-accent-gold/20 text-accent-gold' },
   { id: 'results', labelKey: 'nav.results', subtitleKey: 'nav.results.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'playbook', labelKey: 'nav.playbook', subtitleKey: 'nav.playbook.subtitle', activeColor: 'bg-yellow-500/20 text-yellow-400' },
   { id: 'saved', labelKey: 'nav.saved', subtitleKey: 'nav.saved.subtitle', activeColor: 'bg-green-500/20 text-green-400' },
@@ -29,9 +28,9 @@ const TABS: Array<{ id: ViewId; labelKey: string; subtitleKey: string; activeCol
 // Evidence lens lands in a later phase; no placeholder tab in the interim.
 export const TIER_VIEWS: Record<ViewTier, ViewId[]> = {
   core: ['briefing', 'results', 'playbook'],
-  explorer: ['briefing', 'preemption', 'blindspots', 'evidence', 'results', 'playbook'],
-  invested: ['briefing', 'preemption', 'blindspots', 'evidence', 'results', 'playbook', 'saved', 'profile', 'console'],
-  power: ['briefing', 'preemption', 'blindspots', 'evidence', 'results', 'playbook', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+  explorer: ['briefing', 'preemption', 'blindspots', 'results', 'playbook'],
+  invested: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console'],
+  power: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const BADGE_COLORS: Partial<Record<ViewId, string>> = {
