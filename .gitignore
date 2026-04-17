@@ -152,6 +152,75 @@ README-MARKETING.md
 # Archived planning docs (kept locally, never committed)
 .claude/plans/archive-*/
 
+# ---------------------------------------------------------------------------
+# .ai/ — mixed dir: architecture refs are public, everything else is internal
+# Explicit block-list for internal .ai/ content. The pre-commit gate enforces
+# the allowlist inverse (see scripts/check-doc-location.cjs).
+# Public-OK .ai/ files: ARCHITECTURE, INVARIANTS, WISDOM, WISDOM-REFERENCE,
+#   AI_ENGINEERING_CONTRACT, RULES, TASK_TEMPLATE.
+# ---------------------------------------------------------------------------
+.ai/*PLAN*.md
+.ai/*plan*.md
+.ai/*AUDIT*.md
+.ai/*DEBT*.md
+.ai/*DECISIONS*.md
+.ai/*FAILURE*.md
+.ai/*LAUNCH-BLOCKING*
+.ai/*LAUNCH-SCOPE*
+.ai/*OPTIMIZATION*
+.ai/*IMPROVEMENT*
+.ai/*HARDENING*
+.ai/*I18N*
+.ai/*OPS*
+.ai/*VALIDATION*
+.ai/*VERIFICATION*
+.ai/*COMPREHENSIVE*
+.ai/archive/
+.ai/plans/
+
+# ---------------------------------------------------------------------------
+# docs/strategy/ — mixed dir: architecture protocols are public, strategy is not
+# Public-OK docs/strategy/ files are listed in scripts/doc-allowlist.json.
+# ---------------------------------------------------------------------------
+docs/strategy/*DOMINATION*.md
+docs/strategy/*TIER-PLAN*.md
+docs/strategy/*TIER*.md
+docs/strategy/*PLAYBOOK*.md
+docs/strategy/*TRAJECTORY*.md
+docs/strategy/*HARDENING*.md
+docs/strategy/*PRELAUNCH*.md
+docs/strategy/*PRE-LAUNCH*.md
+docs/strategy/*AUDIT*.md
+docs/strategy/*EXPANSION*.md
+docs/strategy/*KEY-ROTATION*.md
+docs/strategy/*ROTATION*.md
+docs/strategy/*OPTIMAL-SEASONING*.md
+docs/strategy/*ONBOARDING-LOAD*.md
+docs/strategy/*PUBLICATION-STRATEGY*.md
+
+# ---------------------------------------------------------------------------
+# docs/ root — internal ops docs that leak personal info or release logistics
+# ---------------------------------------------------------------------------
+docs/EMAIL-FORWARDING-*.md
+docs/SHOPIFY-*.md
+docs/RELEASE-RUNBOOK*.md
+docs/RELEASE-READINESS*.md
+docs/LAUNCH-PIPELINE*.md
+docs/PRE-LAUNCH-GATES*.md
+docs/*PROACTIVE*PLAN*.md
+docs/SHOW-HN-*.md
+
+# ---------------------------------------------------------------------------
+# merch-print-ready/ — commerce prep artefacts, not source code
+# ---------------------------------------------------------------------------
+merch-print-ready/
+
+# ---------------------------------------------------------------------------
+# docs/marketing/ — internal GTM playbooks: competitive research, campaigns,
+# outreach templates, pre-written blog drafts. Never in the public repo.
+# ---------------------------------------------------------------------------
+docs/marketing/
+
 # CLI workspace (not ready)
 cli/
 
