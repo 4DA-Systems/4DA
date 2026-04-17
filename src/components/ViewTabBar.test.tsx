@@ -39,10 +39,10 @@ describe('ViewTabBar', () => {
     setMockState({});
     render(<ViewTabBar />);
     expect(screen.getByRole('tablist')).toBeInTheDocument();
-    // Tabs: briefing, preemption, blindspots, results, playbook, saved, profile, console, toolkit, calibrate
-    // (Intelligence Reconciliation 2026-04-16 removed 'insights' + 'chapters')
+    // Tabs: briefing, preemption, blindspots, evidence, results, playbook, saved, profile, console, toolkit, calibrate
+    // (Intelligence Reconciliation: removed insights/chapters, added evidence)
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(10);
+    expect(tabs.length).toBe(11);
   });
 
   it('marks the active view tab as selected', () => {
@@ -73,8 +73,8 @@ describe('ViewTabBar', () => {
     setMockState({ viewTier: 'explorer', showAllViews: false });
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    // explorer tier: briefing, preemption, blindspots, results, playbook
-    expect(tabs.length).toBe(5);
+    // explorer tier: briefing, preemption, blindspots, evidence, results, playbook
+    expect(tabs.length).toBe(6);
   });
 
   it('shows badge indicator when results have items', () => {

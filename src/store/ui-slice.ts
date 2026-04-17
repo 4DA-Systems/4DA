@@ -30,7 +30,7 @@ function persistDisclosure(data: PersistedDisclosure): void {
   } catch { /* ignore quota errors */ }
 }
 
-type ViewId = 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots';
+type ViewId = 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots' | 'evidence';
 
 // CANONICAL SOURCE: What setActiveView will ACCEPT per tier.
 // MUST stay in sync with TIER_VIEWS in src/components/ViewTabBar.tsx.
@@ -40,9 +40,9 @@ type ViewId = 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profi
 // and 'chapters' (CategoryChapterView merged into Results).
 export const UI_SLICE_TIER_VIEWS: Record<ViewTier, ViewId[]> = {
   core: ['briefing', 'results', 'playbook'],
-  explorer: ['briefing', 'preemption', 'blindspots', 'results', 'playbook'],
-  invested: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console'],
-  power: ['briefing', 'preemption', 'blindspots', 'results', 'playbook', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
+  explorer: ['briefing', 'preemption', 'blindspots', 'evidence', 'results', 'playbook'],
+  invested: ['briefing', 'preemption', 'blindspots', 'evidence', 'results', 'playbook', 'saved', 'profile', 'console'],
+  power: ['briefing', 'preemption', 'blindspots', 'evidence', 'results', 'playbook', 'saved', 'profile', 'console', 'toolkit', 'calibrate'],
 };
 
 const TIER_ORDER: ViewTier[] = ['core', 'explorer', 'invested', 'power'];
