@@ -299,7 +299,12 @@ const ItemCard = memo(function ItemCard({
                     onDismiss(item.id);
                   } else if (action.action_id === 'investigate' || action.action_id === 'view_source') {
                     const url = item.evidence[0]?.url;
-                    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                    if (url) {
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                    } else {
+                      const q = encodeURIComponent(item.title);
+                      window.open(`https://www.google.com/search?q=${q}`, '_blank', 'noopener,noreferrer');
+                    }
                   }
                 }}
               >
