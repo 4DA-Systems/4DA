@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { DecisionBrief, type DecisionBriefData } from './DecisionBrief';
 import { parseBrief } from './brief-parser';
+import { CommitmentPrompt } from './CommitmentPrompt';
 
 interface Props {
   open: boolean;
@@ -30,6 +31,8 @@ export const ConfessionBox = memo(function ConfessionBox({ open, onClose }: Prop
   const [brief, setBrief] = useState<DecisionBriefData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCommitment, setShowCommitment] = useState(false);
+  const [committed, setCommitted] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Reset state each time the modal opens.
@@ -39,6 +42,8 @@ export const ConfessionBox = memo(function ConfessionBox({ open, onClose }: Prop
       setBrief(null);
       setLoading(false);
       setError(null);
+      setShowCommitment(false);
+      setCommitted(false);
       // Auto-focus the input so the user can type immediately.
       setTimeout(() => inputRef.current?.focus(), 0);
     }
@@ -176,13 +181,48 @@ export const ConfessionBox = memo(function ConfessionBox({ open, onClose }: Prop
         {/* Brief result */}
         {brief !== null && (
           <div className="bg-bg-secondary border-x border-b border-border rounded-b-lg p-5">
-            <DecisionBrief data={brief} />
+            <DecisionBrief
+              data={brief}
+              onAccept={committed ? undefined : () => setShowCommitment(true)}
+              onDefer={() => {
+                setBrief(null);
+                setQuery('');
+                onClose();
+              }}
+              onReject={() => {
+                setBrief(null);
+                setQuery('');
+                onClose();
+              }}
+            />
+
+            {/* Commitment Contract prompt — shows after Accept */}
+            {showCommitment && !committed && (
+              <CommitmentPrompt
+                decisionStatement={brief.decision}
+                subject={query.trim().split(/\s+/).pop() ?? ''}
+                onComplete={() => {
+                  setCommitted(true);
+                  setShowCommitment(false);
+                }}
+                onCancel={() => setShowCommitment(false)}
+              />
+            )}
+
+            {committed && (
+              <p className="mt-3 text-xs text-green-400">
+                {t('commitment.confirmed', 'Refutation watch set. 4DA will surface it if the condition is met.')}
+              </p>
+            )}
+
             <div className="mt-4 flex justify-end">
               <button
                 type="button"
                 onClick={() => {
                   setBrief(null);
                   setQuery('');
+                  setShowCommitment(false);
+                  setCommitted(false);
                   setTimeout(() => inputRef.current?.focus(), 0);
                 }}
                 className="text-[11px] text-text-muted hover:text-white transition-colors"

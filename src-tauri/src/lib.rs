@@ -164,6 +164,8 @@ mod awe_spine;
 mod awe_synthesis;
 mod blind_spots;
 mod boot_context;
+/// Intelligence Reconciliation Phase 11 — Commitment Contracts.
+mod commitment_contracts;
 mod briefing_snapshot;
 mod briefing_window;
 mod calibration;
@@ -624,6 +626,11 @@ pub fn run() {
             git_decision_miner::mine_git_decisions,
             // Intelligence Reconciliation Phase 8 — Curated corpus.
             seed_corpus::get_seed_corpus_stats,
+            // Intelligence Reconciliation Phase 11 — Commitment Contracts.
+            commitment_contracts::create_commitment_contract,
+            commitment_contracts::get_commitment_contracts,
+            commitment_contracts::dismiss_commitment_contract,
+            commitment_contracts::check_refutations,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
             context_commands::generate_cli_briefing,
