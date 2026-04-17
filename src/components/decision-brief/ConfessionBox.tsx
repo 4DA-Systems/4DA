@@ -183,8 +183,33 @@ export const ConfessionBox = memo(function ConfessionBox({ open, onClose }: Prop
           <div className="bg-bg-secondary border-x border-b border-border rounded-b-lg p-5">
             <DecisionBrief
               data={brief}
-              onAccept={committed ? undefined : () => setShowCommitment(true)}
+              onAccept={committed ? undefined : () => {
+                // Persist the decision so it survives modal close.
+                // Non-blocking, best-effort — if persistence fails, the
+                // commitment prompt still shows (the user shouldn't be
+                // blocked by a backend write failure).
+                void cmd('record_developer_decision', {
+                  decisionType: 'wisdom_brief',
+                  subject: query.trim().split(/\s+/).pop() ?? '',
+                  decision: brief.decision,
+                  rationale: brief.verdict,
+                  alternativesRejected: [],
+                  contextTags: brief.assumptions.slice(0, 3),
+                  confidence: brief.confidence,
+                }).catch(() => {});
+                setShowCommitment(true);
+              }}
               onDefer={() => {
+                // Persist as deferred — decision not lost on close.
+                void cmd('record_developer_decision', {
+                  decisionType: 'wisdom_brief',
+                  subject: query.trim().split(/\s+/).pop() ?? '',
+                  decision: brief.decision,
+                  rationale: 'Deferred for later consideration',
+                  alternativesRejected: [],
+                  contextTags: [],
+                  confidence: brief.confidence,
+                }).catch(() => {});
                 setBrief(null);
                 setQuery('');
                 onClose();
