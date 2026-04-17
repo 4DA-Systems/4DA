@@ -396,8 +396,11 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         raw_alerts.push(PreemptionAlert {
             id: uuid::Uuid::new_v4().to_string(),
             alert_type,
-            title: format!("{}: {}", project_name, truncate(&title, 80)),
-            explanation: truncate(&title, 200),
+            title: truncate(&title, 120),
+            explanation: format!(
+                "Affects {} in {}",
+                package_name, project_name
+            ),
             evidence,
             affected_projects: vec![project_path],
             affected_dependencies: vec![package_name],
@@ -578,14 +581,16 @@ fn chain_to_alert(
     PreemptionAlert {
         id: uuid::Uuid::new_v4().to_string(),
         alert_type,
-        title: format!("{} — {}", chain.chain_name, prediction.forecast),
-        explanation: format!(
-            "Signal chain \"{}\" is in {} phase with {} confidence. {}",
-            chain.chain_name,
-            phase_label(&prediction.phase),
-            format_confidence(prediction.confidence),
-            prediction.forecast
-        ),
+        title: if let Some(first_link) = chain.links.first() {
+            truncate(&first_link.title, 120)
+        } else {
+            truncate(&chain.chain_name, 120)
+        },
+        explanation: if prediction.forecast.is_empty() {
+            format!("{} — {}", chain.chain_name, chain.suggested_action)
+        } else {
+            truncate(&prediction.forecast, 200)
+        },
         evidence,
         affected_projects: vec![],
         affected_dependencies: vec![],
@@ -650,14 +655,19 @@ fn gap_to_alert(gap: &crate::knowledge_decay::KnowledgeGap) -> PreemptionAlert {
             gap.dependency,
             gap.missed_items.len()
         ),
-        explanation: format!(
-            "You haven't engaged with {} content in {} days, but {} relevant signals appeared. \
-             This dependency is used in your project at \"{}\".",
-            gap.dependency,
-            gap.days_since_last_engagement,
-            gap.missed_items.len(),
-            gap.project_path
-        ),
+        explanation: if let Some(top_item) = gap.missed_items.first() {
+            truncate(&top_item.title, 200)
+        } else {
+            format!(
+                "{} — {} days without engagement, used in {}",
+                gap.dependency,
+                gap.days_since_last_engagement,
+                std::path::Path::new(&gap.project_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("your project")
+            )
+        },
         evidence,
         affected_projects: vec![gap.project_path.clone()],
         affected_dependencies: vec![gap.dependency.clone()],
