@@ -325,6 +325,8 @@ const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
   const surfacedRef = useRef(new Set<string>());
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  const [lastDismissed, setLastDismissed] = useState<string | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { feed, loading, error } = useAppStore(
     useShallow(s => ({
@@ -341,7 +343,21 @@ const PreemptionView = memo(function PreemptionView() {
 
   const handleDismiss = useCallback((id: string) => {
     setDismissedIds(prev => new Set(prev).add(id));
+    setLastDismissed(id);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
   }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!lastDismissed) return;
+    setDismissedIds(prev => {
+      const next = new Set(prev);
+      next.delete(lastDismissed);
+      return next;
+    });
+    setLastDismissed(null);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  }, [lastDismissed]);
 
   // Sort items by urgency priority (critical first), filter dismissed
   const sortedItems = (feed?.items ?? [])
@@ -406,6 +422,20 @@ const PreemptionView = memo(function PreemptionView() {
               {feed.total} {feed.total === 1 ? 'alert' : 'alerts'}
             </span>
           </div>
+
+          {/* Undo bar — shows for 8s after a dismiss */}
+          {lastDismissed !== null && (
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 animate-in fade-in">
+              <span className="text-xs text-amber-400">Item dismissed</span>
+              <button
+                type="button"
+                onClick={handleUndo}
+                className="text-xs font-medium text-amber-400 hover:text-white underline-offset-2 hover:underline transition-colors"
+              >
+                Undo
+              </button>
+            </div>
+          )}
 
           {/* Item cards */}
           <div className="space-y-4">
