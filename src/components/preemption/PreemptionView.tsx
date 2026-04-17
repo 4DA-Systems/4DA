@@ -61,11 +61,12 @@ const EXPLANATION_MAX_LENGTH = 280;
 
 /** Format days-ago into a short human label. */
 function formatFreshness(days: number): string {
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
+  const d = Math.round(days);
+  if (d <= 0) return 'today';
+  if (d === 1) return 'yesterday';
+  if (d < 7) return `${d}d ago`;
+  if (d < 30) return `${Math.floor(d / 7)}w ago`;
+  return `${Math.floor(d / 30)}mo ago`;
 }
 
 /** Truncate a string to N chars with ellipsis, at a word boundary. */
