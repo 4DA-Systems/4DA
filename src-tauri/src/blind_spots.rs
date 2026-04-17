@@ -113,8 +113,12 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
     // 4. Find uncovered dependencies (deps with no interaction in 14+ days)
     let uncovered = find_uncovered_deps(&conn, &deps)?;
 
-    // 5. Find stale topics from attention blind spots
-    let stale = attention
+    // 5. Find stale topics from attention blind spots.
+    // Only include topics with actual missed signals — a topic with
+    // 0 missed signals means coverage is healthy, not that there's a
+    // gap. Showing "Stale topic: rust (0 signals missed)" erodes trust
+    // by flagging something the user can't act on.
+    let stale: Vec<StaleTopic> = attention
         .blind_spots
         .iter()
         .filter(|bs| bs.in_codebase)
@@ -124,7 +128,8 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
             active_deps_in_topic: count_deps_for_topic(&deps, &bs.topic),
             missed_signal_count: count_missed_for_topic(&gaps, &bs.topic),
         })
-        .collect::<Vec<_>>();
+        .filter(|st| st.missed_signal_count > 0 || st.active_deps_in_topic >= 5)
+        .collect();
 
     // 6. Find missed signals (high-relevance, not seen, older than feed window)
     let missed = find_missed_signals(&conn, 14, &deps)?;
@@ -1114,15 +1119,19 @@ fn now_millis() -> i64 {
 }
 
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
-    let title = truncate_title(&format!("Uncovered dependency: {}", d.name));
-    let explanation = format!(
-        "{} used in {} project{}. Last signal {} days ago. {} available signal{} unseen.",
+    let title = truncate_title(&format!(
+        "{} — {} unseen signal{}",
         d.name,
-        d.projects_using.len(),
-        if d.projects_using.len() == 1 { "" } else { "s" },
-        d.days_since_last_signal,
+        d.available_signal_count,
+        if d.available_signal_count == 1 { "" } else { "s" }
+    ));
+    let explanation = format!(
+        "{} signal{} about {} appeared but you haven't engaged with {} content in {} days.",
         d.available_signal_count,
         if d.available_signal_count == 1 { "" } else { "s" },
+        d.name,
+        d.name,
+        d.days_since_last_signal,
     );
 
     // Synthesize at least one inferred citation so the schema's
@@ -1164,16 +1173,37 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
 }
 
 fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
-    let title = truncate_title(&format!("Stale topic: {}", t.topic));
-    let explanation = format!(
-        "No engagement in {} day{}. {} active dep{} in this topic. {} signal{} missed.",
-        t.last_engagement_days,
-        if t.last_engagement_days == 1 { "" } else { "s" },
-        t.active_deps_in_topic,
-        if t.active_deps_in_topic == 1 { "" } else { "s" },
-        t.missed_signal_count,
-        if t.missed_signal_count == 1 { "" } else { "s" },
-    );
+    let title = if t.missed_signal_count > 0 {
+        truncate_title(&format!(
+            "{} — {} signal{} you haven't seen",
+            t.topic,
+            t.missed_signal_count,
+            if t.missed_signal_count == 1 { "" } else { "s" }
+        ))
+    } else {
+        truncate_title(&format!(
+            "{} — {} dep{}, no recent engagement",
+            t.topic,
+            t.active_deps_in_topic,
+            if t.active_deps_in_topic == 1 { "" } else { "s" }
+        ))
+    };
+    let explanation = if t.missed_signal_count > 0 {
+        format!(
+            "{} article{} about {} appeared in the last 30 days that you didn't engage with.",
+            t.missed_signal_count,
+            if t.missed_signal_count == 1 { "" } else { "s" },
+            t.topic,
+        )
+    } else {
+        format!(
+            "You have {} active {} dependenc{} but haven't engaged with {} content recently.",
+            t.active_deps_in_topic,
+            t.topic,
+            if t.active_deps_in_topic == 1 { "y" } else { "ies" },
+            t.topic,
+        )
+    };
 
     let citation = EvidenceCitation {
         source: "attention-report".to_string(),
