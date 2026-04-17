@@ -73,8 +73,22 @@ export const ConfessionBox = memo(function ConfessionBox({ open, onClose }: Prop
         mode: 'structured',
       });
       setBrief(parseBrief(raw, trimmed));
-    } catch (e) {
-      setError(String(e));
+    } catch (e: unknown) {
+      const msg = e instanceof Error
+        ? e.message
+        : typeof e === 'string'
+          ? e
+          : typeof e === 'object' && e !== null && 'message' in e
+            ? String((e as Record<string, unknown>).message)
+            : JSON.stringify(e);
+      if (msg.includes('AWE') || msg.includes('awe') || msg.includes('os error') || msg.includes('not found')) {
+        setError(
+          'The Wisdom engine (AWE) is not available on this system. ' +
+          'It requires a compatible binary — check docs/strategy for setup instructions.',
+        );
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
