@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { registerFourdaComponent, type FourdaComponentTag } from '../../lib/fourda-components';
+import { PlatonicSVG } from './PlatonicSVG';
+import { PentachoronSVG } from './PentachoronSVG';
+import { CompoundFiveSVG } from './CompoundFiveSVG';
+import { SimplexUnfoldSVG } from './SimplexUnfoldSVG';
+import { TETRAHEDRON, ICOSAHEDRON, DODECAHEDRON } from './geometries';
 
 interface GeometryEntry {
-  tag: FourdaComponentTag;
+  id: string;
   name: string;
   vertices: number;
   edges: number;
@@ -11,110 +15,96 @@ interface GeometryEntry {
   role: string;
   description: string;
   verify?: string;
+  render: (size: number) => ReactNode;
 }
 
-// Architecturally grounded — each maps to verifiable system properties
 const FOUNDATIONS: GeometryEntry[] = [
   {
-    tag: 'fourda-tetrahedron',
+    id: 'tetrahedron',
     name: 'Tetrahedron',
     vertices: 4, edges: 6, dimension: '3D',
     role: 'Foundation',
-    description: 'Four non-negotiable invariants: privacy (INV-004), BYOK (INV-031), local-first (INV-032), zero-config (INV-002). Each enforces every other — BYOK requires privacy, privacy requires local-first, local-first enables zero-config. Remove any vertex and the solid collapses.',
+    description: 'Four non-negotiable invariants: privacy (INV-004), BYOK (INV-031), local-first (INV-032), zero-config (INV-002). Each enforces every other \u2014 BYOK requires privacy, privacy requires local-first, local-first enables zero-config. Remove any vertex and the solid collapses.',
     verify: '.ai/INVARIANTS.md',
+    render: (size: number) => (
+      <PlatonicSVG
+        vertices={TETRAHEDRON.vertices}
+        edges={TETRAHEDRON.edges}
+        faces={TETRAHEDRON.faces}
+        size={size}
+        rotationSpeed={0.012}
+      />
+    ),
   },
   {
-    tag: 'fourda-pentachoron',
+    id: 'pentachoron',
     name: 'Pentachoron',
     vertices: 5, edges: 10, dimension: '4D',
     role: 'Identity',
-    description: '4 Dimensional Autonomy — the name is literal. Four architectural invariants plus your context. ACE scans your projects, learns your stack, maps your interests. The system has four pillars; your context makes five. Rotation speeds are golden-ratio-derived (0.618, 0.382) for non-repeating motion.',
+    description: '4 Dimensional Autonomy \u2014 the name is literal. Four architectural invariants plus your context. ACE scans your projects, learns your stack, maps your interests. The system has four pillars; your context makes five. Rotation speeds are golden-ratio-derived for non-repeating motion.',
     verify: 'src-tauri/src/ace/',
+    render: (size: number) => <PentachoronSVG size={size} />,
   },
   {
-    tag: 'fourda-simplex-unfold',
+    id: 'simplex-unfold',
     name: 'Simplex Unfold',
     vertices: 5, edges: 10, dimension: '0D\u20264D',
     role: 'Emergence',
-    description: 'The simplex progression: each dimension adds one vertex fully connected to all before it. Point, line, triangle, tetrahedron, pentachoron — minimum structure, maximum volume at every scale. Five phases animate the journey from 0D to 4D.',
+    description: 'The simplex progression: each dimension adds one vertex fully connected to all before it. Point, line, triangle, tetrahedron, pentachoron \u2014 minimum structure, maximum volume at every scale. Five phases animate the journey from 0D to 4D.',
+    render: (size: number) => <SimplexUnfoldSVG size={size} />,
   },
 ];
 
-// Geometric family — visual identity completing the Platonic solid set
 const FAMILY: GeometryEntry[] = [
   {
-    tag: 'fourda-icosahedron',
+    id: 'icosahedron',
     name: 'Icosahedron',
     vertices: 12, edges: 30, dimension: '3D',
     role: 'Network',
-    description: '12 vertices, each connected to exactly 5 neighbours. Any node reaches any other in 3 hops. The most efficient triangulated sphere — design target for the distributed Team Relay network.',
+    description: '12 vertices, each connected to exactly 5 neighbours. Any node reaches any other in 3 hops. The most efficient triangulated sphere \u2014 design target for the distributed Team Relay network.',
     verify: 'docs/strategy/TEAM-RELAY-ARCHITECTURE.md',
+    render: (size: number) => (
+      <PlatonicSVG
+        vertices={ICOSAHEDRON.vertices}
+        edges={ICOSAHEDRON.edges}
+        faces={ICOSAHEDRON.faces}
+        size={size}
+        rotationSpeed={0.008}
+      />
+    ),
   },
   {
-    tag: 'fourda-dodecahedron',
+    id: 'dodecahedron',
     name: 'Dodecahedron',
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Dual',
     description: 'The icosahedron\u2019s mathematical dual \u2014 same 30 edges, pentagons where triangles were. Every Platonic solid has a dual. 4DA\u2019s visual language honours the full family.',
+    render: (size: number) => (
+      <PlatonicSVG
+        vertices={DODECAHEDRON.vertices}
+        edges={DODECAHEDRON.edges}
+        faces={DODECAHEDRON.faces}
+        size={size}
+        rotationSpeed={0.007}
+      />
+    ),
   },
   {
-    tag: 'fourda-compound-five-tetrahedra',
+    id: 'compound-five',
     name: 'Compound of Five',
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Bridge',
     description: 'Five interlocking tetrahedra whose vertices coincide with the dodecahedron\u2019s. The proof these solids aren\u2019t arbitrary \u2014 shared vertices, edges, and duality connect the entire Platonic family.',
+    render: (size: number) => <CompoundFiveSVG size={size} />,
   },
 ];
-
-function FourdaElementCell({ tag, size }: { tag: string; size: number }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const elRef = useRef<HTMLElement | null>(null);
-  const sizeRef = useRef(size);
-  sizeRef.current = size;
-
-  useEffect(() => {
-    let cancelled = false;
-    const container = ref.current;
-    if (container === null) return;
-
-    void registerFourdaComponent(tag as FourdaComponentTag).then(() => {
-      if (cancelled) return;
-      if (elRef.current !== null) return;
-      const el = document.createElement(tag);
-      const s = sizeRef.current;
-      el.style.width = `${s}px`;
-      el.style.height = `${s}px`;
-      el.style.display = 'block';
-      container.appendChild(el);
-      elRef.current = el;
-    });
-
-    return () => {
-      cancelled = true;
-      const el = elRef.current;
-      if (el !== null && container.contains(el)) {
-        container.removeChild(el);
-      }
-      elRef.current = null;
-    };
-  }, [tag, size]);
-
-  useEffect(() => {
-    const el = elRef.current;
-    if (el !== null) {
-      el.style.width = `${size}px`;
-      el.style.height = `${size}px`;
-    }
-  }, [size]);
-
-  return <div ref={ref} style={{ width: size, height: size }} />;
-}
 
 function GeometryCard({ geo, isExpanded, onToggle }: {
   geo: GeometryEntry;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const displaySize = isExpanded ? 240 : 180;
   return (
     <button
       onClick={onToggle}
@@ -122,17 +112,16 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
         isExpanded ? 'border-accent-gold/40 col-span-2' : 'border-border/50'
       }`}
     >
-      {/* Geometry — fills card width */}
       <div className="flex justify-center">
         <div
-          className="rounded-lg overflow-hidden aspect-square w-full max-w-[180px]"
+          className="rounded-lg overflow-hidden aspect-square w-full flex items-center justify-center"
+          style={{ maxWidth: displaySize }}
           role="img"
           aria-label={geo.name}
         >
-          <FourdaElementCell tag={geo.tag} size={isExpanded ? 240 : 180} />
+          {geo.render(displaySize)}
         </div>
       </div>
-      {/* Label */}
       <div className="text-center mt-1.5">
         <span className="text-xs font-medium text-white">{geo.name}</span>
         <span className="text-[9px] text-accent-gold font-medium ml-1.5">{geo.role}</span>
@@ -161,24 +150,7 @@ export function GeometryShowcase() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [showFamily, setShowFamily] = useState(false);
 
-  useEffect(() => {
-    void Promise.allSettled(FOUNDATIONS.map(g => registerFourdaComponent(g.tag)));
-  }, []);
-
-  useEffect(() => {
-    if (showFamily) {
-      void Promise.allSettled(FAMILY.map(g => registerFourdaComponent(g.tag)));
-    }
-  }, [showFamily]);
-
-  const toggle = (tag: string) => setExpanded(prev => prev === tag ? null : tag);
-
-  const handleFamilyToggle = () => {
-    if (showFamily && expanded !== null && FAMILY.some(g => g.tag === expanded)) {
-      setExpanded(null);
-    }
-    setShowFamily(prev => !prev);
-  };
+  const toggle = (id: string) => setExpanded(prev => prev === id ? null : id);
 
   return (
     <div className="space-y-4">
@@ -192,16 +164,16 @@ export function GeometryShowcase() {
       <div className="grid grid-cols-2 gap-2">
         {FOUNDATIONS.map(geo => (
           <GeometryCard
-            key={geo.tag}
+            key={geo.id}
             geo={geo}
-            isExpanded={expanded === geo.tag}
-            onToggle={() => toggle(geo.tag)}
+            isExpanded={expanded === geo.id}
+            onToggle={() => toggle(geo.id)}
           />
         ))}
       </div>
 
       <button
-        onClick={handleFamilyToggle}
+        onClick={() => setShowFamily(prev => !prev)}
         className="flex items-center gap-1.5 text-[10px] text-text-muted hover:text-text-secondary transition-colors uppercase tracking-wider"
       >
         <span className="text-[8px]">{showFamily ? '\u25BC' : '\u25B6'}</span>
@@ -213,10 +185,10 @@ export function GeometryShowcase() {
         <div className="grid grid-cols-2 gap-2">
           {FAMILY.map(geo => (
             <GeometryCard
-              key={geo.tag}
+              key={geo.id}
               geo={geo}
-              isExpanded={expanded === geo.tag}
-              onToggle={() => toggle(geo.tag)}
+              isExpanded={expanded === geo.id}
+              onToggle={() => toggle(geo.id)}
             />
           ))}
         </div>
