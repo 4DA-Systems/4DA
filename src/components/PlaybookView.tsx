@@ -73,6 +73,25 @@ export const PlaybookView = memo(function PlaybookView() {
     [loadContent],
   );
 
+  // Rec #5: Auto-open Module S on first visit. When a user has zero
+  // progress and no module selected, the empty state is an unnecessary
+  // gate — just show Sovereign Setup directly. The empty state still
+  // exists as a fallback (e.g., if modules haven't loaded yet).
+  const hasAutoOpened = useRef(false);
+  useEffect(() => {
+    if (
+      !hasAutoOpened.current &&
+      !activeModuleId &&
+      !playbookLoading &&
+      !playbookError &&
+      playbookModules.length > 0 &&
+      (playbookProgress?.overall_percentage ?? 0) === 0
+    ) {
+      hasAutoOpened.current = true;
+      handleModuleClick('S');
+    }
+  }, [activeModuleId, playbookLoading, playbookError, playbookModules, playbookProgress, handleModuleClick]);
+
   const handleShowTemplates = useCallback(() => {
     setShowTemplates(true);
   }, []);
@@ -173,7 +192,12 @@ export const PlaybookView = memo(function PlaybookView() {
 
       {/* Content Area */}
       <main className="flex-1 min-w-0">
-        <StreetHealthBadge />
+        {/* Rec #1: Hide health badge until user has meaningful progress.
+            A score of 2% with "declining" in red greets new users with
+            failure before they've started. Show it only after >= 15%
+            overall progress — by then they've engaged and the metric
+            is useful, not punitive. */}
+        {(playbookProgress?.overall_percentage ?? 0) >= 15 && <StreetHealthBadge />}
 
         {playbookError && (
           <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
@@ -209,15 +233,16 @@ export const PlaybookView = memo(function PlaybookView() {
             <div className="w-16 h-16 bg-accent-gold/10 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl text-accent-gold font-bold">S</span>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">{t('streets:streets.title')}</h3>
-            <p className="text-sm text-text-secondary max-w-md mb-4">
-              {t('streets:streets.selectModuleDescription')}{' '}
-              {t('streets:streets.selectModule')}
+            <h3 className="text-lg font-semibold text-white mb-2">
+              {t('streets:streets.emptyState.headline')}
+            </h3>
+            <p className="text-sm text-text-secondary max-w-md mb-6">
+              {t('streets:streets.emptyState.body')}
             </p>
             <button
               onClick={() => handleModuleClick('S')}
               aria-label={t('streets:streets.startWith')}
-              className="px-4 py-2 bg-accent-gold text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
+              className="px-5 py-2.5 bg-accent-gold text-black text-sm font-medium rounded-lg hover:bg-[#C4A030] transition-colors"
             >
               {t('streets:streets.startWith')}
             </button>
