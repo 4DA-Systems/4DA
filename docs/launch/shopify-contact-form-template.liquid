@@ -1,0 +1,151 @@
+{% comment %}
+  4DA Contact Form Template
+  =========================
+  Replaces the default Shopify contact form template.
+
+  To install:
+  1. Shopify Admin → Online Store → Themes → "..." → Edit code
+  2. Find your contact form template. Depending on your theme:
+     - Dawn/minimal: sections/main-page.liquid or templates/page.contact.liquid
+     - Some themes: snippets/contact-form.liquid
+  3. Replace the form section with this code.
+
+  If you can't find the template, create a new template:
+     templates/page.contact.liquid → paste this entire file.
+
+  Changes from default:
+  - Phone field REMOVED (blocks users, unnecessary for a software company)
+  - Topic dropdown ADDED (routes inquiries by type)
+  - Proper <label> elements (accessibility + UX)
+  - Success message with expectations
+  - Clean, minimal styling that works with any Shopify theme
+{% endcomment %}
+
+{%- if form.posted_successfully? -%}
+  <div style="max-width: 640px; margin: 40px auto; text-align: center; padding: 40px 20px;">
+    <div style="width: 48px; height: 48px; background: #22C55E; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">Message received</h2>
+    <p style="color: #666; font-size: 15px; line-height: 1.6;">
+      We'll get back to you within one business day at the email you provided.
+      If your question is urgent, email <a href="mailto:support@4da.ai" style="color: #D4AF37;">support@4da.ai</a> directly.
+    </p>
+  </div>
+{%- else -%}
+
+{% form 'contact' %}
+
+  {%- if form.errors -%}
+    <div style="background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 12px 16px; margin-bottom: 24px; color: #DC2626; font-size: 14px;">
+      {{ form.errors | default_errors }}
+    </div>
+  {%- endif -%}
+
+  <div style="max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px;">
+
+    <!-- Name -->
+    <div>
+      <label for="contact-name" style="display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px;">
+        Name
+      </label>
+      <input
+        type="text"
+        id="contact-name"
+        name="contact[name]"
+        value="{{ form.name }}"
+        placeholder="Your name"
+        required
+        autocomplete="name"
+        style="width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; background: #fafafa;"
+      >
+    </div>
+
+    <!-- Email -->
+    <div>
+      <label for="contact-email" style="display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px;">
+        Email
+      </label>
+      <input
+        type="email"
+        id="contact-email"
+        name="contact[email]"
+        value="{{ form.email }}"
+        placeholder="you@example.com"
+        required
+        autocomplete="email"
+        style="width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; background: #fafafa;"
+      >
+    </div>
+
+    <!-- Topic (replaces phone field) -->
+    <div>
+      <label for="contact-topic" style="display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px;">
+        What's this about?
+      </label>
+      <select
+        id="contact-topic"
+        name="contact[topic]"
+        required
+        style="width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; background: #fafafa; color: #333; appearance: auto;"
+      >
+        <option value="" disabled selected>Select a topic</option>
+        <option value="General question">General question</option>
+        <option value="License or billing">License or billing</option>
+        <option value="Installation help">Installation help</option>
+        <option value="Bug report">Bug report</option>
+        <option value="Feature request">Feature request</option>
+        <option value="Merch order">Merch order</option>
+        <option value="Partnership or press">Partnership or press</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+
+    <!-- Message -->
+    <div>
+      <label for="contact-message" style="display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px;">
+        Message
+      </label>
+      <textarea
+        id="contact-message"
+        name="contact[body]"
+        placeholder="How can we help?"
+        required
+        rows="6"
+        style="width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; background: #fafafa; resize: vertical; min-height: 120px;"
+      >{{ form.body }}</textarea>
+    </div>
+
+    <!-- Order number (optional, shows context for billing/merch) -->
+    <div>
+      <label for="contact-order" style="display: block; font-size: 13px; font-weight: 500; color: #555; margin-bottom: 6px;">
+        Order or license number <span style="font-weight: 400; color: #999;">(optional)</span>
+      </label>
+      <input
+        type="text"
+        id="contact-order"
+        name="contact[order_number]"
+        placeholder="#1234 or XXXXXX-XXXXXX-..."
+        autocomplete="off"
+        style="width: 100%; padding: 10px 14px; border: 1px solid #ddd; border-radius: 6px; font-size: 15px; background: #fafafa;"
+      >
+    </div>
+
+    <!-- Submit -->
+    <div>
+      <button
+        type="submit"
+        style="padding: 12px 32px; background: #1a1a1a; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 500; cursor: pointer;"
+      >
+        Send message
+      </button>
+      <p style="font-size: 12px; color: #999; margin-top: 8px;">
+        We typically respond within one business day. For bugs, <a href="https://github.com/runyourempire/4DA/issues/new" style="color: #D4AF37;">open a GitHub Issue</a> for the fastest resolution.
+      </p>
+    </div>
+
+  </div>
+
+{% endform %}
+
+{%- endif -%}
