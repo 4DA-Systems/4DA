@@ -1,0 +1,308 @@
+{%- comment -%}
+  4DA Contact Form — Horizon theme (v2 — snippet errors fixed)
+  Select all (Ctrl+A) in the Shopify code editor and paste this.
+{%- endcomment -%}
+
+{%- style -%}
+  #shopify-block-{{ block.id }} {
+    {%- if block.settings.inherit_color_scheme == false -%}color-scheme: {{ block.settings.color_scheme }};{%- endif -%}
+  }
+{%- endstyle -%}
+
+{{ block.shopify_attributes }}
+
+{%- assign form_id = block.id | default: section.id | prepend: 'contactForm-' -%}
+
+<div class="contact-form__form-row">
+  {%- form 'contact', id: form_id, class: 'contact-form__form' -%}
+
+    {%- if form.errors and form.id == form_id -%}
+      <div class="contact-form__error" role="alert">
+        {%- for field in form.errors.translated_fields -%}
+          {{ form.errors.messages[field] | capitalize }}{% unless forloop.last %}, {% endunless %}
+        {%- endfor -%}
+      </div>
+    {%- endif -%}
+
+    {%- if form.posted_successfully? and form.id == form_id -%}
+      <div class="contact-form__success" style="flex-direction: column; text-align: center; padding: 32px 16px;">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style="margin: 0 auto 12px;">
+          <circle cx="18" cy="18" r="18" fill="#22C55E"/>
+          <path d="M12 18l4 4 8-8" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <p style="font-size: 18px; font-weight: 600; margin: 0 0 6px;">Message received</p>
+        <p style="font-size: 14px; color: var(--color-text-secondary, #666); margin: 0;">
+          We'll get back to you within one business day. If urgent, email
+          <a href="mailto:support@4da.ai" style="color: #D4AF37;">support@4da.ai</a> directly.
+        </p>
+      </div>
+    {%- else -%}
+
+      {%- comment -%} ── Name ── {%- endcomment -%}
+      <div class="contact-form__form-row">
+        <label for="ContactForm-name" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">
+          {{ 'blocks.contact_form.name' | t }}
+        </label>
+        <input
+          type="text"
+          id="ContactForm-name"
+          class="contact-form__input"
+          autocomplete="name"
+          name="contact[name]"
+          value="{%- if form.name -%}{{ form.name }}{%- elsif customer -%}{{ customer.name }}{%- endif -%}"
+          placeholder="{{ 'blocks.contact_form.name' | t }}"
+          required
+        >
+      </div>
+
+      {%- comment -%} ── Email ── {%- endcomment -%}
+      <div class="contact-form__form-row">
+        <label for="ContactForm-email" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">
+          {{ 'blocks.contact_form.email' | t }}
+        </label>
+        <input
+          type="email"
+          id="ContactForm-email"
+          class="contact-form__input"
+          autocomplete="email"
+          name="contact[email]"
+          value="{%- if form.email -%}{{ form.email }}{%- elsif customer -%}{{ customer.email }}{%- endif -%}"
+          placeholder="{{ 'blocks.contact_form.email' | t }}"
+          required
+        >
+      </div>
+
+      {%- comment -%} ── Topic (replaces phone) ── {%- endcomment -%}
+      <div class="contact-form__form-row">
+        <label for="ContactForm-topic" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">
+          What's this about?
+        </label>
+        <select
+          id="ContactForm-topic"
+          class="contact-form__input"
+          name="contact[topic]"
+          required
+          style="appearance: auto; cursor: pointer;"
+        >
+          <option value="" disabled selected>Select a topic</option>
+          <option value="General question">General question</option>
+          <option value="License or billing">License or billing</option>
+          <option value="Installation help">Installation help</option>
+          <option value="Bug report">Bug report</option>
+          <option value="Feature request">Feature request</option>
+          <option value="Merch order">Merch order</option>
+          <option value="Partnership or press">Partnership or press</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      {%- comment -%} ── Message ── {%- endcomment -%}
+      <div class="contact-form__form-row">
+        <label for="ContactForm-body" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">
+          {{ 'blocks.contact_form.comment' | t }}
+        </label>
+        <textarea
+          rows="8"
+          id="ContactForm-body"
+          class="contact-form__input contact-form__input--textarea"
+          name="contact[body]"
+          placeholder="How can we help?"
+          required
+        >{{- form.body -}}</textarea>
+      </div>
+
+      {%- comment -%} ── Order / license number (optional) ── {%- endcomment -%}
+      <div class="contact-form__form-row">
+        <label for="ContactForm-order" style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">
+          Order or license number <span style="font-weight: 400; opacity: 0.5;">(optional)</span>
+        </label>
+        <input
+          type="text"
+          id="ContactForm-order"
+          class="contact-form__input"
+          autocomplete="off"
+          name="contact[order_number]"
+          placeholder="#1234 or XXXXXX-XXXXXX-..."
+        >
+      </div>
+
+      <button
+        type="submit"
+        style="padding: 12px 32px; background: #1a1a1a; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: 500; cursor: pointer; margin-top: 8px;"
+      >
+        Send message
+      </button>
+
+    {%- endif -%}
+
+  {%- endform -%}
+</div>
+
+{% stylesheet %}
+  .contact-form__form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+  }
+
+  .contact-form__form-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+
+    @media screen and (min-width: 750px) {
+      flex-direction: row;
+      align-items: center;
+    }
+  }
+
+  .contact-form__input {
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-input-text);
+    background-color: var(--color-input-background);
+    padding: var(--padding-lg) var(--padding-xl);
+    border-radius: var(--style-border-radius-inputs);
+    border: var(--style-border-width-inputs) solid var(--color-input-border);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .contact-form__input--textarea {
+    resize: vertical;
+    min-height: var(--input-textarea-min-height);
+  }
+
+  .contact-form__error,
+  .contact-form__success {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-xs);
+  }
+{% endstylesheet %}
+
+{% schema %}
+{
+  "name": "t:names.contact_form",
+  "tag": null,
+  "settings": [
+    {
+      "type": "select",
+      "id": "width",
+      "label": "t:settings.width_desktop",
+      "options": [
+        {
+          "value": "fit-content",
+          "label": "t:options.fit_content"
+        },
+        {
+          "value": "custom",
+          "label": "t:options.custom"
+        }
+      ],
+      "default": "fit-content"
+    },
+    {
+      "type": "range",
+      "id": "custom_width",
+      "label": "t:settings.width",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "default": 100,
+      "visible_if": "{{ block.settings.width == 'custom' }}"
+    },
+    {
+      "type": "select",
+      "id": "width_mobile",
+      "label": "t:settings.width_mobile",
+      "options": [
+        {
+          "value": "fit-content",
+          "label": "t:options.fit_content"
+        },
+        {
+          "value": "custom",
+          "label": "t:options.custom"
+        }
+      ],
+      "default": "fit-content"
+    },
+    {
+      "type": "range",
+      "id": "custom_width_mobile",
+      "label": "t:settings.width",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "default": 100,
+      "visible_if": "{{ block.settings.width_mobile == 'custom' }}"
+    },
+    {
+      "type": "checkbox",
+      "id": "inherit_color_scheme",
+      "label": "t:settings.inherit_color_scheme",
+      "default": true
+    },
+    {
+      "type": "color_scheme",
+      "id": "color_scheme",
+      "label": "t:settings.color_scheme",
+      "default": "scheme-1",
+      "visible_if": "{{ block.settings.inherit_color_scheme == false }}"
+    },
+    {
+      "type": "header",
+      "content": "t:content.padding"
+    },
+    {
+      "type": "range",
+      "id": "padding-block-start",
+      "label": "t:settings.top",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "padding-block-end",
+      "label": "t:settings.bottom",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "padding-inline-start",
+      "label": "t:settings.left",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
+      "type": "range",
+      "id": "padding-inline-end",
+      "label": "t:settings.right",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    }
+  ],
+  "presets": [
+    {
+      "name": "t:names.contact_form",
+      "category": "t:categories.forms"
+    }
+  ]
+}
+{% endschema %}
