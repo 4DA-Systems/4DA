@@ -112,6 +112,46 @@ CONFIDENCE_SCORE_IMPLEMENTATION.md
 SHIP_READINESS_VERIFICATION.md
 README-MARKETING.md
 
+# Internal planning docs — never at repo root.
+# Canonical homes: .claude/plans/ (session-local) or docs/strategy/ (curated).
+# The pre-commit doc-location gate enforces this in addition to these patterns.
+# Leading `/` scopes to repo root so nested equivalents (docs/strategy/*) still work.
+/*PLAN.md
+/*PLAN-*.md
+/PLAN.md
+/*-PLAN.md
+/*-STRATEGY.md
+/*-STRATEGY-*.md
+/*STRATEGY.md
+/*-AUDIT.md
+/*-AUDIT-*.md
+/*-CHECKLIST.md
+/*-ROADMAP.md
+/*-TRAJECTORY.md
+/TRAJECTORY-*.md
+/whats-next.md
+/WHATS-NEXT.md
+/NEXT-STEPS.md
+/VIRAL-*.md
+/PRE-LAUNCH-*.md
+/FIRST-CONTACT-*.md
+/LAUNCH-*.md
+/FORTIFICATION-*.md
+/EXECUTION-*.md
+/ASCENT-*.md
+/BATTLE-*.md
+/MASTER-PLAN.md
+/MASTER-STRATEGY.md
+/BARRIER-*.md
+/IMPROVEMENTS-*.md
+/CRITICAL-*.md
+/DEVELOPER-OS-*.md
+/NOTIFICATION-INTELLIGENCE-*.md
+/INTELLIGENCE-CONSOLE-*.md
+
+# Archived planning docs (kept locally, never committed)
+.claude/plans/archive-*/
+
 # CLI workspace (not ready)
 cli/
 
