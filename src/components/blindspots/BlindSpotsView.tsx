@@ -298,6 +298,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     buckets.missed.length > 0 ||
     buckets.recommendations.length > 0;
 
+  const scoreContext = buckets.missed.length > 0
+    ? `Driven by ${buckets.missed.length} missed signal${buckets.missed.length === 1 ? '' : 's'} and ${buckets.uncovered.length} coverage gap${buckets.uncovered.length === 1 ? '' : 's'}. Engage with them to improve your score.`
+    : buckets.uncovered.length > 0
+      ? `${buckets.uncovered.length} topic${buckets.uncovered.length === 1 ? '' : 's'} with gaps detected. Review the coverage section below.`
+      : 'Your stack coverage is excellent.';
+
   return (
     <div className="space-y-4 pb-8">
       <div className="mb-2">
@@ -306,6 +312,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       </div>
 
       <ScoreBar score={score} />
+      <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>
 
       {!hasContent ? (
         <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">

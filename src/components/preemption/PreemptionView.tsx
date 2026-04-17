@@ -83,23 +83,53 @@ function kindAsSourceType(item: EvidenceItem): string {
   return typeof item.kind === 'string' ? item.kind : String(item.kind);
 }
 
+/** Extract just the project directory name from a full path.
+ * `C:\Users\Admin\Documents\kairos-mvp\backend` → `kairos-mvp/backend`
+ * Shows the last 2 path segments for context without the full Windows path. */
+function shortenProjectPath(fullPath: string): string {
+  const parts = fullPath.replace(/\\/g, '/').split('/').filter(Boolean);
+  if (parts.length <= 2) return parts.join('/');
+  return parts.slice(-2).join('/');
+}
+
+/** Deduplicate shortened project names for display. */
+function formatProjectNames(paths: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const p of paths) {
+    const short = shortenProjectPath(p);
+    if (!seen.has(short)) {
+      seen.add(short);
+      out.push(short);
+    }
+  }
+  return out;
+}
+
 // ============================================================================
 // Sub-components
 // ============================================================================
 
 const EvidenceList = memo(function EvidenceList({
   evidence,
+  cardTitle,
 }: {
   evidence: EvidenceItem['evidence'];
+  cardTitle?: string;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
 
-  if (evidence.length === 0) return null;
+  // Filter out citations whose title is identical to the card title —
+  // no value in showing the same text twice.
+  const filtered = cardTitle
+    ? evidence.filter(e => e.title.toLowerCase() !== cardTitle.toLowerCase())
+    : evidence;
 
-  const shown = expanded ? evidence : evidence.slice(0, EVIDENCE_COLLAPSE_THRESHOLD);
-  const hiddenCount = evidence.length - EVIDENCE_COLLAPSE_THRESHOLD;
-  const canCollapse = evidence.length > EVIDENCE_COLLAPSE_THRESHOLD;
+  if (filtered.length === 0) return null;
+
+  const shown = expanded ? filtered : filtered.slice(0, EVIDENCE_COLLAPSE_THRESHOLD);
+  const canCollapse = filtered.length > EVIDENCE_COLLAPSE_THRESHOLD;
 
   return (
     <div className="mt-3 pt-3 border-t border-border/50">
@@ -144,7 +174,7 @@ const EvidenceList = memo(function EvidenceList({
         >
           {expanded
             ? t('preemption.evidence.collapse', 'Show less')
-            : t('preemption.evidence.expand', `Show ${hiddenCount} more`, { count: hiddenCount })}
+            : `Show ${filtered.length - EVIDENCE_COLLAPSE_THRESHOLD} more`}
         </button>
       )}
     </div>
@@ -157,20 +187,31 @@ const AffectedChips = memo(function AffectedChips({
   item: EvidenceItem;
 }) {
   const { t } = useTranslation();
-  const hasProjects = item.affected_projects.length > 0;
+  const projectNames = formatProjectNames(item.affected_projects);
+  const hasProjects = projectNames.length > 0;
   const hasDeps = item.affected_deps.length > 0;
   if (!hasProjects && !hasDeps) return null;
 
   return (
     <div className="mt-3 space-y-1.5 text-xs">
       {hasProjects && (
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 flex-wrap">
           <span className="shrink-0 text-[10px] font-medium text-text-muted uppercase tracking-wider w-16">
             {t('preemption.affected.projects')}
           </span>
-          <span className="text-text-secondary truncate" title={item.affected_projects.join(', ')}>
-            {item.affected_projects.join(', ')}
-          </span>
+          <div className="flex flex-wrap gap-1">
+            {projectNames.slice(0, 4).map((name) => (
+              <span
+                key={name}
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary border border-border"
+              >
+                {name}
+              </span>
+            ))}
+            {projectNames.length > 4 && (
+              <span className="text-[10px] text-text-muted">+{projectNames.length - 4}</span>
+            )}
+          </div>
         </div>
       )}
       {hasDeps && (
@@ -198,6 +239,8 @@ const AffectedChips = memo(function AffectedChips({
     </div>
   );
 });
+
+const lastClickRef = { current: 0 };
 
 const ItemCard = memo(function ItemCard({
   item,
@@ -277,7 +320,7 @@ const ItemCard = memo(function ItemCard({
         )}
 
         <AffectedChips item={item} />
-        <EvidenceList evidence={item.evidence} />
+        <EvidenceList evidence={item.evidence} cardTitle={item.title} />
 
         {/* Action buttons — each action_id maps to a real UX effect */}
         {item.suggested_actions.length > 0 && (
@@ -299,6 +342,9 @@ const ItemCard = memo(function ItemCard({
                   if (action.action_id === 'dismiss' || action.action_id === 'snooze_7d') {
                     onDismiss(item.id);
                   } else if (action.action_id === 'investigate' || action.action_id === 'view_source') {
+                    const now = Date.now();
+                    if (now - lastClickRef.current < 500) return;
+                    lastClickRef.current = now;
                     const url = item.evidence[0]?.url
                       ?? `https://www.google.com/search?q=${encodeURIComponent(item.title)}`;
                     import('@tauri-apps/plugin-opener')
@@ -324,7 +370,42 @@ const ItemCard = memo(function ItemCard({
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
   const surfacedRef = useRef(new Set<string>());
-  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
+  // Persist dismissals in localStorage with 7-day TTL so they survive
+  // page reloads. Without this, dismissed items reappear on refresh —
+  // the #1 UX trust-breaker identified in edge case audit.
+  const DISMISS_STORAGE_KEY = 'preemption_dismissed';
+  const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  const loadPersistedDismissals = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+      if (!raw) return new Set();
+      const parsed = JSON.parse(raw) as Array<{ id: string; ts: number }>;
+      const now = Date.now();
+      const valid = parsed.filter(e => now - e.ts < DISMISS_TTL_MS);
+      if (valid.length !== parsed.length) {
+        localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(valid));
+      }
+      return new Set(valid.map(e => e.id));
+    } catch { return new Set(); }
+  };
+  const persistDismissal = (id: string) => {
+    try {
+      const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+      const parsed: Array<{ id: string; ts: number }> = raw ? JSON.parse(raw) : [];
+      parsed.push({ id, ts: Date.now() });
+      localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed));
+    } catch { /* non-fatal */ }
+  };
+  const removeDismissal = (id: string) => {
+    try {
+      const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed: Array<{ id: string; ts: number }> = JSON.parse(raw);
+      localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed.filter(e => e.id !== id)));
+    } catch { /* non-fatal */ }
+  };
+
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(loadPersistedDismissals);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -343,6 +424,7 @@ const PreemptionView = memo(function PreemptionView() {
 
   const handleDismiss = useCallback((id: string) => {
     setDismissedIds(prev => new Set(prev).add(id));
+    persistDismissal(id);
     setLastDismissed(id);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
@@ -355,6 +437,7 @@ const PreemptionView = memo(function PreemptionView() {
       next.delete(lastDismissed);
       return next;
     });
+    removeDismissal(lastDismissed);
     setLastDismissed(null);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
