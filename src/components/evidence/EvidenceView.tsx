@@ -2,13 +2,14 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 /**
- * Evidence Tab — Intelligence Reconciliation Phase 12+13 (2026-04-17).
+ * Evidence Tab — proof that 4DA is working and learning you.
  *
- * The tab where 4DA proves it's working and that it's learning you.
- * Three sections when populated; a focused CTA when empty.
+ * Three sections, each backed by verified working Tauri commands:
+ *   1. This Week — preemption + blind spot counts
+ *   2. Intelligence Pulse — noise rejection, accuracy, learning narratives
+ *   3. What 4DA Learned — topic affinities + anti-topics from real feedback
  *
- * Per Intelligence Doctrine rule 3: no vanity metrics. Every number
- * on screen informs an action or proves a claim.
+ * Zero AWE dependency. Every data source verified on FREE tier.
  */
 
 import { memo, useEffect, useState, useCallback } from 'react';
@@ -17,47 +18,15 @@ import { cmd } from '../../lib/commands';
 import type { EvidenceFeed } from '../../../src-tauri/bindings/bindings/EvidenceFeed';
 
 // ============================================================================
-// Types
-// ============================================================================
-
-interface CommitmentContract {
-  id: number;
-  decision_statement: string;
-  refutation_condition: string;
-  subject: string;
-  status: 'active' | 'triggered' | 'dismissed';
-  created_at: string;
-  triggered_at: string | null;
-}
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-function contractAge(createdAt: string): number {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
-}
-
-function daysAgo(isoDate: string): string {
-  const diff = Date.now() - new Date(isoDate).getTime();
-  const d = Math.floor(diff / 86_400_000);
-  if (d === 0) return 'today';
-  if (d === 1) return '1 day ago';
-  return `${d} days ago`;
-}
-
-// ============================================================================
 // Section 1 — This Week
 // ============================================================================
 
 const ThisWeekSection = memo(function ThisWeekSection({
   preemptionCount,
   blindSpotCount,
-  contractCount,
 }: {
   preemptionCount: number;
   blindSpotCount: number;
-  contractCount: number;
 }) {
   const { t } = useTranslation();
   const total = preemptionCount + blindSpotCount;
@@ -67,154 +36,185 @@ const ThisWeekSection = memo(function ThisWeekSection({
       <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3">
         {t('evidence.thisWeek')}
       </h2>
-      {total === 0 && contractCount === 0 ? (
-        <p className="text-sm text-text-secondary">
-          {t('evidence.thisWeekEmpty')}
-        </p>
+      {total === 0 ? (
+        <p className="text-sm text-text-secondary">{t('evidence.thisWeekEmpty')}</p>
       ) : (
-        <p className="text-sm text-text-secondary leading-relaxed">
-          {t('evidence.thisWeekSummary', {
-            preemption: preemptionCount,
-            blindSpots: blindSpotCount,
-            contracts: contractCount,
-            contractPlural: contractCount === 1 ? '' : 's',
-          })}
-        </p>
+        <div className="flex items-baseline gap-6">
+          <div>
+            <span className="text-2xl font-semibold text-white tabular-nums">{preemptionCount}</span>
+            <span className="text-xs text-text-muted ml-1.5">preemptive alerts</span>
+          </div>
+          <div>
+            <span className="text-2xl font-semibold text-white tabular-nums">{blindSpotCount}</span>
+            <span className="text-xs text-text-muted ml-1.5">blind-spot items</span>
+          </div>
+        </div>
       )}
     </section>
   );
 });
 
 // ============================================================================
-// Section 2 — Active Commitments
+// Section 2 — Intelligence Pulse
 // ============================================================================
 
-const CommitmentCard = memo(function CommitmentCard({
-  contract,
-  onDismiss,
-}: {
-  contract: CommitmentContract;
-  onDismiss: (id: number) => void;
-}) {
-  const age = contractAge(contract.created_at);
+interface PulseData {
+  items_analyzed_7d: number;
+  items_surfaced_7d: number;
+  rejection_rate: number;
+  calibration_accuracy: number;
+  total_cycles: number;
+  learning_narratives: string[];
+}
+
+const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | null }) {
+  if (!pulse) return null;
+
+  const rejectionPct = Math.round(pulse.rejection_rate);
+  const accuracyPct = Math.round(pulse.calibration_accuracy);
 
   return (
-    <div
-      className={`rounded-lg border p-4 ${
-        contract.status === 'triggered'
-          ? 'border-red-500/30 bg-red-500/[0.06]'
-          : 'border-border bg-bg-tertiary/30'
-      }`}
-    >
-      <div className="flex items-start gap-3">
-        <span
-          className={`shrink-0 text-xs mt-0.5 ${
-            contract.status === 'triggered' ? 'text-red-400' : 'text-accent-gold'
-          }`}
-          aria-hidden="true"
-        >
-          {contract.status === 'triggered' ? '!' : '◇'}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-white">{contract.decision_statement}</p>
-          <p className="text-xs text-text-muted mt-1">
-            Watching for: <span className="text-text-secondary italic">{contract.refutation_condition}</span>
-          </p>
-          <div className="flex items-center gap-3 mt-2 text-[10px] text-text-muted">
-            <span>{age === 0 ? 'today' : `${age}d ago`}</span>
-            {contract.status === 'triggered' && contract.triggered_at && (
-              <span className="text-red-400">triggered {daysAgo(contract.triggered_at)}</span>
-            )}
-            {contract.status === 'active' && (
-              <span className="text-green-400/60">watching</span>
-            )}
+    <section className="bg-bg-secondary rounded-lg border border-border p-5">
+      <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-4">
+        Intelligence Pulse
+      </h2>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <div>
+          <div className="text-lg font-semibold text-white tabular-nums">
+            {pulse.items_analyzed_7d.toLocaleString()}
           </div>
+          <div className="text-[10px] text-text-muted">items analyzed (7d)</div>
         </div>
-        {contract.status === 'triggered' && (
-          <button
-            type="button"
-            onClick={() => onDismiss(contract.id)}
-            className="shrink-0 text-[10px] text-text-muted hover:text-white transition-colors px-2 py-1 rounded border border-border"
-          >
-            Dismiss
-          </button>
-        )}
+        <div>
+          <div className="text-lg font-semibold text-white tabular-nums">
+            {pulse.items_surfaced_7d}
+          </div>
+          <div className="text-[10px] text-text-muted">surfaced for you</div>
+        </div>
+        <div>
+          <div className={`text-lg font-semibold tabular-nums ${rejectionPct >= 70 ? 'text-green-400' : 'text-white'}`}>
+            {rejectionPct}%
+          </div>
+          <div className="text-[10px] text-text-muted">noise filtered</div>
+        </div>
       </div>
-    </div>
-  );
-});
 
-const CommitmentsSection = memo(function CommitmentsSection({
-  contracts,
-  onDismiss,
-}: {
-  contracts: CommitmentContract[];
-  onDismiss: (id: number) => void;
-}) {
-  const { t } = useTranslation();
-  const active = contracts.filter(c => c.status === 'active');
-  const triggered = contracts.filter(c => c.status === 'triggered');
-  const all = [...triggered, ...active];
+      {/* Calibration + cycles */}
+      {(accuracyPct > 0 || pulse.total_cycles > 0) && (
+        <div className="flex items-center gap-4 text-xs text-text-secondary border-t border-border/50 pt-3 mb-3">
+          {accuracyPct > 0 && (
+            <span>Calibration accuracy: <span className="text-white tabular-nums">{accuracyPct}%</span></span>
+          )}
+          {pulse.total_cycles > 0 && (
+            <span>Self-optimization cycles: <span className="text-white tabular-nums">{pulse.total_cycles}</span></span>
+          )}
+        </div>
+      )}
 
-  if (all.length === 0) return null;
-
-  return (
-    <section>
-      <div className="flex items-center justify-between mb-3 px-1">
-        <h2 className="text-[10px] text-text-muted uppercase tracking-wider">
-          {t('evidence.commitments')}
-        </h2>
-        <span className="text-[10px] text-text-muted tabular-nums">
-          {active.length} watching{triggered.length > 0 && ` · ${triggered.length} triggered`}
-        </span>
-      </div>
-      <div className="space-y-2">
-        {all.slice(0, 10).map(c => (
-          <CommitmentCard key={c.id} contract={c} onDismiss={onDismiss} />
-        ))}
-      </div>
+      {/* Learning narratives */}
+      {pulse.learning_narratives.length > 0 && (
+        <div className="space-y-1.5">
+          {pulse.learning_narratives.slice(0, 3).map((narrative, i) => (
+            <p key={i} className="text-xs text-text-secondary leading-relaxed flex items-start gap-2">
+              <span className="text-accent-gold/50 mt-0.5 shrink-0" aria-hidden="true">&#x25C6;</span>
+              <span>{narrative}</span>
+            </p>
+          ))}
+        </div>
+      )}
     </section>
   );
 });
 
 // ============================================================================
-// Hero CTA — the main content when the page is empty
+// Section 3 — What 4DA Learned
 // ============================================================================
 
-const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent);
-const SHORTCUT_LABEL = isMac ? '⌘.' : 'Ctrl+.';
+interface TopicAffinity {
+  topic: string;
+  positive_signals: number;
+  negative_signals: number;
+  affinity_score: number;
+}
 
-const WisdomCta = memo(function WisdomCta() {
-  const { t } = useTranslation();
+interface AntiTopic {
+  topic: string;
+  rejection_count: number;
+}
+
+const LearnedSection = memo(function LearnedSection({
+  affinities,
+  antiTopics,
+}: {
+  affinities: TopicAffinity[];
+  antiTopics: AntiTopic[];
+}) {
+  const hasData = affinities.length > 0 || antiTopics.length > 0;
+
   return (
-    <section className="bg-bg-secondary rounded-lg border border-accent-gold/20 p-8 text-center space-y-4">
-      <div className="w-14 h-14 rounded-full bg-accent-gold/10 border border-accent-gold/30 flex items-center justify-center mx-auto">
-        <span className="text-accent-gold text-xl" aria-hidden="true">◇</span>
-      </div>
-      <div>
-        <h3 className="text-base font-medium text-white">
-          {t('evidence.ctaTitle')}
-        </h3>
-        <p className="text-sm text-text-secondary mt-2 max-w-md mx-auto leading-relaxed">
-          Press <kbd className="px-1.5 py-0.5 rounded bg-bg-tertiary border border-border text-xs font-mono text-accent-gold">{SHORTCUT_LABEL}</kbd> anywhere
-          to consult the Wisdom engine on a decision you are weighing. Your decisions, commitments, and
-          their outcomes will appear here as proof that 4DA is compounding your judgment.
+    <section className="bg-bg-secondary rounded-lg border border-border p-5">
+      <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-4">
+        What 4DA Learned About You
+      </h2>
+
+      {!hasData ? (
+        <p className="text-xs text-text-muted leading-relaxed">
+          Save and dismiss items in the feed to help 4DA learn your preferences.
+          After a few interactions, your topic affinities will appear here.
         </p>
-      </div>
-      <div className="flex justify-center gap-6 pt-2 text-[10px] text-text-muted">
-        <div className="text-center">
-          <div className="text-lg font-semibold text-white tabular-nums">0</div>
-          <div>decisions</div>
+      ) : (
+        <div className="space-y-4">
+          {/* Positive affinities */}
+          {affinities.length > 0 && (
+            <div>
+              <h3 className="text-[10px] text-green-400/80 uppercase tracking-wider mb-2">
+                Topics you engage with
+              </h3>
+              <div className="space-y-1.5">
+                {affinities.slice(0, 6).map(a => {
+                  const total = a.positive_signals + a.negative_signals;
+                  const savePct = total > 0 ? Math.round((a.positive_signals / total) * 100) : 0;
+                  return (
+                    <div key={a.topic} className="flex items-center gap-3">
+                      <span className="text-xs text-white w-24 truncate font-mono">{a.topic}</span>
+                      <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-green-400/60 rounded-full"
+                          style={{ width: `${Math.min(100, Math.abs(a.affinity_score) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] text-text-muted tabular-nums w-10 text-right">
+                        {savePct}%
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Anti-topics */}
+          {antiTopics.length > 0 && (
+            <div>
+              <h3 className="text-[10px] text-red-400/80 uppercase tracking-wider mb-2">
+                Topics you consistently skip
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {antiTopics.slice(0, 8).map(at => (
+                  <span
+                    key={at.topic}
+                    className="px-2 py-0.5 rounded text-[10px] font-mono bg-red-500/10 text-red-400/80 border border-red-500/20"
+                  >
+                    {at.topic} ({at.rejection_count})
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        <div className="text-center">
-          <div className="text-lg font-semibold text-white tabular-nums">0</div>
-          <div>commitments</div>
-        </div>
-        <div className="text-center">
-          <div className="text-lg font-semibold text-white tabular-nums">0</div>
-          <div>outcomes</div>
-        </div>
-      </div>
+      )}
     </section>
   );
 });
@@ -225,49 +225,46 @@ const WisdomCta = memo(function WisdomCta() {
 
 const EvidenceView = memo(function EvidenceView() {
   const { t } = useTranslation();
-  const [contracts, setContracts] = useState<CommitmentContract[]>([]);
   const [preemptionCount, setPreemptionCount] = useState(0);
   const [blindSpotCount, setBlindSpotCount] = useState(0);
+  const [pulse, setPulse] = useState<PulseData | null>(null);
+  const [affinities, setAffinities] = useState<TopicAffinity[]>([]);
+  const [antiTopics, setAntiTopics] = useState<AntiTopic[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
+
     const results = await Promise.allSettled([
-      cmd('get_commitment_contracts'),
       cmd('get_preemption_alerts'),
       cmd('get_blind_spots'),
-      cmd('check_refutations', { hours: 168 }),
+      cmd('get_intelligence_pulse'),
+      cmd('ace_get_topic_affinities'),
+      cmd('ace_get_anti_topics', { min_rejections: 3 }),
     ]);
 
     if (results[0]!.status === 'fulfilled') {
-      try { setContracts(JSON.parse(results[0]!.value as string) as CommitmentContract[]); }
-      catch { setContracts([]); }
+      setPreemptionCount((results[0]!.value as unknown as EvidenceFeed).total);
     }
     if (results[1]!.status === 'fulfilled') {
-      const feed = results[1]!.value as unknown as EvidenceFeed;
-      setPreemptionCount(feed.total);
+      setBlindSpotCount((results[1]!.value as unknown as EvidenceFeed).total);
     }
     if (results[2]!.status === 'fulfilled') {
-      const feed = results[2]!.value as unknown as EvidenceFeed;
-      setBlindSpotCount(feed.total);
+      setPulse(results[2]!.value as PulseData);
+    }
+    if (results[3]!.status === 'fulfilled') {
+      const raw = results[3]!.value as { affinities: TopicAffinity[] };
+      setAffinities(raw.affinities ?? []);
+    }
+    if (results[4]!.status === 'fulfilled') {
+      const raw = results[4]!.value as { anti_topics: AntiTopic[] };
+      setAntiTopics(raw.anti_topics ?? []);
     }
 
     setLoading(false);
   }, []);
 
   useEffect(() => { void loadAll(); }, [loadAll]);
-
-  const handleDismiss = useCallback(async (contractId: number) => {
-    try {
-      await cmd('dismiss_commitment_contract', { contractId });
-      setContracts(prev => prev.map(c =>
-        c.id === contractId ? { ...c, status: 'dismissed' as const } : c,
-      ));
-    } catch { /* non-fatal */ }
-  }, []);
-
-  const activeContracts = contracts.filter(c => c.status !== 'dismissed');
-  const hasContracts = activeContracts.length > 0;
 
   if (loading) {
     return (
@@ -278,8 +275,8 @@ const EvidenceView = memo(function EvidenceView() {
   }
 
   return (
-    <div className="space-y-5 pb-8" role="tabpanel" id="view-panel-evidence">
-      <header>
+    <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-evidence">
+      <header className="mb-2">
         <h1 className="text-xl font-semibold text-white tracking-tight">
           {t('evidence.title')}
         </h1>
@@ -291,18 +288,14 @@ const EvidenceView = memo(function EvidenceView() {
       <ThisWeekSection
         preemptionCount={preemptionCount}
         blindSpotCount={blindSpotCount}
-        contractCount={activeContracts.filter(c => c.status === 'active').length}
       />
 
-      {hasContracts && (
-        <CommitmentsSection
-          contracts={activeContracts}
-          onDismiss={handleDismiss}
-        />
-      )}
+      <PulseSection pulse={pulse} />
 
-      {/* Hero CTA — the page's purpose when no decisions/contracts yet */}
-      <WisdomCta />
+      <LearnedSection
+        affinities={affinities}
+        antiTopics={antiTopics}
+      />
     </div>
   );
 });
