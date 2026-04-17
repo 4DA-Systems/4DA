@@ -1,5 +1,5 @@
 {
-  "buildCommand": "pnpm install && npx @11ty/eleventy",
+  "buildCommand": "rm -rf _site && ls src/ && npx @11ty/eleventy --config=eleventy.config.js 2>&1 && echo '=== OUTPUT ===' && ls _site/",
   "outputDirectory": "_site",
   "rewrites": [
     { "source": "/streets", "destination": "/streets.html" },
