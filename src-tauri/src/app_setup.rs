@@ -605,6 +605,19 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         if let Ok(conn) = crate::open_db_connection() {
             let mut total_deleted: usize = 0;
 
+            // Purge stale worktree paths from project_dependencies.
+            // Claude Code worktrees create ephemeral copies at .claude/worktrees/agent-*
+            // which get scanned into project_dependencies but are deleted after the
+            // agent completes. These stale paths cause the Preemption page to show
+            // "AFFECTED PROJECTS: D:\4DA\.claude\worktrees\agent-a0249898\..." noise.
+            match conn.execute(
+                "DELETE FROM project_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
+                [],
+            ) {
+                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: stale worktree project dependencies"); } }
+                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: worktree deps failed"); }
+            }
+
             // Purge superseded intelligence older than 7 days (98.7% are useless dead rows)
             match conn.execute(
                 "DELETE FROM digested_intelligence WHERE superseded_by IS NOT NULL AND created_at < datetime('now', '-7 days')",

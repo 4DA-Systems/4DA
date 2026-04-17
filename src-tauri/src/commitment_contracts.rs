@@ -61,6 +61,18 @@ pub fn create_contract(
     refutation_condition: &str,
     subject: &str,
 ) -> Result<i64> {
+    // Validate refutation condition: must extract ≥2 keywords to
+    // produce a meaningful AND-LIKE query. Single-keyword conditions
+    // (e.g. "fails") would match too broadly and cause false refutations.
+    let keywords = extract_keywords(refutation_condition);
+    if keywords.len() < 2 {
+        return Err(
+            "Refutation condition too vague — needs at least 2 specific keywords. \
+             Example: 'If build times exceed 45 seconds' (not just 'fails')."
+                .into(),
+        );
+    }
+
     conn.execute(
         "INSERT INTO commitment_contracts (decision_statement, refutation_condition, subject)
          VALUES (?1, ?2, ?3)",
