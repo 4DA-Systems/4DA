@@ -9,24 +9,31 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 10 — Confession Box + Decision Brief)
-**Started:** 2026-04-17
-**Prior RECON commits:** Phases 0-9 shipped.
-**Scope:** The first new user-facing AWE surface. Global `⌘.`/`Ctrl+.`
-shortcut opens a single-input modal. User types one-sentence decision;
-modal calls `run_awe_transmute` (which carries Phase-6 context bridge);
-result renders as a canonical DecisionBrief card (restated decision,
-assumptions, reversibility, precedents, verdict).
-**Files claimed:**
-- `src/components/decision-brief/ConfessionBox.tsx` (NEW modal)
-- `src/components/decision-brief/DecisionBrief.tsx` (NEW card)
-- `src/hooks/use-confession-shortcut.ts` (NEW keyboard hook)
-- `src/App.tsx` or root: mount ConfessionBox
-- Tests for brief parser + hook
-**Done when:** ⌘. opens the modal from any tab; typing a decision
-returns a brief within 10s; brief renders all 5 sections; ESC closes;
-shortcut is keyboard-accessible + screen-reader labeled.
-**Commit Lock:** HELD at end of phase
+_No active terminals._
+
+<!-- T-INTEL-RECON (Phases 0-10 done 2026-04-17):
+     Intelligence Reconciliation — Phases 0-10 shipped in one session.
+
+     Session commits:
+       cd5e31c8 — Phase 0  plan lock
+       11a9fc41 — Phase 1  dead code purge (19 files)
+       7f873d42 — Phase 2  EvidenceItem canonical type
+       223d810e — Phase 3  Preemption → EvidenceFeed
+       e1dde0f4 — Phase 4  Blind Spots → EvidenceFeed
+       60fb25c9 — Phase 5  Knowledge Decay + Signal Chains → EvidenceFeed
+       94551289 — hygiene: brand tagline rollout
+       8a085554 — hygiene: source reputation feature
+       31fa095d — Phase 6  AWE Context Bridge (5 → 17 fields)
+       68e18a37 — Phase 7  Git Decision Miner (Cold Start Layer 1)
+       62fce050 — Phase 8  Curated Seed Corpus (Cold Start Layer 2)
+       c162f7b3 — Phase 9  AWE Spine (precedent attachment)
+       46412794 — Phase 10 Confession Box + Decision Brief
+
+     Next (Phase 11): Commitment Contract
+     Next (Phase 12): Evidence Tab rebuild
+     Next (Phase 13): Pre-launch hardening
+     Next (Phase 14): Ship -->
+
 
 <!-- T-INTEL-RECON (Phases 0-8 + 2 hygiene recoveries done 2026-04-17):
      Intelligence Reconciliation + Cold Start complete.
