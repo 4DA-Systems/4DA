@@ -886,7 +886,7 @@ permalink: "/index.html"
       </div>
       <div style="margin-top: 32px; font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em;">Runs locally &middot; Zero telemetry &middot; BYOK &middot; Works offline with Ollama</div>
       <div style="margin-top:48px; max-width:720px; margin-left:auto; margin-right:auto;">
-        <img src="screenshots/feed-signals.png" alt="4DA scored feed showing relevance signals" style="width:100%; border-radius:12px; border:1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+        <img src="screenshots/01-brief.png" alt="4DA Brief tab showing today's top picks and signal stream" style="width:100%; border-radius:12px; border:1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
       </div>
     </div>
   </header>
@@ -937,52 +937,46 @@ permalink: "/index.html"
       </div>
       <div class="gallery-tabs">
         <button class="gallery-tab active" data-filter="all">All</button>
-        <button class="gallery-tab" data-filter="feed">Feed</button>
-        <button class="gallery-tab" data-filter="intelligence">Intelligence</button>
-        <button class="gallery-tab" data-filter="insights">Insights</button>
-        <button class="gallery-tab" data-filter="settings">Settings</button>
+        <button class="gallery-tab" data-filter="brief">Brief</button>
+        <button class="gallery-tab" data-filter="preemption">Preemption</button>
+        <button class="gallery-tab" data-filter="blind-spots">Blind Spots</button>
+        <button class="gallery-tab" data-filter="signal">Signal</button>
+        <button class="gallery-tab" data-filter="playbook">Playbook</button>
       </div>
       <div class="gallery-grid">
-        <div class="gallery-item visible" data-category="feed">
-          <img src="screenshots/feed-signals.png" alt="4DA scored feed with relevance signals" loading="lazy" width="1080" height="auto">
+        <div class="gallery-item visible" data-category="brief">
+          <img src="screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Feed</span>
-            <p>Scored feed with signal classification, knowledge gaps, and color-coded relevance. Every item earns its place.</p>
+            <span class="caption-tag">Brief</span>
+            <p>Your daily intelligence briefing. Top picks surface what matters most, backed by a live signal stream scored against your stack.</p>
           </div>
         </div>
-        <div class="gallery-item visible" data-category="intelligence">
-          <img src="screenshots/intelligence-briefing.png" alt="4DA AI intelligence briefing" loading="lazy" width="1080" height="auto">
+        <div class="gallery-item visible" data-category="preemption">
+          <img src="screenshots/02-preemption.png" alt="4DA Preemption Radar — CVE alerts for your dependencies" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Briefing</span>
-            <p>AI-generated daily briefing with actionable insights and curated top picks from all sources.</p>
+            <span class="caption-tag">Preemption</span>
+            <p>Forward-looking intelligence for your stack. CVEs, breaking changes, and dependency risks surfaced before they hit you.</p>
           </div>
         </div>
-        <div class="gallery-item visible" data-category="intelligence">
-          <img src="screenshots/score-autopsy.png" alt="4DA score autopsy with 5-axis breakdown" loading="lazy" width="1080" height="auto">
+        <div class="gallery-item visible" data-category="blind-spots">
+          <img src="screenshots/03-blind-spots.png" alt="4DA Blind Spot Index — coverage gaps and missed intelligence" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Score Autopsy</span>
-            <p>Full 5-axis breakdown of why an item scored the way it did. Signal confirmation, boosts, and penalties.</p>
+            <span class="caption-tag">Blind Spots</span>
+            <p>What you're not watching well enough. Coverage gaps, low-engagement topics, and high-relevance items you never saw.</p>
           </div>
         </div>
-        <div class="gallery-item visible" data-category="insights">
-          <img src="screenshots/insights-tech-radar.png" alt="4DA tech radar and insights" loading="lazy" width="1080" height="auto">
+        <div class="gallery-item visible" data-category="signal">
+          <img src="screenshots/04-signal.png" alt="4DA Signal tab — key signals you would have missed" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Insights</span>
-            <p>Tech Radar tracking technologies across your stack. Decision Memory for architectural choices.</p>
+            <span class="caption-tag">Signal</span>
+            <p>The items that earn their place. Confirmed through 2+ independent axes, classified by type, ready for action.</p>
           </div>
         </div>
-        <div class="gallery-item visible" data-category="feed">
-          <img src="screenshots/knowledge-gaps.png" alt="4DA knowledge gap detection" loading="lazy" width="1080" height="auto">
+        <div class="gallery-item visible" data-category="playbook">
+          <img src="screenshots/05-playbook.png" alt="4DA Playbook tab — STREETS sovereignty playbook" loading="lazy" width="1080" height="auto">
           <div class="gallery-caption">
-            <span class="caption-tag">Knowledge Gaps</span>
-            <p>Knowledge gap detection finds blind spots between what you use and what you track.</p>
-          </div>
-        </div>
-        <div class="gallery-item visible" data-category="settings">
-          <img src="screenshots/settings-profile-developer-dna.png" alt="4DA Developer DNA profile" loading="lazy" width="1080" height="auto">
-          <div class="gallery-caption">
-            <span class="caption-tag">Developer DNA</span>
-            <p>Developer DNA auto-discovers your tech identity from your codebase. Primary stack, dependencies, expertise map.</p>
+            <span class="caption-tag">Playbook</span>
+            <p>The STREETS playbook built in — seven modules that turn your dev rig into a sovereign business asset. Free, always.</p>
           </div>
         </div>
       </div>
