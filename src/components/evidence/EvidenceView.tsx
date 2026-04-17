@@ -19,8 +19,6 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
-import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
-import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import type { EvidenceFeed } from '../../../src-tauri/bindings/bindings/EvidenceFeed';
 
 // ============================================================================
@@ -40,24 +38,6 @@ interface CommitmentContract {
 // ============================================================================
 // Helpers
 // ============================================================================
-
-const URGENCY_COLOR: Record<Urgency, string> = {
-  critical: 'text-red-400',
-  high: 'text-orange-400',
-  medium: 'text-yellow-400',
-  watch: 'text-blue-400',
-};
-
-const KIND_LABEL: Record<string, string> = {
-  alert: 'Alert',
-  gap: 'Gap',
-  missed_signal: 'Missed',
-  chain: 'Chain',
-  decision: 'Decision',
-  retrospective: 'Retro',
-  refutation: 'Refutation',
-  precedent: 'Precedent',
-};
 
 function daysAgo(isoDate: string): string {
   const diff = Date.now() - new Date(isoDate).getTime();
@@ -214,88 +194,15 @@ const CommitmentsSection = memo(function CommitmentsSection({
 });
 
 // ============================================================================
-// Section 3 — Recent Intelligence Items
-// ============================================================================
-
-const IntelCard = memo(function IntelCard({ item }: { item: EvidenceItem }) {
-  const primaryCite = item.evidence[0];
-  const kindLabel = KIND_LABEL[item.kind] ?? item.kind;
-
-  return (
-    <div className="px-4 py-3 rounded-lg border border-border bg-bg-tertiary/20 hover:bg-bg-tertiary/40 transition-colors">
-      <div className="flex items-start gap-2">
-        <span className={`shrink-0 text-[10px] font-medium uppercase ${URGENCY_COLOR[item.urgency]}`}>
-          {kindLabel}
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm text-white leading-snug">{item.title}</p>
-          {item.explanation && (
-            <p className="text-xs text-text-secondary mt-1 line-clamp-2">{item.explanation}</p>
-          )}
-          <div className="flex items-center gap-2 mt-1.5 text-[10px] text-text-muted">
-            {primaryCite && <span>{primaryCite.source}</span>}
-            {item.confidence.value > 0 && (
-              <>
-                <span>·</span>
-                <span className="tabular-nums">{Math.round(item.confidence.value * 100)}%</span>
-              </>
-            )}
-            {item.precedents.length > 0 && (
-              <>
-                <span>·</span>
-                <span>{item.precedents.length} precedent{item.precedents.length === 1 ? '' : 's'}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
-
-const RecentIntelSection = memo(function RecentIntelSection({
-  items,
-}: {
-  items: EvidenceItem[];
-}) {
-  const { t } = useTranslation();
-
-  if (items.length === 0) {
-    return (
-      <section className="bg-bg-secondary rounded-lg border border-border p-5">
-        <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3">
-          {t('evidence.recentIntel', 'Recent Intelligence')}
-        </h2>
-        <p className="text-xs text-text-muted">
-          {t('evidence.noIntel', 'No intelligence items yet. Sources are still scanning.')}
-        </p>
-      </section>
-    );
-  }
-
-  return (
-    <section>
-      <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3 px-1">
-        {t('evidence.recentIntel', 'Recent Intelligence')}
-      </h2>
-      <div className="space-y-2">
-        {items.slice(0, 15).map(it => (
-          <IntelCard key={it.id} item={it} />
-        ))}
-      </div>
-    </section>
-  );
-});
-
-// ============================================================================
 // Main View
 // ============================================================================
 
 const EvidenceView = memo(function EvidenceView() {
   const { t } = useTranslation();
   const [contracts, setContracts] = useState<CommitmentContract[]>([]);
-  const [preemptionFeed, setPreemptionFeed] = useState<EvidenceFeed | null>(null);
-  const [blindSpotFeed, setBlindSpotFeed] = useState<EvidenceFeed | null>(null);
+  const [decisions, setDecisions] = useState<Array<{ subject: string; decision: string; rationale: string | null; confidence: number; created_at: string }>>([]);
+  const [preemptionCount, setPreemptionCount] = useState(0);
+  const [blindSpotCount, setBlindSpotCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const loadAll = useCallback(async () => {
@@ -305,14 +212,25 @@ const EvidenceView = memo(function EvidenceView() {
       cmd('get_preemption_alerts'),
       cmd('get_blind_spots'),
       cmd('check_refutations', { hours: 168 }),
+      cmd('get_decisions', { decisionType: 'wisdom_brief', status: 'all', limit: 10 }),
     ]);
 
     if (results[0]!.status === 'fulfilled') {
       try { setContracts(JSON.parse(results[0]!.value as string) as CommitmentContract[]); }
       catch { setContracts([]); }
     }
-    if (results[1]!.status === 'fulfilled') setPreemptionFeed(results[1]!.value as unknown as EvidenceFeed);
-    if (results[2]!.status === 'fulfilled') setBlindSpotFeed(results[2]!.value as unknown as EvidenceFeed);
+    if (results[1]!.status === 'fulfilled') {
+      const feed = results[1]!.value as unknown as EvidenceFeed;
+      setPreemptionCount(feed.total);
+    }
+    if (results[2]!.status === 'fulfilled') {
+      const feed = results[2]!.value as unknown as EvidenceFeed;
+      setBlindSpotCount(feed.total);
+    }
+    if (results[4]!.status === 'fulfilled') {
+      const raw = results[4]!.value;
+      setDecisions(Array.isArray(raw) ? raw as typeof decisions : []);
+    }
 
     setLoading(false);
   }, []);
@@ -327,17 +245,6 @@ const EvidenceView = memo(function EvidenceView() {
       ));
     } catch { /* non-fatal */ }
   }, []);
-
-  // Merge items from both lenses, sorted by urgency then recency.
-  const allItems: EvidenceItem[] = [
-    ...(preemptionFeed?.items ?? []),
-    ...(blindSpotFeed?.items ?? []),
-  ].sort((a, b) => {
-    const URGENCY_ORDER: Urgency[] = ['critical', 'high', 'medium', 'watch'];
-    const u = URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency);
-    if (u !== 0) return u;
-    return Number(b.created_at) - Number(a.created_at);
-  });
 
   const activeContracts = contracts.filter(c => c.status !== 'dismissed');
 
@@ -361,8 +268,8 @@ const EvidenceView = memo(function EvidenceView() {
       </header>
 
       <ThisWeekSection
-        preemptionCount={preemptionFeed?.total ?? 0}
-        blindSpotCount={blindSpotFeed?.total ?? 0}
+        preemptionCount={preemptionCount}
+        blindSpotCount={blindSpotCount}
         contractCount={activeContracts.filter(c => c.status === 'active').length}
       />
 
@@ -371,7 +278,42 @@ const EvidenceView = memo(function EvidenceView() {
         onDismiss={handleDismiss}
       />
 
-      <RecentIntelSection items={allItems} />
+      {/* Accepted decisions from the Confession Box */}
+      {decisions.length > 0 && (
+        <section>
+          <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-3 px-1">
+            {t('evidence.decisions', 'Your Decisions')}
+          </h2>
+          <div className="space-y-2">
+            {decisions.map((d, i) => (
+              <div key={i} className="rounded-lg border border-border bg-bg-tertiary/20 px-4 py-3">
+                <p className="text-sm text-white">{d.decision}</p>
+                {d.rationale && (
+                  <p className="text-xs text-text-muted mt-1 italic">{d.rationale}</p>
+                )}
+                <div className="flex items-center gap-2 mt-1.5 text-[10px] text-text-muted">
+                  <span>{d.subject}</span>
+                  <span>·</span>
+                  <span className="tabular-nums">{Math.round(d.confidence * 100)}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Call to action when no decisions yet */}
+      {decisions.length === 0 && activeContracts.length === 0 && (
+        <section className="bg-bg-secondary rounded-lg border border-accent-gold/20 p-6 text-center">
+          <span className="text-accent-gold text-lg" aria-hidden="true">◇</span>
+          <p className="text-sm text-text-secondary mt-2">
+            {t('evidence.ctaTitle', 'Start building your decision history')}
+          </p>
+          <p className="text-xs text-text-muted mt-1">
+            {t('evidence.ctaHint', 'Press ⌘. (or Ctrl+.) anywhere to consult the Wisdom engine on a decision you are weighing.')}
+          </p>
+        </section>
+      )}
     </div>
   );
 });
