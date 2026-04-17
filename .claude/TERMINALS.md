@@ -9,20 +9,11 @@
 
 ## Active Terminals
 
-### T-INTEL-RECON (Phase 13b — Visual QA fixes)
-**Started:** 2026-04-17
-**Scope:** Fix all issues found in visual QA screenshots.
-1. Preemption buttons → functional (open URL / dismiss)
-2. Template explanation → use actual source title
-3. severity_to_confidence → honest values
-4. Evidence tab → unique content only (no merged dump)
-5. Blind Spots → naming fix
-**Files claimed:**
-- `src/components/preemption/PreemptionView.tsx`
-- `src-tauri/src/preemption.rs`
-- `src/components/evidence/EvidenceView.tsx`
-- `src/components/blindspots/BlindSpotsView.tsx`
-**Commit Lock:** HELD
+_No active terminals._
+
+<!-- T-INTEL-RECON Phase 13b done (5d19f6c4). All 5 visual QA issues
+     fixed: buttons functional, template killed, confidence honest,
+     Evidence tab unique, naming fixed. App running live with fixes. -->
 
 <!-- T-INTEL-RECON Phase 13a done (7e41aae0). All 5 gaps from honest
      assessment addressed: auto-seed, monitoring, persistence, i18n, unwrap.
