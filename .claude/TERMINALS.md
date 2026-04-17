@@ -9,17 +9,13 @@
 
 ## Active Terminals
 
-### T-DOC-HYGIENE — Document Hygiene Framework
-**Started**: 2026-04-18
-**Status**: committing
-**Commit Lock**: HELD
-**Files**:
-- .gitignore
-- .husky/pre-commit
-- CLAUDE.md
-- scripts/check-doc-location.cjs (new)
-- .claude/rules/document-hygiene.md (new)
-- All repo-root *PLAN*.md / *STRATEGY*.md / *AUDIT*.md / *CHECKLIST*.md / whats-next.md (untrack + move to .claude/plans/archive-2026-04-18/)
+_No active terminals._
+
+<!-- T-DOC-HYGIENE done (c677362b 2026-04-18). Six-layer Document Hygiene
+     framework: location doctrine, gitignore patterns, pre-commit gate,
+     CLAUDE.md rule, retrospective move of 30 legacy plan docs, audit
+     one-liner. Prevents PLAN*.md / STRATEGY / AUDIT / etc leaking to
+     repo root. Gate tested working. -->
 
 <!-- T-INTEL-RECON Phase 13b done (5d19f6c4). All 5 visual QA issues
      fixed: buttons functional, template killed, confidence honest,
