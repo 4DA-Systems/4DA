@@ -40,6 +40,12 @@ node scripts/check-file-sizes.cjs || {
     exit 1
 }
 
+# Doc-location gate (fast check, <1s) — always runs
+# Blocks internal planning docs from being committed at repo root.
+# See .claude/rules/document-hygiene.md for the framework.
+echo "Checking doc locations..."
+node scripts/check-doc-location.cjs || exit 1
+
 # Rust formatting (fast check, ~2s) — skip if cargo is busy or modules missing
 if [ "$CARGO_BUSY" = true ]; then
     echo "Skipping cargo fmt check (cargo processes active — will check on push)"

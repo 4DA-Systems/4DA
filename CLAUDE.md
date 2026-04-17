@@ -136,6 +136,19 @@ The Momentum tab is **being deleted**. AWE becomes infrastructure, not a feature
 - `data/*.db` — runtime databases
 - `src-tauri/target/` — Rust build artifacts
 
+## Document Hygiene (Planning-Doc Protocol)
+
+Internal planning / strategy / audit / checklist / roadmap docs **must not live at the repo root.** The pre-commit gate (`scripts/check-doc-location.cjs`) rejects commits that try. Full framework: `.claude/rules/document-hygiene.md`.
+
+Before writing any `*.md` at repo root whose name contains `PLAN`, `STRATEGY`, `AUDIT`, `CHECKLIST`, `ROADMAP`, `TRAJECTORY`, `VIRAL`, `LAUNCH`, `FORTIFICATION`, `EXECUTION`, `ASCENT`, `BATTLE`, `MASTER`, `BARRIER`, `IMPROVEMENTS`, `CRITICAL`, `DEVELOPER-OS`, `NOTIFICATION-INTELLIGENCE`, `INTELLIGENCE-CONSOLE`, `whats-next`, `NEXT-STEPS`, `MISSION_`, `SHIP_`, `FIRST-CONTACT`:
+
+1. **Default**: use TodoWrite + in-conversation reasoning — no file.
+2. If a persistent doc is needed: write to `.claude/plans/` (gitignored, never leaks).
+3. Curated strategy docs go to `docs/strategy/` **only after explicit user approval per-file**.
+4. Never write such docs at repo root. If the gate says a doc belongs there, it's wrong — move it.
+
+Public-facing root `.md` allowlist: `README CHANGELOG LICENSE CONTRIBUTING CODE_OF_CONDUCT SECURITY CLAUDE AGENTS CONVENTIONS TRADEMARKS CLA LINUX NETWORK`. Escape hatch for genuine public docs that match a block pattern: add `<!-- public-ok: <reason> -->` to the first 10 lines.
+
 ## AWE Integration (Artificial Wisdom Engine)
 
 AWE is the judgment layer that transmutes intelligence into calibrated wisdom. It runs as an MCP server with 7 tools backed by a Rust engine.
