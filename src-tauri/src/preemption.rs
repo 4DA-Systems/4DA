@@ -397,12 +397,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             id: uuid::Uuid::new_v4().to_string(),
             alert_type,
             title: format!("{}: {}", project_name, truncate(&title, 80)),
-            explanation: format!(
-                "Direct dependency \"{}\" in project \"{}\" is mentioned in a recent \
-                 security/breaking-change advisory. Review the linked source to determine \
-                 whether your current version is affected.",
-                package_name, project_name
-            ),
+            explanation: truncate(&title, 200),
             evidence,
             affected_projects: vec![project_path],
             affected_dependencies: vec![package_name],
@@ -754,11 +749,18 @@ fn format_confidence(confidence: f64) -> String {
 }
 
 /// Convert gap severity to a numeric confidence value.
+/// Map gap severity to a confidence score for preemption alerts.
+///
+/// Pre-Phase-13b, this mapped Critical→0.95 which made ALL critical
+/// items show 95% — meaningless because it echoed the urgency badge.
+/// Now: confidence reflects HOW SURE we are the gap is real (not how
+/// severe it is — that's urgency's job). Knowledge gaps from the
+/// decay detector are inherently heuristic, so we cap at 0.70.
 fn severity_to_confidence(severity: &GapSeverity) -> f32 {
     match severity {
-        GapSeverity::Critical => 0.95,
-        GapSeverity::High => 0.80,
-        GapSeverity::Medium => 0.60,
+        GapSeverity::Critical => 0.70,
+        GapSeverity::High => 0.65,
+        GapSeverity::Medium => 0.55,
         GapSeverity::Low => 0.40,
     }
 }

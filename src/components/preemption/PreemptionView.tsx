@@ -1,7 +1,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { useEffect, useRef, useState, memo } from 'react';
+import { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
@@ -201,9 +201,11 @@ const AffectedChips = memo(function AffectedChips({
 const ItemCard = memo(function ItemCard({
   item,
   surfacedRef,
+  onDismiss,
 }: {
   item: EvidenceItem;
   surfacedRef: React.RefObject<Set<string>>;
+  onDismiss: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const [explanationExpanded, setExplanationExpanded] = useState(false);
@@ -276,7 +278,7 @@ const ItemCard = memo(function ItemCard({
         <AffectedChips item={item} />
         <EvidenceList evidence={item.evidence} />
 
-        {/* Action buttons */}
+        {/* Action buttons — each action_id maps to a real UX effect */}
         {item.suggested_actions.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {item.suggested_actions.map((action, i) => (
@@ -293,6 +295,12 @@ const ItemCard = memo(function ItemCard({
                     topic: item.title,
                     notes: action.label,
                   });
+                  if (action.action_id === 'dismiss' || action.action_id === 'snooze_7d') {
+                    onDismiss(item.id);
+                  } else if (action.action_id === 'investigate' || action.action_id === 'view_source') {
+                    const url = item.evidence[0]?.url;
+                    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+                  }
                 }}
               >
                 {action.label}
@@ -312,6 +320,7 @@ const ItemCard = memo(function ItemCard({
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
   const surfacedRef = useRef(new Set<string>());
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   const { feed, loading, error } = useAppStore(
     useShallow(s => ({
@@ -326,10 +335,17 @@ const PreemptionView = memo(function PreemptionView() {
     void loadPreemption();
   }, [loadPreemption]);
 
-  // Sort items by urgency priority (critical first)
-  const sortedItems = (feed?.items ?? []).slice().sort(
-    (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
-  );
+  const handleDismiss = useCallback((id: string) => {
+    setDismissedIds(prev => new Set(prev).add(id));
+  }, []);
+
+  // Sort items by urgency priority (critical first), filter dismissed
+  const sortedItems = (feed?.items ?? [])
+    .filter(item => !dismissedIds.has(item.id))
+    .slice()
+    .sort(
+      (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
+    );
 
   return (
     <div className="space-y-5" role="tabpanel" id="view-panel-preemption">
@@ -390,7 +406,7 @@ const PreemptionView = memo(function PreemptionView() {
           {/* Item cards */}
           <div className="space-y-4">
             {sortedItems.map(item => (
-              <ItemCard key={item.id} item={item} surfacedRef={surfacedRef} />
+              <ItemCard key={item.id} item={item} surfacedRef={surfacedRef} onDismiss={handleDismiss} />
             ))}
           </div>
         </>
