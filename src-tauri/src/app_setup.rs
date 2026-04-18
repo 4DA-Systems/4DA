@@ -614,8 +614,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 "DELETE FROM project_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
                 [],
             ) {
-                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: stale worktree project dependencies"); } }
-                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: worktree deps failed"); }
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: stale worktree project dependencies");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: worktree deps failed");
+                }
             }
 
             // Purge superseded intelligence older than 7 days (98.7% are useless dead rows)

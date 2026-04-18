@@ -478,21 +478,32 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
     fn priority_tier(title: &str) -> u8 {
         let t = title.to_lowercase();
         // Tier 4 (highest): security advisories
-        if t.contains("cve-") || t.contains("vulnerability") || t.contains("security advisory")
-            || t.contains("rce") || t.contains("zero-day") || t.contains("zeroday")
+        if t.contains("cve-")
+            || t.contains("vulnerability")
+            || t.contains("security advisory")
+            || t.contains("rce")
+            || t.contains("zero-day")
+            || t.contains("zeroday")
             || t.contains("exploit")
         {
             return 4;
         }
         // Tier 3: breaking changes / deprecations
-        if t.contains("breaking change") || t.contains("deprecated") || t.contains("end of life")
-            || t.contains("eol") || t.contains("migration guide") || t.contains("drops support")
+        if t.contains("breaking change")
+            || t.contains("deprecated")
+            || t.contains("end of life")
+            || t.contains("eol")
+            || t.contains("migration guide")
+            || t.contains("drops support")
         {
             return 3;
         }
         // Tier 2: package-registry updates & named releases
-        if t.starts_with("npm:") || t.starts_with("cargo:") || t.starts_with("pypi:")
-            || t.contains("released") || t.contains("announcing")
+        if t.starts_with("npm:")
+            || t.starts_with("cargo:")
+            || t.starts_with("pypi:")
+            || t.contains("released")
+            || t.contains("announcing")
         {
             return 2;
         }
@@ -503,9 +514,11 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
     fn age_days(created_at: &str) -> i64 {
         chrono::DateTime::parse_from_rfc3339(created_at)
             .ok()
-            .or_else(|| chrono::NaiveDateTime::parse_from_str(created_at, "%Y-%m-%d %H:%M:%S")
-                .ok()
-                .map(|ndt| ndt.and_utc().fixed_offset()))
+            .or_else(|| {
+                chrono::NaiveDateTime::parse_from_str(created_at, "%Y-%m-%d %H:%M:%S")
+                    .ok()
+                    .map(|ndt| ndt.and_utc().fixed_offset())
+            })
             .map(|dt| (chrono::Utc::now() - dt.with_timezone(&chrono::Utc)).num_days())
             .unwrap_or(0)
     }
@@ -514,13 +527,11 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
     signals.sort_by(|a, b| {
         let tier_a = priority_tier(&a.title);
         let tier_b = priority_tier(&b.title);
-        tier_b
-            .cmp(&tier_a)
-            .then_with(|| {
-                b.relevance_score
-                    .partial_cmp(&a.relevance_score)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        tier_b.cmp(&tier_a).then_with(|| {
+            b.relevance_score
+                .partial_cmp(&a.relevance_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     });
 
     // Cap Tier 1 (generic blog) items older than OLD_DAYS_THRESHOLD to OLD_BLOG_CAP.
@@ -1123,12 +1134,20 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         "{} — {} unseen signal{}",
         d.name,
         d.available_signal_count,
-        if d.available_signal_count == 1 { "" } else { "s" }
+        if d.available_signal_count == 1 {
+            ""
+        } else {
+            "s"
+        }
     ));
     let explanation = format!(
         "{} signal{} about {} appeared but you haven't engaged with {} content in {} days.",
         d.available_signal_count,
-        if d.available_signal_count == 1 { "" } else { "s" },
+        if d.available_signal_count == 1 {
+            ""
+        } else {
+            "s"
+        },
         d.name,
         d.name,
         d.days_since_last_signal,
@@ -1200,7 +1219,11 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
             "You have {} active {} dependenc{} but haven't engaged with {} content recently.",
             t.active_deps_in_topic,
             t.topic,
-            if t.active_deps_in_topic == 1 { "y" } else { "ies" },
+            if t.active_deps_in_topic == 1 {
+                "y"
+            } else {
+                "ies"
+            },
             t.topic,
         )
     };
@@ -1927,7 +1950,7 @@ mod tests {
         assert_eq!(feed.total, 4);
         assert_eq!(feed.score, Some(68.0));
         assert_eq!(feed.critical_count, 1); // uncovered "critical"
-        // high_count: high-priority recommendation + high-urgency missed
+                                            // high_count: high-priority recommendation + high-urgency missed
         assert_eq!(feed.high_count, 2);
     }
 
@@ -1950,8 +1973,11 @@ mod tests {
     fn all_items_pass_schema_validation() {
         let feed = blind_spot_report_to_feed(&report_sample());
         for it in &feed.items {
-            assert!(crate::evidence::validate_item(it).is_ok(),
-                "item {} failed validation", it.id);
+            assert!(
+                crate::evidence::validate_item(it).is_ok(),
+                "item {} failed validation",
+                it.id
+            );
         }
     }
 

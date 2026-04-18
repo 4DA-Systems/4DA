@@ -1014,7 +1014,11 @@ fn classify_signals(
                     let best_dep = matched_deps
                         .iter()
                         .filter(|d| !d.is_dev)
-                        .max_by(|a, b| a.confidence.partial_cmp(&b.confidence).unwrap_or(std::cmp::Ordering::Equal))
+                        .max_by(|a, b| {
+                            a.confidence
+                                .partial_cmp(&b.confidence)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        })
                         .unwrap_or(&matched_deps[0]);
                     c.action = format!(
                         "Critical: Security issue affects your dependency {}",

@@ -716,9 +716,7 @@ impl SignalChainWithPrediction {
             kind: EvidenceKind::Chain,
             title,
             explanation,
-            confidence: Confidence::heuristic(
-                (self.prediction.confidence as f32).clamp(0.0, 1.0),
-            ),
+            confidence: Confidence::heuristic((self.prediction.confidence as f32).clamp(0.0, 1.0)),
             urgency: priority_str_to_urgency(&self.chain.overall_priority),
             reversibility: None,
             evidence,
@@ -852,13 +850,22 @@ mod tests {
     fn chain_priority_maps_to_urgency() {
         let mut c = sample_chain_with_prediction();
         c.chain.overall_priority = "critical".to_string();
-        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::Critical);
+        assert_eq!(
+            c.to_evidence_item().urgency,
+            crate::evidence::Urgency::Critical
+        );
         c.chain.overall_priority = "high".to_string();
         assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::High);
         c.chain.overall_priority = "medium".to_string();
-        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::Medium);
+        assert_eq!(
+            c.to_evidence_item().urgency,
+            crate::evidence::Urgency::Medium
+        );
         c.chain.overall_priority = "low".to_string();
-        assert_eq!(c.to_evidence_item().urgency, crate::evidence::Urgency::Watch);
+        assert_eq!(
+            c.to_evidence_item().urgency,
+            crate::evidence::Urgency::Watch
+        );
     }
 
     #[test]

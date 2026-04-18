@@ -524,8 +524,7 @@ pub async fn run_awe_transmute(query: String, mode: String) -> Result<String> {
     let ctx_path = std::env::temp_dir().join("awe_dev_ctx.json");
     if let Ok(conn) = crate::open_db_connection() {
         let profile = crate::sovereign_developer_profile::assemble_profile(&conn);
-        let dev_ctx =
-            crate::awe_bridge::assemble_developer_context(&conn, &profile, 0, 0.0);
+        let dev_ctx = crate::awe_bridge::assemble_developer_context(&conn, &profile, 0, 0.0);
         if let Ok(json) = serde_json::to_string(&dev_ctx) {
             if std::fs::write(&ctx_path, &json).is_ok() {
                 args.push("--context-file".into());

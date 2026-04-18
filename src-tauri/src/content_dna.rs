@@ -655,10 +655,7 @@ mod tests {
     #[test]
     fn test_clickbait_he_just_pattern() {
         // The exact screenshot offender
-        let (ct, mult) = classify_content(
-            "He just crawled through hell to fix the browser...",
-            "",
-        );
+        let (ct, mult) = classify_content("He just crawled through hell to fix the browser...", "");
         assert_eq!(ct, ContentType::Clickbait);
         assert_eq!(mult, 0.25);
     }
@@ -781,11 +778,7 @@ mod tests {
             "rss",
             Some("https://random-blog.example.com/post"),
         );
-        let (ct_b, mult_b) = classify_content_for_source(
-            "Announcing Foo 1.0",
-            "",
-            "rss",
-        );
+        let (ct_b, mult_b) = classify_content_for_source("Announcing Foo 1.0", "", "rss");
         assert_eq!(ct_a, ct_b);
         assert!((mult_a - mult_b).abs() < 0.01);
     }
@@ -799,7 +792,10 @@ mod tests {
             "rss",
             Some("https://blog.rust-lang.org/post"),
         );
-        assert!(mult <= 1.70, "combined multiplier should not exceed 1.70, got {mult}");
+        assert!(
+            mult <= 1.70,
+            "combined multiplier should not exceed 1.70, got {mult}"
+        );
     }
 
     #[test]

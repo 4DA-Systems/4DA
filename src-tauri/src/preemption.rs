@@ -229,6 +229,78 @@ fn has_project_relevance_column(conn: &rusqlite::Connection) -> bool {
 /// Scope: direct runtime deps only when the `is_direct` column exists,
 /// otherwise all non-dev deps. Last 30 days only. Deduped by
 /// (package_name, project_path) and capped at 20 via word-boundary post-filter.
+///
+// ── Generic-name suppression list ──────────────────────────────────
+//
+// Package names that are also common English words used heavily in
+// security advisories. These produce extreme false positive rates
+// (40-80/month per audit) because LIKE '%crypto%' matches every
+// article about cryptocurrency, not just the npm crypto module.
+//
+// Suppressed from the SECURITY ALERT path only. These deps still
+// surface in Blind Spots and Knowledge Gaps (different matching).
+//
+// Each entry was individually reviewed: the package is real, but
+// its name collides with security terminology so severely that
+// no word-boundary heuristic can distinguish package-mention from
+// concept-mention. Proper fix is ecosystem-aware CVE cross-ref
+// (v1.1 roadmap).
+//
+// Declared at module scope so the test module can reach it via
+// `super::SUPPRESSED_GENERIC_NAMES`.
+pub(crate) const SUPPRESSED_GENERIC_NAMES: &[&str] = &[
+    "crypto",       // Node.js crypto module ≠ cryptocurrency discussions
+    "buffer",       // Node.js Buffer ≠ "buffer overflow" (security term!)
+    "stream",       // Node.js stream ≠ "streaming data"
+    "events",       // Node.js events ≠ "security events"
+    "worker",       // various worker packages ≠ "worker process"
+    "domain",       // Node.js domain ≠ "domain name" / "domain-driven"
+    "string",       // various string utils ≠ "string injection"
+    "assert",       // Node.js assert ≠ "assertion failure"
+    "console",      // various console packages ≠ "web console"
+    "process",      // Node.js process ≠ "data processing"
+    "cluster",      // Node.js cluster ≠ "database cluster"
+    "module",       // various ≠ "kernel module"
+    "socket",       // socket.io etc ≠ "socket connection" generics
+    "server",       // various server packages ≠ "server vulnerability"
+    "client",       // various client packages ≠ "client-side attack"
+    "request",      // request npm ≠ "request forgery" (SSRF)
+    "response",     // various ≠ "response injection"
+    "session",      // express-session etc ≠ "session hijacking"
+    "cookie",       // cookie packages ≠ "cookie stealing"
+    "token",        // various token packages ≠ "token theft"
+    "secret",       // secret managers ≠ "secret exposure"
+    "password",     // password utils ≠ "password leak"
+    "injection",    // various DI ≠ "SQL injection"
+    "payload",      // payload packages ≠ "malicious payload"
+    "exploit",      // exploit packages ≠ "exploit disclosed"
+    "proxy",        // http-proxy etc ≠ "proxy misconfiguration"
+    "chain",        // various chain libs ≠ "supply chain attack"
+    "distribution", // various ≠ "distribution vulnerability"
+    "platform",     // various platform libs ≠ "platform affected"
+    "workflow",     // workflow engines ≠ "CI/CD workflow" attacks
+    "mermaid",      // mermaid.js ≠ SiYuan's mermaid rendering CVEs
+    "image",        // Rust image crate ≠ "upload_image" URL paths in Feishu/etc CVEs
+    "color",        // color packages ≠ "color scheme" discussions
+    "debug",        // debug npm ≠ "debug mode" / "debug interface"
+    "config",       // config packages ≠ "configuration vulnerability"
+    "dotenv",       // dotenv ≠ ".env file exposure" (the CONCEPT, not the package)
+    "connect",      // connect middleware ≠ "connection reset" / "connect to"
+    "express",      // express.js ≠ "express concern" / "expressly forbidden"
+    "resolve",      // resolve npm ≠ "resolve the issue"
+    "source",       // source packages ≠ "source code leak"
+    "target",       // target packages ≠ "target system" / "attack target"
+    "global",       // global packages ≠ "global impact"
+    "signal",       // signal packages ≠ "signal handling" / "signal intelligence"
+    "memory",       // memory packages ≠ "memory corruption"
+    "render",       // render packages ≠ "render pipeline" / "server-side render"
+    "access",       // access-control packages ≠ "access violation" / "unauthorized access"
+    "update",       // update packages ≠ "security update" (would match EVERY advisory)
+    "method",       // method packages ≠ "HTTP method" discussions
+    "header",       // header packages ≠ "header injection" (security term!)
+    "origin",       // origin packages ≠ "cross-origin" (CORS discussions)
+];
+
 fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<PreemptionAlert>> {
     // Runtime column detection for `is_direct`. Pre-Phase-53 DBs lack it --
     // we fall back to processing all non-dev deps in that case.
@@ -303,74 +375,6 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             row.get::<_, String>(6)?,         // source_type
         ))
     })?;
-
-    // ── Generic-name suppression list ──────────────────────────────────
-    //
-    // Package names that are also common English words used heavily in
-    // security advisories. These produce extreme false positive rates
-    // (40-80/month per audit) because LIKE '%crypto%' matches every
-    // article about cryptocurrency, not just the npm crypto module.
-    //
-    // Suppressed from the SECURITY ALERT path only. These deps still
-    // surface in Blind Spots and Knowledge Gaps (different matching).
-    //
-    // Each entry was individually reviewed: the package is real, but
-    // its name collides with security terminology so severely that
-    // no word-boundary heuristic can distinguish package-mention from
-    // concept-mention. Proper fix is ecosystem-aware CVE cross-ref
-    // (v1.1 roadmap).
-    const SUPPRESSED_GENERIC_NAMES: &[&str] = &[
-        "crypto",       // Node.js crypto module ≠ cryptocurrency discussions
-        "buffer",       // Node.js Buffer ≠ "buffer overflow" (security term!)
-        "stream",       // Node.js stream ≠ "streaming data"
-        "events",       // Node.js events ≠ "security events"
-        "worker",       // various worker packages ≠ "worker process"
-        "domain",       // Node.js domain ≠ "domain name" / "domain-driven"
-        "string",       // various string utils ≠ "string injection"
-        "assert",       // Node.js assert ≠ "assertion failure"
-        "console",      // various console packages ≠ "web console"
-        "process",      // Node.js process ≠ "data processing"
-        "cluster",      // Node.js cluster ≠ "database cluster"
-        "module",       // various ≠ "kernel module"
-        "socket",       // socket.io etc ≠ "socket connection" generics
-        "server",       // various server packages ≠ "server vulnerability"
-        "client",       // various client packages ≠ "client-side attack"
-        "request",      // request npm ≠ "request forgery" (SSRF)
-        "response",     // various ≠ "response injection"
-        "session",      // express-session etc ≠ "session hijacking"
-        "cookie",       // cookie packages ≠ "cookie stealing"
-        "token",        // various token packages ≠ "token theft"
-        "secret",       // secret managers ≠ "secret exposure"
-        "password",     // password utils ≠ "password leak"
-        "injection",    // various DI ≠ "SQL injection"
-        "payload",      // payload packages ≠ "malicious payload"
-        "exploit",      // exploit packages ≠ "exploit disclosed"
-        "proxy",        // http-proxy etc ≠ "proxy misconfiguration"
-        "chain",        // various chain libs ≠ "supply chain attack"
-        "distribution", // various ≠ "distribution vulnerability"
-        "platform",     // various platform libs ≠ "platform affected"
-        "workflow",     // workflow engines ≠ "CI/CD workflow" attacks
-        "mermaid",      // mermaid.js ≠ SiYuan's mermaid rendering CVEs
-        "image",        // Rust image crate ≠ "upload_image" URL paths in Feishu/etc CVEs
-        "color",        // color packages ≠ "color scheme" discussions
-        "debug",        // debug npm ≠ "debug mode" / "debug interface"
-        "config",       // config packages ≠ "configuration vulnerability"
-        "dotenv",       // dotenv ≠ ".env file exposure" (the CONCEPT, not the package)
-        "connect",      // connect middleware ≠ "connection reset" / "connect to"
-        "express",      // express.js ≠ "express concern" / "expressly forbidden"
-        "resolve",      // resolve npm ≠ "resolve the issue"
-        "source",       // source packages ≠ "source code leak"
-        "target",       // target packages ≠ "target system" / "attack target"
-        "global",       // global packages ≠ "global impact"
-        "signal",       // signal packages ≠ "signal handling" / "signal intelligence"
-        "memory",       // memory packages ≠ "memory corruption"
-        "render",       // render packages ≠ "render pipeline" / "server-side render"
-        "access",       // access-control packages ≠ "access violation" / "unauthorized access"
-        "update",       // update packages ≠ "security update" (would match EVERY advisory)
-        "method",       // method packages ≠ "HTTP method" discussions
-        "header",       // header packages ≠ "header injection" (security term!)
-        "origin",       // origin packages ≠ "cross-origin" (CORS discussions)
-    ];
 
     // Phase 1: Build raw alerts with word-boundary validation.
     // Post-filter by word-boundary matching to eliminate false positives
@@ -471,10 +475,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             id: uuid::Uuid::new_v4().to_string(),
             alert_type,
             title: truncate(&title, 120),
-            explanation: format!(
-                "Affects {} in {}",
-                package_name, project_name
-            ),
+            explanation: format!("Affects {} in {}", package_name, project_name),
             evidence,
             affected_projects: vec![project_path],
             affected_dependencies: vec![package_name],
@@ -964,9 +965,10 @@ impl PreemptionAlert {
         // `created_at` is an ISO-8601 SQLite datetime string; convert to
         // Unix millis. On parse failure fall back to "now" — never break
         // a user-facing item on a timestamp quirk.
-        let created_at = chrono::NaiveDateTime::parse_from_str(&self.created_at, "%Y-%m-%d %H:%M:%S")
-            .map(|dt| dt.and_utc().timestamp_millis())
-            .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
+        let created_at =
+            chrono::NaiveDateTime::parse_from_str(&self.created_at, "%Y-%m-%d %H:%M:%S")
+                .map(|dt| dt.and_utc().timestamp_millis())
+                .unwrap_or_else(|_| chrono::Utc::now().timestamp_millis());
 
         // Always title the item with the alert's own title; trim any
         // trailing period per schema rule.
@@ -1445,7 +1447,13 @@ mod tests {
             .collect();
         assert_eq!(
             ids,
-            vec!["snooze_7d", "brief_this", "investigate", "dismiss", "acknowledge"]
+            vec![
+                "snooze_7d",
+                "brief_this",
+                "investigate",
+                "dismiss",
+                "acknowledge"
+            ]
         );
     }
 
@@ -1535,7 +1543,9 @@ mod tests {
     #[test]
     fn suppression_list_does_not_block_real_packages() {
         // Real packages with unique names must NOT be suppressed
-        for name in &["react", "tokio", "axios", "redis", "sqlite", "vite", "tauri", "pnpm"] {
+        for name in &[
+            "react", "tokio", "axios", "redis", "sqlite", "vite", "tauri", "pnpm",
+        ] {
             assert!(
                 !super::SUPPRESSED_GENERIC_NAMES.contains(name),
                 "{name} should NOT be in suppression list — it's a real unique package"
