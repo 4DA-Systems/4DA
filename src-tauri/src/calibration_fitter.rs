@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — The Filter (Phase 5b.2).
 //!
 //! The final piece of the calibration pipeline. Where

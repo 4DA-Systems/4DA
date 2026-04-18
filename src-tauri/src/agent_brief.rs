@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Agent Session Brief — Tailored context briefs for AI agents connecting to 4DA
 //!
 //! Generates a structured summary of active decisions, ecosystem changes,

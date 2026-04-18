@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE - Autonomous Context Engine (Simplified)
 //!
 //! The brain of 4DA. Implements autonomous context detection with:

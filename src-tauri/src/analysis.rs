@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Analysis functions extracted from lib.rs
 //!
 //! Contains: run_deep_initial_scan, run_cached_analysis, get_analysis_status,
