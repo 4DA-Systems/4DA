@@ -7,6 +7,10 @@
   "homepage": "https://4da.ai",
   "type": "module",
   "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.15.0"
+  },
   "scripts": {
     "dev": "node scripts/kill-fourda.cjs && node scripts/kill-port.cjs 4444 && vite",
     "copy:notif": "node -e \"const fs=require('fs'),p=require('path');['notif-card-critical','notif-card-high','notif-card-medium','notif-card-low','fourda-runtime'].forEach(n=>{const s=p.join('src/lib/fourda-components',n+'.js'),d=p.join('public',n+'.js');if(fs.existsSync(s))fs.copyFileSync(s,d)})\"",
