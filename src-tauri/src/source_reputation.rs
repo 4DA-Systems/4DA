@@ -274,11 +274,7 @@ pub fn infer_source_quality(samples: &[ItemSample]) -> f32 {
     let specificity_score = (avg_specific / 3.0).clamp(0.0, 1.0);
 
     // Metric 2: average body length (longer = more substance)
-    let avg_len = samples
-        .iter()
-        .map(|s| s.content.len() as f32)
-        .sum::<f32>()
-        / n;
+    let avg_len = samples.iter().map(|s| s.content.len() as f32).sum::<f32>() / n;
     // 500 chars ≈ short update, 3000+ chars ≈ deep dive.
     let length_score = ((avg_len - 500.0) / 2500.0).clamp(0.0, 1.0);
 
@@ -312,10 +308,8 @@ pub fn infer_source_quality(samples: &[ItemSample]) -> f32 {
         / n;
 
     // Combine: base 1.0, add up to +0.30, subtract up to -0.30
-    let uplift = 0.10 * specificity_score
-        + 0.08 * length_score
-        + 0.06 * code_ratio
-        + 0.06 * urgent_ratio;
+    let uplift =
+        0.10 * specificity_score + 0.08 * length_score + 0.06 * code_ratio + 0.06 * urgent_ratio;
     let penalty = 0.30 * clickbait_ratio;
 
     (1.0 + uplift - penalty).clamp(0.70, 1.30)
@@ -353,12 +347,7 @@ fn count_specific_tokens(title: &str) -> usize {
         if idx == 0 {
             continue;
         }
-        if word.len() >= 4
-            && word
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_uppercase())
-        {
+        if word.len() >= 4 && word.chars().next().is_some_and(|c| c.is_ascii_uppercase()) {
             count += 1;
         }
     }
@@ -442,8 +431,12 @@ pub fn compute_final_multiplier(rep: &SourceReputation) -> f32 {
     } else {
         (total_interactions as f32 / 100.0).clamp(0.0, 1.0)
     };
-    let layer3_score =
-        engagement_score(rep.items_surfaced, rep.items_clicked, rep.items_saved, rep.items_dismissed);
+    let layer3_score = engagement_score(
+        rep.items_surfaced,
+        rep.items_clicked,
+        rep.items_saved,
+        rep.items_dismissed,
+    );
     let layer3 = engagement_to_multiplier(layer3_score);
 
     // Blend: partition 1.0 of weight across the three layers.
@@ -466,7 +459,10 @@ mod tests {
     #[test]
     fn test_normalize_strips_protocol_and_www() {
         assert_eq!(normalize_source_key("https://www.deno.com/"), "deno.com");
-        assert_eq!(normalize_source_key("http://blog.rust-lang.org/index.html"), "blog.rust-lang.org");
+        assert_eq!(
+            normalize_source_key("http://blog.rust-lang.org/index.html"),
+            "blog.rust-lang.org"
+        );
     }
 
     #[test]
@@ -535,7 +531,10 @@ mod tests {
             },
         ];
         let q = infer_source_quality(&samples);
-        assert!(q > 1.0, "security/release feed should score above neutral, got {q}");
+        assert!(
+            q > 1.0,
+            "security/release feed should score above neutral, got {q}"
+        );
     }
 
     #[test]
@@ -562,7 +561,10 @@ mod tests {
     fn test_engagement_score_smoothed_by_prior() {
         // 1 save on 1 surface shouldn't pin the score to 1.0 — prior smoothing
         let s = engagement_score(1, 0, 1, 0);
-        assert!(s < 0.75, "Bayesian prior should keep single-sample from dominating, got {s}");
+        assert!(
+            s < 0.75,
+            "Bayesian prior should keep single-sample from dominating, got {s}"
+        );
     }
 
     #[test]
@@ -579,7 +581,10 @@ mod tests {
     fn test_combined_unknown_source_starts_at_one() {
         let rep = SourceReputation::new_with_prior("random-blog.example");
         let m = compute_final_multiplier(&rep);
-        assert!((m - 1.0).abs() < 0.01, "expected ~1.0 for unknown source, got {m}");
+        assert!(
+            (m - 1.0).abs() < 0.01,
+            "expected ~1.0 for unknown source, got {m}"
+        );
     }
 
     #[test]
@@ -596,8 +601,14 @@ mod tests {
             multiplier: 0.0,
         };
         let m = compute_final_multiplier(&rep);
-        assert!(m >= 0.70 - 0.01, "multiplier should not go below 0.70, got {m}");
-        assert!(m <= 1.30 + 0.01, "multiplier should not exceed 1.30, got {m}");
+        assert!(
+            m >= 0.70 - 0.01,
+            "multiplier should not go below 0.70, got {m}"
+        );
+        assert!(
+            m <= 1.30 + 0.01,
+            "multiplier should not exceed 1.30, got {m}"
+        );
     }
 
     #[test]

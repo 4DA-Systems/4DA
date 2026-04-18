@@ -130,9 +130,9 @@ const DECISION_VERBS: &[(&str, &str)] = &[
 /// Tokens we do not treat as decision subjects — too generic, too common,
 /// or purely grammatical. Single-word subjects must not be in this list.
 const SUBJECT_STOPWORDS: &[&str] = &[
-    "to", "from", "the", "a", "an", "and", "or", "for", "with", "in", "on",
-    "of", "this", "that", "these", "those", "new", "old", "some", "all",
-    "it", "them", "our", "my", "your", "his", "her", "their", "we",
+    "to", "from", "the", "a", "an", "and", "or", "for", "with", "in", "on", "of", "this", "that",
+    "these", "those", "new", "old", "some", "all", "it", "them", "our", "my", "your", "his", "her",
+    "their", "we",
 ];
 
 /// True when `word` is a plausible decision subject (library, tool,
@@ -380,11 +380,7 @@ pub fn mine_repo(repo_path: &Path, max_commits: usize) -> Result<Vec<SeededDecis
 
         // newer_commits = those strictly after `commit` in time (later
         // in chronological order)
-        let newer: Vec<ParsedCommit> = chronological[idx + 1..]
-            .iter()
-            .copied()
-            .cloned()
-            .collect();
+        let newer: Vec<ParsedCommit> = chronological[idx + 1..].iter().copied().cloned().collect();
 
         let in_head = subject_in_head(repo_path, &subject);
         let outcome = infer_outcome(&subject, &newer, in_head);
@@ -494,8 +490,7 @@ mod tests {
 
     #[test]
     fn detects_adopt_verb() {
-        let (tok, verb, after) =
-            find_decision_verb("feat: adopt tokio for async runtime").unwrap();
+        let (tok, verb, after) = find_decision_verb("feat: adopt tokio for async runtime").unwrap();
         assert_eq!(tok, "adopt");
         assert_eq!(verb, "adopt");
         assert!(after.contains("tokio"));
@@ -536,7 +531,10 @@ mod tests {
 
     #[test]
     fn extracts_subject_after_verb() {
-        assert_eq!(extract_subject(" tokio for async").as_deref(), Some("tokio"));
+        assert_eq!(
+            extract_subject(" tokio for async").as_deref(),
+            Some("tokio")
+        );
         assert_eq!(
             extract_subject(" sqlite-vec as vector backend").as_deref(),
             Some("sqlite-vec")
@@ -563,7 +561,10 @@ mod tests {
 
     #[test]
     fn extract_strips_trailing_punctuation() {
-        assert_eq!(extract_subject(" tokio, because async").as_deref(), Some("tokio"));
+        assert_eq!(
+            extract_subject(" tokio, because async").as_deref(),
+            Some("tokio")
+        );
     }
 
     // --- Statement composition ---------------------------------------------
@@ -580,10 +581,7 @@ mod tests {
 
     #[test]
     fn composes_unknown_verb_falls_back_to_chose() {
-        assert_eq!(
-            compose_statement("handwave", "pnpm"),
-            "Chose pnpm"
-        );
+        assert_eq!(compose_statement("handwave", "pnpm"), "Chose pnpm");
     }
 
     // --- Outcome inference -------------------------------------------------

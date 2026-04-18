@@ -79,8 +79,7 @@ pub fn load_corpus() -> Vec<SeededDecision> {
 pub fn corpus_stats() -> CorpusStats {
     let items = load_corpus();
     let mut counts = OutcomeCounts::default();
-    let mut domains: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut domains: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for d in &items {
         match d.outcome {
@@ -161,7 +160,10 @@ pub fn classify_subject_domain(subject: &str) -> String {
         return "monorepo".to_string();
     }
     // Deploy targets
-    if matches!(s.as_str(), "vercel" | "cloudflare-workers" | "docker" | "kubernetes") {
+    if matches!(
+        s.as_str(),
+        "vercel" | "cloudflare-workers" | "docker" | "kubernetes"
+    ) {
         return "deploy".to_string();
     }
     // Package managers

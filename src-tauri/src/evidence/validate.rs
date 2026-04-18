@@ -10,9 +10,7 @@
 //!
 //! Rules come from `docs/strategy/EVIDENCE-ITEM-SCHEMA.md`.
 
-use super::types::{
-    Action, ConfidenceProvenance, EvidenceItem, EvidenceKind, ACTION_IDS,
-};
+use super::types::{Action, ConfidenceProvenance, EvidenceItem, EvidenceKind, ACTION_IDS};
 
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ValidationError {
@@ -56,10 +54,7 @@ fn requires_evidence(kind: EvidenceKind) -> bool {
 fn requires_actions(kind: EvidenceKind) -> bool {
     matches!(
         kind,
-        EvidenceKind::Alert
-            | EvidenceKind::Gap
-            | EvidenceKind::Decision
-            | EvidenceKind::Refutation
+        EvidenceKind::Alert | EvidenceKind::Gap | EvidenceKind::Decision | EvidenceKind::Refutation
     )
 }
 

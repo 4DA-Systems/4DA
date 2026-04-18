@@ -9,7 +9,50 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-WAR-ROOM-2026-04-19 (ACTIVE, began 2026-04-19)
+
+**Scope:** Execute full remediation from combined self-audit + GPT-5.4 adversarial audit. Multiple waves, commit per wave.
+
+**Wave 1 (P0 BLOCKER):**
+- src-tauri/src/preemption.rs (lift SUPPRESSED_GENERIC_NAMES to module scope)
+- package.json + pnpm-lock.yaml (bump DOMPurify to ≥3.4.0)
+
+**Wave 2 (P0 HONESTY PASS):**
+- README.md (align privacy/telemetry/checksum claims with code)
+- SECURITY.md (align "no crash reporters" claim with opt-in Sentry reality)
+- src/locales/en/ui.json (soften "physically cannot leave" absolutism)
+
+**Wave 3 (P1 SECURITY):**
+- src-tauri/src/webhooks.rs (apply SSRF validation in register_webhook_cmd)
+- src-tauri/src/settings/keystore.rs (stop silently succeeding on keychain failure)
+- src-tauri/src/team_sync_commands.rs (rename _enc fields to reflect plaintext reality OR add keychain encryption)
+
+**Wave 4 (REPO HYGIENE):**
+- .gitattributes (new file)
+- TRADEMARKS.md (fix 4 wrong facts)
+- docs/legal/TERMS-OF-SERVICE.md (propagate TM correction)
+- docs/strategy/MUSE-STRATEGY.md (propagate TM correction)
+- Delete 9 stale root PNGs + empty dirs
+- .claude/.gitignore (add plans/)
+
+**Wave 5 (CI/CD ADDITIONS):**
+- .github/dependabot.yml (new)
+- .github/CODEOWNERS (new)
+- .github/FUNDING.yml (new)
+- .github/workflows/nightly-audit.yml (new)
+- .github/workflows/release.yml (pin AWE sidecar, verify CodeSignTool SHA, fix SBOM fallback)
+- .github/workflows/validate.yml (pin dtolnay SHA, add cargo audit/deny to macOS/Linux, add vite smoke)
+- Delete stale .github/copilot-instructions.md
+
+**Wave 6 (BUILD UX + DOCS):**
+- README.md (Quick Start rewrite with platform prereqs)
+- CONTRIBUTING.md (fix stale version pins)
+- package.json (add engines field)
+- src-tauri/Cargo.toml (add rust-version)
+- .ai/FAILURE_MODES.md (create or remove CLAUDE.md reference)
+
+**Commit Lock:** HELD (Wave 1 commit in progress)
+
 
 <!-- T-PUBLIC-READY done (a3301906 + filter-repo → da8c87fa, 2026-04-18).
      Document Hygiene v2: mixed-dir allowlist + PII gate + public-readiness

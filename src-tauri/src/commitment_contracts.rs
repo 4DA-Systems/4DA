@@ -214,8 +214,10 @@ pub fn scan_for_refutations(conn: &rusqlite::Connection, hours: u32) -> Result<V
         );
 
         let mut stmt = conn.prepare(&sql)?;
-        let params_vec: Vec<&dyn rusqlite::ToSql> =
-            bind_values.iter().map(|v| v as &dyn rusqlite::ToSql).collect();
+        let params_vec: Vec<&dyn rusqlite::ToSql> = bind_values
+            .iter()
+            .map(|v| v as &dyn rusqlite::ToSql)
+            .collect();
 
         if let Ok(item_id) = stmt.query_row(params_vec.as_slice(), |row| row.get::<_, i64>(0)) {
             trigger_contract(conn, contract.id, item_id)?;
@@ -230,11 +232,10 @@ pub fn scan_for_refutations(conn: &rusqlite::Connection, hours: u32) -> Result<V
 /// Drops stopwords and too-short tokens.
 fn extract_keywords(condition: &str) -> Vec<String> {
     const STOP: &[&str] = &[
-        "if", "the", "a", "an", "is", "are", "was", "were", "in", "on", "at",
-        "to", "for", "of", "and", "or", "not", "it", "my", "our", "they",
-        "this", "that", "there", "than", "then", "with", "from", "by", "has",
-        "have", "had", "will", "would", "could", "should", "be", "been",
-        "being", "do", "does", "did", "any", "more", "over", "go", "goes",
+        "if", "the", "a", "an", "is", "are", "was", "were", "in", "on", "at", "to", "for", "of",
+        "and", "or", "not", "it", "my", "our", "they", "this", "that", "there", "than", "then",
+        "with", "from", "by", "has", "have", "had", "will", "would", "could", "should", "be",
+        "been", "being", "do", "does", "did", "any", "more", "over", "go", "goes",
     ];
     condition
         .split(|c: char| c.is_whitespace() || matches!(c, ',' | '.' | '!' | '?' | ';' | ':'))
@@ -269,7 +270,10 @@ impl CommitmentContract {
             freshness_days: 0.0,
             relevance_note: format!(
                 "condition: {}",
-                self.refutation_condition.chars().take(200).collect::<String>()
+                self.refutation_condition
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
             ),
         };
 

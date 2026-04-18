@@ -607,13 +607,12 @@ fn truncate_gap_note(s: &str) -> String {
 }
 
 fn missed_item_to_citation(m: &MissedItem) -> EvidenceCitation {
-    let freshness_days =
-        chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
-            .map(|dt| {
-                let secs = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
-                (secs as f32 / 86_400.0).max(0.0)
-            })
-            .unwrap_or(0.0);
+    let freshness_days = chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
+        .map(|dt| {
+            let secs = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
+            (secs as f32 / 86_400.0).max(0.0)
+        })
+        .unwrap_or(0.0);
     EvidenceCitation {
         source: m.source_type.clone(),
         title: truncate_gap_title(&m.title),
@@ -639,7 +638,11 @@ impl KnowledgeGap {
             format!(
                 "{} day{} since last engagement",
                 self.days_since_last_engagement,
-                if self.days_since_last_engagement == 1 { "" } else { "s" }
+                if self.days_since_last_engagement == 1 {
+                    ""
+                } else {
+                    "s"
+                }
             )
         };
         let explanation = format!(
@@ -648,7 +651,11 @@ impl KnowledgeGap {
             self.version.as_deref().unwrap_or("no version"),
             days_phrase,
             self.missed_items.len(),
-            if self.missed_items.len() == 1 { "signal" } else { "signals" },
+            if self.missed_items.len() == 1 {
+                "signal"
+            } else {
+                "signals"
+            },
         );
 
         // Build citations from missed items; cap at top 5 to keep the
@@ -851,13 +858,22 @@ mod tests {
     fn knowledge_gap_severity_maps_to_urgency() {
         let mut g = sample_gap();
         g.gap_severity = GapSeverity::Critical;
-        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::Critical);
+        assert_eq!(
+            g.to_evidence_item().urgency,
+            crate::evidence::Urgency::Critical
+        );
         g.gap_severity = GapSeverity::High;
         assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::High);
         g.gap_severity = GapSeverity::Medium;
-        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::Medium);
+        assert_eq!(
+            g.to_evidence_item().urgency,
+            crate::evidence::Urgency::Medium
+        );
         g.gap_severity = GapSeverity::Low;
-        assert_eq!(g.to_evidence_item().urgency, crate::evidence::Urgency::Watch);
+        assert_eq!(
+            g.to_evidence_item().urgency,
+            crate::evidence::Urgency::Watch
+        );
     }
 
     #[test]

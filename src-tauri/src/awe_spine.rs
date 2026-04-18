@@ -245,9 +245,7 @@ pub fn _test_seeds() -> &'static [SeededDecision] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::evidence::{
-        Action, Confidence, EvidenceCitation, EvidenceKind, LensHints, Urgency,
-    };
+    use crate::evidence::{Action, Confidence, EvidenceCitation, EvidenceKind, LensHints, Urgency};
 
     fn sample_seed(subject: &str, statement: &str, outcome: PrecedentOutcome) -> SeededDecision {
         SeededDecision {
@@ -368,7 +366,10 @@ mod tests {
 
     #[test]
     fn title_match_at_start() {
-        assert!(title_contains_subject_as_word("tokio 1.37 released", "tokio"));
+        assert!(title_contains_subject_as_word(
+            "tokio 1.37 released",
+            "tokio"
+        ));
     }
 
     #[test]
@@ -414,7 +415,10 @@ mod tests {
             )),
             "curated-corpus"
         );
-        assert_eq!(classify_precedent_origin(&sample_git_seed("tokio")), "user-history");
+        assert_eq!(
+            classify_precedent_origin(&sample_git_seed("tokio")),
+            "user-history"
+        );
     }
 
     #[test]

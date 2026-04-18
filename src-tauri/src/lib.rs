@@ -164,8 +164,6 @@ mod awe_spine;
 mod awe_synthesis;
 mod blind_spots;
 mod boot_context;
-/// Intelligence Reconciliation Phase 11 — Commitment Contracts.
-mod commitment_contracts;
 mod briefing_snapshot;
 mod briefing_window;
 mod calibration;
@@ -180,6 +178,8 @@ mod channel_commands;
 mod channel_provenance;
 mod channel_render;
 pub mod channels;
+/// Intelligence Reconciliation Phase 11 — Commitment Contracts.
+mod commitment_contracts;
 mod community_intelligence;
 mod competing_tech;
 mod concept_graph;
@@ -245,12 +245,10 @@ mod evidence;
 mod external;
 pub mod extractors;
 mod free_briefing;
-#[cfg(feature = "glyph_audit")]
-mod glyph_integration;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
-/// Intelligence Reconciliation Phase 8 — Cold Start Layer 2 (curated corpus).
-mod seed_corpus;
+#[cfg(feature = "glyph_audit")]
+mod glyph_integration;
 mod health;
 mod health_commands;
 mod http_client;
@@ -295,6 +293,8 @@ mod scheduler_state;
 mod scoring;
 pub(crate) mod scoring_config;
 mod search_synthesis;
+/// Intelligence Reconciliation Phase 8 — Cold Start Layer 2 (curated corpus).
+mod seed_corpus;
 mod semantic_diff;
 pub mod settings;
 mod settings_commands;
