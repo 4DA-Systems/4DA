@@ -1,92 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+// NOTICE file imported at build time via Vite's ?raw loader.
+//
+// Previously this component hand-maintained a string constant that mirrored
+// the repo's NOTICE file. That mirror drifted — the on-disk NOTICE listed
+// ~50 deps while the in-app modal listed ~25. Self-audit 4.8 called out
+// that drift as a compliance risk for Apache 2.0 §4(d) attribution and the
+// FSL-1.1-Apache-2.0 transparency promise.
+//
+// The raw-import means: whatever is in NOTICE at build time IS what the
+// modal renders. There is no second source of truth to keep in sync.
+import NOTICE_TEXT from '../../NOTICE?raw';
 
 interface Props {
   onClose: () => void;
 }
-
-// NOTICE file embedded as a constant. Generated once at build time from the
-// repo's NOTICE file. Apache 2.0 and FSL compliance requires these
-// attributions be accessible to users. This component displays them in-app.
-//
-// If NOTICE file changes, update this constant. Consider wiring to a build
-// step that reads NOTICE at compile time (Vite raw import) — left as manual
-// for now to keep the build graph simple.
-const NOTICE_TEXT = `4DA Home
-Copyright 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841)
-
-Licensed under the Functional Source License, Version 1.1, Apache 2.0 Future
-License (FSL-1.1-Apache-2.0). See LICENSE for details.
-
-This product includes software developed by third parties. The following is
-a non-exhaustive list of major dependencies and their licenses. Full license
-texts are available in the respective source repositories.
-
-═══════════════════════════════════════════════════════════════════════════
-Rust Backend Dependencies
-═══════════════════════════════════════════════════════════════════════════
-
-tauri (Apache 2.0 / MIT) — https://github.com/tauri-apps/tauri
-tokio (MIT) — https://github.com/tokio-rs/tokio
-serde, serde_json (MIT / Apache 2.0) — https://github.com/serde-rs/serde
-rusqlite (MIT) — https://github.com/rusqlite/rusqlite
-sqlite-vec (Apache 2.0 / MIT) — https://github.com/asg017/sqlite-vec
-reqwest (MIT / Apache 2.0) — https://github.com/seanmonstar/reqwest
-tracing, tracing-subscriber (MIT) — https://github.com/tokio-rs/tracing
-tracing-appender (MIT) — https://github.com/tokio-rs/tracing
-anyhow, thiserror (MIT / Apache 2.0) — https://github.com/dtolnay/anyhow
-parking_lot (MIT / Apache 2.0) — https://github.com/Amanieu/parking_lot
-once_cell (MIT / Apache 2.0) — https://github.com/matklad/once_cell
-ed25519-dalek (BSD 3-Clause) — https://github.com/dalek-cryptography/ed25519-dalek
-chacha20poly1305 (Apache 2.0 / MIT) — https://github.com/RustCrypto/AEADs
-blake3 (CC0 1.0 / Apache 2.0) — https://github.com/BLAKE3-team/BLAKE3
-semver (MIT / Apache 2.0) — https://github.com/dtolnay/semver
-url (MIT / Apache 2.0) — https://github.com/servo/rust-url
-chrono (MIT / Apache 2.0) — https://github.com/chronotope/chrono
-uuid (Apache 2.0 / MIT) — https://github.com/uuid-rs/uuid
-regex (MIT / Apache 2.0) — https://github.com/rust-lang/regex
-ocrs (MPL 2.0 — isolated library, not linked into final binary static layout)
-pdf-extract (Apache 2.0) — https://github.com/jrmuizel/pdf-extract
-lopdf (MIT) — https://github.com/J-F-Liu/lopdf
-docx-rs (Apache 2.0 / MIT) — https://github.com/bokuweb/docx-rs
-calamine (Apache 2.0 / MIT) — https://github.com/tafia/calamine
-notify (Apache 2.0 / MIT) — https://github.com/notify-rs/notify
-ts-rs (MIT) — https://github.com/Aleph-Alpha/ts-rs
-keyring (Apache 2.0 / MIT) — https://github.com/hwchen/keyring-rs
-whichlang (MIT) — https://github.com/quickwit-oss/whichlang
-uhlc (EPL-2.0 / Apache 2.0) — https://github.com/atolab/uhlc-rs
-
-═══════════════════════════════════════════════════════════════════════════
-Frontend Dependencies
-═══════════════════════════════════════════════════════════════════════════
-
-react, react-dom (MIT) — https://github.com/facebook/react
-zustand (MIT) — https://github.com/pmndrs/zustand
-i18next, react-i18next (MIT) — https://github.com/i18next/i18next
-@tauri-apps/api (Apache 2.0 / MIT) — https://github.com/tauri-apps/tauri
-@tauri-apps/plugin-opener (Apache 2.0 / MIT)
-@tauri-apps/plugin-updater (Apache 2.0 / MIT)
-@fontsource-variable/inter (OFL-1.1) — https://fontsource.org
-@fontsource-variable/jetbrains-mono (OFL-1.1) — https://fontsource.org
-@tanstack/react-virtual (MIT) — https://github.com/TanStack/virtual
-dompurify (Apache 2.0 / MPL 2.0) — https://github.com/cure53/DOMPurify
-tailwindcss (MIT) — https://github.com/tailwindlabs/tailwindcss
-vite (MIT) — https://github.com/vitejs/vite
-typescript (Apache 2.0) — https://github.com/microsoft/TypeScript
-
-═══════════════════════════════════════════════════════════════════════════
-Full License Texts
-═══════════════════════════════════════════════════════════════════════════
-
-The complete NOTICE file with full attribution is available at:
-https://github.com/runyourempire/4DA/blob/main/NOTICE
-
-Full license texts for each dependency are available in their respective
-source repositories. This list is provided to satisfy Apache 2.0 Section 4
-attribution requirements and FSL-1.1-Apache-2.0 transparency obligations.
-
-For questions about third-party licenses, contact: legal@4da.ai
-`;
 
 export function ThirdPartyLicensesModal({ onClose }: Props) {
   const { t } = useTranslation();
