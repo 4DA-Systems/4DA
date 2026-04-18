@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Tool exports for 4DA MCP Server — 35 tools across 8 categories
  *
