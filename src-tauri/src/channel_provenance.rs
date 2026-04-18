@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Provenance extraction for channel renders.
 //!
 //! Parses [S1], [S2] source markers from LLM-generated markdown and maps them

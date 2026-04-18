@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Cache-first analysis, status queries, and cancellation.
 
 use tauri::{AppHandle, Emitter};

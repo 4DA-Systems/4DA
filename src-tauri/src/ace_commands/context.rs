@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE context commands: detected tech, active topics, interest seeding and suggestions.
 
 use tracing::{debug, info, warn};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Calibration Probes — re-exports from probes_corpus + probes_engine,
 //! plus 4-dimension score computation.
 //!

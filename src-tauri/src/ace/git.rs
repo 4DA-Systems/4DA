@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Git Analyzer - Extract context from git history
 //!
 //! Analyzes git repositories to understand:

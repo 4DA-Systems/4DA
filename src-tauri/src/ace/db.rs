@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE Database Schema and Migrations
 //!
 //! Implements the full ACE database schema as specified in the stone tablet.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE scanning commands: full scan, auto-discover, scan summary, and path helpers.
 
 use std::path::{Path, PathBuf};

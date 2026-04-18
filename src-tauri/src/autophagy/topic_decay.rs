@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Topic decay analysis — computes per-topic engagement half-lives.
 //!
 //! By bucketing engagement by content age, we discover how quickly each
