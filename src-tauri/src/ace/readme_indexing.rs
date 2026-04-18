@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! README indexing pipeline — discovers projects, parses READMEs, generates weighted embeddings.
 //!
 //! This is the PASIFA bridge between ACE discovery and embedding-based relevance.

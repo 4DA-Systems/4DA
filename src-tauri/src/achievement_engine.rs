@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! GAME Engine — Achievement tracking for 4DA
 //!
 //! Tracks user activity counters and unlocks achievements

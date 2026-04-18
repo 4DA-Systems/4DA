@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Pulse subsystem for the autophagy dashboard.
 //!
 //! Provides a rich 7-day snapshot of how the scoring/relevance system is performing,

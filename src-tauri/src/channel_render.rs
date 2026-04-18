@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Channel render pipeline — source gathering, LLM synthesis, fallback content.
 //!
 //! This module orchestrates the full render cycle for an Information Channel:

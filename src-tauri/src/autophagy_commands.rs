@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for the Intelligent Autophagy system.
 //!
 //! Exposes autophagy status, history, and manual trigger to the frontend.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Calibration Commands — 4-dimension rig calibration and scoring quality assessment.
 //!
 //! Grade = Infrastructure (25) + Context Richness (25) + Signal Coverage (25) + Discrimination (25)

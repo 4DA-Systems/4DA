@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE dependency storage: direct and transitive dependency discovery from lockfiles.
 
 use std::path::PathBuf;
