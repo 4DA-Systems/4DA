@@ -322,7 +322,9 @@ fn title_is_first_person_opinion(title_lower: &str) -> bool {
         "hot take",
         "unpopular opinion",
     ];
-    opinion_openers.iter().any(|p| title_lower.starts_with(p) || title_lower.contains(p))
+    opinion_openers
+        .iter()
+        .any(|p| title_lower.starts_with(p) || title_lower.contains(p))
 }
 
 // ============================================================================
@@ -816,16 +818,24 @@ mod tests {
 
     #[test]
     fn test_title_is_first_person_opinion() {
-        assert!(title_is_first_person_opinion("i stopped re-explaining my database schemas"));
-        assert!(title_is_first_person_opinion("why i moved from postgres to sqlite"));
-        assert!(title_is_first_person_opinion("how we replaced redux with zustand"));
+        assert!(title_is_first_person_opinion(
+            "i stopped re-explaining my database schemas"
+        ));
+        assert!(title_is_first_person_opinion(
+            "why i moved from postgres to sqlite"
+        ));
+        assert!(title_is_first_person_opinion(
+            "how we replaced redux with zustand"
+        ));
         assert!(title_is_first_person_opinion("my honest take on rust"));
     }
 
     #[test]
     fn test_title_is_first_person_ignores_product_launches() {
         // "Show HN:" format is a legit launch — should NOT match
-        assert!(!title_is_first_person_opinion("show hn: foobar — a faster parser"));
+        assert!(!title_is_first_person_opinion(
+            "show hn: foobar — a faster parser"
+        ));
         assert!(!title_is_first_person_opinion("introducing acmedb"));
         assert!(!title_is_first_person_opinion("announcing zed 1.0"));
     }
@@ -847,7 +857,8 @@ mod tests {
         // Should return None (suppressed) OR classify as something other than ToolDiscovery
         if let Some(c) = result {
             assert_ne!(
-                c.signal_type, SignalType::ToolDiscovery,
+                c.signal_type,
+                SignalType::ToolDiscovery,
                 "Version bumps should not classify as ToolDiscovery"
             );
         }
@@ -868,7 +879,8 @@ mod tests {
         );
         if let Some(c) = result {
             assert_ne!(
-                c.signal_type, SignalType::ToolDiscovery,
+                c.signal_type,
+                SignalType::ToolDiscovery,
                 "Vent posts should not classify as ToolDiscovery"
             );
         }

@@ -167,7 +167,11 @@ pub fn extract_available_models(profile: &SovereignDeveloperProfile) -> Vec<Stri
     }
     if let Some(ollama_models) = profile.infrastructure.llm.get("ollama_models") {
         // Stored as comma-separated list when present.
-        for m in ollama_models.split(',').map(str::trim).filter(|s| !s.is_empty()) {
+        for m in ollama_models
+            .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             out.push(format!("ollama:{m}"));
         }
     }
@@ -188,11 +192,9 @@ pub fn query_project_and_dep_counts(conn: &Connection) -> (u32, u32) {
         )
         .unwrap_or(0);
     let deps: u32 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM project_dependencies",
-            [],
-            |row| row.get::<_, i64>(0).map(|n| n.max(0) as u32),
-        )
+        .query_row("SELECT COUNT(*) FROM project_dependencies", [], |row| {
+            row.get::<_, i64>(0).map(|n| n.max(0) as u32)
+        })
         .unwrap_or(0);
     (projects, deps)
 }
@@ -200,11 +202,9 @@ pub fn query_project_and_dep_counts(conn: &Connection) -> (u32, u32) {
 /// Count source items processed. The schema may vary across migrations;
 /// zero is a safe fallback.
 pub fn query_items_processed(conn: &Connection) -> u64 {
-    conn.query_row(
-        "SELECT COUNT(*) FROM source_items",
-        [],
-        |row| row.get::<_, i64>(0).map(|n| n.max(0) as u64),
-    )
+    conn.query_row("SELECT COUNT(*) FROM source_items", [], |row| {
+        row.get::<_, i64>(0).map(|n| n.max(0) as u64)
+    })
     .unwrap_or(0)
 }
 
@@ -212,11 +212,7 @@ pub fn query_items_processed(conn: &Connection) -> u64 {
 /// the user has been active with 4DA.
 pub fn query_days_active(conn: &Connection) -> u32 {
     let earliest: Option<String> = conn
-        .query_row(
-            "SELECT MIN(created_at) FROM feedback",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MIN(created_at) FROM feedback", [], |row| row.get(0))
         .ok()
         .flatten();
 
@@ -235,10 +231,7 @@ pub fn query_days_active(conn: &Connection) -> u32 {
 /// Top N dependency names that have a knowledge gap.
 pub fn query_knowledge_gap_deps(conn: &Connection, limit: usize) -> Vec<String> {
     let gaps = crate::knowledge_decay::detect_knowledge_gaps(conn).unwrap_or_default();
-    gaps.into_iter()
-        .take(limit)
-        .map(|g| g.dependency)
-        .collect()
+    gaps.into_iter().take(limit).map(|g| g.dependency).collect()
 }
 
 /// Top N blind-spot dep names from the blind-spot report.
@@ -297,7 +290,10 @@ pub fn assemble_developer_context(
         .chain(profile.stack.adjacent_tech.iter())
         .map(|s| s.to_lowercase())
         .collect();
-    if stack_lower.iter().any(|s| s.contains("tauri") || s.contains("rust") || s.contains("c++")) {
+    if stack_lower
+        .iter()
+        .any(|s| s.contains("tauri") || s.contains("rust") || s.contains("c++"))
+    {
         domain_concerns.push("performance".to_string());
     }
     if !profile.infrastructure.llm.is_empty()
@@ -309,7 +305,10 @@ pub fn assemble_developer_context(
     {
         domain_concerns.push("privacy".to_string());
     }
-    if stack_lower.iter().any(|s| s.contains("sqlite") || s.contains("local")) {
+    if stack_lower
+        .iter()
+        .any(|s| s.contains("sqlite") || s.contains("local"))
+    {
         domain_concerns.push("local-first".to_string());
     }
 
@@ -411,15 +410,21 @@ mod tests {
     #[test]
     fn compose_os_joins_name_and_version() {
         let mut p = empty_profile();
-        p.infrastructure.os.insert("name".to_string(), "Windows".to_string());
-        p.infrastructure.os.insert("version".to_string(), "10.0.19045".to_string());
+        p.infrastructure
+            .os
+            .insert("name".to_string(), "Windows".to_string());
+        p.infrastructure
+            .os
+            .insert("version".to_string(), "10.0.19045".to_string());
         assert_eq!(compose_os(&p), "Windows 10.0.19045");
     }
 
     #[test]
     fn compose_os_tolerates_missing_version() {
         let mut p = empty_profile();
-        p.infrastructure.os.insert("name".to_string(), "macOS".to_string());
+        p.infrastructure
+            .os
+            .insert("name".to_string(), "macOS".to_string());
         assert_eq!(compose_os(&p), "macOS");
     }
 
@@ -432,8 +437,12 @@ mod tests {
     #[test]
     fn extract_cpu_cores_prefers_cores_key() {
         let mut p = empty_profile();
-        p.infrastructure.cpu.insert("cores".to_string(), "16".to_string());
-        p.infrastructure.cpu.insert("core_count".to_string(), "8".to_string());
+        p.infrastructure
+            .cpu
+            .insert("cores".to_string(), "16".to_string());
+        p.infrastructure
+            .cpu
+            .insert("core_count".to_string(), "8".to_string());
         assert_eq!(extract_cpu_cores(&p), Some(16));
     }
 
@@ -560,7 +569,10 @@ mod tests {
         {
             concerns.push("privacy".to_string());
         }
-        if stack_lower.iter().any(|s| s.contains("sqlite") || s.contains("local")) {
+        if stack_lower
+            .iter()
+            .any(|s| s.contains("sqlite") || s.contains("local"))
+        {
             concerns.push("local-first".to_string());
         }
 

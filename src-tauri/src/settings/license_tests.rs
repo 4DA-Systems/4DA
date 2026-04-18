@@ -159,7 +159,8 @@ mod tests {
     #[test]
     fn dev_unlock_all_defaults_false() {
         // Missing field should default to false (backward compat with existing settings)
-        let json = r#"{"tier":"free","license_key":"","activated_at":null,"trial_started_at":null}"#;
+        let json =
+            r#"{"tier":"free","license_key":"","activated_at":null,"trial_started_at":null}"#;
         let license: LicenseConfig = serde_json::from_str(json).expect("deserialize");
         assert!(
             !license.dev_unlock_all,

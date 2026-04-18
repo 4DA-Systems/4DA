@@ -86,10 +86,22 @@ fn urgency_ordering_is_most_urgent_first() {
 
 #[test]
 fn confidence_constructors_set_provenance() {
-    assert_eq!(Confidence::checklist(0.5).provenance, ConfidenceProvenance::Checklist);
-    assert_eq!(Confidence::heuristic(0.5).provenance, ConfidenceProvenance::Heuristic);
-    assert_eq!(Confidence::calibrated(0.5, 42).provenance, ConfidenceProvenance::Calibrated);
-    assert_eq!(Confidence::llm_assessed(0.5).provenance, ConfidenceProvenance::LlmAssessed);
+    assert_eq!(
+        Confidence::checklist(0.5).provenance,
+        ConfidenceProvenance::Checklist
+    );
+    assert_eq!(
+        Confidence::heuristic(0.5).provenance,
+        ConfidenceProvenance::Heuristic
+    );
+    assert_eq!(
+        Confidence::calibrated(0.5, 42).provenance,
+        ConfidenceProvenance::Calibrated
+    );
+    assert_eq!(
+        Confidence::llm_assessed(0.5).provenance,
+        ConfidenceProvenance::LlmAssessed
+    );
 }
 
 #[test]
@@ -144,7 +156,10 @@ fn title_over_120_rejected() {
 fn title_ending_in_period_rejected() {
     let mut it = good_alert();
     it.title = "Something.".into();
-    assert_eq!(validate_item(&it), Err(ValidationError::TitleTrailingPeriod));
+    assert_eq!(
+        validate_item(&it),
+        Err(ValidationError::TitleTrailingPeriod)
+    );
 }
 
 #[test]
