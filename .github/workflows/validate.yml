@@ -47,6 +47,12 @@ jobs:
       - name: Generate i18n type declarations
         run: pnpm run i18n:types
 
+      - name: Vite cold-start smoke test
+        # Catches the Vite dep-reshuffle class of failures (see CLAUDE.md
+        # "Vite dep updates + running fourda.exe" gotcha). Cheap and
+        # identifies module-resolution regressions before they reach prod.
+        run: pnpm run validate:vite-smoke
+
       - name: Run tests and verify count floor
         run: |
           set +e
@@ -129,6 +135,12 @@ jobs:
           cargo install cargo-deny --locked
           cd src-tauri && cargo deny check
 
+      - name: Compile-gate (cargo test --no-run)
+        # Fast-fail if the test binary stops compiling. Wave 1 blocker was a
+        # silent compile break in the test tree that only showed up after
+        # the slow full test run — this step catches it in seconds.
+        run: cd src-tauri && cargo test --lib ${{ matrix.cargo-features }} --no-run
+
       - name: Run unit tests and verify count floor
         run: |
           cd src-tauri
@@ -161,10 +173,21 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e18c1f174353f47 # stable
 
       - name: Clippy lints
         run: cd src-tauri && cargo clippy -- -D warnings
+
+      - name: Install cargo-audit and cargo-deny
+        run: |
+          cargo install cargo-audit --locked
+          cargo install cargo-deny --locked
+
+      - name: Security audit (cargo audit)
+        run: cd src-tauri && cargo audit
+
+      - name: Supply chain policy check (cargo deny)
+        run: cd src-tauri && cargo deny check
 
       - name: Run unit tests
         run: cd src-tauri && cargo test --lib
@@ -185,10 +208,21 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e18c1f174353f47 # stable
 
       - name: Clippy lints
         run: cd src-tauri && cargo clippy -- -D warnings
+
+      - name: Install cargo-audit and cargo-deny
+        run: |
+          cargo install cargo-audit --locked
+          cargo install cargo-deny --locked
+
+      - name: Security audit (cargo audit)
+        run: cd src-tauri && cargo audit
+
+      - name: Supply chain policy check (cargo deny)
+        run: cd src-tauri && cargo deny check
 
       - name: Run unit tests
         run: cd src-tauri && cargo test --lib

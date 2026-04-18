@@ -1,0 +1,185 @@
+# Nightly supply-chain audit for 4DA.
+#
+# Runs every night at 06:00 UTC (≈ early evening AEST) on main. Executes:
+#   1. cargo audit               — RustSec advisories against Cargo.lock
+#   2. cargo deny check          — licence/source/advisory policy
+#   3. pnpm audit --prod --high  — npm advisories on production deps only
+#
+# If ANY of the three fire, an issue is opened (or an existing
+# open one is reused) labelled `security` / `supply-chain` so it
+# surfaces in the triage lane immediately.
+#
+# Manual runs via workflow_dispatch are supported — useful when a CVE
+# drops during the day and you want to know if we're affected now.
+#
+# Action SHAs below mirror those used by release.yml / validate.yml
+# so the pin surface stays uniform across workflows.
+
+name: nightly-supply-chain-audit
+
+on:
+  schedule:
+    # 06:00 UTC daily.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    name: nightly-supply-chain-audit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b3b07ba8b418998c39fb20f53e18c1f174353f47 # stable
+
+      - name: Install cargo-audit and cargo-deny
+        run: |
+          cargo install cargo-audit --locked
+          cargo install cargo-deny --locked
+
+      - name: cargo audit
+        id: cargo_audit
+        continue-on-error: true
+        working-directory: src-tauri
+        run: |
+          set +e
+          OUTPUT=$(cargo audit 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT"
+          {
+            echo "exit_code=$EXIT_CODE"
+            echo "output<<CARGO_AUDIT_EOF"
+            echo "$OUTPUT"
+            echo "CARGO_AUDIT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: cargo deny check
+        id: cargo_deny
+        continue-on-error: true
+        working-directory: src-tauri
+        run: |
+          set +e
+          OUTPUT=$(cargo deny check 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT"
+          {
+            echo "exit_code=$EXIT_CODE"
+            echo "output<<CARGO_DENY_EOF"
+            echo "$OUTPUT"
+            echo "CARGO_DENY_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: pnpm install (frozen)
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm audit (prod, high+)
+        id: pnpm_audit
+        continue-on-error: true
+        run: |
+          set +e
+          OUTPUT=$(pnpm audit --prod --audit-level=high 2>&1)
+          EXIT_CODE=$?
+          set -e
+          echo "$OUTPUT"
+          {
+            echo "exit_code=$EXIT_CODE"
+            echo "output<<PNPM_AUDIT_EOF"
+            echo "$OUTPUT"
+            echo "PNPM_AUDIT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open issue on any failure
+        if: >-
+          steps.cargo_audit.outputs.exit_code != '0' ||
+          steps.cargo_deny.outputs.exit_code != '0' ||
+          steps.pnpm_audit.outputs.exit_code != '0'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          CARGO_AUDIT_EXIT: ${{ steps.cargo_audit.outputs.exit_code }}
+          CARGO_AUDIT_OUT:  ${{ steps.cargo_audit.outputs.output }}
+          CARGO_DENY_EXIT:  ${{ steps.cargo_deny.outputs.exit_code }}
+          CARGO_DENY_OUT:   ${{ steps.cargo_deny.outputs.output }}
+          PNPM_AUDIT_EXIT:  ${{ steps.pnpm_audit.outputs.exit_code }}
+          PNPM_AUDIT_OUT:   ${{ steps.pnpm_audit.outputs.output }}
+        with:
+          script: |
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `Nightly supply-chain audit failure — ${today}`;
+            const section = (name, exit, out) => {
+              const truncated = (out || '').slice(0, 6000);
+              return [
+                `### ${name}`,
+                `exit code: \`${exit}\``,
+                '',
+                '```',
+                truncated,
+                '```',
+                ''
+              ].join('\n');
+            };
+            const body = [
+              `Nightly supply-chain audit fired.`,
+              '',
+              `- Run: ${runUrl}`,
+              '',
+              section('cargo audit',     process.env.CARGO_AUDIT_EXIT, process.env.CARGO_AUDIT_OUT),
+              section('cargo deny check', process.env.CARGO_DENY_EXIT, process.env.CARGO_DENY_OUT),
+              section('pnpm audit --prod --audit-level=high', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
+            ].join('\n');
+
+            // Reuse an existing open issue from a previous nightly if present,
+            // to avoid issue spam while a CVE is still unpatched.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'supply-chain,nightly-audit',
+              per_page: 10,
+            });
+            const match = existing.data.find(i => i.title.startsWith('Nightly supply-chain audit failure'));
+            if (match) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                body,
+              });
+              core.info(`Appended to existing issue #${match.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['security', 'supply-chain', 'nightly-audit'],
+              });
+              core.info(`Opened issue #${created.data.number}`);
+            }
+
+      - name: Fail job if any audit failed
+        if: >-
+          steps.cargo_audit.outputs.exit_code != '0' ||
+          steps.cargo_deny.outputs.exit_code != '0' ||
+          steps.pnpm_audit.outputs.exit_code != '0'
+        run: |
+          echo "::error::One or more supply-chain audits failed — see opened issue."
+          exit 1

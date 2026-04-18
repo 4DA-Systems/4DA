@@ -1,0 +1,168 @@
+# Dependabot configuration for 4DA.
+#
+# Keeps supply-chain dependencies current by opening weekly PRs for every
+# ecosystem that has a lockfile in the repo. Capped at 5 open PRs per
+# ecosystem so the queue stays reviewable and upgrades land in small,
+# atomic changes rather than mega-merges.
+#
+# Ecosystems enabled (each requires a lockfile to exist — Dependabot skips
+# directories where it can't find one):
+#   - github-actions (/)                — workflow action pins
+#   - cargo          (/src-tauri)       — Rust crates (Cargo.lock)
+#   - npm            (/)                — root frontend (pnpm-lock.yaml)
+#   - npm            (/mcp-4da-server)  — MCP server (pnpm-lock.yaml)
+#   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
+#   - npm            (/editors/vscode/4da) — VS Code extension (package-lock.json)
+#   - npm            (/paddle-webhook)  — Paddle webhook handler (pnpm-lock.yaml)
+#
+# Dependabot's "npm" ecosystem handles both npm and pnpm lockfiles despite
+# the name — the detection is lockfile-based.
+#
+# Labels route PRs to the right triage lane. Reviewers/assignees default
+# to the sole maintainer until the team expands (see CODEOWNERS).
+#
+# Adding a new workspace: drop it in with its own `- package-ecosystem:`
+# block. Do NOT omit a maintainer-owned package.json just to keep the
+# queue short — that defeats the purpose of the gate.
+
+version: 2
+updates:
+  # ── GitHub Actions ────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(actions)"
+      include: "scope"
+
+  # ── Rust (Tauri backend) ──────────────────────────────────────────
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "rust"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(cargo)"
+      include: "scope"
+
+  # ── Frontend (root pnpm workspace) ────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(npm)"
+      include: "scope"
+
+  # ── MCP 4DA server ────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/mcp-4da-server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "mcp"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(mcp-4da)"
+      include: "scope"
+
+  # ── MCP memory server ─────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/mcp-memory-server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "mcp"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(mcp-memory)"
+      include: "scope"
+
+  # ── VS Code extension ─────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/editors/vscode/4da"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "vscode"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(vscode)"
+      include: "scope"
+
+  # ── Paddle webhook handler ────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/paddle-webhook"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "paddle"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(paddle)"
+      include: "scope"

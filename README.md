@@ -119,16 +119,32 @@ npx @4da/mcp-server
 
 ## Quick Start (Build from Source)
 
-**Prerequisites:** [Rust](https://rustup.rs/) 1.93+, [Node.js](https://nodejs.org/) 20+, [pnpm](https://pnpm.io/)
+**Required tools** (install in this order):
+
+1. **Rust** (auto-pins to 1.93.1 via `rust-toolchain.toml`) — [rustup.rs](https://rustup.rs/)
+2. **Node.js 20 LTS** — [nodejs.org](https://nodejs.org/) (`.nvmrc` provided for nvm/fnm/Volta)
+3. **pnpm 9.15.0** (pinned in `package.json` `packageManager`): `corepack enable && corepack prepare pnpm@9.15.0 --activate`
+
+**Platform build tools** (required before `pnpm tauri dev`):
+
+- **Windows:** Visual Studio Build Tools 2022 with the **"Desktop development with C++"** workload. Without it, the Rust build fails with `linker 'link.exe' not found`.
+- **macOS:** `xcode-select --install`
+- **Linux (Debian/Ubuntu):** see the full apt list in [docs/BUILD-FROM-SOURCE.md#linux-debianubuntu](docs/BUILD-FROM-SOURCE.md) — webkit2gtk, gtk3, libappindicator, etc.
+
+**Build & run:**
 
 ```bash
 git clone https://github.com/runyourempire/4DA.git
 cd 4DA
 pnpm install
-pnpm tauri dev
+pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.
 ```
 
-Onboard (pick your stack, add an API key, point at your projects), and run your first scan. First useful results in under 3 minutes.
+> Hitting an issue? **[docs/BUILD-FROM-SOURCE.md](docs/BUILD-FROM-SOURCE.md)** covers MSVC linker errors, pkg-config issues, port conflicts, WebView2 quirks, and slow first builds.
+
+> First-run app setup (API keys, context dirs, sources): **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**.
+
+Onboard (pick your stack, add an API key, point at your projects), and run your first scan. First useful results in under 3 minutes once the build completes.
 
 ---
 
