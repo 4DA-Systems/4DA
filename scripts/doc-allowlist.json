@@ -3,6 +3,14 @@
   "_version": 1,
   "_updated": "2026-04-18",
 
+  "docs/": {
+    "_comment": "Top-level docs/ files that are public-facing reference or handoff material.",
+    "files": [
+      "ADVERSARIAL-AUDIT-2026-04-19.md",
+      "LAUNCH-ACTIONS.md"
+    ]
+  },
+
   "root": {
     "_comment": "Repo-root *.md files that are public-facing. Anything else matching a block pattern at root is rejected by the gate.",
     "files": [
