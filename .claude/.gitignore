@@ -17,6 +17,11 @@ scheduled_tasks.lock
 # Session archives (local only)
 sessions/
 
+# Planning docs — per CLAUDE.md Document Hygiene v2, .claude/plans/ is
+# the canonical gitignored home for session-local working plans. Curated
+# strategy docs go to docs/strategy/ via the allowlist, not here.
+plans/
+
 # Superseded scripts (kept on disk for reference, not tracked)
 scripts/ops-session-end.cjs
 scripts/wisdom-digest.cjs
