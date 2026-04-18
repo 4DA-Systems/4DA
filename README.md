@@ -20,7 +20,7 @@ It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history �
 
 Typical rejection rate: **99%+**. What's left is yours.
 
-Privacy-first. Runs locally. Zero telemetry. BYOK. Your data never leaves your machine. It learns from how you engage with what it shows you — yesterday's noise becomes tomorrow's signal.
+Privacy-first. Local-first. BYOK. Your indexed content stays on your machine — there is no 4DA-operated server for it to go to. It learns from how you engage with what it shows you — yesterday's noise becomes tomorrow's signal. Crash reporting is opt-in, off by default. For the full list of outbound connections with source-code references, see [NETWORK.md](NETWORK.md).
 
 <p align="center">
   <img src="site/screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream scored against your stack" width="800" />
@@ -105,8 +105,9 @@ Every release publishes `SHASUMS256.txt` (all platforms, canonical) plus per-fil
 # Bash (macOS/Linux/Git-Bash):  compare against SHASUMS256.txt
 sha256sum -c SHASUMS256.txt --ignore-missing
 
-# PowerShell (Windows):  compute and compare one file
-Get-FileHash -Algorithm SHA256 .\4DA-Setup-1.0.0.exe
+# PowerShell (Windows):  compute and compare one file (substitute the
+# actual installer filename from the release page — Tauri tags platform + version)
+Get-FileHash -Algorithm SHA256 .\4DA.Home_1.0.0_x64-setup.exe
 ```
 
 > **Windows users:** because 4DA is a new release, SmartScreen will prompt on first launch. Click **More info → Run anyway**. Signed Windows builds deliver silently via the auto-updater once EV certification completes. See the [Windows install guide](docs/launch/WINDOWS-INSTALL.md) for verification steps.
@@ -173,7 +174,17 @@ Your Codebase                    External Sources
 
 ## Privacy & Trust
 
-All data stays on your machine. Raw content never leaves. Zero telemetry. Zero analytics. Zero tracking. Zero user accounts.
+4DA is local-first and direct-to-provider. There is no 4DA-operated server, no 4DA-operated analytics, and no user account system. Your indexed content, scores, decisions, and AWE wisdom live in a SQLite database on your machine.
+
+**The only outbound traffic 4DA makes:**
+
+- **Source adapters** fetching public content (HN, GitHub, Reddit, arxiv, CVE feeds — see [NETWORK.md](NETWORK.md))
+- **BYOK LLM providers** you explicitly configured (Anthropic / OpenAI / localhost Ollama)
+- **License validation** (Keygen) if you activated a paid license
+- **Updater** against GitHub Releases (signed via minisign)
+- **Opt-in crash reports** (Sentry), *off by default*, fully disabled unless you turn it on in Settings → Privacy
+
+That's the whole list. There is no 4DA telemetry endpoint because there is no 4DA cloud.
 
 - Core scoring is pure Rust — zero API calls, 2 seconds for 500 items, $0.00 per analysis
 - LLM verification (optional): free with Ollama, or ~$0.05/analysis with your own cloud key

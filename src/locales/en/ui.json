@@ -2602,7 +2602,7 @@
   "comp.approach.categoryBody": "People often ask \"is 4DA like a feed reader?\" or \"is it like an AI search tool?\" The honest answer is no — not because those are bad tools, but because the interaction model is fundamentally different. Feed readers require curation. Search requires intent. 4DA requires neither. It works in the background, learning from your projects, and interrupts you only when something genuinely matters.",
 
   "comp.privacy.title": "Privacy by Architecture",
-  "comp.privacy.desc": "4DA's privacy isn't a policy — it's a structural property of how the software is built. Your data physically cannot leave your machine because there is no server to send it to.",
+  "comp.privacy.desc": "4DA's privacy isn't a policy — it's a structural property of how the software is built. Local-first and direct-to-provider. There is no 4DA-operated server, so your indexed content, scores, and decisions have nowhere to go except your own SQLite database. The only outbound traffic is source-adapter fetches of public content, BYOK LLM calls to providers you chose, updater checks, license validation, and opt-in crash reports — every connection documented with source-code references.",
   "comp.privacy.colLayer": "Layer",
   "comp.privacy.colHow": "How it works",
   "comp.privacy.colVerify": "Verifiable?",
