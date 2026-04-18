@@ -624,6 +624,21 @@ pub struct PrivacyConfig {
     /// no license keys. See `src/lib/sentry-init.ts` for scrubbing rules.
     #[serde(default)]
     pub crash_reporting_opt_in: bool,
+    /// Whether the user has opted in to local activity tracking.
+    ///
+    /// Activity tracking records tab opens, view durations, and search
+    /// queries in the LOCAL SQLite telemetry table. Nothing is ever
+    /// transmitted — this is purely the signal that powers relevance
+    /// learning and the compound-intelligence system.
+    ///
+    /// Default: false, matching .ai/INVARIANTS.md. The frontend
+    /// `use-telemetry.ts` hook no-ops every `track_event` call until
+    /// this setting is flipped on by the user in Settings -> Privacy.
+    ///
+    /// Ref: docs/ADVERSARIAL-AUDIT-2026-04-19.md P2 "internal privacy
+    /// invariants and runtime behavior are out of alignment".
+    #[serde(default)]
+    pub activity_tracking_opt_in: bool,
 }
 
 fn default_llm_content_level() -> String {
@@ -636,6 +651,7 @@ impl Default for PrivacyConfig {
             llm_content_level: default_llm_content_level(),
             cloud_llm_disclosure_accepted: false,
             crash_reporting_opt_in: false,
+            activity_tracking_opt_in: false,
         }
     }
 }

@@ -2,6 +2,7 @@ import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { AppStore, SettingsSlice, SettingsForm, OllamaStatus } from './types';
 import { translateError } from '../utils/error-messages';
+import { setActivityTrackingEnabled } from '../hooks/use-telemetry';
 
 const defaultSettingsForm: SettingsForm = {
   provider: 'anthropic',
@@ -46,6 +47,11 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
   loadSettings: async () => {
     try {
       const s = await cmd('get_settings');
+      // Activity-tracking gate. No telemetry is recorded until this
+      // line flips the runtime flag. Default (no settings, bootstrap
+      // failure, user not opted in) keeps it off. See use-telemetry.ts.
+      const priv = (s as unknown as { privacy?: { activity_tracking_opt_in?: boolean } }).privacy;
+      setActivityTrackingEnabled(priv?.activity_tracking_opt_in === true);
       set(state => ({
         settings: s,
         settingsForm: {
