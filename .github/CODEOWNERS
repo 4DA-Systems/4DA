@@ -1,0 +1,18 @@
+# CODEOWNERS — 4DA
+#
+# GitHub uses this file to auto-request reviews on pull requests. The
+# last matching pattern wins, same way as .gitignore.
+#
+# Right now 4DA has a single maintainer, so every path routes to
+# @runyourempire. As the team grows, add narrower owners ABOVE the
+# catch-all — e.g.:
+#
+#     /src-tauri/                  @runyourempire @rust-lead
+#     /src/                        @runyourempire @frontend-lead
+#     /src-tauri/src/scoring/      @runyourempire @scoring-owner
+#     /docs/strategy/              @runyourempire
+#     /.github/                    @runyourempire
+#
+# The catch-all MUST stay last so unclaimed paths still get a reviewer.
+
+* @runyourempire

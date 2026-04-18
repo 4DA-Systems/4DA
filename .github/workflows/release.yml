@@ -108,7 +108,15 @@ jobs:
           # Clone and build the AWE (Artificial Wisdom Engine) binary.
           # AWE is placed next to the Tauri executable so find_awe_binary()
           # resolves it via sibling-of-exe (Priority 2).
-          git clone --depth 1 https://github.com/runyourempire/awe.git "$RUNNER_TEMP/awe"
+          #
+          # SUPPLY-CHAIN PIN: the `--branch v0.3.0` ref below pins the AWE
+          # sidecar to a specific tag. Bump this per 4DA release after
+          # auditing the AWE changelog + any new deps it pulls in. Do NOT
+          # change it to a floating branch (main/master) — that undoes the
+          # pin and lets upstream compromises reach 4DA release artifacts.
+          # Prefer a commit SHA (`--branch <sha>` works with modern git)
+          # once AWE stabilises; tags are trivially movable by the upstream.
+          git clone --depth 1 --branch v0.3.0 https://github.com/runyourempire/awe.git "$RUNNER_TEMP/awe"
           cd "$RUNNER_TEMP/awe"
           cargo build --release -p awe-cli --target ${{ matrix.target }}
           # Copy to where Tauri will bundle it (next to fourda binary)
@@ -137,6 +145,19 @@ jobs:
           $zipPath = Join-Path $env:RUNNER_TEMP "CodeSignTool.zip"
           $extractPath = Join-Path $env:RUNNER_TEMP "CodeSignTool"
           Invoke-WebRequest -Uri "https://www.ssl.com/download/codesigntool-for-windows/" -OutFile $zipPath -UseBasicParsing
+
+          # SHA-256 verification of the downloaded CodeSignTool archive.
+          # TODO: compute the SHA-256 of the current SSL.com CodeSignTool
+          # release and replace PLACEHOLDER_SHA256_FILL_IN below. Once set,
+          # uncomment the `if` block to enforce it. Leaving verification
+          # off is tolerated only because SSL.com publishes the tool over
+          # HTTPS without a separate checksum endpoint — pin the hash
+          # ourselves and update it whenever we intentionally upgrade.
+          $expected = "PLACEHOLDER_SHA256_FILL_IN"
+          $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "CodeSignTool.zip SHA-256: $actual"
+          # if ($expected -ne "PLACEHOLDER_SHA256_FILL_IN" -and $actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch — expected $expected, got $actual"; exit 1 }
+
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
           # Add to PATH for signCommand
           $cstDir = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
@@ -295,14 +316,30 @@ jobs:
         if: matrix.label == 'Windows'
         shell: bash
         run: |
-          cargo install cargo-cyclonedx --quiet 2>/dev/null || true
-          cd src-tauri && cargo cyclonedx --format json --output-file ../sbom-rust.json 2>/dev/null || echo '{"note": "SBOM generation not available"}' > ../sbom-rust.json
+          # SBOMs are a release-gate artefact — a silent "note" fallback would
+          # publish a release with no machine-verifiable dependency inventory.
+          # Hard-fail the job if generation breaks, so someone has to look.
+          set -e
+          cargo install cargo-cyclonedx --locked
+          cd src-tauri
+          cargo cyclonedx --format json --output-pattern bom
+          # cargo-cyclonedx emits `bom.json` next to each manifest; move the
+          # top-level crate's SBOM to the expected path.
+          if [[ -f bom.json ]]; then
+            mv bom.json ../sbom-rust.json
+          else
+            echo "::error::cargo-cyclonedx did not produce bom.json"
+            exit 1
+          fi
 
       - name: Generate npm SBOM
         if: matrix.label == 'Windows'
         shell: bash
         run: |
-          npx @cyclonedx/cyclonedx-npm --output-file sbom-npm.json 2>/dev/null || echo '{"note": "SBOM generation not available"}' > sbom-npm.json
+          # Same rationale as Rust SBOM — failure must fail the job, not emit
+          # a placeholder JSON that pretends everything is fine.
+          set -e
+          npx --yes @cyclonedx/cyclonedx-npm --output-file sbom-npm.json
 
       - name: Upload SBOMs
         if: matrix.label == 'Windows'

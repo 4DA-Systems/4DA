@@ -5,12 +5,22 @@
 ## Quick Start
 
 ```bash
-# Prerequisites: Rust 1.70+, Node.js 18+, pnpm
+# Prerequisites:
+#   - Rust 1.93+ (rustup will auto-pin from src-tauri/rust-toolchain.toml)
+#   - Node.js 20 LTS (.nvmrc provided)
+#   - pnpm 9.15.0 (pinned in package.json packageManager)
+# Platform build tools:
+#   - Windows: Visual Studio Build Tools 2022 + "Desktop development with C++"
+#   - macOS:   xcode-select --install
+#   - Linux:   see docs/BUILD-FROM-SOURCE.md for the apt/dnf list
 git clone https://github.com/runyourempire/4DA.git
 cd 4DA
 pnpm install
 pnpm tauri dev
 ```
+
+Full build guide with troubleshooting: **[docs/BUILD-FROM-SOURCE.md](docs/BUILD-FROM-SOURCE.md)**
+First-run app setup (API keys, context dirs): **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**
 
 ## Development Commands
 
