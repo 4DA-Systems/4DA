@@ -34,30 +34,42 @@ pub struct MigrationReport {
 
 /// Store a secret in the platform keychain.
 ///
-/// If the keychain is unavailable, logs a warning and returns Ok(())
-/// so the caller can continue operating with in-memory keys.
-pub fn store_secret(key_name: &str, value: &str) -> Result<()> {
+/// Returns `Ok(true)` when the secret was successfully persisted to the OS
+/// keychain. Returns `Ok(false)` when the keychain was unavailable or the
+/// write failed — the caller is responsible for deciding whether to keep
+/// the plaintext fallback or surface the posture downgrade to the user.
+///
+/// This function never hard-fails on keychain unavailability, because some
+/// Linux setups (CI, headless servers, locked DBus) legitimately lack a
+/// usable keyring service. But unlike the previous implementation it no
+/// longer silently returns success when the posture is actually degraded.
+///
+/// Migration helpers and license-activation paths should branch on the
+/// returned bool and update their report/UI accordingly.
+pub fn store_secret(key_name: &str, value: &str) -> Result<bool> {
     match keyring::Entry::new(SERVICE_NAME, key_name) {
-        Ok(entry) => {
-            if let Err(e) = entry.set_password(value) {
+        Ok(entry) => match entry.set_password(value) {
+            Ok(()) => Ok(true),
+            Err(e) => {
                 warn!(
                     target: "4da::keystore",
                     key = key_name,
                     error = %e,
-                    "Failed to store secret in keychain — continuing with in-memory key"
+                    "Failed to write to keychain — secret remains in plaintext fallback"
                 );
+                Ok(false)
             }
-        }
+        },
         Err(e) => {
             warn!(
                 target: "4da::keystore",
                 key = key_name,
                 error = %e,
-                "Keychain unavailable — secret not persisted"
+                "Keychain unavailable — secret remains in plaintext fallback"
             );
+            Ok(false)
         }
     }
-    Ok(())
 }
 
 /// Retrieve a secret from the platform keychain.

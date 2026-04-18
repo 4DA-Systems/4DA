@@ -36,12 +36,19 @@ pub(crate) fn get_or_create_db_key() -> Option<String> {
         }
     }
 
-    // Generate new key
+    // Generate new key. store_secret now distinguishes keychain-persisted
+    // (true) from plaintext-fallback (false) — for DB encryption we ONLY
+    // want to return Some(key) when the key is durably stored, because
+    // otherwise the next boot won't find it and the DB becomes unreadable.
     let key = generate_hex_key();
     match crate::settings::keystore::store_secret(DB_KEY_NAME, &key) {
-        Ok(()) => {
-            info!(target: "4da::db::encryption", "Generated and stored new database encryption key");
+        Ok(true) => {
+            info!(target: "4da::db::encryption", "Generated and stored new database encryption key in platform keychain");
             Some(key)
+        }
+        Ok(false) => {
+            warn!(target: "4da::db::encryption", "Keychain unavailable; database encryption will be skipped to keep the database openable on next boot");
+            None
         }
         Err(e) => {
             warn!(target: "4da::db::encryption", error = %e, "Failed to store encryption key — database will run unencrypted");
