@@ -1,0 +1,79 @@
+# 4DA .gitattributes — enforce binary classification and LF for text.
+#
+# Rationale: without this file, contributors on Windows with the default
+# `core.autocrlf=true` get every tracked PNG/ICO/MP4/font line-ending-mangled
+# on checkout. Corrupt binaries then fail opaquely (the Tauri icon has done
+# this before). This file is the authoritative source — do not rely on
+# per-machine git config.
+
+# Default: auto-detect, normalize to LF in the repo, check out LF everywhere.
+* text=auto eol=lf
+
+# Source — explicit text + LF to avoid any ambiguity.
+*.rs        text eol=lf
+*.toml      text eol=lf
+*.lock      text eol=lf
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.md        text eol=lf
+*.html      text eol=lf
+*.css       text eol=lf
+*.scss      text eol=lf
+*.svg       text eol=lf
+*.njk       text eol=lf
+*.hbs       text eol=lf
+*.sh        text eol=lf
+*.cjs       text eol=lf
+
+# Windows-native scripts should keep CRLF.
+*.ps1       text eol=crlf
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Binary — MUST be marked so line-ending conversion never touches them.
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.avif      binary
+*.ico       binary
+*.icns      binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.eot       binary
+*.mp3       binary
+*.mp4       binary
+*.wav       binary
+*.ogg       binary
+*.webm      binary
+*.pdf       binary
+*.zip       binary
+*.tar       binary
+*.tar.gz    binary
+*.tgz       binary
+*.7z        binary
+*.exe       binary
+*.dll       binary
+*.so        binary
+*.dylib     binary
+*.bin       binary
+*.msi       binary
+*.deb       binary
+*.rpm       binary
+*.dmg       binary
+*.app       binary
+*.wasm      binary
+*.db        binary
+*.sqlite    binary
+*.sqlite3   binary
+*.game      text eol=lf

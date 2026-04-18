@@ -230,10 +230,53 @@ EOF
     scan_pattern "API Key" 'api[_-]?key\s*[:=]\s*['\''"][A-Za-z0-9_-]{16,}' 'example|placeholder|your_|test|fake|dummy|TODO|FIXME|xxx|REPLACE'
 
     # --- Personal Identifiable Information ---
-    # Australian phone numbers
-    scan_pattern "AU Phone" '\+614[0-9]{8}'
-    # ABN (11 digits) near keyword
-    scan_pattern "ABN/TFN" '(ABN|TFN|abn|tfn)\s*[:=]?\s*[0-9]{2}\s?[0-9]{3}\s?[0-9]{3}\s?[0-9]{3}'
+    # Australian phone numbers (contact.njk is the legitimate public contact page)
+    for FILE in $STAGED_FILES; do
+        case "$FILE" in
+            site/src/contact.njk) continue ;;
+        esac
+        if file "$FILE" 2>/dev/null | grep -qE 'binary|executable|image|archive'; then
+            continue
+        fi
+        PHONE_MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE '\+614[0-9]{8}' 2>/dev/null || true)
+        if [ -n "$PHONE_MATCHES" ]; then
+            while IFS= read -r LINE; do
+                SECRETS_FOUND="${SECRETS_FOUND}  [AU Phone] $FILE:$LINE\n"
+                FAIL=1
+            done <<EOF
+$PHONE_MATCHES
+EOF
+        fi
+    done
+    # ABN (11 digits) near keyword — EXCLUDING legitimate statutory disclosures
+    # on legal pages. Per CLAUDE.md Document Hygiene v2: "Business-statutory
+    # info (ABN, ACN, TM serials) is fine on legal pages only." The list below
+    # enumerates every tracked surface where the ACN/ABN is a required legal
+    # disclosure (terms, privacy, trademarks, CLA, security, license, etc).
+    for FILE in $STAGED_FILES; do
+        case "$FILE" in
+            LICENSE|LICENSE.md|NOTICE|CLA.md|TRADEMARKS.md|SECURITY.md|\
+            README.md|CONTRIBUTING.md|CODE_OF_CONDUCT.md|\
+            docs/legal/*|docs/TRUST-ARCHITECTURE.md|docs/NETWORK-TRANSPARENCY.md|\
+            docs/PRIVACY-PLAIN-LANGUAGE.md|docs/BUILD-FROM-SOURCE.md|\
+            docs/SECURITY-AUDIT-GUIDE.md|docs/VERIFY-DOWNLOADS.md|\
+            docs/launch/WINDOWS-INSTALL.md|site/src/*|\
+            docs/philosophy/*|docs/launch/*|docs/RELEASE-NOTES-*.md|NETWORK.md)
+                continue ;;
+        esac
+        if file "$FILE" 2>/dev/null | grep -qE 'binary|executable|image|archive'; then
+            continue
+        fi
+        ABN_MATCHES=$(git show ":$FILE" 2>/dev/null | grep -nE '(ABN|TFN|abn|tfn)\s*[:=]?\s*[0-9]{2}\s?[0-9]{3}\s?[0-9]{3}\s?[0-9]{3}' 2>/dev/null || true)
+        if [ -n "$ABN_MATCHES" ]; then
+            while IFS= read -r LINE; do
+                SECRETS_FOUND="${SECRETS_FOUND}  [ABN/TFN] $FILE:$LINE\n"
+                FAIL=1
+            done <<EOF
+$ABN_MATCHES
+EOF
+        fi
+    done
 
     # --- Personal emails in code files ---
     # Only flag in .ts/.tsx/.rs/.js/.jsx source files (not docs, config, legal)

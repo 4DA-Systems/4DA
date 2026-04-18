@@ -33,6 +33,15 @@ dist-ssr
 .claude/knowledge/
 *.local.md
 
+# Playwright MCP runtime state (console logs, page snapshots)
+.playwright-mcp/
+
+# Temporary GAME renderer outputs — NEVER track at repo root
+/living-*.png
+/primordial-*.png
+/singularity-*.png
+/nexus-*.png
+
 # ONNX model cache (binary files)
 src-tauri/.fastembed_cache/
 

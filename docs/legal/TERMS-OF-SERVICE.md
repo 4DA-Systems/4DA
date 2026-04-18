@@ -177,7 +177,7 @@ This license does not grant you the right to:
 
 ### 6.3 Trademarks
 
-"4DA", "4 Dimensional Autonomy", and the 4DA logo are trademarks of 4DA Systems Pty Ltd (ACN 696 078 841, ABN 51 696 078 841). Australian trademark applications: TM 2629468, TM 2631247, TM 2631246.
+"4DA" (word mark), the 4DA logo, and "4 Dimensional Autonomy" (unregistered) are trademarks of 4DA Systems Pty Ltd (ACN 696 078 841, ABN 51 696 078 841). Australian registrations: word mark TM 2631247 (accepted 24 Mar 2026), logo TM 2631246 (accepted 24 Mar 2026). United States applications: Serial 99736230 (word), Serial 99736238 (logo), both filed 31 Mar 2026.
 
 The FSL-1.1-Apache-2.0 license does **not** grant any rights to use 4DA Systems' trademarks. You may not use the 4DA name, logo, or any confusingly similar marks without prior written permission, except as necessary to refer to 4DA or its products in a factual, non-misleading manner consistent with fair use principles.
 

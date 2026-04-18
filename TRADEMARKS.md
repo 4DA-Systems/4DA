@@ -2,9 +2,9 @@
 
 The following are trademarks of 4DA Systems Pty Ltd (ACN 696 078 841):
 
-- **"4DA"** — registered trademark (AU TM 2629468, US pending)
-- **The 4DA logo** (stylised numeral "4" in white on black) — registered trademark (AU TM 2631247, US pending)
-- **"4 Dimensional Autonomy"** — trademark (AU TM 2631246)
+- **"4DA"** word mark — AU TM **2631247** (accepted, 24 Mar 2026) · US Serial **99736230** (filed 31 Mar 2026)
+- **The 4DA logo** (stylised numeral "4" in white on black) — AU TM **2631246** (accepted, 24 Mar 2026) · US Serial **99736238** (filed 31 Mar 2026)
+- **"4 Dimensional Autonomy"** — unregistered trademark, ™ use only
 
 ## Use of 4DA Trademarks
 
