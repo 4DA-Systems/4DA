@@ -425,6 +425,13 @@ struct RelayJoinResponse {
 /// 5. Queue MemberJoined entry for sync
 #[tauri::command]
 pub async fn create_team(relay_url: String, display_name: String) -> Result<serde_json::Value> {
+    // Team relays are DELIBERATELY allowed to target private/internal IPs
+    // (self-hosted relays on corporate networks are a first-class supported
+    // use case). We therefore use the weaker `validate_url_input` (scheme +
+    // length + control-char checks) rather than `validate_url_safe_for_request`
+    // (which blocks RFC1918). This is a documented tradeoff; the user
+    // explicitly opts in by typing a private URL. See SECURITY.md and
+    // docs/ADVERSARIAL-AUDIT-2026-04-19.md P2.
     let relay_url = crate::ipc_guard::validate_url_input("relay_url", &relay_url)?;
     let display_name = crate::ipc_guard::validate_length(
         "display_name",
@@ -467,7 +474,22 @@ pub async fn create_team(relay_url: String, display_name: String) -> Result<serd
         .await
         .map_err(|e| format!("Invalid relay response: {e}"))?;
 
-    // Store keypair + team key in local DB
+    // Store keypair + team key in local DB.
+    //
+    // SECURITY NOTE (2026-04-19, tracked for v1.1): the `_enc` suffix on
+    // `our_private_key_enc` and `team_symmetric_key_enc` is a SCHEMA-NAMING
+    // LIE in the current build. The bytes written here are PLAINTEXT, not
+    // ciphertext. The schema anticipated at-rest encryption that was not
+    // shipped in v1.0. An attacker with filesystem access can read these
+    // keys and decrypt captured relay traffic for the affected team.
+    //
+    // v1.1 will either (a) wrap these with SQLCipher-protected storage or
+    // (b) move them to the OS keychain. Until then: treat the local 4da.db
+    // as a secret and advise users accordingly. See SECURITY.md §"Database
+    // encryption" for the public-facing disclosure.
+    //
+    // Ref: docs/ADVERSARIAL-AUDIT-2026-04-19.md P1 "Team sync stores
+    // encrypted keys as plaintext bytes in SQLite".
     let conn = crate::state::open_db_connection()?;
     conn.execute(
         "INSERT OR REPLACE INTO team_crypto
@@ -642,6 +664,9 @@ pub async fn join_team_via_invite(
     invite_code: String,
     display_name: String,
 ) -> Result<serde_json::Value> {
+    // Private/internal relay URLs are allowed here for the same reason
+    // as `create_team`: self-hosted relays are supported. See the note
+    // on `create_team` above.
     let relay_url = crate::ipc_guard::validate_url_input("relay_url", &relay_url)?;
     let invite_code = crate::ipc_guard::validate_length(
         "invite_code",
@@ -688,6 +713,10 @@ pub async fn join_team_via_invite(
 
     // Store our keypair + admin public key in local DB.
     // Team key not available yet — it'll arrive via DeliverTeamKey sync entry.
+    //
+    // SECURITY NOTE: `our_private_key_enc` is currently stored PLAINTEXT
+    // despite the schema naming. v1.1 roadmap. See the create-team path
+    // above for the full rationale and roadmap reference.
     let conn = crate::state::open_db_connection()?;
     conn.execute(
         "INSERT OR REPLACE INTO team_crypto
