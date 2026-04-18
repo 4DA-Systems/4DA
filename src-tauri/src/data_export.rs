@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Comprehensive data export for GDPR compliance and data portability.
 //!
 //! Provides commands to export all user data stored in 4DA's local database.

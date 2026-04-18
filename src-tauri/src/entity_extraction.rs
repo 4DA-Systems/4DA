@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Entity extraction at ingestion time.
 //!
 //! Extracts structured entities (CVE IDs) from source item titles and content

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Sovereign Content Engine — personalized STREETS module content.
 //!
 //! Five-level pipeline that transforms static markdown into personalized lessons

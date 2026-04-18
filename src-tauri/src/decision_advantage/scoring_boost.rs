@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Scoring pipeline integration — boosts items that match open decision windows.
 //!
 //! Called during relevance scoring to amplify items related to active windows.

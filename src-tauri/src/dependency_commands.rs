@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Dependency Intelligence — Tauri commands for the Dependency Dashboard.
 //!
 //! Provides overview, per-project detail, alert management, and cross-project

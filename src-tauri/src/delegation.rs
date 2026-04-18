@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Delegation Scoring — AI Task Delegation Reliability for 4DA
 //!
 //! Scores how reliably tasks can be delegated to AI agents, based on

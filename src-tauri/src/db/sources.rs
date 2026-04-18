@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source item CRUD, feedback, source registry, and health tracking.
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! L1/L2 Template Processor — synchronous text transformation engine.
 //!
 //! Processes personalization template syntax in markdown files:

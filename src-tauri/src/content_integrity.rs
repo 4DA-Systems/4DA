@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Content Integrity Verification — autonomous accuracy gate for personalized content.
 //!
 //! Ensures every piece of user-facing personalized content in STREETS, briefings,

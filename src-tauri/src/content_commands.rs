@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Content commands for 4DA — article reader, AI summaries, saved items.
 
 use crate::error::{FourDaError, Result};

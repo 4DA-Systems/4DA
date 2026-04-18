@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Diagnostics module for 4DA
 //!
 //! Provides runtime health information: memory usage, database size,

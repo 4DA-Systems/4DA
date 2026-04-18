@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Context Engine - Personalized Relevance System for 4DA
 //!
 //! The Context Engine implements a 3-layer "Context Membrane" that transforms

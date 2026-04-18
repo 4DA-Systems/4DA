@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Cache management for the Sovereign Content Engine.
 //!
 //! Handles pruning of stale personalization cache entries and read state cleanup.

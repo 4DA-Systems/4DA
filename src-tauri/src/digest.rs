@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Email digest system for 4DA
 //!
 //! Collects relevant items over a time period and formats them into

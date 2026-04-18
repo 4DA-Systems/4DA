@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision Impact Tracking — Signal-gated cross-referencing of decisions
 //! with incoming signals.
 //!

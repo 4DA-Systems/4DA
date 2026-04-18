@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Database concurrency & integrity tests — Phase 3.5 hardening.
 //!
 //! Covers: concurrent readers, concurrent readers + writer, transaction

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Developer DNA — Shareable Technology Identity Profile
 //!
 //! Aggregates data from domain profile, attention tracking, knowledge gaps,
