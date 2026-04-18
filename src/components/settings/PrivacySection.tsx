@@ -4,21 +4,24 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { setActivityTrackingEnabled } from '../../hooks/use-telemetry';
 
 /**
- * Privacy settings — controls what data leaves the user's device.
+ * Privacy settings — controls what data leaves the user's device AND
+ * what is recorded locally.
  *
- * Currently exposes:
- *   • Anonymous crash reporting (Sentry) — opt-in, default OFF
+ * Exposes:
+ *   • Anonymous crash reporting (Sentry) — opt-in, default OFF, sends to network
+ *   • Local activity tracking — opt-in, default OFF, stays on device
  *   • LLM content level (not yet surfaced — set in onboarding)
  *
  * Design principle: every toggle here defaults to the most privacy-preserving
- * option. User must explicitly opt IN to share any data. Clear disclosure
- * of what is sent + link to privacy policy.
+ * option. User must explicitly opt IN to each. Clear disclosure of scope.
  */
 export function PrivacySection() {
   const { t } = useTranslation();
   const [optedIn, setOptedIn] = useState<boolean | null>(null);
+  const [activityOptedIn, setActivityOptedIn] = useState<boolean | null>(null);
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -29,9 +32,13 @@ export function PrivacySection() {
         const privacy = await cmd('get_privacy_config');
         if (!cancelled) {
           setOptedIn(Boolean(privacy.crash_reporting_opt_in));
+          setActivityOptedIn(Boolean(privacy.activity_tracking_opt_in));
         }
       } catch {
-        if (!cancelled) setOptedIn(false);
+        if (!cancelled) {
+          setOptedIn(false);
+          setActivityOptedIn(false);
+        }
       }
     })();
     return () => {
@@ -51,7 +58,21 @@ export function PrivacySection() {
     }
   };
 
-  if (optedIn === null) {
+  const handleActivityToggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await cmd('set_privacy_config', { activity_tracking_opt_in: next });
+      setActivityOptedIn(next);
+      // Flip runtime telemetry gate immediately — don't wait for reload.
+      setActivityTrackingEnabled(next);
+    } catch {
+      // Toggle stays where it was.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (optedIn === null || activityOptedIn === null) {
     return null; // Loading — render nothing rather than flash wrong state
   }
 
@@ -141,6 +162,31 @@ export function PrivacySection() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="border-t border-border/40 pt-3">
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={activityOptedIn}
+            disabled={saving}
+            onChange={(e) => {
+              void handleActivityToggle(e.target.checked);
+            }}
+            className="mt-0.5 w-4 h-4 rounded border-border bg-bg-secondary text-accent-gold focus:ring-accent-gold/50"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-white">
+              {t('settings.privacy.activityTracking.title', 'Local activity tracking')}
+            </div>
+            <p className="text-xs text-text-muted mt-0.5">
+              {t(
+                'settings.privacy.activityTracking.subtitle',
+                'Record tab opens, view durations, and search queries on your device to power relevance learning. Nothing is transmitted — data stays in your local SQLite. Off by default.',
+              )}
+            </p>
+          </div>
+        </label>
       </div>
     </div>
   );
