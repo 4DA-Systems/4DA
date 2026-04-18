@@ -187,22 +187,40 @@ fn check_disk_space() -> Option<String> {
 
     #[cfg(target_os = "linux")]
     {
-        // Check the partition containing 4DA's data directory
+        // Check the partition containing 4DA's data directory.
+        //
+        // SECURITY: Previous implementation shelled out via `sh -c` with the
+        // path interpolated via format!() — a Linux username containing shell
+        // metacharacters (POSIX permits anything except '/' and NUL) would
+        // execute arbitrary commands. Now we invoke df directly without a
+        // shell and parse in-process. The last line of df's multi-line
+        // output is the data row we want; no pipe to `tail` is needed.
+        // Ref: docs/ADVERSARIAL-AUDIT-2026-04-19.md self-audit HIGH-3.
         let data_dir = dirs::data_dir()
             .map(|d| d.join("4da"))
             .unwrap_or_else(|| std::path::PathBuf::from("/"));
-        let path = data_dir.to_string_lossy();
-        if let Ok(output) = run_cmd(&format!("df -BG {} | tail -1", path)) {
-            // df output: Filesystem 1G-blocks Used Available Use% Mounted
-            let parts: Vec<&str> = output.split_whitespace().collect();
-            if parts.len() >= 4 {
-                let avail_str = parts[3].trim_end_matches('G');
-                if let Ok(avail_gb) = avail_str.parse::<u64>() {
-                    if avail_gb < 50 {
-                        return Some(format!(
-                            "Low disk space: {}GB free on data partition",
-                            avail_gb
-                        ));
+        if let Ok(out) = std::process::Command::new("df")
+            .arg("-BG")
+            .arg(&data_dir)
+            .output()
+        {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout);
+                // df output: header line + one data line per filesystem.
+                // We want the last data line (covers the data_dir's mount).
+                if let Some(last) = stdout.lines().filter(|l| !l.is_empty()).next_back() {
+                    // df output: Filesystem 1G-blocks Used Available Use% Mounted
+                    let parts: Vec<&str> = last.split_whitespace().collect();
+                    if parts.len() >= 4 {
+                        let avail_str = parts[3].trim_end_matches('G');
+                        if let Ok(avail_gb) = avail_str.parse::<u64>() {
+                            if avail_gb < 50 {
+                                return Some(format!(
+                                    "Low disk space: {}GB free on data partition",
+                                    avail_gb
+                                ));
+                            }
+                        }
                     }
                 }
             }
