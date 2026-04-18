@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import type { MonitoringStatus } from '../../types/settings';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { LocaleSection } from './LocaleSection';
 import { ShowAllViewsToggle } from './ShowAllViewsToggle';
@@ -10,7 +11,7 @@ import { CommunityIntelligenceSection } from './CommunityIntelligenceSection';
 import { PrivacySection } from './PrivacySection';
 
 interface SettingsGeneralTabProps {
-  monitoring: any;
+  monitoring: MonitoringStatus | null;
   monitoringInterval: number;
   setMonitoringInterval: (v: number) => void;
   notificationThreshold: string;
