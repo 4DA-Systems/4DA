@@ -3,11 +3,22 @@
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <!--
+    macOS entitlements for 4DA.
+
+    SECURITY (2026-04-19, ref self-audit HIGH-6):
+    Previously allowed three entitlements — allow-jit (required for WebKit
+    JavaScriptCore), allow-unsigned-executable-memory, and
+    allow-dyld-environment-variables. The latter two materially reduce
+    macOS hardening and are NOT required by Tauri 2.0's WKWebView. They
+    have been removed so the app runs with the standard hardened runtime
+    + JIT only.
+
+    If a future release genuinely needs the removed entitlements (e.g.,
+    an embedded interpreter that rewrites pages), add them back with a
+    comment documenting the specific requirement — never ambient.
+    -->
     <key>com.apple.security.cs.allow-jit</key>
-    <true/>
-    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
-    <true/>
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>

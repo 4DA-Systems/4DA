@@ -122,6 +122,11 @@ pub(crate) fn strip_sensitive_fields(value: &mut JsonValue) {
 // ============================================================================
 
 /// Check if a table exists in the database.
+#[inline]
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
+
 fn table_exists(conn: &rusqlite::Connection, table_name: &str) -> bool {
     conn.query_row(
         "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -161,14 +166,32 @@ fn safe_query_all(
     table_name: &str,
     order_by: &str,
 ) -> Result<(JsonValue, u32)> {
-    // Whitelist validation — prevent SQL identifier injection
+    // SECURITY INVARIANT (2026-04-19, ref self-audit MED-2):
+    // This function constructs SQL via format!() — which is acceptable ONLY
+    // while BOTH `table_name` and `order_by` pass every check below. Every
+    // caller of safe_query_all in this module passes a literal string for
+    // both arguments; treat that as an invariant and do not relax.
+    //
+    // Invariants enforced:
+    //   1. table_name ∈ ALLOWED_EXPORT_TABLES (static whitelist).
+    //   2. order_by contains only [a-zA-Z0-9_], space, and comma.
+    //   3. order_by tokens restricted to identifier + optional DESC/ASC;
+    //      SQL keywords and tokens commonly used for injection are blocked
+    //      by an explicit denylist on top of the character whitelist.
+    //
+    // Reviewer checklist: if you add a new caller, it MUST pass literal
+    // strings. If a new caller needs user-supplied ordering, add an
+    // enum+match mapping to a hardcoded ORDER BY clause — never thread
+    // user input into this function.
+
+    // Invariant 1: table whitelist.
     if !ALLOWED_EXPORT_TABLES.contains(&table_name) {
         return Err(crate::error::FourDaError::Validation(format!(
             "Table '{}' is not allowed for export",
             table_name
         )));
     }
-    // Validate order_by contains only safe characters (alphanumeric, underscore, space, comma, DESC/ASC)
+    // Invariant 2: character-class whitelist for ORDER BY.
     if !order_by
         .chars()
         .all(|c| c.is_alphanumeric() || c == '_' || c == ' ' || c == ',')
@@ -176,6 +199,36 @@ fn safe_query_all(
         return Err(crate::error::FourDaError::Validation(
             "Invalid ORDER BY clause".to_string(),
         ));
+    }
+    // Invariant 3: defense-in-depth keyword denylist. Blocks e.g. UNION,
+    // SELECT, INSERT, UPDATE, DELETE, DROP, EXEC, LIMIT, OFFSET, INTO, JOIN,
+    // WHERE, HAVING, CASE, WHEN. These tokens have no legitimate reason
+    // to appear in an ORDER BY clause for any of the allowed tables.
+    const FORBIDDEN_ORDER_BY_TOKENS: &[&str] = &[
+        "UNION", "SELECT", "INSERT", "UPDATE", "DELETE", "DROP", "EXEC", "EXECUTE", "LIMIT",
+        "OFFSET", "INTO", "JOIN", "WHERE", "HAVING", "CASE", "WHEN", "ATTACH", "DETACH", "PRAGMA",
+        "VACUUM", "CREATE", "ALTER", "TRUNCATE",
+    ];
+    let order_upper = order_by.to_uppercase();
+    for tok in FORBIDDEN_ORDER_BY_TOKENS {
+        // Word-boundary match: token surrounded by non-identifier chars or
+        // at start/end of string. Prevents false positives on column names
+        // like "updated_at" matching "UPDATE".
+        let bytes = order_upper.as_bytes();
+        let tok_bytes = tok.as_bytes();
+        for i in 0..=bytes.len().saturating_sub(tok_bytes.len()) {
+            if &bytes[i..i + tok_bytes.len()] == tok_bytes {
+                let before_ok = i == 0 || !is_ident_byte(bytes[i - 1]);
+                let after_ok = i + tok_bytes.len() == bytes.len()
+                    || !is_ident_byte(bytes[i + tok_bytes.len()]);
+                if before_ok && after_ok {
+                    return Err(crate::error::FourDaError::Validation(format!(
+                        "ORDER BY contains forbidden token '{}'",
+                        tok
+                    )));
+                }
+            }
+        }
     }
 
     if !table_exists(conn, table_name) {
