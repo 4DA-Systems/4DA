@@ -829,6 +829,36 @@ pub async fn register_webhook_cmd(
     url: String,
     events: Vec<String>,
 ) -> crate::error::Result<Webhook> {
+    // SSRF defense-in-depth. The frontend also validates the URL, but the
+    // webhook dispatcher is a high-risk outbound path (arbitrary user-supplied
+    // target + signed request body) so we must enforce at the backend too.
+    // Blocks localhost, RFC1918, link-local, IPv6 loopback/ULA, file:// etc.
+    // Ref: docs/ADVERSARIAL-AUDIT-2026-04-19.md P1 "SSRF protections exist
+    // but are not enforced in webhook registration".
+    let url = crate::ipc_guard::validate_url_safe_for_request("url", &url)
+        .map_err(|e| format!("Invalid webhook URL: {e}"))?;
+
+    // Name: trim + length cap + reject control chars. Cheap and close to
+    // the boundary so downstream formatting/logging cannot be abused.
+    let name = name.trim().to_string();
+    if name.is_empty() || name.len() > 100 {
+        return Err("Webhook name must be 1-100 characters".into());
+    }
+    if name.chars().any(|c| c.is_control()) {
+        return Err("Webhook name must not contain control characters".into());
+    }
+
+    // Event list: sanity cap and per-string cap. Prevents pathological
+    // event arrays from bloating the audit log or the webhooks table.
+    if events.is_empty() || events.len() > 50 {
+        return Err("Webhook must subscribe to 1-50 events".into());
+    }
+    for ev in &events {
+        if ev.is_empty() || ev.len() > 100 {
+            return Err("Each event name must be 1-100 characters".into());
+        }
+    }
+
     let team_id = get_webhook_team_id()?;
     let conn = crate::state::open_db_connection()?;
     ensure_webhook_tables(&conn).map_err(|e| format!("Schema init failed: {e}"))?;
