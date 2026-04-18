@@ -53,9 +53,9 @@ With your permission, we will acknowledge your contribution in the release notes
 ### Backend (Rust)
 
 - **Memory safety.** The Rust backend eliminates entire classes of vulnerabilities: buffer overflows, use-after-free, data races.
-- **Credential storage.** API keys are stored in the platform keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service). Credentials are never written to plaintext files.
+- **Credential storage.** API keys are stored in the platform keychain (Windows Credential Manager, macOS Keychain, Linux Secret Service) whenever the OS keychain is available and accessible. If keychain write fails (e.g., headless CI, locked keychain, missing keyring service on some Linux setups), 4DA logs the failure and — until a successful migration — keys remain in `settings.json` on disk. Users can verify keychain status in Settings → Security.
 - **Path canonicalization.** All file system operations canonicalize paths to prevent symlink and directory traversal attacks.
-- **SSRF prevention.** Outbound HTTP requests are validated against an allowlist. Private and internal IP ranges are blocked.
+- **SSRF prevention.** Outbound HTTP requests on content-fetch and updater paths validate the URL and block private/internal IP ranges via `validate_url_safe_for_request`. Webhook registration validation is being hardened in v1.1; user-supplied webhook URLs should be treated as trusted until then.
 
 ### Frontend (React/TypeScript)
 
@@ -91,10 +91,19 @@ With your permission, we will acknowledge your contribution in the release notes
 
 These are architectural properties, not claims of invulnerability.
 
-- **BYOK (Bring Your Own Key).** API keys are stored in the platform keychain and are only transmitted to the providers the user has explicitly configured. 4DA Systems never receives or stores user API keys.
-- **No telemetry.** Zero data leaves the machine without explicit user action. There are no analytics, crash reporters, or phone-home mechanisms.
-- **Local-first.** 4DA functions fully offline. There is no required server connection, no user account, and no remote database.
+- **BYOK (Bring Your Own Key).** API keys are stored in the platform keychain (see "Credential storage" above for the keychain-unavailable fallback) and are only transmitted to the providers the user has explicitly configured. 4DA Systems never receives or stores user API keys.
+- **Local-first, direct-to-provider.** 4DA has no server-side database, no user accounts, and no 4DA-operated analytics, tracking, or backend storage. Your indexed content, scores, decisions, and AWE wisdom stay in a SQLite database on your machine. The only outbound traffic is:
+  - **Source adapters** fetching public content (Hacker News, GitHub, Reddit, arxiv, CVE/OSV feeds, etc. — all documented in [`NETWORK.md`](NETWORK.md)).
+  - **BYOK LLM providers** you have explicitly configured (Anthropic, OpenAI, or localhost Ollama).
+  - **License validation** (Keygen) if you have activated a paid license.
+  - **Update checks** against the signed updater endpoint on GitHub Releases.
+  - **Opt-in crash reports** to Sentry, *off by default*, toggleable in Settings → Privacy. When off, no Sentry connection is ever made.
+- **No 4DA-operated cloud.** 4DA Systems does not run a data collection backend. Nothing you index, search, or read is ever sent to 4DA servers — because there are no 4DA servers for it to go to.
+- **On-device activity log.** 4DA records UI activity (tab opens, result clicks, feedback) in a local SQLite table to power relevance learning and the compound-intelligence system. This data stays on your machine and is never transmitted. Activity logging is gated by a Privacy → Activity Tracking setting, which we are wiring to respect the same default as crash reporting.
+- **Database encryption.** The default public build uses bundled SQLite without at-rest encryption. The SQLCipher scaffolding exists for self-compiled builds. Opt-in at-rest encryption for the default installer is on the v1.1 roadmap.
 - **No accounts.** There is no user database, authentication system, or session infrastructure to breach.
+
+For the authoritative list of every outbound connection with source-code references, see [`NETWORK.md`](NETWORK.md) and [`docs/NETWORK-TRANSPARENCY.md`](docs/NETWORK-TRANSPARENCY.md).
 
 ## Contact
 

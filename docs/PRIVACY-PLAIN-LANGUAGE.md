@@ -19,11 +19,15 @@ Four things, all transparent:
 
 ## What do you collect about me?
 
-Nothing. Seriously.
+Nothing, by default.
 
-No analytics. No crash reports. No usage tracking. No cookies. No device fingerprints. No user accounts. No sign-up.
+4DA Systems does not operate a server, an analytics pipeline, or a user account system. There is no 4DA-operated tracking, cookies, fingerprinting, or sign-up.
 
-The app does learn what you click and search -- but that data stays on your computer to improve your recommendations. It never leaves your machine.
+The app learns from what you click and save to improve your recommendations — all of that stays on your machine in a local SQLite database.
+
+**One opt-in exception**: crash reporting (Sentry). It is **off by default**. If you turn it on in Settings → Privacy, anonymized crash traces get sent to Sentry with file paths, API keys, and PII scrubbed. You can verify the scrubbing in `src/lib/sentry-init.ts`. With the toggle off, no Sentry connection is ever attempted.
+
+Your BYOK LLM calls go direct to the provider *you* chose (Anthropic, OpenAI, or localhost Ollama). Source adapters fetch public content (HN, GitHub, Reddit, CVE feeds, etc.). License validation pings Keygen if you're on a paid tier. Updates check GitHub Releases. That's the full list — documented in [NETWORK.md](../NETWORK.md) with source references.
 
 ## What about my API keys?
 

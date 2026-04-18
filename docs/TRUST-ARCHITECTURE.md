@@ -30,7 +30,7 @@ Layer 6: Track Record    Years of consistent, honest operation
 Layer 5: Transparency    Source-available code, public audits, honest communication
 Layer 4: Legal           Registered company, privacy policy, Australian jurisdiction
 Layer 3: Technical       Signed binaries, Minisign updates, CSP enforcement
-Layer 2: Architecture    Local-first means data physically cannot leave the machine
+Layer 2: Architecture    Local-first + direct-to-provider — no 4DA-operated server for your data to land in
 Layer 1: Philosophy      Privacy-by-design, not privacy-by-policy
 ```
 
