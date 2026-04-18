@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Post-scoring quality processing — LLM reranking, digest generation, and dedup utilities.
 
 use tracing::{debug, info, warn};

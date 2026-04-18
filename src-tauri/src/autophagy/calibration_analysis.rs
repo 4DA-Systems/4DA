@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Calibration analysis — topic-level and accuracy feedback analysis.
 //!
 //! Provides deeper calibration by analyzing at the content-topic level

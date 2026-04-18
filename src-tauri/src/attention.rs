@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Attention Economy Dashboard for 4DA
 //!
 //! Tracks where user attention goes vs where code needs it.

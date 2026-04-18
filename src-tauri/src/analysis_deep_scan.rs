@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Deep scan and multi-source analysis implementations.
 
 use tauri::{AppHandle, Emitter};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Achievement definitions for the GAME Engine.
 //!
 //! Extracted from achievement_engine.rs to keep file sizes manageable.

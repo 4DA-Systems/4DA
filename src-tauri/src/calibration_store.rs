@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Calibration curve persistence — Phase 5b.1.
 //!
 //! Curves live on disk at `{data_dir}/calibrations/{identity_hash}/{task}.json`.

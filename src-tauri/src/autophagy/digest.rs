@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Autophagy cycle orchestrator — runs all six analyzers and records metrics.
 //!
 //! This is the main entry point for an autophagy cycle. It:

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Changelog computation for channel renders.
 //!
 //! Compares two render versions at the paragraph level using word-level Jaccard

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for Information Channels.
 //!
 //! All commands follow the pattern: clone data out of mutex, release lock, then await.

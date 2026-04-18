@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Agent Memory — Cross-Agent Shared Memory for 4DA
 //!
 //! Enables AI agents to store and recall memories across sessions.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE (Autonomous Context Engine) Tauri commands and PASIFA helpers.
 //!
 //! Extracted from lib.rs. Contains all ACE phase commands (A through E),

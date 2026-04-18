@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE accuracy metrics and calibration feedback commands.
 
 use crate::error::{Result, ResultExt};

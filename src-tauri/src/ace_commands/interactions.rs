@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE interaction commands: feedback recording, topic affinities, engagement summary.
 
 use tracing::warn;

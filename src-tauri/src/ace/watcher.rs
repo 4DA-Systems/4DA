@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! File Watcher - Real-time context updates
 //!
 //! Watches configured directories for file changes and triggers context updates.

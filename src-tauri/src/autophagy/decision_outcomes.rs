@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision window outcome analysis.
 //!
 //! Analyzes historical decision window outcomes (acted vs expired)

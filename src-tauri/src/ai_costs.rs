@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! AI usage tracking and cost estimation.
 //!
 //! Records all LLM API calls with token counts and estimated costs.

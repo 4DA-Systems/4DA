@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE embedding-related commands: similar topics search and embedding status.
 
 use crate::error::Result;

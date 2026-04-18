@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Calibration analysis — compares what the system scored vs what users engaged with.
 //!
 //! Items in the pruning window (approaching max_age_days) are cross-referenced with

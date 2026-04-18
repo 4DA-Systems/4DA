@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Project Manifest Scanner
 //!
 //! Scans directories for project manifests and extracts technology stack.

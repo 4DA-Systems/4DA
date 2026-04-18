@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Topic embedding storage and retrieval via sqlite-vec.
 
 use parking_lot::Mutex;

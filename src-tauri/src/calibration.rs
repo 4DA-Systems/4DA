@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — Layer 4 (Calibration Manifolds).
 //!
 //! LLM confidence is not probability. A model that reports 0.8 confidence

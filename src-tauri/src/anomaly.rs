@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Anomaly Detection for ACE
 //!
 //! Detects unusual patterns in context and behavior:

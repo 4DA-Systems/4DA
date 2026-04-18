@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source autopsy — per-source engagement quality analysis.
 //!
 //! Computes engagement rates for each source_type, revealing which sources

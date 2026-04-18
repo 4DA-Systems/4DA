@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Analysis Narration — human-readable summaries of scoring decisions.
 //!
 //! Provides narrative explanations for why items were scored the way they were,

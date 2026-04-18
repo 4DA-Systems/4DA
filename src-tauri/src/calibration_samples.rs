@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — Calibration Sample Store (Phase 5b.2 substrate).
 //!
 //! Persistence for raw advisor signals so the Filter (see
