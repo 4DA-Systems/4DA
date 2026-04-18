@@ -439,7 +439,7 @@ The marketplace is the long-term revenue multiplier. Even a 15% fee on $5-15 sty
 ### Trademarks
 - **"4DA MUSE"** — confirmed clear globally. "MUSE" alone is taken in Class 9, but "4DA MUSE" has no conflicts anywhere.
 - File in the same classes as existing 4DA marks (Class 9 — software)
-- The 4DA prefix provides umbrella protection under existing AU marks (TM 2629468, 2631247, 2631246) and pending US filings.
+- The 4DA prefix provides umbrella protection under the accepted AU marks (word TM 2631247 + logo TM 2631246) and the filed US applications (Serial 99736230 word + Serial 99736238 logo).
 - **Action item:** File "4DA MUSE" as a mark when ready to announce publicly. May qualify under existing 4DA mark coverage depending on jurisdiction.
 
 ### Artist Content
