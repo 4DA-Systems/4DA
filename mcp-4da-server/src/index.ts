@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * 4DA MCP Server - Internal Use Only
  *
