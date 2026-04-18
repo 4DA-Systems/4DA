@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Command history, HTTP history, maintenance, and diagnostics.
 
 use rusqlite::{params, Result as SqliteResult};

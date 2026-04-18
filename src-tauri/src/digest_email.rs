@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Email delivery for 4DA digest system.
 //!
 //! Privacy-first design: emails go directly from user's machine to their SMTP

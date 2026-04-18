@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Unified error type for 4DA.
 //!
 //! Replaces ad-hoc `Result<_, String>` with a typed enum.

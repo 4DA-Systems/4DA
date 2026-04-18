@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Engine scoring helpers — static engine definitions and scoring computations.
 //!
 //! Contains the `EngineSpec` definitions, stack/hardware scoring, GB parsing,

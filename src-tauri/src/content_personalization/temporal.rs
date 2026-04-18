@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! L5 Temporal Evolution Engine — diff ribbons, feed echoes, progressive reveals.
 //!
 //! Detects what changed between lesson reads to show personalized temporal context:

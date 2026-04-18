@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Content Quality Heuristics for 4DA
 //!
 //! Evaluates the quality of source items based on title patterns,

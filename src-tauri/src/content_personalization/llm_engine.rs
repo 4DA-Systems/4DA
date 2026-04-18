@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! LLM Prose Engine — upgrades no-LLM cards with rich personalized prose.
 //!
 //! When an LLM is configured, generates contextual prose for insight blocks

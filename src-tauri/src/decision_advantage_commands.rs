@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision Advantage Tauri commands.
 //!
 //! Expose decision windows and compound advantage scoring to the frontend.

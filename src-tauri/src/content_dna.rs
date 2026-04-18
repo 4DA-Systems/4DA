@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Content DNA Classification for 4DA
 //!
 //! Fast regex/keyword classifier that runs BEFORE the LLM.

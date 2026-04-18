@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Information Channels — types and seed definitions.
 //!
 //! A channel is a topic 4DA maintains intelligence on — continuously, locally,

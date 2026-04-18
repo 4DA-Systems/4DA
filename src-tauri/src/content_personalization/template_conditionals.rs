@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! L2 Conditional Block Processing for the template engine.
 //!
 //! Handles `{? if/elif/else/endif ?}` conditional blocks by parsing them

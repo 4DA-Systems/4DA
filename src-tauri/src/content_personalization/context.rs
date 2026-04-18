@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! PersonalizationContext — structured data assembly from all sovereign sources.
 //!
 //! Unlike CoachContext (which produces string summaries for LLM prompts), this

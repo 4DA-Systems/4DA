@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision Advantage — detects time-bounded decision windows from signal chains
 //! and dependency intelligence, tracks user response, and builds a compound
 //! advantage score.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /// Archive extraction (ZIP, TAR, etc.)
 ///
 /// Recursively extracts and processes files from archive formats.

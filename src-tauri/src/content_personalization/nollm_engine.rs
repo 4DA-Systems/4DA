@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! No-LLM Computation Engine — structured data cards from sovereign data.
 //!
 //! Produces `SovereignInsightCard` structs with data points and visualizations

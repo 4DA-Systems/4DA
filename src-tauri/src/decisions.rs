@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision Memory — Developer Decision Intelligence for 4DA
 //!
 //! Records, retrieves, and checks alignment of developer decisions.

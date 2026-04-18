@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Domain Profile Data — constant arrays, lookup tables, and taxonomy definitions
 //!
 //! Extracted from domain_profile.rs to keep logic files under size limits.

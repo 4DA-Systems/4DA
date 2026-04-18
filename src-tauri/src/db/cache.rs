@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Caching, projection data, LLM content retrieval, briefings, and digest operations.
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /// Image OCR extraction
 ///
 /// Extracts text from images using OCR via the ocrs crate (pure Rust).
