@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! AI Briefing Tauri commands.
 //!
 //! Extracted from lib.rs to reduce file size. Contains AI briefing synthesis.

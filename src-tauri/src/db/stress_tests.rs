@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Database stress tests — bulk insert, concurrent access, idempotency,
 //! embedding roundtrip, and KNN search accuracy.
 //!

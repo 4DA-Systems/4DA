@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision window detection and lifecycle management.
 //!
 //! Scans recent source_items for time-bounded opportunities, cross-references

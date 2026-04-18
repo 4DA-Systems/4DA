@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! L1 path resolution — resolves dotted paths against PersonalizationContext.
 //!
 //! Extracted from template_processor.rs to keep file sizes within limits.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Database module for 4DA - Persistence layer for embeddings and sources
 //!
 //! Uses sqlite-vec for vector similarity search at scale.

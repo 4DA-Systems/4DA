@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for real-time content translation.
 //!
 //! Exposes content translation to the frontend for feed items,

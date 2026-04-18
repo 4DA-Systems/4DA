@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Domain Profile — Technology Identity Model for 4DA
 //!
 //! Builds a graduated understanding of the user's technology identity from:

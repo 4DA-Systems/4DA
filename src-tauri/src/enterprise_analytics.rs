@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Enterprise Analytics — organization-level usage and intelligence metrics.
 //!
 //! Aggregates activity across all teams in an organization for

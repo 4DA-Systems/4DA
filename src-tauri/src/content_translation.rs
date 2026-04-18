@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Content Translation Engine — real-time translation for dynamic content.
 //!
 //! Translates feed item titles, descriptions, and briefing summaries into

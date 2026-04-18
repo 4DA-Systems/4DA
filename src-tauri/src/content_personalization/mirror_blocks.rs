@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! L4 Mirror / Sovereign Connection Blocks — cross-data correlations.
 //!
 //! Computes `MirrorBlock` structs that surface cross-data sovereign connections,

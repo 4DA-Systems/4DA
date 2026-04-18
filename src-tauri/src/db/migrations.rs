@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Database migrations — schema versioning, backup, and migration orchestration.
 
 use once_cell::sync::OnceCell;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Community Intelligence — privacy-preserving anonymous pattern sharing.
 //!
 //! Shares PATTERNS (scoring weights, accuracy metrics), never DATA

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Digest configuration, briefing cache, and decision context builder.
 //!
 //! Extracted from digest_commands.rs to keep both files under the 600-line limit.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Competing Technology Anti-Affinity for 4DA
 //!
 //! Detects when content is primarily about a technology that competes with
