@@ -291,7 +291,7 @@ pub fn compose_statement(verb: &str, subject: &str) -> String {
 /// (caller's responsibility). Returned outcome:
 ///   * Refuted  if any newer commit contains "revert"/"ripout" + subject
 ///   * Partial  if any newer commit has a different decision verb on the
-///              same subject (e.g. adopt X → replace X)
+///     same subject (e.g. adopt X → replace X)
 ///   * Confirmed if HEAD still references the subject in tracked files
 ///   * Pending   otherwise
 pub fn infer_outcome(

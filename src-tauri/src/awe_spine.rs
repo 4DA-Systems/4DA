@@ -169,7 +169,7 @@ fn seed_to_precedent(seed: &SeededDecision, similarity: f32) -> PrecedentRef {
     PrecedentRef {
         decision_id: build_precedent_id(seed),
         statement: seed.statement.clone(),
-        outcome: Some(seed.outcome.clone()),
+        outcome: Some(seed.outcome),
         origin: classify_precedent_origin(seed).to_string(),
         similarity,
     }

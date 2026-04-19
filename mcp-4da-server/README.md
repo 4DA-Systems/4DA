@@ -253,7 +253,7 @@ npx @4da/mcp-server --help       # Show all options
 ## FAQ
 
 **Do I need the 4DA desktop app?**
-Yes. The MCP server is a read layer on top of the intelligence that 4DA builds. 4DA scans your projects, fetches content, computes scores, and writes everything to a local SQLite database. The MCP server queries that database. Without it, there's nothing to query.
+No. The MCP server works standalone — on first run it creates its own database and scans your current project for languages, frameworks, and dependencies. You get immediate access to tech stack detection, dependency health, knowledge gaps, developer DNA, decision memory, and project health. Install the [desktop app](https://github.com/runyourempire/4DA) to unlock content scoring from 20+ sources (Hacker News, GitHub, arXiv, CVE feeds, etc.), daily AI briefings, and signal intelligence that compounds over time.
 
 **Does this send my code anywhere?**
 No. The MCP server reads from a local SQLite database on your filesystem. It makes zero network calls. Your codebase data, scoring profiles, and decisions never leave your machine.
