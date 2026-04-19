@@ -117,7 +117,6 @@ export const ConfessionBox = memo(function ConfessionBox({ open, onClose }: Prop
       aria-label={t('confession.title', 'Wisdom')}
       className="fixed inset-0 z-50 flex items-start justify-center pt-[12vh] px-4"
     >
-      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions,jsx-a11y/click-events-have-key-events -- backdrop close; a11y primary path is ESC key (handled in keydown listener above) + the explicit close button. */}
       <button
         type="button"
         aria-label={t('action.close', 'Close')}

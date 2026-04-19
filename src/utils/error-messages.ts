@@ -43,7 +43,6 @@ const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
 function t(key: string, fallback: string): string {
   try {
     // i18n singleton is already initialized by the time errors are shown
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const i18n = (window as unknown as Record<string, unknown>).__4da_i18n as
       | { t: (k: string, opts?: Record<string, unknown>) => string; isInitialized: boolean }
       | undefined;
