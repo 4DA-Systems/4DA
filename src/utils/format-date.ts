@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Locale-aware date formatting utilities.
  * Uses Intl.DateTimeFormat with the user's i18next language for consistent
