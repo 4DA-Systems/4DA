@@ -9,7 +9,7 @@
 
 ## Active Terminals
 
-### T-WAR-ROOM-RECOVERY-2026-04-19 (Wave 12 done, paused before 13-17)
+### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-17 COMPLETE, no active claim)
 
 **Scope:** Recovery of stuck Wave 12 SPDX commit. Previous terminal hung on
 pre-commit secret-scan over 431 staged Rust files (secret-scan runs ~25 regex
@@ -33,9 +33,28 @@ Wave 12 results — 12 new commits, 840 files, pre-commit green every time:
   - 5057df4b part 3e/3 (80 + CRLF→LF on 10 files)
   - f88d436b part 3f/3 (9 — final Wave 12)
 
-Waves 13-17 held pending user go-ahead — these are not mechanical like 12,
-and each carries real implementation risk. Wave 16 in particular (team-crypto
-keys → keychain) is the largest remaining P1.
+Waves 13-17 landed sequentially after 12. Final session tally: **17 commits**
+(12 Wave-12 batches + 1 TERMINALS record + Waves 13/15/16/17 = four feature
+commits; Wave 14 was a clean-audit finding with no commit). Working tree clean.
+
+  - bf4ec8ad Wave 13 ESLint rebalance (7073 → 733 warnings, 10x signal)
+  - (no commit) Wave 14 unwrap audit — migrations.rs clean, broader scan
+    found 18 prod unwraps: 14 are test/bench/sim, 4 are legitimate
+    unrecoverable panics, all documented
+  - 6f644efa Wave 15 webhook signing secrets → keychain (6 new tests)
+  - 0b8eba73 Wave 16 team-crypto X25519 + symmetric keys → keychain,
+    retires the _enc-schema-naming-lie P1; FAILURE_MODES.md entry
+    flipped to RESOLVED
+  - 4d44c52f Wave 17 installer smoke test + release runbook +
+    HONEST-ASSESSMENT-2026-04-19.md
+
+Key finding surfaced in Waves 15/16: on some Windows Credential Manager
+configurations `set_password` returns Ok but the next `get_password`
+returns NoEntry. Trust-the-write would have silently lost the webhook
+signing secret AND the team-crypto private key. The write-then-read-back
+verify pattern in both modules is what keeps us from shipping a silent-
+loss bug on that class of host — documented in the assessment doc so
+future readers questioning the verify overhead know why it stays.
 
 **Commit Lock:** not held
 
