@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /** Summary of a stack profile available for selection. */
 export interface StackProfileSummary {
   id: string;
