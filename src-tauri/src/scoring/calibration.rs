@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use crate::context_engine;
 use crate::scoring_config;
 use fourda_macros::score_component;

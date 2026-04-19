@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /// PDF document extraction
 ///
 /// Extracts text from PDF files using the pdf-extract crate.

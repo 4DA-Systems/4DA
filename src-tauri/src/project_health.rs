@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Project Health Radar for 4DA
 //!
 //! Per-project health dashboard combining dependency freshness,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source authority weighting
 //!
 //! Not all sources are equal. Official advisories are more authoritative

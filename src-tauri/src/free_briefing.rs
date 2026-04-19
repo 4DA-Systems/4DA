@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Template briefing -- structured summary without LLM.
 //!
 //! Gives all users a useful daily overview using only scored data.

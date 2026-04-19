@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Background Job Queue for Document Extraction
 //!
 //! Handles async processing of document extraction jobs (OCR, audio transcription).

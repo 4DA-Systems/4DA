@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Continuous Monitoring Module for 4DA
 //!
 //! Provides background analysis scheduling, system tray integration,

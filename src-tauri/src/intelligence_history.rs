@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence History — tracks how the system's accuracy evolves over time.
 //!
 //! Records snapshots of accuracy, topics learned, items analyzed, and relevant items found.

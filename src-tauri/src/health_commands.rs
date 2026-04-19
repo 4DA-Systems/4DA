@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source health commands — exposes circuit breaker state + intelligence gap messages.
 
 use crate::error::{FourDaError, Result};

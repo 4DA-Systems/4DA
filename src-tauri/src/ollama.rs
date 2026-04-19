@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Centralized Ollama model management for 4DA
 //!
 //! Provides model warming, staleness tracking, and status events

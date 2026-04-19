@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! First-Run Simulation Audit — "think from the end" verification system.
 //!
 //! Simulates a new user's experience by walking every STREETS lesson through

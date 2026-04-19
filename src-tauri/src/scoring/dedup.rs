@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use tracing::info;
 
 use crate::{extract_topics, scoring_config, SourceRelevance};

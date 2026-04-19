@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Query executor - Hybrid keyword + vector search
 use crate::error::Result;
 use parking_lot::Mutex;

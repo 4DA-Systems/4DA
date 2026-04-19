@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Phase 2 stubs for the AWE consequence-scan hook and the human-ack provider.
 //!
 //! In Phase 2 audit-only mode we don't block envelopes on AWE scans or

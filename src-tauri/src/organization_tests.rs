@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for organization management and enterprise features.
 
 use crate::organization::{self, OrgPolicies};

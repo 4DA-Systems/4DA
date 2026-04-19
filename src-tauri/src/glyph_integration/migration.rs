@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! SQL migration for the `glyph_audit` table.
 //!
 //! Phase 2 of the GEP rollout adds a single table to 4DA's SQLite database.

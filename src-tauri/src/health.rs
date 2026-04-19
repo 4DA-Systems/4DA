@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Health Monitoring for 4DA
 //!
 //! Checks component status and provides graceful degradation info.

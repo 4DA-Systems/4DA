@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! # glyph_integration — 4DA Phase 2 Audit-Only Mode
 //!
 //! This module bridges the [Glyph Envelope Protocol](https://github.com/runyourempire/glyph)

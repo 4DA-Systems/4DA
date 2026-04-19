@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Monitoring Tauri commands for background analysis scheduling.
 //!
 //! Extracted from lib.rs. Provides commands for checking monitoring status,

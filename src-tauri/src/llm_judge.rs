@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Relevance Judge - LLM-powered relevance scoring
 //!
 //! Extracted from llm.rs to keep files under 1000-line limit.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Prompt-injection defense primitives (Intelligence Mesh Layer 2).
 //!
 //! Untrusted content — article bodies from HN, Reddit, RSS, GitHub, arXiv —

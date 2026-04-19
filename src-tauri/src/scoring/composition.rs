@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — Feed composition floors (Gap 3).
 //!
 //! The 5-axis pipeline + sophistication matching + serendipity injection

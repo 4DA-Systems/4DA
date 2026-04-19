@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Natural Language Search — Intelligence Console query engine.
 //!
 //! Tiered search: free users get 3 results + ghost preview,

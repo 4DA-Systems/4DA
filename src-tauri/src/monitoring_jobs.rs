@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Monitoring job reactions -- background tasks triggered by the scheduler.
 //!
 //! Contains: auto-briefing on critical signals, digest scheduler,
