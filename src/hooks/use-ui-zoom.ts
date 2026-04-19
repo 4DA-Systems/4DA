@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const ZOOM_MIN = 0.75;

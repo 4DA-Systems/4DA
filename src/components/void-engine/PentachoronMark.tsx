@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useRef, useEffect, useMemo, useCallback } from 'react';
 import type { VoidSignal } from '../../types';
 import { registerFourdaComponent } from '../../lib/fourda-components';

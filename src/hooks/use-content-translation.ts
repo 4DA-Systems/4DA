@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * useContentTranslation — translates dynamic content (feed items, briefings)
  * into the user's preferred language.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useMemo } from 'react';
 import type { SourceRelevance, SourceHealthStatus } from '../types';
 import { parseBriefingContent } from '../utils/briefing-parser';

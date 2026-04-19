@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Tests for the type-safe IPC command layer (src/lib/commands.ts).
  *

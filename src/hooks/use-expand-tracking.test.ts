@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Phase 6a — classify interaction pattern from dwell time.
  *
