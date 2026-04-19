@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! License, trial, context engine, and STREETS membership commands.
 
 use tracing::{debug, info, warn};

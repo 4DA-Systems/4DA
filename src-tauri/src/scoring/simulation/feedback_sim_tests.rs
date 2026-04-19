@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Integration tests for feedback simulation — full feedback loop validation.
 //!
 //! Split from feedback_sim.rs to keep the module under 600 lines.

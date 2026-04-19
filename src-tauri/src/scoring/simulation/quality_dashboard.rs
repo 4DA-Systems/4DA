@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Quality Dashboard — Aggregate quality reporting across all simulation systems
 //!
 //! Cross-cutting quality tests that span all 9 personas and the full corpus.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Settings type definitions for 4DA
 //!
 //! All struct and enum definitions, Default impls, serde helpers,

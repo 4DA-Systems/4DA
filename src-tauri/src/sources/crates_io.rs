@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! crates.io source implementation
 //!
 //! Monitors Rust crates for new versions, yanked crates, and recently updated

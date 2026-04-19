@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 #[cfg(test)]
 mod tests {
     use crate::context_engine::InteractionType;

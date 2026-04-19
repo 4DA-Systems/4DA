@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! SettingsManager — loading, saving, and accessing settings
 //!
 //! Handles disk I/O, keychain migration, locale detection,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Lobste.rs source implementation
 //!
 //! Fetches hottest and newest stories from Lobste.rs JSON API.

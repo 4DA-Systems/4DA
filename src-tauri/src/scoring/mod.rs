@@ -1,4 +1,5 @@
 #![allow(clippy::manual_range_contains)]
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 mod ace_context;
 mod affinity;
 mod analyzer;

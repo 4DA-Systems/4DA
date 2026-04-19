@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Per-persona enrichment data for full-fidelity simulation.
 //!
 //! Provides realistic values for the 11 ScoringContext fields and 4 ACEContext

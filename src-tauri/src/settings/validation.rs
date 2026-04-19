@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Real-time API key validation.
 //!
 //! Provides instant format checks (no network) and lightweight API

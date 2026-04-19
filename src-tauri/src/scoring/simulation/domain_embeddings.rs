@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Domain-Specific Embedding Generation for Simulation
 //!
 //! Generates deterministic, domain-aware pseudo-embeddings for the corpus items.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Content freshness validation for source adapters.
 //!
 //! Detects "zombie" sources — APIs that return HTTP 200 but deliver stale,

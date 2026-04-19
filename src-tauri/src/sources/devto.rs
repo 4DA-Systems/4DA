@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Dev.to source implementation
 //!
 //! Fetches top articles from Dev.to (dev.to) using their public API.

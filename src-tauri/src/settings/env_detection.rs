@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Environment variable detection for API keys.
 //!
 //! Detects API keys from environment variables and offers one-click import

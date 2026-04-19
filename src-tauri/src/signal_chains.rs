@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Signal Chains for 4DA (Temporal Causal Reasoning)
 //!
 //! Connects individual signals into causal chains over time.

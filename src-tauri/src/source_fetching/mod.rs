@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source fetching functions extracted from lib.rs
 //!
 //! Contains: fetch_all_sources, fetch_all_sources_deep, fill_cache_background,

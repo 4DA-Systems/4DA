@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Validation Personas — 10 developer archetypes for scoring validation
 //!
 //! Each persona defines interests, tech stack, dependencies, expected topics,

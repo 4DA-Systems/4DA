@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tier 2: Semantic / Embedding Scoring Validation
 //!
 //! Tests that the interest_score (embedding cosine similarity path) and

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
