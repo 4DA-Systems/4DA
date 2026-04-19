@@ -156,7 +156,7 @@ export function CriticalAlertBanner() {
                     import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
                       void openUrl(alert.url!);
                     }).catch(() => {
-                      window.open(alert.url!, '_blank', 'noopener,noreferrer');
+                      window.open(alert.url, '_blank', 'noopener,noreferrer');
                     });
                   }}
                   className="text-amber-400 hover:text-amber-300 transition-colors underline cursor-pointer"

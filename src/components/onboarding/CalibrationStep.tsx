@@ -250,7 +250,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
                 {(userContext?.interests?.length ?? 0) > 0
                   ? t('calibration.onboarding.summaryInterests', {
-                      count: userContext!.interests!.length,
+                      count: userContext!.interests.length,
                     })
                   : t('calibration.onboarding.summaryDefaultInterests')
                 }
