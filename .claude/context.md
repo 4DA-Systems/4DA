@@ -23,7 +23,7 @@
 | `mcp-4da-server/src/db.ts` | Fixed TypeScript error: `import type BetterSqlite3` for compile-time types + dynamic `await import` for runtime |
 | `mcp-4da-server/src/llm.ts` | Removed hardcoded `/mnt/d/4DA/data/settings.json`, replaced with portable `__dirname`-relative resolution |
 | `mcp-4da-server/package.json` | Added `!dist/__tests__` to files array — package dropped from 186 files/155kB to 178 files/136kB |
-| Audit result | 30/33 tools verified, zero hardcoded paths, zero TODO/FIXME, doctor command working |
+| Audit result | 30/35 tools verified, zero hardcoded paths, zero TODO/FIXME, doctor command working |
 
 ### Void Engine Heartbeat Brightness
 | Change | Details |
@@ -46,7 +46,7 @@
 |--------|---------|
 | `.claude/commands/mcp-maintain.md` | NEW: 8-step MCP maintenance audit (schema sync, types, paths, agent drift, README, build, deps) |
 | `.claude/commands/pre-launch.md` | Added YAML frontmatter for tool restrictions |
-| `4da-mcp-server-dev.md` | Complete rewrite: 4 tools -> 33 tools, schema registry pattern, current file tree |
+| `4da-mcp-server-dev.md` | Complete rewrite: 4 tools -> 35 tools, schema registry pattern, current file tree |
 | `4da-mcp-tester.md` | Complete rewrite: 0 tests -> 71 tests, Vitest v3 patterns |
 | `4da-contract-validator.md` | Patched: tool count, extraction patterns, removed /mnt/d/ paths |
 
@@ -100,5 +100,5 @@
 ## RESUME COMMAND
 
 ```
-/compact Continue 4DA pre-launch hardening. MCP server immaculate (33 tools, 71 tests, zero issues). Void Heartbeat at full brightness. Settings decomposed. /mcp-maintain and /pre-launch skills created and audited. All tests green (565 Rust + 177 frontend + 71 MCP). Next: run /pre-launch full audit, fix act() warnings, test onboarding flow. @.claude/context.md
+/compact Continue 4DA pre-launch hardening. MCP server immaculate (35 tools, 71 tests, zero issues). Void Heartbeat at full brightness. Settings decomposed. /mcp-maintain and /pre-launch skills created and audited. All tests green (565 Rust + 177 frontend + 71 MCP). Next: run /pre-launch full audit, fix act() warnings, test onboarding flow. @.claude/context.md
 ```
