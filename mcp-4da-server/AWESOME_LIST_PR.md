@@ -12,7 +12,7 @@ Insert this line in the **Developer Tools** section, alphabetically between
 `rsdouglas/janee` and `ryan0204/github-repo-mcp`:
 
 ```markdown
-- [runyourempire/4DA](https://github.com/runyourempire/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 33 MCP tools that score content from Hacker News, arXiv, Reddit, and GitHub against your actual codebase. Includes developer context profiling, decision memory, knowledge gap detection, tech radar, and agent session handoff. Privacy-first — everything stays local. `npx @4da/mcp-server`
+- [runyourempire/4DA](https://github.com/runyourempire/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 35 MCP tools that score content from Hacker News, arXiv, Reddit, and GitHub against your actual codebase. Includes developer context profiling, decision memory, knowledge gap detection, tech radar, and agent session handoff. Privacy-first — everything stays local. `npx @4da/mcp-server`
 ```
 
 ## PR Description / Body
@@ -24,7 +24,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 
 ## About the server
 
-**@4da/mcp-server** provides 33 MCP tools that connect AI coding assistants (Claude Code, Cursor, Windsurf, Copilot) to a developer's local codebase and score internet content against their tech stack.
+**@4da/mcp-server** provides 35 MCP tools that connect AI coding assistants (Claude Code, Cursor, Windsurf, Copilot) to a developer's local codebase and score internet content against their tech stack.
 
 **Key capabilities:**
 - **Content scoring** — Scores articles from Hacker News, arXiv, Reddit, and GitHub against the user's actual project dependencies and tech stack
