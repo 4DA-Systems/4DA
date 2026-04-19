@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Twitter/X source implementation
 //!
 //! Fetches tweets from X API v2 using Bearer Token auth (BYOK).

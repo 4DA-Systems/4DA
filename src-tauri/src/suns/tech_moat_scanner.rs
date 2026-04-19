@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tech Moat Scanner Sun -- analyzes detected tech stack for competitive moats (daily).
 
 use super::SunResult;

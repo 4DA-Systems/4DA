@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tech Radar — Additional Tauri commands for interactive radar features
 //!
 //! Provides entry detail enrichment, snapshot listing, and historical

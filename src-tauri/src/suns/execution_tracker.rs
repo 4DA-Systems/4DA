@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Execution Tracker Sun -- measures shipping velocity via playbook progress (12h).
 
 use super::SunResult;

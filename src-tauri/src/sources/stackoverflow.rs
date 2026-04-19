@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack Overflow source implementation
 //!
 //! Fetches trending questions from Stack Overflow's public API.

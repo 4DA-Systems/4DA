@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Technology Radar — Computed personal tech radar from existing 4DA data
 //!
 //! Synthesizes a ThoughtWorks-style Technology Radar from domain profile,

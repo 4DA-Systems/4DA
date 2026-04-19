@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stream Monitor Sun -- measures revenue stream diversity (6h).
 
 use super::SunResult;

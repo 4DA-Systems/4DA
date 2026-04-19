@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack Health Engine — ambient intelligence about the user's detected technology stack.
 //!
 //! Computes per-technology health signals by cross-referencing ACE-detected tech

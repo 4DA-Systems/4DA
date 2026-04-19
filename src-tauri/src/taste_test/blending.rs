@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Persona blending — converts posterior persona weights into production context.
 //!
 //! Maps each persona to characteristic interests, tech stack, and exclusions,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Auto-detect stack profiles from ACE context.
 //!
 //! Matches ACE-detected technologies against each profile's detection markers
