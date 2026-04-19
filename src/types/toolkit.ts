@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { ComponentType } from 'react';
 
 export type ToolCategory = 'formatters' | 'encoders' | 'generators' | 'system' | 'intelligence' | 'capture';
