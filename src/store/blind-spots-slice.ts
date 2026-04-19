@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
 import { cmd } from '../lib/commands';

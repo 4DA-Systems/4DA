@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { create } from 'zustand';
 import type { AppStore } from './types';
 import { createToastSlice } from './toast-slice';

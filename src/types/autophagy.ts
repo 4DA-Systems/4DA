@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Intelligence Metabolism types — Autophagy + Decision Advantage + Intelligence Pulse
 
 export interface AutophagyCycleResult {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { ALL_SOURCE_IDS } from '../config/sources';
 import type { AppStore, FiltersSlice } from './types';

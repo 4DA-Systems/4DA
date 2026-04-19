@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Information Channels types — matches Rust structs from channels.rs
 
 export type ChannelStatus = 'active' | 'paused' | 'archived';
