@@ -79,10 +79,10 @@ Living document of fragile areas, previous regressions, and "never again" lesson
 
 ---
 
-### Plaintext team-crypto despite `_enc` schema naming (v1.1 item)
-**Symptom.** The `team_crypto` table has columns `our_private_key_enc` and `team_symmetric_key_enc`. In v1.0 builds, the bytes are plaintext despite the suffix.
+### Plaintext team-crypto despite `_enc` schema naming (resolved 2026-04-19)
+**Symptom.** The `team_crypto` table has columns `our_private_key_enc` and `team_symmetric_key_enc`. Pre-Wave-16 builds wrote the bytes as plaintext despite the suffix.
 
-**Status.** Documented in `SECURITY.md` and annotated at both INSERT sites in `src-tauri/src/team_sync_commands.rs`. v1.1 will wrap with SQLCipher or move to OS keychain.
+**Status: RESOLVED.** Both keys now live in the OS keychain (key names `team_privkey__<team_id>` and `team_symkey__<team_id>`). The DB columns remain as a fallback for hosts without a reliable keychain and are blanked to a zero-length BLOB on successful keychain round-trip. All five touchpoints (two INSERT paths in `team_sync_commands.rs`; three READ paths in `app_setup.rs` and `team_sync_scheduler.rs`) route through the `team_sync_crypto::persist_*` / `read_team_*` helpers. The helpers use write-then-read-back verification so a keyring that lies about the write (observed on some Windows Credential Manager setups) can never cause silent loss. Old rows lazy-migrate on the next read. See Wave 16 commit.
 
 ---
 

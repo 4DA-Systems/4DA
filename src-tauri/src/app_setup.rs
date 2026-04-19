@@ -480,19 +480,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         let settings = get_settings_manager().lock();
         if let Some(ref relay_cfg) = settings.get().team_relay {
             team_state.configure(relay_cfg);
-            // Load team key from DB if available
+            // Load team key — keychain first, DB fallback, lazy migration on
+            // plaintext-DB-only rows. See team_sync_crypto::read_team_symmetric_key.
             if let Ok(conn) = crate::state::open_db_connection() {
                 if let Some(ref tid) = relay_cfg.team_id {
-                    if let Ok(key_bytes) = conn.query_row(
-                        "SELECT team_symmetric_key_enc FROM team_crypto WHERE team_id = ?1",
-                        rusqlite::params![tid],
-                        |row| row.get::<_, Vec<u8>>(0),
-                    ) {
-                        if key_bytes.len() == 32 {
-                            let mut key = [0u8; 32];
-                            key.copy_from_slice(&key_bytes);
-                            *team_state.team_key.lock() = Some(key);
-                        }
+                    if let Ok(Some(key)) =
+                        crate::team_sync_crypto::read_team_symmetric_key(&conn, tid)
+                    {
+                        *team_state.team_key.lock() = Some(key);
                     }
                 }
             }
