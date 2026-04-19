@@ -82,10 +82,6 @@ pub mod migration;
 pub mod sqlite_audit_sink;
 pub mod wisdom_bridge;
 
-pub use mcp_envelope::{ShadowEnvelopeBuilder, ShadowEnvelopeResult};
-pub use sqlite_audit_sink::SqliteAuditSink;
-pub use wisdom_bridge::{NoopAck, NoopAwe};
-
 /// Phase 2 audit-only mode sentinel. When this returns `true` the broker
 /// writes shadow envelopes without changing routing behaviour. When
 /// Phase 3+ lands the caller will check a richer state instead.
