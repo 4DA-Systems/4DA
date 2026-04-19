@@ -138,7 +138,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
   if (!open) return null;
 
   return (
-    <div // eslint-disable-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events
+    <div // eslint-disable-line jsx-a11y/no-noninteractive-element-interactions
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-modal="true"

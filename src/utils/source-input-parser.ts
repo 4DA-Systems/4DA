@@ -147,7 +147,6 @@ export function parseSourceInput(raw: string): ParsedInput {
 
   // Validate it's parseable as a URL
   try {
-    // eslint-disable-next-line no-new
     new URL(normalized);
     return {
       kind: 'rss',

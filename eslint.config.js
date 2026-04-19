@@ -88,7 +88,11 @@ export default [
       // TypeScript strict rules (type-checked)
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-misused-promises': 'warn',
-      '@typescript-eslint/strict-boolean-expressions': 'warn',
+      // strict-boolean-expressions: 501 violations project-wide, aspirational, not
+      // being followed. Turned off rather than leaving as perpetual noise. If we
+      // decide to enforce explicit boolean coercion later, reintroduce with a
+      // scheduled cleanup — not a passive warning.
+      '@typescript-eslint/strict-boolean-expressions': 'off',
       '@typescript-eslint/consistent-type-imports': 'warn',
       '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
 
@@ -135,10 +139,12 @@ export default [
       'prefer-const': 'warn',
       'no-var': 'error',
 
-      // Code style (warnings mode - not blocking)
-      'semi': ['warn', 'always'],
-      'quotes': ['warn', 'single', { avoidEscape: true }],
-      'comma-dangle': ['warn', 'always-multiline'],
+      // Code style — OFF. No Prettier config exists; these rules were generating
+      // ~5800 quote-style warnings on JSX attributes alone. Style is not the job
+      // of type-checked lint. Add Prettier later if we want automated formatting.
+      'semi': 'off',
+      'quotes': 'off',
+      'comma-dangle': 'off',
     },
     settings: {
       react: {
