@@ -174,6 +174,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
 
       - name: Clippy lints
         run: cd src-tauri && cargo clippy -- -D warnings
@@ -209,6 +211,8 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: stable
 
       - name: Clippy lints
         run: cd src-tauri && cargo clippy -- -D warnings
