@@ -9,7 +9,7 @@
 
 ## Active Terminals
 
-### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-23 COMPLETE, no active claim)
+### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-27 COMPLETE, pushed to origin)
 
 **Scope:** Recovery of stuck Wave 12 SPDX commit. Previous terminal hung on
 pre-commit secret-scan over 431 staged Rust files (secret-scan runs ~25 regex
@@ -68,7 +68,25 @@ commits; Wave 14 was a clean-audit finding with no commit). Working tree clean.
     + 22 tests for deleted code; fixed ParsedCommit visibility;
     silenced doctrine-bound evidence scaffolding with allow(dead_code)
 
-Final state across the 2026-04-19 session (23 commits):
+### Waves 24–27 — final cleanup + public-readiness push
+
+  - (gitignored state) Wave 24 save-and-drop two 2026-04-05/06 orphan
+    stashes whose base commits were rewritten away by the 2026-04-18
+    filter-repo run. Patches preserved in .claude/plans/.
+  - 978a8679 Wave 25 fix immune-scan bug-fix classifier. Old regex
+    `\b(fix|bug|patch|...)\b` false-triggered on `chore(lint): apply
+    ESLint --fix`. Tightened to conventional-commits form
+    ^<sha>\s+(fix|hotfix)[(!:] Verified with 9/9 test cases. Cleared
+    the false-positive from ops-state.json.
+  - 89cc841b Wave 26 complete public-readiness assessment covering 13
+    perimeter sections + package.json discoverability gaps (added
+    repository, bugs, keywords fields that were missing).
+  - Wave 27 pushed 37 commits to origin/main as a clean fast-forward.
+    Pre-push ran the full test matrix green; upstream tracking
+    configured.
+
+Final state across the 2026-04-19 session (27 commits, 37 pushed
+together with previous-session work):
   - Rust: 25 default-feature warnings → 0 (just the ts-rs cosmetic
     from a dependency we don't control); 66 with --all-features → 36
     (remaining are feature-gated pub APIs expected by Tauri's invoke
@@ -78,6 +96,16 @@ Final state across the 2026-04-19 session (23 commits):
   - Tests: 3109 default + 3364 all-features + 1293 frontend = 7766
     total, all green across the matrix
   - Sentinel: 0 critical / 0 warning / 7 OK
+  - Public-readiness audit: 0 findings over 1875 tracked files
+  - origin/main: fast-forwarded to 89cc841b
+
+Launch gating (from PUBLIC-READINESS-COMPLETE-2026-04-19.md):
+  Gate A (5 min operator-only): GitHub release re-tag, social preview
+         upload, enable 4 security toggles, pin CodeSignTool SHA-256
+  Gate B (30-60 min operator-only): Keygen slug rename, MCP tool-count
+         unification, move Paddle webhook to private repo
+  Gate C (external wait): SSL.com EV validation — THE launch gate;
+         without it first-install SmartScreen warning kills conversion
 
 Key finding surfaced in Waves 15/16: on some Windows Credential Manager
 configurations `set_password` returns Ok but the next `get_password`
