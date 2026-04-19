@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! URL validation utilities — SSRF prevention for user-supplied URLs.
 //!
 //! Blocks requests to internal/private network addresses to prevent

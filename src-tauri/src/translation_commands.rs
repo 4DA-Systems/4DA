@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for the autonomous translation pipeline.
 //!
 //! Exposes `get_translation_status`, `trigger_translation`, and

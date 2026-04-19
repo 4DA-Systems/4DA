@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Toolkit — Backend commands for the Developer Toolkit.
 //!
 //! Provides port scanning and environment snapshots.

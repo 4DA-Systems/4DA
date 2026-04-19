@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Dedicated translation API providers (DeepL, Google Cloud, Azure).
 //!
 //! These are cheaper, faster alternatives to using the main LLM for

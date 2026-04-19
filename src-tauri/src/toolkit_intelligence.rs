@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Toolkit Intelligence — Backend commands for 4DA-connected intelligence tools
 //!
 //! Provides two Tauri commands:

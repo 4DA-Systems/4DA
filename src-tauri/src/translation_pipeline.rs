@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Autonomous Translation Pipeline
 //!
 //! Uses the existing LLM client to translate UI strings and STREETS content

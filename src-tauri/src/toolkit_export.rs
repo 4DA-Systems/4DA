@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Toolkit Export Pack — Generates a shareable developer profile markdown document
 //!
 //! Extracted from `toolkit_intelligence.rs` to keep modules under the 1000-line limit.
