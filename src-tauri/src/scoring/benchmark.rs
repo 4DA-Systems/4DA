@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! PASIFA Scoring Benchmark — Controlled Baseline
 //!
 //! Establishes measurable precision/recall/rejection baselines for the full

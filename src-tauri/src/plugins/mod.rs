@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source Plugin API — external binary plugins that provide content items.
 //!
 //! Plugins are standalone executables in the `plugins/` data directory.

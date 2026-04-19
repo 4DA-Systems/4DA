@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /// Office document extraction (Word, Excel)
 ///
 /// Extracts text from Microsoft Office documents:

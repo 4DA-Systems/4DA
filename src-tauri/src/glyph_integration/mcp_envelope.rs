@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Shadow-envelope wrapper for MCP tool calls.
 //!
 //! In Phase 2 audit-only mode, every MCP tool call that flows through

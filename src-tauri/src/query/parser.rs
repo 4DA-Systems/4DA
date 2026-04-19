@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Query parser - Natural language to structured query
 use serde::{Deserialize, Serialize};
 

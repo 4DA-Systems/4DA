@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Indexed Documents Tauri commands.
 //!
 //! Expose the local document index to the frontend for browsing and search.

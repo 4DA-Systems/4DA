@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Novelty Detection for 4DA
 //!
 //! Detects whether content is novel (new information) or redundant

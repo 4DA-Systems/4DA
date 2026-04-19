@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — Reconciler (Layer 3).
 //!
 //! The reconciler combines the authoritative pipeline score with zero or

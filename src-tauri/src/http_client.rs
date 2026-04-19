@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Shared HTTP clients for outbound requests.
 //!
 //! Three pooled clients with distinct timeout profiles:
