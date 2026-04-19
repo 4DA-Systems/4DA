@@ -25,7 +25,16 @@ const OPS_STATE_FILE = path.join(WISDOM_DIR, 'ops-state.json');
 const SESSIONS_LOG = path.join(CLAUDE_DIR, 'sessions', 'sessions.log');
 
 // Bug fix detection patterns
-const FIX_PATTERNS = /\b(fix|bug|patch|resolve|regression|hotfix)\b/i;
+// Conventional-commits-aware classifier. Matches a commit summary of the form
+//   <sha>  fix: ...
+//   <sha>  fix(scope): ...
+//   <sha>  hotfix: ...
+//   <sha>  fix!: ...      (breaking-change marker)
+// and nothing else. The older loose `\bfix\b` match false-triggered on
+// routine chores like "chore(lint): apply ESLint --fix" because the word
+// "fix" appeared anywhere in the subject. The bug-fix signal is the
+// conventional-commit TYPE, not the presence of the word.
+const FIX_PATTERNS = /^[0-9a-f]{7,}\s+(?:fix|hotfix)(?:\([^)]+\))?!?:\s/i;
 
 // Area categorization for drift tracking
 const AREA_MAP = [
