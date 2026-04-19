@@ -155,7 +155,7 @@ export const RadarSVG = memo(function RadarSVG({ entries, userStack, onEntryClic
 
         {/* Concentric rings */}
         {RING_KEYS.map((ring) => (
-          <circle key={ring} cx={CX} cy={CY} r={RING_RADII[ring]!}
+          <circle key={ring} cx={CX} cy={CY} r={RING_RADII[ring]}
             fill="none" stroke="#2A2A2A" strokeWidth="1" />
         ))}
 

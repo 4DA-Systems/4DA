@@ -56,7 +56,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
       )}
       {hasDepMatch && (
         <span className="text-[10px] text-emerald-400/70">
-          {t('results.affects')} {b!.matched_deps!.slice(0, 2).join(', ')}
+          {t('results.affects')} {b.matched_deps!.slice(0, 2).join(', ')}
         </span>
       )}
       {canStartTrial ? (

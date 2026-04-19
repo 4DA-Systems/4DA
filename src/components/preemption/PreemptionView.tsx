@@ -259,8 +259,8 @@ const ItemCard = memo(function ItemCard({
 
   // Record surfaced event once per item
   useEffect(() => {
-    if (!surfacedRef.current!.has(item.id)) {
-      surfacedRef.current!.add(item.id);
+    if (!surfacedRef.current.has(item.id)) {
+      surfacedRef.current.add(item.id);
       recordTrustEvent({
         eventType: 'surfaced',
         alertId: item.id,

@@ -59,7 +59,7 @@ describe('autophagy-slice', () => {
     it('sets loading true during fetch then resets', async () => {
       let resolvePromise: (v: unknown) => void;
       const pendingPromise = new Promise((resolve) => { resolvePromise = resolve; });
-      vi.mocked(invoke).mockReturnValueOnce(pendingPromise as ReturnType<typeof invoke>);
+      vi.mocked(invoke).mockReturnValueOnce(pendingPromise);
 
       const loadPromise = useAppStore.getState().loadAutophagyStatus();
 

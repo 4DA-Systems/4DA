@@ -370,7 +370,7 @@ export function ResultsView({
             <div
               role="listbox"
               aria-label={t('results.title')}
-              aria-activedescendant={focusedIndex >= 0 && filteredResults[focusedIndex] ? `result-item-${filteredResults[focusedIndex]!.id}` : undefined}
+              aria-activedescendant={focusedIndex >= 0 && filteredResults[focusedIndex] ? `result-item-${filteredResults[focusedIndex].id}` : undefined}
               tabIndex={-1}
               style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}
             >

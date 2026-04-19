@@ -24,10 +24,10 @@ function processInline(text: string): ReactNode[] {
     // Links [text](url)
     const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)(.*)/s);
     if (linkMatch) {
-      if (linkMatch[1]) parts.push(...processInlineSimple(linkMatch[1]!, key));
+      if (linkMatch[1]) parts.push(...processInlineSimple(linkMatch[1], key));
       key++;
       parts.push(
-        <a key={`link-${key}`} href={linkMatch[3]!} target="_blank" rel="noopener noreferrer"
+        <a key={`link-${key}`} href={linkMatch[3]} target="_blank" rel="noopener noreferrer"
           className="text-[#D4AF37] hover:underline">
           {linkMatch[2]}
         </a>,

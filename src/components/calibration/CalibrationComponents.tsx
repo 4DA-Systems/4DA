@@ -69,7 +69,7 @@ export function ActionButton({ rec, actionInProgress, onAction }: ActionButtonPr
   return (
     <button
       onClick={() => onAction(rec)}
-      disabled={!!actionInProgress && !['open_settings_interests', 'open_settings_stacks', 'give_feedback', 'install_ollama'].includes(rec.action_type!)}
+      disabled={!!actionInProgress && !['open_settings_interests', 'open_settings_stacks', 'give_feedback', 'install_ollama'].includes(rec.action_type)}
       aria-label={isActive ? label.active : label.idle}
       className={`mt-1.5 px-3 py-1 border-none rounded text-[11px] font-semibold font-[Inter,sans-serif] ${
         isActive

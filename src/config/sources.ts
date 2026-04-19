@@ -27,8 +27,8 @@ const COLOR_MAP: Record<string, string> = {
 };
 
 // Cache populated from backend
-let sourcesCache = new Map<string, SourceMeta>();
-let allIds = new Set<string>();
+const sourcesCache = new Map<string, SourceMeta>();
+const allIds = new Set<string>();
 
 /** Load source metadata from the Rust backend. Call once at startup. */
 export async function loadSourceMeta(): Promise<void> {

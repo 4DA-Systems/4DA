@@ -136,7 +136,7 @@ export function SystemHealthSection() {
       {capabilities && (
         <div className="p-3 bg-bg-secondary rounded-lg border border-border divide-y divide-border/50">
           {Object.entries(capabilities).map(([name, info]) => (
-            <CapabilityRow key={name} name={name} info={info as CapabilityInfo} />
+            <CapabilityRow key={name} name={name} info={info} />
           ))}
         </div>
       )}
