@@ -7,7 +7,7 @@
 //! Desktop SSO flow:
 //! 1. Admin configures SSO (IdP URL, entity ID, certificate or OIDC client)
 //! 2. User clicks "Sign in with SSO" → app opens system browser to IdP
-//! 3. IdP authenticates → redirects to localhost:4445/sso/callback
+//! 3. IdP authenticates → redirects to localhost:4446/sso/callback
 //! 4. App validates the SAML assertion or OIDC token from the callback
 //! 5. Identity extracted (email, name, groups) → stored locally for role assignment
 //!
@@ -460,7 +460,7 @@ pub async fn set_sso_config(config: SsoConfig) -> crate::error::Result<()> {
 /// Generate the IdP login URL and return it for the frontend to open in the system browser.
 ///
 /// Returns the full URL that should be opened in the user's default browser.
-/// The IdP will authenticate the user and redirect back to localhost:4445/sso/callback.
+/// The IdP will authenticate the user and redirect back to localhost:4446/sso/callback.
 #[tauri::command]
 pub async fn initiate_sso_login() -> crate::error::Result<String> {
     let conn = crate::state::open_db_connection()?;
@@ -1290,7 +1290,7 @@ mod tests {
             "Entity ID must appear in the request"
         );
         assert!(
-            xml.contains("localhost:4445"),
+            xml.contains("localhost:4446"),
             "Callback URL must reference the SSO callback port"
         );
         assert!(xml.contains("Version=\"2.0\""), "Must be SAML 2.0");
@@ -1536,7 +1536,10 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn test_sso_callback_port_is_4445() {
-        assert_eq!(SSO_CALLBACK_PORT, 4445, "SSO callback must use port 4445");
+    fn test_sso_callback_port_is_4446() {
+        // Port was 4445 historically; bumped to 4446 to avoid clashing with
+        // signal_terminal's dev port (src/signal_terminal.rs ships on 4445
+        // in debug builds). Keep these two in sync when either changes.
+        assert_eq!(SSO_CALLBACK_PORT, 4446, "SSO callback must use port 4446");
     }
 }
