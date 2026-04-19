@@ -62,15 +62,6 @@ scraper = "0.23"
 once_cell = "1"
 parking_lot = "0.12"
 
-# Airlock (née Glyph) Envelope Protocol (Phase 2 audit-only mode; behind glyph_audit feature)
-# Path deps to the standalone airlock repo at D:\runyourempire\glyph
-# Crates renamed glyph-* → airlock-*; `package` field remaps so Rust `use glyph_*` still works.
-glyph-core    = { package = "airlock-core",    path = "../../runyourempire/glyph/crates/airlock-core",    optional = true }
-glyph-compile = { package = "airlock-compile", path = "../../runyourempire/glyph/crates/airlock-compile", optional = true }
-glyph-lift    = { package = "airlock-lift",    path = "../../runyourempire/glyph/crates/airlock-lift",    optional = true }
-glyph-engine  = { package = "airlock-engine",  path = "../../runyourempire/glyph/crates/airlock-engine",  optional = true }
-glyph-safety  = { package = "airlock-safety",  path = "../../runyourempire/glyph/crates/airlock-safety",  optional = true }
-
 # Database (sqlite + vector search)
 # Default: "bundled" (plaintext SQLite). For encrypted databases:
 #   1. Install Strawberry Perl: choco install strawberryperl
@@ -195,17 +186,6 @@ archive = ["dep:zip", "dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
 experimental = []
-# Glyph Envelope Protocol — Phase 2 audit-only mode.
-# Off by default; enable to activate the glyph_integration module.
-# Kill gate: if measurements fail (see docs/glyph/GEP-INTEGRATION.md),
-# turn this feature off and the code is dormant with zero user impact.
-glyph_audit = [
-    "dep:glyph-core",
-    "dep:glyph-compile",
-    "dep:glyph-lift",
-    "dep:glyph-engine",
-    "dep:glyph-safety",
-]
 # Feature-gated command groups (ghost commands with zero frontend callers)
 team-sync = []       # Team Sync, Intelligence, Monitoring (AD-023) — 17 commands
 enterprise = ["dep:jsonwebtoken", "dep:rsa", "dep:pkcs8", "dep:x509-cert"]      # Audit, Webhooks, Organizations, Analytics, SSO crypto — 15 commands

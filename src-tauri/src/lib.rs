@@ -248,8 +248,6 @@ pub mod extractors;
 mod free_briefing;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
-#[cfg(feature = "glyph_audit")]
-mod glyph_integration;
 mod health;
 mod health_commands;
 mod http_client;
