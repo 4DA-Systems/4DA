@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * HTML sanitization and URL validation utilities.
  * Used for LLM-generated content, external article snippets, and user-provided URLs.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Maps analysis stages and source events to user-friendly narration
 // Used exclusively by FirstRunTransition for the first-time experience
 
