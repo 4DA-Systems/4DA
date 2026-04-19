@@ -180,10 +180,10 @@ fn extract_subject(after_verb: &str) -> Option<String> {
 
 /// Represents a single commit we pulled from `git log`.
 #[derive(Debug, Clone)]
-struct ParsedCommit {
-    hash: String,
-    timestamp: i64,
-    subject_line: String,
+pub(crate) struct ParsedCommit {
+    pub(crate) hash: String,
+    pub(crate) timestamp: i64,
+    pub(crate) subject_line: String,
 }
 
 /// Find the first decision verb match in a commit subject line.

@@ -21,10 +21,6 @@ use tracing::info;
 use ts_rs::TS;
 
 use crate::error::Result;
-use crate::evidence::{
-    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceItem, EvidenceKind, LensHints,
-    Urgency,
-};
 
 // ============================================================================
 // Types
@@ -247,74 +243,6 @@ fn extract_keywords(condition: &str) -> Vec<String> {
 }
 
 // ============================================================================
-// EvidenceItem conversion
-// ============================================================================
-
-impl CommitmentContract {
-    pub fn to_evidence_item(&self) -> EvidenceItem {
-        let title = format!("Refutation: {}", self.decision_statement)
-            .chars()
-            .take(120)
-            .collect::<String>()
-            .trim_end_matches('.')
-            .to_string();
-
-        let explanation = format!(
-            "Your refutation condition was met: \"{}\"",
-            self.refutation_condition
-        );
-
-        let citation = EvidenceCitation {
-            source: "commitment-contract".to_string(),
-            title: format!("Contract #{}", self.id),
-            url: None,
-            freshness_days: 0.0,
-            relevance_note: format!(
-                "condition: {}",
-                self.refutation_condition
-                    .chars()
-                    .take(200)
-                    .collect::<String>()
-            ),
-        };
-
-        EvidenceItem {
-            id: format!("cc_refute_{}", self.id),
-            kind: EvidenceKind::Refutation,
-            title,
-            explanation,
-            confidence: Confidence::heuristic(0.7),
-            urgency: Urgency::High,
-            reversibility: None,
-            evidence: vec![citation],
-            affected_projects: Vec::new(),
-            affected_deps: if self.subject.is_empty() {
-                Vec::new()
-            } else {
-                vec![self.subject.clone()]
-            },
-            suggested_actions: vec![
-                EvidenceAction {
-                    action_id: "investigate".to_string(),
-                    label: "Re-examine".to_string(),
-                    description: "Revisit your original decision.".to_string(),
-                },
-                EvidenceAction {
-                    action_id: "dismiss".to_string(),
-                    label: "Dismiss".to_string(),
-                    description: "The condition was met but the decision still holds.".to_string(),
-                },
-            ],
-            precedents: Vec::new(),
-            refutation_condition: Some(self.refutation_condition.clone()),
-            lens_hints: LensHints::evidence_only(),
-            created_at: chrono::Utc::now().timestamp_millis(),
-            expires_at: None,
-        }
-    }
-}
-
-// ============================================================================
 // Tauri Commands
 // ============================================================================
 
@@ -489,25 +417,6 @@ mod tests {
         .unwrap();
         let triggered = scan_for_refutations(&conn, 24).unwrap();
         assert!(triggered.is_empty());
-    }
-
-    #[test]
-    fn to_evidence_item_produces_refutation_kind() {
-        let c = CommitmentContract {
-            id: 1,
-            decision_statement: "Adopted tokio".to_string(),
-            refutation_condition: "CVE in tokio".to_string(),
-            subject: "tokio".to_string(),
-            status: ContractStatus::Triggered,
-            created_at: "2026-04-17 00:00:00".to_string(),
-            triggered_at: Some("2026-04-17 12:00:00".to_string()),
-            trigger_item_id: Some(42),
-        };
-        let item = c.to_evidence_item();
-        assert_eq!(item.kind, crate::evidence::EvidenceKind::Refutation);
-        assert_eq!(item.urgency, crate::evidence::Urgency::High);
-        assert!(item.lens_hints.evidence);
-        assert!(crate::evidence::validate_item(&item).is_ok());
     }
 
     #[test]
