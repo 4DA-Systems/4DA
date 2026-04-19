@@ -139,6 +139,17 @@ pub struct Confidence {
 }
 
 impl Confidence {
+    // Doctrine-bound scaffolding. The three public constructors below
+    // (`checklist`, `calibrated`, `llm_assessed`) are the canonical builders
+    // that every EvidenceItem producer is supposed to use once the
+    // Intelligence Reconciliation Phase 9 wiring is complete. Today only
+    // `heuristic()` is being called in production, so the other three
+    // trip the dead-code lint — but deleting them would break the Phase 9
+    // contract and force a later re-introduction. See
+    // .claude/rules/intelligence-doctrine.md rule 1 (one canonical type
+    // per concept, extended via ADR — not by removing builders that
+    // haven't landed their lens yet).
+    #[allow(dead_code)]
     /// Constructor for keyword/pattern-matched confidence.
     pub fn checklist(value: f32) -> Self {
         Self {
@@ -159,6 +170,8 @@ impl Confidence {
 
     /// Constructor for Bayesian-calibrated confidence.
     /// `n` must be ≥ 10 per schema rules (enforced by `validate_item`).
+    /// Doctrine-bound scaffolding — see the impl-block note above.
+    #[allow(dead_code)]
     pub fn calibrated(value: f32, n: u32) -> Self {
         Self {
             value,
@@ -168,6 +181,8 @@ impl Confidence {
     }
 
     /// Constructor for LLM-assessed confidence (AWE.calibrate output).
+    /// Doctrine-bound scaffolding — see the impl-block note above.
+    #[allow(dead_code)]
     pub fn llm_assessed(value: f32) -> Self {
         Self {
             value,
@@ -298,6 +313,9 @@ impl LensHints {
     }
 
     /// Convenience: hint only the evidence lens (decisions, retrospectives).
+    /// Doctrine-bound scaffolding (see `Confidence` note above) — will be
+    /// used once retrospective lens materializers land in Phase 9.
+    #[allow(dead_code)]
     pub fn evidence_only() -> Self {
         Self {
             evidence: true,

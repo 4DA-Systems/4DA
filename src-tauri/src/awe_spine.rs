@@ -31,7 +31,9 @@
 
 use std::sync::OnceLock;
 
-use crate::evidence::{EvidenceItem, PrecedentOutcome, PrecedentRef};
+#[cfg(test)]
+use crate::evidence::PrecedentOutcome;
+use crate::evidence::{EvidenceItem, PrecedentRef};
 use crate::git_decision_miner::SeededDecision;
 
 // ============================================================================
@@ -170,13 +172,6 @@ fn seed_to_precedent(seed: &SeededDecision, similarity: f32) -> PrecedentRef {
         outcome: Some(seed.outcome.clone()),
         origin: classify_precedent_origin(seed).to_string(),
         similarity,
-    }
-}
-
-impl PrecedentOutcome {
-    #[must_use]
-    pub fn clone_enum(&self) -> Self {
-        *self
     }
 }
 
