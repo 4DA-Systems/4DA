@@ -1157,28 +1157,28 @@ mod tests {
     #[test]
     fn borderline_relevance_included_in_preemption() {
         let conn = setup_test_db();
-        // Exactly at the threshold (0.15) -- should be included
-        insert_dep_with_relevance(&conn, "/proj/borderline", "express", true, false, 0.15);
+        // Exactly at the threshold (0.15) -- should be included.
+        // Use `axios` (not in SUPPRESSED_GENERIC_NAMES) and `fastify` as
+        // below-threshold. `express` was suppressed for false-positive
+        // reasons ("express concern" / "expressly forbidden") after this
+        // test was originally written — see the generic-name list above.
+        insert_dep_with_relevance(&conn, "/proj/borderline", "axios", true, false, 0.15);
         // Just below threshold -- should be excluded
         insert_dep_with_relevance(&conn, "/proj/example", "fastify", true, false, 0.14);
-        insert_item(&conn, "security advisory for express framework");
+        insert_item(&conn, "security advisory for axios framework");
         insert_item(&conn, "security advisory for fastify framework");
 
         let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
 
-        let express_alerts: Vec<_> = alerts
+        let axios_alerts: Vec<_> = alerts
             .iter()
-            .filter(|a| a.affected_dependencies.contains(&"express".to_string()))
+            .filter(|a| a.affected_dependencies.contains(&"axios".to_string()))
             .collect();
         let fastify_alerts: Vec<_> = alerts
             .iter()
             .filter(|a| a.affected_dependencies.contains(&"fastify".to_string()))
             .collect();
-        assert_eq!(
-            express_alerts.len(),
-            1,
-            "at-threshold dep should be included"
-        );
+        assert_eq!(axios_alerts.len(), 1, "at-threshold dep should be included");
         assert_eq!(
             fastify_alerts.len(),
             0,

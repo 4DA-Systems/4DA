@@ -8,4 +8,4 @@ export type TeamOp = { "type": "ShareDnaSummary", primary_stack: Array<string>, 
 /**
  * XChaCha20Poly1305 encrypted team key (encrypted with DH shared secret)
  */
-encrypted_team_key: Array<number>, } | { "type": "MemberJoined", display_name: string, role: string, } | { "type": "MemberLeft", reason: string, } | { "type": "RoleChanged", target_member_id: string, new_role: string, };
+encrypted_team_key: Array<number>, } | { "type": "ShareSource", source_type: string, config_summary: string, recommendation: string, } | { "type": "MemberJoined", display_name: string, role: string, } | { "type": "MemberLeft", reason: string, } | { "type": "RoleChanged", target_member_id: string, new_role: string, };
