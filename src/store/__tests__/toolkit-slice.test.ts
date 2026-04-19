@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useAppStore } from '../index';
 

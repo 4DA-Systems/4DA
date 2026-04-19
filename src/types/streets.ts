@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // STREETS Command Execution types — mirrors src-tauri/src/streets_commands.rs
 
 export type OsTarget = 'linux' | 'mac_os' | 'windows' | 'universal';
