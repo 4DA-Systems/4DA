@@ -475,23 +475,20 @@ pub async fn create_team(relay_url: String, display_name: String) -> Result<serd
         .await
         .map_err(|e| format!("Invalid relay response: {e}"))?;
 
-    // Store keypair + team key in local DB.
-    //
-    // SECURITY NOTE (2026-04-19, tracked for v1.1): the `_enc` suffix on
-    // `our_private_key_enc` and `team_symmetric_key_enc` is a SCHEMA-NAMING
-    // LIE in the current build. The bytes written here are PLAINTEXT, not
-    // ciphertext. The schema anticipated at-rest encryption that was not
-    // shipped in v1.0. An attacker with filesystem access can read these
-    // keys and decrypt captured relay traffic for the affected team.
-    //
-    // v1.1 will either (a) wrap these with SQLCipher-protected storage or
-    // (b) move them to the OS keychain. Until then: treat the local 4da.db
-    // as a secret and advise users accordingly. See SECURITY.md §"Database
-    // encryption" for the public-facing disclosure.
-    //
-    // Ref: docs/ADVERSARIAL-AUDIT-2026-04-19.md P1 "Team sync stores
-    // encrypted keys as plaintext bytes in SQLite".
+    // Store keypair + team key. The X25519 private key and the team symmetric
+    // key are both written to the OS keychain first (see Wave 16 in the
+    // war-room notes). The DB columns remain as a fallback for hosts without
+    // a reliable keychain; on success the DB gets a zero-length BLOB as a
+    // migrated sentinel. See the `team_sync_crypto::persist_*` helpers for
+    // the write-then-read-back verify that prevents silent loss on keyring
+    // backends that lie about the write.
     let conn = crate::state::open_db_connection()?;
+    let priv_db = crate::team_sync_crypto::persist_team_private_key(
+        &relay_resp.team_id,
+        &crypto.private_key_bytes(),
+    );
+    let team_key_db =
+        crate::team_sync_crypto::persist_team_symmetric_key(&relay_resp.team_id, &team_key);
     conn.execute(
         "INSERT OR REPLACE INTO team_crypto
             (team_id, our_public_key, our_private_key_enc, team_symmetric_key_enc)
@@ -499,8 +496,8 @@ pub async fn create_team(relay_url: String, display_name: String) -> Result<serd
         params![
             relay_resp.team_id,
             crypto.public_key_bytes().to_vec(),
-            crypto.private_key_bytes().to_vec(),
-            team_key.to_vec(),
+            priv_db,
+            team_key_db,
         ],
     )
     .map_err(|e| format!("Failed to store crypto: {e}"))?;
@@ -712,22 +709,21 @@ pub async fn join_team_via_invite(
         .await
         .map_err(|e| format!("Invalid relay response: {e}"))?;
 
-    // Store our keypair + admin public key in local DB.
-    // Team key not available yet — it'll arrive via DeliverTeamKey sync entry.
-    //
-    // SECURITY NOTE: `our_private_key_enc` is currently stored PLAINTEXT
-    // despite the schema naming. v1.1 roadmap. See the create-team path
-    // above for the full rationale and roadmap reference.
+    // Store our keypair + admin public key. Team key is not available yet —
+    // it arrives later via DeliverTeamKey. The X25519 private key is written
+    // to the OS keychain with a write-then-read-back verify; the DB column
+    // gets a zero-length BLOB as the migrated sentinel, or the plaintext as
+    // a fallback when the keychain is unavailable.
     let conn = crate::state::open_db_connection()?;
+    let priv_db = crate::team_sync_crypto::persist_team_private_key(
+        &join.team_id,
+        &crypto.private_key_bytes(),
+    );
     conn.execute(
         "INSERT OR REPLACE INTO team_crypto
             (team_id, our_public_key, our_private_key_enc, team_symmetric_key_enc)
          VALUES (?1, ?2, ?3, NULL)",
-        params![
-            join.team_id,
-            crypto.public_key_bytes().to_vec(),
-            crypto.private_key_bytes().to_vec(),
-        ],
+        params![join.team_id, crypto.public_key_bytes().to_vec(), priv_db,],
     )
     .map_err(|e| format!("Failed to store crypto: {e}"))?;
 
