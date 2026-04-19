@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo } from 'react';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { TeamSection } from './TeamSection';

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /** Source metadata — loaded from backend at startup, cached locally. */
 
 import { cmd } from '../lib/commands';
