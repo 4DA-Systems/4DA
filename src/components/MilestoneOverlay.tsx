@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useState, useEffect, useRef } from 'react';
 import { useFourdaComponent } from '../hooks/use-fourda-component';
 import { useAppStore } from '../store';

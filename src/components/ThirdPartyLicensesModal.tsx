@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 // NOTICE file imported at build time via Vite's ?raw loader.

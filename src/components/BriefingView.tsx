@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useCallback, useState, useEffect, memo } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useTranslation } from 'react-i18next';
