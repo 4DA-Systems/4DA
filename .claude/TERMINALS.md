@@ -9,7 +9,35 @@
 
 ## Active Terminals
 
-_No active terminals._
+### T-WAR-ROOM-RECOVERY-2026-04-19 (Wave 12 done, paused before 13-17)
+
+**Scope:** Recovery of stuck Wave 12 SPDX commit. Previous terminal hung on
+pre-commit secret-scan over 431 staged Rust files (secret-scan runs ~25 regex
+patterns over each file's full contents — O(n) per batch). Strategy: split
+into 80-file batches (matched Part 1 precedent: 79 files in ~60s).
+
+Wave 12 results — 12 new commits, 840 files, pre-commit green every time:
+
+- Rust backend (431 files, 6 commits):
+  - 75fe0c97 part 2a/3 (80)
+  - 7244b87a part 2b/3 (80)
+  - 28518252 part 2c/3 (80)
+  - 73d29591 part 2d/3 (80)
+  - 2300f99f part 2e/3 (80)
+  - 14f074e6 part 2f/3 (31 — final Rust)
+- Frontend src/ (409 files, 6 commits):
+  - bb136097 part 3a/3 (80)
+  - 3365de2d part 3b/3 (80)
+  - f884b285 part 3c/3 (80)
+  - cbe56947 part 3d/3 (80 + CRLF→LF normalization on 4 files)
+  - 5057df4b part 3e/3 (80 + CRLF→LF on 10 files)
+  - f88d436b part 3f/3 (9 — final Wave 12)
+
+Waves 13-17 held pending user go-ahead — these are not mechanical like 12,
+and each carries real implementation risk. Wave 16 in particular (team-crypto
+keys → keychain) is the largest remaining P1.
+
+**Commit Lock:** not held
 
 
 <!-- T-PUBLIC-READY done (a3301906 + filter-repo → da8c87fa, 2026-04-18).
