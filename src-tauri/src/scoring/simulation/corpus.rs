@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Simulation Corpus — 215+ labeled content items across 14 categories
 //!
 //! Each item has per-persona expected outcomes in canonical order:

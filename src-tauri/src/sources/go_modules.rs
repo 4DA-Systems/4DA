@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Go Module Proxy source implementation
 //!
 //! Monitors new Go module versions via the Go Module Index API.

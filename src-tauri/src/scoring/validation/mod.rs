@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Scoring Validation — Persona-based precision testing
 //!
 //! Validates the scoring engine across 10 developer profiles by scoring

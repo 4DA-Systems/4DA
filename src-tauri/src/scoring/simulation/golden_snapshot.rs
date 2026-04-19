@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Golden Snapshot Testing — canonical item score baselines
 //!
 //! Unlike reality.rs (aggregate F1/precision), these tests check SPECIFIC item

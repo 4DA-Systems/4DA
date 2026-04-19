@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tier 3: Reranking Validation
 //!
 //! Tests the post-scoring reranking layer: sort_results, dedup_results,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Item processing logic: fill_cache_background, process_source_items,
 //! embedding generation, deduplication, validation.
 

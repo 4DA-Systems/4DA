@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Enriched Lifecycle Tests — full-fidelity multi-session convergence.
 //!
 //! Re-runs lifecycle convergence tests with fully enriched personas to validate

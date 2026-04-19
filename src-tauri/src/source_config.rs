@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source configuration commands for RSS, Twitter, YouTube, and GitHub.
 //!
 //! Extracted from lib.rs to reduce file size. These are pure Tauri command

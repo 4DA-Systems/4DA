@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Validation Runner — Scores real DB items against 10 personas
 //!
 //! For each persona, scores the last 500 fetched items, takes the top 20,

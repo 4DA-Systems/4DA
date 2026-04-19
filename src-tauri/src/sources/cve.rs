@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! CVE/NVD feed source adapter for the Developer Immune System.
 //!
 //! Fetches security advisories from GitHub Advisory Database and NVD.

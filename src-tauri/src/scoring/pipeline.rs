@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use std::collections::HashMap;
 
 use crate::db::Database;

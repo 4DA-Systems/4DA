@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! arXiv source implementation
 //!
 //! Fetches recent papers from arXiv API for relevant categories.

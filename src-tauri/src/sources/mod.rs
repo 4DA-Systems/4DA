@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source abstraction layer for 4DA
 //!
 //! This module defines the trait that all information sources must implement.

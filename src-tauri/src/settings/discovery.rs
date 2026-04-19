@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Autonomous directory discovery for user context.
 //!
 //! Discovers directories that define the user's context on their system.

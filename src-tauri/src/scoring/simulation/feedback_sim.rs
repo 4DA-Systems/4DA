@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Feedback Simulation — deterministic session-based feedback engine
 //!
 //! Simulates user feedback over multiple sessions without DB writes.

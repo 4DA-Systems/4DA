@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Multi-path fallback system for source adapters.
 //!
 //! When a primary source API fails after retries, this module provides

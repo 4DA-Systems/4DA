@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! System 1: Multi-Session Convergence
 //!
 //! Validates that scoring quality improves (or at least doesn't degrade)

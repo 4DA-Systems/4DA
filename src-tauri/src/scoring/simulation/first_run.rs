@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! System 3: First-Run / Bootstrap Validation
 //!
 //! Validates the first-60-seconds experience: a user with minimal context

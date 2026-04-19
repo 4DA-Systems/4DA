@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! PASIFA V2 Scoring Pipeline — 8-phase structured architecture
 //!
 //! Restructures V1 into clean, testable phases while reusing all existing module functions.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Search Synthesis — LLM-powered briefings for Intelligence Console queries.
 //!
 //! Signal-gated. Takes a natural language query, gathers deep context from the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Necessity scoring — "what you'd regret missing"
 //!
 //! Computes a 0.0-1.0 necessity score from the intersection of:

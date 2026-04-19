@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Temporal clustering: groups items about the same event or announcement.
 //!
 //! Runs after topic_dedup to catch remaining same-event duplicates that
