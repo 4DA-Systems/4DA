@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Reddit source implementation
 //!
 //! Fetches top posts from tech-related subreddits using Reddit's JSON API.

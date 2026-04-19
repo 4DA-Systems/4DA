@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Standing Queries — persistent intelligence monitoring.
 //!
 //! Signal-gated system that lets users define persistent search queries

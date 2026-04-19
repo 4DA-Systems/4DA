@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team sync engine — queue, apply, and manage team metadata entries.
 //!
 //! Phase 1: local sync primitives (no server communication yet).

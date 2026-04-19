@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Hardware Monitor Sun -- re-runs hardware detection daily, updates sovereign_profile.
 
 use super::SunResult;

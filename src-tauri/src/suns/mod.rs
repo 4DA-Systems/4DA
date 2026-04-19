@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Suns -- Self-sustaining background systems for STREETS modules.
 //!
 //! Each "Sun" is a background job that maintains data freshness for a STREETS module.

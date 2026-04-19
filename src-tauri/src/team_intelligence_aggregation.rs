@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team Intelligence aggregation helpers — pure functions, no DB access.
 //!
 //! Split from `team_intelligence.rs` to stay under 600-line file limit.

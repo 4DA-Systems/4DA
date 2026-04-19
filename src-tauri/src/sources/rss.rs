@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! RSS/Atom source implementation
 //!
 //! Fetches items from configured RSS and Atom feeds.

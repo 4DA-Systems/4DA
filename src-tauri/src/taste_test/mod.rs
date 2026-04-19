@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Taste Test Calibration — Bayesian persona inference from 15 content items.
 //!
 //! Shows users carefully-selected content cards and infers their developer

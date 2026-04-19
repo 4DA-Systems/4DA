@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! PyPI source implementation
 //!
 //! Monitors Python packages for new versions and metadata.

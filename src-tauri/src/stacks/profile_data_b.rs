@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack profile definitions — Group B: React Native, Laravel, Django, Vue,
 //! DevOps/SRE, Haskell/FP, Bootstrap Web Dev.
 

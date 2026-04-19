@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack profile definitions — all 11 built-in technology profiles.
 //!
 //! Each profile encodes curated domain knowledge about a technology ecosystem:

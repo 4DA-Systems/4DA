@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Local Telemetry — privacy-first usage analytics that never leave the machine.
 //!
 //! All data stays in local SQLite. No external services. No aggregation.

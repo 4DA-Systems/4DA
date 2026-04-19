@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Taste Test Items — 15 maximally-discriminating calibration cards.
 //!
 //! Each item is selected from the simulation corpus for maximum information

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack Intelligence System — proactive domain knowledge for developer ecosystems.
 //!
 //! Pre-computed, composable technology profiles that make scoring smarter
