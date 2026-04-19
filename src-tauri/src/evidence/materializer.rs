@@ -7,6 +7,14 @@
 //!
 //! Rule 7 of the Intelligence Doctrine: "Materializer trait is the only entry
 //! point — no tab queries the DB directly for intelligence data."
+//!
+//! The trait and context struct below are the canonical contract intelligence
+//! commands will migrate to in the remaining phases of the reconciliation.
+//! Until those lenses land, they trip the dead-code lint; deleting them
+//! would be a direct violation of doctrine rule 7 and would force a later
+//! re-introduction.
+
+#![allow(dead_code)]
 
 use async_trait::async_trait;
 

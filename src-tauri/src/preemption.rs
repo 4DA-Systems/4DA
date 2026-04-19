@@ -826,24 +826,6 @@ fn freshness_from_timestamp(timestamp: &str) -> f32 {
         .unwrap_or(0.0)
 }
 
-/// Human-readable label for a chain phase.
-fn phase_label(phase: &crate::signal_chains::ChainPhase) -> &'static str {
-    use crate::signal_chains::ChainPhase;
-    match phase {
-        ChainPhase::Nascent => "nascent",
-        ChainPhase::Active => "active",
-        ChainPhase::Escalating => "escalating",
-        ChainPhase::Peak => "peak",
-        ChainPhase::Resolving => "resolving",
-    }
-}
-
-/// Format confidence as a percentage string.
-fn format_confidence(confidence: f64) -> String {
-    format!("{:.0}%", confidence * 100.0)
-}
-
-/// Convert gap severity to a numeric confidence value.
 /// Map gap severity to a confidence score for preemption alerts.
 ///
 /// Pre-Phase-13b, this mapped Critical→0.95 which made ALL critical
