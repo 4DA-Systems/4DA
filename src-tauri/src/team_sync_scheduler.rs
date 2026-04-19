@@ -466,21 +466,20 @@ fn auto_deliver_team_keys(
         return Ok(0);
     }
 
-    // Load our crypto to encrypt the team key for each member
-    let (our_pub_bytes, our_priv_bytes): (Vec<u8>, Vec<u8>) = conn.query_row(
-        "SELECT our_public_key, our_private_key_enc FROM team_crypto WHERE team_id = ?1",
+    // Load our crypto to encrypt the team key for each member. Public key is
+    // read from the DB directly (non-secret); private key routes through the
+    // keychain-first helper with DB fallback and lazy migration.
+    let our_pub_bytes: Vec<u8> = conn.query_row(
+        "SELECT our_public_key FROM team_crypto WHERE team_id = ?1",
         rusqlite::params![team_id],
-        |row| Ok((row.get(0)?, row.get(1)?)),
+        |row| row.get(0),
     )?;
-
-    if our_pub_bytes.len() != 32 || our_priv_bytes.len() != 32 {
-        anyhow::bail!("Invalid keypair in team_crypto");
+    if our_pub_bytes.len() != 32 {
+        anyhow::bail!("Invalid public key in team_crypto");
     }
-
+    let priv_arr = crate::team_sync_crypto::read_team_private_key(&conn, team_id)?;
     let mut pub_arr = [0u8; 32];
-    let mut priv_arr = [0u8; 32];
     pub_arr.copy_from_slice(&our_pub_bytes);
-    priv_arr.copy_from_slice(&our_priv_bytes);
     let crypto = crate::team_sync_crypto::TeamCrypto::from_stored(&pub_arr, &priv_arr);
 
     let mut delivered = 0;
@@ -597,25 +596,12 @@ fn process_team_key_delivery(team_id: &str, state: &TeamSyncState) {
     // the outer encryption too (not the team key). This requires the
     // scheduler to try DH decryption on unprocessed entries.
     //
-    // For the initial implementation, the team key is stored raw in
-    // team_crypto.team_symmetric_key_enc by the apply_entry handler
-    // after successful DH decryption. Let's check if it's there.
-    let team_key_bytes: Option<Vec<u8>> = conn
-        .query_row(
-            "SELECT team_symmetric_key_enc FROM team_crypto WHERE team_id = ?1",
-            rusqlite::params![team_id],
-            |row| row.get(0),
-        )
-        .ok()
-        .flatten();
-
-    if let Some(key_bytes) = team_key_bytes {
-        if key_bytes.len() == 32 {
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&key_bytes);
-            *state.team_key.lock() = Some(key);
-            info!(target: "4da::team_sync", "Team key loaded from database — sync fully operational");
-        }
+    // Check the keychain (with DB fallback + lazy migration) for a team key
+    // that a previous DeliverTeamKey handler may have persisted. See
+    // team_sync_crypto::read_team_symmetric_key.
+    if let Ok(Some(key)) = crate::team_sync_crypto::read_team_symmetric_key(&conn, team_id) {
+        *state.team_key.lock() = Some(key);
+        info!(target: "4da::team_sync", "Team key loaded — sync fully operational");
     }
 
     // If still no key but we have a delivery blob, this is the case where

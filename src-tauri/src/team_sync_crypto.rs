@@ -258,6 +258,176 @@ fn decrypt_bytes(key: &[u8; 32], blob: &[u8]) -> Result<Vec<u8>> {
 }
 
 // ---------------------------------------------------------------------------
+// Keystore integration (X25519 private keys + team symmetric keys)
+//
+// The `team_crypto` table columns `our_private_key_enc` and
+// `team_symmetric_key_enc` were named with an `_enc` suffix that the v1.0
+// build did not deliver — the bytes were written as plaintext BLOBs. This
+// migration moves both keys into the OS keychain and treats the BLOBs as
+// either (a) a zero-length sentinel meaning "look in the keychain" or
+// (b) a plaintext fallback when the keychain is unavailable / unreliable.
+//
+// Same posture as the Wave-15 webhook-signing-secret migration: a write is
+// followed by a read-back verify, and the DB is only blanked after the
+// keychain round-trip succeeds. On hosts where `set_password` returns Ok
+// but `get_password` returns NoEntry (observed on some Windows Credential
+// Manager setups and on CI hosts with incomplete DBus), the plaintext stays
+// in the DB fallback — never silently lost.
+// ---------------------------------------------------------------------------
+
+/// Keychain key-name for a team's X25519 private key.
+pub(crate) fn team_privkey_keystore_key(team_id: &str) -> String {
+    format!("team_privkey__{team_id}")
+}
+
+/// Keychain key-name for a team's symmetric (sync) key.
+pub(crate) fn team_symkey_keystore_key(team_id: &str) -> String {
+    format!("team_symkey__{team_id}")
+}
+
+/// Store a 32-byte secret in the keychain, verifying with a read-back. Returns
+/// true only when the value is durably retrievable from the keychain. False
+/// means the caller must keep a plaintext DB fallback.
+fn store_verified_key(key_name: &str, value: &[u8; 32]) -> bool {
+    let encoded = hex::encode(value);
+    let written = match crate::settings::keystore::store_secret(key_name, &encoded) {
+        Ok(w) => w,
+        Err(_) => return false,
+    };
+    if !written {
+        return false;
+    }
+    matches!(
+        crate::settings::keystore::get_secret(key_name),
+        Ok(Some(ref v)) if v == &encoded
+    )
+}
+
+/// Read a 32-byte secret from the keychain. Returns None if the key is absent
+/// or if the decoded value is not 32 bytes.
+fn read_keychain_key(key_name: &str) -> Option<[u8; 32]> {
+    let encoded = crate::settings::keystore::get_secret(key_name)
+        .ok()
+        .flatten()?;
+    let decoded = hex::decode(&encoded).ok()?;
+    if decoded.len() != 32 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&decoded);
+    Some(out)
+}
+
+/// Persist a team's X25519 private key. Tries the keychain first with a
+/// write-then-read-back verify. Returns the bytes that should go into the
+/// `our_private_key_enc` column — either empty (keychain is authoritative)
+/// or the plaintext (keychain unavailable; DB is the fallback).
+pub(crate) fn persist_team_private_key(team_id: &str, private_key: &[u8; 32]) -> Vec<u8> {
+    if store_verified_key(&team_privkey_keystore_key(team_id), private_key) {
+        info!(target: "4da::team_crypto", team_id = %team_id, "X25519 private key stored in keychain (verified)");
+        Vec::new()
+    } else {
+        info!(target: "4da::team_crypto", team_id = %team_id, "Keychain unavailable — X25519 private key kept as plaintext DB fallback");
+        private_key.to_vec()
+    }
+}
+
+/// Persist a team's symmetric key. Same posture as the private-key helper.
+/// Returns the bytes for the `team_symmetric_key_enc` column.
+pub(crate) fn persist_team_symmetric_key(team_id: &str, symmetric_key: &[u8; 32]) -> Vec<u8> {
+    if store_verified_key(&team_symkey_keystore_key(team_id), symmetric_key) {
+        info!(target: "4da::team_crypto", team_id = %team_id, "Team symmetric key stored in keychain (verified)");
+        Vec::new()
+    } else {
+        info!(target: "4da::team_crypto", team_id = %team_id, "Keychain unavailable — team symmetric key kept as plaintext DB fallback");
+        symmetric_key.to_vec()
+    }
+}
+
+/// Read a team's X25519 private key. Prefers the keychain; falls back to the
+/// DB column. On fallback success, opportunistically lazy-migrates into the
+/// keychain (with verify) and blanks the DB column so future reads take the
+/// fast path.
+pub(crate) fn read_team_private_key(
+    conn: &rusqlite::Connection,
+    team_id: &str,
+) -> Result<[u8; 32]> {
+    let key_name = team_privkey_keystore_key(team_id);
+    if let Some(k) = read_keychain_key(&key_name) {
+        return Ok(k);
+    }
+    let db_bytes: Vec<u8> = conn.query_row(
+        "SELECT our_private_key_enc FROM team_crypto WHERE team_id = ?1",
+        rusqlite::params![team_id],
+        |row| row.get(0),
+    )?;
+    if db_bytes.len() != 32 {
+        bail!(
+            "Team {} has no X25519 private key (keychain empty and DB column length {})",
+            team_id,
+            db_bytes.len()
+        );
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&db_bytes);
+    // Lazy migration: write+verify, then blank the DB column.
+    if store_verified_key(&key_name, &key) {
+        let _ = conn.execute(
+            "UPDATE team_crypto SET our_private_key_enc = ?1 WHERE team_id = ?2",
+            rusqlite::params![Vec::<u8>::new(), team_id],
+        );
+        info!(target: "4da::team_crypto", team_id = %team_id, "Lazy-migrated X25519 private key to keychain (verified)");
+    }
+    Ok(key)
+}
+
+/// Read a team's symmetric key. Returns Ok(None) when neither source has it
+/// (expected for members who are still waiting for DeliverTeamKey). Lazy-
+/// migrates plaintext DB bytes into the keychain on success.
+pub(crate) fn read_team_symmetric_key(
+    conn: &rusqlite::Connection,
+    team_id: &str,
+) -> Result<Option<[u8; 32]>> {
+    let key_name = team_symkey_keystore_key(team_id);
+    if let Some(k) = read_keychain_key(&key_name) {
+        return Ok(Some(k));
+    }
+    let db_bytes: Option<Vec<u8>> = conn
+        .query_row(
+            "SELECT team_symmetric_key_enc FROM team_crypto WHERE team_id = ?1",
+            rusqlite::params![team_id],
+            |row| row.get::<_, Option<Vec<u8>>>(0),
+        )
+        .ok()
+        .flatten();
+    let Some(bytes) = db_bytes else {
+        return Ok(None);
+    };
+    if bytes.len() != 32 {
+        // Treat empty / wrong-length as "not set" rather than erroring — the
+        // member-pre-delivery case reaches this branch.
+        return Ok(None);
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&bytes);
+    if store_verified_key(&key_name, &key) {
+        let _ = conn.execute(
+            "UPDATE team_crypto SET team_symmetric_key_enc = ?1 WHERE team_id = ?2",
+            rusqlite::params![Vec::<u8>::new(), team_id],
+        );
+        info!(target: "4da::team_crypto", team_id = %team_id, "Lazy-migrated team symmetric key to keychain (verified)");
+    }
+    Ok(Some(key))
+}
+
+/// Scrub both keychain entries for a team. Tolerant of keychain unavailability.
+#[allow(dead_code)] // wired up when team-leave lands; meanwhile kept for parity with Wave 15.
+pub(crate) fn forget_team_keys(team_id: &str) {
+    let _ = crate::settings::keystore::delete_secret(&team_privkey_keystore_key(team_id));
+    let _ = crate::settings::keystore::delete_secret(&team_symkey_keystore_key(team_id));
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -444,5 +614,145 @@ mod tests {
         let restored = TeamCrypto::from_stored(&pub_arr, &priv_arr);
 
         assert_eq!(restored.public_key_bytes(), original.public_key_bytes());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Keystore integration tests
+//
+// As in Wave 15 (webhooks), these tests assert the observable invariant —
+// "what we put in is what we read back" — rather than specific DB-vs-keychain
+// state, so they pass on hosts where the keychain silently refuses writes.
+// Each test scopes to a unique team id so concurrent tests never collide on
+// the shared credential store.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod keystore_tests {
+    use super::*;
+    use rusqlite::Connection;
+    use uuid::Uuid;
+
+    fn setup_conn() -> Connection {
+        let conn = Connection::open_in_memory().expect("open in-memory DB");
+        // Minimal slice of the team_crypto schema — matches migrations.rs.
+        conn.execute_batch(
+            "CREATE TABLE team_crypto (
+                team_id TEXT PRIMARY KEY,
+                our_public_key BLOB NOT NULL,
+                our_private_key_enc BLOB NOT NULL,
+                team_symmetric_key_enc BLOB
+            );",
+        )
+        .expect("create schema");
+        conn
+    }
+
+    fn seed_team(conn: &Connection, team_id: &str, priv_bytes: &[u8], sym_bytes: Option<&[u8]>) {
+        conn.execute(
+            "INSERT INTO team_crypto (team_id, our_public_key, our_private_key_enc, team_symmetric_key_enc)
+             VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![
+                team_id,
+                vec![0u8; 32], // public key placeholder — unused in these tests
+                priv_bytes.to_vec(),
+                sym_bytes.map(|b| b.to_vec()),
+            ],
+        )
+        .expect("seed team_crypto");
+    }
+
+    fn fresh_team_id(prefix: &str) -> String {
+        format!("{}-{}", prefix, Uuid::new_v4())
+    }
+
+    #[test]
+    fn persist_then_read_returns_same_private_key() {
+        let conn = setup_conn();
+        let team_id = fresh_team_id("tk-roundtrip-priv");
+        forget_team_keys(&team_id);
+        let key = [7u8; 32];
+        let db_bytes = persist_team_private_key(&team_id, &key);
+        // Seed the row with whatever `persist_*` returned for the DB column.
+        seed_team(&conn, &team_id, &db_bytes, None);
+
+        let got = read_team_private_key(&conn, &team_id).expect("read");
+        assert_eq!(got, key);
+
+        forget_team_keys(&team_id);
+    }
+
+    #[test]
+    fn persist_then_read_returns_same_symmetric_key() {
+        let conn = setup_conn();
+        let team_id = fresh_team_id("tk-roundtrip-sym");
+        forget_team_keys(&team_id);
+        let priv_key = [3u8; 32];
+        let sym_key = [9u8; 32];
+        let priv_db = persist_team_private_key(&team_id, &priv_key);
+        let sym_db = persist_team_symmetric_key(&team_id, &sym_key);
+        seed_team(&conn, &team_id, &priv_db, Some(&sym_db));
+
+        let got = read_team_symmetric_key(&conn, &team_id).expect("read");
+        assert_eq!(got, Some(sym_key));
+
+        forget_team_keys(&team_id);
+    }
+
+    #[test]
+    fn read_falls_back_to_db_plaintext_when_keychain_absent() {
+        let conn = setup_conn();
+        let team_id = fresh_team_id("tk-fallback");
+        forget_team_keys(&team_id);
+        let priv_key = [0x42; 32];
+        // Seed the DB directly with a plaintext private key — no keystore call.
+        // This simulates a pre-migration row from a prior install.
+        seed_team(&conn, &team_id, &priv_key, None);
+
+        let got = read_team_private_key(&conn, &team_id).expect("read via DB fallback");
+        assert_eq!(got, priv_key);
+
+        forget_team_keys(&team_id);
+    }
+
+    #[test]
+    fn read_symmetric_returns_none_when_db_is_null() {
+        let conn = setup_conn();
+        let team_id = fresh_team_id("tk-sym-null");
+        forget_team_keys(&team_id);
+        // Pre-delivery member: private key seeded, sym key NULL.
+        seed_team(&conn, &team_id, &[1u8; 32], None);
+
+        let got = read_team_symmetric_key(&conn, &team_id).expect("read");
+        assert_eq!(got, None, "pre-delivery state must surface as Ok(None)");
+
+        forget_team_keys(&team_id);
+    }
+
+    #[test]
+    fn read_private_key_errors_when_both_sources_absent() {
+        let conn = setup_conn();
+        let team_id = fresh_team_id("tk-missing");
+        forget_team_keys(&team_id);
+        seed_team(&conn, &team_id, &[], None); // zero-length sentinel
+
+        let result = read_team_private_key(&conn, &team_id);
+        assert!(
+            result.is_err(),
+            "empty keychain + empty DB must fail loudly on private-key read"
+        );
+
+        forget_team_keys(&team_id);
+    }
+
+    #[test]
+    fn keystore_keys_are_unique_per_team() {
+        // Ensures two teams on the same install don't collide in the keychain.
+        let a = fresh_team_id("tk-uniq-a");
+        let b = fresh_team_id("tk-uniq-b");
+        assert_ne!(team_privkey_keystore_key(&a), team_privkey_keystore_key(&b));
+        assert_ne!(team_symkey_keystore_key(&a), team_symkey_keystore_key(&b));
+        // And the two axes within one team must also be disjoint.
+        assert_ne!(team_privkey_keystore_key(&a), team_symkey_keystore_key(&a));
     }
 }
