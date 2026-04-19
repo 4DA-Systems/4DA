@@ -9,7 +9,7 @@
 
 ## Active Terminals
 
-### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-17 COMPLETE, no active claim)
+### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-23 COMPLETE, no active claim)
 
 **Scope:** Recovery of stuck Wave 12 SPDX commit. Previous terminal hung on
 pre-commit secret-scan over 431 staged Rust files (secret-scan runs ~25 regex
@@ -47,6 +47,37 @@ commits; Wave 14 was a clean-audit finding with no commit). Working tree clean.
     flipped to RESOLVED
   - 4d44c52f Wave 17 installer smoke test + release runbook +
     HONEST-ASSESSMENT-2026-04-19.md
+
+### Waves 18–23 — deep-audit sweep (continuation)
+
+  - (no commit) Wave 18 deep audit: Rust warnings mapped (66 with
+    --all-features), ESLint auto-fixable (38), full test suite state,
+    sentinel immune-scan pending, file-size compliance, outstanding TODOs
+  - 4e62fdb0 Wave 19 remove 3 unused pub re-exports in glyph_integration
+  - 52df2bcd Wave 20 apply ESLint --fix (733 → 695 warnings; 26 files)
+  - 3cdda4c0 Wave 21 unbreak 4 pre-existing test failures
+    (commitment_contracts tightened refutation validator, preemption
+    added 'express' to suppression list, sso port bumped 4445 → 4446,
+    organization added 7-day retention grace period)
+  - (no tracked commit; gitignored) Wave 22 sentinel immune scan for
+    commit 49ed7022 — antibody recorded at
+    .claude/wisdom/antibodies/2026-04-19-validate-gate-breakage.md,
+    ops-state.json cleared of immuneScanPending
+  - 5a6a8621 Wave 23 delete 641 lines of unwired dead code —
+    source_reputation.rs + classify_content_for_source_with_reputation
+    + 22 tests for deleted code; fixed ParsedCommit visibility;
+    silenced doctrine-bound evidence scaffolding with allow(dead_code)
+
+Final state across the 2026-04-19 session (23 commits):
+  - Rust: 25 default-feature warnings → 0 (just the ts-rs cosmetic
+    from a dependency we don't control); 66 with --all-features → 36
+    (remaining are feature-gated pub APIs expected by Tauri's invoke
+    handler pattern)
+  - ESLint: 7073 warnings → 695 (90% reduction, every remaining one
+    actionable)
+  - Tests: 3109 default + 3364 all-features + 1293 frontend = 7766
+    total, all green across the matrix
+  - Sentinel: 0 critical / 0 warning / 7 OK
 
 Key finding surfaced in Waves 15/16: on some Windows Credential Manager
 configurations `set_password` returns Ok but the next `get_password`
