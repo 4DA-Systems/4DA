@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Knowledge Decay Alerting for 4DA
 //!
 //! Cross-references project dependencies with source items to detect

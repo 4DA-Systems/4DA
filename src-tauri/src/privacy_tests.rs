@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Privacy-critical tests for 4DA — core module.
 //!
 //! Validates that API keys and sensitive data never leak through Debug output,

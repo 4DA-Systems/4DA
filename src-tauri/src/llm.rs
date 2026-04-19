@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! LLM client module for 4DA
 //!
 //! Provides a unified interface for interacting with different LLM providers:

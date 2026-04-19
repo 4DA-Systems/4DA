@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Calibration Probe Corpus — 28 domain-aware items across 5 tech domains,
 //! universal developer probes, and pure noise controls.
 

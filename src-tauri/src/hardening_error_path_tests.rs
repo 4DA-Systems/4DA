@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Phase 3.1 Hardening: Error-path tests
 //!
 //! Verifies that each module handles failure gracefully (returns Err, not panic).

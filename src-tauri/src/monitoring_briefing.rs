@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Morning briefing generation for 4DA monitoring.
 //!
 //! Generates formatted briefing text for CLI output and frontend display.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use crate::{ScoreBreakdown, SourceRelevance};
 
 /// Helper: create a ScoreBreakdown with a specific signal_count via serde defaults

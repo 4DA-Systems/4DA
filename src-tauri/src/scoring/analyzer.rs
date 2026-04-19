@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Analysis orchestration — full scoring pipeline and background analysis.
 //!
 //! Contains: score_items_full (cache-first analysis), run_background_analysis (scheduled),

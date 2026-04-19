@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Backend i18n -- simple key-based translation for Rust-generated messages.
 //!
 //! Loads JSON translation files from `data/translations/{lang}/` at runtime.

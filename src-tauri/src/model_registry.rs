@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Self-updating LLM model registry.
 //!
 //! Single source of truth for model names, pricing, and capabilities.

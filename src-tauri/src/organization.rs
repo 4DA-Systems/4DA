@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Organization management — multi-team enterprise orchestration.
 //!
 //! Organizations group teams under a single entity with shared policies,
