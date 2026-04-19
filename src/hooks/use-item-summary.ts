@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useCallback } from 'react';
 import { cmd } from '../lib/commands';
 import { translateError } from '../utils/error-messages';

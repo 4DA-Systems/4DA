@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { Suspense, Component, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18next from 'i18next';

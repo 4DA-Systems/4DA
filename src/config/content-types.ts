@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /** Canonical content type badge registry — maps content_dna classifications to display badges. */
 
 export interface ContentTypeMeta {

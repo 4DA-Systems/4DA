@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /* global IntersectionObserver */
 import { useRef, useEffect, useCallback } from 'react';
 import { cmd } from '../lib/commands';

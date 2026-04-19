@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useVoidSignals } from '../../hooks/use-void-signals';
 import { PentachoronMark } from './PentachoronMark';
 
