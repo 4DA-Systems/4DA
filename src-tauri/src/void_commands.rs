@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Void Engine Tauri commands for heartbeat signal visualization.
 
 use crate::error::Result;

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Waitlist signup storage — captures Team/Enterprise interest locally.
 //!
 //! Privacy-first: signups stored in local SQLite, never sent externally.

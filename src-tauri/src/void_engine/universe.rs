@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // ============================================================================
 // Phase 2: Random Projection Engine & Universe (feature-gated)
 // Experimental (AD-012). Enable with: cargo build --features void-universe

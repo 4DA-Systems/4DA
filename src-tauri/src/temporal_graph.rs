@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Developer Temporal Graph — tracks how interests and skills evolve over time.
 //!
 //! Weekly snapshots capture the developer's tech stack, interests, and engagement.

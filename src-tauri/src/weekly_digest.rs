@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Weekly Intelligence Digest — aggregated intelligence report.
 //!
 //! Combines attention report, signal chains, knowledge gaps, and top items
