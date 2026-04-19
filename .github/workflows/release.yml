@@ -153,10 +153,10 @@ jobs:
           # off is tolerated only because SSL.com publishes the tool over
           # HTTPS without a separate checksum endpoint — pin the hash
           # ourselves and update it whenever we intentionally upgrade.
-          $expected = "PLACEHOLDER_SHA256_FILL_IN"
+          $expected = "033b55dcb6a5f64cd9e3893dd960f1d7606e97e57bacdb60bae88720eece0c8b"
           $actual = (Get-FileHash -Path $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "CodeSignTool.zip SHA-256: $actual"
-          # if ($expected -ne "PLACEHOLDER_SHA256_FILL_IN" -and $actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch — expected $expected, got $actual"; exit 1 }
+          if ($actual -ne $expected.ToLowerInvariant()) { Write-Error "CodeSignTool SHA-256 mismatch — expected $expected, got $actual"; exit 1 }
 
           Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
           # Add to PATH for signCommand
