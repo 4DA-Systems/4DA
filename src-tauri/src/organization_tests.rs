@@ -325,10 +325,13 @@ fn test_enforce_retention_purges_source_items() {
     // Set a 1-day retention for source_items
     organization::set_retention_policy(&conn, "team-purge", "source_items", 1).expect("set policy");
 
-    // Insert an old source item (3 days ago)
+    // Insert an old source item older than the 7-day grace period.
+    // `enforce_retention` adds +7 days to the policy (see organization.rs),
+    // so with a 1-day policy the effective cutoff is 8 days. Use 10 days
+    // to stay comfortably past the grace window.
     conn.execute(
         "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding, created_at)
-         VALUES ('test', 'old-1', 'Old Item', 'content', 'hash1', zeroblob(0), datetime('now', '-3 days'))",
+         VALUES ('test', 'old-1', 'Old Item', 'content', 'hash1', zeroblob(0), datetime('now', '-10 days'))",
         [],
     )
     .expect("insert old item");

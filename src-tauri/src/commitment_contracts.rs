@@ -403,7 +403,7 @@ mod tests {
     #[test]
     fn trigger_contract_flips_status() {
         let conn = setup_db();
-        let id = create_contract(&conn, "test", "condition", "").unwrap();
+        let id = create_contract(&conn, "test", "build times exceed 45 seconds", "").unwrap();
         trigger_contract(&conn, id, 42).unwrap();
         let all = list_all_contracts(&conn).unwrap();
         assert_eq!(all[0].status, ContractStatus::Triggered);
@@ -413,7 +413,7 @@ mod tests {
     #[test]
     fn trigger_only_affects_active() {
         let conn = setup_db();
-        let id = create_contract(&conn, "test", "condition", "").unwrap();
+        let id = create_contract(&conn, "test", "build times exceed 45 seconds", "").unwrap();
         dismiss_contract(&conn, id).unwrap();
         trigger_contract(&conn, id, 42).unwrap();
         let all = list_all_contracts(&conn).unwrap();
@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn dismiss_contract_works() {
         let conn = setup_db();
-        let id = create_contract(&conn, "test", "condition", "").unwrap();
+        let id = create_contract(&conn, "test", "build times exceed 45 seconds", "").unwrap();
         dismiss_contract(&conn, id).unwrap();
         let active = list_active_contracts(&conn).unwrap();
         assert!(active.is_empty());
