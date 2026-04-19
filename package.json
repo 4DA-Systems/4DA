@@ -5,6 +5,27 @@
   "author": "4DA Systems Pty Ltd",
   "license": "FSL-1.1-Apache-2.0",
   "homepage": "https://4da.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/runyourempire/4DA.git"
+  },
+  "bugs": {
+    "url": "https://github.com/runyourempire/4DA/issues"
+  },
+  "keywords": [
+    "tauri",
+    "developer-tools",
+    "privacy-first",
+    "local-first",
+    "rag",
+    "rss",
+    "hacker-news",
+    "content-scoring",
+    "semantic-search",
+    "rust",
+    "react",
+    "sqlite-vec"
+  ],
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
