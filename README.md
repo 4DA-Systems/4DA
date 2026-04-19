@@ -223,7 +223,7 @@ Don't take our word for it. Verify every claim:
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server (33 tools), CLI
+- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server (35 tools), CLI
 
 **Signal** — $12/month or $99/year. Compound intelligence that gets smarter every day.
 - Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
@@ -287,7 +287,7 @@ Don't take our word for it. Verify every claim:
 </details>
 
 <details>
-<summary><strong>MCP Integration</strong> — 33 tools across 8 categories</summary>
+<summary><strong>MCP Integration</strong> — 35 tools across 8 categories</summary>
 
 Plug your intelligence system directly into Claude Code, Cursor, or any MCP-compatible tool.
 

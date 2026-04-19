@@ -15,18 +15,20 @@
 /**
  * 4DA MCP Server v4.0.0 — Intelligence Platform
  *
- * 33 tools across 8 categories. Exposes 4DA's codebase-aware content
+ * 35 tools across 8 categories. Exposes 4DA's codebase-aware content
  * scoring engine to any AI tool that speaks MCP.
  *
- * Categories:
- *   Core (4)                  — content feed, context, relevance, feedback
- *   Intelligence (9)          — briefings, signals, autopsy, trends, topics
- *   Diagnostic (3)            — source health, config, LLM status
- *   Knowledge & Health (4)    — gaps, project health, mentions, context export
- *   Decision Intelligence (3) — decision memory, tech radar, alignment checks
- *   Agent Autonomy (3)        — persistent memory, session briefs, delegation
- *   Developer DNA (1)         — tech identity profile
- *   Intelligence Metabolism (3)— autophagy, decision windows, compound advantage
+ * Categories (canonical — matches schema-registry.ts `ToolCategory`):
+ *   Core (4)                    — content feed, context, relevance, feedback
+ *   Intelligence (11)           — briefings, signals, autopsy, trends, topics,
+ *                                 chains, shifts, attention, trust, preemption
+ *   Diagnostic (3)              — source health, config, LLM status
+ *   Knowledge & Health (4)      — gaps, project health, mentions, context export
+ *   Decision Intelligence (3)   — decision memory, tech radar, alignment checks
+ *   Agent Autonomy (6)          — persistent memory, session briefs, delegation,
+ *                                 agent feedback record + stats, what_should_i_know
+ *   Developer DNA / Identity (1)— tech identity profile
+ *   Intelligence Metabolism (3) — autophagy, decision windows, compound advantage
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -275,7 +277,7 @@ async function main() {
   // Help
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-  @4da/mcp-server — 33 tools for codebase-aware developer intelligence
+  @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 
   Usage:
     npx @4da/mcp-server              Start MCP server (stdio transport)

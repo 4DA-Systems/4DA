@@ -8,13 +8,13 @@ cover_image:
 series:
 ---
 
-The Model Context Protocol spec is simple: expose tools, accept calls, return results. But when your server has 33 tools across 8 categories, that simplicity becomes a design problem. A naive implementation turns into a 2,000-line switch statement, a 4,500-token tool listing that chokes context windows, and a dispatch layer that makes adding new tools painful.
+The Model Context Protocol spec is simple: expose tools, accept calls, return results. But when your server has 35 tools across 8 categories, that simplicity becomes a design problem. A naive implementation turns into a 2,000-line switch statement, a 4,500-token tool listing that chokes context windows, and a dispatch layer that makes adding new tools painful.
 
 This is a walkthrough of how `@4da/mcp-server` handles these problems. The patterns apply to any MCP server with more than a handful of tools.
 
 ## The Architecture at a Glance
 
-The server exposes 33 tools that query a local SQLite database. No network calls to external APIs from the tool layer itself. The data comes from a companion desktop app that scans project manifests, fetches content from sources (Hacker News, arXiv, Reddit, GitHub, RSS), and scores it against the user's detected tech stack.
+The server exposes 35 tools that query a local SQLite database. No network calls to external APIs from the tool layer itself. The data comes from a companion desktop app that scans project manifests, fetches content from sources (Hacker News, arXiv, Reddit, GitHub, RSS), and scores it against the user's detected tech stack.
 
 The MCP server is the read layer. It gives AI coding assistants structured access to that intelligence.
 
@@ -37,7 +37,7 @@ src/
 
 ## Problem 1: Tool Listing Blows Up Context Windows
 
-The MCP `list_tools` response includes the full JSON Schema for every tool. With 33 tools, each having 3-8 parameters with descriptions and enums, this balloons to roughly 4,500 tokens. That is context budget the AI model could spend on actually reasoning about the user's question.
+The MCP `list_tools` response includes the full JSON Schema for every tool. With 35 tools, each having 3-8 parameters with descriptions and enums, this balloons to roughly 4,500 tokens. That is context budget the AI model could spend on actually reasoning about the user's question.
 
 The fix is a two-layer schema system.
 
@@ -109,7 +109,7 @@ The `ToolExecutor` type uses `any` for params intentionally. Type safety lives i
 
 ## Problem 3: Category-Based Organization
 
-With 33 tools, discoverability matters. A flat list of tool names is not navigable. The schema registry assigns every tool a category and a set of tags:
+With 35 tools, discoverability matters. A flat list of tool names is not navigable. The schema registry assigns every tool a category and a set of tags:
 
 ```typescript
 export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
