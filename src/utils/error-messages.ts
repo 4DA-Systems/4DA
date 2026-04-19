@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Translates raw Rust backend error strings into user-friendly messages.
  *

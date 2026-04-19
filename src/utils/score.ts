@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Score formatting and color utilities
 import type { SourceRelevance } from '../types';
 

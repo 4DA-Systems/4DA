@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, expect, it } from 'vitest';
 import { parseSourceInput } from './source-input-parser';
 
