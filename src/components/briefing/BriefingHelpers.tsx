@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useEffect, useState } from 'react';
 import { getRelativeTime, getFreshnessColor } from '../../utils/briefing-parser';
 
