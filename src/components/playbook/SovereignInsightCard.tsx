@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect } from 'react';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { InsightBlock, DataPoint } from '../../types/personalization';

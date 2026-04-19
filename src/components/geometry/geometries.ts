@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 export interface PolyhedronGeometry {
   vertices: [number, number, number][];
   edges: [number, number][];
