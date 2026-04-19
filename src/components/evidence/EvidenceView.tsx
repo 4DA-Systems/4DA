@@ -244,21 +244,21 @@ const EvidenceView = memo(function EvidenceView() {
       cmd('ace_get_anti_topics', { min_rejections: 3 }),
     ]);
 
-    if (results[0]!.status === 'fulfilled') {
-      setPreemptionCount((results[0]!.value as unknown as EvidenceFeed).total);
+    if (results[0].status === 'fulfilled') {
+      setPreemptionCount((results[0].value as unknown as EvidenceFeed).total);
     }
-    if (results[1]!.status === 'fulfilled') {
-      setBlindSpotCount((results[1]!.value as unknown as EvidenceFeed).total);
+    if (results[1].status === 'fulfilled') {
+      setBlindSpotCount((results[1].value as unknown as EvidenceFeed).total);
     }
-    if (results[2]!.status === 'fulfilled') {
-      setPulse(results[2]!.value as PulseData);
+    if (results[2].status === 'fulfilled') {
+      setPulse(results[2].value as PulseData);
     }
-    if (results[3]!.status === 'fulfilled') {
-      const raw = results[3]!.value as { affinities: TopicAffinity[] };
+    if (results[3].status === 'fulfilled') {
+      const raw = results[3].value as { affinities: TopicAffinity[] };
       setAffinities(raw.affinities ?? []);
     }
-    if (results[4]!.status === 'fulfilled') {
-      const raw = results[4]!.value as { anti_topics: AntiTopic[] };
+    if (results[4].status === 'fulfilled') {
+      const raw = results[4].value as { anti_topics: AntiTopic[] };
       setAntiTopics(raw.anti_topics ?? []);
     }
 

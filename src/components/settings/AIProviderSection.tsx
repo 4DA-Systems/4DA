@@ -31,7 +31,7 @@ const popularEndpoints: { name: string; url: string }[] = [
 /** Get models for a provider from registry, falling back to hardcoded defaults. */
 function getProviderModels(provider: string, registry: ModelRegistryData | null | undefined): string[] {
   if (registry && registry.providers[provider]?.length) {
-    return registry.providers[provider]!.map(m => m.id);
+    return registry.providers[provider].map(m => m.id);
   }
   return fallbackModels[provider] ?? [];
 }
