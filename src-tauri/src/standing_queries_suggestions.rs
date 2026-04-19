@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Standing Query Suggestions — auto-generated query recommendations.
 //!
 //! Analyzes user engagement patterns (topic affinities, dependencies)

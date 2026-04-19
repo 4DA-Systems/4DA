@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Sovereign Developer Profile — unified view across all profile systems.
 //!
 //! Computed assembly layer that reads from 12+ existing tables and computes

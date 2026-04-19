@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! API Cost Monitor Sun -- tracks LLM API usage costs (hourly).
 
 use super::SunResult;

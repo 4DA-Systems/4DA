@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Papers with Code source implementation
 //!
 //! Fetches latest research papers with linked code implementations

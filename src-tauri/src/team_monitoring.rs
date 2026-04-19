@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team monitoring — signal aggregation, alert policies, and team-wide detection.
 //!
 //! Aggregates signals detected by individual team members into team-level

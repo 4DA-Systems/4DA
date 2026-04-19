@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! STREETS Contextual Discovery — surfaces relevant STREETS modules based on
 //! user behavior (saved items, topic affinities) from the last 7 days.
 //!

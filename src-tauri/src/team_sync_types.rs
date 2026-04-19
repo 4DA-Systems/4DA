@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team sync types — metadata entries that transit the encrypted relay.
 //!
 //! These types define WHAT gets synced between team members.

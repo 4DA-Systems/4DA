@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team Intelligence — aggregated analytics across all team members.
 //!
 //! Queries the `team_sync_log` and `team_members_cache` tables to build

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Bayesian persona inference engine for taste test calibration.
 //!
 //! Maintains a posterior probability distribution over 9 developer personas,

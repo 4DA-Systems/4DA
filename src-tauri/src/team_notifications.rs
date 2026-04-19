@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team notifications — in-app notification system for team events.
 //!
 //! Notifications are stored locally and never synced via the relay.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Temporal Event Store for 4DA Innovation Features
 //!
 //! Provides recording and querying of temporal events, project dependencies,

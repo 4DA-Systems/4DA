@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Centralized rate limiter for source fetching.
 //!
 //! Tracks the last request timestamp per source/domain and enforces

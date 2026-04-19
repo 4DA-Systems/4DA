@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team sync scheduler -- background task that syncs metadata with the relay.
 //!
 //! Integrates with the existing monitoring scheduler pattern (see `monitoring.rs`).

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for team sync UI integration.
 //!
 //! Phase 4: Status, members, sharing commands.

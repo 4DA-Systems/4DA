@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Radar computation engine — builds a personal tech radar from existing 4DA data.
 //!
 //! Extracted from `tech_radar.rs` to keep file sizes under the 600-line limit.

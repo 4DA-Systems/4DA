@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Sovereign Facts — fact extraction and storage from command output.
 //!
 //! Extracted from `sovereign_profile.rs` to keep file sizes manageable.

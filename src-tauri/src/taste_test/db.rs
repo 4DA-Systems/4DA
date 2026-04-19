@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Persistence layer for taste test results using existing SQLite database.
 
 use rusqlite::{params, Connection};

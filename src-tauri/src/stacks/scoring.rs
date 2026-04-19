@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack-aware scoring functions that plug into the PASIFA pipeline.
 //!
 //! Four injection points:

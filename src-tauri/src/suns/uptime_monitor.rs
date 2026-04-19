@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Uptime Monitor Sun -- tracks system uptime (every 5 min).
 
 use super::SunResult;

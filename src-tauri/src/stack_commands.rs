@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for the Stack Intelligence System.
 //!
 //! 5 commands for managing stack profiles from the frontend:

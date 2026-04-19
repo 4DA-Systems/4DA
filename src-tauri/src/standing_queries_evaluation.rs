@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Standing Query Evaluation — monitoring cycle integration.
 //!
 //! Evaluates all active standing queries against newly ingested content

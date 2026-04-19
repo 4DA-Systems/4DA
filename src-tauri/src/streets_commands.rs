@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! STREETS Command Parser & Executor — transforms playbook code blocks into runnable commands.
 //!
 //! Parses markdown code blocks from STREETS lessons, classifies commands by OS target
