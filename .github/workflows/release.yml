@@ -79,6 +79,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Rust cache
@@ -474,9 +475,6 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
 
       - name: Install and build MCP server
         working-directory: mcp-4da-server
