@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tauri commands for the Source Plugin API.
 //!
 //! Exposes plugin discovery and execution to the frontend via IPC.

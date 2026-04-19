@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Privacy tests for export, analysis, and data pipeline paths.
 //!
 //! Validates that API keys never leak through exports, analysis results,

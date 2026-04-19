@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Real SQLite-backed [`AuditSink`] — Phase 2 audit-only storage.
 //!
 //! This is the 4DA production implementation. It shares the same schema

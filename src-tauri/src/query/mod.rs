@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Query module - Natural Language Query System
 // Phase 2 of 4DA roadmap
 

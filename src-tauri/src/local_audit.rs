@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Local audit tool integration — runs `npm audit` and `cargo audit` when available.
 //!
 //! Supplements the GitHub Advisory Database CVE scan with findings from

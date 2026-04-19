@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — Provenance Graph (Layer 5).
 //!
 //! Every AI-influenced artifact in 4DA carries provenance: which model

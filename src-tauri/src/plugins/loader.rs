@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Plugin loader — discovers, validates, and executes source plugins.
 //!
 //! Plugins live in `data/plugins/<plugin-name>/` with a `manifest.json`

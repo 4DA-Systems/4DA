@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Streaming LLM completion for progressive token delivery.
 //!
 //! Extracted from `llm.rs` to keep file sizes within limits.

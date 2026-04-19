@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence Mesh — Layer 2 (Advisory Mesh): the `IntelligenceCore` trait.
 //!
 //! The deterministic pipeline stays sovereign (scoring::pipeline_v2).
