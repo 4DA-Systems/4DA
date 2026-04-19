@@ -22,6 +22,16 @@ Typical rejection rate: **99%+**. What's left is yours.
 
 Privacy-first. Local-first. BYOK. Your indexed content stays on your machine — there is no 4DA-operated server for it to go to. It learns from how you engage with what it shows you — yesterday's noise becomes tomorrow's signal. Crash reporting is opt-in, off by default. For the full list of outbound connections with source-code references, see [NETWORK.md](NETWORK.md).
 
+### Try it in 30 seconds
+
+Already using Claude Code, Cursor, or Windsurf? One command:
+
+```bash
+npx @4da/mcp-server --setup
+```
+
+This auto-detects your editor, scans your project, and gives your AI assistant context-aware developer intelligence. No desktop app required — works standalone. [Learn more about the MCP server.](mcp-4da-server/)
+
 <p align="center">
   <img src="site/screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream scored against your stack" width="800" />
 </p>
@@ -225,8 +235,10 @@ Don't take our word for it. Verify every claim:
 **Free** — $0 forever. No credit card. No account. No expiration.
 - All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server (35 tools), CLI
 
-**Signal** — $12/month or $99/year. Compound intelligence that gets smarter every day.
+**Signal** — $12/month or $99/year (45-day free trial). Compound intelligence that gets smarter every day.
 - Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
+
+Free is not a demo. It's the full scoring engine, all sources, behavior learning, and MCP integration. Signal adds analytical depth for developers who want to understand *why* things score the way they do and track patterns over time.
 
 ---
 

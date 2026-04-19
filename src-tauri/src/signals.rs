@@ -270,7 +270,7 @@ fn title_contains_semver(title_lower: &str) -> bool {
             }
             if ends_clean && dots == 1 && j - i >= 3 {
                 // N.N — only count if paired with release context
-                let ctx = &title_lower[..];
+                let ctx = &title_lower;
                 if ctx.contains("release")
                     || ctx.contains("announc")
                     || ctx.contains("available")

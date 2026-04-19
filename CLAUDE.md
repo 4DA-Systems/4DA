@@ -192,39 +192,6 @@ Do NOT record the same decision in all three. Route by purpose. AWE is for decis
 **AWE binary:** `D:\runyourempire\awe\target\release\awe.exe`
 **Wisdom database:** `%APPDATA%\awe\wisdom.db` (87 decisions, 1 validated principle, compounding)
 
-## Airlock (Agent Safety Gates)
-
-Airlock is safety middleware for agent-to-agent communication. Every message between agents passes through 9 composable safety gates before delivery. Irreversible actions require human acknowledgement. Every message is logged in both machine-parseable and human-readable form.
-
-**Repository:** `D:\runyourempire\glyph` (standalone Rust workspace, Apache 2.0) — GitHub repo rename to `airlock` pending
-**Dictionary:** 60 glyphs across 8 categories, hash-locked via blake3
-**Crates:** airlock-core, airlock-engine, airlock-compile, airlock-lift, airlock-safety, airlock-cli
-
-**9 safety gates** (all load-bearing, non-optional):
-
-1. Roundtrip invariant — every envelope compiles to non-empty NL, property-tested
-2. Payload invariant — payloads cannot contain glyphs (anti-steganography)
-3. Anti-steg statistical monitor — per-agent frequency divergence flagging
-4. Capability declaration — agents register which glyphs they may emit
-5. Reversibility gate — `⟲` and `🔒` envelopes route through AWE consequence scan
-6. Mandatory human ACK — `🔴` `⬛` `🔒` `✋` envelopes block until human ACK
-7. Dual-form audit log — wire + compiled NL, always written (even for rejections)
-8. Dictionary version gate — hard mismatch error, no compatibility mode
-9. Semantic drift detector — weekly recompile of stored envelopes vs current dict
-
-**Rollout phases:**
-- Phase 0 — spec + tokenizer measurement ✅ (compression claim retracted, safety gates are the value)
-- Phase 1 — Rust crate with 35 tests ✅
-- Phase 1.5 — Integration harness (SqliteAuditSink, mocks, demo) ✅
-- Phase 2 — audit-only mode in 4DA (shadow envelopes, no agent behavior change)
-- Phase 3 — first opt-in agent emits real envelopes
-- Phase 4 — broker routing by typed headers
-- Phase 5 — safety hardening (real AWE + UI bridges)
-- Phase 6 — compound measurement + AWE feedback loop
-
-**Kill gates:** Phase 2 aborts if categorical coverage <50% or audit log growth excessive.
-**Canonical spec:** `D:\runyourempire\glyph\docs\SPEC.md` (dual-licensed CC-BY-4.0)
-
 ## Worktree Hygiene
 
 Subagents spawned with `isolation: "worktree"` create a new worktree under `.claude/worktrees/agent-<hash>/` and a matching branch `worktree-agent-<hash>`. After the subagent's commits are merged into main, the worktree directory and branch remain — neither the subagent nor the orchestrator cleans up. Over time these accumulate and trigger sentinel alarms.

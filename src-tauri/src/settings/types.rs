@@ -360,6 +360,7 @@ impl std::fmt::Debug for LicenseConfig {
             )
             .field("activated_at", &self.activated_at)
             .field("trial_started_at", &self.trial_started_at)
+            .field("dev_unlock_all", &self.dev_unlock_all)
             .finish()
     }
 }
