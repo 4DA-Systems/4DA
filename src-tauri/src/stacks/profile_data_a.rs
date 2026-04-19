@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Stack profile definitions — Group A: Next.js, Rust, Python ML, Go Backend.
 
 use crate::stacks::{EcosystemShift, PainPoint, SeedItem, StackProfile};

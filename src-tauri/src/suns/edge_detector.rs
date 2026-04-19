@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Edge Detector Sun -- detects emerging trends in user's tech stack (daily).
 
 use super::SunResult;

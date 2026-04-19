@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Intelligence computation, completeness, export, and Tauri commands for
 //! the Sovereign Developer Profile.
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Continuous taste inference — extends the one-shot taste test into a
 //! persistent learning engine. Every user interaction updates the persona
 //! posterior, turning implicit behavior into increasingly precise persona

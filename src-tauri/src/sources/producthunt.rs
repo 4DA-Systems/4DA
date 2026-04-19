@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Product Hunt source implementation
 //!
 //! Fetches featured products from Product Hunt RSS feed and extracts metadata.

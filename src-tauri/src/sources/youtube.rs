@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! YouTube source implementation
 //!
 //! Fetches recent videos from YouTube channels via their public Atom RSS feeds.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Suns module -- global registry and helpers.
 //!
 //! Command functions were removed (not registered in invoke_handler).

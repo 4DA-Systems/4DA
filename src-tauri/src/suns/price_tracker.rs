@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Price Tracker Sun -- checks regional data for updates (weekly).
 
 use super::SunResult;

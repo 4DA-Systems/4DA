@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Negative Stack Model — infers what technologies the user does NOT use
 //! and applies suppressive priors in scoring. Self-correcting: new deps promote,
 //! positive interactions weaken, temporal decay prevents stale suppression.

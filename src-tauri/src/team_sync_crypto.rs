@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Team sync encryption -- XChaCha20Poly1305 + X25519 key exchange.
 //!
 //! The relay server stores only encrypted blobs and cannot read team metadata.

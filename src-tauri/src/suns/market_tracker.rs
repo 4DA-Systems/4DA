@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Market Tracker Sun -- analyzes source_items for revenue-related trends (daily).
 
 use super::SunResult;

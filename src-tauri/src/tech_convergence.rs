@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Cross-project technology convergence analysis.
 //!
 //! Identifies shared and unique technologies across all ACE-detected projects.

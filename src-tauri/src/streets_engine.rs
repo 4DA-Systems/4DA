@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /// STREETS Revenue Engine mapping
 ///
 /// Maps scored items to STREETS revenue engines based on content type,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Automation Auditor Sun -- measures automation coverage in projects (daily).
 
 use super::SunResult;

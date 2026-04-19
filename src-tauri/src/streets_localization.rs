@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! STREETS Content Localization — region-specific prices and context for STREETS playbook.
 //!
 //! Loads regional data from `docs/streets/regions/*.json` at runtime,

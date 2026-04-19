@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Sovereign Profile — accumulates hardware/system facts from STREETS commands.
 //!
 //! Facts are extracted automatically from command output and stored in the
