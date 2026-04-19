@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Hugging Face Hub source implementation
 //!
 //! Monitors trending AI/ML models and new model releases from the

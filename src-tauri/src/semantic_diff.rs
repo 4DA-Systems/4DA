@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Semantic Diff Engine for 4DA
 //!
 //! Tracks how the conversation around topics shifts over time.

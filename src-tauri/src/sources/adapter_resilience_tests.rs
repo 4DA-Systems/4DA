@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Resilience tests for source adapter parsing and deserialization.
 //!
 //! These tests verify that every adapter gracefully handles edge-case inputs:

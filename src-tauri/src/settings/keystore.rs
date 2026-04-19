@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Encrypted keystore for API keys using platform-native credential storage.
 //!
 //! Uses the `keyring` crate to store secrets in:

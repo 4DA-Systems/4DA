@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Simulation Personas — 9 developer archetypes
 //!
 //! Canonical order: [rust, python, typescript, devops, mobile, bootstrap, power, switcher, niche]

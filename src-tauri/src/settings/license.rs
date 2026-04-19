@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! License verification, feature gating, and trial management.
 
 use crate::error::Result;

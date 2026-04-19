@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Scoring configuration constants — AUTO-GENERATED from scoring/pipeline.scoring
 //!
 //! This module includes the build-time generated scoring configuration.

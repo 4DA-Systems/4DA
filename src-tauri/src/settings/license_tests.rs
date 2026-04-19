@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for license verification, feature gating, and trial management.
 //!
 //! Split from settings/license.rs to keep the module under 600 lines.

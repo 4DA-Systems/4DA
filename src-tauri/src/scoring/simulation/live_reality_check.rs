@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Live Reality Check — Validates scoring pipeline against real HN content
 //!
 //! Fetches top stories from Hacker News and scores them against 3 personas

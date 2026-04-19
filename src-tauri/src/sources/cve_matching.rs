@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! CVE matching logic — version-aware cross-referencing of advisories
 //! against user dependencies.
 //!

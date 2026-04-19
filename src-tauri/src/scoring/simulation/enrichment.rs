@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Context Enrichment Engine — merges PersonaEnrichment into base ScoringContext.
 //!
 //! Takes a base `ScoringContext` (from `personas.rs`) and a `PersonaEnrichment`

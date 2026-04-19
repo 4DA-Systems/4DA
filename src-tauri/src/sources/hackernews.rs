@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Hacker News source implementation
 //!
 //! Fetches top stories from Hacker News API and scrapes article content.

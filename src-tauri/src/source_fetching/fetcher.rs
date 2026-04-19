@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Network fetching logic: fetch_all_sources, fetch_all_sources_deep
 
 use tauri::{AppHandle, Emitter};

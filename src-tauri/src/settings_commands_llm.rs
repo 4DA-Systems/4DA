@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! LLM provider commands: test connection, Ollama status, model pulling.
 
 use std::sync::atomic::{AtomicBool, Ordering};

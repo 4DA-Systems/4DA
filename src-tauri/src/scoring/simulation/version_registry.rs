@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Pipeline Version Registry — abstracts V1/V2 pipeline selection.
 //!
 //! Enables tests to score items through V1, V2, or both without touching

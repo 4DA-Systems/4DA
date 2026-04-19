@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /// Known 1-2 char programming language names that should match despite being short.
 /// Without this allowlist, "go", "r", "c", "d" are invisible to topic matching.
 const SHORT_LANGUAGE_NAMES: &[&str] = &["go", "r", "c", "d"];

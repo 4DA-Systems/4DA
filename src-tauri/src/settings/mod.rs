@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Settings module for 4DA
 //!
 //! Manages user configuration including API keys (BYOK), preferences,

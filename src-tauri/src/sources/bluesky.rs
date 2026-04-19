@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Bluesky/AT Protocol source implementation
 //!
 //! Fetches developer-relevant posts from Bluesky's public search API.
