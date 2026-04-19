@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { PersonalizationDepth } from '../../types/personalization';
 
 interface Props {
