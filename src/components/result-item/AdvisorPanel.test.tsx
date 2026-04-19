@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * AdvisorPanel — Intelligence Mesh Phase 7b + 7c component test.
  *

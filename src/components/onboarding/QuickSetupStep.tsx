@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { SetupAIProvider } from './setup-ai-provider';
 import { SetupProjects } from './setup-projects';
 import { SetupStack } from './setup-stack';

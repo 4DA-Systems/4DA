@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useTranslation } from 'react-i18next';
 
 export type ExperienceLevel = 'learning' | 'building' | 'leading' | 'architecting';

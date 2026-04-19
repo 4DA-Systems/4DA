@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Module IDs (static, mirrors backend MODULE_DEFS)
 export const MODULE_IDS = ['S', 'T', 'R', 'E1', 'E2', 'T2', 'S2'] as const;
 

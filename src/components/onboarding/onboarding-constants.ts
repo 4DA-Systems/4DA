@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 export const fallbackSuggestions = [
   'Machine Learning', 'Rust', 'TypeScript', 'Web Development',
   'DevOps', 'Security', 'Startups', 'Open Source', 'AI/LLM',
