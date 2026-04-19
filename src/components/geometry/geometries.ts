@@ -137,7 +137,7 @@ const C5T_GROUPS: number[][] = [
 const C5T_COLORS = ['#D4AF37', '#DAB94A', '#BF8C20', '#B8782A', '#A68538'];
 export const COMPOUND_FIVE: CompoundGeometry = {
   groups: C5T_GROUPS.map((indices, gi) => {
-    const verts = indices.map(i => DODECAHEDRON.vertices[i]!) as [number, number, number][];
+    const verts = indices.map(i => DODECAHEDRON.vertices[i]!);
     return {
       vertices: verts,
       edges: [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]] as [number, number][],
