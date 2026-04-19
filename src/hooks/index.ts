@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 export { useSettings } from './use-settings';
 export { useMonitoring } from './use-monitoring';
 export { useAnalysis } from './use-analysis';
