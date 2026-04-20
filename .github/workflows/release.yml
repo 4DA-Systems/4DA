@@ -101,6 +101,16 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Download OCR models
+        shell: bash
+        run: |
+          mkdir -p src-tauri/models
+          curl -sSL -o src-tauri/models/text-detection.rten \
+            https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
+          curl -sSL -o src-tauri/models/text-recognition.rten \
+            https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+          ls -lh src-tauri/models/
+
       - name: Build AWE sidecar
         shell: bash
         run: |
