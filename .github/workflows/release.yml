@@ -32,7 +32,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: `v${{ steps.version.outputs.version }}`,
-              name: `4DA Home v${{ steps.version.outputs.version }}`,
+              name: `4DA v${{ steps.version.outputs.version }}`,
               body: `## Download\n\nPick the installer for your platform below.\n\n| Platform | File |\n|----------|------|\n| Windows | \`.exe\` (NSIS installer) |\n| macOS | \`.dmg\` |\n| Linux | \`.AppImage\` or \`.deb\` |\n\n---\n\nSee [CHANGELOG](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/main/CHANGELOG.md) for details.`,
               draft: true,
               prerelease: false,
