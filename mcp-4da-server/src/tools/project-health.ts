@@ -7,6 +7,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { ProjectSummaryRow, DependencyRow, CountRow } from "../types.js";
+import { getLiveIntelligence } from "../live-singleton.js";
 
 export interface ProjectHealthParams {
   project_path?: string;
@@ -54,18 +55,51 @@ export function executeProjectHealth(
       )
       .all(proj.project_path) as DependencyRow[];
 
-    // Check for security-related source items mentioning these deps
+    // Security: use live OSV data if available, fall back to source_items pattern matching
     let securityIssues = 0;
-    for (const dep of deps.slice(0, 20)) {
-      const pattern = `%${dep.package_name}%`;
-      const securityMentions = rawDb
-        .prepare(
-          `SELECT COUNT(*) as cnt FROM source_items
-           WHERE (title LIKE ? OR content LIKE ?)
-           AND (signal_type = 'security_alert' OR title LIKE '%CVE%' OR title LIKE '%vulnerability%')`,
-        )
-        .get(pattern, pattern) as CountRow | undefined;
-      if (securityMentions && securityMentions.cnt > 0) securityIssues++;
+    const depVulnDetails: Array<{ name: string; vulnCount: number; highestSeverity: string }> = [];
+    const liveIntel = getLiveIntelligence();
+    const vulnResult = liveIntel?.getVulnerabilities();
+
+    if (vulnResult && vulnResult.vulnerabilities.length > 0) {
+      // Use real vulnerability data from OSV
+      const vulnByPkg = new Map<string, { count: number; severity: string }>();
+      for (const v of vulnResult.vulnerabilities) {
+        const existing = vulnByPkg.get(v.package);
+        if (!existing) {
+          vulnByPkg.set(v.package, { count: 1, severity: v.severity });
+        } else {
+          existing.count++;
+          const order: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, unknown: 0 };
+          if ((order[v.severity] || 0) > (order[existing.severity] || 0)) {
+            existing.severity = v.severity;
+          }
+        }
+      }
+      for (const dep of deps) {
+        const vuln = vulnByPkg.get(dep.package_name);
+        if (vuln) {
+          securityIssues++;
+          depVulnDetails.push({ name: dep.package_name, vulnCount: vuln.count, highestSeverity: vuln.severity });
+        }
+      }
+    } else {
+      // Fallback: search source_items for security mentions (only if table has expected columns)
+      try {
+        for (const dep of deps.slice(0, 20)) {
+          const pattern = `%${dep.package_name}%`;
+          const securityMentions = rawDb
+            .prepare(
+              `SELECT COUNT(*) as cnt FROM source_items
+               WHERE (title LIKE ? OR content LIKE ?)
+               AND (title LIKE '%CVE%' OR title LIKE '%vulnerability%')`,
+            )
+            .get(pattern, pattern) as CountRow | undefined;
+          if (securityMentions && securityMentions.cnt > 0) securityIssues++;
+        }
+      } catch {
+        // source_items table may not exist or have different schema in standalone
+      }
     }
 
     const securityScore = deps.length > 0 ? 1.0 - securityIssues / deps.length : 1.0;
@@ -82,6 +116,8 @@ export function executeProjectHealth(
       health: {
         security_score: Math.max(0, securityScore),
         security_issues: securityIssues,
+        vulnerable_packages: depVulnDetails.length > 0 ? depVulnDetails : undefined,
+        data_source: vulnResult ? "osv.dev" : "source_items",
       },
     };
   });

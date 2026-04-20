@@ -20,6 +20,7 @@ import { executeSourceHealth } from "./source-health.js";
 import { executeSignalChains } from "./signal-chains.js";
 import { executeAgentSessionBrief } from "./agent-session-brief.js";
 import { findAweBinary } from "./decision-memory.js";
+import { getLiveIntelligence } from "../live-singleton.js";
 
 // ============================================================================
 // Types
@@ -272,6 +273,31 @@ export function executeWhatShouldIKnow(
       }));
   } catch {
     // Signals unavailable — non-fatal
+  }
+
+  // ── 1b. Live vulnerability data ──────────────────────────────────────
+  try {
+    const liveIntel = getLiveIntelligence();
+    if (liveIntel) {
+      const vulnResult = liveIntel.getVulnerabilities();
+      if (vulnResult && vulnResult.totalVulnerable > 0) {
+        const topVulns = vulnResult.vulnerabilities.slice(0, 3);
+        const details = topVulns.map((v) =>
+          `${v.package}@${v.currentVersion}: ${v.summary}`
+        ).join("; ");
+
+        advisories.unshift({
+          title: `${vulnResult.totalVulnerable} dependenc${vulnResult.totalVulnerable !== 1 ? "ies have" : "y has"} known vulnerabilities`,
+          signal_type: "security_alert",
+          priority: vulnResult.bySeverity.critical > 0 ? "critical" :
+                    vulnResult.bySeverity.high > 0 ? "high" : "medium",
+          action: `Run vulnerability_scan for full details. ${details}`,
+          url: null,
+        });
+      }
+    }
+  } catch {
+    // Live intel unavailable — non-fatal
   }
 
   // ── 2. Source Health (CVE/security check) ─────────────────────────────
