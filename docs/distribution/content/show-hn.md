@@ -12,7 +12,7 @@ How it works: An Autonomous Context Engine scans your local repos (package.json,
 
 Stack: Tauri 2.0 (Rust backend, React/TypeScript frontend), SQLite with sqlite-vec for local vector search, optional Ollama for embeddings. Nothing leaves your machine — no accounts, no telemetry, BYOK for any LLM features.
 
-The MCP server component (@4da/mcp-server) exposes 35 tools to Claude Code, Cursor, or any MCP client so your LLM can query trends, knowledge gaps, and signals relevant to your codebase. MIT licensed.
+The MCP server component (@4da/mcp-server) exposes 36 tools to Claude Code, Cursor, or any MCP client so your LLM can query trends, knowledge gaps, and signals relevant to your codebase. MIT licensed.
 
 Install the MCP server: `npx @4da/mcp-server --setup`
 

@@ -3,20 +3,21 @@
 [![npm version](https://img.shields.io/npm/v/@4da/mcp-server?color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/Node-%3E%3D18-brightgreen)](https://nodejs.org/)
-[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-35-white)](https://4da.ai)
+[![MCP Tools](https://img.shields.io/badge/MCP%20Tools-36-white)](https://4da.ai)
 [![smithery badge](https://smithery.ai/badge/@4da/mcp-server)](https://smithery.ai/server/@4da/mcp-server)
 
-**35 MCP tools that give your AI coding assistant memory, context, and awareness of what you actually build.**
+**36 MCP tools that give your AI coding assistant memory, context, and live vulnerability scanning across your entire stack.**
 
-Your AI writes code without knowing your tech stack, your dependencies, or that the library it just recommended has a critical CVE from yesterday. This MCP server fixes that. It connects Claude Code, Cursor, Copilot, and Windsurf to a local intelligence engine that reads your `Cargo.toml`, `package.json`, `go.mod`, and `requirements.txt` -- then scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what matters to you.
+Your AI writes code without knowing your tech stack, your dependencies, or that the library it just recommended has a critical CVE from yesterday. This MCP server fixes that. It connects Claude Code, Cursor, Copilot, and Windsurf to a local intelligence engine that reads your `Cargo.toml`, `package.json`, `go.mod`, and `requirements.txt` -- then scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what matters to you. It also scans your dependencies against the OSV.dev vulnerability database in real time.
 
-Everything runs locally. Nothing leaves your machine.
+Everything runs locally. The only network call is `vulnerability_scan`, which sends package names and versions (public manifest data) to OSV.dev -- no code, no paths, no personal data. Set `FOURDA_OFFLINE=true` to disable even that.
 
 ```
-You:     "Are there any security issues in my dependencies?"
-Claude:  [calls project_health, knowledge_gaps, get_actionable_signals]
-         "Yes — the serde crate you use in 3 projects has a new advisory
-          (RUSTSEC-2026-0012). Here's the migration path..."
+You:     "Scan my dependencies for vulnerabilities"
+Claude:  [calls vulnerability_scan]
+         "Found 3 advisories: serde 1.0.197 has RUSTSEC-2026-0012 (high),
+          cookie 0.17.0 has RUSTSEC-2025-0381 (medium), and openssl-sys
+          has CVE-2025-4231 (critical). Upgrade paths available for all three."
 
 You:     "Give me my morning briefing"
 Claude:  [calls daily_briefing]
@@ -36,10 +37,11 @@ Claude:  [calls check_decision_alignment, tech_radar, trend_analysis]
 
 Most MCP servers expose 1-5 tools that wrap a cloud API. This is different:
 
-- **35 tools** across 8 categories -- content scoring, decision memory, knowledge gaps, agent autonomy, and more
+- **36 tools** across 9 categories -- vulnerability scanning, content scoring, decision memory, knowledge gaps, agent autonomy, and more
+- **Live vulnerability scanning** -- checks your dependencies against OSV.dev for known CVEs across npm, Rust, Python, and Go
 - **Codebase-aware** -- reads your actual project files, not just what you tell it
-- **Privacy-first** -- reads from a local SQLite database, zero network calls, no telemetry
-- **Works offline** -- the intelligence engine runs entirely on your machine with optional Ollama for local LLM
+- **Privacy-first** -- all tools except `vulnerability_scan` read from a local SQLite database with zero network calls. `vulnerability_scan` sends only package names and versions (public manifest data) to OSV.dev
+- **Works offline** -- set `FOURDA_OFFLINE=true` to disable all network calls. The intelligence engine runs entirely on your machine with optional Ollama for local LLM
 - **MIT licensed** -- use it anywhere, fork it, integrate it, build on it
 
 ## Quick Start
@@ -121,6 +123,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 No configuration needed -- 4DA already knows your stack:
 
 ```
+"Scan my project for vulnerabilities"
 "What's relevant to my current project?"
 "Any breaking changes in my dependencies?"
 "What are my knowledge gaps?"
@@ -149,7 +152,7 @@ npx @4da/mcp-server --doctor
 
 What survives the gate is genuinely relevant to what you build. The MCP server exposes that intelligence to any AI tool that speaks MCP.
 
-## All 30 Tools
+## All 36 Tools
 
 ### Core (4 tools)
 
@@ -160,7 +163,7 @@ What survives the gate is genuinely relevant to what you build. The MCP server e
 | `explain_relevance` | Full axis breakdown of why a specific item scored the way it did |
 | `record_feedback` | Teach 4DA what matters -- save, dismiss, or mark items irrelevant |
 
-### Intelligence (9 tools)
+### Intelligence (11 tools)
 
 | Tool | Description |
 |------|-------------|
@@ -173,6 +176,8 @@ What survives the gate is genuinely relevant to what you build. The MCP server e
 | `signal_chains` | Causal chains connecting related events across sources over time |
 | `semantic_shifts` | Detects when topics you follow are shifting in meaning or sentiment |
 | `attention_report` | Where you spend attention vs. where your codebase actually needs it |
+| `trust_summary` | Intelligence quality metrics -- precision, action rate, false positives, preemption wins |
+| `preemption_feed` | Forward-looking alerts on risks, breaking changes, and ecosystem shifts affecting your stack |
 
 ### Decision Intelligence (3 tools)
 
@@ -191,13 +196,22 @@ What survives the gate is genuinely relevant to what you build. The MCP server e
 | `reverse_mentions` | Where your projects are being discussed across monitored sources |
 | `export_context_packet` | Portable context snapshot for session or agent handoff |
 
-### Agent Autonomy (3 tools)
+### Security (1 tool)
+
+| Tool | Description |
+|------|-------------|
+| `vulnerability_scan` | Scan dependencies for known CVEs via OSV.dev -- npm, Rust, Python, Go. Zero config. |
+
+### Agent Autonomy (6 tools)
 
 | Tool | Description |
 |------|-------------|
 | `agent_memory` | Persistent memory that survives across sessions, agents, and editors |
 | `agent_session_brief` | Tailored startup context so agents resume where you left off |
 | `delegation_score` | Autonomy assessment -- should the agent proceed or ask the human? |
+| `record_agent_feedback` | Record whether agent-recommended content was used, rejected, or partially used |
+| `get_agent_feedback_stats` | Statistics on agent recommendation usage -- source usefulness, top items, trends |
+| `what_should_i_know` | Pre-task intelligence briefing -- advisories, decisions, signals, delegation assessment |
 
 ### Developer Identity (1 tool)
 
@@ -249,20 +263,21 @@ npx @4da/mcp-server --help       # Show all options
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `FOURDA_DB_PATH` | Path to 4DA's SQLite database | Auto-detected from standard install locations |
+| `FOURDA_OFFLINE` | Set to `true` to disable all network calls (vulnerability scanning) | `false` |
 
 ## FAQ
 
 **Do I need the 4DA desktop app?**
-No. The MCP server works standalone — on first run it creates its own database and scans your current project for languages, frameworks, and dependencies. You get immediate access to tech stack detection, dependency health, knowledge gaps, developer DNA, decision memory, and project health. Install the [desktop app](https://github.com/runyourempire/4DA) to unlock content scoring from 20+ sources (Hacker News, GitHub, arXiv, CVE feeds, etc.), daily AI briefings, and signal intelligence that compounds over time.
+No. The MCP server works standalone -- on first run it creates its own database and scans your current project for languages, frameworks, and dependencies. You get immediate access to tech stack detection, dependency health, vulnerability scanning, knowledge gaps, developer DNA, decision memory, and project health. Install the [desktop app](https://github.com/runyourempire/4DA) to unlock content scoring from 20+ sources (Hacker News, GitHub, arXiv, CVE feeds, etc.), daily AI briefings, and signal intelligence that compounds over time.
 
 **Does this send my code anywhere?**
-No. The MCP server reads from a local SQLite database on your filesystem. It makes zero network calls. Your codebase data, scoring profiles, and decisions never leave your machine.
+Almost nothing leaves your machine. 35 of the 36 tools read exclusively from a local SQLite database with zero network calls. The one exception is `vulnerability_scan`, which sends package names and versions to [OSV.dev](https://osv.dev) to check for known CVEs. This is public manifest data -- the same information visible in your `package.json` or `Cargo.toml`. No source code, file paths, or personal data is transmitted. Set `FOURDA_OFFLINE=true` to disable all network calls entirely.
 
 **Which AI tools does this work with?**
 Any tool that supports the [Model Context Protocol](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code with Copilot, and any custom MCP client.
 
-**Why 35 tools instead of 3?**
-Because developer context is not one thing. Knowing your tech stack is different from tracking your dependencies, which is different from remembering your architectural decisions, which is different from detecting that a trending HN post is about the exact library version you pinned last week. Each tool serves a distinct intelligence function. They compose naturally -- your AI picks the right ones for each question.
+**Why 36 tools instead of 3?**
+Because developer context is not one thing. Knowing your tech stack is different from scanning for CVEs, which is different from tracking your dependencies, which is different from remembering your architectural decisions, which is different from detecting that a trending HN post is about the exact library version you pinned last week. Each tool serves a distinct intelligence function. They compose naturally -- your AI picks the right ones for each question.
 
 **What content sources does 4DA monitor?**
 Hacker News, arXiv, Reddit (customizable subreddits), GitHub Trending, GitHub Releases, RSS/Atom feeds, DevTo, Lobsters, Product Hunt, and more. All configurable.
