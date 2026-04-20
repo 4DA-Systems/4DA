@@ -55,7 +55,7 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
           - label: macOS (Intel)
-            runner: macos-13
+            runner: macos-14
             target: x86_64-apple-darwin
           - label: Linux
             # ubuntu-22.04 is the minimum — Tauri 2.0 requires libwebkit2gtk-4.1-dev
@@ -86,6 +86,10 @@ jobs:
         uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2
         with:
           workspaces: src-tauri
+
+      - name: Ensure cross-compilation target is installed
+        shell: bash
+        run: rustup target add ${{ matrix.target }}
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
