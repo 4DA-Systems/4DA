@@ -89,7 +89,11 @@ jobs:
 
       - name: Ensure cross-compilation target is installed
         shell: bash
-        run: rustup target add ${{ matrix.target }}
+        run: |
+          # The project pins a specific Rust toolchain via src-tauri/rust-toolchain.toml.
+          # Running from src-tauri/ ensures rustup installs the target on THAT toolchain
+          # (not the 'stable' one from dtolnay/rust-toolchain).
+          cd src-tauri && rustup target add ${{ matrix.target }}
 
       - name: Install system dependencies (Linux)
         if: runner.os == 'Linux'
