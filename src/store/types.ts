@@ -269,25 +269,38 @@ export interface InstantBriefingSnapshot {
   wisdomSynthesis?: string | null;
 }
 
+/** Live morning briefing items received from the T+3s startup check.
+ *  Fills the render gap between snapshot and analysis completion. */
+export interface MorningBriefData {
+  title: string;
+  totalRelevant: number;
+  items: Array<{
+    title: string;
+    sourceType: string;
+    score: number;
+    signalType?: string | null;
+  }>;
+}
+
 export interface BriefingSlice {
   aiBriefing: BriefingState;
-  showBriefing: boolean;
   autoBriefingEnabled: boolean;
   lastBackgroundResultsAt: Date | null;
   sourceHealth: SourceHealthStatus[];
   freeBriefing: FreeBriefingData | null;
   freeBriefingLoading: boolean;
   morningBriefSynthesis: string | null;
+  /** Live morning briefing data from the T+3s startup check. Superseded
+   *  once analysis completes and freeBriefing or aiBriefing populates. */
+  morningBriefData: MorningBriefData | null;
   /** Pre-baked briefing from the previous session. Populated on app boot
-   *  via window.__4DA_INSTANT_SNAPSHOT__ for sub-200ms first paint, then
-   *  set to null once a fresh briefing replaces it. */
+   *  via window.__4DA_INSTANT_SNAPSHOT__ for sub-200ms first paint.
+   *  Naturally superseded by the render waterfall — never explicitly cleared. */
   instantSnapshot: InstantBriefingSnapshot | null;
-  setShowBriefing: (show: boolean) => void;
   setMorningBriefSynthesis: (synthesis: string | null) => void;
+  setMorningBriefData: (data: MorningBriefData | null) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
-  /** Replace or clear the instant snapshot. Called once on mount with the
-   *  globalThis-cached value, and called with null once fresh data lands. */
   setInstantSnapshot: (snapshot: InstantBriefingSnapshot | null) => void;
   generateBriefing: () => Promise<void>;
   generateFreeBriefing: () => Promise<void>;

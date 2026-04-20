@@ -33,19 +33,19 @@ function readPreloadedSnapshot(): InstantBriefingSnapshot | null {
 
 export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> = (set) => ({
   aiBriefing: { ...initialBriefingState },
-  showBriefing: false,
   autoBriefingEnabled: true,
   lastBackgroundResultsAt: null,
   sourceHealth: [],
   freeBriefing: null,
   freeBriefingLoading: false,
   morningBriefSynthesis: null,
+  morningBriefData: null,
   // Sovereign Cold Boot: hydrate from the pre-mount fetch in main.tsx so the
   // first render already has yesterday's briefing on screen.
   instantSnapshot: readPreloadedSnapshot(),
 
-  setShowBriefing: (show) => set({ showBriefing: show }),
   setMorningBriefSynthesis: (synthesis) => set({ morningBriefSynthesis: synthesis }),
+  setMorningBriefData: (data) => set({ morningBriefData: data }),
   setAutoBriefingEnabled: (enabled) => set({ autoBriefingEnabled: enabled }),
   setLastBackgroundResultsAt: (date) => set({ lastBackgroundResultsAt: date }),
   setInstantSnapshot: (snapshot) => set({ instantSnapshot: snapshot }),
@@ -63,7 +63,6 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
             model: result.model,
             lastGenerated: new Date(result.created_at + 'Z'),
           },
-          showBriefing: true,
         });
       }
     } catch {
@@ -96,7 +95,6 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
             model: result.model || null,
             lastGenerated: new Date(),
           },
-          showBriefing: true,
         });
       } else {
         set(state => ({

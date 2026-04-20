@@ -6,8 +6,6 @@ import type { BriefingState } from '../store';
 
 interface UseBriefingResult {
   aiBriefing: BriefingState;
-  showBriefing: boolean;
-  setShowBriefing: (show: boolean) => void;
   autoBriefingEnabled: boolean;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   generateBriefing: () => Promise<void>;
@@ -22,8 +20,6 @@ export function useBriefing(
   analysisComplete: boolean,
 ): UseBriefingResult {
   const aiBriefing = useAppStore(s => s.aiBriefing);
-  const showBriefing = useAppStore(s => s.showBriefing);
-  const setShowBriefing = useAppStore(s => s.setShowBriefing);
   const autoBriefingEnabled = useAppStore(s => s.autoBriefingEnabled);
   const setAutoBriefingEnabled = useAppStore(s => s.setAutoBriefingEnabled);
   const generateBriefing = useAppStore(s => s.generateBriefing);
@@ -92,8 +88,6 @@ export function useBriefing(
 
   return {
     aiBriefing,
-    showBriefing,
-    setShowBriefing,
     autoBriefingEnabled,
     setAutoBriefingEnabled,
     generateBriefing,
