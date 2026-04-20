@@ -158,7 +158,7 @@ pub(crate) fn initialize_pre_tauri() {
     crate::integrity::verify_integrity();
 
     info!(target: "4da::startup", "========================================");
-    info!(target: "4da::startup", "4DA Home - Personalized Intelligence");
+    info!(target: "4da::startup", "4DA — Personalized Intelligence");
     info!(target: "4da::startup", "All signal. No feed.");
     info!(target: "4da::startup", "========================================");
 

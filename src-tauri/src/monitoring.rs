@@ -120,7 +120,7 @@ impl MonitoringState {
 /// Set up the system tray with menu
 pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
     // Create menu items
-    let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "Show 4DA", true, None::<&str>)?;
     let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let monitoring_item = MenuItem::with_id(
@@ -154,7 +154,7 @@ pub fn setup_tray<R: Runtime>(app: &AppHandle<R>) -> Result<TrayIcon<R>> {
                 .clone(),
         )
         .menu(&menu)
-        .tooltip("4DA Home - All signal. No feed.")
+        .tooltip("4DA — All signal. No feed.")
         .on_menu_event(move |app, event| {
             match event.id.as_ref() {
                 "show" => {
@@ -1110,7 +1110,7 @@ pub fn update_tray_menu<R: Runtime>(
     app: &AppHandle<R>,
     monitoring_enabled: bool,
 ) -> Result<()> {
-    let show_item = MenuItem::with_id(app, "show", "Show 4DA Home", true, None::<&str>)?;
+    let show_item = MenuItem::with_id(app, "show", "Show 4DA", true, None::<&str>)?;
     let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
 
@@ -1146,9 +1146,9 @@ pub fn update_tray_menu<R: Runtime>(
 
     // Update tooltip
     let tooltip = if monitoring_enabled {
-        "4DA Home - Monitoring active"
+        "4DA — Monitoring active"
     } else {
-        "4DA Home - All signal. No feed."
+        "4DA — All signal. No feed."
     };
     tray.set_tooltip(Some(tooltip))?;
 
