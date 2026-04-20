@@ -195,3 +195,9 @@ export {
   preemptionFeedTool,
   executePreemptionFeed,
 } from "./preemption-feed.js";
+
+// Live Intelligence Tools
+export {
+  vulnerabilityScanTool,
+  executeVulnerabilityScan,
+} from "./vulnerability-scan.js";

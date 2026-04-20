@@ -268,6 +268,14 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     tags: ["preemption", "alerts", "risks", "dependencies", "forward-looking"],
   },
 
+  // Live Intelligence Tools
+  vulnerability_scan: {
+    summary: "Scan dependencies for known CVEs via OSV.dev — zero config, multi-ecosystem",
+    schemaFile: "vulnerability-scan.json",
+    category: "knowledge",
+    tags: ["security", "vulnerabilities", "cve", "dependencies", "osv", "scanning"],
+  },
+
 };
 
 /**

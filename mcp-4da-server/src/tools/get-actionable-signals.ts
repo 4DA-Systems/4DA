@@ -8,6 +8,7 @@
  */
 
 import type { FourDADatabase } from "../db.js";
+import { getLiveIntelligence } from "../live-singleton.js";
 
 // ============================================================================
 // Signal Classification Types
@@ -357,6 +358,39 @@ export function executeGetActionableSignals(
       confidence: result.confidence,
       discovered_ago: item.discovered_ago,
     });
+  }
+
+  // Inject live vulnerability data as security_alert signals
+  const liveIntel = getLiveIntelligence();
+  if (liveIntel) {
+    const vulnResult = liveIntel.getVulnerabilities();
+    if (vulnResult && vulnResult.vulnerabilities.length > 0) {
+      for (const vuln of vulnResult.vulnerabilities) {
+        // Apply filters
+        const vulnPriority: SignalPriority =
+          vuln.severity === "critical" ? "critical" :
+          vuln.severity === "high" ? "high" : "medium";
+
+        if (params.priority_filter && vulnPriority !== params.priority_filter) continue;
+        if (params.signal_type && params.signal_type !== "security_alert") continue;
+
+        signals.push({
+          id: -1,
+          title: `${vuln.severity.toUpperCase()}: ${vuln.summary} (${vuln.package}@${vuln.currentVersion})`,
+          url: vuln.references[0] || null,
+          source_type: "osv_live",
+          relevance_score: vuln.severity === "critical" ? 1.0 : vuln.severity === "high" ? 0.9 : 0.7,
+          signal_type: "security_alert",
+          signal_priority: vulnPriority,
+          action: vuln.fixedVersion
+            ? `Upgrade ${vuln.package} to ${vuln.fixedVersion}`
+            : `Review ${vuln.package} — no fix version published`,
+          triggers: [vuln.vulnId, ...vuln.aliases].filter(Boolean),
+          confidence: 1.0,
+          discovered_ago: vuln.published ? `published ${vuln.published}` : "recently",
+        });
+      }
+    }
   }
 
   // Sort by priority (critical first), then by relevance score
