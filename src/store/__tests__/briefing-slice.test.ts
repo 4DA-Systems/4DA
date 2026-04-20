@@ -28,8 +28,8 @@ describe('briefing-slice', () => {
       expect(aiBriefing.lastGenerated).toBeNull();
     });
 
-    it('has showBriefing false', () => {
-      expect(useAppStore.getState().showBriefing).toBe(false);
+    it('has morningBriefData null', () => {
+      expect(useAppStore.getState().morningBriefData).toBeNull();
     });
 
     it('has autoBriefingEnabled true', () => {
@@ -54,18 +54,24 @@ describe('briefing-slice', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // setShowBriefing
+  // setMorningBriefData
   // ---------------------------------------------------------------------------
-  describe('setShowBriefing', () => {
-    it('sets showBriefing to true', () => {
-      useAppStore.getState().setShowBriefing(true);
-      expect(useAppStore.getState().showBriefing).toBe(true);
+  describe('setMorningBriefData', () => {
+    it('stores morning brief items', () => {
+      useAppStore.getState().setMorningBriefData({
+        title: '4DA Intelligence Briefing',
+        totalRelevant: 3,
+        items: [{ title: 'Test', sourceType: 'hn', score: 0.8, signalType: null }],
+      });
+      expect(useAppStore.getState().morningBriefData?.totalRelevant).toBe(3);
     });
 
-    it('sets showBriefing back to false', () => {
-      useAppStore.getState().setShowBriefing(true);
-      useAppStore.getState().setShowBriefing(false);
-      expect(useAppStore.getState().showBriefing).toBe(false);
+    it('clears morning brief data', () => {
+      useAppStore.getState().setMorningBriefData({
+        title: 'Brief', totalRelevant: 1, items: [{ title: 'X', sourceType: 'hn', score: 0.5, signalType: null }],
+      });
+      useAppStore.getState().setMorningBriefData(null);
+      expect(useAppStore.getState().morningBriefData).toBeNull();
     });
   });
 
@@ -115,7 +121,6 @@ describe('briefing-slice', () => {
       expect(aiBriefing.content).toBe('Your daily briefing content');
       expect(aiBriefing.model).toBe('claude-3-haiku');
       expect(aiBriefing.error).toBeNull();
-      expect(useAppStore.getState().showBriefing).toBe(true);
     });
 
     it('sets error on unsuccessful result', async () => {

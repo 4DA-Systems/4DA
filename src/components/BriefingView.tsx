@@ -24,7 +24,7 @@ export const BriefingView = memo(function BriefingView() {
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
     lastBackgroundResultsAt, sourceHealth,
-    freeBriefing, freeBriefingLoading, morningBriefSynthesis, instantSnapshot,
+    freeBriefing, freeBriefingLoading, morningBriefSynthesis, morningBriefData, instantSnapshot,
   } = useAppStore(
     useShallow((s) => ({
       briefing: s.aiBriefing,
@@ -37,6 +37,7 @@ export const BriefingView = memo(function BriefingView() {
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
       morningBriefSynthesis: s.morningBriefSynthesis,
+      morningBriefData: s.morningBriefData,
       instantSnapshot: s.instantSnapshot,
     })),
   );
@@ -100,13 +101,12 @@ export const BriefingView = memo(function BriefingView() {
   // ==========================================================================
   // If we're still booting (no fresh briefing content yet, no fresh results)
   // AND a pre-baked snapshot was loaded by main.tsx, render the snapshot
-  // immediately with a refreshing-in-background banner. This is the difference
-  // between cold-boot UX of "black screen for 5+ seconds" and "yesterday's
-  // briefing is already here, refreshing now".
+  // immediately with a refreshing-in-background banner.
   //
-  // The instant snapshot is cleared as soon as fresh data arrives via the
-  // morning-briefing-ready event handler (use-analysis.ts), at which point
-  // this branch stops matching and the normal flow takes over.
+  // The snapshot is NEVER explicitly cleared by event handlers. It's naturally
+  // superseded by the render waterfall: once aiBriefing.content is populated
+  // (from loadPersistedBriefing or generateBriefing) or analysisComplete
+  // becomes true, this branch stops matching and the normal flow takes over.
   if (!briefing.content && !analysisComplete && instantSnapshot) {
     return (
       <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
@@ -315,6 +315,66 @@ export const BriefingView = memo(function BriefingView() {
             </div>
           </div>
           <EngagementPulse />
+        </section>
+      );
+    }
+
+    // Morning briefing items — fills the gap between startup and analysis completion.
+    // The T+3s morning check produces scored items from the DB; render them while
+    // the full analysis runs in the background.
+    if (morningBriefData && morningBriefData.items.length > 0) {
+      return (
+        <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
+          <div className="bg-bg-secondary rounded-lg border border-border">
+            <div className="px-5 pt-5 pb-3 border-b border-border flex items-center justify-between gap-3">
+              <h2 className="text-[9px] font-semibold tracking-[0.12em] text-text-muted uppercase">
+                {t('briefing.intelligenceBriefing')}
+              </h2>
+              <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#D4AF37] animate-pulse" />
+                <span>{t('briefing.analysisRunning', 'Analysis running…')}</span>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              {isAbstentionSynthesis(morningBriefSynthesis) ? (
+                <div className="py-6 text-center space-y-2">
+                  <p className="text-xs text-text-muted italic">
+                    {parseAbstention(morningBriefSynthesis ?? '').headline}
+                  </p>
+                </div>
+              ) : morningBriefSynthesis ? (
+                <div className="pb-3 mb-1 border-b border-border">
+                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
+                    {t('briefing.synthesis', 'Synthesis')}
+                  </h3>
+                  <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
+                </div>
+              ) : null}
+              <div>
+                <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">
+                  {t('briefing.sourceItems', 'Source items')}
+                </h3>
+                <div className="space-y-2">
+                  {morningBriefData.items.map((item, i) => (
+                    <div
+                      key={i}
+                      className="block pl-2 border-l-2 border-border py-1"
+                    >
+                      <p className="text-xs text-text-primary leading-snug line-clamp-2">{item.title}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[9px] font-mono text-text-muted uppercase tracking-wider">
+                          {item.sourceType}
+                        </span>
+                        <span className="text-[9px] font-mono text-text-muted">
+                          {formatScore(item.score)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
       );
     }
