@@ -55,7 +55,7 @@ jobs:
             runner: macos-latest
             target: aarch64-apple-darwin
           - label: macOS (Intel)
-            runner: macos-15
+            runner: macos-13
             target: x86_64-apple-darwin
           - label: Linux
             # ubuntu-22.04 is the minimum — Tauri 2.0 requires libwebkit2gtk-4.1-dev
@@ -337,7 +337,7 @@ jobs:
           set -e
           cargo install cargo-cyclonedx --locked
           cd src-tauri
-          cargo cyclonedx --format json --output-pattern bom
+          cargo cyclonedx --format json --override-filename bom
           # cargo-cyclonedx emits `bom.json` next to each manifest; move the
           # top-level crate's SBOM to the expected path.
           if [[ -f bom.json ]]; then
