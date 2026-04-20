@@ -10,9 +10,9 @@
 #
 # Users install with: winget install 4DA.4DAHome
 
-PackageIdentifier: 4DA.4DAHome
+PackageIdentifier: 4DA.4DA
 PackageVersion: 1.0.0
-PackageName: 4DA Home
+PackageName: 4DA
 Publisher: 4DA Systems Pty Ltd
 PublisherUrl: https://4da.ai
 PublisherSupportUrl: https://github.com/runyourempire/4DA/issues

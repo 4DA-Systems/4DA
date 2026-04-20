@@ -1297,7 +1297,7 @@ function cmdNeofetch(){
       '    \u256D\u2500\u2500\u2500\u2500\u2500\u256E',
       '    \u2502  4  \u2502  <span class="g">4DA Signal Terminal</span> <span class="d">v1.0.0</span>',
       '    \u2570\u2500\u2500\u2500\u2500\u2500\u256F  <span class="d">\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>',
-      '             <span class="m">OS:</span> 4DA Home v1.0.0',
+      '             <span class="m">OS:</span> 4DA v1.0.0',
       '             <span class="m">Signals:</span> '+(d.total_relevant||0)+' relevant',
       '             <span class="m">Sources:</span> '+(d.monitoring?'active':'idle'),
       '             <span class="m">Scanned:</span> '+(d.total_scanned||0),
