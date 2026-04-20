@@ -17,7 +17,7 @@ It's called **4DA** — a desktop app that watches Hacker News, arXiv, Reddit, G
 
 Everything runs locally. No cloud. No account. No telemetry. Your code never leaves your machine.
 
-The part I'm most proud of: it ships with an MCP server (35 tools) that plugs into Claude Code, Cursor, or Copilot. So your AI assistant stops being generic and starts knowing your stack, your decisions, and what happened in your ecosystem while you were sleeping. You ask "anything I should know today?" and it actually has a real answer.
+The part I'm most proud of: it ships with an MCP server (36 tools) that plugs into Claude Code, Cursor, or Copilot. So your AI assistant stops being generic and starts knowing your stack, your decisions, and what happened in your ecosystem while you were sleeping. You ask "anything I should know today?" and it actually has a real answer.
 
 I'm not running a beta or asking for feedback forms. I just think you'd genuinely get value from it and I'd trust your honest reaction more than anyone's. If you're up for it, I'll send you a build.
 
