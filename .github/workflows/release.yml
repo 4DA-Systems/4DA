@@ -396,6 +396,7 @@ jobs:
       - name: Consolidate SHA-256 checksums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -e
@@ -403,19 +404,16 @@ jobs:
           mkdir -p shasums && cd shasums
 
           # Download every per-platform SHASUMS256-*.txt produced by the matrix.
-          # Tolerate missing files (one matrix arm might have failed); we still
-          # want the aggregate to reflect what shipped.
-          for ASSET in $(gh release view "$TAG" --json assets -q '.assets[].name' | grep '^SHASUMS256-'); do
-            gh release download "$TAG" -p "$ASSET" --clobber
+          for ASSET in $(gh release view "$TAG" --repo "$GH_REPO" --json assets -q '.assets[].name' | grep '^SHASUMS256-'); do
+            gh release download "$TAG" --repo "$GH_REPO" -p "$ASSET" --clobber
           done
 
           # Produce a single SHASUMS256.txt sorted by filename.
-          # Format: `<hash>  <file>` — compatible with `sha256sum -c`.
           if ls SHASUMS256-*.txt >/dev/null 2>&1; then
             cat SHASUMS256-*.txt | sort -k2 > SHASUMS256.txt
             echo "Consolidated checksums:"
             cat SHASUMS256.txt
-            gh release upload "$TAG" SHASUMS256.txt --clobber
+            gh release upload "$TAG" SHASUMS256.txt --repo "$GH_REPO" --clobber
           else
             echo "::warning::No per-platform SHASUMS256 files found — consolidated file not created."
           fi
@@ -423,19 +421,18 @@ jobs:
       - name: Verify release artifacts
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -e
           TAG="${GITHUB_REF#refs/tags/}"
 
-          # Collect asset names once; reuse for each check.
-          ASSETS=$(gh release view "$TAG" --json assets -q '.assets[].name')
+          ASSETS=$(gh release view "$TAG" --repo "$GH_REPO" --json assets -q '.assets[].name')
           echo "Release assets:"
           echo "$ASSETS" | sed 's/^/  - /'
 
           # Required artifacts — fail the release if any are missing.
           REQUIRED=(
-            "latest.json"
             "SHASUMS256.txt"
           )
 
@@ -446,8 +443,10 @@ jobs:
             fi
           done
 
-          # Desirable-but-not-fatal: at least one installer per platform.
-          # We warn on absence, don't fail — partial releases can still be useful.
+          # Desirable-but-not-fatal checks.
+          if ! echo "$ASSETS" | grep -qx "latest.json"; then
+            echo "::warning::latest.json (auto-updater manifest) not present — updater won't work until fixed."
+          fi
           for PATTERN in "\\.exe$" "\\.dmg$" "\\.AppImage$"; do
             if ! echo "$ASSETS" | grep -qE "$PATTERN"; then
               echo "::warning::No asset matches $PATTERN — platform coverage incomplete."
