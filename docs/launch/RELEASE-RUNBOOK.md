@@ -17,7 +17,7 @@ The gate runs 9 steps: git hygiene, full test suite (frontend + Rust), validatio
 Expected runtime: 8–15 minutes on a warm checkout.
 
 Artifacts the gate produces:
-- `src-tauri/target/release/bundle/nsis/4DA Home_<version>_x64-setup.exe` (primary ship artifact)
+- `src-tauri/target/release/bundle/nsis/4DA_<version>_x64-setup.exe` (primary ship artifact)
 - Test-count entry in `.claude/wisdom/ops-state.json` (trend tracking)
 
 ---
@@ -89,7 +89,7 @@ git push origin v<X.Y.Z>
 gh release create v<X.Y.Z> \
   --title "4DA v<X.Y.Z>" \
   --notes-file <release-notes.md> \
-  "<signed-installer-path>#4DA Home x64 setup"
+  "<signed-installer-path>#4DA x64 setup"
 ```
 
 The GitHub Action for `post-release-packages.sh` will kick off automatically, producing updates for Homebrew cask, AUR, and winget manifests.

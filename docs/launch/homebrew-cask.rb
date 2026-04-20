@@ -30,7 +30,7 @@ cask "4da" do
   auto_updates true
   depends_on macos: ">= :catalina"
 
-  app "4DA Home.app"
+  app "4DA.app"
 
   zap trash: [
     "~/Library/Application Support/com.4da.app",
