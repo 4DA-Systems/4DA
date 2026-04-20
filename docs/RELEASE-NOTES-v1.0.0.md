@@ -8,7 +8,7 @@ Every piece of content is scored against your actual codebase using PASIFA, a 5-
 
 - **5-axis relevance scoring** — PASIFA rates every item against your local projects (context, interest, dependencies, learned patterns, ACE codebase scan)
 - **20+ built-in content sources** — Hacker News, Reddit, GitHub, arXiv, CVE/OSV, Stack Overflow, crates.io, PyPI, npm, Lobsters, Product Hunt, Bluesky, Dev.to, Hugging Face, YouTube, Go Modules, RSS, and more
-- **35 MCP tools** — `npx @4da/mcp-server --setup` installs in one command. Works standalone or with the desktop app. Claude Code, Cursor, Windsurf, GitHub Copilot compatible.
+- **36 MCP tools** — `npx @4da/mcp-server --setup` installs in one command. Works standalone or with the desktop app. Claude Code, Cursor, Windsurf, GitHub Copilot compatible.
 - **AI briefings** — daily and weekly intelligence summaries generated locally via your own API key
 - **STREETS Playbook** — 7 modules for developer growth, included free
 - **14 languages** — Arabic, Chinese, English, French, German, Hindi, Italian, Japanese, Korean, Portuguese (BR), Russian, Spanish, Turkish. Content translation, cross-lingual search, native briefings.
@@ -55,7 +55,7 @@ No account required. No configuration needed. No sign-up.
 npx @4da/mcp-server --setup
 ```
 
-The MCP server works standalone — no desktop app required. 35 tools for context analysis, signal chains, decision memory, and more.
+The MCP server works standalone — no desktop app required. 36 tools for context analysis, signal chains, decision memory, and more.
 
 ## Privacy
 

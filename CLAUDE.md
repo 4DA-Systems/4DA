@@ -204,5 +204,5 @@ Subagents spawned with `isolation: "worktree"` create a new worktree under `.cla
 
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.claude/commands/` (project-specific commands)
-- MCP servers: memory (persistent decisions/learnings), 4da (35 intelligence tools), awe (7 wisdom tools)
+- MCP servers: memory (persistent decisions/learnings), 4da (36 intelligence tools), awe (7 wisdom tools)
 - Hooks: wisdom gates (PreToolUse), consequence processing + AWE wisdom injection (UserPromptSubmit), session capture + AWE feedback tracking (Stop), prompt analyzer

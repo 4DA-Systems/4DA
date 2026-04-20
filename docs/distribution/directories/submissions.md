@@ -10,7 +10,7 @@ Comprehensive, ready-to-paste copy for every MCP directory and listing platform.
 ## 1. Short Description (<100 chars)
 
 ```
-35 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first.
+36 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first.
 ```
 
 Alternative (more specific):
@@ -23,7 +23,7 @@ MCP server that scores HN, arXiv, Reddit, GitHub content against your actual tec
 ## 2. Medium Description (2-3 sentences)
 
 ```
-35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine.
+36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine.
 ```
 
 ---
@@ -31,7 +31,7 @@ MCP server that scores HN, arXiv, Reddit, GitHub content against your actual tec
 ## 3. Long Description (1 paragraph)
 
 ```
-@4da/mcp-server is an MCP server that connects Claude Code, Cursor, Copilot, and Windsurf to a local developer intelligence engine. It provides 35 tools across 8 categories: content scoring, developer context, intelligence analysis, decision memory, knowledge gap detection, tech radar, agent autonomy, and diagnostic health. The server reads your Cargo.toml, package.json, go.mod, and requirements.txt — then scores articles, papers, and discussions from Hacker News, arXiv, Reddit, GitHub Trending, RSS feeds, and more against your actual codebase using a 5-axis relevance algorithm (semantic similarity, interest alignment, real-time Git signals, dependency matching, and learned behavior). It also provides persistent decision memory so your AI assistant can check whether a proposed change aligns with your recorded architectural decisions, detect knowledge blind spots in dependencies you use daily but never read about, and generate daily briefings of only the content that matters to your work. All data stays on your machine — zero network calls, no telemetry, MIT licensed.
+@4da/mcp-server is an MCP server that connects Claude Code, Cursor, Copilot, and Windsurf to a local developer intelligence engine. It provides 36 tools across 9 categories: content scoring, developer context, intelligence analysis, decision memory, knowledge gap detection, tech radar, agent autonomy, and diagnostic health. The server reads your Cargo.toml, package.json, go.mod, and requirements.txt — then scores articles, papers, and discussions from Hacker News, arXiv, Reddit, GitHub Trending, RSS feeds, and more against your actual codebase using a 5-axis relevance algorithm (semantic similarity, interest alignment, real-time Git signals, dependency matching, and learned behavior). It also provides persistent decision memory so your AI assistant can check whether a proposed change aligns with your recorded architectural decisions, detect knowledge blind spots in dependencies you use daily but never read about, and generate daily briefings of only the content that matters to your work. All data stays on your machine — zero network calls, no telemetry, MIT licensed.
 ```
 
 ---
@@ -39,7 +39,7 @@ MCP server that scores HN, arXiv, Reddit, GitHub content against your actual tec
 ## 4. Feature Bullet Points (6-8 bullets)
 
 ```
-- 35 MCP tools across 8 categories — content scoring, decision memory, knowledge gaps, tech radar, agent autonomy, and more
+- 36 MCP tools across 9 categories — content scoring, decision memory, knowledge gaps, tech radar, agent autonomy, and more
 - Codebase-aware — auto-discovers your tech stack from package.json, Cargo.toml, go.mod, requirements.txt, and lockfiles
 - 5-axis relevance scoring — semantic similarity, interest alignment, real-time Git signals, dependency matching, and learned behavior
 - Decision memory — record, query, and enforce architectural decisions across AI sessions and editors
@@ -82,7 +82,7 @@ mcp, mcp-server, model-context-protocol, claude, claude-code, claude-desktop, cu
 
 **Line to add** (Developer Tools section, alphabetical):
 ```markdown
-- [runyourempire/4DA](https://github.com/runyourempire/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 35 MCP tools that score content from Hacker News, arXiv, Reddit, and GitHub against your actual codebase. Includes developer context profiling, decision memory, knowledge gap detection, tech radar, and agent session handoff. Privacy-first — everything stays local. `npx @4da/mcp-server`
+- [runyourempire/4DA](https://github.com/runyourempire/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 36 MCP tools that score content from Hacker News, arXiv, Reddit, and GitHub against your actual codebase. Includes developer context profiling, decision memory, knowledge gap detection, tech radar, and agent session handoff. Privacy-first — everything stays local. `npx @4da/mcp-server`
 ```
 
 **PR Title:**
@@ -103,7 +103,7 @@ Add @4da/mcp-server — developer intelligence with codebase-aware content scori
 
 **Issue Title:**
 ```
-Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
+Add @4da/mcp-server — 36 tools for codebase-aware developer intelligence
 ```
 
 **Issue Body:**
@@ -120,7 +120,7 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 
 ## Description
 
-35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine.
+36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine.
 
 ## Categories
 
@@ -130,7 +130,7 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 
 ## Tool Count
 
-35 tools across 8 categories:
+36 tools across 9 categories:
 - Core (4): content feed, context profile, relevance explanation, feedback
 - Intelligence (9): daily briefing, actionable signals, score autopsy, trend analysis, context analysis, topic connections, signal chains, semantic shifts, attention report
 - Decision Intelligence (3): decision memory, tech radar, decision alignment
@@ -163,7 +163,7 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 | Server Name | @4da/mcp-server |
 | URL | https://www.npmjs.com/package/@4da/mcp-server |
 | Website | https://4da.ai |
-| Short Description | 35 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Local-only, privacy-first. |
+| Short Description | 36 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Local-only, privacy-first. |
 | Category | Developer Tools |
 | Language | TypeScript |
 | License | MIT |
@@ -181,7 +181,7 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 | Field | Value |
 |-------|-------|
 | Name | @4da/mcp-server |
-| Description | 35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build. Privacy-first — everything runs locally. |
+| Description | 36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build. Privacy-first — everything runs locally. |
 | npm Package | @4da/mcp-server |
 | GitHub Repository | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 | Website | https://4da.ai |
@@ -202,8 +202,8 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 | Field | Value |
 |-------|-------|
 | Server Name | @4da/mcp-server |
-| One-line Description | 35 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first. |
-| Full Description | 35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. |
+| One-line Description | 36 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first. |
+| Full Description | 36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. |
 | npm URL | https://www.npmjs.com/package/@4da/mcp-server |
 | GitHub URL | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 | Website | https://4da.ai |
@@ -223,7 +223,7 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 
 **Issue Title:**
 ```
-[MCP Server] @4da/mcp-server — 35 tools for codebase-aware developer intelligence
+[MCP Server] @4da/mcp-server — 36 tools for codebase-aware developer intelligence
 ```
 
 **Issue Body:**
@@ -234,7 +234,7 @@ Add @4da/mcp-server — 35 tools for codebase-aware developer intelligence
 @4da/mcp-server
 
 ### Description
-35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub against what you actually build. Privacy-first — everything runs locally.
+36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub against what you actually build. Privacy-first — everything runs locally.
 
 ### npm Package
 https://www.npmjs.com/package/@4da/mcp-server
@@ -298,7 +298,7 @@ MIT
   "identifier": "4da-mcp-server",
   "meta": {
     "title": "@4da/mcp-server",
-    "description": "35 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Local-only, privacy-first.",
+    "description": "36 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Local-only, privacy-first.",
     "tags": ["developer-tools", "content-scoring", "privacy", "codebase-awareness", "mcp"],
     "avatar": "https://4da.ai/logo.png",
     "homepage": "https://4da.ai"
@@ -328,8 +328,8 @@ MIT
 | Field | Value |
 |-------|-------|
 | Server Name | @4da/mcp-server |
-| Short Description | 35 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first. |
-| Full Description | 35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. |
+| Short Description | 36 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first. |
+| Full Description | 36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. |
 | npm URL | https://www.npmjs.com/package/@4da/mcp-server |
 | GitHub URL | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 | Website | https://4da.ai |
@@ -350,7 +350,7 @@ MIT
 | Field | Value |
 |-------|-------|
 | Name | @4da/mcp-server |
-| Description | 35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build. Privacy-first — everything runs locally, zero network calls, no telemetry. |
+| Description | 36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build. Privacy-first — everything runs locally, zero network calls, no telemetry. |
 | npm | https://www.npmjs.com/package/@4da/mcp-server |
 | Repository | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 | Homepage | https://4da.ai |
@@ -371,8 +371,8 @@ MIT
 | Field | Value |
 |-------|-------|
 | Server Name | @4da/mcp-server |
-| One-line Description | 35 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first. |
-| Description | 35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. Works with Claude Code, Cursor, Windsurf, VS Code (Copilot), and Claude Desktop. |
+| One-line Description | 36 MCP tools for codebase-aware developer intelligence. Local-only, privacy-first. |
+| Description | 36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Scores content from Hacker News, arXiv, Reddit, GitHub, and 7 other sources against what you actually build — then surfaces security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. Works with Claude Code, Cursor, Windsurf, VS Code (Copilot), and Claude Desktop. |
 | npm Package | @4da/mcp-server |
 | GitHub | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 | Website | https://4da.ai |
@@ -393,8 +393,8 @@ MIT
 | Field | Value |
 |-------|-------|
 | Name | @4da/mcp-server |
-| Tagline | 35 MCP tools for codebase-aware developer intelligence |
-| Description | An MCP server that connects Claude Code, Cursor, Copilot, and Windsurf to a local developer intelligence engine. Provides 35 tools that score content from Hacker News, arXiv, Reddit, GitHub against your actual tech stack — surfacing security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. MIT licensed. |
+| Tagline | 36 MCP tools for codebase-aware developer intelligence |
+| Description | An MCP server that connects Claude Code, Cursor, Copilot, and Windsurf to a local developer intelligence engine. Provides 36 tools that score content from Hacker News, arXiv, Reddit, GitHub against your actual tech stack — surfacing security advisories, breaking changes, knowledge gaps, and decision conflicts. Everything runs locally. Nothing leaves your machine. MIT licensed. |
 | Website | https://4da.ai |
 | GitHub | https://github.com/runyourempire/4DA/tree/main/mcp-4da-server |
 | Tags | developer-tools, mcp, ai-tools, privacy, open-source |
@@ -413,7 +413,7 @@ MIT
 
 **Line to add** (under "Plugins" or "Utilities" or most relevant section):
 ```markdown
-- [4DA](https://4da.ai) - Privacy-first developer intelligence desktop app built with Tauri 2.0. Includes an MCP server with 35 tools for codebase-aware content scoring, decision memory, and knowledge gap detection.
+- [4DA](https://4da.ai) - Privacy-first developer intelligence desktop app built with Tauri 2.0. Includes an MCP server with 36 tools for codebase-aware content scoring, decision memory, and knowledge gap detection.
 ```
 
 **PR Title:**
@@ -425,7 +425,7 @@ Add 4DA — developer intelligence with MCP server (Tauri 2.0)
 ```markdown
 Adds [4DA](https://4da.ai) to the list.
 
-4DA is a Tauri 2.0 desktop app (Rust + React + TypeScript + SQLite) that surfaces developer-relevant content from the internet — privately, locally, with zero configuration. It includes an npm-published MCP server (`@4da/mcp-server`) with 35 tools for AI coding assistants.
+4DA is a Tauri 2.0 desktop app (Rust + React + TypeScript + SQLite) that surfaces developer-relevant content from the internet — privately, locally, with zero configuration. It includes an npm-published MCP server (`@4da/mcp-server`) with 36 tools for AI coding assistants.
 
 - **Stack:** Rust backend, React/TypeScript frontend, SQLite + sqlite-vec
 - **MCP Server:** https://www.npmjs.com/package/@4da/mcp-server
@@ -441,12 +441,12 @@ Adds [4DA](https://4da.ai) to the list.
 
 **Line to add** (under "Developer Tools" section):
 ```markdown
-- [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) - 35 tools for codebase-aware developer intelligence. Scores HN, arXiv, Reddit, GitHub content against your tech stack. Decision memory, knowledge gaps, tech radar. Local-only, privacy-first.
+- [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) - 36 tools for codebase-aware developer intelligence. Scores HN, arXiv, Reddit, GitHub content against your tech stack. Decision memory, knowledge gaps, tech radar. Local-only, privacy-first.
 ```
 
 **PR Title:**
 ```
-Add @4da/mcp-server — codebase-aware developer intelligence (35 tools)
+Add @4da/mcp-server — codebase-aware developer intelligence (36 tools)
 ```
 
 **PR Body:**
@@ -457,7 +457,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 
 ## About
 
-35 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Reads your project files (package.json, Cargo.toml, go.mod, etc.) and scores content from 10+ sources against what you actually build.
+36 MCP tools that give AI coding assistants awareness of your tech stack, dependencies, and architectural decisions. Reads your project files (package.json, Cargo.toml, go.mod, etc.) and scores content from 10+ sources against what you actually build.
 
 - **npm:** https://www.npmjs.com/package/@4da/mcp-server
 - **Install:** `npx @4da/mcp-server`
@@ -474,7 +474,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 
 **Line to add** (under "MCP Servers" or "Context Providers" or most relevant section):
 ```markdown
-- [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) - 35 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Includes decision memory, knowledge gap detection, and agent session handoff. Privacy-first, local-only.
+- [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) - 36 MCP tools for codebase-aware developer intelligence. Scores content from HN, arXiv, Reddit, GitHub against your actual tech stack. Includes decision memory, knowledge gap detection, and agent session handoff. Privacy-first, local-only.
 ```
 
 **PR Title:**
@@ -486,7 +486,7 @@ Add @4da/mcp-server — MCP server for codebase-aware developer intelligence
 ```markdown
 ## What
 
-Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) — an MCP server providing 35 tools for developer intelligence.
+Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) — an MCP server providing 36 tools for developer intelligence.
 
 ## Key Capabilities
 

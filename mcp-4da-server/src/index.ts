@@ -13,10 +13,10 @@
  * Do NOT expose this server over a network without adding proper auth.
  */
 /**
- * 4DA MCP Server v4.0.0 — Intelligence Platform
+ * 4DA MCP Server v4.1.0 — Intelligence Platform
  *
- * 35 tools across 8 categories. Exposes 4DA's codebase-aware content
- * scoring engine to any AI tool that speaks MCP.
+ * 36 tools across 9 categories. Live vulnerability scanning (OSV.dev),
+ * persistent project memory, and tech stack awareness for any MCP host.
  *
  * Categories (canonical — matches schema-registry.ts `ToolCategory`):
  *   Core (4)                    — content feed, context, relevance, feedback
@@ -29,6 +29,7 @@
  *                                 agent feedback record + stats, what_should_i_know
  *   Developer DNA / Identity (1)— tech identity profile
  *   Intelligence Metabolism (3) — autophagy, decision windows, compound advantage
+ *   Security (1)                — live vulnerability scanning via OSV.dev
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -346,6 +347,7 @@ async function main() {
 
   Environment:
     FOURDA_DB_PATH      Path to 4DA's SQLite database (auto-detected if omitted)
+    FOURDA_OFFLINE      Set to "true" to disable all network calls (OSV.dev, HN)
 
   Works standalone (scans your project on startup) or with the full
   4DA desktop app for content scoring, source monitoring, and more.
