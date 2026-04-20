@@ -48,6 +48,8 @@ import { startHttpServer } from "./http-transport.js";
 import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
 import { scanCurrentProject } from "./project-scanner.js";
+import { LiveIntelligence } from "./live/index.js";
+import { setLiveIntelligence } from "./live-singleton.js";
 
 // Schema registry for slim tool listing + category metadata
 import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename, getCategoryManifest } from "./schema-registry.js";
@@ -67,7 +69,7 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.0.1",
+    version: "4.1.0",
   },
   {
     capabilities: {
@@ -79,6 +81,7 @@ const server = new Server(
 
 // Database instance (lazy initialized)
 let db: FourDADatabase | null = null;
+let liveIntel: LiveIntelligence | null = null;
 
 /**
  * Get or create database connection.
@@ -89,6 +92,10 @@ function getDatabase(): FourDADatabase {
   if (!db) {
     const dbPath = process.env.FOURDA_DB_PATH;
     db = createDatabase(dbPath);
+
+    // Initialize live intelligence layer
+    liveIntel = new LiveIntelligence(db.getRawDb());
+    setLiveIntelligence(liveIntel);
 
     // Standalone mode: auto-populate from project scan
     if (db.isStandalone) {
@@ -108,10 +115,54 @@ function getDatabase(): FourDADatabase {
         console.error(
           `[4DA]   Detected: ${detected.join(", ")} | ${scan.dependencies.length} deps, ${scan.devDependencies.length} dev deps`
         );
+
+        // Initialize live intelligence with resolved versions
+        const primaryLang = scan.languages.includes("typescript") || scan.languages.includes("javascript")
+          ? "npm"
+          : scan.languages.includes("rust")
+            ? "rust"
+            : scan.languages.includes("python")
+              ? "python"
+              : scan.languages.includes("go")
+                ? "go"
+                : "npm";
+
+        liveIntel.initFromProject(cwd, scan.dependencies, scan.devDependencies, primaryLang);
+
+        if (liveIntel.isEnabled()) {
+          console.error(`[4DA]   Live intelligence: enabled (OSV.dev + HN)`);
+          // Background prefetch — non-blocking, warms cache for first tool call
+          const techStack = [...scan.languages, ...scan.frameworks];
+          liveIntel.scanVulnerabilities(cwd).catch(() => {});
+          liveIntel.fetchHeadlines(techStack).catch(() => {});
+        }
       } else {
         console.error(
           `[4DA]   No project manifests found in ${cwd} — tools will return empty results`
         );
+      }
+    } else {
+      // Full 4DA database mode — still initialize live intel from project_dependencies
+      try {
+        const rawDb = db.getRawDb();
+        const deps = rawDb.prepare(
+          "SELECT DISTINCT package_name, language FROM project_dependencies WHERE is_dev = 0 LIMIT 200",
+        ).all() as Array<{ package_name: string; language: string }>;
+        const devDeps = rawDb.prepare(
+          "SELECT DISTINCT package_name FROM project_dependencies WHERE is_dev = 1 LIMIT 100",
+        ).all() as Array<{ package_name: string }>;
+
+        if (deps.length > 0) {
+          const primaryLang = deps[0].language || "npm";
+          liveIntel.initFromProject(
+            process.cwd(),
+            deps.map((d) => d.package_name),
+            devDeps.map((d) => d.package_name),
+            primaryLang,
+          );
+        }
+      } catch {
+        // Non-fatal — live intel just won't have version data
       }
     }
   }
@@ -270,14 +321,14 @@ async function main() {
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
-    console.log("@4da/mcp-server 4.0.1");
+    console.log("@4da/mcp-server 4.1.0");
     return;
   }
 
   // Help
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-  @4da/mcp-server — 35 tools for codebase-aware developer intelligence
+  @4da/mcp-server — 36 tools for codebase-aware developer intelligence
 
   Usage:
     npx @4da/mcp-server              Start MCP server (stdio transport)
@@ -364,7 +415,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.0.1 started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.1.0 started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

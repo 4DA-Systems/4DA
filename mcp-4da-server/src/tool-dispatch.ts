@@ -46,7 +46,10 @@ import {
   executeWhatShouldIKnow,
   executeTrustSummary,
   executePreemptionFeed,
+  executeVulnerabilityScan,
 } from "./tools/index.js";
+
+import { getLiveIntelligence } from "./live-singleton.js";
 
 /**
  * Executor signature — all tool execute functions follow this shape.
@@ -119,6 +122,9 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   // Trust & Preemption
   trust_summary: executeTrustSummary,
   preemption_feed: executePreemptionFeed,
+
+  // Live Intelligence
+  vulnerability_scan: (db, params) => executeVulnerabilityScan(db, params, getLiveIntelligence()),
 
 };
 
