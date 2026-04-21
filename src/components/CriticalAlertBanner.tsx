@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
+import { cmd } from '../lib/commands';
 import type { SourceRelevance } from '../types/analysis';
 
 interface CriticalAlert {
@@ -27,30 +28,35 @@ interface CriticalAlert {
  * or breaking changes affect the user's actual dependencies.
  *
  * Unlike HealthBanner (dismissible, one-time), this banner persists
- * until the user explicitly acknowledges each alert. It survives
- * navigation between views.
+ * until the user explicitly triages each alert. Triage state is
+ * persisted to SQLite via the triage_alert IPC command.
  */
 export function CriticalAlertBanner() {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
   const relevanceResults = useAppStore(s => s.appState.relevanceResults);
-  const [acknowledged, setAcknowledged] = useState<Set<number>>(
-    () => {
-      try {
-        const stored = localStorage.getItem('4da-acknowledged-alerts');
-        return stored != null ? new Set(JSON.parse(stored) as number[]) : new Set<number>();
-      } catch {
-        return new Set<number>();
-      }
-    },
-  );
+  const [triaged, setTriaged] = useState<Set<number>>(new Set<number>());
+
+  // Load triage state from SQLite on mount and when results change
+  useEffect(() => {
+    const ids = relevanceResults
+      .filter((r: SourceRelevance) => r.is_critical_alert === true)
+      .map((r: SourceRelevance) => r.id);
+    if (ids.length === 0) return;
+
+    cmd('get_triage_states', { itemIds: ids })
+      .then(records => {
+        setTriaged(new Set(records.map(r => r.item_id)));
+      })
+      .catch(() => { /* fallback: empty set */ });
+  }, [relevanceResults]);
 
   // Find critical alerts from results
   const criticalAlerts: CriticalAlert[] = useMemo(() =>
     relevanceResults
       .filter((r: SourceRelevance) =>
         r.is_critical_alert === true
-        && !acknowledged.has(r.id),
+        && !triaged.has(r.id),
       )
       .map((r: SourceRelevance) => ({
         id: r.id,
@@ -69,32 +75,27 @@ export function CriticalAlertBanner() {
         dependency_path: r.score_breakdown?.dependency_path,
       }))
       .slice(0, 3),
-    [relevanceResults, acknowledged],
+    [relevanceResults, triaged],
   );
 
-  const handleAcknowledge = useCallback((id: number) => {
-    setAcknowledged(prev => {
-      const next = new Set(prev);
-      next.add(id);
-      try {
-        localStorage.setItem('4da-acknowledged-alerts', JSON.stringify([...next]));
-      } catch { /* localStorage full */ }
-      return next;
-    });
+  const handleTriage = useCallback((id: number, action: string, advisory_id?: string) => {
+    setTriaged(prev => new Set([...prev, id]));
+    cmd('triage_alert', {
+      itemId: id,
+      action,
+      advisoryId: advisory_id ?? null,
+      reason: null,
+      expiresAt: action === 'snoozed'
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null,
+    }).catch(() => { /* best-effort persist */ });
   }, []);
 
-  const handleAcknowledgeAll = useCallback(() => {
-    setAcknowledged(prev => {
-      const next = new Set(prev);
-      for (const alert of criticalAlerts) {
-        next.add(alert.id);
-      }
-      try {
-        localStorage.setItem('4da-acknowledged-alerts', JSON.stringify([...next]));
-      } catch { /* localStorage full */ }
-      return next;
-    });
-  }, [criticalAlerts]);
+  const handleTriageAll = useCallback(() => {
+    for (const alert of criticalAlerts) {
+      handleTriage(alert.id, 'acknowledged', alert.advisory_id);
+    }
+  }, [criticalAlerts, handleTriage]);
 
   // Request translations for critical alert content
   useEffect(() => {
@@ -137,10 +138,10 @@ export function CriticalAlertBanner() {
         </div>
         {criticalAlerts.length > 1 && (
           <button
-            onClick={handleAcknowledgeAll}
+            onClick={handleTriageAll}
             className="text-xs text-text-muted hover:text-text-secondary transition-colors"
           >
-            {t('alerts.acknowledgeAll', 'Acknowledge all')}
+            {t('alerts.dismissAll', 'Dismiss all')}
           </button>
         )}
       </div>
@@ -194,7 +195,7 @@ export function CriticalAlertBanner() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1 shrink-0">
               {alert.url != null && alert.url !== '' && (
                 <button
                   onClick={() => {
@@ -203,18 +204,26 @@ export function CriticalAlertBanner() {
                     }).catch(() => {
                       window.open(alert.url, '_blank', 'noopener,noreferrer');
                     });
+                    handleTriage(alert.id, 'investigating', alert.advisory_id);
                   }}
-                  className="text-amber-400 hover:text-amber-300 transition-colors underline cursor-pointer"
+                  className="px-1.5 py-0.5 text-[10px] rounded bg-blue-500/15 text-blue-400 hover:bg-blue-500/25 transition-colors"
                 >
-                  {t('alerts.details', 'Details')}
+                  {t('alerts.investigate', 'Investigate')}
                 </button>
               )}
               <button
-                onClick={() => { handleAcknowledge(alert.id); }}
-                className="text-text-muted hover:text-text-secondary transition-colors"
-                title={t('alerts.acknowledge', 'Acknowledge')}
+                onClick={() => { handleTriage(alert.id, 'not_applicable', alert.advisory_id); }}
+                className="px-1.5 py-0.5 text-[10px] rounded bg-zinc-500/15 text-text-muted hover:bg-zinc-500/25 transition-colors"
+                title={t('alerts.notApplicable', 'Not applicable to this project')}
               >
-                {'\u2713'}
+                {t('alerts.notApplicableShort', 'N/A')}
+              </button>
+              <button
+                onClick={() => { handleTriage(alert.id, 'fixed', alert.advisory_id); }}
+                className="px-1.5 py-0.5 text-[10px] rounded bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 transition-colors"
+                title={t('alerts.alreadyFixed', 'Already fixed/updated')}
+              >
+                {'✓'}
               </button>
             </div>
           </div>
