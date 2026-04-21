@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useCallback, useEffect, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cmd } from '../../lib/commands';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { formatScore } from '../../utils/score';
 import { isSafeUrl } from '../../utils/sanitize-html';
@@ -89,6 +90,21 @@ const AttentionCard = memo(function AttentionCard({
   const displayTitle = getTranslated(String(item.id), item.title);
   const necessityScore = item.score_breakdown?.necessity_score ?? 0;
   const necessityCategory = item.score_breakdown?.necessity_category;
+  const isSecurityItem = necessityCategory === 'security_vulnerability';
+  const [triageAction, setTriageAction] = useState<string | null>(null);
+
+  const handleTriage = useCallback((action: string) => {
+    setTriageAction(action);
+    cmd('triage_alert', {
+      itemId: item.id,
+      action,
+      advisoryId: item.advisory_id ?? null,
+      reason: null,
+      expiresAt: action === 'snoozed'
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null,
+    }).catch(() => { /* best-effort */ });
+  }, [item.id, item.advisory_id]);
 
   // Priority from necessity: security vulnerabilities get critical styling,
   // other high-necessity items get alert styling, otherwise fall back to signal_priority
@@ -155,6 +171,13 @@ const AttentionCard = memo(function AttentionCard({
         {isSignal && item.signal_action ? item.signal_action : displayTitle}
       </button>
 
+      {/* Necessity reason — security subtitle */}
+      {item.score_breakdown?.necessity_reason && (
+        <div className="text-[10px] text-text-muted mt-0.5 line-clamp-1">
+          {item.score_breakdown.necessity_reason}
+        </div>
+      )}
+
       {/* Why — single line */}
       {item.explanation && (
         <p className="text-xs text-text-muted line-clamp-1">{item.explanation}</p>
@@ -162,28 +185,73 @@ const AttentionCard = memo(function AttentionCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 mt-auto">
-        {item.url && isSafeUrl(item.url) && (
-          <button
-            onClick={handleOpen}
-            className="px-2.5 py-1 text-xs bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-border transition-all"
-          >
-            {t('briefing.read', 'Read')}
-          </button>
+        {isSecurityItem ? (
+          triageAction ? (
+            <span className={`text-[11px] ${
+              triageAction === 'investigating' ? 'text-blue-400'
+              : triageAction === 'fixed' ? 'text-emerald-400'
+              : triageAction === 'accepted_risk' ? 'text-amber-400'
+              : 'text-text-muted'
+            }`}>
+              {triageAction === 'investigating' ? t('triage.investigating', 'Investigating')
+              : triageAction === 'fixed' ? t('triage.fixed', 'Fixed')
+              : triageAction === 'not_applicable' ? t('triage.notApplicable', 'Not applicable')
+              : triageAction === 'accepted_risk' ? t('triage.riskAccepted', 'Risk accepted')
+              : t('triage.acknowledged', 'Acknowledged')}
+            </span>
+          ) : (
+            <>
+              {item.url && isSafeUrl(item.url) && (
+                <button
+                  onClick={() => {
+                    handleOpen();
+                    handleTriage('investigating');
+                  }}
+                  className="px-2 py-1 text-[11px] bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded hover:bg-blue-500/20 transition-all"
+                >
+                  {t('triage.investigate', 'Investigate')}
+                </button>
+              )}
+              <button
+                onClick={() => handleTriage('fixed')}
+                className="px-2 py-1 text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded hover:bg-emerald-500/20 transition-all"
+              >
+                {t('triage.markFixed', 'Fixed')}
+              </button>
+              <button
+                onClick={() => handleTriage('not_applicable')}
+                className="px-2 py-1 text-[11px] bg-zinc-500/10 text-text-muted border border-border rounded hover:bg-zinc-500/20 transition-all ms-auto"
+              >
+                {t('triage.markNA', 'N/A')}
+              </button>
+            </>
+          )
+        ) : (
+          <>
+            {item.url && isSafeUrl(item.url) && (
+              <button
+                onClick={handleOpen}
+                className="px-2.5 py-1 text-xs bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-border transition-all"
+              >
+                {t('briefing.read', 'Read')}
+              </button>
+            )}
+            <button
+              onClick={() => onSave(item)}
+              aria-label={t('action.save', 'Save') + ': ' + item.title}
+              className="px-2.5 py-1 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-all"
+            >
+              {t('action.save', 'Save')}
+            </button>
+            <button
+              onClick={() => onDismiss(item)}
+              aria-label={t('action.dismiss', 'Dismiss') + ': ' + item.title}
+              className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all ms-auto"
+            >
+              {t('action.dismiss', 'Dismiss')}
+            </button>
+          </>
         )}
-        <button
-          onClick={() => onSave(item)}
-          aria-label={t('action.save', 'Save') + ': ' + item.title}
-          className="px-2.5 py-1 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-all"
-        >
-          {t('action.save', 'Save')}
-        </button>
-        <button
-          onClick={() => onDismiss(item)}
-          aria-label={t('action.dismiss', 'Dismiss') + ': ' + item.title}
-          className="px-2.5 py-1 text-xs text-text-muted border border-border rounded hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all ms-auto"
-        >
-          {t('action.dismiss', 'Dismiss')}
-        </button>
       </div>
     </div>
   );
