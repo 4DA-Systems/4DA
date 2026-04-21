@@ -340,9 +340,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
         )
         .await
         .map_err(|_| String::from("Scoring context build timed out after 10s"))?
-        .map_err(|e| {
-            format!("Failed to build scoring context for differential analysis: {e}")
-        })?;
+        .map_err(|e| format!("Failed to build scoring context for differential analysis: {e}"))?;
         let trend_topics = crate::detect_trend_topics(
             new_items
                 .iter()
