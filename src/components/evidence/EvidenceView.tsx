@@ -43,11 +43,11 @@ const ThisWeekSection = memo(function ThisWeekSection({
         <div className="flex items-baseline gap-6">
           <div>
             <span className="text-2xl font-semibold text-white tabular-nums">{preemptionCount}</span>
-            <span className="text-xs text-text-muted ml-1.5">preemptive alerts</span>
+            <span className="text-xs text-text-muted ml-1.5">{t('evidence.preemptiveAlerts')}</span>
           </div>
           <div>
             <span className="text-2xl font-semibold text-white tabular-nums">{blindSpotCount}</span>
-            <span className="text-xs text-text-muted ml-1.5">blind-spot items</span>
+            <span className="text-xs text-text-muted ml-1.5">{t('evidence.blindSpotItems')}</span>
           </div>
         </div>
       )}
@@ -69,6 +69,7 @@ interface PulseData {
 }
 
 const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | null }) {
+  const { t } = useTranslation();
   if (!pulse) return null;
 
   const rejectionPct = Math.round(pulse.rejection_rate);
@@ -77,7 +78,7 @@ const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | 
   return (
     <section className="bg-bg-secondary rounded-lg border border-border p-5">
       <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-4">
-        Intelligence Pulse
+        {t('evidence.pulse')}
       </h2>
 
       {/* Stats row */}
@@ -86,19 +87,19 @@ const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | 
           <div className="text-lg font-semibold text-white tabular-nums">
             {pulse.items_analyzed_7d.toLocaleString()}
           </div>
-          <div className="text-[10px] text-text-muted">items analyzed (7d)</div>
+          <div className="text-[10px] text-text-muted">{t('evidence.pulseAnalyzed')}</div>
         </div>
         <div>
           <div className="text-lg font-semibold text-white tabular-nums">
             {pulse.items_surfaced_7d}
           </div>
-          <div className="text-[10px] text-text-muted">surfaced for you</div>
+          <div className="text-[10px] text-text-muted">{t('evidence.pulseSurfaced')}</div>
         </div>
         <div>
           <div className={`text-lg font-semibold tabular-nums ${rejectionPct >= 70 ? 'text-green-400' : 'text-white'}`}>
             {rejectionPct}%
           </div>
-          <div className="text-[10px] text-text-muted">noise filtered</div>
+          <div className="text-[10px] text-text-muted">{t('evidence.pulseNoise')}</div>
         </div>
       </div>
 
@@ -106,10 +107,10 @@ const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | 
       {(accuracyPct > 0 || pulse.total_cycles > 0) && (
         <div className="flex items-center gap-4 text-xs text-text-secondary border-t border-border/50 pt-3 mb-3">
           {accuracyPct > 0 && (
-            <span>Calibration accuracy: <span className="text-white tabular-nums">{accuracyPct}%</span></span>
+            <span>{t('evidence.pulseCalibration')} <span className="text-white tabular-nums">{accuracyPct}%</span></span>
           )}
           {pulse.total_cycles > 0 && (
-            <span>Self-optimization cycles: <span className="text-white tabular-nums">{pulse.total_cycles}</span></span>
+            <span>{t('evidence.pulseCycles')} <span className="text-white tabular-nums">{pulse.total_cycles}</span></span>
           )}
         </div>
       )}
@@ -152,18 +153,18 @@ const LearnedSection = memo(function LearnedSection({
   affinities: TopicAffinity[];
   antiTopics: AntiTopic[];
 }) {
+  const { t } = useTranslation();
   const hasData = affinities.length > 0 || antiTopics.length > 0;
 
   return (
     <section className="bg-bg-secondary rounded-lg border border-border p-5">
       <h2 className="text-[10px] text-text-muted uppercase tracking-wider mb-4">
-        What 4DA Learned About You
+        {t('evidence.learned')}
       </h2>
 
       {!hasData ? (
         <p className="text-xs text-text-muted leading-relaxed">
-          Save and dismiss items in the feed to help 4DA learn your preferences.
-          After a few interactions, your topic affinities will appear here.
+          {t('evidence.learnedEmpty')}
         </p>
       ) : (
         <div className="space-y-4">
@@ -171,7 +172,7 @@ const LearnedSection = memo(function LearnedSection({
           {affinities.length > 0 && (
             <div>
               <h3 className="text-[10px] text-green-400/80 uppercase tracking-wider mb-2">
-                Topics you engage with
+                {t('evidence.learnedPositive')}
               </h3>
               <div className="space-y-1.5">
                 {affinities.slice(0, 6).map(a => {
@@ -200,7 +201,7 @@ const LearnedSection = memo(function LearnedSection({
           {antiTopics.length > 0 && (
             <div>
               <h3 className="text-[10px] text-red-400/80 uppercase tracking-wider mb-2">
-                Topics you consistently skip
+                {t('evidence.learnedNegative')}
               </h3>
               <div className="flex flex-wrap gap-1.5">
                 {antiTopics.slice(0, 8).map(at => (
