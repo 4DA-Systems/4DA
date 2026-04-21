@@ -721,6 +721,9 @@ pub(crate) async fn run_multi_source_analysis_impl(
                                                 decision_boost_applied: 0.0,
                                                 created_at: None,
                                                 detected_lang: stored.detected_lang.clone(),
+                                                is_critical_alert: false,
+                                                applicability: None,
+                                                advisory_id: None,
                                             };
                                             info!(
                                                 target: "4da::analysis",

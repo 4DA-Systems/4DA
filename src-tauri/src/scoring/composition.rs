@@ -251,6 +251,15 @@ mod tests {
             content_analysis_mult: 1.0,
             advisor_signals: vec![],
             disagreement: None,
+            advisory_source: None,
+            cvss_score: None,
+            cvss_severity: None,
+            affected_versions: None,
+            fixed_version: None,
+            installed_version: None,
+            is_version_affected: None,
+            dependency_path: None,
+            affected_project_count: None,
         }
     }
 
@@ -292,6 +301,9 @@ mod tests {
             decision_boost_applied: 0.0,
             created_at: None,
             detected_lang: String::new(),
+            is_critical_alert: false,
+            applicability: None,
+            advisory_id: None,
         }
     }
 

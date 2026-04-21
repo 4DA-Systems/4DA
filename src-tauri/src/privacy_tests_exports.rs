@@ -237,6 +237,9 @@ mod tests {
             decision_window_match: None,
             decision_boost_applied: 0.0,
             created_at: None,
+            is_critical_alert: false,
+            applicability: None,
+            advisory_id: None,
         }];
 
         // Serialize the results as the frontend would receive them

@@ -164,6 +164,33 @@ pub struct ScoreBreakdown {
     /// `None` means agreement or no advisor opinion was produced.
     #[serde(default)]
     pub disagreement: Option<DisagreementKind>,
+    /// Advisory source authority (e.g. "GHSA", "RustSec", "npm_advisory", "OSV")
+    #[serde(default)]
+    pub advisory_source: Option<String>,
+    /// CVSS score (0.0-10.0) from the advisory
+    #[serde(default)]
+    pub cvss_score: Option<f32>,
+    /// CVSS severity label ("critical", "high", "medium", "low")
+    #[serde(default)]
+    pub cvss_severity: Option<String>,
+    /// Affected version range from advisory (e.g. "< 3.0.0")
+    #[serde(default)]
+    pub affected_versions: Option<String>,
+    /// Fixed version from advisory (e.g. "3.0.1")
+    #[serde(default)]
+    pub fixed_version: Option<String>,
+    /// User's installed version from lockfile (e.g. "2.8.1")
+    #[serde(default)]
+    pub installed_version: Option<String>,
+    /// Whether installed version falls within the affected range
+    #[serde(default)]
+    pub is_version_affected: Option<bool>,
+    /// Dependency path description ("direct" | "transitive via X" | "dev-only")
+    #[serde(default)]
+    pub dependency_path: Option<String>,
+    /// How many of the user's scanned projects are affected
+    #[serde(default)]
+    pub affected_project_count: Option<u32>,
 }
 
 /// Describes why pipeline and advisor(s) disagreed about an item.
@@ -312,6 +339,17 @@ pub struct SourceRelevance {
     /// BCP-47 language code detected from content (e.g. "en", "es", "ja")
     #[serde(default = "default_lang_en")]
     pub detected_lang: String,
+    /// Whether this item should display in the critical alert banner.
+    /// Only true when: SecurityAlert + dep_match >= 0.40 + non-dev + correct ecosystem.
+    /// Frontend routes on this field instead of parsing signal_action strings.
+    #[serde(default)]
+    pub is_critical_alert: bool,
+    /// Applicability assessment for security items
+    #[serde(default)]
+    pub applicability: Option<String>,
+    /// Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234")
+    #[serde(default)]
+    pub advisory_id: Option<String>,
 }
 
 pub(crate) fn default_lang_en() -> String {
