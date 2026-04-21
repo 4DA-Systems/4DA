@@ -1537,6 +1537,8 @@ pub(crate) fn score_item(
         None
     };
     let installed_version = raw.matched_deps.first().and_then(|d| d.version.clone());
+    let sec_affected_project_count =
+        count_affected_projects(db, &matched_dep_names) as u32;
 
     // ── Score breakdown ───────────────────────────────────────────────
     let score_breakdown = ScoreBreakdown {
@@ -1609,7 +1611,7 @@ pub(crate) fn score_item(
         installed_version: installed_version.clone(),
         is_version_affected: None, // TODO: semver range matching
         dependency_path: dep_path.clone(),
-        affected_project_count: Some(count_affected_projects(db, &matched_dep_names) as u32),
+        affected_project_count: Some(sec_affected_project_count),
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
