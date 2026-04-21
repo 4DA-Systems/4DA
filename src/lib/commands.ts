@@ -575,9 +575,6 @@ interface CommandMap {
   get_capability_states: { params: Record<string, never>; result: Record<string, { state: string; reason?: string; since?: string; fallback?: string; remediation?: string }> };
   get_capability_summary: { params: Record<string, never>; result: { full: number; degraded: number; unavailable: number; total: number } };
 
-  // -- Active Work Context --
-  get_active_work_context: { params: Record<string, never>; result: { topics: Array<{ topic: string; weight: number; confidence: number; last_seen: string }>; file_changes_last_hour: number; active_project: string | null } };
-
   // -- Tech Narratives (LLM-synthesized) --
   generate_tech_narratives: { params: Record<string, never>; result: { narratives: Record<string, string> } };
 
