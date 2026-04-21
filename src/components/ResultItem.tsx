@@ -99,6 +99,19 @@ export const ResultItem = memo(function ResultItem({
   // Track expand dwell time — emits click+dwell when collapsed/unmounted
   useExpandTracking(item.id, item.source_type || 'unknown', isExpanded, itemTopics);
 
+  const categoryBorder = useMemo(() => {
+    if (item.score_breakdown?.necessity_category === 'security_vulnerability') {
+      return 'border-l-2 border-l-red-500/50';
+    }
+    if (item.signal_type === 'breaking_change') {
+      return 'border-l-2 border-l-amber-500/50';
+    }
+    if (item.signal_type === 'tool_discovery' || item.score_breakdown?.content_type === 'release_announcement') {
+      return 'border-l-2 border-l-blue-500/50';
+    }
+    return '';
+  }, [item.score_breakdown?.necessity_category, item.score_breakdown?.content_type, item.signal_type]);
+
   const scoreGlow = useMemo(() => {
     if (!isTopPick) return undefined;
     const intensity = Math.min((item.top_score - 0.72) * 10, 1);
@@ -115,7 +128,7 @@ export const ResultItem = memo(function ResultItem({
       aria-selected={isFocused}
       tabIndex={isFocused ? 0 : -1}
       style={scoreGlow}
-      className={`rounded border transition-all duration-500 ${
+      className={`rounded border transition-all duration-500 ${categoryBorder} ${
         isFocused
           ? 'ring-1 ring-orange-500/50'
           : ''

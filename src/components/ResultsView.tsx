@@ -186,28 +186,26 @@ export function ResultsView({
               {/* Sort */}
               <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
                 <span className="text-xs text-text-muted">{t('results.sort')}</span>
-                <button
-                  onClick={() => setSortBy('score')}
-                  aria-pressed={sortBy === 'score'}
-                  className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                    sortBy === 'score'
-                      ? 'bg-white/10 text-white'
-                      : 'text-text-muted hover:text-text-secondary'
-                  }`}
-                >
-                  {t('results.score')}
-                </button>
-                <button
-                  onClick={() => setSortBy('date')}
-                  aria-pressed={sortBy === 'date'}
-                  className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                    sortBy === 'date'
-                      ? 'bg-white/10 text-white'
-                      : 'text-text-muted hover:text-text-secondary'
-                  }`}
-                >
-                  {t('results.recent')}
-                </button>
+                {([
+                  ['score', t('results.score')] as const,
+                  ['date', t('results.recent')] as const,
+                  ['priority', t('results.sortPriority', 'Priority')] as const,
+                  ['applicability', t('results.sortApplicability', 'Applicability')] as const,
+                  ['freshness', t('results.sortFreshness', 'Freshness')] as const,
+                ]).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => setSortBy(mode)}
+                    aria-pressed={sortBy === mode}
+                    className={`px-2 py-1 text-xs rounded-lg transition-all ${
+                      sortBy === mode
+                        ? 'bg-white/10 text-white'
+                        : 'text-text-muted hover:text-text-secondary'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
               {/* Relevance Toggle */}
