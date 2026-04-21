@@ -21,10 +21,15 @@ const KEYGEN_ACCOUNT_ID: &str = "runyourempirehq";
 const KEYGEN_VALIDATE_URL: &str = "https://api.keygen.sh/v1/licenses/actions/validate-key";
 
 /// Hours before a cached validation result is considered stale.
-/// 7 days provides resilience for offline periods and intermittent keychain failures.
+/// 90 days provides resilience for offline periods and intermittent keychain failures.
 /// The cache is refreshed on every successful online validation, so active users
-/// always have a fresh cache. The 7-day window only matters when offline.
-const VALIDATION_CACHE_HOURS: u64 = 168;
+/// always have a fresh cache. The 90-day window only matters when fully offline
+/// with no other key source available.
+const VALIDATION_CACHE_HOURS: u64 = 2160; // 90 days
+
+/// Grace period: if `activated_at` is set, do not downgrade the tier for this
+/// many days even if the license key is temporarily unavailable.
+const ACTIVATION_GRACE_PERIOD_DAYS: i64 = 30;
 
 /// Maximum license activation attempts per minute
 const MAX_ACTIVATION_ATTEMPTS_PER_MINUTE: u32 = 5;
@@ -81,6 +86,19 @@ const LICENSE_REVALIDATION_INTERVAL_SECS: u64 = 21_600; // 6 hours
 #[cfg(test)]
 pub(crate) fn reset_license_check_timestamp() {
     LAST_LICENSE_CHECK.store(0, Ordering::Relaxed);
+}
+
+/// Check if the user activated within the grace period.
+fn is_within_activation_grace(license: &LicenseConfig) -> bool {
+    if let Some(ref activated) = license.activated_at {
+        if let Ok(activated_date) = chrono::DateTime::parse_from_rfc3339(activated) {
+            let elapsed = chrono::Utc::now().signed_duration_since(activated_date);
+            if elapsed.num_days() < ACTIVATION_GRACE_PERIOD_DAYS {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Check if a license key is available — in memory, keychain, or validation cache.
@@ -168,17 +186,24 @@ fn maybe_revalidate_license() {
         && !is_trial_active(&license)
         && !has_license_key_available(&mut license)
     {
-        warn!(
-            "Runtime re-validation: tier '{}' with no license key (checked memory, keychain, and cache) — resetting to free",
-            license.tier
-        );
-        guard.get_mut().license.tier = "free".to_string();
-        TIER_DOWNGRADED.store(true, Ordering::Relaxed);
-        if let Err(e) = guard.save() {
+        if is_within_activation_grace(&license) {
             warn!(
-                "Failed to persist license reset during re-validation: {}",
-                e
+                "Runtime re-validation: tier '{}' with no license key — within grace period, preserving tier",
+                license.tier
             );
+        } else {
+            warn!(
+                "Runtime re-validation: tier '{}' with no license key (checked memory, keychain, and cache) — resetting to free",
+                license.tier
+            );
+            guard.get_mut().license.tier = "free".to_string();
+            TIER_DOWNGRADED.store(true, Ordering::Relaxed);
+            if let Err(e) = guard.save() {
+                warn!(
+                    "Failed to persist license reset during re-validation: {}",
+                    e
+                );
+            }
         }
     } else if !license.license_key.is_empty() && guard.get().license.license_key.is_empty() {
         // Re-hydration happened (from keychain) — persist key to BOTH in-memory
@@ -282,19 +307,26 @@ pub fn validate_license_on_startup() {
         return;
     }
 
-    // If tier is paid but no license key is set, reset to free
+    // If tier is paid but no license key is set, check grace period before downgrading
     if is_paid_tier(license.tier.as_str())
         && !is_trial_active(&license)
         && !has_license_key_available(&mut license)
     {
-        warn!(
-            "License tier is '{}' but no license key found (checked memory, keychain, and cache) — resetting to free",
-            license.tier
-        );
-        guard.get_mut().license.tier = "free".to_string();
-        TIER_DOWNGRADED.store(true, Ordering::Relaxed);
-        if let Err(e) = guard.save() {
-            warn!("Failed to reset license tier: {}", e);
+        if is_within_activation_grace(&license) {
+            warn!(
+                "License tier is '{}' but no license key found — within activation grace period, preserving tier",
+                license.tier
+            );
+        } else {
+            warn!(
+                "License tier is '{}' but no license key found (checked memory, keychain, and cache) — resetting to free",
+                license.tier
+            );
+            guard.get_mut().license.tier = "free".to_string();
+            TIER_DOWNGRADED.store(true, Ordering::Relaxed);
+            if let Err(e) = guard.save() {
+                warn!("Failed to reset license tier: {}", e);
+            }
         }
     } else if !license.license_key.is_empty() && guard.get().license.license_key.is_empty() {
         // Re-hydration happened (from keychain) — persist key to BOTH in-memory

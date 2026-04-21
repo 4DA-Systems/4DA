@@ -104,7 +104,27 @@ where
     let mut last_error: Option<SourceError> = None;
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
-        match fetch_fn().await {
+        // 15s per-attempt timeout: one hung HTTP connection must not stall all sources
+        let attempt_result = tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            fetch_fn(),
+        )
+        .await;
+
+        let fetch_result = match attempt_result {
+            Ok(r) => r,
+            Err(_) => {
+                warn!(
+                    target: "4da::retry",
+                    adapter = adapter_name,
+                    attempt,
+                    "Fetch attempt timed out after 15s"
+                );
+                Err(SourceError::Network(format!("{adapter_name}: fetch timed out after 15s")))
+            }
+        };
+
+        match fetch_result {
             Ok(items) => {
                 if attempt > 1 {
                     info!(

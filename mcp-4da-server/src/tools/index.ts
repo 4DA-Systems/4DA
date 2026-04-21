@@ -201,3 +201,8 @@ export {
   vulnerabilityScanTool,
   executeVulnerabilityScan,
 } from "./vulnerability-scan.js";
+
+export {
+  ecosystemPulseTool,
+  executeEcosystemPulse,
+} from "./ecosystem-pulse.js";
