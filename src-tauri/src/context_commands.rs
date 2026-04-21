@@ -755,6 +755,12 @@ pub(crate) fn run_awe_with_timeout(
         }
     }
 
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+
     let mut child = cmd
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
@@ -835,6 +841,10 @@ pub(crate) async fn run_awe_async(
     cmd.args(args)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
+    #[cfg(windows)]
+    {
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 
     // Inject LLM provider config — AWE uses the same provider as 4DA
     if let Ok(mgr) = std::panic::catch_unwind(crate::get_settings_manager) {

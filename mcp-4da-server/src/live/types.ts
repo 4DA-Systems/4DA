@@ -76,3 +76,46 @@ export interface LiveIntelligenceStatus {
   cachedVulnCount: number;
   cachedHeadlineCount: number;
 }
+
+// =============================================================================
+// Registry Package Info (Phase 2)
+// =============================================================================
+
+export interface RegistryPackageInfo {
+  name: string;
+  ecosystem: OsvEcosystem;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  latestStableVersion: string | null;
+  versionsBehind: SemverDistance | null;
+  deprecated: boolean;
+  deprecationMessage: string | null;
+  lastPublished: string | null;
+  license: string | null;
+  weeklyDownloads: number | null;
+  isDev: boolean;
+  fetchError: string | null;
+}
+
+export interface SemverDistance {
+  major: number;
+  minor: number;
+  patch: number;
+  label: "up-to-date" | "patch" | "minor" | "major";
+}
+
+export interface DependencyHealthResult {
+  scannedAt: string;
+  projectPath: string;
+  ecosystemsScanned: string[];
+  totalDeps: number;
+  outdatedCount: number;
+  deprecatedCount: number;
+  vulnerableCount: number;
+  healthScore: number;
+  dependencies: RegistryPackageInfo[];
+  vulnerabilitySummary: { critical: number; high: number; medium: number; low: number } | null;
+  summary: string;
+  scanDurationMs: number;
+  cached: boolean;
+}

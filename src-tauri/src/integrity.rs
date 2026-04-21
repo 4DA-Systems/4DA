@@ -87,17 +87,21 @@ fn verify_windows_signature(exe_path: &std::path::Path) -> bool {
         return true;
     }
 
-    match std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "(Get-AuthenticodeSignature '{}').Status",
-                exe_path.display()
-            ),
-        ])
-        .output()
+    let mut cmd = std::process::Command::new("powershell");
+    cmd.args([
+        "-NoProfile",
+        "-Command",
+        &format!(
+            "(Get-AuthenticodeSignature '{}').Status",
+            exe_path.display()
+        ),
+    ]);
+    #[cfg(windows)]
     {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    match cmd.output() {
         Ok(output) => {
             let status = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if status == "Valid" {

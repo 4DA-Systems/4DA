@@ -319,6 +319,20 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     tags: ["ecosystem", "news", "hacker-news", "trends", "live"],
     standalone: true,
   },
+  dependency_health: {
+    summary: "Dependency health — version freshness, deprecation, CVEs across npm/Rust/Python/Go",
+    schemaFile: "dependency-health.json",
+    category: "knowledge",
+    tags: ["dependencies", "health", "outdated", "deprecated", "registry", "versions"],
+    standalone: true,
+  },
+  upgrade_planner: {
+    summary: "Ranked upgrade recommendations — prioritized by CVE severity, deprecation, version distance",
+    schemaFile: "upgrade-planner.json",
+    category: "knowledge",
+    tags: ["upgrade", "dependencies", "recommendations", "versions", "planning"],
+    standalone: true,
+  },
 };
 
 /**

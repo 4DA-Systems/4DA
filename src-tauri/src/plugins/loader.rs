@@ -198,6 +198,8 @@ pub fn execute_plugin(manifest: &PluginManifest, config: &PluginConfig) -> Resul
         if let Ok(root) = std::env::var("SystemRoot") {
             cmd.env("SystemRoot", root);
         }
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
 
     let mut child = cmd

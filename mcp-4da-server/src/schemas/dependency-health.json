@@ -1,0 +1,27 @@
+{
+  "name": "dependency_health",
+  "description": "Assess health of project dependencies — version freshness, deprecation status, known CVEs across npm, Rust, Python, and Go. Auto-detects from lock files.\n\nReturns a health score (0-100), outdated/deprecated/vulnerable counts, and per-dependency details including semver distance and registry metadata.\n\nPrivacy: sends only package names (public manifest data). No code or personal data transmitted.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "include_dev": {
+        "type": "boolean",
+        "description": "Include devDependencies in health check. Default: false."
+      },
+      "ecosystem_filter": {
+        "type": "string",
+        "enum": ["npm", "crates.io", "PyPI", "Go"],
+        "description": "Only show dependencies from this ecosystem."
+      },
+      "sort_by": {
+        "type": "string",
+        "enum": ["risk", "name", "outdated"],
+        "description": "Sort order. 'risk' prioritizes vulnerable+deprecated+outdated. Default: risk."
+      },
+      "limit": {
+        "type": "number",
+        "description": "Maximum dependencies to return. Default: 50."
+      }
+    }
+  }
+}
