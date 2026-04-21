@@ -12,6 +12,14 @@ interface CriticalAlert {
   signal_type?: string;
   source_type?: string;
   url?: string;
+  advisory_id?: string;
+  applicability?: string;
+  cvss_score?: number;
+  cvss_severity?: string;
+  matched_deps?: string[];
+  fixed_version?: string;
+  installed_version?: string;
+  dependency_path?: string;
 }
 
 /**
@@ -41,8 +49,7 @@ export function CriticalAlertBanner() {
   const criticalAlerts: CriticalAlert[] = useMemo(() =>
     relevanceResults
       .filter((r: SourceRelevance) =>
-        r.signal_priority === 'critical'
-        && (r.signal_action?.startsWith('Critical:') ?? false)
+        r.is_critical_alert === true
         && !acknowledged.has(r.id),
       )
       .map((r: SourceRelevance) => ({
@@ -52,6 +59,14 @@ export function CriticalAlertBanner() {
         signal_type: r.signal_type,
         source_type: r.source_type,
         url: r.url ?? undefined,
+        advisory_id: r.advisory_id,
+        applicability: r.applicability,
+        cvss_score: r.score_breakdown?.cvss_score,
+        cvss_severity: r.score_breakdown?.cvss_severity,
+        matched_deps: r.score_breakdown?.matched_deps,
+        fixed_version: r.score_breakdown?.fixed_version,
+        installed_version: r.score_breakdown?.installed_version,
+        dependency_path: r.score_breakdown?.dependency_path,
       }))
       .slice(0, 3),
     [relevanceResults, acknowledged],
@@ -148,6 +163,36 @@ export function CriticalAlertBanner() {
                   {getTranslated(`alert-title-${alert.id}`, alert.title)}
                 </div>
               )}
+              {/* Evidence row */}
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                {alert.advisory_id && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-red-500/15 text-red-400">
+                    {alert.advisory_id}
+                  </span>
+                )}
+                {alert.cvss_score != null && (
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    alert.cvss_score >= 9.0 ? 'bg-red-500/15 text-red-400'
+                      : alert.cvss_score >= 7.0 ? 'bg-orange-500/15 text-orange-400'
+                      : 'bg-yellow-500/15 text-yellow-400'
+                  }`}>
+                    CVSS {alert.cvss_score.toFixed(1)}
+                  </span>
+                )}
+                {alert.matched_deps && alert.matched_deps.length > 0 && (
+                  <span className="text-[10px] text-text-muted">
+                    {alert.dependency_path === 'direct' ? '●' : '○'}{' '}
+                    {alert.matched_deps[0]}
+                    {alert.installed_version ? ` ${alert.installed_version}` : ''}
+                    {alert.dependency_path ? ` (${alert.dependency_path})` : ''}
+                  </span>
+                )}
+                {alert.fixed_version && (
+                  <span className="text-[10px] text-emerald-400">
+                    {'→'} {alert.fixed_version}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {alert.url != null && alert.url !== '' && (
