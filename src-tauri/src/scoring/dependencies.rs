@@ -28,6 +28,8 @@ pub(crate) struct DepMatch {
     /// Direct dependency (from manifest) vs transitive (from lockfile).
     /// CVE scoring uses this to differentiate urgency.
     pub is_direct: bool,
+    /// Installed version from the user's lockfile (e.g. "2.8.1")
+    pub version: Option<String>,
 }
 
 /// Version comparison between installed and mentioned
@@ -561,6 +563,7 @@ pub(crate) fn match_dependencies(
             version_delta,
             is_dev: info.is_dev,
             is_direct: info.is_direct,
+            version: info.version.clone(),
         });
     }
 
