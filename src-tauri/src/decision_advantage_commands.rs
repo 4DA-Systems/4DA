@@ -41,7 +41,6 @@ pub async fn close_decision_window(window_id: i64, outcome: Option<String>) -> R
     Ok(format!("Window {window_id} closed"))
 }
 
-
 /// Get historical advantage scores for sparkline rendering.
 /// Returns the last N scores for the given period, oldest first.
 #[tauri::command]

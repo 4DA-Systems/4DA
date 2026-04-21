@@ -115,11 +115,11 @@ export function executeConfigValidator(
     `).all() as { key: string; value: string }[];
   } catch {
     return {
-      overall_status: "valid",
+      overall_status: "warnings",
       sections: [],
-      summary: { total_issues: 0, errors: 0, warnings: 0, info: 0 },
-      quick_fixes: ["Configuration validation unavailable — settings stored externally (not in this database)."],
-      config_score: 100,
+      summary: { total_issues: 0, errors: 0, warnings: 1, info: 0 },
+      quick_fixes: ["Settings table not found — running in standalone mode. Install the 4DA desktop app for full configuration management."],
+      config_score: -1,
     };
   }
   const settings: Record<string, unknown> = {};

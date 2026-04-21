@@ -1,8 +1,8 @@
 {
   "name": "@4da/mcp-server",
-  "version": "4.1.2",
+  "version": "4.2.0",
   "mcpName": "io.github.runyourempire/4da-mcp-server",
-  "description": "36 MCP tools for codebase-aware developer intelligence. Live vulnerability scanning (OSV.dev), persistent project memory, and tech stack awareness for Claude, Cursor, and Copilot. Zero config, privacy-first.",
+  "description": "Scan your dependencies for known CVEs via MCP. Auto-detects your stack, queries OSV.dev, returns severity + fix versions. Zero config, privacy-first. Also includes 35 tools for project context, decision memory, and knowledge gaps.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
