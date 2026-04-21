@@ -78,9 +78,6 @@ vi.mock('../../store', () => ({
         recordDecision: vi.fn(),
         updateDecision: vi.fn(),
 
-        // compound advantage
-        compoundAdvantage: null,
-        loadCompoundAdvantage: vi.fn(),
 
         // autophagy
         autophagyStatus: null,
