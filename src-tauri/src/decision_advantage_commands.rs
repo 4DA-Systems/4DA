@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Decision Advantage Tauri commands.
 //!
-//! Expose decision windows and compound advantage scoring to the frontend.
+//! Expose decision windows and advantage history to the frontend.
 //! Core logic lives in `decision_advantage::windows` and `decision_advantage::compound_score`.
 
-use crate::decision_advantage::{CompoundAdvantageScore, DecisionWindow};
+use crate::decision_advantage::DecisionWindow;
 use crate::error::Result;
 use crate::open_db_connection;
 
@@ -41,13 +41,6 @@ pub async fn close_decision_window(window_id: i64, outcome: Option<String>) -> R
     Ok(format!("Window {window_id} closed"))
 }
 
-/// Calculate compound advantage score for a given period (daily, weekly, monthly).
-#[tauri::command]
-pub async fn get_compound_advantage(period: Option<String>) -> Result<CompoundAdvantageScore> {
-    let conn = open_db_connection()?;
-    let p = period.as_deref().unwrap_or("weekly");
-    Ok(crate::decision_advantage::compute_compound_score(&conn, p))
-}
 
 /// Get historical advantage scores for sparkline rendering.
 /// Returns the last N scores for the given period, oldest first.
