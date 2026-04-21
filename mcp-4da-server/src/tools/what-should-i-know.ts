@@ -112,6 +112,7 @@ export const whatShouldIKnowTool = {
  */
 function buildKeywords(task: string, files: string[]): Set<string> {
   const words = new Set<string>();
+  if (!task) return words;
 
   // Extract meaningful words from task (3+ chars, lowercased)
   for (const word of task.toLowerCase().split(/\s+/)) {
@@ -143,6 +144,7 @@ function buildKeywords(task: string, files: string[]): Set<string> {
  * Check if a text matches any keywords from the task context.
  */
 function matchesKeywords(text: string, keywords: Set<string>): boolean {
+  if (!text) return false;
   const textLower = text.toLowerCase();
   for (const keyword of keywords) {
     if (textLower.includes(keyword)) {
@@ -261,7 +263,7 @@ export function executeWhatShouldIKnow(
           return true;
         }
         // Otherwise, filter by keyword relevance
-        return matchesKeywords(s.title + " " + s.action, keywords);
+        return matchesKeywords((s.title || "") + " " + (s.action || ""), keywords);
       })
       .slice(0, 10)
       .map((s) => ({
@@ -325,7 +327,7 @@ export function executeWhatShouldIKnow(
     });
 
     activeSignals = chainResult.chains
-      .filter((c) => matchesKeywords(c.chain_name + " " + c.suggested_action, keywords))
+      .filter((c) => matchesKeywords((c.chain_name || "") + " " + (c.suggested_action || ""), keywords))
       .slice(0, 5)
       .map((c) => ({
         chain_name: c.chain_name,
