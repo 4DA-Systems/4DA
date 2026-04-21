@@ -79,6 +79,8 @@ export function ResultsView({
   // 5b. Memoize computed filter counts and unique sources
   const relevantCount = useMemo(() => filteredResults.filter(r => r.relevant).length, [filteredResults]);
   const topPicksCount = useMemo(() => filteredResults.filter(r => r.top_score >= 0.72).length, [filteredResults]);
+  const totalCount = state.relevanceResults.length;
+  const criticalCount = useMemo(() => filteredResults.filter(r => r.is_critical_alert).length, [filteredResults]);
 
   // Request content translation for visible results + near misses
   useEffect(() => {
@@ -130,7 +132,14 @@ export function ResultsView({
                 </div>
                 <p className="text-xs text-text-muted" aria-live="polite">
                   {state.analysisComplete
-                    ? `${filteredResults.length} items · ${relevantCount} relevant · ${topPicksCount} high confidence`
+                    ? <>
+                        {showOnlyRelevant
+                          ? t('results.countFiltered', { filtered: filteredResults.length, total: totalCount })
+                          : t('results.countAll', { count: filteredResults.length })
+                        }
+                        {topPicksCount > 0 && ` · ${t('results.topPicks', { count: topPicksCount })}`}
+                        {criticalCount > 0 && ` · ${t('results.criticalCount', { count: criticalCount })}`}
+                      </>
                     : t('results.clickAnalyze')}
                 </p>
               </div>

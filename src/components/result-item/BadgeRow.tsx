@@ -78,6 +78,19 @@ export const BadgeRow = memo(function BadgeRow({ item }: BadgeRowProps) {
           {t(`results.signal.${item.signal_type}`, { defaultValue: item.signal_type })}
         </span>
       )}
+      {item.applicability && item.applicability !== 'not_applicable' && (
+        <span className={`flex-shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+          item.applicability === 'affected' ? 'bg-red-500/20 text-red-400'
+          : item.applicability === 'likely_affected' ? 'bg-orange-500/20 text-orange-400'
+          : item.applicability === 'needs_verification' ? 'bg-yellow-500/20 text-yellow-400'
+          : 'bg-blue-500/20 text-blue-400'
+        }`}>
+          {item.applicability === 'affected' ? t('results.affected', 'Affected')
+          : item.applicability === 'likely_affected' ? t('results.likelyAffected', 'Likely Affected')
+          : item.applicability === 'needs_verification' ? t('results.needsVerification', 'Needs Verification')
+          : t('results.ecosystemWatch', 'Ecosystem Watch')}
+        </span>
+      )}
       {item.score_breakdown?.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
         <span
           className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/20 text-emerald-400"
