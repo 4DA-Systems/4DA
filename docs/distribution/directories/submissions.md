@@ -2,8 +2,8 @@
 
 Comprehensive, ready-to-paste copy for every MCP directory and listing platform.
 
-**Package:** [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) v4.2.0
-**Last updated:** 2026-04-21
+**Package:** [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) v4.2.1
+**Last updated:** 2026-04-22
 
 ---
 
@@ -511,7 +511,7 @@ Use this to track progress across all directories:
 
 | # | Directory | Status | URL | Notes |
 |---|-----------|--------|-----|-------|
-| 1 | Official MCP Registry | IN PROGRESS | — | server.json validated, awaiting login auth |
+| 1 | Official MCP Registry | PUBLISHED | registry.modelcontextprotocol.io | v4.2.1 published 2026-04-22 |
 | 2 | punkpeye/awesome-mcp-servers | PR OPEN | https://github.com/punkpeye/awesome-mcp-servers/pull/5179 | Pending review |
 | 3 | mcp.so (mcp-get) | SUBMITTED | https://github.com/michaellatman/mcp-get/issues/214 | GitHub issue |
 | 4 | PulseMCP | PENDING | — | Auto-ingests from Official Registry weekly |
