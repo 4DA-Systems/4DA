@@ -231,6 +231,13 @@ function classify(
   // Compute priority
   let priorityScore = BASE_WEIGHTS[bestType];
   const techMatch = detectedTech.find((t) => hasWordBoundary(textLower, t.toLowerCase()));
+
+  // Security alerts MUST mention something in the user's stack to be relevant.
+  // A CVE for "Prometheus" or "PraisonAI" is noise if the user doesn't use them.
+  // Only keep security alerts that explicitly name a technology the user has.
+  if (bestType === "security_alert" && !techMatch) {
+    return null;
+  }
   if (techMatch) priorityScore += 1;
   if (relevanceScore > 0.7) priorityScore += 1;
   priorityScore = Math.min(priorityScore, 4);

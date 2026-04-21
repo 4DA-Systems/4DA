@@ -124,7 +124,10 @@ export async function executeScoreAutopsy(
   // Get the item
   const item = db.getSourceItem(item_id, source_type);
   if (!item) {
-    throw new Error(`Item ${item_id} of type ${source_type} not found`);
+    return {
+      error: `Item ${item_id} of type ${source_type} not found`,
+      suggestion: "Use get_relevant_content to find valid item IDs first.",
+    } as unknown as AutopsyResult;
   }
 
   // Get full context
@@ -133,7 +136,10 @@ export async function executeScoreAutopsy(
   // Get detailed explanation
   const explanation = db.explainRelevance(item_id, source_type);
   if (!explanation) {
-    throw new Error("Failed to compute relevance explanation");
+    return {
+      error: `Failed to compute relevance explanation for item ${item_id}`,
+      suggestion: "The item may not have been scored yet. Try a different item.",
+    } as unknown as AutopsyResult;
   }
 
   // Calculate age
