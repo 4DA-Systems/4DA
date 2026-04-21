@@ -581,9 +581,6 @@ pub fn extract_rich_topics(content: &str, file_ext: &str) -> Vec<(String, f32)> 
         _ => {}
     }
 
-    // Universal patterns (all languages)
-    extract_rich_universal(content, &mut topics);
-
     // Dedup by topic name, keep highest confidence
     topics.sort_by(|a, b| a.0.cmp(&b.0));
     topics.dedup_by(|a, b| {
@@ -775,53 +772,6 @@ fn extract_rich_python(content: &str, topics: &mut Vec<(String, f32)>) {
     }
 }
 
-fn extract_rich_universal(content: &str, topics: &mut Vec<(String, f32)>) {
-    // TODO/FIXME — active problems the developer is thinking about
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed.contains("TODO") || trimmed.contains("FIXME") || trimmed.contains("HACK") {
-            topics.push(("active_problem".to_string(), 0.7));
-            // Try to extract the topic from the comment
-            let comment = trimmed
-                .split("TODO")
-                .last()
-                .or_else(|| trimmed.split("FIXME").last())
-                .or_else(|| trimmed.split("HACK").last())
-                .unwrap_or("");
-            let clean = comment.trim_start_matches(&[':', ' ', '-'][..]).trim();
-            if clean.len() >= 5 {
-                // First 3 meaningful words as topic
-                let words: Vec<&str> = clean
-                    .split_whitespace()
-                    .filter(|w| w.len() >= 3)
-                    .take(3)
-                    .collect();
-                if !words.is_empty() {
-                    topics.push((words.join("_").to_lowercase(), 0.6));
-                }
-            }
-        }
-    }
-
-    // Test-related patterns
-    if content.contains("#[test]")
-        || content.contains("#[tokio::test]")
-        || content.contains("describe(")
-        || content.contains("it(")
-        || content.contains("test(")
-    {
-        topics.push(("testing".to_string(), 0.55));
-    }
-
-    // Security patterns
-    if content.contains("password")
-        || content.contains("secret")
-        || content.contains("api_key")
-        || content.contains("token")
-    {
-        topics.push(("security".to_string(), 0.6));
-    }
-}
 
 // ============================================================================
 // State Persistence

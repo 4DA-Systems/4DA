@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "Lektionssprache",
   "streets.translateModule": "Auf {{lang}} übersetzen",
-  "streets.translating": "Wird übersetzt..."
+  "streets.translating": "Wird übersetzt...",
+  "streets.emptyState.headline": "Jeder Entwickler hat Infrastruktur, für die niemand bezahlt.",
+  "streets.emptyState.body": "STREETS verwandelt das in Einkommen — 7 Module, jedes ein Umsatzmotor. Starte wo du willst.",
+  "streets.sidebar.S": "Dein Einkommensfundament",
+  "streets.sidebar.T": "Baue, was Wettbewerber nicht kopieren können",
+  "streets.sidebar.R": "Verwandle Skills in wiederkehrendes Einkommen",
+  "streets.sidebar.E1": "Entwickle und verkaufe, systematisch",
+  "streets.sidebar.E2": "Dein 2-Stunden-Vorteil pro Tag",
+  "streets.sidebar.T2": "Verdiene im Schlaf",
+  "streets.sidebar.S2": "Verstärke, was funktioniert"
 }

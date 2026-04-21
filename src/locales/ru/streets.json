@@ -42,5 +42,14 @@
   "streets.lessonCount": "{{count}} урок",
   "streets.lessonCount_plural": "{{count}} уроков",
   "streets.translateModule": "Перевести на {{lang}}",
-  "streets.translating": "Перевод..."
+  "streets.translating": "Перевод...",
+  "streets.emptyState.headline": "У каждого разработчика есть инфраструктура, за которую никто не платит.",
+  "streets.emptyState.body": "STREETS превращает это в доход — 7 модулей, каждый — источник выручки. Начните с любого.",
+  "streets.sidebar.S": "Фундамент вашего дохода",
+  "streets.sidebar.T": "Создайте то, что конкуренты не смогут скопировать",
+  "streets.sidebar.R": "Превратите навыки в регулярный доход",
+  "streets.sidebar.E1": "Запускайте и продавайте системно",
+  "streets.sidebar.E2": "Ваше ежедневное 2-часовое преимущество",
+  "streets.sidebar.T2": "Зарабатывайте, пока спите",
+  "streets.sidebar.S2": "Наращивайте то, что работает"
 }

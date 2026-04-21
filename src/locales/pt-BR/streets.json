@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "Idioma da lição",
   "streets.translateModule": "Traduzir para {{lang}}",
-  "streets.translating": "Traduzindo..."
+  "streets.translating": "Traduzindo...",
+  "streets.emptyState.headline": "Todo desenvolvedor tem infraestrutura pela qual ninguém paga.",
+  "streets.emptyState.body": "STREETS transforma isso em renda — 7 módulos, cada um um motor de receita. Comece por onde quiser.",
+  "streets.sidebar.S": "Sua base de renda",
+  "streets.sidebar.T": "Construa o que os concorrentes não conseguem copiar",
+  "streets.sidebar.R": "Transforme habilidades em renda recorrente",
+  "streets.sidebar.E1": "Lance e venda, sistematicamente",
+  "streets.sidebar.E2": "Sua vantagem diária de 2 horas",
+  "streets.sidebar.T2": "Ganhe enquanto dorme",
+  "streets.sidebar.S2": "Potencialize o que funciona"
 }

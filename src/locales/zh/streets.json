@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "课程语言",
   "streets.translateModule": "翻译为{{lang}}",
-  "streets.translating": "翻译中..."
+  "streets.translating": "翻译中...",
+  "streets.emptyState.headline": "每个开发者都有无人为之付费的基础设施。",
+  "streets.emptyState.body": "STREETS 将其转化为收入 — 7 个模块，每个都是营收引擎。从任何地方开始。",
+  "streets.sidebar.S": "你的收入根基",
+  "streets.sidebar.T": "打造竞争对手无法复制的东西",
+  "streets.sidebar.R": "将技能转化为持续收入",
+  "streets.sidebar.E1": "系统化地打造和销售",
+  "streets.sidebar.E2": "你每天 2 小时的优势",
+  "streets.sidebar.T2": "睡觉时也在赚钱",
+  "streets.sidebar.S2": "放大有效的方法"
 }

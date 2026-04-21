@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "레슨 언어",
   "streets.translateModule": "{{lang}}(으)로 번역",
-  "streets.translating": "번역 중..."
+  "streets.translating": "번역 중...",
+  "streets.emptyState.headline": "모든 개발자에게는 아무도 돈을 지불하지 않는 인프라가 있습니다.",
+  "streets.emptyState.body": "STREETS는 그것을 수입으로 바꿉니다 — 7개 모듈, 각각이 수익 엔진. 어디서든 시작하세요.",
+  "streets.sidebar.S": "당신의 수입 기반",
+  "streets.sidebar.T": "경쟁자가 복제할 수 없는 것을 만드세요",
+  "streets.sidebar.R": "기술을 반복 수입으로 전환하세요",
+  "streets.sidebar.E1": "체계적으로 만들고 판매하세요",
+  "streets.sidebar.E2": "하루 2시간의 경쟁 우위",
+  "streets.sidebar.T2": "자는 동안에도 수익 창출",
+  "streets.sidebar.S2": "효과가 있는 것을 복리로 키우세요"
 }

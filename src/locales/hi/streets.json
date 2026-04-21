@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "पाठ की भाषा",
   "streets.translateModule": "{{lang}} में अनुवाद करें",
-  "streets.translating": "अनुवाद हो रहा है..."
+  "streets.translating": "अनुवाद हो रहा है...",
+  "streets.emptyState.headline": "हर डेवलपर के पास ऐसा इन्फ्रास्ट्रक्चर होता है जिसके लिए कोई पैसे नहीं देता।",
+  "streets.emptyState.body": "STREETS उसे आय में बदलता है — 7 मॉड्यूल, हर एक एक रेवेन्यू इंजन। कहीं से भी शुरू करें।",
+  "streets.sidebar.S": "आपकी आय की नींव",
+  "streets.sidebar.T": "वो बनाएं जो प्रतिस्पर्धी कॉपी न कर सकें",
+  "streets.sidebar.R": "कौशल को नियमित आय में बदलें",
+  "streets.sidebar.E1": "व्यवस्थित तरीके से बनाएं और बेचें",
+  "streets.sidebar.E2": "आपका 2 घंटे का दैनिक लाभ",
+  "streets.sidebar.T2": "सोते हुए कमाएं",
+  "streets.sidebar.S2": "जो काम कर रहा है उसे बढ़ाएं"
 }
