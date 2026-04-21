@@ -27,6 +27,86 @@ use super::pipeline::{ScoringInput, ScoringOptions};
 use super::*;
 
 // ============================================================================
+// Security evidence extraction helpers
+// ============================================================================
+
+/// Extract advisory ID (GHSA-xxxx-yyyy-zzzz or CVE-2025-XXXXX) from title text.
+fn extract_advisory_id(title: &str) -> Option<String> {
+    // Try GHSA pattern
+    if let Some(start) = title.find("GHSA-") {
+        let rest = &title[start..];
+        let end = rest
+            .find(|c: char| c == ']' || c == ' ' || c == ')')
+            .unwrap_or(rest.len());
+        return Some(rest[..end].to_string());
+    }
+    // Try CVE pattern
+    if let Some(start) = title.find("CVE-") {
+        let rest = &title[start..];
+        let end = rest
+            .find(|c: char| c == ']' || c == ' ' || c == ')')
+            .unwrap_or(rest.len());
+        return Some(rest[..end].to_string());
+    }
+    None
+}
+
+/// Extract CVSS score and severity label from content that contains "Severity: CVSS_V3: X.X".
+fn extract_cvss_from_content(content: &str) -> (Option<f32>, Option<String>) {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Severity:") {
+            let nums: Vec<f32> = trimmed
+                .split(|c: char| !c.is_ascii_digit() && c != '.')
+                .filter_map(|s| s.parse::<f32>().ok())
+                .filter(|&v| v <= 10.0 && v > 0.0)
+                .collect();
+            if let Some(&score) = nums.first() {
+                let severity = if score >= 9.0 {
+                    "critical"
+                } else if score >= 7.0 {
+                    "high"
+                } else if score >= 4.0 {
+                    "medium"
+                } else {
+                    "low"
+                };
+                return (Some(score), Some(severity.to_string()));
+            }
+        }
+    }
+    (None, None)
+}
+
+/// Extract fixed version from content (e.g. "Fixed in: 3.0.1").
+fn extract_fixed_version(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Fixed in:") || trimmed.starts_with("Patched in:") {
+            let version = trimmed.splitn(2, ':').nth(1)?.trim();
+            if !version.is_empty() {
+                return Some(version.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Extract affected version range from content (e.g. "Affected: < 3.0.0").
+fn extract_affected_range(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("Affected:") {
+            let range = trimmed.splitn(2, ':').nth(1)?.trim();
+            if !range.is_empty() {
+                return Some(range.to_string());
+            }
+        }
+    }
+    None
+}
+
+// ============================================================================
 // V2 Constants (self-contained)
 // ============================================================================
 
@@ -1051,6 +1131,20 @@ fn classify_signals(
                 c.priority = signals::SignalPriority::Advisory;
             }
 
+            // TRUST GATE: Critical requires verified dependency evidence.
+            // If signal classifier set Critical but there's no strong direct dep match, downgrade.
+            if c.priority == signals::SignalPriority::Critical {
+                let has_strong_direct_dep = matched_deps
+                    .iter()
+                    .any(|d| !d.is_dev && d.confidence >= 0.40 && d.is_direct);
+                if !has_strong_direct_dep {
+                    c.priority = signals::SignalPriority::Alert;
+                    if matched_deps.is_empty() {
+                        c.action = format!("Ecosystem watch: {}", input.title);
+                    }
+                }
+            }
+
             (
                 Some(c.signal_type.slug().to_string()),
                 Some(c.priority.label().to_string()),
@@ -1111,6 +1205,9 @@ pub(crate) fn score_item(
             decision_boost_applied: 0.0,
             created_at: None,
             detected_lang: input.detected_lang.to_string(),
+            is_critical_alert: false,
+            applicability: None,
+            advisory_id: None,
         };
     }
 
@@ -1378,6 +1475,69 @@ pub(crate) fn score_item(
         necessity_result.score = (necessity_result.score * authority).clamp(0.0, 1.0);
     }
 
+    // ── Security applicability + critical alert gate ────────────────────
+    let is_security_source = matches!(input.source_type, "cve" | "osv");
+    let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
+        let has_strong_dep = raw
+            .matched_deps
+            .iter()
+            .any(|d| !d.is_dev && d.confidence >= 0.40);
+        let has_any_dep = !raw.matched_deps.is_empty();
+        let all_dev = raw.matched_deps.iter().all(|d| d.is_dev);
+        let all_transitive = raw.matched_deps.iter().all(|d| !d.is_direct);
+
+        if has_strong_dep {
+            if all_transitive {
+                (Some("likely_affected".to_string()), false)
+            } else {
+                (Some("affected".to_string()), true)
+            }
+        } else if has_any_dep && !all_dev {
+            (Some("likely_affected".to_string()), false)
+        } else if all_dev && has_any_dep {
+            (Some("likely_affected".to_string()), false)
+        } else {
+            (Some("needs_verification".to_string()), false)
+        }
+    } else {
+        (None, false)
+    };
+
+    // ── Security evidence extraction ─────────────────────────────────
+    let (cvss_score, cvss_severity) = if is_security_source {
+        extract_cvss_from_content(input.content)
+    } else {
+        (None, None)
+    };
+    let advisory_id = if is_security_source {
+        extract_advisory_id(input.title)
+    } else {
+        None
+    };
+    let fixed_version = if is_security_source {
+        extract_fixed_version(input.content)
+    } else {
+        None
+    };
+    let affected_versions = if is_security_source {
+        extract_affected_range(input.content)
+    } else {
+        None
+    };
+    let dep_path = if !raw.matched_deps.is_empty() {
+        let dep = &raw.matched_deps[0];
+        Some(if dep.is_dev {
+            "dev-only".to_string()
+        } else if !dep.is_direct {
+            "transitive".to_string()
+        } else {
+            "direct".to_string()
+        })
+    } else {
+        None
+    };
+    let installed_version = raw.matched_deps.first().and_then(|d| d.version.clone());
+
     // ── Score breakdown ───────────────────────────────────────────────
     let score_breakdown = ScoreBreakdown {
         context_score: cal.context_score,
@@ -1430,6 +1590,26 @@ pub(crate) fn score_item(
         content_analysis_mult,
         advisor_signals: Vec::new(),
         disagreement: None,
+        advisory_source: if is_security_source {
+            Some(
+                if input.source_type == "osv" {
+                    "OSV"
+                } else {
+                    "GHSA"
+                }
+                .to_string(),
+            )
+        } else {
+            None
+        },
+        cvss_score,
+        cvss_severity,
+        affected_versions,
+        fixed_version,
+        installed_version: installed_version.clone(),
+        is_version_affected: None, // TODO: semver range matching
+        dependency_path: dep_path.clone(),
+        affected_project_count: Some(count_affected_projects(db, &matched_dep_names) as u32),
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
@@ -1478,6 +1658,9 @@ pub(crate) fn score_item(
         decision_boost_applied: window_boost,
         created_at: None,
         detected_lang: input.detected_lang.to_string(),
+        is_critical_alert,
+        applicability,
+        advisory_id,
     }
 }
 
