@@ -114,9 +114,31 @@ export const useResultFilters = () => {
     deduped.push(...noUrl);
 
     // Step 3: Sort
+    const priorityOrder: Record<string, number> = {
+      critical: 0, alert: 1, advisory: 2, watch: 3,
+    };
+    const applicabilityOrder: Record<string, number> = {
+      affected: 0, likely_affected: 1, needs_verification: 2, not_affected: 3,
+    };
+
     deduped.sort((a, b) => {
       if (sortBy === 'score') {
         return b.top_score - a.top_score;
+      }
+      if (sortBy === 'priority') {
+        const aPrio = priorityOrder[a.signal_priority ?? 'watch'] ?? 4;
+        const bPrio = priorityOrder[b.signal_priority ?? 'watch'] ?? 4;
+        return aPrio - bPrio || b.top_score - a.top_score;
+      }
+      if (sortBy === 'applicability') {
+        const aAppl = applicabilityOrder[a.applicability ?? 'not_affected'] ?? 4;
+        const bAppl = applicabilityOrder[b.applicability ?? 'not_affected'] ?? 4;
+        return aAppl - bAppl || b.top_score - a.top_score;
+      }
+      if (sortBy === 'freshness') {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bDate - aDate;
       }
       return b.id - a.id;
     });
