@@ -64,5 +64,13 @@ export function executeGetRelevantContent(
   const limit = Math.max(1, Math.min(100, params.limit ?? 20));
   const sinceHours = Math.max(1, Math.min(168, params.since_hours ?? 24)); // Max 1 week
 
-  return db.getRelevantContent(minScore, params.source_type, limit, sinceHours);
+  // Try requested window first, then expand progressively
+  let items = db.getRelevantContent(minScore, params.source_type, limit, sinceHours);
+  if (items.length === 0 && sinceHours < 168) {
+    items = db.getRelevantContent(minScore, params.source_type, limit, 168);
+  }
+  if (items.length === 0) {
+    items = db.getRelevantContent(0.0, params.source_type, limit, 720);
+  }
+  return items;
 }
