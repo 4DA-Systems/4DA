@@ -1,8 +1,8 @@
 {
   "name": "@4da/mcp-server",
-  "version": "4.2.1",
+  "version": "4.3.0",
   "mcpName": "io.github.runyourempire/4da-mcp-server",
-  "description": "Scan your dependencies for known CVEs via MCP. Auto-detects your stack, queries OSV.dev, returns severity + fix versions. Zero config, privacy-first. Also includes 35 tools for project context, decision memory, and knowledge gaps.",
+  "description": "Dependency intelligence for AI coding agents. Live CVE scanning (OSV.dev), ecosystem news, resolved versions, decision memory, and project context — zero config, privacy-first. 7 focused tools standalone, 37 with full desktop app.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

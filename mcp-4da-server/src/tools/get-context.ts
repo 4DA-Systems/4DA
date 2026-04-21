@@ -7,6 +7,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { GetContextParams, UserContext } from "../types.js";
+import { getLiveIntelligence } from "../live-singleton.js";
 
 /**
  * Tool definition for MCP registration
@@ -46,9 +47,27 @@ Use this to understand what the user is working on and interested in.`,
 export function executeGetContext(
   db: FourDADatabase,
   params: GetContextParams
-): UserContext {
+): UserContext & { resolved_dependencies?: Array<{ name: string; version: string | null; ecosystem: string; isDev: boolean }> } {
   const includeAce = params.include_ace ?? true;
   const includeLearned = params.include_learned ?? true;
 
-  return db.getUserContext(includeAce, includeLearned);
+  const context = db.getUserContext(includeAce, includeLearned);
+
+  const liveIntel = getLiveIntelligence();
+  if (liveIntel) {
+    const deps = liveIntel.getResolvedDeps();
+    if (deps.length > 0) {
+      return {
+        ...context,
+        resolved_dependencies: deps.map((d) => ({
+          name: d.name,
+          version: d.version,
+          ecosystem: d.ecosystem,
+          isDev: d.isDev,
+        })),
+      };
+    }
+  }
+
+  return context;
 }
