@@ -1,6 +1,6 @@
 {
   "name": "@4da/mcp-server",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "36 MCP tools for codebase-aware developer intelligence. Live vulnerability scanning (OSV.dev), persistent project memory, and tech stack awareness for Claude, Cursor, and Copilot. Zero config, privacy-first.",
   "type": "module",
   "main": "dist/index.js",
@@ -89,6 +89,9 @@
     "node": ">=18.0.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   }
 }
