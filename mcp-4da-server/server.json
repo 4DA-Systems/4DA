@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.runyourempire/4da-mcp-server",
+  "description": "36 MCP tools for codebase-aware developer intelligence. Privacy-first, zero config.",
+  "repository": {
+    "url": "https://github.com/runyourempire/4DA",
+    "source": "github",
+    "subfolder": "mcp-4da-server"
+  },
+  "version": "4.1.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@4da/mcp-server",
+      "version": "4.1.1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
