@@ -2,20 +2,24 @@
 
 ## Title
 
-Show HN: 4DA — Scores HN, arXiv, Reddit, GitHub against your actual codebase
+Show HN: 4DA — MCP server that scans your deps for CVEs and scores HN against your stack
 
 ## Post Body
 
-4DA is a desktop app that scans your local projects and scores developer content from Hacker News, arXiv, Reddit, GitHub trending, Product Hunt, and RSS feeds against what you're actually building. Instead of reading everything and hoping something is relevant, it surfaces what matters to your stack, dependencies, and problem domain.
+I built an MCP server that gives Claude/Cursor/Copilot awareness of your actual tech stack. It reads your lockfiles, scans dependencies against OSV.dev for known vulnerabilities, fetches Hacker News headlines relevant to your stack, and maintains persistent project memory across sessions. 36 tools, MIT licensed, works standalone with zero config.
 
-How it works: An Autonomous Context Engine scans your local repos (package.json, Cargo.toml, imports, README files) to build a developer profile. Content from sources gets embedded and scored against that profile using a confidence-weighted algorithm called PASIFA. Results above threshold surface in the app. Everything below gets discarded.
+    npx @4da/mcp-server --setup
 
-Stack: Tauri 2.0 (Rust backend, React/TypeScript frontend), SQLite with sqlite-vec for local vector search, optional Ollama for embeddings. Nothing leaves your machine — no accounts, no telemetry, BYOK for any LLM features.
+What it does: On startup it reads your package-lock.json / Cargo.lock / go.sum / poetry.lock, resolves exact dependency versions, then batch-queries OSV.dev for CVEs. It also scores HN headlines against your detected tech stack using word-boundary matching. All results are cached in a local SQLite database (1h for vulns, 30min for headlines).
 
-The MCP server component (@4da/mcp-server) exposes 36 tools to Claude Code, Cursor, or any MCP client so your LLM can query trends, knowledge gaps, and signals relevant to your codebase. MIT licensed.
+The vulnerability scanner sends only package names + versions to OSV.dev (the same data visible in your manifest files). Everything else is local-only — no accounts, no telemetry. Set FOURDA_OFFLINE=true to disable all network calls.
 
-Install the MCP server: `npx @4da/mcp-server --setup`
+Beyond security scanning, there are tools for decision memory (record + enforce architectural decisions), knowledge gap detection, developer DNA profiling, tech radar, and agent session handoff. The desktop app (4DA) adds content scoring from HN, arXiv, Reddit, GitHub against your codebase using local embeddings.
 
+Stack: TypeScript, @modelcontextprotocol/sdk, better-sqlite3. The companion desktop app is Tauri 2.0 (Rust + React + SQLite + sqlite-vec).
+
+GitHub: https://github.com/runyourempire/4DA/tree/main/mcp-4da-server
+npm: https://www.npmjs.com/package/@4da/mcp-server
 Website: https://4da.ai
 
 ---
@@ -49,9 +53,13 @@ The scoring engine is called PASIFA (Privacy Aware Semantic Intelligence for Fil
 
 The MCP server is MIT licensed. The desktop app is source-available under FSL-1.1-Apache-2.0 — you can read, modify, and run the code. The only restriction is you can't use it to build a competing product. After two years, it converts to full Apache 2.0 automatically. This lets us build a sustainable business while keeping the code transparent and auditable, which matters for a tool that scans your local projects.
 
+### Q: "Why not just use npm audit / cargo audit?"
+
+Those tools show you a list you have to go read. This plugs directly into your AI coding session. When you ask Claude "are there any issues with my deps?" it calls vulnerability_scan and gives you the answer in context — with upgrade paths, severity levels, and how they relate to your actual usage. It also means your AI knows not to recommend a package with an active CVE, because it checked before suggesting it.
+
 ### Q: "Does it phone home?"
 
-No. The app makes outbound requests only to fetch content from sources you've enabled (HN API, Reddit, arXiv, RSS feeds). Your codebase data, developer profile, embeddings, and scores never leave the machine. There's no account system, no telemetry, no analytics. Settings are stored in a local JSON file. The database is local SQLite. If you use LLM features, you provide your own API key (BYOK) and requests go directly from your machine to the provider — we never proxy or see them.
+The only outbound request is vulnerability_scan sending package names + versions to OSV.dev (same data that's public in your manifest files). Everything else is local SQLite reads. No account system, no telemetry, no analytics. Set FOURDA_OFFLINE=true to go fully offline. If you use LLM features in the desktop app, you provide your own API key (BYOK) and requests go directly from your machine to the provider.
 
 ### Q: "What's the business model?"
 
