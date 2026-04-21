@@ -13,7 +13,7 @@
  * Do NOT expose this server over a network without adding proper auth.
  */
 /**
- * 4DA MCP Server v4.2.0 — Intelligence Platform
+ * 4DA MCP Server v4.2.1 — Intelligence Platform
  *
  * 36 tools across 9 categories. Live vulnerability scanning (OSV.dev),
  * persistent project memory, and tech stack awareness for any MCP host.
@@ -70,7 +70,7 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.2.0",
+    version: "4.2.1",
   },
   {
     capabilities: {
@@ -326,7 +326,7 @@ async function main() {
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
-    console.log("@4da/mcp-server 4.2.0");
+    console.log("@4da/mcp-server 4.2.1");
     return;
   }
 
@@ -421,7 +421,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.2.0 started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.2.1 started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

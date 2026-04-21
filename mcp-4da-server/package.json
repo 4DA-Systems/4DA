@@ -1,11 +1,12 @@
 {
   "name": "@4da/mcp-server",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "mcpName": "io.github.runyourempire/4da-mcp-server",
   "description": "Scan your dependencies for known CVEs via MCP. Auto-detects your stack, queries OSV.dev, returns severity + fix versions. Zero config, privacy-first. Also includes 35 tools for project context, decision memory, and knowledge gaps.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
+    "mcp-server": "dist/index.js",
     "4da-mcp": "dist/index.js",
     "4da-mcp-setup": "dist/setup.js"
   },
