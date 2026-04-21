@@ -15,20 +15,29 @@ import { RateLimiter, DEFAULT_RATE_LIMITS } from "./rate-limiter.js";
 import { OsvScanner } from "./osv-scanner.js";
 import { HNFetcher } from "./hn-fetcher.js";
 import { resolveVersions, mapEcosystem } from "./version-resolver.js";
+import { NpmRegistry } from "./npm-registry.js";
+import { CratesRegistry } from "./crates-registry.js";
+import { PyPIRegistry } from "./pypi-registry.js";
+import { GoRegistry } from "./go-registry.js";
 import type {
   ResolvedDependency,
+  RegistryPackageInfo,
   VulnerabilityScanResult,
   LiveHeadline,
   LiveIntelligenceStatus,
 } from "./types.js";
 
-export type { VulnerabilityScanResult, VulnerabilityEntry, LiveHeadline, LiveIntelligenceStatus } from "./types.js";
+export type { VulnerabilityScanResult, VulnerabilityEntry, LiveHeadline, LiveIntelligenceStatus, RegistryPackageInfo, DependencyHealthResult } from "./types.js";
 
 export class LiveIntelligence {
   private cache: LiveCache;
   private rateLimiter: RateLimiter;
   private osvScanner: OsvScanner;
   private hnFetcher: HNFetcher;
+  private npmRegistry: NpmRegistry;
+  private cratesRegistry: CratesRegistry;
+  private pypiRegistry: PyPIRegistry;
+  private goRegistry: GoRegistry;
   private enabled: boolean;
 
   private lastVulnScan: VulnerabilityScanResult | null = null;
@@ -42,6 +51,10 @@ export class LiveIntelligence {
     this.rateLimiter = new RateLimiter(DEFAULT_RATE_LIMITS);
     this.osvScanner = new OsvScanner(this.cache, this.rateLimiter);
     this.hnFetcher = new HNFetcher(this.cache, this.rateLimiter);
+    this.npmRegistry = new NpmRegistry(this.cache, this.rateLimiter);
+    this.cratesRegistry = new CratesRegistry(this.cache, this.rateLimiter);
+    this.pypiRegistry = new PyPIRegistry(this.cache, this.rateLimiter);
+    this.goRegistry = new GoRegistry(this.cache, this.rateLimiter);
   }
 
   /**
@@ -131,6 +144,70 @@ export class LiveIntelligence {
 
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  async fetchRegistryHealth(deps: ResolvedDependency[]): Promise<RegistryPackageInfo[]> {
+    if (!this.enabled) {
+      return deps.map((d) => ({
+        name: d.name, ecosystem: d.ecosystem, currentVersion: d.version,
+        latestVersion: null, latestStableVersion: null, versionsBehind: null,
+        deprecated: false, deprecationMessage: null, lastPublished: null,
+        license: null, weeklyDownloads: null, isDev: d.isDev, fetchError: "Offline mode",
+      }));
+    }
+
+    const registryForEcosystem = (eco: string) => {
+      switch (eco) {
+        case "npm": return this.npmRegistry;
+        case "crates.io": return this.cratesRegistry;
+        case "PyPI": return this.pypiRegistry;
+        case "Go": return this.goRegistry;
+        default: return null;
+      }
+    };
+
+    const results = await Promise.all(
+      deps.map(async (dep) => {
+        const registry = registryForEcosystem(dep.ecosystem);
+        if (!registry) {
+          return {
+            name: dep.name, ecosystem: dep.ecosystem, currentVersion: dep.version,
+            latestVersion: null, latestStableVersion: null, versionsBehind: null,
+            deprecated: false, deprecationMessage: null, lastPublished: null,
+            license: null, weeklyDownloads: null, isDev: dep.isDev,
+            fetchError: `No registry fetcher for ${dep.ecosystem}`,
+          } as RegistryPackageInfo;
+        }
+        try {
+          return await registry.getPackageInfo(dep.name, dep.version, dep.isDev);
+        } catch {
+          return {
+            name: dep.name, ecosystem: dep.ecosystem, currentVersion: dep.version,
+            latestVersion: null, latestStableVersion: null, versionsBehind: null,
+            deprecated: false, deprecationMessage: null, lastPublished: null,
+            license: null, weeklyDownloads: null, isDev: dep.isDev,
+            fetchError: "Registry fetch failed",
+          } as RegistryPackageInfo;
+        }
+      }),
+    );
+
+    // Bulk fetch npm downloads for npm deps
+    const npmDeps = deps.filter((d) => d.ecosystem === "npm");
+    if (npmDeps.length > 0) {
+      try {
+        const downloads = await this.npmRegistry.getBulkDownloads(npmDeps.map((d) => d.name));
+        for (const result of results) {
+          if (result.ecosystem === "npm" && downloads.has(result.name)) {
+            result.weeklyDownloads = downloads.get(result.name) || null;
+          }
+        }
+      } catch {
+        // Downloads are nice-to-have, not critical
+      }
+    }
+
+    return results;
   }
 
   getStatus(): LiveIntelligenceStatus {

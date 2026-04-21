@@ -229,11 +229,14 @@ pub fn fetch_commits(repo_path: &Path, max_commits: usize) -> Result<Vec<ParsedC
     ];
 
     // Inline the subprocess (can't cross-call ace::git's private helper).
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo_path)
-        .output()
-        .context("failed to run git log")?;
+    let mut cmd = Command::new("git");
+    cmd.args(args).current_dir(repo_path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output().context("failed to run git log")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -336,16 +339,21 @@ pub fn subject_in_head(repo_path: &Path, subject: &str) -> bool {
     if subject.is_empty() {
         return false;
     }
-    let output = Command::new("git")
-        .args([
-            "grep",
-            "--quiet", // exit 0 if found, 1 if not
-            "--ignore-case",
-            "--fixed-strings",
-            subject,
-        ])
-        .current_dir(repo_path)
-        .output();
+    let mut cmd = Command::new("git");
+    cmd.args([
+        "grep",
+        "--quiet", // exit 0 if found, 1 if not
+        "--ignore-case",
+        "--fixed-strings",
+        subject,
+    ])
+    .current_dir(repo_path);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output();
     matches!(output, Ok(out) if out.status.success())
 }
 

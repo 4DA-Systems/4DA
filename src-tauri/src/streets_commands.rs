@@ -626,6 +626,11 @@ fn execute_pipeline(segments: &[&str]) -> Result<CommandExecutionResult> {
         let mut cmd = std::process::Command::new(program);
         cmd.args(args);
         cmd.envs(&env);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
 
         // Wire previous command's stdout to this command's stdin
         if let Some(prev) = prev_stdout.take() {

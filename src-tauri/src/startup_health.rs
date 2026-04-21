@@ -645,10 +645,13 @@ fn check_webview2_version(issues: &mut Vec<HealthIssue>) {
 #[cfg(target_os = "windows")]
 fn read_registry_value(key: &str, value_name: &str) -> Option<String> {
     use std::process::Command;
-    let output = Command::new("reg")
-        .args(["query", key, "/v", value_name])
-        .output()
-        .ok()?;
+    let mut cmd = Command::new("reg");
+    cmd.args(["query", key, "/v", value_name]);
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output().ok()?;
     if !output.status.success() {
         return None;
     }

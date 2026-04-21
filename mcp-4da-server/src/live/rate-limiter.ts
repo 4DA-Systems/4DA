@@ -57,4 +57,8 @@ export class RateLimiter {
 export const DEFAULT_RATE_LIMITS = {
   osv: { maxPerMinute: 10 },
   hn: { maxPerMinute: 30 },
+  npm: { maxPerMinute: 120 },
+  crates: { maxPerMinute: 50 },
+  pypi: { maxPerMinute: 60 },
+  go: { maxPerMinute: 60 },
 };

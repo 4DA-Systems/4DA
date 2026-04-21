@@ -55,7 +55,12 @@ pub(crate) async fn score_items_full(
         total_cached,
     );
 
-    let scoring_ctx = scoring::build_scoring_context(db).await?;
+    let scoring_ctx = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        scoring::build_scoring_context(db),
+    )
+    .await
+    .map_err(|_| String::from("Scoring context build timed out after 10s"))??;
     let trend_topics = crate::detect_trend_topics(keep_indices.iter().map(|&i| {
         (
             cached_items[i].title.as_str(),
@@ -151,6 +156,7 @@ pub(crate) async fn score_items_full(
     }
 
     // LLM Reranking (if enabled and within daily limits)
+    // 120s timeout: LLM API calls can hang on provider outages
     emit_narration(
         app,
         NarrationEvent {
@@ -160,7 +166,17 @@ pub(crate) async fn score_items_full(
             relevance: None,
         },
     );
-    crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx),
+    )
+    .await
+    {
+        Ok(_) => {}
+        Err(_) => {
+            warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+        }
+    }
 
     emit_progress(
         app,
@@ -248,11 +264,23 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
     let new_count = items.len();
     info!(target: "4da::monitor", items = new_count, "Background analysis: scoring items");
 
-    // Score items
-    let scoring_ctx = match scoring::build_scoring_context(db).await {
-        Ok(ctx) => ctx,
-        Err(e) => {
+    // Score items (10s timeout on context build)
+    let scoring_ctx = match tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        scoring::build_scoring_context(db),
+    )
+    .await
+    {
+        Ok(Ok(ctx)) => ctx,
+        Ok(Err(e)) => {
             warn!(target: "4da::monitor", error = %e, "Background analysis: scoring context failed");
+            state
+                .is_checking
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            return;
+        }
+        Err(_) => {
+            warn!(target: "4da::monitor", "Background analysis: scoring context timed out after 10s");
             state
                 .is_checking
                 .store(false, std::sync::atomic::Ordering::Relaxed);

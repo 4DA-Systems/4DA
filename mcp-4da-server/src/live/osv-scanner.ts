@@ -10,6 +10,7 @@
 
 import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
+import { fetchWithTimeout } from "./http-utils.js";
 import type {
   ResolvedDependency,
   OsvVulnerability,
@@ -219,16 +220,3 @@ function extractFixedVersion(
   return null;
 }
 
-async function fetchWithTimeout(
-  url: string,
-  options: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
