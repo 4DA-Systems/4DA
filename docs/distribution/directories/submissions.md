@@ -511,10 +511,10 @@ Use this to track progress across all directories:
 
 | # | Directory | Status | URL | Notes |
 |---|-----------|--------|-----|-------|
-| 1 | Official MCP Registry | Not started | — | Use mcp-publisher CLI. See official-registry.md |
-| 2 | punkpeye/awesome-mcp-servers | PR draft ready | — | AWESOME_LIST_PR.md has full PR copy |
-| 3 | mcp.so (mcp-get) | Not started | — | GitHub issue format |
-| 4 | PulseMCP | Not started | pulsemcp.com/submit | Form submission |
+| 1 | Official MCP Registry | IN PROGRESS | — | server.json validated, awaiting login auth |
+| 2 | punkpeye/awesome-mcp-servers | PR OPEN | https://github.com/punkpeye/awesome-mcp-servers/pull/5179 | Pending review |
+| 3 | mcp.so (mcp-get) | SUBMITTED | https://github.com/michaellatman/mcp-get/issues/214 | GitHub issue |
+| 4 | PulseMCP | PENDING | — | Auto-ingests from Official Registry weekly |
 | 5 | mcpservers.org | Not started | mcpservers.org/submit | Form submission |
 | 6 | MCPMarket | Not started | mcpmarket.com/submit | Form submission |
 | 7 | Cline Marketplace | Not started | — | Needs 400x400 PNG logo |
@@ -524,8 +524,9 @@ Use this to track progress across all directories:
 | 11 | mcp-servers-hub.net | Not started | mcp-servers-hub.net/submit | Form submission |
 | 12 | DevHunt | Not started | devhunt.org/submit | Time for weekday morning |
 | 13 | awesome-tauri | Not started | — | GitHub PR |
-| 14 | appcypher/awesome-mcp-servers | Not started | — | GitHub PR |
-| 15 | jamesmurdza/awesome-ai-devtools | Not started | — | GitHub PR |
+| 14 | appcypher/awesome-mcp-servers | PR PUSHED | https://github.com/appcypher/awesome-mcp-servers/compare/main...runyourempire:awesome-mcp-servers-1:add-4da-mcp-server | Open via browser |
+| 15 | jamesmurdza/awesome-ai-devtools | PR OPEN | https://github.com/jamesmurdza/awesome-ai-devtools/pull/466 | Submitted |
+| 16 | Glama.ai | PENDING | — | Auto-discovers from Official Registry |
 
 ---
 
