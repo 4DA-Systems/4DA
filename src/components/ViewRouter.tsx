@@ -22,6 +22,7 @@ const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').the
 const IntelligenceConsole = lazy(() => import('./IntelligenceConsole'));
 const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
 const BlindSpotsView = lazy(() => import('./blindspots/BlindSpotsView'));
+const EvidenceView = lazy(() => import('./evidence/EvidenceView'));
 
 interface ViewRouterProps {
   newItemIds: Set<number>;
@@ -32,6 +33,7 @@ const VIEW_LABEL_KEYS: Record<string, string> = {
   briefing: 'nav.briefing.label',
   preemption: 'nav.preemption.label',
   blindspots: 'nav.blindspots.label',
+  evidence: 'nav.evidence',
   results: 'nav.results',
   profile: 'nav.profile',
   saved: 'nav.saved',
@@ -78,6 +80,10 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : activeView === 'blindspots' ? (
         <ViewErrorBoundary viewName="BlindSpots">
           <BlindSpotsView />
+        </ViewErrorBoundary>
+      ) : activeView === 'evidence' ? (
+        <ViewErrorBoundary viewName="Evidence">
+          <EvidenceView />
         </ViewErrorBoundary>
       ) : activeView === 'profile' ? (
         <ViewErrorBoundary viewName="Profile">

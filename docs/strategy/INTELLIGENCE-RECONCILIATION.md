@@ -99,25 +99,23 @@ All keys matching `momentum.*`, `awe.momentum.*`, `intelligence_profile.*`, `com
 
 ## Ship phases (each has a binding done-when)
 
-| Phase | What | Done when |
-|-------|------|-----------|
-| **0** | Lock the plan (this doc + schema + doctrine) | Three docs committed, referenced in CLAUDE.md |
-| **1** | Kill dead code (frontend first, backend follows) | `pnpm validate:all` green, ~3000 LOC removed |
-| **2** | Define `EvidenceItem` canonical type | Trait compiles, ts-rs exports generate, roundtrip tests pass |
-| **3** | Collapse Preemption to `EvidenceItem` | Preemption tab visually identical, backed by shared types |
-| **4** | Collapse Blind Spots to `EvidenceItem` | Same for Blind Spots |
-| **5** | Collapse Knowledge Decay + Signal Chains | No UI references these types directly |
-| **6** | Context Bridge — AWE's DeveloperContext expanded 5→17 fields | Transmutations carry full user situation |
-| **7** | Cold Start Layer 1 — Git history miner | Fresh install has ≥20 seeded decisions from git |
-| **8** | Cold Start Layer 2 — Curated 200-decision corpus | `awe transmute` returns ≥3 precedents for common queries on fresh install |
-| **9** | AWE Judgment Spine wiring | Every `EvidenceItem` has AWE-generated explanation + calibrated confidence + precedents |
-| **10** | The Confession Box + Decision Brief | `⌘.` from any tab returns a useful brief in <5s |
-| **11** | Commitment Contract + Refutation Monitor | Accepted decision + refutation signal → Refutation card in Evidence |
-| **12** | Evidence tab (replaces Momentum slot) | Three sections render real data, no empty-state pseudo-gauges |
-| **13** | Pre-launch hardening | 7-day founder soak with zero "this isn't right" reports |
-| **14** | Ship | Release Gate passes |
-
-**Realistic total:** 11–13 weeks of focused work.
+| Phase | What | Done when | Status |
+|-------|------|-----------|--------|
+| **0** | Lock the plan (this doc + schema + doctrine) | Three docs committed, referenced in CLAUDE.md | DONE |
+| **1** | Kill dead code (frontend first, backend follows) | `pnpm validate:all` green, ~3000 LOC removed | DONE |
+| **2** | Define `EvidenceItem` canonical type | Trait compiles, ts-rs exports generate, roundtrip tests pass | DONE |
+| **3** | Collapse Preemption to `EvidenceItem` | Preemption tab visually identical, backed by shared types | DONE |
+| **4** | Collapse Blind Spots to `EvidenceItem` | Same for Blind Spots | DONE |
+| **5** | Collapse Knowledge Decay + Signal Chains | No UI references these types directly | DONE |
+| **6** | Context Bridge — AWE's DeveloperContext expanded 5→17 fields | Transmutations carry full user situation | DONE |
+| **7** | Cold Start Layer 1 — Git history miner | Fresh install has ≥20 seeded decisions from git | DONE |
+| **8** | Cold Start Layer 2 — Curated 200-decision corpus | `awe transmute` returns ≥3 precedents for common queries on fresh install | DONE |
+| **9** | AWE Judgment Spine wiring | Every `EvidenceItem` has AWE-generated explanation + calibrated confidence + precedents | DONE |
+| **10** | The Confession Box + Decision Brief | `⌘.` from any tab returns a useful brief in <5s | CODE COMPLETE (disabled pending AWE binary deployment) |
+| **11** | Commitment Contract + Refutation Monitor | Accepted decision + refutation signal → Refutation card in Evidence | DONE |
+| **12** | Evidence tab (replaces Momentum slot) | Three sections render real data, no empty-state pseudo-gauges | DONE |
+| **13** | Pre-launch hardening | 7-day founder soak with zero "this isn't right" reports | BLOCKED (requires founder dogfood) |
+| **14** | Ship | Release Gate passes | BLOCKED (Phase 13) |
 
 ## Anti-rot standards (enforced in code review)
 
