@@ -37,6 +37,102 @@ export function ResultItemExpanded({
   const { t } = useTranslation();
   return (
     <div id={`result-detail-${item.id}`} className="px-4 pb-3 border-t border-border/50 mt-2 pt-3">
+      {/* Urgency + Category Badges */}
+      {(item.score_breakdown?.necessity_urgency || item.score_breakdown?.necessity_category) && (
+        <div className="flex items-center gap-1.5 mb-2">
+          {item.score_breakdown?.necessity_urgency && item.score_breakdown.necessity_urgency !== 'none' && (
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              item.score_breakdown.necessity_urgency === 'immediate' ? 'bg-red-500/15 text-red-400'
+              : item.score_breakdown.necessity_urgency === 'this_week' ? 'bg-amber-500/15 text-amber-400'
+              : 'bg-blue-500/15 text-blue-400'
+            }`}>
+              {item.score_breakdown.necessity_urgency === 'immediate' ? t('urgency.immediate', 'Immediate')
+              : item.score_breakdown.necessity_urgency === 'this_week' ? t('urgency.thisWeek', 'This week')
+              : t('urgency.awareness', 'Awareness')}
+            </span>
+          )}
+          {item.score_breakdown?.necessity_category && item.score_breakdown.necessity_category !== 'none' && (
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-500/15 text-text-secondary">
+              {item.score_breakdown.necessity_category === 'security_vulnerability' ? t('category.security', 'Security')
+              : item.score_breakdown.necessity_category === 'breaking_change' ? t('category.breaking', 'Breaking Change')
+              : item.score_breakdown.necessity_category === 'deprecation_notice' ? t('category.deprecation', 'Deprecation')
+              : item.score_breakdown.necessity_category === 'blind_spot' ? t('category.blindSpot', 'Blind Spot')
+              : t('category.decision', 'Decision Relevant')}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Necessity Reason */}
+      {item.score_breakdown?.necessity_reason && (
+        <p className="text-xs text-text-muted mb-2 italic">
+          {item.score_breakdown.necessity_reason}
+        </p>
+      )}
+
+      {/* Advisory Evidence Section (security items only) */}
+      {item.score_breakdown?.necessity_category === 'security_vulnerability' && (
+        <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-3 mb-3">
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            {item.advisory_id && (
+              <a
+                href={item.url ?? '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-0.5 rounded text-xs font-mono bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-colors"
+              >
+                {item.advisory_id}
+              </a>
+            )}
+            {item.score_breakdown?.advisory_source && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400">
+                {item.score_breakdown.advisory_source}
+              </span>
+            )}
+            {item.score_breakdown?.cvss_score != null && (
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                item.score_breakdown.cvss_score >= 9.0 ? 'bg-red-500/20 text-red-400'
+                : item.score_breakdown.cvss_score >= 7.0 ? 'bg-orange-500/20 text-orange-400'
+                : item.score_breakdown.cvss_score >= 4.0 ? 'bg-yellow-500/20 text-yellow-400'
+                : 'bg-zinc-500/20 text-text-muted'
+              }`}>
+                CVSS {item.score_breakdown.cvss_score.toFixed(1)}
+              </span>
+            )}
+            {item.applicability && (
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                item.applicability === 'affected' ? 'bg-red-500/20 text-red-400'
+                : item.applicability === 'likely_affected' ? 'bg-orange-500/20 text-orange-400'
+                : 'bg-yellow-500/20 text-yellow-400'
+              }`}>
+                {item.applicability === 'affected' ? t('results.affected', 'Affected')
+                : item.applicability === 'likely_affected' ? t('results.likelyAffected', 'Likely Affected')
+                : t('results.needsVerification', 'Needs Verification')}
+              </span>
+            )}
+          </div>
+          {/* Dependency details */}
+          {item.score_breakdown?.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
+            <div className="text-xs text-text-secondary space-y-1">
+              {item.score_breakdown.matched_deps.map((dep, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="font-mono text-text-primary">{dep}</span>
+                  {i === 0 && item.score_breakdown?.installed_version && (
+                    <span className="text-text-muted">{item.score_breakdown.installed_version}</span>
+                  )}
+                  {i === 0 && item.score_breakdown?.dependency_path && (
+                    <span className="text-text-muted">({item.score_breakdown.dependency_path})</span>
+                  )}
+                  {i === 0 && item.score_breakdown?.fixed_version && (
+                    <span className="text-emerald-400">&rarr; {item.score_breakdown.fixed_version}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Why This Matters - Full Display */}
       {item.explanation && (
         <div className="mb-3 p-2 bg-bg-primary/50 rounded border border-accent-gold/30">

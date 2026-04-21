@@ -183,13 +183,13 @@ export interface AnalysisSlice {
 
 export interface FiltersSlice {
   sourceFilters: Set<string>;
-  sortBy: 'score' | 'date';
+  sortBy: 'score' | 'date' | 'priority' | 'applicability' | 'freshness';
   showOnlyRelevant: boolean;
   searchQuery: string;
   showSavedOnly: boolean;
   toggleSourceFilter: (source: string) => void;
   resetSourceFilters: () => void;
-  setSortBy: (sort: 'score' | 'date') => void;
+  setSortBy: (sort: 'score' | 'date' | 'priority' | 'applicability' | 'freshness') => void;
   setShowOnlyRelevant: (show: boolean) => void;
   setSearchQuery: (q: string) => void;
   setShowSavedOnly: (show: boolean) => void;
