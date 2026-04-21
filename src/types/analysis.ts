@@ -34,6 +34,12 @@ export interface SourceRelevance {
   decision_boost_applied?: number;
   /** When this item was first seen (ISO timestamp) */
   created_at?: string;
+  /** Whether this item should display in critical alert banner (verified dependency match) */
+  is_critical_alert?: boolean;
+  /** Applicability assessment: affected | likely_affected | needs_verification | not_affected */
+  applicability?: string;
+  /** Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234") */
+  advisory_id?: string;
 }
 
 export interface ScoreBreakdown {
@@ -102,6 +108,24 @@ export interface ScoreBreakdown {
   /** Intelligence Mesh Phase 2: set when pipeline and advisor(s) disagreed.
    *  The pipeline score is always authoritative — this flag is informative. */
   disagreement?: DisagreementKind | null;
+  /** Advisory source (GHSA, RustSec, npm_advisory, OSV) */
+  advisory_source?: string;
+  /** CVSS score (0.0-10.0) */
+  cvss_score?: number;
+  /** CVSS severity (critical, high, medium, low) */
+  cvss_severity?: string;
+  /** Affected version range from advisory (e.g. "< 3.0.0") */
+  affected_versions?: string;
+  /** Fixed version (e.g. "3.0.1") */
+  fixed_version?: string;
+  /** User's installed version from lockfile */
+  installed_version?: string;
+  /** Whether installed version is in the affected range */
+  is_version_affected?: boolean;
+  /** Dependency path (direct | transitive | dev-only) */
+  dependency_path?: string;
+  /** Number of user's projects affected */
+  affected_project_count?: number;
 }
 
 /** Why pipeline and advisor(s) disagreed. Always a UI signal, never a score override. */
