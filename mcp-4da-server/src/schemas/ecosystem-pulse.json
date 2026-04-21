@@ -1,0 +1,17 @@
+{
+  "name": "ecosystem_pulse",
+  "description": "Live ecosystem news relevant to your tech stack. Surfaces trending Hacker News discussions filtered by your detected technologies. Updated on server startup.\n\nPrivacy: No personal data sent. Only generic tech keywords used for filtering.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "min_points": {
+        "type": "number",
+        "description": "Minimum HN points to include. Default: 0"
+      },
+      "limit": {
+        "type": "number",
+        "description": "Maximum headlines to return. Default: 15"
+      }
+    }
+  }
+}

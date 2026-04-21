@@ -59,6 +59,13 @@ interface WisdomEntry {
   detail: string;
 }
 
+interface EcosystemNewsItem {
+  title: string;
+  url: string | null;
+  points: number;
+  relevance_reason: string;
+}
+
 type DelegationLevel = "safe_to_delegate" | "review_needed" | "human_only";
 
 interface WhatShouldIKnowResult {
@@ -68,6 +75,7 @@ interface WhatShouldIKnowResult {
   decision_windows: DecisionWindow[];
   active_signals: ActiveSignal[];
   relevant_wisdom: WisdomEntry[];
+  ecosystem_news: EcosystemNewsItem[];
   delegation_assessment: {
     level: DelegationLevel;
     reason: string;
@@ -427,6 +435,26 @@ export function executeWhatShouldIKnow(
     // AWE unavailable — non-fatal
   }
 
+  // ── 5c. Ecosystem News (HN headlines relevant to tech stack) ──────────
+  let ecosystemNews: EcosystemNewsItem[] = [];
+  try {
+    const hnIntel = getLiveIntelligence();
+    if (hnIntel) {
+      const headlines = hnIntel.getHeadlines();
+      ecosystemNews = headlines
+        .filter((h) => h.relevanceScore > 0.3 || matchesKeywords(h.title, keywords))
+        .slice(0, 5)
+        .map((h) => ({
+          title: h.title,
+          url: h.url,
+          points: h.points,
+          relevance_reason: h.relevanceReason,
+        }));
+    }
+  } catch {
+    // Headlines unavailable — non-fatal
+  }
+
   // ── 6. Delegation Assessment ──────────────────────────────────────────
   const signalDensity =
     advisories.length + decisionWindows.length + activeSignals.length;
@@ -466,6 +494,9 @@ export function executeWhatShouldIKnow(
   if (relevantWisdom.length > 0) {
     parts.push(`${relevantWisdom.length} relevant decision${relevantWisdom.length !== 1 ? "s" : ""}/memor${relevantWisdom.length !== 1 ? "ies" : "y"}`);
   }
+  if (ecosystemNews.length > 0) {
+    parts.push(`${ecosystemNews.length} ecosystem update${ecosystemNews.length !== 1 ? "s" : ""}`);
+  }
 
   const summary =
     parts.length > 0
@@ -479,6 +510,7 @@ export function executeWhatShouldIKnow(
     decision_windows: decisionWindows,
     active_signals: activeSignals,
     relevant_wisdom: relevantWisdom,
+    ecosystem_news: ecosystemNews,
     delegation_assessment: {
       level: delegationLevel,
       reason: delegationReason,

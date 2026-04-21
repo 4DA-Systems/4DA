@@ -41,10 +41,19 @@ pub(crate) async fn run_npm_audit(project_path: &Path) -> Vec<LocalAuditFinding>
     }
 
     // Check if npm is available
-    let check = if cfg!(windows) {
-        Command::new("where").arg("npm").output().await
-    } else {
-        Command::new("which").arg("npm").output().await
+    let check = {
+        let mut cmd = if cfg!(windows) {
+            let mut c = Command::new("where");
+            c.arg("npm");
+            c
+        } else {
+            let mut c = Command::new("which");
+            c.arg("npm");
+            c
+        };
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.output().await
     };
 
     if check.is_err() || !check.as_ref().is_ok_and(|o| o.status.success()) {
@@ -54,11 +63,11 @@ pub(crate) async fn run_npm_audit(project_path: &Path) -> Vec<LocalAuditFinding>
 
     // Run npm audit
     let result = tokio::time::timeout(Duration::from_secs(30), async {
-        Command::new("npm")
-            .args(["audit", "--json"])
-            .current_dir(project_path)
-            .output()
-            .await
+        let mut cmd = Command::new("npm");
+        cmd.args(["audit", "--json"]).current_dir(project_path);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+        cmd.output().await
     })
     .await;
 
@@ -171,10 +180,13 @@ pub(crate) async fn run_cargo_audit(project_path: &Path) -> Vec<LocalAuditFindin
     }
 
     // Check if cargo-audit is available
-    let check = Command::new("cargo")
-        .args(["audit", "--version"])
-        .output()
-        .await;
+    let check = {
+        let mut cmd = Command::new("cargo");
+        cmd.args(["audit", "--version"]);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+        cmd.output().await
+    };
 
     if check.is_err() || !check.as_ref().is_ok_and(|o| o.status.success()) {
         debug!(target: "4da::audit", "cargo-audit not installed — skipping cargo audit");
@@ -183,11 +195,11 @@ pub(crate) async fn run_cargo_audit(project_path: &Path) -> Vec<LocalAuditFindin
 
     // Run cargo audit
     let result = tokio::time::timeout(Duration::from_secs(60), async {
-        Command::new("cargo")
-            .args(["audit", "--json"])
-            .current_dir(project_path)
-            .output()
-            .await
+        let mut cmd = Command::new("cargo");
+        cmd.args(["audit", "--json"]).current_dir(project_path);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000);
+        cmd.output().await
     })
     .await;
 

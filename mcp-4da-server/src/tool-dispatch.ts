@@ -47,6 +47,7 @@ import {
   executeTrustSummary,
   executePreemptionFeed,
   executeVulnerabilityScan,
+  executeEcosystemPulse,
 } from "./tools/index.js";
 
 import { getLiveIntelligence } from "./live-singleton.js";
@@ -125,6 +126,7 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
 
   // Live Intelligence
   vulnerability_scan: (db, params) => executeVulnerabilityScan(db, params, getLiveIntelligence()),
+  ecosystem_pulse: (db, params) => executeEcosystemPulse(db, params, getLiveIntelligence()),
 
 };
 

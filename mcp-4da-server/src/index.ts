@@ -13,10 +13,10 @@
  * Do NOT expose this server over a network without adding proper auth.
  */
 /**
- * 4DA MCP Server v4.2.1 — Intelligence Platform
+ * 4DA MCP Server v4.3.0 — Dependency Intelligence Platform
  *
- * 36 tools across 9 categories. Live vulnerability scanning (OSV.dev),
- * persistent project memory, and tech stack awareness for any MCP host.
+ * 37 tools across 9 categories. Live vulnerability scanning (OSV.dev),
+ * ecosystem news, persistent project memory, and tech stack awareness for any MCP host.
  *
  * Categories (canonical — matches schema-registry.ts `ToolCategory`):
  *   Core (4)                    — content feed, context, relevance, feedback
@@ -70,7 +70,7 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.2.1",
+    version: "4.3.0",
   },
   {
     capabilities: {
@@ -185,8 +185,9 @@ function getDatabase(): FourDADatabase {
  * Full schemas available via MCP Resources: 4da://schema/{tool_name}
  */
 server.setRequestHandler(ListToolsRequestSchema, async () => {
+  const database = getDatabase();
   return {
-    tools: getSlimToolList(),
+    tools: getSlimToolList(database.isStandalone ? true : undefined),
   };
 });
 
@@ -326,14 +327,14 @@ async function main() {
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
-    console.log("@4da/mcp-server 4.2.1");
+    console.log("@4da/mcp-server 4.3.0");
     return;
   }
 
   // Help
   if (args.includes("--help") || args.includes("-h")) {
     console.log(`
-  @4da/mcp-server — 36 tools for codebase-aware developer intelligence
+  @4da/mcp-server — Dependency intelligence for AI coding agents
 
   Usage:
     npx @4da/mcp-server              Start MCP server (stdio transport)
@@ -421,7 +422,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.2.1 started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.3.0 started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

@@ -247,15 +247,24 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
 
     // Fetch fresh content from all sources before scoring
     // Without this, manual analysis only re-scores stale cached items
+    // 60s timeout: one slow/hung source must not stall the entire pipeline
     emit_progress(app, "fetch", 0.08, "Fetching fresh content...", 0, 0);
-    match crate::source_fetching::fill_cache_background(app).await {
-        Ok(count) => {
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(60),
+        crate::source_fetching::fill_cache_background(app),
+    )
+    .await
+    {
+        Ok(Ok(count)) => {
             if count > 0 {
                 info!(target: "4da::analysis", new_items = count, "Fetched fresh content before scoring");
             }
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             warn!(target: "4da::analysis", error = %e, "Cache fill failed, continuing with existing cache");
+        }
+        Err(_) => {
+            warn!(target: "4da::analysis", "Cache fill timed out after 60s, continuing with existing cache");
         }
     }
 
@@ -324,8 +333,14 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
             new_items.len(),
         );
 
-        // Score only new items
-        let scoring_ctx = scoring::build_scoring_context(db).await.map_err(|e| {
+        // Score only new items (10s timeout on context build — it's local DB + ACE, should be fast)
+        let scoring_ctx = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            scoring::build_scoring_context(db),
+        )
+        .await
+        .map_err(|_| String::from("Scoring context build timed out after 10s"))?
+        .map_err(|e| {
             format!("Failed to build scoring context for differential analysis: {e}")
         })?;
         let trend_topics = crate::detect_trend_topics(
@@ -378,6 +393,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
         }
 
         // LLM Reranking on new items only (if enabled)
+        // 120s timeout: LLM API calls can hang on provider outages
         emit_narration(
             app,
             NarrationEvent {
@@ -387,7 +403,17 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
                 relevance: None,
             },
         );
-        analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx).await;
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(120),
+            analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx),
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(_) => {
+                warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+            }
+        }
 
         // Merge: take previous results, update/add new ones by ID
         let mut prev = previous_results.unwrap_or_default();

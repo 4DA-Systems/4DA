@@ -12,13 +12,17 @@
  */
 
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { extractAuthClaims, type TeamClaims } from "./auth.js";
 
 const DEFAULT_PORT = 4840;
 const DEFAULT_HOST = "127.0.0.1";
-const SERVER_VERSION = "4.0.1";
+const __ht_dirname = dirname(fileURLToPath(import.meta.url));
+const SERVER_VERSION: string = JSON.parse(readFileSync(join(__ht_dirname, "..", "package.json"), "utf-8")).version;
 
 export interface HttpServerOptions {
   port: number;

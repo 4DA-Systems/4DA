@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.runyourempire/4da-mcp-server",
-  "description": "Scan deps for CVEs via MCP. Auto-detects stack, queries OSV.dev. Zero config, privacy-first.",
+  "description": "Dependency intelligence for AI coding agents. Live CVE scanning, ecosystem news, decision memory, project context. Zero config, privacy-first.",
   "repository": {
     "url": "https://github.com/runyourempire/4DA",
     "source": "github",
     "subfolder": "mcp-4da-server"
   },
-  "version": "4.2.1",
+  "version": "4.3.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@4da/mcp-server",
-      "version": "4.2.1",
+      "version": "4.3.0",
       "transport": {
         "type": "stdio"
       }
