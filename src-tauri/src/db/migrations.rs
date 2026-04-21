@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 58;
+        const TARGET_VERSION: i64 = 59;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2166,6 +2166,40 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Created commitment_contracts table + 2 indices (Intelligence Reconciliation Phase 11)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // ── Phase 59: Alert Triage (Trust & Credibility Tier 2) ──
+            // Persistent security triage actions replacing localStorage-based
+            // acknowledgment. Supports investigating/fixed/not_applicable/
+            // accepted_risk/snoozed/acknowledged with audit trail and expiry.
+            if current_version < 59 {
+                Self::run_versioned_migration(
+                    &conn,
+                    58,
+                    59,
+                    "Phase 59: Alert Triage (persistent security triage actions)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS alert_triage (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                item_id INTEGER NOT NULL,
+                                advisory_id TEXT,
+                                action TEXT NOT NULL CHECK(action IN ('investigating', 'fixed', 'not_applicable', 'accepted_risk', 'snoozed', 'acknowledged')),
+                                reason TEXT,
+                                resolved_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                expires_at TEXT,
+                                UNIQUE(item_id)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_alert_triage_item ON alert_triage(item_id);
+                            CREATE INDEX IF NOT EXISTS idx_alert_triage_expires ON alert_triage(expires_at) WHERE expires_at IS NOT NULL;",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created alert_triage table + 2 indices (Trust & Credibility Tier 2)"
                         );
                         Ok(())
                     },

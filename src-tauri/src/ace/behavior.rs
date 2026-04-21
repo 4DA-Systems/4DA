@@ -315,10 +315,32 @@ impl ACE {
             signal
         };
 
-        self.update_topic_affinities(&signal)?;
+        // Don't let security triage pollute topic learning.
+        // Dismissing a CVE as "not applicable" shouldn't suppress future security content,
+        // and saving a CVE shouldn't boost unrelated topics that happen to share keywords.
+        let is_security_item = {
+            let conn = self.conn.lock();
+            conn.query_row(
+                "SELECT necessity_category FROM item_necessity WHERE source_item_id = ?1",
+                rusqlite::params![item_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .unwrap_or(None)
+            .as_deref()
+                == Some("security_vulnerability")
+        };
 
-        if signal.signal_strength < -0.5 {
-            self.update_anti_topics(&item_topics, signal.signal_strength)?;
+        if !is_security_item {
+            self.update_topic_affinities(&signal)?;
+
+            if signal.signal_strength < -0.5 {
+                self.update_anti_topics(&item_topics, signal.signal_strength)?;
+            }
+        } else {
+            debug!(target: "ace::behavior",
+                item_id = item_id,
+                "Skipping affinity/anti-topic update for security vulnerability item"
+            );
         }
 
         self.update_source_preference(&item_source, signal.signal_strength)?;

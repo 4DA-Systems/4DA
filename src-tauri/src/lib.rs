@@ -148,6 +148,7 @@ mod ace_commands;
 mod agent_brief;
 mod agent_memory;
 mod ai_costs;
+mod alert_triage;
 mod analysis;
 mod analysis_narration;
 mod analysis_rerank;
@@ -1083,6 +1084,10 @@ pub fn run() {
             trust_ledger::record_intelligence_feedback,
             trust_ledger::get_domain_precision_report,
             trust_ledger::get_false_positive_analysis,
+            // Alert Triage (persistent security triage actions)
+            alert_triage::triage_alert,
+            alert_triage::get_triage_states,
+            alert_triage::clear_expired_triage,
             // Diagnostic log reader (persistent log files)
             log_retention::get_recent_logs,
         ])

@@ -1537,8 +1537,7 @@ pub(crate) fn score_item(
         None
     };
     let installed_version = raw.matched_deps.first().and_then(|d| d.version.clone());
-    let sec_affected_project_count =
-        count_affected_projects(db, &matched_dep_names) as u32;
+    let sec_affected_project_count = count_affected_projects(db, &matched_dep_names) as u32;
 
     // ── Score breakdown ───────────────────────────────────────────────
     let score_breakdown = ScoreBreakdown {

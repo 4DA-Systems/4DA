@@ -6,6 +6,7 @@ import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
 import { ScoreBreakdownRow } from './ScoreBreakdownRow';
 import { FeedbackButtons } from './FeedbackButtons';
+import { SecurityTriageButtons } from './SecurityTriageButtons';
 import { StreetsEngineLink } from './StreetsEngineLink';
 
 interface ResultItemExpandedProps {
@@ -88,12 +89,16 @@ export function ResultItemExpanded({
         isHighConfidence={isHighConfidence}
       />
 
-      {/* Feedback Buttons */}
-      <FeedbackButtons
-        item={item}
-        feedback={feedback}
-        onRecordInteraction={onRecordInteraction}
-      />
+      {/* Feedback / Triage Buttons */}
+      {item.score_breakdown?.necessity_category === 'security_vulnerability' ? (
+        <SecurityTriageButtons item={item} />
+      ) : (
+        <FeedbackButtons
+          item={item}
+          feedback={feedback}
+          onRecordInteraction={onRecordInteraction}
+        />
+      )}
 
       <div className="text-xs text-text-muted mb-2 font-medium">
         {t('results.topMatches')}
