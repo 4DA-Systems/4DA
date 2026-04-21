@@ -50,15 +50,31 @@ export function executeExportContextPacket(
   const includeSaved = params.include_saved ?? true;
 
   // Get interests
-  const interests = rawDb
-    .prepare("SELECT topic FROM interests ORDER BY weight DESC LIMIT 20")
-    .all() as SimpleTopicRow[];
+  let interests: SimpleTopicRow[] = [];
+  try {
+    interests = rawDb
+      .prepare("SELECT topic FROM interests ORDER BY weight DESC LIMIT 20")
+      .all() as SimpleTopicRow[];
+  } catch {
+    try {
+      interests = rawDb
+        .prepare("SELECT topic FROM explicit_interests ORDER BY weight DESC LIMIT 20")
+        .all() as SimpleTopicRow[];
+    } catch {
+      // Neither table exists
+    }
+  }
   const interestTopics = interests.map((r) => r.topic);
 
   // Get exclusions
-  const exclusionRows = rawDb
-    .prepare("SELECT topic FROM exclusions")
-    .all() as SimpleTopicRow[];
+  let exclusionRows: SimpleTopicRow[] = [];
+  try {
+    exclusionRows = rawDb
+      .prepare("SELECT topic FROM exclusions")
+      .all() as SimpleTopicRow[];
+  } catch {
+    // exclusions table not present
+  }
   const exclusions = exclusionRows.map((r) => r.topic);
 
   // Get detected tech from ACE

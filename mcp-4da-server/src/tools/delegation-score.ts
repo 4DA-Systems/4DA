@@ -256,6 +256,16 @@ export function executeDelegationScore(
   const rawDb = db.getRawDb();
   const subject = params.subject;
 
+  if (!subject) {
+    return {
+      subject: "(none)",
+      recommendation: "collaborate_realtime",
+      confidence: 0,
+      reasoning: "No subject provided — cannot assess delegatability without knowing what to delegate.",
+      factors: {},
+    };
+  }
+
   // Compute factors
   const patternStability = computePatternStability(rawDb, subject);
   const securitySensitivity = computeSecuritySensitivity(rawDb, subject);

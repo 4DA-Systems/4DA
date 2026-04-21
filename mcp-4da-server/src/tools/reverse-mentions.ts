@@ -35,17 +35,27 @@ export function executeReverseMentions(
   const limit = params.limit || 20;
 
   // Get project identifiers from item_relationships
-  const mentions = rawDb
-    .prepare(
-      `SELECT ir.source_item_id, ir.related_item_id, ir.metadata, ir.created_at,
-              si.title, si.url, si.source_type
-       FROM item_relationships ir
-       JOIN source_items si ON ir.source_item_id = si.id
-       WHERE ir.relationship_type = 'mentions_project'
-       ORDER BY ir.created_at DESC
-       LIMIT ?`,
-    )
-    .all(limit) as MentionRow[];
+  let mentions: MentionRow[] = [];
+  try {
+    mentions = rawDb
+      .prepare(
+        `SELECT ir.source_item_id, ir.related_item_id, ir.metadata, ir.created_at,
+                si.title, si.url, si.source_type
+         FROM item_relationships ir
+         JOIN source_items si ON ir.source_item_id = si.id
+         WHERE ir.relationship_type = 'mentions_project'
+         ORDER BY ir.created_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as MentionRow[];
+  } catch {
+    return {
+      mentions: [],
+      total: 0,
+      tracked_projects: [],
+      summary: "Reverse mentions unavailable — item_relationships table not present in this database.",
+    };
+  }
 
   const results = mentions.map((m) => {
     const metadata: { project_name?: string; context?: string } = m.metadata ? JSON.parse(m.metadata) : {};
@@ -61,10 +71,15 @@ export function executeReverseMentions(
   });
 
   // Also check for mentions via text search of project names from dependencies
-  const projectNames = (rawDb
-    .prepare("SELECT DISTINCT package_name FROM project_dependencies LIMIT 10")
-    .all() as PackageNameRow[])
-    .map((r) => r.package_name);
+  let projectNames: string[] = [];
+  try {
+    projectNames = (rawDb
+      .prepare("SELECT DISTINCT package_name FROM project_dependencies LIMIT 10")
+      .all() as PackageNameRow[])
+      .map((r) => r.package_name);
+  } catch {
+    // project_dependencies table not present
+  }
 
   return {
     mentions: results,
