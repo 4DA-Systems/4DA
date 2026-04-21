@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "レッスン言語",
   "streets.translateModule": "{{lang}}に翻訳",
-  "streets.translating": "翻訳中..."
+  "streets.translating": "翻訳中...",
+  "streets.emptyState.headline": "すべての開発者には、誰も対価を払っていないインフラがある。",
+  "streets.emptyState.body": "STREETS はそれを収入に変えます — 7つのモジュール、それぞれが収益エンジン。どこからでも始められます。",
+  "streets.sidebar.S": "あなたの収入の土台",
+  "streets.sidebar.T": "競合がコピーできないものを構築する",
+  "streets.sidebar.R": "スキルを継続収入に変える",
+  "streets.sidebar.E1": "体系的に作って売る",
+  "streets.sidebar.E2": "毎日2時間のアドバンテージ",
+  "streets.sidebar.T2": "寝ている間に稼ぐ",
+  "streets.sidebar.S2": "うまくいっていることを積み重ねる"
 }

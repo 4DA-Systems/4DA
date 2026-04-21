@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "Ders dili",
   "streets.translateModule": "{{lang}} diline çevir",
-  "streets.translating": "Çevriliyor..."
+  "streets.translating": "Çevriliyor...",
+  "streets.emptyState.headline": "Her geliştiricinin kimsenin karşılığını ödemediği bir altyapısı vardır.",
+  "streets.emptyState.body": "STREETS bunu gelire dönüştürür — 7 modül, her biri bir gelir motoru. Dilediğin yerden başla.",
+  "streets.sidebar.S": "Gelir temelin",
+  "streets.sidebar.T": "Rakiplerin kopyalayamayacağı şeyi inşa et",
+  "streets.sidebar.R": "Yeteneklerini düzenli gelire dönüştür",
+  "streets.sidebar.E1": "Sistematik olarak üret ve sat",
+  "streets.sidebar.E2": "Günlük 2 saatlik avantajın",
+  "streets.sidebar.T2": "Sen uyurken kazan",
+  "streets.sidebar.S2": "İşe yarayanı katla"
 }
