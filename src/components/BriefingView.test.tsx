@@ -42,8 +42,6 @@ function setMockState(overrides: Record<string, unknown>) {
     loadDecisionWindows: vi.fn(),
     actOnWindow: vi.fn(),
     closeWindow: vi.fn(),
-    compoundAdvantage: null,
-    loadCompoundAdvantage: vi.fn(),
     // AWE slice
     aweSummary: null,
     awePatterns: null,
