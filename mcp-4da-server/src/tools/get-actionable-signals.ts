@@ -323,7 +323,14 @@ export function executeGetActionableSignals(
   const sinceHours = Math.max(1, Math.min(168, params.since_hours ?? 48));
 
   // Get items from DB (reuse existing method with low min score to get more items)
-  const items = db.getRelevantContent(0.1, undefined, 200, sinceHours);
+  // Try progressively wider time windows if no items found
+  let items = db.getRelevantContent(0.1, undefined, 200, sinceHours);
+  if (items.length === 0 && sinceHours < 168) {
+    items = db.getRelevantContent(0.1, undefined, 200, 168); // Try 7 days
+  }
+  if (items.length === 0) {
+    items = db.getRelevantContent(0.0, undefined, 200, 720); // Try 30 days, any score
+  }
 
   // Get user's detected tech for cross-referencing
   const context = db.getUserContext(true, false);
@@ -411,5 +418,6 @@ export function executeGetActionableSignals(
     signals: signals.slice(0, limit),
     total: signals.length,
     summary,
+    ...(signals.length === 0 && items.length === 0 ? { note: "No source items in the database. Run the 4DA desktop app to fetch content, or use vulnerability_scan to check dependencies directly." } : {}),
   };
 }
