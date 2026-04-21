@@ -224,10 +224,33 @@ export function executeDeveloperDna(
       )
       .all(maxDependencies) as DependencyRow[];
 
-    topDependencies = depRows.map((r) => ({
-      name: r.package_name,
-      project_path: r.project_path,
-    }));
+    // Filter out invalid package names (template literals, path aliases, non-packages)
+    const isValidPackageName = (name: string): boolean => {
+      if (!name) return false;
+      if (name.includes("${")) return false;  // Template literals
+      if (name.startsWith("@/") || name.startsWith("~/")) return false;  // Path aliases
+      if (name.startsWith("./") || name.startsWith("../")) return false;  // Relative paths
+      if (name.includes(" ")) return false;  // Not a valid package name
+      if (name.length > 100) return false;  // Too long to be a package name
+      if (/^[A-Z]:\\/.test(name) || name.startsWith("/")) return false;  // Absolute paths
+      return true;
+    };
+
+    topDependencies = depRows
+      .filter((r) => isValidPackageName(r.package_name))
+      .map((r) => ({
+        name: r.package_name,
+        project_path: r.project_path,
+      }));
+
+    // Deduplicate (case-insensitive)
+    const seen = new Set<string>();
+    topDependencies = topDependencies.filter(d => {
+      const key = d.name.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   } catch {
     // table may not exist
   }

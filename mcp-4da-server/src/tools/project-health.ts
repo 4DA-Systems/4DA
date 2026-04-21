@@ -45,7 +45,18 @@ export function executeProjectHealth(
   }
   query += " GROUP BY project_path";
 
-  const projects = rawDb.prepare(query).all(...queryParams) as ProjectSummaryRow[];
+  let projects: ProjectSummaryRow[];
+  try {
+    projects = rawDb.prepare(query).all(...queryParams) as ProjectSummaryRow[];
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return {
+      projects: [],
+      total_projects: 0,
+      summary: "Project health unavailable — database may need updating",
+      error: msg,
+    };
+  }
 
   const healthReports = projects.map((proj) => {
     // Get dependencies for this project

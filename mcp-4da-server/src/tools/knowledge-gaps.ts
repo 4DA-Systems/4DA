@@ -16,6 +16,7 @@ function hasWordBoundary(text: string, term: string): boolean {
 
 export interface KnowledgeGapsParams {
   min_severity?: string;
+  limit?: number;
 }
 
 export const knowledgeGapsTool = {
@@ -29,6 +30,11 @@ export const knowledgeGapsTool = {
         enum: ["critical", "high", "medium", "low"],
         description: "Minimum gap severity to include. Default: medium",
         default: "medium",
+      },
+      limit: {
+        type: "number",
+        description: "Maximum gaps to return. Default: 15",
+        default: 15,
       },
     },
   },
@@ -52,7 +58,7 @@ export function executeKnowledgeGaps(
 
   // Get all tracked dependencies
   const deps = rawDb
-    .prepare("SELECT package_name, version, project_path, language FROM project_dependencies")
+    .prepare("SELECT package_name, version, project_path, language FROM project_dependencies LIMIT 100")
     .all() as DependencyWithProjectRow[];
 
   if (deps.length === 0) {
@@ -95,7 +101,10 @@ export function executeKnowledgeGaps(
         version: dep.version,
         project_path: dep.project_path,
         language: dep.language,
-        missed_items: mentionedItems,
+        missed_items: mentionedItems.map(item => ({
+          ...item,
+          title: item.title && item.title.length > 120 ? item.title.substring(0, 120) + "..." : item.title,
+        })),
         gap_severity: severity,
         missed_count: mentionedItems.length,
       });
@@ -109,13 +118,16 @@ export function executeKnowledgeGaps(
     (g) => (severityOrder[g.gap_severity] || 0) >= minLevel,
   );
 
+  const maxGaps = Math.min(Math.max(1, params.limit || 15), 50);
+
   return {
     gaps: filtered.sort(
       (a, b) =>
         (severityOrder[b.gap_severity] || 0) - (severityOrder[a.gap_severity] || 0),
-    ),
+    ).slice(0, maxGaps),
     total_dependencies: deps.length,
     gaps_found: filtered.length,
-    summary: `${filtered.length} knowledge gaps across ${deps.length} tracked dependencies`,
+    gaps_returned: Math.min(filtered.length, maxGaps),
+    summary: `${filtered.length} knowledge gaps across ${deps.length} tracked dependencies (showing top ${Math.min(filtered.length, maxGaps)})`,
   };
 }
