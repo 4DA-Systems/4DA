@@ -110,15 +110,3 @@ export interface MaintenanceResult {
   vacuumed: boolean;
 }
 
-export interface CompoundAdvantageScore {
-  score: number;
-  period: string;
-  items_surfaced: number;
-  avg_lead_time_hours: number;
-  windows_opened: number;
-  windows_acted: number;
-  windows_expired: number;
-  knowledge_gaps_closed: number;
-  calibration_accuracy: number;
-  trend: number;
-}

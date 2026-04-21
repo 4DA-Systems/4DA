@@ -54,7 +54,6 @@ import type {
   DataHealth,
   MaintenanceResult,
   DecisionWindow,
-  CompoundAdvantageScore,
 } from '../types/autophagy';
 import type {
   PlaybookModule,
@@ -331,7 +330,6 @@ interface CommandMap {
   get_decision_windows: { params: Record<string, never>; result: DecisionWindow[] };
   act_on_decision_window: { params: { windowId: number; outcome: string | null }; result: string };
   close_decision_window: { params: { windowId: number; outcome: string | null }; result: string };
-  get_compound_advantage: { params: Record<string, never>; result: CompoundAdvantageScore };
   get_advantage_history: { params: { period?: string; limit?: number }; result: number[] };
 
   // -- Autophagy --

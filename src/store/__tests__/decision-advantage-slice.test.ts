@@ -23,10 +23,6 @@ describe('decision-advantage-slice', () => {
       expect(useAppStore.getState().decisionWindows).toEqual([]);
     });
 
-    it('has compoundAdvantage null', () => {
-      expect(useAppStore.getState().compoundAdvantage).toBeNull();
-    });
-
     it('has decisionWindowsLoading false', () => {
       expect(useAppStore.getState().decisionWindowsLoading).toBe(false);
     });
@@ -72,29 +68,6 @@ describe('decision-advantage-slice', () => {
       await loadPromise;
 
       expect(useAppStore.getState().decisionWindowsLoading).toBe(false);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // loadCompoundAdvantage
-  // ---------------------------------------------------------------------------
-  describe('loadCompoundAdvantage', () => {
-    it('sets compoundAdvantage from invoke result', async () => {
-      const mockScore = { score: 85, trend: 'rising', factors: [] };
-      vi.mocked(invoke).mockResolvedValueOnce(mockScore);
-
-      await useAppStore.getState().loadCompoundAdvantage();
-
-      expect(invoke).toHaveBeenCalledWith('get_compound_advantage', {});
-      expect(useAppStore.getState().compoundAdvantage).toEqual(mockScore);
-    });
-
-    it('silently ignores errors', async () => {
-      vi.mocked(invoke).mockRejectedValueOnce(new Error('fail'));
-
-      await useAppStore.getState().loadCompoundAdvantage();
-
-      expect(useAppStore.getState().compoundAdvantage).toBeNull();
     });
   });
 

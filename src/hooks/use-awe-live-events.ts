@@ -105,12 +105,9 @@ function createDebouncer(fn: () => void, wait: number): () => void {
       try {
         fn();
       } catch (err) {
-        // A store action (e.g. loadAweSummary) can throw if the Tauri
-        // bridge is disconnected — we must swallow to avoid escaping
-        // into the JS timer queue. The caller has no awareness and
-        // losing a single refresh is non-fatal; the next event or the
-        // 30 s poll safety net in MomentumWisdomTrajectory will pick
-        // up any missed state.
+        // Store actions can throw if the Tauri bridge is disconnected.
+        // Losing a single refresh is non-fatal; the next event or the
+        // 30 s poll safety net will pick up any missed state.
         console.warn('[awe-live-events] debounced refresh error', err);
       }
     }, wait);
@@ -119,18 +116,12 @@ function createDebouncer(fn: () => void, wait: number): () => void {
 
 /**
  * Subscribe to all AWE live events. Call this once from a top-level
- * component that is always mounted during an AWE-aware session — the
- * `MomentumWisdomTrajectory` is the canonical host, but `WisdomTab` can
- * also subscribe safely (events are broadcast, there is no hidden state).
+ * component that is always mounted during an AWE-aware session.
+ * Events are broadcast; there is no hidden state.
  *
- * The hook returns nothing — all state updates flow through the zustand
- * store so any component that reads `aweSummary`, `awePendingDecisions`,
- * `aweWisdomWell`, etc. will re-render automatically when data changes.
- *
- * **Safety net**: on top of events, `MomentumWisdomTrajectory` still
- * calls `loadAweSummary()` on mount and at a 30 s interval. If events
- * are lost (e.g. external `awe.exe` runs from the terminal) the poll
- * catches up within one tick.
+ * All state updates flow through the zustand store so any component
+ * that reads `aweSummary`, `awePendingDecisions`, `aweWisdomWell`,
+ * etc. will re-render automatically when data changes.
  */
 export function useAweLiveEvents(): void {
   useEffect(() => {

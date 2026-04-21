@@ -39,7 +39,6 @@ vi.mock('../../store', () => ({
         loadPersonalizedContent: vi.fn(), loadPersonalizedContentBatch: vi.fn(),
         decisions: [], decisionsLoading: false, loadDecisions: vi.fn(),
         recordDecision: vi.fn(), updateDecision: vi.fn(),
-        compoundAdvantage: null, loadCompoundAdvantage: vi.fn(),
         autophagyStatus: null, autophagyHistory: [], autophagyLoading: false,
         loadAutophagyStatus: vi.fn(), loadAutophagyHistory: vi.fn(),
         decisionWindows: [], decisionWindowsLoading: false,
