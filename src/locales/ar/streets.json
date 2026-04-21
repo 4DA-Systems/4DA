@@ -44,5 +44,14 @@
   "streets.lessonCount": "{{count}} درس",
   "streets.lessonCount_plural": "{{count}} دروس",
   "streets.translateModule": "ترجمة إلى {{lang}}",
-  "streets.translating": "جارٍ الترجمة..."
+  "streets.translating": "جارٍ الترجمة...",
+  "streets.emptyState.headline": "كل مطور يملك بنية تحتية لا يدفع له أحد مقابلها.",
+  "streets.emptyState.body": "STREETS يحوّل ذلك إلى دخل — 7 وحدات، كل واحدة محرك إيرادات. ابدأ من أي مكان.",
+  "streets.sidebar.S": "أساس دخلك",
+  "streets.sidebar.T": "ابنِ ما لا يستطيع المنافسون نسخه",
+  "streets.sidebar.R": "حوّل مهاراتك إلى دخل متكرر",
+  "streets.sidebar.E1": "أطلق وبِع، بشكل منهجي",
+  "streets.sidebar.E2": "ميزتك اليومية في ساعتين",
+  "streets.sidebar.T2": "اكسب وأنت نائم",
+  "streets.sidebar.S2": "ضاعف ما ينجح"
 }

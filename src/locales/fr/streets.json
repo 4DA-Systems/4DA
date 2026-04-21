@@ -38,5 +38,14 @@
   "streets.tierEnterprise": "Enterprise",
   "streets.language": "Langue de la leçon",
   "streets.translateModule": "Traduire en {{lang}}",
-  "streets.translating": "Traduction en cours..."
+  "streets.translating": "Traduction en cours...",
+  "streets.emptyState.headline": "Chaque développeur possède une infrastructure que personne ne rémunère.",
+  "streets.emptyState.body": "STREETS transforme ça en revenus — 7 modules, chacun un moteur de chiffre d'affaires. Commencez où vous voulez.",
+  "streets.sidebar.S": "Votre socle de revenus",
+  "streets.sidebar.T": "Construisez ce que vos concurrents ne peuvent pas copier",
+  "streets.sidebar.R": "Transformez vos compétences en revenus récurrents",
+  "streets.sidebar.E1": "Livrez et vendez, méthodiquement",
+  "streets.sidebar.E2": "Votre avantage quotidien de 2 heures",
+  "streets.sidebar.T2": "Gagnez pendant que vous dormez",
+  "streets.sidebar.S2": "Capitalisez sur ce qui marche"
 }
