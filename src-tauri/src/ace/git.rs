@@ -22,13 +22,17 @@ const GIT_TIMEOUT_SECS: u64 = 30;
 fn run_git_with_timeout(args: &[&str], repo_path: &Path) -> Result<std::process::Output> {
     use std::process::Stdio;
 
-    let mut child = Command::new("git")
-        .args(args)
+    let mut cmd = Command::new("git");
+    cmd.args(args)
         .current_dir(repo_path)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .context("Failed to spawn git process")?;
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let mut child = cmd.spawn().context("Failed to spawn git process")?;
 
     // Poll for completion with timeout
     let start = std::time::Instant::now();

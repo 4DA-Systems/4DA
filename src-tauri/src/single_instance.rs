@@ -218,9 +218,13 @@ fn is_process_alive_windows(pid: u32) -> bool {
     // tasklist is present on every Windows SKU since XP. We prefer it to
     // OpenProcess because it doesn't require additional features on
     // windows-sys and can't accidentally keep a handle open.
-    let output = Command::new("tasklist")
-        .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
-        .output();
+    let mut cmd = Command::new("tasklist");
+    cmd.args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]);
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output();
 
     match output {
         Ok(out) if out.status.success() => {

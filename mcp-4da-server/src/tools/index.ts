@@ -206,3 +206,13 @@ export {
   ecosystemPulseTool,
   executeEcosystemPulse,
 } from "./ecosystem-pulse.js";
+
+export {
+  dependencyHealthTool,
+  executeDependencyHealth,
+} from "./dependency-health.js";
+
+export {
+  upgradePlannerTool,
+  executeUpgradePlanner,
+} from "./upgrade-planner.js";

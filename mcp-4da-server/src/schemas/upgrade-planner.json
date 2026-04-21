@@ -1,0 +1,22 @@
+{
+  "name": "upgrade_planner",
+  "description": "Ranked upgrade recommendations for project dependencies. Combines vulnerability severity, deprecation status, and version distance to produce a prioritized upgrade plan.\n\nShows quick wins (safe patch/minor upgrades) separately from breaking changes (major version bumps). Use this after dependency_health to plan your upgrade strategy.\n\nPrivacy: uses cached registry data. No additional network calls beyond what dependency_health already fetched.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "include_dev": {
+        "type": "boolean",
+        "description": "Include devDependencies. Default: false."
+      },
+      "max_recommendations": {
+        "type": "number",
+        "description": "Maximum recommendations to return. Default: 20."
+      },
+      "risk_threshold": {
+        "type": "string",
+        "enum": ["all", "low", "medium", "high", "critical"],
+        "description": "Only show upgrades at or above this risk level. Default: all."
+      }
+    }
+  }
+}
