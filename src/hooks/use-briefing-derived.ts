@@ -75,15 +75,15 @@ export function useBriefingDerived(
 
   // Critical/alert signal items for action cards.
   //
-  // Items with a "Critical:" signal_action prefix render in the
-  // persistent `CriticalAlertBanner` at the top of the view — those are
+  // Items with `is_critical_alert === true` render in the persistent
+  // `CriticalAlertBanner` at the top of the view — those are
   // intentionally excluded from this card strip so the same item doesn't
   // appear twice (banner AND card) with conflicting score framings.
   const signalItems = useMemo(() => {
     return results
       .filter(r =>
         (r.signal_priority === 'critical' || r.signal_priority === 'alert')
-        && !(r.signal_action?.startsWith('Critical:') ?? false),
+        && !(r.is_critical_alert === true),
       )
       .slice(0, 3);
   }, [results]);
@@ -98,8 +98,7 @@ export function useBriefingDerived(
         && !signalIds.has(r.id)
         // Also hide banner-owned critical items from top picks —
         // they live in the amber banner, not in the top-picks strip.
-        && !(r.signal_priority === 'critical'
-             && (r.signal_action?.startsWith('Critical:') ?? false)),
+        && !(r.is_critical_alert === true),
       )
       .slice(0, 8);
   }, [results, signalItems]);
