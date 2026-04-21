@@ -2,7 +2,7 @@
 
 Comprehensive, ready-to-paste copy for every MCP directory and listing platform.
 
-**Package:** [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) v4.1.1
+**Package:** [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) v4.2.0
 **Last updated:** 2026-04-21
 
 ---

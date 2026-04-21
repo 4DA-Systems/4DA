@@ -78,15 +78,25 @@ export function executeExportContextPacket(
   const exclusions = exclusionRows.map((r) => r.topic);
 
   // Get detected tech from ACE
-  const detectedTechRows = rawDb
-    .prepare("SELECT DISTINCT name FROM detected_tech ORDER BY confidence DESC LIMIT 15")
-    .all() as SimpleNameRow[];
+  let detectedTechRows: SimpleNameRow[] = [];
+  try {
+    detectedTechRows = rawDb
+      .prepare("SELECT DISTINCT name FROM detected_tech ORDER BY confidence DESC LIMIT 15")
+      .all() as SimpleNameRow[];
+  } catch {
+    // detected_tech table may not exist
+  }
   const detectedTech = detectedTechRows.map((r) => r.name);
 
   // Get active topics
-  const activeTopicRows = rawDb
-    .prepare("SELECT DISTINCT topic FROM active_topics ORDER BY last_seen DESC LIMIT 10")
-    .all() as SimpleTopicRow[];
+  let activeTopicRows: SimpleTopicRow[] = [];
+  try {
+    activeTopicRows = rawDb
+      .prepare("SELECT DISTINCT topic FROM active_topics ORDER BY last_seen DESC LIMIT 10")
+      .all() as SimpleTopicRow[];
+  } catch {
+    // active_topics table may not exist
+  }
   const activeTopics = activeTopicRows.map((r) => r.topic);
 
   // Get open signals from temporal events (signals are computed at runtime, not stored in source_items)

@@ -86,10 +86,39 @@ export function executeSourceHealth(
   const startDate = new Date(endDate.getTime() - hours * 60 * 60 * 1000);
 
   // Get all sources or specific one
-  const sourcesStmt = dbInstance.prepare(`
-    SELECT DISTINCT source_type FROM source_items
-  `);
-  const allSources = (sourcesStmt.all() as { source_type: string }[]).map(s => s.source_type);
+  let allSources: string[] = [];
+  try {
+    const sourcesStmt = dbInstance.prepare(`
+      SELECT DISTINCT source_type FROM source_items
+    `);
+    allSources = (sourcesStmt.all() as { source_type: string }[]).map(s => s.source_type);
+  } catch {
+    // source_items table may not exist in standalone mode
+  }
+
+  if (allSources.length === 0 && !source) {
+    return {
+      analysis_period: {
+        start: startDate.toISOString(),
+        end: endDate.toISOString(),
+        hours,
+      },
+      overall_status: "healthy" as const,
+      sources: [],
+      summary: {
+        total_sources: 0,
+        healthy: 0,
+        degraded: 0,
+        failing: 0,
+        total_items_24h: 0,
+      },
+      global_recommendations: [
+        "No content sources found. Install the 4DA desktop app to ingest content from Hacker News, GitHub, arXiv, and more.",
+        "Vulnerability scanning works independently — try the vulnerability_scan tool.",
+      ],
+    };
+  }
+
   const sourcesToAnalyze = source ? [source] : allSources;
 
   const sourceStatuses: SourceStatus[] = [];
