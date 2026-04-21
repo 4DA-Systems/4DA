@@ -89,4 +89,18 @@ created_at: string | null,
 /**
  * BCP-47 language code detected from content (e.g. "en", "es", "ja")
  */
-detected_lang: string, };
+detected_lang: string, 
+/**
+ * Whether this item should display in the critical alert banner.
+ * Only true when: SecurityAlert + dep_match >= 0.40 + non-dev + correct ecosystem.
+ * Frontend routes on this field instead of parsing signal_action strings.
+ */
+is_critical_alert: boolean, 
+/**
+ * Applicability assessment for security items
+ */
+applicability: string | null, 
+/**
+ * Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234")
+ */
+advisory_id: string | null, };

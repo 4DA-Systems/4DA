@@ -134,4 +134,40 @@ advisor_signals: Array<AdvisorSignal>,
  *
  * `None` means agreement or no advisor opinion was produced.
  */
-disagreement: DisagreementKind | null, };
+disagreement: DisagreementKind | null, 
+/**
+ * Advisory source authority (e.g. "GHSA", "RustSec", "npm_advisory", "OSV")
+ */
+advisory_source: string | null, 
+/**
+ * CVSS score (0.0-10.0) from the advisory
+ */
+cvss_score: number | null, 
+/**
+ * CVSS severity label ("critical", "high", "medium", "low")
+ */
+cvss_severity: string | null, 
+/**
+ * Affected version range from advisory (e.g. "< 3.0.0")
+ */
+affected_versions: string | null, 
+/**
+ * Fixed version from advisory (e.g. "3.0.1")
+ */
+fixed_version: string | null, 
+/**
+ * User's installed version from lockfile (e.g. "2.8.1")
+ */
+installed_version: string | null, 
+/**
+ * Whether installed version falls within the affected range
+ */
+is_version_affected: boolean | null, 
+/**
+ * Dependency path description ("direct" | "transitive via X" | "dev-only")
+ */
+dependency_path: string | null, 
+/**
+ * How many of the user's scanned projects are affected
+ */
+affected_project_count: number | null, };
