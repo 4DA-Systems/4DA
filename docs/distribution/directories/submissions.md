@@ -2,8 +2,8 @@
 
 Comprehensive, ready-to-paste copy for every MCP directory and listing platform.
 
-**Package:** [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) v4.0.1
-**Last updated:** 2026-03-11
+**Package:** [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) v4.1.1
+**Last updated:** 2026-04-21
 
 ---
 
@@ -211,7 +211,7 @@ Add @4da/mcp-server — 36 tools for codebase-aware developer intelligence
 | Category | Developer Tools |
 | Tags | developer-intelligence, content-scoring, privacy-first, codebase-awareness, decision-memory, knowledge-gaps |
 | License | MIT |
-| Tool Count | 30 |
+| Tool Count | 36 |
 
 ---
 
@@ -380,7 +380,7 @@ MIT
 | Category | Developer Tools |
 | Tags | developer-intelligence, content-scoring, privacy-first, local-first, codebase-awareness, decision-memory |
 | License | MIT |
-| Tool Count | 30 |
+| Tool Count | 36 |
 
 ---
 
