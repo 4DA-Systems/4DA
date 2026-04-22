@@ -19,13 +19,14 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
     let guard = manager.lock();
     let license = &guard.get().license;
 
+    let dev_unlock = cfg!(debug_assertions) && license.dev_unlock_all;
+
     // Extract expiry from license key payload if present.
     // Self-signed keys (4DA-...) embed expiry in the payload.
     // Keygen keys (BE3529-...) don't — trust the stored tier and use cached validation.
     let (expires_at, days_remaining, expired) = if license.license_key.is_empty() {
         (None, 0, false)
     } else if license.license_key.starts_with("4DA-") {
-        // Self-signed ed25519 key — verify and extract embedded expiry
         match crate::settings::verify_license_key(&license.license_key) {
             Ok(payload) => {
                 if let Ok(exp) = chrono::DateTime::parse_from_rfc3339(&payload.expires_at) {
@@ -36,11 +37,10 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
                     (Some(payload.expires_at), 0, false)
                 }
             }
-            Err(_) => (None, 0, true), // Signature invalid — treat as expired
+            Err(_) if dev_unlock => (None, 365, false),
+            Err(_) => (None, 0, true),
         }
     } else {
-        // Keygen API key — trust stored tier (validated at activation time).
-        // Background re-validation happens via the periodic license check.
         (None, 0, false)
     };
 
