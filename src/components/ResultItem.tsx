@@ -73,7 +73,8 @@ export const ResultItem = memo(function ResultItem({
 
   const feedback = feedbackGiven[item.id];
   const isTopPick = item.top_score >= 0.72;
-  const { summary, summaryLoading, summaryError, generateSummary } = useItemSummary(item.id, isExpanded);
+  const autoGenerate = itemIndex != null && itemIndex < 3;
+  const { summary, summaryLoading, summaryError, generateSummary } = useItemSummary(item.id, isExpanded, { autoGenerate });
 
   // Extract topics from title for behavior tracking
   const itemTopics = useMemo(() =>

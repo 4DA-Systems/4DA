@@ -728,6 +728,116 @@ pub async fn snooze_item(
     }))
 }
 
+/// Watch an item — resurface when new signals arrive for the same topic
+#[tauri::command]
+pub async fn watch_item(
+    source_item_id: i64,
+    topic: String,
+    title: String,
+) -> Result<serde_json::Value> {
+    validate_input_length(&topic, "Watch topic", 200)?;
+    validate_input_length(&title, "Watch title", 500)?;
+    let conn = crate::state::open_db_connection()?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS watched_items (
+            source_item_id INTEGER PRIMARY KEY,
+            topic TEXT NOT NULL,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )",
+        [],
+    )
+    .map_err(|e| format!("Failed to create watched_items table: {e}"))?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO watched_items (source_item_id, topic, title)
+         VALUES (?1, ?2, ?3)",
+        rusqlite::params![source_item_id, topic, title],
+    )
+    .map_err(|e| format!("Failed to watch item: {e}"))?;
+
+    debug!(target: "4da::context", item_id = source_item_id, topic = %topic, "Watching item");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "topic": topic
+    }))
+}
+
+/// Remove an item from watched list
+#[tauri::command]
+pub async fn unwatch_item(source_item_id: i64) -> Result<serde_json::Value> {
+    let conn = crate::state::open_db_connection()?;
+
+    conn.execute(
+        "DELETE FROM watched_items WHERE source_item_id = ?1",
+        rusqlite::params![source_item_id],
+    )
+    .map_err(|e| format!("Failed to unwatch item: {e}"))?;
+
+    Ok(serde_json::json!({ "success": true }))
+}
+
+/// Get all currently watched items
+#[tauri::command]
+pub async fn get_watched_items() -> Result<serde_json::Value> {
+    let conn = crate::state::open_db_connection()?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS watched_items (
+            source_item_id INTEGER PRIMARY KEY,
+            topic TEXT NOT NULL,
+            title TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )",
+        [],
+    )
+    .map_err(|e| format!("Failed to create watched_items table: {e}"))?;
+
+    let mut stmt = conn
+        .prepare("SELECT source_item_id, topic, title, created_at FROM watched_items ORDER BY created_at DESC")
+        .map_err(|e| format!("Failed to query watched items: {e}"))?;
+
+    let items: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "source_item_id": row.get::<_, i64>(0)?,
+                "topic": row.get::<_, String>(1)?,
+                "title": row.get::<_, String>(2)?,
+                "created_at": row.get::<_, String>(3)?,
+            }))
+        })
+        .map_err(|e| format!("Failed to read watched items: {e}"))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(serde_json::json!({ "watched_items": items }))
+}
+
+/// Set blind spot detection sensitivity
+#[tauri::command]
+pub async fn set_blind_spot_sensitivity(sensitivity: String) -> Result<serde_json::Value> {
+    let valid = ["aggressive", "normal", "relaxed"];
+    if !valid.contains(&sensitivity.as_str()) {
+        return Err(format!("Invalid sensitivity: {sensitivity}. Must be one of: {}", valid.join(", ")).into());
+    }
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    guard.get_mut().blind_spot_sensitivity = sensitivity.clone();
+    guard.save()?;
+    Ok(serde_json::json!({ "success": true, "sensitivity": sensitivity }))
+}
+
+/// Get blind spot detection sensitivity
+#[tauri::command]
+pub async fn get_blind_spot_sensitivity() -> Result<serde_json::Value> {
+    let manager = get_settings_manager();
+    let guard = manager.lock();
+    let sensitivity = guard.get().blind_spot_sensitivity.clone();
+    Ok(serde_json::json!({ "sensitivity": sensitivity }))
+}
+
 /// Get locale configuration
 #[tauri::command]
 pub async fn get_locale() -> Result<serde_json::Value> {

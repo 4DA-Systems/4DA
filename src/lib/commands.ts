@@ -245,6 +245,11 @@ interface CommandMap {
   trigger_briefing_preview: { params: Record<string, never>; result: { message: string } };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
   snooze_item: { params: { sourceItemId: number; days: number }; result: { success: boolean; snooze_days: number } };
+  watch_item: { params: { sourceItemId: number; topic: string; title: string }; result: { success: boolean; topic: string } };
+  unwatch_item: { params: { sourceItemId: number }; result: { success: boolean } };
+  get_watched_items: { params: Record<string, never>; result: { watched_items: Array<{ source_item_id: number; topic: string; title: string; created_at: string }> } };
+  set_blind_spot_sensitivity: { params: { sensitivity: string }; result: { success: boolean; sensitivity: string } };
+  get_blind_spot_sensitivity: { params: Record<string, never>; result: { sensitivity: string } };
 
   // -- Taste Test Calibration --
   taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };
