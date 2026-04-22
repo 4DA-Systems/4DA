@@ -36,11 +36,11 @@ export function SecurityTriageButtons({ item, onTriaged }: Props) {
           : triageAction === 'accepted_risk' ? 'text-amber-400'
           : 'text-text-muted'
         }>
-          {triageAction === 'investigating' ? t('triage.investigating', 'Investigating')
-          : triageAction === 'fixed' ? t('triage.fixed', 'Fixed')
-          : triageAction === 'not_applicable' ? t('triage.notApplicable', 'Not applicable')
-          : triageAction === 'accepted_risk' ? t('triage.riskAccepted', 'Risk accepted')
-          : t('triage.snoozed', 'Snoozed 7d')}
+          {triageAction === 'investigating' ? t('triage.investigating')
+          : triageAction === 'fixed' ? t('triage.fixed')
+          : triageAction === 'not_applicable' ? t('triage.notApplicable')
+          : triageAction === 'accepted_risk' ? t('triage.riskAccepted')
+          : t('triage.snoozed')}
         </span>
       </div>
     );
@@ -49,10 +49,19 @@ export function SecurityTriageButtons({ item, onTriaged }: Props) {
   return (
     <div className="flex items-center gap-1 mb-3">
       <button
-        onClick={() => handleTriage('investigating')}
+        onClick={() => {
+          if (item.url) {
+            import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+              void openUrl(item.url!);
+            }).catch(() => {
+              window.open(item.url!, '_blank', 'noopener,noreferrer');
+            });
+          }
+          handleTriage('investigating');
+        }}
         className="px-2 py-1 text-[11px] rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
       >
-        {t('triage.investigate', 'Investigate')}
+        {item.url ? t('triage.openAdvisory', 'Open advisory') : t('triage.investigate', 'Investigate')}
       </button>
       <button
         onClick={() => handleTriage('fixed')}

@@ -158,13 +158,13 @@ export function ResultItemExpanded({
       )}
 
       {/* Why This Matters - Full Display */}
-      {item.explanation && (
+      {item.explanation && !item.explanation.includes('No judgment provided by LLM') && (
         <div className="mb-3 p-2 bg-bg-primary/50 rounded border border-accent-gold/30">
           <div className="text-xs text-accent-gold font-medium mb-1">
             {t('results.whyThisMatters')}
           </div>
           <div className="text-xs text-text-secondary leading-relaxed">
-            {item.explanation}
+            {item.explanation.replace(/^Filtered:\s*/i, '')}
           </div>
         </div>
       )}
