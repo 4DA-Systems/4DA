@@ -37,6 +37,8 @@ pub(crate) struct NecessityInputs {
     pub affected_project_count: usize,
     /// Skill gap boost from sovereign profile
     pub skill_gap_boost: f32,
+    /// Which skill gaps were matched (dep names)
+    pub matched_skill_gaps: Vec<String>,
     /// Decision window boost (active decision affected)
     pub window_boost: f32,
     /// Hours since content was published
@@ -393,9 +395,17 @@ fn try_blind_spot_path(
     }
 
     let score = 0.40 + inputs.skill_gap_boost;
+    let reason = if inputs.matched_skill_gaps.is_empty() {
+        "Covers a gap in your technology profile".to_string()
+    } else {
+        format!(
+            "You use {} but haven't engaged with recent updates",
+            inputs.matched_skill_gaps.join(", ")
+        )
+    };
     Some((
         score,
-        "Covers a skill gap in your technology profile".to_string(),
+        reason,
         NecessityCategory::BlindSpot,
         Urgency::Awareness,
     ))
@@ -420,6 +430,7 @@ mod tests {
             cvss_score: None,
             affected_project_count: 0,
             skill_gap_boost: 0.0,
+            matched_skill_gaps: vec![],
             window_boost: 0.0,
             age_hours: 0.0,
             content_type: None,

@@ -126,7 +126,11 @@ export const useResultFilters = () => {
 
     deduped.sort((a, b) => {
       if (sortBy === 'score') {
-        return b.top_score - a.top_score;
+        const aN = a.score_breakdown?.necessity_score ?? 0;
+        const bN = b.score_breakdown?.necessity_score ?? 0;
+        const aComposite = a.top_score + aN * 0.4;
+        const bComposite = b.top_score + bN * 0.4;
+        return bComposite - aComposite;
       }
       if (sortBy === 'priority') {
         const aPrio = priorityOrder[a.signal_priority ?? 'watch'] ?? 4;

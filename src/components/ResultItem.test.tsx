@@ -219,6 +219,7 @@ describe('ResultItem', () => {
       />,
     );
 
+    fireEvent.click(screen.getByLabelText('feedback.moreActions'));
     fireEvent.click(screen.getByText('action.dismiss'));
     expect(onRecord).toHaveBeenCalledWith(item.id, 'dismiss', item);
   });
