@@ -1211,6 +1211,7 @@
   "triage.riskAccepted": "Risk accepted",
   "triage.snoozed": "Snoozed 7d",
   "triage.acceptRiskTooltip": "Accept risk for 30 days",
+  "feedback.moreActions": "More actions",
   "feedback.suppressTopic": "Suppress",
   "feedback.topicSuppressed": "Suppressing '{{topic}}' — matching content will be filtered out.",
   "feedback.suppressFailed": "Failed to suppress topic",
