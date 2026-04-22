@@ -211,7 +211,16 @@ export function ResultItemExpanded({
 
       {/* Context Matches — top match inline, rest collapsible */}
       {item.matches.length > 0 && (() => {
-        const topMatch = item.matches[0]!;
+        const sorted = [...item.matches].sort((a, b) => {
+          const aProof = /\b(package\.json|Cargo\.toml|go\.mod|requirements\.txt|Gemfile|\.lock)\b/i.test(a.source_file) ? 1 : 0;
+          const bProof = /\b(package\.json|Cargo\.toml|go\.mod|requirements\.txt|Gemfile|\.lock)\b/i.test(b.source_file) ? 1 : 0;
+          if (aProof !== bProof) return bProof - aProof;
+          const aDoc = /\b(README|CHANGELOG|LICENSE|\.md)\b/i.test(a.source_file) ? 1 : 0;
+          const bDoc = /\b(README|CHANGELOG|LICENSE|\.md)\b/i.test(b.source_file) ? 1 : 0;
+          if (aDoc !== bDoc) return aDoc - bDoc;
+          return b.similarity - a.similarity;
+        });
+        const topMatch = sorted[0]!;
         return (
         <div className="mb-3">
           <div className="text-xs text-text-muted mb-1.5">
@@ -228,14 +237,14 @@ export function ResultItemExpanded({
               </span>
             </div>
           </div>
-          {item.matches.length > 1 && (
+          {sorted.length > 1 && (
             <details className="group mt-1">
               <summary className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-text-muted hover:text-text-secondary transition-colors list-none">
                 <span className="group-open:rotate-90 transition-transform">&#9654;</span>
-                {item.matches.length - 1} more
+                {sorted.length - 1} more
               </summary>
               <ul className="mt-1 space-y-1">
-                {item.matches.slice(1).map((match, i) => (
+                {sorted.slice(1).map((match, i) => (
                   <li key={i} className="text-xs bg-bg-primary rounded p-2 border border-border/30">
                     <div className="flex items-center gap-2">
                       <span className={`font-mono ${getScoreColor(match.similarity)}`}>

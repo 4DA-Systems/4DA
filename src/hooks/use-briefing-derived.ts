@@ -88,7 +88,8 @@ export function useBriefingDerived(
       .slice(0, 3);
   }, [results]);
 
-  // Top picks (exclude signal items AND banner items to avoid duplicates).
+  // Top picks — sorted by actionability (necessity × relevance) so security
+  // CVEs with matched deps always outrank generic awareness items.
   const topItems = useMemo(() => {
     const signalIds = new Set(signalItems.map(s => s.id));
     return results
@@ -96,10 +97,15 @@ export function useBriefingDerived(
         r.relevant
         && r.top_score >= 0.5
         && !signalIds.has(r.id)
-        // Also hide banner-owned critical items from top picks —
-        // they live in the amber banner, not in the top-picks strip.
         && !(r.is_critical_alert === true),
       )
+      .sort((a, b) => {
+        const aN = a.score_breakdown?.necessity_score ?? 0;
+        const bN = b.score_breakdown?.necessity_score ?? 0;
+        const aScore = a.top_score + aN * 0.4;
+        const bScore = b.top_score + bN * 0.4;
+        return bScore - aScore;
+      })
       .slice(0, 8);
   }, [results, signalItems]);
 
