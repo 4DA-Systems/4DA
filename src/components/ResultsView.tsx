@@ -428,7 +428,6 @@ export function ResultsView({
                         item={item}
                         isExpanded={expandedItem === item.id}
                         isFocused={focusedIndex === idx}
-                        isNew={newItemIds.has(item.id)}
                         onToggleExpand={handleToggleExpand}
                         feedbackGiven={feedbackGiven}
                         onRecordInteraction={recordInteraction}

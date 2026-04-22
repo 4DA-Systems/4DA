@@ -4,16 +4,11 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
 import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
-import { ScoreBreakdownRow } from './ScoreBreakdownRow';
 import { FeedbackButtons } from './FeedbackButtons';
 import { SecurityTriageButtons } from './SecurityTriageButtons';
-import { StreetsEngineLink } from './StreetsEngineLink';
 
 interface ResultItemExpandedProps {
   item: SourceRelevance;
-  isNew?: boolean;
-  isTopPick: boolean;
-  isHighConfidence: boolean;
   feedback: FeedbackAction | undefined;
   onRecordInteraction: (itemId: number, actionType: FeedbackAction, item: SourceRelevance) => void;
   summary: string | null;
@@ -24,9 +19,6 @@ interface ResultItemExpandedProps {
 
 export function ResultItemExpanded({
   item,
-  isNew,
-  isTopPick,
-  isHighConfidence,
   feedback,
   onRecordInteraction,
   summary,
@@ -145,6 +137,17 @@ export function ResultItemExpanded({
         </div>
       )}
 
+      {/* Feedback / Triage Buttons */}
+      {item.score_breakdown?.necessity_category === 'security_vulnerability' ? (
+        <SecurityTriageButtons item={item} />
+      ) : (
+        <FeedbackButtons
+          item={item}
+          feedback={feedback}
+          onRecordInteraction={onRecordInteraction}
+        />
+      )}
+
       {/* AI Summary */}
       <div className="mb-3">
         {summary ? (
@@ -167,9 +170,6 @@ export function ResultItemExpanded({
         )}
       </div>
 
-      {/* STREETS Revenue Engine Connection */}
-      <StreetsEngineLink item={item} />
-
       {/* Article Reader */}
       <ArticleReader
         itemId={item.id}
@@ -177,56 +177,66 @@ export function ResultItemExpanded({
         contentType={item.score_breakdown?.content_type}
       />
 
-      {/* Quality Indicators */}
-      <ScoreBreakdownRow
-        item={item}
-        isNew={isNew}
-        isTopPick={isTopPick}
-        isHighConfidence={isHighConfidence}
-      />
-
-      {/* Feedback / Triage Buttons */}
-      {item.score_breakdown?.necessity_category === 'security_vulnerability' ? (
-        <SecurityTriageButtons item={item} />
-      ) : (
-        <FeedbackButtons
-          item={item}
-          feedback={feedback}
-          onRecordInteraction={onRecordInteraction}
-        />
-      )}
-
-      <div className="text-xs text-text-muted mb-2 font-medium">
-        {t('results.topMatches')}
-      </div>
-      <ul className="space-y-2">
-        {item.matches.map((match, i) => (
-          <li
-            key={i}
-            className="text-xs bg-bg-primary rounded p-2 border border-border/30"
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`font-mono ${getScoreColor(match.similarity)}`} aria-label={`Match score: ${formatScore(match.similarity)}`}>
-                {formatScore(match.similarity)}
+      {/* Context Matches — top match inline, rest collapsible */}
+      {item.matches.length > 0 && (() => {
+        const topMatch = item.matches[0]!;
+        return (
+        <div className="mb-3">
+          <div className="text-xs text-text-muted mb-1.5">
+            {t('results.contextMatches', { count: item.matches.length })}
+          </div>
+          <div className="text-xs bg-bg-primary rounded p-2 border border-border/30">
+            <div className="flex items-center gap-2">
+              <span className={`font-mono ${getScoreColor(topMatch.similarity)}`}>
+                {formatScore(topMatch.similarity)}
               </span>
-              <span className="text-text-muted">-&gt;</span>
-              <span className="text-accent-gold font-medium">
-                {match.source_file}
+              <span className="text-text-muted">&rarr;</span>
+              <span className="text-accent-gold font-medium truncate">
+                {topMatch.source_file}
               </span>
             </div>
-            <div className="text-text-secondary ps-12 leading-relaxed">
-              "{match.matched_text}"
-            </div>
-          </li>
-        ))}
-      </ul>
+          </div>
+          {item.matches.length > 1 && (
+            <details className="group mt-1">
+              <summary className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-text-muted hover:text-text-secondary transition-colors list-none">
+                <span className="group-open:rotate-90 transition-transform">&#9654;</span>
+                {item.matches.length - 1} more
+              </summary>
+              <ul className="mt-1 space-y-1">
+                {item.matches.slice(1).map((match, i) => (
+                  <li key={i} className="text-xs bg-bg-primary rounded p-2 border border-border/30">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono ${getScoreColor(match.similarity)}`}>
+                        {formatScore(match.similarity)}
+                      </span>
+                      <span className="text-text-muted">&rarr;</span>
+                      <span className="text-accent-gold font-medium truncate">
+                        {match.source_file}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
+        );
+      })()}
 
-      {/* Score Autopsy Component */}
-      <ScoreAutopsy
-        itemId={item.id}
-        sourceType={item.source_type || 'hackernews'}
-        currentScore={item.top_score}
-      />
+      {/* Score Details (Tier 3 — on demand) */}
+      <details className="group">
+        <summary className="flex items-center gap-2 cursor-pointer select-none text-xs text-text-muted hover:text-text-secondary transition-colors list-none">
+          <span className="text-[10px] group-open:rotate-90 transition-transform">&#9654;</span>
+          {t('results.scoreDetails', 'Score details')}
+        </summary>
+        <div className="mt-2">
+          <ScoreAutopsy
+            itemId={item.id}
+            sourceType={item.source_type || 'hackernews'}
+            currentScore={item.top_score}
+          />
+        </div>
+      </details>
     </div>
   );
 }
