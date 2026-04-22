@@ -593,6 +593,8 @@ pub fn is_low_quality_signal(title: &str) -> bool {
         "weekend project",
         "pet project",
         "built with",
+        "built on top of",
+        "built on the top of",
         "made with",
         "powered by",
     ];
