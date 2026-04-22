@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useState, useEffect, useCallback } from 'react';
+import { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { isSafeUrl } from '../../utils/sanitize-html';
@@ -11,7 +11,6 @@ interface FeedbackButtonsProps {
   item: SourceRelevance;
   feedback: FeedbackAction | undefined;
   onRecordInteraction: (itemId: number, actionType: FeedbackAction, item: SourceRelevance) => void;
-  /** Optional: session save count to display as badge on save button */
   sessionSaveCount?: number;
 }
 
@@ -19,8 +18,9 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
   const { t } = useTranslation();
   const [savePulse, setSavePulse] = useState(false);
   const [dismissFlash, setDismissFlash] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
-  // Clear save pulse after 600ms — uses rAF to ensure the glow renders before starting the timer
   useEffect(() => {
     if (!savePulse) return;
     let timeout: ReturnType<typeof setTimeout>;
@@ -33,12 +33,22 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     };
   }, [savePulse]);
 
-  // Clear dismiss flash after 400ms
   useEffect(() => {
     if (!dismissFlash) return;
     const timeout = setTimeout(() => setDismissFlash(false), 400);
     return () => clearTimeout(timeout);
   }, [dismissFlash]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const close = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [moreOpen]);
 
   const handleSave = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -56,6 +66,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
   const handleDismiss = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setDismissFlash(true);
+    setMoreOpen(false);
     onRecordInteraction(item.id, 'dismiss', item);
     recordTrustEvent({
       eventType: 'dismissed',
@@ -90,6 +101,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
 
   const handleSuppress = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setMoreOpen(false);
     const topic = extractTopic();
     void cmd('add_exclusion', { topic }).then(() => {
       useAppStore.getState().addToast('success', t('feedback.topicSuppressed', { topic }));
@@ -108,6 +120,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
 
   const handleWatch = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setMoreOpen(false);
     const topic = extractTopic();
     void cmd('watch_item', { sourceItemId: item.id, topic, title: item.title }).then(() => {
       useAppStore.getState().addToast('success', t('feedback.watchAdded', { topic }));
@@ -125,17 +138,17 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
 
   const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setMoreOpen(false);
     const scorePercent = Math.round((item.top_score ?? 0) * 100);
     const text = `${item.title} — Scored ${scorePercent}% by 4DA (https://4da.ai)`;
     navigator.clipboard.writeText(text).then(() => {
       useAppStore.getState().addToast('success', t('feedback.shareCopied'));
-    }).catch(() => {
-      // Clipboard write failed silently
-    });
+    }).catch(() => {});
   }, [item.title, item.top_score, t]);
 
   return (
-    <div className="flex gap-2 mb-3" role="group" aria-label={t('feedback.actions')}>
+    <div className="flex items-center gap-2 mb-3" role="group" aria-label={t('feedback.actions')}>
+      {/* Primary actions */}
       {item.url && isSafeUrl(item.url) && (
         <button
           onClick={(e) => {
@@ -179,7 +192,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
           transition: 'box-shadow 0.6s ease-out',
         }}
       >
-        {feedback === 'save' ? `\u2713 ${t('feedback.saved')}` : t('action.save')}
+        {feedback === 'save' ? `✓ ${t('feedback.saved')}` : t('action.save')}
         {sessionSaveCount != null && sessionSaveCount > 0 && (
           <span
             className="absolute -top-1.5 -end-1.5 min-w-[16px] h-4 px-1 text-[10px] leading-4 text-center bg-success text-white rounded-full font-mono"
@@ -188,24 +201,6 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
             {sessionSaveCount}
           </span>
         )}
-      </button>
-      <button
-        onClick={handleDismiss}
-        disabled={!!feedback}
-        aria-label={feedback === 'dismiss' ? t('feedback.dismissed') : t('action.dismiss')}
-        className={`px-3 py-1.5 text-xs rounded font-medium transition-all duration-200 ${
-          dismissFlash
-            ? 'opacity-50'
-            : ''
-        } ${
-          feedback === 'dismiss'
-            ? 'bg-text-muted/20 text-text-muted cursor-default'
-            : feedback
-            ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
-            : 'bg-bg-tertiary text-text-secondary hover:bg-border'
-        }`}
-      >
-        {feedback === 'dismiss' ? `\u2717 ${t('feedback.dismissed')}` : t('action.dismiss')}
       </button>
       <button
         onClick={handleSnooze}
@@ -243,39 +238,59 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
             : 'bg-error/10 text-error/80 hover:bg-error/20 hover:text-error'
         }`}
       >
-        {feedback === 'mark_irrelevant' ? `\u2298 ${t('feedback.marked')}` : t('feedback.notRelevant')}
+        {feedback === 'mark_irrelevant' ? `⊘ ${t('feedback.marked')}` : t('feedback.notRelevant')}
       </button>
-      <button
-        onClick={handleSuppress}
-        disabled={!!feedback}
-        aria-label={t('feedback.suppressTopic')}
-        className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
-          feedback
-            ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
-            : 'bg-purple-500/10 text-purple-400/80 hover:bg-purple-500/20 hover:text-purple-400'
-        }`}
-      >
-        {t('feedback.suppressTopic')}
-      </button>
-      <button
-        onClick={handleWatch}
-        disabled={!!feedback}
-        aria-label={t('feedback.watchItem')}
-        className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
-          feedback
-            ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
-            : 'bg-cyan-500/10 text-cyan-400/80 hover:bg-cyan-500/20 hover:text-cyan-400'
-        }`}
-      >
-        {t('feedback.watchItem')}
-      </button>
-      <button
-        onClick={handleShare}
-        aria-label={`${t('action.share')}: ${item.title}`}
-        className="px-2.5 py-1 text-xs rounded font-medium bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
-      >
-        {t('action.share')}
-      </button>
+
+      {/* Overflow menu — secondary actions */}
+      <div className="relative" ref={moreRef}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setMoreOpen(v => !v); }}
+          aria-label={t('feedback.moreActions', 'More actions')}
+          aria-expanded={moreOpen}
+          className="px-2 py-1.5 text-xs rounded font-medium bg-bg-tertiary text-text-muted hover:bg-border hover:text-text-secondary transition-colors"
+        >
+          &middot;&middot;&middot;
+        </button>
+        {moreOpen && (
+          <div className="absolute bottom-full mb-1 end-0 z-50 min-w-[140px] py-1 bg-bg-secondary border border-border rounded-lg shadow-lg">
+            <button
+              onClick={handleDismiss}
+              disabled={!!feedback}
+              className={`w-full text-start px-3 py-1.5 text-xs hover:bg-bg-tertiary transition-colors ${
+                dismissFlash ? 'opacity-50' : ''
+              } ${
+                feedback === 'dismiss'
+                  ? 'text-text-muted'
+                  : feedback
+                  ? 'text-text-muted opacity-40'
+                  : 'text-text-secondary'
+              }`}
+            >
+              {feedback === 'dismiss' ? `✗ ${t('feedback.dismissed')}` : t('action.dismiss')}
+            </button>
+            <button
+              onClick={handleSuppress}
+              disabled={!!feedback}
+              className="w-full text-start px-3 py-1.5 text-xs text-purple-400 hover:bg-bg-tertiary transition-colors disabled:opacity-40"
+            >
+              {t('feedback.suppressTopic')}
+            </button>
+            <button
+              onClick={handleWatch}
+              disabled={!!feedback}
+              className="w-full text-start px-3 py-1.5 text-xs text-cyan-400 hover:bg-bg-tertiary transition-colors disabled:opacity-40"
+            >
+              {t('feedback.watchItem')}
+            </button>
+            <button
+              onClick={handleShare}
+              className="w-full text-start px-3 py-1.5 text-xs text-blue-400 hover:bg-bg-tertiary transition-colors"
+            >
+              {t('action.share')}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 });

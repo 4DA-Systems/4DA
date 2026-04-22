@@ -211,15 +211,19 @@ export function ResultItemExpanded({
 
       {/* Context Matches — top match inline, rest collapsible */}
       {item.matches.length > 0 && (() => {
-        const sorted = [...item.matches].sort((a, b) => {
-          const aProof = /\b(package\.json|Cargo\.toml|go\.mod|requirements\.txt|Gemfile|\.lock)\b/i.test(a.source_file) ? 1 : 0;
-          const bProof = /\b(package\.json|Cargo\.toml|go\.mod|requirements\.txt|Gemfile|\.lock)\b/i.test(b.source_file) ? 1 : 0;
-          if (aProof !== bProof) return bProof - aProof;
-          const aDoc = /\b(README|CHANGELOG|LICENSE|\.md)\b/i.test(a.source_file) ? 1 : 0;
-          const bDoc = /\b(README|CHANGELOG|LICENSE|\.md)\b/i.test(b.source_file) ? 1 : 0;
-          if (aDoc !== bDoc) return aDoc - bDoc;
-          return b.similarity - a.similarity;
-        });
+        const isDoc = (f: string) => /\b(README|CHANGELOG|LICENSE|CONTRIBUTING)\b/i.test(f);
+        const sorted = [...item.matches]
+          .filter(m => !(isDoc(m.source_file) && m.similarity < 0.60))
+          .sort((a, b) => {
+            const aProof = /\b(package\.json|Cargo\.toml|go\.mod|requirements\.txt|Gemfile|\.lock)\b/i.test(a.source_file) ? 1 : 0;
+            const bProof = /\b(package\.json|Cargo\.toml|go\.mod|requirements\.txt|Gemfile|\.lock)\b/i.test(b.source_file) ? 1 : 0;
+            if (aProof !== bProof) return bProof - aProof;
+            const aDoc = isDoc(a.source_file) ? 1 : 0;
+            const bDoc = isDoc(b.source_file) ? 1 : 0;
+            if (aDoc !== bDoc) return aDoc - bDoc;
+            return b.similarity - a.similarity;
+          });
+        if (sorted.length === 0) return null;
         const topMatch = sorted[0]!;
         return (
         <div className="mb-3">

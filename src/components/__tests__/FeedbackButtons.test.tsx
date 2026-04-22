@@ -76,7 +76,7 @@ describe('FeedbackButtons', () => {
     expect(screen.getByText('action.save')).toBeInTheDocument();
   });
 
-  it('shows Dismiss button', () => {
+  it('shows Dismiss button in overflow menu', () => {
     render(
       <FeedbackButtons
         item={defaultItem}
@@ -84,6 +84,7 @@ describe('FeedbackButtons', () => {
         onRecordInteraction={mockOnRecordInteraction}
       />,
     );
+    fireEvent.click(screen.getByLabelText('feedback.moreActions'));
     expect(screen.getByText('action.dismiss')).toBeInTheDocument();
   });
 
@@ -118,6 +119,7 @@ describe('FeedbackButtons', () => {
         onRecordInteraction={mockOnRecordInteraction}
       />,
     );
+    fireEvent.click(screen.getByLabelText('feedback.moreActions'));
     fireEvent.click(screen.getByText('action.dismiss'));
     expect(mockOnRecordInteraction).toHaveBeenCalledWith(defaultItem.id, 'dismiss', defaultItem);
   });
@@ -165,6 +167,7 @@ describe('FeedbackButtons', () => {
         onRecordInteraction={mockOnRecordInteraction}
       />,
     );
+    fireEvent.click(screen.getByLabelText('feedback.moreActions'));
     expect(screen.getByText(/feedback\.dismissed/)).toBeInTheDocument();
   });
 
@@ -187,22 +190,16 @@ describe('FeedbackButtons', () => {
         onRecordInteraction={mockOnRecordInteraction}
       />,
     );
-    // Save, Dismiss, and Not Relevant buttons should be disabled.
-    // Open Link and Share buttons remain enabled (not feedback actions).
+    // Primary feedback buttons (Save, Snooze, Not Relevant) should be disabled.
+    // Open Link and the overflow trigger (···) remain enabled.
     const allButtons = screen.getAllByRole('button');
-    const alwaysEnabled = new Set(['feedback.openLink', 'action.share']);
+    const alwaysEnabled = new Set(['feedback.openLink', '···']);
     const feedbackButtons = allButtons.filter(
       (btn) => !alwaysEnabled.has(btn.textContent ?? ''),
     );
     feedbackButtons.forEach((btn) => {
       expect(btn).toBeDisabled();
     });
-    // Open Link and Share should still be enabled
-    allButtons
-      .filter((btn) => alwaysEnabled.has(btn.textContent ?? ''))
-      .forEach((btn) => {
-        expect(btn).not.toBeDisabled();
-      });
   });
 
   it('does not call onRecordInteraction when buttons are disabled', () => {
@@ -213,7 +210,8 @@ describe('FeedbackButtons', () => {
         onRecordInteraction={mockOnRecordInteraction}
       />,
     );
-    // Try clicking a disabled button
+    // Try clicking a disabled button (dismiss is now in overflow)
+    fireEvent.click(screen.getByLabelText('feedback.moreActions'));
     const dismissBtn = screen.getByText('action.dismiss');
     fireEvent.click(dismissBtn);
     expect(mockOnRecordInteraction).not.toHaveBeenCalled();

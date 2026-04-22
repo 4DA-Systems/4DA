@@ -1485,6 +1485,7 @@ pub(crate) fn score_item(
         cvss_score: None,   // Not directly available at this pipeline stage
         affected_project_count: count_affected_projects(db, &matched_dep_names),
         skill_gap_boost,
+        matched_skill_gaps: matched_skill_gaps.clone(),
         window_boost,
         age_hours,
         content_type: Some(content_type.slug().to_string()),
