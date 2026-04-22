@@ -508,7 +508,7 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
 /// Returns `true` if the title matches known low-quality patterns (tutorials,
 /// generic questions, off-topic personal/career content). Items mentioning
 /// CVE/GHSA/vulnerability are always kept regardless of other patterns.
-fn is_low_quality_signal(title: &str) -> bool {
+pub fn is_low_quality_signal(title: &str) -> bool {
     let lower = title.to_lowercase();
 
     // Never filter security-related items

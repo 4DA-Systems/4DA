@@ -9,6 +9,18 @@
 
 ## Active Terminals
 
+### T-SIGNAL-HARDENING-W4-2026-04-23
+
+**Scope:** Signal hardening Phases 2-6 — remaining recommendations.
+
+**Wave 4:** `src/components/ResultsView.tsx`, `src/components/KnowledgeGapsPanel.tsx`, `src-tauri/src/scoring/pipeline_v2.rs`
+**Wave 5:** `src/components/result-item/FeedbackButtons.tsx`, `src-tauri/src/commands.rs`
+**Wave 6:** `src-tauri/src/blind_spots.rs`, `src/components/result-item/ResultItemExpanded.tsx`
+
+**Commit Lock:** not held
+
+---
+
 ### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-27 COMPLETE, pushed to origin)
 
 **Scope:** Recovery of stuck Wave 12 SPDX commit. Previous terminal hung on
@@ -116,7 +128,6 @@ loss bug on that class of host — documented in the assessment doc so
 future readers questioning the verify overhead know why it stays.
 
 **Commit Lock:** not held
-
 
 <!-- T-PUBLIC-READY done (a3301906 + filter-repo → da8c87fa, 2026-04-18).
      Document Hygiene v2: mixed-dir allowlist + PII gate + public-readiness

@@ -56,6 +56,7 @@ const EXCEPTIONS = {
   'src/components/playbook/PlaybookView.test.tsx':         'Playbook tests — 15 tests for module navigation and progress',
   'src/components/SettingsModal.test.tsx':                  'Settings tests — comprehensive modal and tab interaction tests',
   'src/types/i18n-resources.d.ts':                         'Auto-generated i18n type declarations — regenerated via pnpm i18n:types',
+  'src/components/blindspots/BlindSpotsView.tsx':          'TEMP: grown with title-first UI, signal matching, and noise reduction in Intelligence Reconciliation. Extract signal grouping into a hook post-launch.',
 };
 
 const SCAN_DIRS = ['src', 'src-tauri/src'];

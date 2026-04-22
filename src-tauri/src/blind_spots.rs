@@ -106,9 +106,20 @@ struct DepCoverage {
 // Implementation
 // ============================================================================
 
+fn blind_spot_threshold_days() -> u32 {
+    let manager = crate::state::get_settings_manager();
+    let guard = manager.lock();
+    match guard.get().blind_spot_sensitivity.as_str() {
+        "aggressive" => 7,
+        "relaxed" => 30,
+        _ => 14,
+    }
+}
+
 /// Generate a comprehensive blind spot report.
 pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
     let conn = crate::open_db_connection()?;
+    let threshold_days = blind_spot_threshold_days();
 
     // 1. Get attention report (30-day window)
     let attention = crate::attention::generate_report(30)?;
@@ -119,8 +130,8 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
     // 3. Get all user dependencies with project coverage
     let deps = get_dependency_coverage(&conn)?;
 
-    // 4. Find uncovered dependencies (deps with no interaction in 14+ days)
-    let uncovered = find_uncovered_deps(&conn, &deps)?;
+    // 4. Find uncovered dependencies (deps with no interaction in threshold days)
+    let uncovered = find_uncovered_deps(&conn, &deps, threshold_days)?;
 
     // 5. Find stale topics from attention blind spots.
     // Only include topics with actual missed signals — a topic with
@@ -141,7 +152,7 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
         .collect();
 
     // 6. Find missed signals (high-relevance, not seen, older than feed window)
-    let missed = find_missed_signals(&conn, 14, &deps)?;
+    let missed = find_missed_signals(&conn, threshold_days, &deps)?;
 
     // 7. Generate recommendations
     let recommendations = generate_recommendations(&uncovered, &stale, &gaps);
@@ -246,6 +257,7 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
 fn find_uncovered_deps(
     conn: &rusqlite::Connection,
     deps: &[DepCoverage],
+    threshold_days: u32,
 ) -> Result<Vec<UncoveredDep>> {
     const MAX_DEPS_TO_PROCESS: usize = 50;
     const MIN_DEP_NAME_LEN: usize = 4;
@@ -264,13 +276,14 @@ fn find_uncovered_deps(
 
         let search_term = format!("%{}%", dep.package_name);
 
-        // Count available signals mentioning this dep in the last 14 days.
+        let window = format!("-{threshold_days} days");
+
         let available: u32 = conn
             .query_row(
                 "SELECT COUNT(*) FROM source_items
                  WHERE title LIKE ?1
-                   AND created_at >= datetime('now', '-14 days')",
-                params![search_term],
+                   AND created_at >= datetime('now', ?2)",
+                params![search_term, window],
                 |row| row.get(0),
             )
             .unwrap_or(0);
@@ -280,14 +293,13 @@ fn find_uncovered_deps(
             continue;
         }
 
-        // Count how many of those the user actually interacted with.
         let interacted: u32 = conn
             .query_row(
                 "SELECT COUNT(DISTINCT si.id) FROM source_items si
                  JOIN interactions i ON i.item_id = si.id
                  WHERE si.title LIKE ?1
-                   AND si.created_at >= datetime('now', '-14 days')",
-                params![search_term],
+                   AND si.created_at >= datetime('now', ?2)",
+                params![search_term, window],
                 |row| row.get(0),
             )
             .unwrap_or(0);
@@ -450,6 +462,9 @@ fn find_missed_signals(
 
     let mut signals: Vec<MissedSignal> = rows.flatten().collect();
 
+    // Filter low-quality noise: tutorials, beginner content, off-topic career posts.
+    signals.retain(|s| !crate::knowledge_decay::is_low_quality_signal(&s.title));
+
     // Populate `why_relevant` and `dep_name` by looking for dep mentions in titles.
     for signal in &mut signals {
         let (why, dep) =
@@ -573,20 +588,24 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
 }
 
 /// Cap per-dep diversity: at most `max_per_dep` signals per matched dep name.
-/// Signals with no dep_name are always kept (they passed on score alone).
+/// Signals with no dep_name are capped at 2 total — they passed on score alone
+/// and shouldn't dominate over dep-matched items.
 fn cap_per_dep(signals: Vec<MissedSignal>, max_per_dep: usize) -> Vec<MissedSignal> {
     use std::collections::HashMap;
+    const MAX_UNMATCHED: usize = 2;
     let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut unmatched_count = 0usize;
     signals
         .into_iter()
-        .filter(|s| {
-            match &s.dep_name {
-                Some(dep) => {
-                    let c = counts.entry(dep.to_lowercase()).or_insert(0);
-                    *c += 1;
-                    *c <= max_per_dep
-                }
-                None => true,
+        .filter(|s| match &s.dep_name {
+            Some(dep) => {
+                let c = counts.entry(dep.to_lowercase()).or_insert(0);
+                *c += 1;
+                *c <= max_per_dep
+            }
+            None => {
+                unmatched_count += 1;
+                unmatched_count <= MAX_UNMATCHED
             }
         })
         .collect()
@@ -1318,7 +1337,7 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
         reversibility: None,
         evidence: vec![citation],
         affected_projects: Vec::new(),
-        affected_deps: Vec::new(),
+        affected_deps: vec![t.topic.clone()],
         suggested_actions: vec![EvidenceAction {
             action_id: "investigate".to_string(),
             label: "Investigate".to_string(),
@@ -1669,7 +1688,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps).expect("must not SQL-error");
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).expect("must not SQL-error");
         assert_eq!(uncovered.len(), 1, "should flag as blind spot");
         let u = &uncovered[0];
 
@@ -1695,7 +1714,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps).unwrap();
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
             0,
@@ -1720,7 +1739,7 @@ mod tests {
             });
         }
 
-        let uncovered = find_uncovered_deps(&conn, &deps).unwrap();
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert!(
             uncovered.len() <= 50,
             "must cap at MAX_DEPS_TO_PROCESS=50, got {}",
@@ -1739,7 +1758,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps).unwrap();
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
             0,

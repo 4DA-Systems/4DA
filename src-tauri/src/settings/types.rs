@@ -751,6 +751,13 @@ pub struct Settings {
     /// Privacy settings for controlling data sent to cloud providers
     #[serde(default)]
     pub privacy: PrivacyConfig,
+    /// Blind spot detection sensitivity: "aggressive" (7d), "normal" (14d), "relaxed" (30d)
+    #[serde(default = "default_blind_spot_sensitivity")]
+    pub blind_spot_sensitivity: String,
+}
+
+fn default_blind_spot_sensitivity() -> String {
+    "normal".to_string()
 }
 
 impl std::fmt::Debug for Settings {
@@ -968,6 +975,7 @@ impl Default for Settings {
             team_relay: None,
             network: NetworkConfig::default(),
             privacy: PrivacyConfig::default(),
+            blind_spot_sensitivity: default_blind_spot_sensitivity(),
         }
     }
 }
