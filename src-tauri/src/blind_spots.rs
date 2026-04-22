@@ -1781,6 +1781,7 @@ mod tests {
                 created_at: "2026-04-11T00:00:00Z".to_string(),
                 why_relevant: String::new(),
                 dep_name: None,
+                was_shown: false,
             })
             .collect();
 
@@ -1953,6 +1954,7 @@ mod tests {
             created_at: "2026-04-10 14:30:00".into(),
             why_relevant: "Matches tokio in 2 of your projects".into(),
             dep_name: Some("tokio".into()),
+            was_shown: false,
         }
     }
 

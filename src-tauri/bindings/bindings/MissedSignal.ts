@@ -5,4 +5,9 @@ export type MissedSignal = { item_id: bigint, title: string, url: string | null,
  * The dependency name this signal relates to (if identified).
  * Used by the frontend to group missed signals under their coverage gap.
  */
-dep_name: string | null, };
+dep_name: string | null, 
+/**
+ * Whether the user has seen this item before (any interaction recorded).
+ * false = "New for you", true = "Blind Spot" (shown but never engaged).
+ */
+was_shown: boolean, };
