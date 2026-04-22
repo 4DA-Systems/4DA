@@ -109,12 +109,8 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
-    let settings = guard.get_mut();
-    // Store license key in platform keychain (best-effort — key also persists to disk).
-    // store_secret() always returns Ok(()) even on failure, so we verify with has_secret().
     if !license_key.is_empty() {
         let _ = crate::settings::keystore::store_secret("license_key", &license_key);
-        // Verify the keychain write actually stuck
         if !crate::settings::keystore::has_secret("license_key") {
             warn!(
                 target: "4da::license",
@@ -123,13 +119,17 @@ pub async fn activate_license(license_key: String) -> Result<serde_json::Value> 
             );
         }
     }
-    settings.license.license_key = license_key;
-    settings.license.tier = effective_tier.clone();
-    settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
-    // Clear trial state on paid activation — prevents double-trial exploit
-    // (user could otherwise downgrade and get another 14-day trial)
-    settings.license.trial_started_at = None;
+    let activated_at = chrono::Utc::now().to_rfc3339();
+    {
+        let settings = guard.get_mut();
+        settings.license.license_key = license_key.clone();
+        settings.license.tier = effective_tier.clone();
+        settings.license.activated_at = Some(activated_at.clone());
+        settings.license.trial_started_at = None;
+    }
     guard.save()?;
+
+    crate::settings::save_license_backup(&license_key, &effective_tier, &activated_at);
 
     info!(target: "4da::license", "License activated — tier: {}", effective_tier);
     crate::settings::clear_activation_rate_limit();
@@ -377,9 +377,16 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
                     let _ = crate::settings::keystore::store_secret("license_key", &license_key);
                     settings.license.license_key = license_key.clone();
                     settings.license.tier = effective_tier.clone();
-                    settings.license.activated_at = Some(chrono::Utc::now().to_rfc3339());
+                    let activated_at = chrono::Utc::now().to_rfc3339();
+                    settings.license.activated_at = Some(activated_at.clone());
                     settings.license.trial_started_at = None;
                     guard.save()?;
+
+                    crate::settings::save_license_backup(
+                        &license_key,
+                        &effective_tier,
+                        &activated_at,
+                    );
 
                     info!(target: "4da::license", tier = %effective_tier, "License recovered and activated via email lookup");
 

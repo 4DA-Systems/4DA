@@ -35,6 +35,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   const { t } = useTranslation();
   const { getTranslated } = useTranslatedContent();
   const displayTitle = getTranslated(String(item.id), item.title);
+  const expandedReason = !item.explanation ? fallbackReason : '';
   const scoreTooltip = useMemo(() => {
     const keys = getScoreFactorKeys(item);
     if (keys.length === 0) return undefined;
@@ -139,10 +140,10 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         </button>
       </div>
 
-      {/* Secondary row: explanation (only when expanded) */}
-      {isExpanded && (
+      {/* Secondary row: fallback reason (only when expanded and explanation is absent) */}
+      {isExpanded && expandedReason && (
         <div className="mt-1.5 text-xs text-text-secondary ps-[3.75rem]">
-          {item.explanation || fallbackReason}
+          {expandedReason}
         </div>
       )}
 

@@ -762,21 +762,31 @@ fn execute_single(command: &str) -> Result<CommandExecutionResult> {
 
     let child = if cfg!(windows) && is_powershell_cmdlet(program) {
         debug!("Routing PowerShell cmdlet via powershell.exe: {}", program);
-        std::process::Command::new("powershell.exe")
-            .args(["-NoProfile", "-NonInteractive", "-Command", command])
+        let mut cmd = std::process::Command::new("powershell.exe");
+        cmd.args(["-NoProfile", "-NonInteractive", "-Command", command])
             .envs(&env)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
+            .stderr(std::process::Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        cmd.spawn()
     } else {
         validate_command_program(program)?;
 
-        std::process::Command::new(program)
-            .args(args)
+        let mut cmd = std::process::Command::new(program);
+        cmd.args(args)
             .envs(&env)
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
+            .stderr(std::process::Stdio::piped());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        cmd.spawn()
     };
 
     let mut child =
