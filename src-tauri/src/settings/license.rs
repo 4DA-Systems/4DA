@@ -101,13 +101,12 @@ fn is_within_activation_grace(license: &LicenseConfig) -> bool {
     false
 }
 
-/// Check if a license key is available — in memory, keychain, or validation cache.
+/// Check if a license key is available — four-layer fallback chain.
 ///
-/// Three-layer fallback chain:
-/// 1. **In-memory** (loaded from settings.json at startup — fastest, most reliable since
-///    the key is now always persisted to disk)
-/// 2. **Keychain** (platform credential store — re-hydrates in-memory if found)
-/// 3. **Validation cache** (Keygen result — 7-day TTL, prevents downgrade during offline)
+/// 1. **In-memory** (loaded from settings.json at startup)
+/// 2. **Keychain** (platform credential store)
+/// 3. **Backup file** (license_backup.json — survives settings corruption/reset)
+/// 4. **Validation cache** (Keygen result — 90-day TTL, prevents offline downgrade)
 ///
 /// Returns true and re-hydrates `license` if ANY layer has the key.
 fn has_license_key_available(license: &mut LicenseConfig) -> bool {
@@ -130,7 +129,34 @@ fn has_license_key_available(license: &mut LicenseConfig) -> bool {
         }
     }
 
-    // Tertiary: check if we have a valid Keygen validation cache for a paid tier.
+    // Layer 3: backup file (separate from settings.json — survives settings corruption/reset)
+    if let Some(backup) = load_license_backup() {
+        if !backup.license_key.is_empty() {
+            if backup.license_key.starts_with("4DA-") {
+                if verify_license_key(&backup.license_key).is_ok() {
+                    info!(
+                        target: "4da::license",
+                        "Re-hydrated license key from backup file (ed25519 verified)"
+                    );
+                    license.license_key = backup.license_key;
+                    license.tier = backup.tier;
+                    license.activated_at = Some(backup.activated_at);
+                    return true;
+                }
+            } else {
+                info!(
+                    target: "4da::license",
+                    "Re-hydrated license key from backup file (Keygen format — trusted)"
+                );
+                license.license_key = backup.license_key;
+                license.tier = backup.tier;
+                license.activated_at = Some(backup.activated_at);
+                return true;
+            }
+        }
+    }
+
+    // Layer 4: check if we have a valid Keygen validation cache for a paid tier.
     // If the key was validated online recently, don't downgrade just because
     // both disk and keychain are temporarily unavailable.
     if let Some(cache) = load_validation_cache() {
@@ -220,6 +246,11 @@ fn maybe_revalidate_license() {
                 "Failed to persist re-hydrated license key to disk during periodic check"
             );
         }
+        save_license_backup(
+            &license.license_key,
+            &license.tier,
+            license.activated_at.as_deref().unwrap_or(""),
+        );
     }
 }
 
@@ -343,6 +374,18 @@ pub fn validate_license_on_startup() {
                 "Failed to persist re-hydrated license key to disk"
             );
         }
+        save_license_backup(
+            &license.license_key,
+            &license.tier,
+            license.activated_at.as_deref().unwrap_or(""),
+        );
+    } else if !license.license_key.is_empty() {
+        // Key is present and valid — ensure backup file exists
+        save_license_backup(
+            &license.license_key,
+            &license.tier,
+            license.activated_at.as_deref().unwrap_or(""),
+        );
     }
 
     // Record the startup validation timestamp so periodic re-checks
@@ -587,6 +630,79 @@ fn is_cache_valid(cache: &KeygenValidationCache, current_key: &str) -> bool {
         return age.num_hours() < VALIDATION_CACHE_HOURS as i64;
     }
     false
+}
+
+// ============================================================================
+// License Backup File (4th recovery layer)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LicenseBackup {
+    license_key: String,
+    tier: String,
+    activated_at: String,
+    backup_created_at: String,
+}
+
+fn backup_path() -> std::path::PathBuf {
+    let db_path = crate::state::get_db_path();
+    db_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("data"))
+        .join("license_backup.json")
+}
+
+pub fn save_license_backup(key: &str, tier: &str, activated_at: &str) {
+    if key.is_empty() {
+        return;
+    }
+    let backup = LicenseBackup {
+        license_key: key.to_string(),
+        tier: tier.to_string(),
+        activated_at: activated_at.to_string(),
+        backup_created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    let path = backup_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match serde_json::to_string_pretty(&backup) {
+        Ok(json) => {
+            if let Err(e) = std::fs::write(&path, &json) {
+                warn!(target: "4da::license", error = %e, "Failed to write license backup");
+            } else {
+                info!(target: "4da::license", "License backup saved");
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+                }
+            }
+        }
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, "Failed to serialize license backup");
+        }
+    }
+}
+
+fn load_license_backup() -> Option<LicenseBackup> {
+    let path = backup_path();
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(e) => {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!(target: "4da::license", error = %e, "Failed to read license backup");
+            }
+            return None;
+        }
+    };
+    match serde_json::from_str(&content) {
+        Ok(backup) => Some(backup),
+        Err(e) => {
+            warn!(target: "4da::license", error = %e, "Failed to parse license backup");
+            None
+        }
+    }
 }
 
 /// Validate a license key against the Keygen API.

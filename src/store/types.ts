@@ -400,6 +400,7 @@ export interface LicenseSlice {
   tier: 'free' | 'pro' | 'signal' | 'team' | 'enterprise';
   licenseKey: string;
   licenseLoading: boolean;
+  wasDowngraded: boolean;
   trialStatus: TrialStatus | null;
   expiresAt: string | null;
   daysRemaining: number;
