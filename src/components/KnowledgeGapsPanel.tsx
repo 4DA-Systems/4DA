@@ -143,15 +143,35 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                   </div>
                   );
                 })()}
-                {it.suggested_actions.length > 0 && (
+                {it.suggested_actions.length > 0 && (() => {
+                  const firstUrl = it.evidence.find(c => c.url)?.url;
+                  return (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {it.suggested_actions.map((action) => (
-                      <span key={action.action_id} className={`text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color} cursor-default`} title={action.description}>
-                        {action.label}
-                      </span>
+                      firstUrl ? (
+                        <button
+                          key={action.action_id}
+                          onClick={() => {
+                            import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
+                              void openUrl(firstUrl);
+                            }).catch(() => {
+                              window.open(firstUrl, '_blank', 'noopener,noreferrer');
+                            });
+                          }}
+                          className={`text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color} hover:brightness-125 transition-all cursor-pointer`}
+                          title={action.description}
+                        >
+                          {action.label} &#8599;
+                        </button>
+                      ) : (
+                        <span key={action.action_id} className={`text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color} cursor-default`} title={action.description}>
+                          {action.label}
+                        </span>
+                      )
                     ))}
                   </div>
-                )}
+                  );
+                })()}
                 <div className="text-[10px] text-text-muted mt-1">
                   {it.explanation} {projectPath && `· ${projectPath}`}
                 </div>

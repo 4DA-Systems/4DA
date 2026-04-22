@@ -79,10 +79,18 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     });
   }, [item, onRecordInteraction]);
 
+  const extractTopic = useCallback((): string => {
+    const deps = item.score_breakdown?.matched_deps;
+    if (deps && deps.length > 0) return deps[0]!;
+    const triggers = item.signal_triggers;
+    if (triggers && triggers.length > 0) return triggers[0]!;
+    const words = item.title.toLowerCase().split(/\s+/);
+    return words.find(w => w.length > 3 && !/^(this|that|from|with|have|been|will|what|when|where|about|into|your|more|some)$/.test(w)) || words[0] || 'unknown';
+  }, [item]);
+
   const handleSuppress = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const words = item.title.toLowerCase().split(/\s+/);
-    const topic = words.find(w => w.length > 3) || words[0] || 'unknown';
+    const topic = extractTopic();
     void cmd('add_exclusion', { topic }).then(() => {
       useAppStore.getState().addToast('success', t('feedback.topicSuppressed', { topic }));
       void useAppStore.getState().loadLearnedBehavior();
@@ -96,13 +104,12 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       topic: item.title,
       notes: `suppress_topic:${topic}`,
     });
-  }, [item, t]);
+  }, [item, t, extractTopic]);
 
   const handleWatch = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const words = item.title.toLowerCase().split(/\s+/);
-    const topic = words.find(w => w.length > 3) || words[0] || 'unknown';
-    cmd('watch_item', { sourceItemId: item.id, topic, title: item.title }).then(() => {
+    const topic = extractTopic();
+    void cmd('watch_item', { sourceItemId: item.id, topic, title: item.title }).then(() => {
       useAppStore.getState().addToast('success', t('feedback.watchAdded', { topic }));
     }).catch(() => {
       useAppStore.getState().addToast('warning', t('feedback.watchFailed'));
@@ -114,7 +121,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       topic: item.title,
       notes: `watch_topic:${topic}`,
     });
-  }, [item, t]);
+  }, [item, t, extractTopic]);
 
   const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
