@@ -21,6 +21,7 @@ import { ViewRouter } from './components/ViewRouter';
 import { UpdateBanner } from './components/UpdateBanner';
 import { HealthBanner } from './components/HealthBanner';
 import { CriticalAlertBanner } from './components/CriticalAlertBanner';
+import { LicenseRecoveryBanner } from './components/LicenseRecoveryBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
@@ -345,6 +346,8 @@ function App() {
         )}
 
         <main id="main-content">
+        {/* License recovery — non-dismissible until tier restored */}
+        <LicenseRecoveryBanner />
         {/* Critical security alerts — persistent until acknowledged */}
         <CriticalAlertBanner />
         {/* Health warnings — dismissible, only shows if issues found */}

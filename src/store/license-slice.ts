@@ -8,6 +8,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   tier: 'free',
   licenseKey: '',
   licenseLoading: false,
+  wasDowngraded: false,
   trialStatus: null,
   expiresAt: null,
   daysRemaining: 0,
@@ -17,17 +18,16 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
   loadLicense: async () => {
     try {
       const result = await cmd('get_license_tier');
-      const wasDowngraded = (result as Record<string, unknown>).was_downgraded === true;
+      const downgraded = (result as Record<string, unknown>).was_downgraded === true;
       set({
         tier: result.expired ? 'free' : result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',
         expiresAt: result.expires_at,
         daysRemaining: result.days_remaining,
         expired: result.expired,
+        wasDowngraded: downgraded,
       });
-      if (wasDowngraded) {
-        // Notify user that their tier was downgraded (license key missing/expired)
+      if (downgraded) {
         console.warn('[4DA] License tier was downgraded to free — key missing or expired');
-        get().addToast?.('warning', 'License issue: your Signal features have been deactivated. Re-enter your license key in Settings to restore access.');
       }
     } catch {
       set({ tier: 'free', expiresAt: null, daysRemaining: 0, expired: false });
@@ -45,13 +45,13 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
           tier: result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',
           licenseKey: key,
           licenseLoading: false,
+          wasDowngraded: false,
           expired: false,
           expiresAt: result.expires_at ?? null,
           daysRemaining: result.expires_at
             ? Math.max(0, Math.ceil((new Date(result.expires_at).getTime() - Date.now()) / 86400000))
             : 0,
         });
-        // Also refresh STREETS tier in case this key has STREETS features
         get().loadStreetsTier?.();
         return { ok: true };
       }
@@ -73,6 +73,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
           tier: result.tier as 'free' | 'pro' | 'signal' | 'team' | 'enterprise',
           licenseKey: result.license_key ?? '',
           licenseLoading: false,
+          wasDowngraded: false,
           expired: false,
           expiresAt: result.expires_at ?? null,
           daysRemaining: result.expires_at

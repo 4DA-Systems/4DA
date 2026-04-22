@@ -78,10 +78,14 @@ pub async fn toolkit_list_ports() -> Result<Vec<ListeningPort>> {
 
         #[cfg(target_os = "windows")]
         {
-            let output = Command::new("cmd")
-                .args(["/C", "netstat -ano -p TCP"])
-                .output()
-                .map_err(|e| FourDaError::Internal(format!("netstat failed: {e}")))?;
+            let output = {
+                use std::os::windows::process::CommandExt;
+                Command::new("cmd")
+                    .args(["/C", "netstat -ano -p TCP"])
+                    .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                    .output()
+                    .map_err(|e| FourDaError::Internal(format!("netstat failed: {e}")))?
+            };
 
             let stdout = String::from_utf8_lossy(&output.stdout);
             for line in stdout.lines().skip(4) {
@@ -180,9 +184,13 @@ fn get_process_name_win(pid: u32) -> String {
     if pid == 0 {
         return "System Idle".into();
     }
-    let output = Command::new("cmd")
-        .args(["/C", &format!("tasklist /FI \"PID eq {pid}\" /NH /FO CSV")])
-        .output();
+    let output = {
+        use std::os::windows::process::CommandExt;
+        Command::new("cmd")
+            .args(["/C", &format!("tasklist /FI \"PID eq {pid}\" /NH /FO CSV")])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output()
+    };
 
     match output {
         Ok(out) => {
@@ -228,9 +236,13 @@ pub async fn toolkit_kill_process(pid: u32) -> Result<String> {
 
     tokio::task::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
-        let result = Command::new("taskkill")
-            .args(["/F", "/PID", &pid.to_string()])
-            .output();
+        let result = {
+            use std::os::windows::process::CommandExt;
+            Command::new("taskkill")
+                .args(["/F", "/PID", &pid.to_string()])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+        };
 
         #[cfg(not(target_os = "windows"))]
         let result = Command::new("kill").args(["-9", &pid.to_string()]).output();
@@ -268,10 +280,14 @@ pub async fn toolkit_env_snapshot(working_dir: Option<String>) -> Result<EnvSnap
 
     tokio::task::spawn_blocking(move || {
         let run = |prog: &str, args: &[&str]| -> Option<String> {
-            Command::new(prog)
-                .args(args)
-                .current_dir(&work_dir)
-                .output()
+            let mut cmd = Command::new(prog);
+            cmd.args(args).current_dir(&work_dir);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            }
+            cmd.output()
                 .ok()
                 .filter(|o| o.status.success())
                 .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
@@ -279,9 +295,11 @@ pub async fn toolkit_env_snapshot(working_dir: Option<String>) -> Result<EnvSnap
 
         #[cfg(target_os = "windows")]
         let run_shell = |cmd: &str| -> Option<String> {
+            use std::os::windows::process::CommandExt;
             Command::new("cmd")
                 .args(["/C", cmd])
                 .current_dir(&work_dir)
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
                 .output()
                 .ok()
                 .filter(|o| o.status.success())
