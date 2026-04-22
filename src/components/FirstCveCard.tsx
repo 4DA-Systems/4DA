@@ -59,7 +59,7 @@ export function FirstCveCard({ cveId, packageName, severity, projectCount, minut
       </p>
       <div className="flex items-center gap-3">
         <button
-          onClick={() => { setActiveView('toolkit'); }}
+          onClick={() => { setActiveView('results'); }}
           className="px-4 py-2 text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors"
         >
           View Details

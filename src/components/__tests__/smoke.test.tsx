@@ -101,15 +101,6 @@ vi.mock('../../store', () => ({
         agentMemoryLoading: false,
         loadAgentMemories: vi.fn(),
 
-        // progressive disclosure
-        viewTier: 'core',
-        showAllViews: false,
-        analysisCycleCount: 0,
-        firstAnalysisDate: null,
-        setShowAllViews: vi.fn(),
-        incrementAnalysisCycle: vi.fn(),
-        computeViewTier: vi.fn(),
-
         // license
         tier: 'free',
         trialStatus: null,
