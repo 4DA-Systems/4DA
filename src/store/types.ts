@@ -107,32 +107,25 @@ export interface ToastSlice {
   removeToast: (id: number) => void;
 }
 
-export type ViewTier = 'core' | 'explorer' | 'invested' | 'power';
-
 export type EmbeddingStatus = 'active' | 'degraded' | 'unavailable';
+
+export type ActiveView = 'briefing' | 'results' | 'preemption' | 'blindspots' | 'playbook';
 
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
-  activeView: 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots' | 'evidence';
+  activeView: ActiveView;
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
   embeddingStatus: EmbeddingStatus | undefined;
-  viewTier: ViewTier;
-  showAllViews: boolean;
-  analysisCycleCount: number;
-  firstAnalysisDate: string | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
-  setActiveView: (view: 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console' | 'preemption' | 'blindspots' | 'evidence') => void;
+  setActiveView: (view: ActiveView) => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
   setEmbeddingStatus: (status: EmbeddingStatus | undefined) => void;
-  incrementAnalysisCycle: () => void;
-  setShowAllViews: (show: boolean) => void;
-  computeViewTier: () => void;
 }
 
 export interface ToolkitSlice {

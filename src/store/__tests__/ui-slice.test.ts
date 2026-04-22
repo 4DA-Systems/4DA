@@ -83,22 +83,14 @@ describe('ui-slice', () => {
       expect(useAppStore.getState().activeView).toBe('results');
     });
 
-    it('changes active view to saved', () => {
-      useAppStore.setState({ viewTier: 'invested' });
-      useAppStore.getState().setActiveView('saved');
-      expect(useAppStore.getState().activeView).toBe('saved');
-    });
-
     it('changes active view to preemption', () => {
-      useAppStore.setState({ viewTier: 'explorer' });
       useAppStore.getState().setActiveView('preemption');
       expect(useAppStore.getState().activeView).toBe('preemption');
     });
 
-    it('changes active view to toolkit', () => {
-      useAppStore.setState({ viewTier: 'power' });
-      useAppStore.getState().setActiveView('toolkit');
-      expect(useAppStore.getState().activeView).toBe('toolkit');
+    it('changes active view to blindspots', () => {
+      useAppStore.getState().setActiveView('blindspots');
+      expect(useAppStore.getState().activeView).toBe('blindspots');
     });
 
     it('changes active view to playbook', () => {
@@ -112,20 +104,11 @@ describe('ui-slice', () => {
       expect(useAppStore.getState().activeView).toBe('briefing');
     });
 
-    it('blocks navigation to views above current tier', () => {
-      useAppStore.setState({ viewTier: 'core', activeView: 'briefing' });
-      useAppStore.getState().setActiveView('preemption');
-      expect(useAppStore.getState().activeView).toBe('briefing');
-
-      useAppStore.setState({ viewTier: 'explorer', activeView: 'briefing' });
-      useAppStore.getState().setActiveView('saved');
-      expect(useAppStore.getState().activeView).toBe('briefing');
-    });
-
-    it('allows all views when showAllViews is true', () => {
-      useAppStore.setState({ viewTier: 'core', showAllViews: true });
+    it('rejects invalid view names', () => {
+      useAppStore.getState().setActiveView('briefing');
+      // @ts-expect-error — testing runtime rejection of removed view
       useAppStore.getState().setActiveView('toolkit');
-      expect(useAppStore.getState().activeView).toBe('toolkit');
+      expect(useAppStore.getState().activeView).toBe('briefing');
     });
   });
 
