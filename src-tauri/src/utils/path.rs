@@ -34,6 +34,18 @@ pub(crate) fn sanitize_path(path: &str) -> String {
     }
 }
 
+/// Extract just the project directory name from a full filesystem path.
+/// "D:\4DA" → "4DA", "/home/user/projects/myapp" → "myapp".
+/// Returns the last path segment, or the original string if no separator found.
+pub(crate) fn project_display_name(path: &str) -> &str {
+    let normalized = path.trim_end_matches(['/', '\\']);
+    normalized
+        .rsplit(['/', '\\'])
+        .next()
+        .filter(|s| !s.is_empty())
+        .unwrap_or(normalized)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -56,5 +68,30 @@ mod tests {
         // Should normalize and truncate
         assert!(result.contains("main.rs"));
         assert!(!result.contains("john"), "Should not reveal username");
+    }
+
+    #[test]
+    fn test_project_display_name_windows() {
+        assert_eq!(project_display_name("D:\\4DA"), "4DA");
+        assert_eq!(
+            project_display_name("D:\\runyourempire\\game-engine\\game-compiler"),
+            "game-compiler"
+        );
+    }
+
+    #[test]
+    fn test_project_display_name_unix() {
+        assert_eq!(project_display_name("/home/user/projects/myapp"), "myapp");
+    }
+
+    #[test]
+    fn test_project_display_name_trailing_slash() {
+        assert_eq!(project_display_name("D:\\4DA\\"), "4DA");
+        assert_eq!(project_display_name("/home/user/app/"), "app");
+    }
+
+    #[test]
+    fn test_project_display_name_bare_name() {
+        assert_eq!(project_display_name("myproject"), "myproject");
     }
 }

@@ -476,6 +476,7 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
             let normalized = normalize_gap_title(&item.title);
             seen_titles.insert(normalized) // true if this is NEW (not a duplicate)
         })
+        .filter(|item| !is_low_quality_signal(&item.title))
         .take(5)
         .collect();
 
@@ -500,6 +501,81 @@ fn has_word_boundary_match(text: &str, term: &str) -> bool {
         }
         search_from = abs_pos + 1;
     }
+    false
+}
+
+/// Reject low-value content that adds noise to missed-signal feeds.
+/// Returns `true` if the title matches known low-quality patterns (tutorials,
+/// generic questions, off-topic personal/career content). Items mentioning
+/// CVE/GHSA/vulnerability are always kept regardless of other patterns.
+fn is_low_quality_signal(title: &str) -> bool {
+    let lower = title.to_lowercase();
+
+    // Never filter security-related items
+    if lower.contains("cve-")
+        || lower.contains("ghsa-")
+        || lower.contains("vulnerability")
+        || lower.contains("vulnerabilities")
+    {
+        return false;
+    }
+
+    // --- Tutorial / beginner patterns ---
+    if lower.starts_with("how to ")
+        || lower.starts_with("introduction to ")
+        || lower.starts_with("learn ")
+        || lower.starts_with("crud ")
+        || lower.starts_with("what is ")
+    {
+        return true;
+    }
+
+    let tutorial_phrases = [
+        "tutorial:",
+        "tutorial -",
+        "beginner",
+        "beginners",
+        "getting started with",
+        "a beginner's guide",
+        "step by step",
+    ];
+    if tutorial_phrases.iter().any(|p| lower.contains(p)) {
+        return true;
+    }
+
+    // --- Generic question patterns ---
+    let question_phrases = [
+        "what's the best way to",
+        "how do i ",
+        "how can i ",
+        "is it possible to",
+        "what's the difference between",
+        "which is better",
+        "should i use",
+    ];
+    if question_phrases.iter().any(|p| lower.contains(p)) {
+        return true;
+    }
+
+    // --- Off-topic: personal / career content ---
+    let offtopic_words = [
+        "girlfriend",
+        "boyfriend",
+        "wife",
+        "husband",
+        "job",
+        "interview",
+        "resume",
+        "laid off",
+        "hiring",
+        "salary",
+        "pay raise",
+        "compensation",
+    ];
+    if offtopic_words.iter().any(|w| lower.contains(w)) {
+        return true;
+    }
+
     false
 }
 
