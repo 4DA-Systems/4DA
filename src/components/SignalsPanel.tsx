@@ -56,6 +56,44 @@ const SIGNAL_LABELS: Record<string, string> = {
   competitive_intel: 'Competitive',
 };
 
+interface LaneConfig {
+  key: string;
+  label: string;
+  icon: string;
+  color: string;
+  borderColor: string;
+  types: Set<string>;
+  priorityFilter?: Set<string>;
+}
+
+const LANES: LaneConfig[] = [
+  {
+    key: 'critical',
+    label: 'Critical Now',
+    icon: '🔴',
+    color: 'text-red-400',
+    borderColor: 'border-red-500/20',
+    types: new Set(['security_alert', 'breaking_change']),
+    priorityFilter: new Set(['critical', 'alert']),
+  },
+  {
+    key: 'stack',
+    label: 'Stack Updates',
+    icon: '📦',
+    color: 'text-amber-400',
+    borderColor: 'border-amber-500/20',
+    types: new Set(['security_alert', 'breaking_change', 'tool_discovery']),
+  },
+  {
+    key: 'learning',
+    label: 'Learning & Trends',
+    icon: '📈',
+    color: 'text-blue-400',
+    borderColor: 'border-blue-500/20',
+    types: new Set(['learning', 'tech_trend', 'competitive_intel']),
+  },
+];
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -67,7 +105,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const { isPro } = useLicense();
 
-  const { signals, filtered, typeCounts, priorityCounts } = useMemo(() => {
+  const { signals, filtered, typeCounts, priorityCounts, lanes } = useMemo(() => {
     const signals: SignalItem[] = results
       .filter((r) => r.signal_type && r.signal_priority && r.signal_action)
       .map((r) => ({
@@ -102,7 +140,21 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       priorityCounts[s.signal_priority] = (priorityCounts[s.signal_priority] || 0) + 1;
     }
 
-    return { signals, sorted, filtered, typeCounts, priorityCounts };
+    // Group filtered signals into lanes. Each signal goes into the first
+    // matching lane; "Critical Now" requires both type AND priority match.
+    const claimed = new Set<number>();
+    const lanes: { config: LaneConfig; items: SignalItem[] }[] = LANES.map((lane) => {
+      const items = filtered.filter((s) => {
+        if (claimed.has(s.id)) return false;
+        if (!lane.types.has(s.signal_type)) return false;
+        if (lane.priorityFilter && !lane.priorityFilter.has(s.signal_priority)) return false;
+        return true;
+      });
+      for (const item of items) claimed.add(item.id);
+      return { config: lane, items };
+    });
+
+    return { signals, sorted, filtered, typeCounts, priorityCounts, lanes };
   }, [results, typeFilter, priorityFilter]);
 
   if (signals.length === 0) return (
@@ -263,13 +315,32 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
             )}
           </div>
 
-          {/* Signal Items */}
-          <div className="space-y-2 max-h-[400px] overflow-y-auto" role="list" aria-label={t('signals.title')}>
+          {/* Signal Items — grouped by lane */}
+          <div className="space-y-4 max-h-[500px] overflow-y-auto" role="list" aria-label={t('signals.title')}>
             {filtered.length === 0 ? (
               <p className="text-center text-sm text-text-muted py-4">{t('signals.noMatch')}</p>
+            ) : (typeFilter || priorityFilter) ? (
+              /* When filters are active, show flat list (user is already narrowing) */
+              <div className="space-y-2">
+                {filtered.map((signal) => (
+                  <SignalRow key={signal.id} signal={signal} />
+                ))}
+              </div>
             ) : (
-              filtered.map((signal) => (
-                <SignalRow key={signal.id} signal={signal} />
+              /* Unfiltered: show grouped lanes */
+              lanes.filter((l) => l.items.length > 0).map((lane) => (
+                <div key={lane.config.key}>
+                  <div className={`flex items-center gap-2 mb-2 pb-1 border-b ${lane.config.borderColor}`}>
+                    <span className="text-xs" aria-hidden="true">{lane.config.icon}</span>
+                    <span className={`text-xs font-medium ${lane.config.color}`}>{lane.config.label}</span>
+                    <span className="text-[10px] text-text-muted">{lane.items.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {lane.items.map((signal) => (
+                      <SignalRow key={signal.id} signal={signal} />
+                    ))}
+                  </div>
+                </div>
               ))
             )}
           </div>
