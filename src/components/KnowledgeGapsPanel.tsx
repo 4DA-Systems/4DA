@@ -88,7 +88,8 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
             const cfg = URGENCY_CONFIG[it.urgency];
             const depName = depNameFromItem(it);
             const missedCount = it.evidence.filter(c => c.url !== null).length;
-            const projectPath = it.affected_projects[0] ?? '';
+            const rawPath = it.affected_projects[0] ?? '';
+            const projectPath = rawPath.split(/[/\\]/).filter(Boolean).pop() ?? rawPath;
             return (
               <div key={it.id} className={`px-4 py-3 rounded-lg border ${cfg.border} ${cfg.bg}`}>
                 <div className="flex items-center gap-2">

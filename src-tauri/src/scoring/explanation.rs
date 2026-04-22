@@ -21,6 +21,7 @@ pub(crate) fn generate_relevance_explanation(
     let mut used_topics: Vec<&str> = Vec::new();
 
     // 1. Declared tech stack matches (highest priority — user's explicit stack)
+    //    Enriched with version info from dependency_info when available.
     let declared_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
@@ -34,9 +35,22 @@ pub(crate) fn generate_relevance_explanation(
         })
         .collect();
     if !declared_hits.is_empty() {
-        let names: Vec<&str> = declared_hits.iter().copied().take(3).collect();
-        for &n in &names {
-            used_topics.push(n);
+        let names: Vec<String> = declared_hits
+            .iter()
+            .copied()
+            .take(3)
+            .map(|n| {
+                let nl = n.to_lowercase();
+                if let Some(info) = ace_ctx.dependency_info.get(&nl) {
+                    if let Some(ref v) = info.version {
+                        return format!("{n} v{v}");
+                    }
+                }
+                n.to_string()
+            })
+            .collect();
+        for hit in &declared_hits {
+            used_topics.push(hit);
         }
         parts.push(format!("Uses {} (your stack)", names.join(", ")));
     }
@@ -54,9 +68,20 @@ pub(crate) fn generate_relevance_explanation(
         .filter(|t| !used_topics.contains(t))
         .collect();
     if !detected_only_hits.is_empty() && declared_hits.is_empty() {
-        // Only show detected tech if no declared tech matched (avoid confusing "python (detected)" next to "rust (your stack)")
-        let names: Vec<&str> = detected_only_hits.iter().copied().take(2).collect();
-        for &n in &names {
+        let names: Vec<String> = detected_only_hits
+            .iter()
+            .copied()
+            .take(2)
+            .map(|n| {
+                if let Some(info) = ace_ctx.dependency_info.get(n) {
+                    if let Some(ref v) = info.version {
+                        return format!("{n} v{v}");
+                    }
+                }
+                n.to_string()
+            })
+            .collect();
+        for &n in &detected_only_hits {
             used_topics.push(n);
         }
         parts.push(format!(
@@ -139,14 +164,25 @@ pub(crate) fn generate_relevance_explanation(
         }
     }
 
-    // 6. Skill gap annotation — surfaces the intelligence loop to the user
+    // 6. Skill gap annotation — surfaces the intelligence loop to the user.
+    //    Dedup: skip techs already mentioned in the stack/detected section above
+    //    to avoid "Uses react (your stack) · Closes skill gap: react" redundancy.
     if !matched_skill_gaps.is_empty() {
-        let names: Vec<&str> = matched_skill_gaps
+        let new_gaps: Vec<&str> = matched_skill_gaps
             .iter()
             .map(std::string::String::as_str)
+            .filter(|g| {
+                let gl = g.to_lowercase();
+                !used_topics.iter().any(|u| u.to_lowercase() == gl)
+            })
             .take(3)
             .collect();
-        parts.push(format!("Closes skill gap: {}", names.join(", ")));
+        if !new_gaps.is_empty() {
+            parts.push(format!("Closes skill gap: {}", new_gaps.join(", ")));
+        } else if !parts.is_empty() {
+            // All gaps already covered by stack match — annotate the existing entry
+            parts.push("has unread updates".to_string());
+        }
     }
 
     // Return empty string instead of vague fallback — the frontend handles empty gracefully
@@ -487,6 +523,76 @@ mod tests {
         assert!(
             explanation.contains("Closes skill gap: tokio"),
             "Should also show skill gap: {}",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_declared_tech_with_version() {
+        use crate::scoring::dependencies::DepInfo;
+        let mut dep_info = std::collections::HashMap::new();
+        dep_info.insert(
+            "react".to_string(),
+            DepInfo {
+                package_name: "react".to_string(),
+                version: Some("18.3.1".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: vec![],
+            },
+        );
+        let ace_ctx = ACEContext {
+            dependency_info: dep_info,
+            ..Default::default()
+        };
+        let explanation = generate_relevance_explanation(
+            "React 19 Features",
+            0.2,
+            0.2,
+            &[],
+            &ace_ctx,
+            &["react".to_string()],
+            &[],
+            &["React".to_string()],
+            &[],
+        );
+        assert!(
+            explanation.contains("v18.3.1"),
+            "Should include version: {}",
+            explanation
+        );
+        assert!(
+            explanation.contains("your stack"),
+            "Should still mention stack: {}",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_skill_gap_dedup_with_stack() {
+        let ace_ctx = ACEContext {
+            detected_tech: vec!["react".to_string()],
+            ..Default::default()
+        };
+        let explanation = generate_relevance_explanation(
+            "React Patterns",
+            0.2,
+            0.2,
+            &[],
+            &ace_ctx,
+            &["react".to_string()],
+            &[],
+            &["React".to_string()],
+            &["react".to_string()],
+        );
+        assert!(
+            !explanation.contains("Closes skill gap: react"),
+            "Should NOT repeat react as skill gap when already in stack: {}",
+            explanation
+        );
+        assert!(
+            explanation.contains("has unread updates"),
+            "Should show 'has unread updates' annotation: {}",
             explanation
         );
     }
