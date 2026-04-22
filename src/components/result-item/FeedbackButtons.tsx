@@ -5,6 +5,7 @@ import type { SourceRelevance, FeedbackAction } from '../../types';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useAppStore } from '../../store';
 import { recordTrustEvent } from '../../lib/trust-feedback';
+import { cmd } from '../../lib/commands';
 
 interface FeedbackButtonsProps {
   item: SourceRelevance;
@@ -62,6 +63,19 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       sourceType: item.source_type || undefined,
       topic: item.title,
       notes: 'dismiss',
+    });
+  }, [item, onRecordInteraction]);
+
+  const handleSnooze = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onRecordInteraction(item.id, 'snooze', item);
+    cmd('snooze_item', { sourceItemId: item.id, days: 7 }).catch(() => {});
+    recordTrustEvent({
+      eventType: 'dismissed',
+      signalId: String(item.id),
+      sourceType: item.source_type || undefined,
+      topic: item.title,
+      notes: 'snoozed_7d',
     });
   }, [item, onRecordInteraction]);
 
@@ -148,6 +162,20 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         }`}
       >
         {feedback === 'dismiss' ? `\u2717 ${t('feedback.dismissed')}` : t('action.dismiss')}
+      </button>
+      <button
+        onClick={handleSnooze}
+        disabled={!!feedback}
+        aria-label={feedback === 'snooze' ? t('feedback.snoozed', 'Snoozed') : t('action.snooze', 'Snooze 7d')}
+        className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+          feedback === 'snooze'
+            ? 'bg-amber-500/20 text-amber-400 cursor-default'
+            : feedback
+            ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
+            : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20 hover:text-amber-400'
+        }`}
+      >
+        {feedback === 'snooze' ? `⏰ ${t('feedback.snoozed', 'Snoozed')}` : t('action.snooze', 'Snooze 7d')}
       </button>
       <button
         onClick={(e) => {

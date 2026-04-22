@@ -10,6 +10,7 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
   click: 0.05,
   dismiss: -0.10,
   mark_irrelevant: -0.20,
+  snooze: -0.05,
 };
 
 const STOP_WORDS = new Set([
