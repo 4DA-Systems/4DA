@@ -61,9 +61,9 @@ describe('FirstCveCard', () => {
     expect(localStorage.getItem('4da_first_cve_shown')).toBe('true');
   });
 
-  it('navigates to toolkit view on View Details click', () => {
+  it('navigates to signal view on View Details click', () => {
     render(<FirstCveCard {...defaultProps} />);
     fireEvent.click(screen.getByText('View Details'));
-    expect(mockSetActiveView).toHaveBeenCalledWith('toolkit');
+    expect(mockSetActiveView).toHaveBeenCalledWith('results');
   });
 });

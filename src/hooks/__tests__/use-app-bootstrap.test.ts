@@ -73,10 +73,8 @@ describe('useAppBootstrap store integration', () => {
     useAppStore.getState().setActiveView('briefing');
     expect(useAppStore.getState().activeView).toBe('briefing');
 
-    // 'saved' requires invested tier or higher
-    useAppStore.setState({ viewTier: 'invested' });
-    useAppStore.getState().setActiveView('saved');
-    expect(useAppStore.getState().activeView).toBe('saved');
+    useAppStore.getState().setActiveView('preemption');
+    expect(useAppStore.getState().activeView).toBe('preemption');
   });
 
   it('showOnlyRelevant toggles filter state', () => {

@@ -372,6 +372,8 @@
   "nav.briefing.label": "Brief",
   "nav.briefing.subtitle": "Your intelligence at a glance",
   "nav.results.subtitle": "Every item scored against your stack",
+  "nav.signal.label": "Signal",
+  "nav.signal.subtitle": "Your curated intelligence feed",
   "nav.saved.subtitle": "Your bookmarked items",
   "nav.toolkit.subtitle": "Score testing & debugging",
   "nav.playbook.subtitle": "Developer business course",

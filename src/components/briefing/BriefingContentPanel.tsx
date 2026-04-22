@@ -7,7 +7,7 @@ import { useTranslatedContent } from '../ContentTranslationProvider';
 import type { SourceRelevance, SourceHealthStatus, FeedbackAction } from '../../types';
 import type { BriefingState } from '../../store/types';
 
-type ActiveView = 'briefing' | 'results' | 'saved' | 'toolkit' | 'playbook' | 'profile' | 'calibrate' | 'console';
+import type { ActiveView } from '../../store/types';
 
 interface BriefingContentPanelProps {
   briefing: BriefingState;

@@ -97,7 +97,6 @@ function App() {
   const loadTrialStatus = useAppStore(s => s.loadTrialStatus);
   const loadProValueReport = useAppStore(s => s.loadProValueReport);
   const loadChannels = useAppStore(s => s.loadChannels);
-  const computeViewTier = useAppStore(s => s.computeViewTier);
   const setEmbeddingStatus = useAppStore(s => s.setEmbeddingStatus);
   const embeddingStatus = useAppStore(s => s.embeddingStatus);
 
@@ -212,11 +211,9 @@ function App() {
     loadLicense();
     loadTrialStatus();
     loadProValueReport();
-    // Compute progressive disclosure tier from persisted state
-    computeViewTier();
     // Prune stale personalization cache (non-blocking)
     cmd('prune_personalization_cache').catch((e) => console.debug('[App] prune cache:', e));
-  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport, computeViewTier]);
+  }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
   useAppListeners({

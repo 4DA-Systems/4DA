@@ -3,7 +3,6 @@ import { memo } from 'react';
 import type { MonitoringStatus } from '../../types/settings';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { LocaleSection } from './LocaleSection';
-import { ShowAllViewsToggle } from './ShowAllViewsToggle';
 import { MonitoringSection } from './MonitoringSection';
 import { DataHealthSection } from './DataHealthSection';
 import { SystemHealthSection } from './SystemHealthSection';
@@ -40,8 +39,6 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
         <PanelErrorBoundary name="Language">
           <LocaleSection />
         </PanelErrorBoundary>
-
-        <ShowAllViewsToggle />
 
         <PanelErrorBoundary name="Monitoring">
           <MonitoringSection
