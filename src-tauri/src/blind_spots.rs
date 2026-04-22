@@ -496,6 +496,41 @@ fn find_missed_signals(
     Ok(signals)
 }
 
+/// Classify a signal's content priority tier based on title text.
+/// Tier 4 = security, Tier 3 = breaking/deprecation, Tier 2 = releases,
+/// Tier 1 = everything else (blog, Q&A, showcase).
+fn title_priority_tier(title: &str) -> u8 {
+    let t = title.to_lowercase();
+    if t.contains("cve-")
+        || t.contains("vulnerability")
+        || t.contains("security advisory")
+        || t.contains("rce")
+        || t.contains("zero-day")
+        || t.contains("zeroday")
+        || t.contains("exploit")
+    {
+        return 4;
+    }
+    if t.contains("breaking change")
+        || t.contains("deprecated")
+        || t.contains("end of life")
+        || t.contains("eol")
+        || t.contains("migration guide")
+        || t.contains("drops support")
+    {
+        return 3;
+    }
+    if t.starts_with("npm:")
+        || t.starts_with("cargo:")
+        || t.starts_with("pypi:")
+        || t.contains("released")
+        || t.contains("announcing")
+    {
+        return 2;
+    }
+    1
+}
+
 /// Re-rank missed signals so high-urgency content surfaces above opinion/blog
 /// content, even when relevance scores are similar. Also caps older non-urgent
 /// content so the panel stays focused on recent-enough material.
@@ -503,45 +538,6 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
     const FINAL_LIMIT: usize = 15;
     const OLD_BLOG_CAP: usize = 3;
     const OLD_DAYS_THRESHOLD: i64 = 10;
-
-    // Classify each signal's priority tier based on title text.
-    // We don't have content_type stored on MissedSignal, so we re-run a quick
-    // title-only check for security / breaking-change / version markers.
-    fn priority_tier(title: &str) -> u8 {
-        let t = title.to_lowercase();
-        // Tier 4 (highest): security advisories
-        if t.contains("cve-")
-            || t.contains("vulnerability")
-            || t.contains("security advisory")
-            || t.contains("rce")
-            || t.contains("zero-day")
-            || t.contains("zeroday")
-            || t.contains("exploit")
-        {
-            return 4;
-        }
-        // Tier 3: breaking changes / deprecations
-        if t.contains("breaking change")
-            || t.contains("deprecated")
-            || t.contains("end of life")
-            || t.contains("eol")
-            || t.contains("migration guide")
-            || t.contains("drops support")
-        {
-            return 3;
-        }
-        // Tier 2: package-registry updates & named releases
-        if t.starts_with("npm:")
-            || t.starts_with("cargo:")
-            || t.starts_with("pypi:")
-            || t.contains("released")
-            || t.contains("announcing")
-        {
-            return 2;
-        }
-        // Tier 1: everything else (blog posts, Q&A, discussions)
-        1
-    }
 
     fn age_days(created_at: &str) -> i64 {
         chrono::DateTime::parse_from_rfc3339(created_at)
@@ -557,8 +553,8 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
 
     // Sort by (priority_tier DESC, relevance DESC).
     signals.sort_by(|a, b| {
-        let tier_a = priority_tier(&a.title);
-        let tier_b = priority_tier(&b.title);
+        let tier_a = title_priority_tier(&a.title);
+        let tier_b = title_priority_tier(&b.title);
         tier_b.cmp(&tier_a).then_with(|| {
             b.relevance_score
                 .partial_cmp(&a.relevance_score)
@@ -573,7 +569,7 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
         if kept.len() >= FINAL_LIMIT {
             break;
         }
-        let tier = priority_tier(&s.title);
+        let tier = title_priority_tier(&s.title);
         let age = age_days(&s.created_at);
         if tier == 1 && age > OLD_DAYS_THRESHOLD {
             if old_tier1_count >= OLD_BLOG_CAP {
@@ -923,6 +919,19 @@ fn compute_why_relevant(
         .collect();
     matched.sort_by_key(|b| std::cmp::Reverse(b.len()));
     matched.truncate(3);
+
+    // Roundup detection: if the title mentions 5+ distinct technology
+    // keywords (comma-separated lists, newsletter digests), it's a roundup
+    // — don't assign it to a single dep. The is_low_quality_signal filter
+    // catches "This Week In React" etc., but titles like "React, Vue,
+    // Angular, Svelte, Solid comparison" also need handling.
+    let comma_segments = title.split(',').count() + title.split('·').count();
+    if matched.len() >= 2 && comma_segments >= 5 {
+        return (
+            "Roundup article mentioning multiple technologies".to_string(),
+            None,
+        );
+    }
 
     if !matched.is_empty() {
         let first_dep = matched[0].to_string();
@@ -1366,16 +1375,22 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
         relevance_note: truncate_note(&m.why_relevant),
     };
 
-    // Missed signals come with a 0-1 relevance_score from upstream; map
-    // into Urgency via coarse thresholds. The schema's Urgency scale is
-    // not about relevance per se, but this is the cleanest mapping
-    // while we're pre-AWE-spine.
-    let urgency = if m.relevance_score >= 0.8 {
-        Urgency::High
-    } else if m.relevance_score >= 0.6 {
-        Urgency::Medium
-    } else {
-        Urgency::Watch
+    // Map urgency from content priority tier + relevance score.
+    // Tier 1 (generic blog/showcase) caps at Watch regardless of score.
+    // Tier 2 (registry releases) caps at Medium.
+    // Tier 3-4 (breaking changes, security) use score-based urgency.
+    let tier = title_priority_tier(&m.title);
+    let urgency = match tier {
+        4 => {
+            if m.relevance_score >= 0.7 { Urgency::Critical } else { Urgency::High }
+        }
+        3 => {
+            if m.relevance_score >= 0.8 { Urgency::High } else { Urgency::Medium }
+        }
+        2 => Urgency::Medium,
+        _ => {
+            if m.relevance_score >= 0.9 { Urgency::Medium } else { Urgency::Watch }
+        }
     };
 
     EvidenceItem {

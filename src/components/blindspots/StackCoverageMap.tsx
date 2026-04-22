@@ -111,8 +111,10 @@ const DepCoverageRow = memo(function DepCoverageRow({
         <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
         <span className="text-sm font-medium text-white flex-1 truncate">{dep.name}</span>
         {dep.projects.length > 0 && (
-          <span className="text-[10px] text-text-muted shrink-0">
-            {dep.projects.length} project{dep.projects.length === 1 ? '' : 's'}
+          <span className="text-[10px] text-text-muted shrink-0 truncate max-w-[120px]" title={dep.projects.join(', ')}>
+            {dep.projects.length <= 2
+              ? dep.projects.map(p => p.split('/').pop() ?? p).join(', ')
+              : `${dep.projects.length} projects`}
           </span>
         )}
         {dep.signals.length > 0 && (
@@ -142,11 +144,11 @@ const DepCoverageRow = memo(function DepCoverageRow({
                 </div>
               )}
             </div>
-          ) : (
-            <div className="px-4 py-3 text-xs text-text-muted italic">
-              No recent signals found — potential gap in source coverage.
+          ) : dep.gap ? (
+            <div className="px-4 py-3 text-xs text-text-muted">
+              {dep.gap.explanation}
             </div>
-          )}
+          ) : null}
         </div>
       )}
     </div>
