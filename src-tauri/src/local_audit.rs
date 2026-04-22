@@ -28,6 +28,16 @@ pub(crate) struct LocalAuditFinding {
     pub fix_version: Option<String>,
 }
 
+fn suppress_console_window(cmd: &mut Command) {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    cmd.stdin(std::process::Stdio::null());
+}
+
 // ============================================================================
 // npm audit
 // ============================================================================
@@ -51,8 +61,7 @@ pub(crate) async fn run_npm_audit(project_path: &Path) -> Vec<LocalAuditFinding>
             c.arg("npm");
             c
         };
-        #[cfg(windows)]
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        suppress_console_window(&mut cmd);
         cmd.output().await
     };
 
@@ -65,8 +74,7 @@ pub(crate) async fn run_npm_audit(project_path: &Path) -> Vec<LocalAuditFinding>
     let result = tokio::time::timeout(Duration::from_secs(30), async {
         let mut cmd = Command::new("npm");
         cmd.args(["audit", "--json"]).current_dir(project_path);
-        #[cfg(windows)]
-        cmd.creation_flags(0x08000000);
+        suppress_console_window(&mut cmd);
         cmd.output().await
     })
     .await;
@@ -183,8 +191,7 @@ pub(crate) async fn run_cargo_audit(project_path: &Path) -> Vec<LocalAuditFindin
     let check = {
         let mut cmd = Command::new("cargo");
         cmd.args(["audit", "--version"]);
-        #[cfg(windows)]
-        cmd.creation_flags(0x08000000);
+        suppress_console_window(&mut cmd);
         cmd.output().await
     };
 
@@ -197,8 +204,7 @@ pub(crate) async fn run_cargo_audit(project_path: &Path) -> Vec<LocalAuditFindin
     let result = tokio::time::timeout(Duration::from_secs(60), async {
         let mut cmd = Command::new("cargo");
         cmd.args(["audit", "--json"]).current_dir(project_path);
-        #[cfg(windows)]
-        cmd.creation_flags(0x08000000);
+        suppress_console_window(&mut cmd);
         cmd.output().await
     })
     .await;

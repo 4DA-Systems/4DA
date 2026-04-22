@@ -12,15 +12,18 @@ pub fn detect_system_locale() -> LocaleConfig {
     // Use PowerShell to query the system culture (e.g., "en-US", "de-DE").
     #[cfg(target_os = "windows")]
     {
-        if let Ok(output) = std::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-NonInteractive",
-                "-Command",
-                "(Get-Culture).Name",
-            ])
-            .output()
-        {
+        if let Ok(output) = {
+            use std::os::windows::process::CommandExt;
+            std::process::Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "(Get-Culture).Name",
+                ])
+                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                .output()
+        } {
             let culture = String::from_utf8_lossy(&output.stdout).trim().to_string();
             // culture is like "en-US", "de-DE", "ja-JP"
             if let Some((lang, country_raw)) = culture.split_once('-') {

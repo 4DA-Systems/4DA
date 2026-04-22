@@ -128,7 +128,13 @@ pub(super) fn run_cmd(cmd: &str) -> Result<String> {
     debug!(target: "4da::suns", cmd, "Running system command");
 
     #[cfg(target_os = "windows")]
-    let output = std::process::Command::new("cmd").args(["/C", cmd]).output();
+    let output = {
+        use std::os::windows::process::CommandExt;
+        std::process::Command::new("cmd")
+            .args(["/C", cmd])
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .output()
+    };
 
     #[cfg(not(target_os = "windows"))]
     let output = std::process::Command::new("sh").args(["-c", cmd]).output();
