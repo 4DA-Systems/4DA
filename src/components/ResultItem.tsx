@@ -41,7 +41,6 @@ interface ResultItemProps {
   item: SourceRelevance;
   isExpanded: boolean;
   isFocused?: boolean;
-  isNew?: boolean;
   onToggleExpand: (itemId: number) => void;
   feedbackGiven: FeedbackGiven;
   onRecordInteraction: (
@@ -61,7 +60,6 @@ export const ResultItem = memo(function ResultItem({
   item,
   isExpanded,
   isFocused,
-  isNew,
   onToggleExpand,
   feedbackGiven,
   onRecordInteraction,
@@ -75,7 +73,6 @@ export const ResultItem = memo(function ResultItem({
 
   const feedback = feedbackGiven[item.id];
   const isTopPick = item.top_score >= 0.72;
-  const isHighConfidence = (item.confidence ?? 0) >= 0.7;
   const { summary, summaryLoading, summaryError, generateSummary } = useItemSummary(item.id, isExpanded);
 
   // Extract topics from title for behavior tracking
@@ -163,9 +160,6 @@ export const ResultItem = memo(function ResultItem({
       {isExpanded && (
         <ResultItemExpanded
           item={item}
-          isNew={isNew}
-          isTopPick={isTopPick}
-          isHighConfidence={isHighConfidence}
           feedback={feedback}
           onRecordInteraction={onRecordInteraction}
           summary={summary}

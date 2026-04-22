@@ -124,10 +124,10 @@ describe('ResultItem', () => {
       />,
     );
 
-    // Expanded view shows "Top Matches:" label and match details
-    expect(screen.getByText('results.topMatches')).toBeInTheDocument();
+    // Expanded view shows context matches with source file and similarity score
+    expect(screen.getByText('results.contextMatches')).toBeInTheDocument();
     expect(screen.getByText('src/main.rs')).toBeInTheDocument();
-    expect(screen.getByText(/Relevant code snippet/)).toBeInTheDocument();
+    expect(screen.getByText('85%')).toBeInTheDocument();
   });
 
   it('does not show expanded details when collapsed', () => {
@@ -142,7 +142,7 @@ describe('ResultItem', () => {
       />,
     );
 
-    expect(screen.queryByText('results.topMatches')).not.toBeInTheDocument();
+    expect(screen.queryByText('results.contextMatches')).not.toBeInTheDocument();
   });
 
   it('shows expand indicator "+" when collapsed and "-" when expanded', () => {
