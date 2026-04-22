@@ -406,7 +406,9 @@ pub(crate) async fn apply_llm_reranking(
                     breakdown.disagreement = reconciled.disagreement;
                 }
 
-                if !judgment.reasoning.is_empty() {
+                if !judgment.reasoning.is_empty()
+                    && judgment.reasoning != "No judgment provided by LLM"
+                {
                     result.explanation = Some(judgment.reasoning.clone());
                 }
 
@@ -443,14 +445,18 @@ pub(crate) async fn apply_llm_reranking(
                     } else {
                         blended
                     };
-                    if !judgment.reasoning.is_empty() {
+                    if !judgment.reasoning.is_empty()
+                        && judgment.reasoning != "No judgment provided by LLM"
+                    {
                         result.explanation = Some(judgment.reasoning.clone());
                     }
                     confirmed += 1;
                 } else {
                     result.relevant = false;
                     result.top_score *= 0.15;
-                    result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
+                    if judgment.reasoning != "No judgment provided by LLM" {
+                        result.explanation = Some(format!("Filtered: {}", judgment.reasoning));
+                    }
                     rejected += 1;
                 }
             }
