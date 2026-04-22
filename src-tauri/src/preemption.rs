@@ -17,7 +17,6 @@ use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
 };
-use crate::knowledge_decay::GapSeverity;
 use crate::signal_chains::ChainResolution;
 
 // ============================================================================
@@ -113,7 +112,6 @@ pub struct PreemptionFeed {
 /// 2. Replace `compute_all_project_health` with a single batched JOIN query
 ///    that finds DIRECT deps mentioned in security-keyword source_items in
 ///    the last 30 days. One SQL round-trip vs ~8000 per-dep queries.
-/// 3. Knowledge gaps already has its own 50-dep cap (in `knowledge_decay.rs`).
 ///
 /// Target: under 5 seconds end-to-end on the production DB.
 pub fn get_preemption_feed() -> Result<PreemptionFeed> {
@@ -140,20 +138,6 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
         Err(e) => {
             warn!(target: "4da::preemption", error = %e, "Failed to fetch direct-dep security alerts")
         }
-    }
-
-    // ─── 3. Knowledge gaps as blind-spot alerts ──────────────────────────
-    match crate::knowledge_decay::detect_knowledge_gaps(&conn) {
-        Ok(gaps) => {
-            for gap in &gaps {
-                if gap.gap_severity == GapSeverity::Critical
-                    || gap.gap_severity == GapSeverity::High
-                {
-                    alerts.push(gap_to_alert(gap));
-                }
-            }
-        }
-        Err(e) => warn!(target: "4da::preemption", error = %e, "Failed to detect knowledge gaps"),
     }
 
     // Sort: Critical first, then High, Medium, Watch. Within same urgency, highest confidence first.
@@ -687,82 +671,6 @@ fn chain_to_alert(
     }
 }
 
-/// Convert a knowledge gap into a blind-spot preemption alert.
-fn gap_to_alert(gap: &crate::knowledge_decay::KnowledgeGap) -> PreemptionAlert {
-    let urgency = match gap.gap_severity {
-        GapSeverity::Critical => AlertUrgency::Critical,
-        GapSeverity::High => AlertUrgency::High,
-        GapSeverity::Medium => AlertUrgency::Medium,
-        GapSeverity::Low => AlertUrgency::Watch,
-    };
-
-    let evidence: Vec<AlertEvidence> = gap
-        .missed_items
-        .iter()
-        .map(|item| {
-            let freshness = freshness_from_timestamp(&item.created_at);
-            AlertEvidence {
-                source: item.source_type.clone(),
-                title: item.title.clone(),
-                url: item.url.clone(),
-                freshness_days: freshness,
-                relevance_score: 0.8,
-            }
-        })
-        .collect();
-
-    let suggested_actions = vec![
-        SuggestedAction {
-            action_type: "investigate".to_string(),
-            label: format!("Review {} updates", gap.dependency),
-            description: format!(
-                "You have {} unread signals about {} — last engagement was {} days ago",
-                gap.missed_items.len(),
-                gap.dependency,
-                gap.days_since_last_engagement
-            ),
-        },
-        SuggestedAction {
-            action_type: "dismiss".to_string(),
-            label: "Not relevant".to_string(),
-            description: format!(
-                "Dismiss if {} is no longer part of your active stack",
-                gap.dependency
-            ),
-        },
-    ];
-
-    PreemptionAlert {
-        id: uuid::Uuid::new_v4().to_string(),
-        alert_type: PreemptionType::KnowledgeBlindSpot,
-        title: format!(
-            "Blind spot: {} ({} missed signals)",
-            gap.dependency,
-            gap.missed_items.len()
-        ),
-        explanation: if let Some(top_item) = gap.missed_items.first() {
-            truncate(&top_item.title, 200)
-        } else {
-            format!(
-                "{} — {} days without engagement, used in {}",
-                gap.dependency,
-                gap.days_since_last_engagement,
-                std::path::Path::new(&gap.project_path)
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("your project")
-            )
-        },
-        evidence,
-        affected_projects: vec![gap.project_path.clone()],
-        affected_dependencies: vec![gap.dependency.clone()],
-        urgency,
-        confidence: severity_to_confidence(&gap.gap_severity),
-        predicted_window: None,
-        suggested_actions,
-        created_at: chrono::Utc::now().to_rfc3339(),
-    }
-}
 
 // ============================================================================
 // Helpers
@@ -826,21 +734,6 @@ fn freshness_from_timestamp(timestamp: &str) -> f32 {
         .unwrap_or(0.0)
 }
 
-/// Map gap severity to a confidence score for preemption alerts.
-///
-/// Pre-Phase-13b, this mapped Critical→0.95 which made ALL critical
-/// items show 95% — meaningless because it echoed the urgency badge.
-/// Now: confidence reflects HOW SURE we are the gap is real (not how
-/// severe it is — that's urgency's job). Knowledge gaps from the
-/// decay detector are inherently heuristic, so we cap at 0.70.
-fn severity_to_confidence(severity: &GapSeverity) -> f32 {
-    match severity {
-        GapSeverity::Critical => 0.70,
-        GapSeverity::High => 0.65,
-        GapSeverity::Medium => 0.55,
-        GapSeverity::Low => 0.40,
-    }
-}
 
 /// Truncate a string to a maximum length, appending "..." if truncated.
 fn truncate(s: &str, max_len: usize) -> String {

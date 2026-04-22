@@ -68,6 +68,10 @@ pub struct MissedSignal {
     pub relevance_score: f32,
     pub created_at: String,
     pub why_relevant: String,
+    /// The dependency name this signal relates to (if identified).
+    /// Used by the frontend to group missed signals under their coverage gap.
+    #[serde(default)]
+    pub dep_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -435,15 +439,18 @@ fn find_missed_signals(
             relevance_score: row.get(4)?,
             created_at: row.get(5)?,
             why_relevant: String::new(), // populated below
+            dep_name: None,              // populated below
         })
     })?;
 
     let mut signals: Vec<MissedSignal> = rows.flatten().collect();
 
-    // Populate `why_relevant` by actually looking for dep mentions in titles.
+    // Populate `why_relevant` and `dep_name` by looking for dep mentions in titles.
     for signal in &mut signals {
-        signal.why_relevant =
+        let (why, dep) =
             compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
+        signal.why_relevant = why;
+        signal.dep_name = dep;
     }
 
     // Deduplicate missed signals by normalized title similarity.
@@ -826,7 +833,15 @@ fn dedup_missed_signals(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
 /// Scans the title (lowercased) for any of the user's direct dep names. If
 /// found, returns a specific "Mentions <dep>" message. Otherwise falls back
 /// to a score-tier canned string that is honest about its generality.
-fn compute_why_relevant(title: &str, score: f32, direct_deps: &[DepCoverage]) -> String {
+/// Returns `(why_relevant_text, first_matched_dep_name)`.
+///
+/// The first matched dep (longest name = most specific) is returned separately
+/// so callers can associate a signal with its coverage-gap dependency.
+fn compute_why_relevant(
+    title: &str,
+    score: f32,
+    direct_deps: &[DepCoverage],
+) -> (String, Option<String>) {
     let title_lower = title.to_lowercase();
 
     // Look for direct dep mentions, preferring longer names (more specific).
@@ -849,19 +864,22 @@ fn compute_why_relevant(title: &str, score: f32, direct_deps: &[DepCoverage]) ->
     matched.truncate(3);
 
     if !matched.is_empty() {
-        return format!("Mentions {} from your stack", matched.join(", "));
+        let first_dep = matched[0].to_string();
+        let text = format!("Mentions {} from your stack", matched.join(", "));
+        return (text, Some(first_dep));
     }
 
     // No specific match — fall back to generic text keyed to score tier.
     // These strings are DELIBERATELY general: we didn't find a specific
     // match, so we don't claim one.
-    if score >= 0.85 {
+    let text = if score >= 0.85 {
         "High-relevance item matching your topic affinities".to_string()
     } else if score >= 0.7 {
         "Moderately relevant based on your scoring profile".to_string()
     } else {
         "Borderline-relevant — worth a glance if you have time".to_string()
-    }
+    };
+    (text, None)
 }
 
 /// Check whether `text` contains `term` at a word boundary.
@@ -1309,7 +1327,11 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
         reversibility: None,
         evidence: vec![citation],
         affected_projects: Vec::new(),
-        affected_deps: Vec::new(),
+        affected_deps: m
+            .dep_name
+            .as_ref()
+            .map(|d| vec![d.clone()])
+            .unwrap_or_default(),
         // MissedSignal is informational; schema doesn't require actions
         // for this kind.
         suggested_actions: Vec::new(),
@@ -1716,6 +1738,7 @@ mod tests {
                 relevance_score: 0.7,
                 created_at: "2026-04-11T00:00:00Z".to_string(),
                 why_relevant: String::new(),
+                dep_name: None,
             })
             .collect();
 
@@ -1812,7 +1835,7 @@ mod tests {
             ecosystem: "javascript".to_string(),
             projects: vec![],
         }];
-        let text = compute_why_relevant("New features in React 19", 0.9, &deps);
+        let (text, dep) = compute_why_relevant("New features in React 19", 0.9, &deps);
         assert!(
             text.contains("react"),
             "why_relevant must name the matched dep: {text}"
@@ -1821,6 +1844,7 @@ mod tests {
             !text.contains("strong match with your dependencies"),
             "must not use the old canned lying text: {text}"
         );
+        assert_eq!(dep, Some("react".to_string()), "dep_name must be set");
     }
 
     #[test]
@@ -1831,7 +1855,7 @@ mod tests {
             projects: vec![],
         }];
         // Title doesn't mention react
-        let text = compute_why_relevant("Postgres new extension released", 0.9, &deps);
+        let (text, dep) = compute_why_relevant("Postgres new extension released", 0.9, &deps);
         assert!(
             !text.contains("react"),
             "must not claim a match that isn't there: {text}"
@@ -1841,6 +1865,7 @@ mod tests {
             text.contains("scoring") || text.contains("relevance") || text.contains("topic"),
             "fallback should be honestly generic: {text}"
         );
+        assert_eq!(dep, None, "dep_name must be None when no match");
     }
 
     #[test]
@@ -1885,6 +1910,7 @@ mod tests {
             relevance_score: 0.9,
             created_at: "2026-04-10 14:30:00".into(),
             why_relevant: "Matches tokio in 2 of your projects".into(),
+            dep_name: Some("tokio".into()),
         }
     }
 

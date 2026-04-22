@@ -7,6 +7,12 @@ import { ScoreAutopsy } from '../ScoreAutopsy';
 import { FeedbackButtons } from './FeedbackButtons';
 import { SecurityTriageButtons } from './SecurityTriageButtons';
 
+function truncateSourcePath(path: string): string {
+  const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
+  if (parts.length <= 2) return path;
+  return parts.slice(-2).join('/');
+}
+
 interface ResultItemExpandedProps {
   item: SourceRelevance;
   feedback: FeedbackAction | undefined;
@@ -192,7 +198,7 @@ export function ResultItemExpanded({
               </span>
               <span className="text-text-muted">&rarr;</span>
               <span className="text-accent-gold font-medium truncate">
-                {topMatch.source_file}
+                {truncateSourcePath(topMatch.source_file)}
               </span>
             </div>
           </div>
@@ -211,7 +217,7 @@ export function ResultItemExpanded({
                       </span>
                       <span className="text-text-muted">&rarr;</span>
                       <span className="text-accent-gold font-medium truncate">
-                        {match.source_file}
+                        {truncateSourcePath(match.source_file)}
                       </span>
                     </div>
                   </li>
