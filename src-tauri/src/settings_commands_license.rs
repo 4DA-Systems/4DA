@@ -688,6 +688,46 @@ pub async fn record_interaction(
     }))
 }
 
+/// Snooze an item for a number of days. The item will reappear after the
+/// snooze period expires. Recorded as a distinct interaction type so the
+/// trust model treats it as "deferred" rather than "rejected."
+#[tauri::command]
+pub async fn snooze_item(
+    source_item_id: i64,
+    days: u32,
+) -> Result<serde_json::Value> {
+    let days = days.clamp(1, 30);
+    let conn = crate::state::open_db_connection()?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS snoozed_items (
+            source_item_id INTEGER PRIMARY KEY,
+            snooze_until TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )",
+        [],
+    )
+    .map_err(|e| format!("Failed to create snoozed_items table: {e}"))?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO snoozed_items (source_item_id, snooze_until)
+         VALUES (?1, datetime('now', ?2))",
+        rusqlite::params![source_item_id, format!("+{days} days")],
+    )
+    .map_err(|e| format!("Failed to snooze item: {e}"))?;
+
+    if let Ok(engine) = get_context_engine() {
+        let _ = engine.record_interaction(source_item_id, InteractionType::Ignore);
+    }
+
+    debug!(target: "4da::context", item_id = source_item_id, days = days, "Snoozed item");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "snooze_days": days
+    }))
+}
+
 /// Get locale configuration
 #[tauri::command]
 pub async fn get_locale() -> Result<serde_json::Value> {

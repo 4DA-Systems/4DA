@@ -21,7 +21,7 @@ export interface AppState {
   lastAnalyzedAt: Date | null;
 }
 
-export type FeedbackAction = 'save' | 'dismiss' | 'mark_irrelevant' | 'click';
+export type FeedbackAction = 'save' | 'dismiss' | 'mark_irrelevant' | 'click' | 'snooze';
 export type FeedbackGiven = Record<number, FeedbackAction>;
 
 // Void Engine types

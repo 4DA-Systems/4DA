@@ -106,6 +106,33 @@ fn extract_affected_range(content: &str) -> Option<String> {
     None
 }
 
+/// Check if installed_version falls within the affected range.
+/// Supports patterns like "< 3.0.1", "<= 2.8.0", ">= 1.0 < 3.0".
+/// Returns None if either input is missing or unparseable.
+fn check_version_affected(
+    installed: Option<&str>,
+    affected_range: Option<&str>,
+    fixed: Option<&str>,
+) -> Option<bool> {
+    let inst_str = installed?;
+    let inst = semver::Version::parse(inst_str).ok()?;
+
+    // If we have a fixed version, simple check: affected if installed < fixed
+    if let Some(fix_str) = fixed {
+        if let Ok(fix) = semver::Version::parse(fix_str) {
+            return Some(inst < fix);
+        }
+    }
+
+    // Try parsing affected range as a semver requirement
+    let range_str = affected_range?;
+    if let Ok(req) = semver::VersionReq::parse(range_str) {
+        return Some(req.matches(&inst));
+    }
+
+    None
+}
+
 // ============================================================================
 // V2 Constants (self-contained)
 // ============================================================================
@@ -1537,6 +1564,11 @@ pub(crate) fn score_item(
         None
     };
     let installed_version = raw.matched_deps.first().and_then(|d| d.version.clone());
+    let is_version_affected = check_version_affected(
+        installed_version.as_deref(),
+        affected_versions.as_deref(),
+        fixed_version.as_deref(),
+    );
     let sec_affected_project_count = count_affected_projects(db, &matched_dep_names) as u32;
 
     // ── Score breakdown ───────────────────────────────────────────────
@@ -1608,7 +1640,7 @@ pub(crate) fn score_item(
         affected_versions,
         fixed_version,
         installed_version: installed_version.clone(),
-        is_version_affected: None, // TODO: semver range matching
+        is_version_affected,
         dependency_path: dep_path.clone(),
         affected_project_count: Some(sec_affected_project_count),
     };
@@ -1786,5 +1818,43 @@ mod tests {
         // Non-security source content is passed through verbatim
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, input.content);
+    }
+
+    #[test]
+    fn check_version_affected_with_fixed() {
+        assert_eq!(
+            check_version_affected(Some("2.8.1"), None, Some("3.0.1")),
+            Some(true),
+        );
+        assert_eq!(
+            check_version_affected(Some("3.1.0"), None, Some("3.0.1")),
+            Some(false),
+        );
+    }
+
+    #[test]
+    fn check_version_affected_with_range() {
+        assert_eq!(
+            check_version_affected(Some("2.8.1"), Some("< 3.0.0"), None),
+            Some(true),
+        );
+        assert_eq!(
+            check_version_affected(Some("3.0.0"), Some("< 3.0.0"), None),
+            Some(false),
+        );
+    }
+
+    #[test]
+    fn check_version_affected_none_inputs() {
+        assert_eq!(check_version_affected(None, None, None), None);
+        assert_eq!(check_version_affected(Some("1.0.0"), None, None), None);
+    }
+
+    #[test]
+    fn check_version_affected_fixed_takes_precedence() {
+        assert_eq!(
+            check_version_affected(Some("2.0.0"), Some(">= 3.0.0"), Some("2.5.0")),
+            Some(true),
+        );
     }
 }

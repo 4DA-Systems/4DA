@@ -13,6 +13,16 @@ function truncateSourcePath(path: string): string {
   return parts.slice(-2).join('/');
 }
 
+function formatTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 interface ResultItemExpandedProps {
   item: SourceRelevance;
   feedback: FeedbackAction | undefined;
@@ -109,23 +119,39 @@ export function ResultItemExpanded({
               </span>
             )}
           </div>
-          {/* Dependency details */}
+          {item.score_breakdown?.is_version_affected === true && (
+            <div className="text-[10px] text-red-400 font-medium mb-1.5">
+              {t('results.versionAffected', 'Your installed version is in the affected range')}
+            </div>
+          )}
+          {item.score_breakdown?.is_version_affected === false && (
+            <div className="text-[10px] text-emerald-400 font-medium mb-1.5">
+              {t('results.versionNotAffected', 'Your installed version is not affected')}
+            </div>
+          )}
           {item.score_breakdown?.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
             <div className="text-xs text-text-secondary space-y-1">
               {item.score_breakdown.matched_deps.map((dep, i) => (
                 <div key={i} className="flex items-center gap-2">
                   <span className="font-mono text-text-primary">{dep}</span>
                   {i === 0 && item.score_breakdown?.installed_version && (
-                    <span className="text-text-muted">{item.score_breakdown.installed_version}</span>
+                    <span className={`font-mono ${item.score_breakdown?.is_version_affected ? 'text-red-400' : 'text-text-muted'}`}>
+                      v{item.score_breakdown.installed_version}
+                    </span>
+                  )}
+                  {i === 0 && item.score_breakdown?.fixed_version && (
+                    <span className="text-emerald-400 font-mono">&rarr; v{item.score_breakdown.fixed_version}</span>
                   )}
                   {i === 0 && item.score_breakdown?.dependency_path && (
                     <span className="text-text-muted">({item.score_breakdown.dependency_path})</span>
                   )}
-                  {i === 0 && item.score_breakdown?.fixed_version && (
-                    <span className="text-emerald-400">&rarr; {item.score_breakdown.fixed_version}</span>
-                  )}
                 </div>
               ))}
+            </div>
+          )}
+          {item.created_at && (
+            <div className="text-[10px] text-text-muted mt-1.5">
+              {t('results.published', 'Published')} {formatTimeAgo(item.created_at)}
             </div>
           )}
         </div>

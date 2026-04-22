@@ -101,24 +101,48 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                 <p className="text-xs text-text-secondary mt-1">
                   {t('knowledgeGaps.missedArticles', { count: missedCount })}
                 </p>
-                {it.evidence.length > 0 && (
+                {it.evidence.length > 0 && (() => {
+                  const topCite = it.evidence[0]!;
+                  const isSecurityTop = topCite.relevance_note.toLowerCase().includes('security');
+                  const rest = it.evidence.slice(1, 4);
+                  return (
                   <div className="mt-2 space-y-1">
-                    {it.evidence.slice(0, 3).map((cite, i) => (
-                      <div key={i} className="text-[11px]">
-                        {cite.url ? (
-                          <a href={cite.url} target="_blank" rel="noopener noreferrer" className="text-text-secondary hover:text-white transition-colors">
-                            {getTranslated(`${it.id}_cite_${i}`, cite.title)}
+                    <div className={`text-xs p-1.5 rounded ${isSecurityTop ? 'bg-red-500/10 border border-red-500/20' : 'bg-bg-tertiary/50'}`}>
+                      <span className="text-[9px] text-text-muted uppercase tracking-wide">{t('knowledgeGaps.startHere', 'Start here')}</span>
+                      <div className="mt-0.5">
+                        {topCite.url ? (
+                          <a href={topCite.url} target="_blank" rel="noopener noreferrer" className={`font-medium ${isSecurityTop ? 'text-red-400 hover:text-red-300' : 'text-text-primary hover:text-white'} transition-colors`}>
+                            {getTranslated(`${it.id}_cite_0`, topCite.title)}
                           </a>
                         ) : (
-                          <span className="text-text-secondary">{getTranslated(`${it.id}_cite_${i}`, cite.title)}</span>
+                          <span className="font-medium text-text-primary">{getTranslated(`${it.id}_cite_0`, topCite.title)}</span>
                         )}
                       </div>
-                    ))}
-                    {it.evidence.length > 3 && (
-                      <span className="text-[10px] text-text-muted">+{it.evidence.length - 3} more</span>
+                    </div>
+                    {rest.length > 0 && (
+                      <details className="group">
+                        <summary className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-text-muted hover:text-text-secondary transition-colors list-none">
+                          <span className="group-open:rotate-90 transition-transform">&#9654;</span>
+                          {rest.length} more {rest.length === 1 ? 'article' : 'articles'}
+                        </summary>
+                        <div className="mt-1 space-y-1">
+                          {rest.map((cite, i) => (
+                            <div key={i + 1} className="text-[11px]">
+                              {cite.url ? (
+                                <a href={cite.url} target="_blank" rel="noopener noreferrer" className="text-text-secondary hover:text-white transition-colors">
+                                  {getTranslated(`${it.id}_cite_${i + 1}`, cite.title)}
+                                </a>
+                              ) : (
+                                <span className="text-text-secondary">{getTranslated(`${it.id}_cite_${i + 1}`, cite.title)}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
                     )}
                   </div>
-                )}
+                  );
+                })()}
                 {it.suggested_actions.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {it.suggested_actions.map((action) => (
