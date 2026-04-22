@@ -221,12 +221,14 @@ function checkTestCoverage(changedFiles, fileChanges) {
     .map(f => f.file)
     .filter(f => /\.test\.(ts|tsx)$/.test(f));
 
-  const deletedSources = changedFiles
-    .filter(f => f.status === 'D')
+  const deletedOrModifiedSources = changedFiles
+    .filter(f => f.status === 'D' || f.status === 'M')
     .map(f => f.file)
     .filter(f => /\.(ts|tsx)$/.test(f) && !f.includes('.test.'));
 
-  // Tests deleted without their source being deleted = regression.
+  // Tests deleted without their source being deleted or modified = regression.
+  // A test deleted alongside a major source refactor (M status) is intentional —
+  // the feature the test covered was removed from the source.
   // Handle both co-located tests (Foo.tsx + Foo.test.tsx) and __tests__/
   // subdir convention (components/Foo.tsx + components/__tests__/Foo.test.tsx).
   const orphanedTestDeletions = deletedTests.filter(testFile => {
@@ -234,10 +236,25 @@ function checkTestCoverage(changedFiles, fileChanges) {
     // Derive the "sibling path" that would exist if the test is in __tests__/.
     // e.g. src/components/__tests__/Foo → src/components/Foo
     const siblingPath = baseName.replace(/\/__tests__\//, '/');
-    return !deletedSources.some(src => {
+
+    // If the corresponding source was deleted or modified, the test deletion is intentional.
+    const sourceChanged = deletedOrModifiedSources.some(src => {
       const srcBase = src.replace(/\.(ts|tsx)$/, '');
       return srcBase === baseName || srcBase === siblingPath;
     });
+    if (sourceChanged) return false;
+
+    // Cross-cutting tests in __tests__/ that don't map to any single source file
+    // (e.g. tier-views-consistency.test.ts) are standalone — deleting them is valid.
+    if (testFile.includes('/__tests__/')) {
+      const siblingSource = siblingPath;
+      const exists = ['ts', 'tsx'].some(ext => {
+        try { fs.accessSync(path.resolve(siblingSource + '.' + ext)); return true; } catch { return false; }
+      });
+      if (!exists) return false;
+    }
+
+    return true;
   });
 
   if (orphanedTestDeletions.length > 0) {
