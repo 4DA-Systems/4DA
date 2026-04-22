@@ -499,12 +499,18 @@ fn find_missed_signals(
 /// Classify a signal's content priority tier based on title text.
 /// Tier 4 = security, Tier 3 = breaking/deprecation, Tier 2 = releases,
 /// Tier 1 = everything else (blog, Q&A, showcase).
+fn has_standalone_word(haystack: &str, word: &str) -> bool {
+    haystack
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|w| w == word)
+}
+
 fn title_priority_tier(title: &str) -> u8 {
     let t = title.to_lowercase();
     if t.contains("cve-")
         || t.contains("vulnerability")
         || t.contains("security advisory")
-        || t.contains("rce")
+        || has_standalone_word(&t, "rce")
         || t.contains("zero-day")
         || t.contains("zeroday")
         || t.contains("exploit")
@@ -2034,7 +2040,7 @@ mod tests {
     fn missed_signal_maps_to_missed_signal_kind() {
         let item = missed_signal_to_evidence_item(&missed_sample());
         assert_eq!(item.kind, crate::evidence::EvidenceKind::MissedSignal);
-        assert_eq!(item.urgency, crate::evidence::Urgency::High);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
         assert_eq!(item.evidence.len(), 1);
         assert!(crate::evidence::validate_item(&item).is_ok());
     }
@@ -2054,9 +2060,8 @@ mod tests {
         // 1 uncovered + 1 stale + 1 missed + 1 recommendation
         assert_eq!(feed.total, 4);
         assert_eq!(feed.score, Some(68.0));
-        assert_eq!(feed.critical_count, 1); // uncovered "critical"
-                                            // high_count: high-priority recommendation + high-urgency missed
-        assert_eq!(feed.high_count, 2);
+        assert_eq!(feed.critical_count, 2); // uncovered "critical" + missed "vulnerability" (tier 4)
+        assert_eq!(feed.high_count, 1); // high-priority recommendation
     }
 
     #[test]
@@ -2095,5 +2100,25 @@ mod tests {
             assert!(!it.lens_hints.briefing);
             assert!(!it.lens_hints.evidence);
         }
+    }
+
+    #[test]
+    fn rce_word_boundary_prevents_source_false_positive() {
+        assert!(has_standalone_word("critical rce vulnerability", "rce"));
+        assert!(has_standalone_word("[rce] openssl flaw", "rce"));
+        assert!(has_standalone_word("rce in libxml2", "rce"));
+        assert!(!has_standalone_word("open source project", "rce"));
+        assert!(!has_standalone_word("open-source tool", "rce"));
+        assert!(!has_standalone_word("resource management", "rce"));
+        assert!(!has_standalone_word("workforce planning", "rce"));
+    }
+
+    #[test]
+    fn tier1_blog_post_gets_watch_urgency() {
+        let mut m = missed_sample();
+        m.title = "We Scored 28 Famous Open Source PRs for Deploy Risk".into();
+        m.relevance_score = 0.8;
+        let item = missed_signal_to_evidence_item(&m);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Watch);
     }
 }
