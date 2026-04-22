@@ -79,6 +79,43 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     });
   }, [item, onRecordInteraction]);
 
+  const handleSuppress = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const words = item.title.toLowerCase().split(/\s+/);
+    const topic = words.find(w => w.length > 3) || words[0] || 'unknown';
+    void cmd('add_exclusion', { topic }).then(() => {
+      useAppStore.getState().addToast('success', t('feedback.topicSuppressed', { topic }));
+      void useAppStore.getState().loadLearnedBehavior();
+    }).catch(() => {
+      useAppStore.getState().addToast('warning', t('feedback.suppressFailed'));
+    });
+    recordTrustEvent({
+      eventType: 'false_positive',
+      signalId: String(item.id),
+      sourceType: item.source_type || undefined,
+      topic: item.title,
+      notes: `suppress_topic:${topic}`,
+    });
+  }, [item, t]);
+
+  const handleWatch = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const words = item.title.toLowerCase().split(/\s+/);
+    const topic = words.find(w => w.length > 3) || words[0] || 'unknown';
+    cmd('watch_item', { sourceItemId: item.id, topic, title: item.title }).then(() => {
+      useAppStore.getState().addToast('success', t('feedback.watchAdded', { topic }));
+    }).catch(() => {
+      useAppStore.getState().addToast('warning', t('feedback.watchFailed'));
+    });
+    recordTrustEvent({
+      eventType: 'acted_on',
+      signalId: String(item.id),
+      sourceType: item.source_type || undefined,
+      topic: item.title,
+      notes: `watch_topic:${topic}`,
+    });
+  }, [item, t]);
+
   const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const scorePercent = Math.round((item.top_score ?? 0) * 100);
@@ -166,7 +203,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
       <button
         onClick={handleSnooze}
         disabled={!!feedback}
-        aria-label={feedback === 'snooze' ? t('feedback.snoozed', 'Snoozed') : t('action.snooze', 'Snooze 7d')}
+        aria-label={feedback === 'snooze' ? t('feedback.snoozed') : t('action.snooze')}
         className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
           feedback === 'snooze'
             ? 'bg-amber-500/20 text-amber-400 cursor-default'
@@ -175,7 +212,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
             : 'bg-amber-500/10 text-amber-400/80 hover:bg-amber-500/20 hover:text-amber-400'
         }`}
       >
-        {feedback === 'snooze' ? `⏰ ${t('feedback.snoozed', 'Snoozed')}` : t('action.snooze', 'Snooze 7d')}
+        {feedback === 'snooze' ? `⏰ ${t('feedback.snoozed')}` : t('action.snooze')}
       </button>
       <button
         onClick={(e) => {
@@ -200,6 +237,30 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
         }`}
       >
         {feedback === 'mark_irrelevant' ? `\u2298 ${t('feedback.marked')}` : t('feedback.notRelevant')}
+      </button>
+      <button
+        onClick={handleSuppress}
+        disabled={!!feedback}
+        aria-label={t('feedback.suppressTopic')}
+        className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+          feedback
+            ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
+            : 'bg-purple-500/10 text-purple-400/80 hover:bg-purple-500/20 hover:text-purple-400'
+        }`}
+      >
+        {t('feedback.suppressTopic')}
+      </button>
+      <button
+        onClick={handleWatch}
+        disabled={!!feedback}
+        aria-label={t('feedback.watchItem')}
+        className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+          feedback
+            ? 'bg-bg-tertiary text-text-muted cursor-not-allowed'
+            : 'bg-cyan-500/10 text-cyan-400/80 hover:bg-cyan-500/20 hover:text-cyan-400'
+        }`}
+      >
+        {t('feedback.watchItem')}
       </button>
       <button
         onClick={handleShare}

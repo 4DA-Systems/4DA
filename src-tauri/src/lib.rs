@@ -687,6 +687,11 @@ pub fn run() {
             settings_commands::remove_exclusion,
             settings_commands::record_interaction,
             settings_commands::snooze_item,
+            settings_commands::watch_item,
+            settings_commands::unwatch_item,
+            settings_commands::get_watched_items,
+            settings_commands::set_blind_spot_sensitivity,
+            settings_commands::get_blind_spot_sensitivity,
             settings_commands::get_context_stats,
             // Embedding model management
             reembed::get_embedding_model_info,
