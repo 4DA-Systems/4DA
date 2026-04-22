@@ -189,6 +189,7 @@ export function ResultsView({
                 {([
                   ['score', t('results.score')] as const,
                   ['date', t('results.recent')] as const,
+                  ['urgency', t('results.sortUrgency', 'Urgency')] as const,
                   ['priority', t('results.sortPriority', 'Priority')] as const,
                   ['applicability', t('results.sortApplicability', 'Applicability')] as const,
                   ['freshness', t('results.sortFreshness', 'Freshness')] as const,

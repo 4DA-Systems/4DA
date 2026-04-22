@@ -686,6 +686,7 @@ pub fn run() {
             settings_commands::add_exclusion,
             settings_commands::remove_exclusion,
             settings_commands::record_interaction,
+            settings_commands::snooze_item,
             settings_commands::get_context_stats,
             // Embedding model management
             reembed::get_embedding_model_info,

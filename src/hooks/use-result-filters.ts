@@ -120,6 +120,9 @@ export const useResultFilters = () => {
     const applicabilityOrder: Record<string, number> = {
       affected: 0, likely_affected: 1, needs_verification: 2, not_affected: 3,
     };
+    const urgencyOrder: Record<string, number> = {
+      immediate: 0, this_week: 1, awareness: 2, none: 3,
+    };
 
     deduped.sort((a, b) => {
       if (sortBy === 'score') {
@@ -134,6 +137,11 @@ export const useResultFilters = () => {
         const aAppl = applicabilityOrder[a.applicability ?? 'not_affected'] ?? 4;
         const bAppl = applicabilityOrder[b.applicability ?? 'not_affected'] ?? 4;
         return aAppl - bAppl || b.top_score - a.top_score;
+      }
+      if (sortBy === 'urgency') {
+        const aUrg = urgencyOrder[a.score_breakdown?.necessity_urgency ?? 'none'] ?? 4;
+        const bUrg = urgencyOrder[b.score_breakdown?.necessity_urgency ?? 'none'] ?? 4;
+        return aUrg - bUrg || b.top_score - a.top_score;
       }
       if (sortBy === 'freshness') {
         const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;

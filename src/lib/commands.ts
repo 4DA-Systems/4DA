@@ -244,6 +244,7 @@ interface CommandMap {
   set_briefing_time: { params: { time: string }; result: { briefing_time: string; message: string } };
   trigger_briefing_preview: { params: Record<string, never>; result: { message: string } };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
+  snooze_item: { params: { sourceItemId: number; days: number }; result: { success: boolean; snooze_days: number } };
 
   // -- Taste Test Calibration --
   taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };
