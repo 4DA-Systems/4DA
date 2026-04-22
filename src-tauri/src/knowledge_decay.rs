@@ -683,6 +683,21 @@ fn truncate_gap_note(s: &str) -> String {
     s.chars().take(200).collect()
 }
 
+fn classify_missed_item(title: &str) -> &'static str {
+    let lower = title.to_lowercase();
+    if lower.contains("cve") || lower.contains("ghsa") || lower.contains("vulnerability") {
+        "security advisory"
+    } else if lower.contains("breaking") || lower.contains("deprecated") || lower.contains("eol") {
+        "breaking change"
+    } else if lower.contains("release") || lower.contains("update") || lower.contains("upgrade") {
+        "version update"
+    } else if lower.contains("rfc") || lower.contains("proposal") || lower.contains("roadmap") {
+        "roadmap signal"
+    } else {
+        "relevant discussion"
+    }
+}
+
 fn missed_item_to_citation(m: &MissedItem) -> EvidenceCitation {
     let freshness_days = chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
         .map(|dt| {
@@ -690,16 +705,133 @@ fn missed_item_to_citation(m: &MissedItem) -> EvidenceCitation {
             (secs as f32 / 86_400.0).max(0.0)
         })
         .unwrap_or(0.0);
+    let category = classify_missed_item(&m.title);
     EvidenceCitation {
         source: m.source_type.clone(),
         title: truncate_gap_title(&m.title),
         url: m.url.clone(),
         freshness_days,
-        relevance_note: truncate_gap_note(&format!(
-            "missed item #{} for dependency gap",
-            m.item_id
-        )),
+        relevance_note: truncate_gap_note(&format!("Unread {category}")),
     }
+}
+
+fn build_gap_explanation(
+    dep: &str,
+    version: Option<&str>,
+    days_since: u32,
+    missed: &[MissedItem],
+) -> String {
+    let mut parts: Vec<String> = Vec::with_capacity(3);
+
+    // Categorize what was missed
+    let mut security = 0u32;
+    let mut breaking = 0u32;
+    let mut updates = 0u32;
+    let mut other = 0u32;
+    for m in missed {
+        match classify_missed_item(&m.title) {
+            "security advisory" => security += 1,
+            "breaking change" => breaking += 1,
+            "version update" => updates += 1,
+            _ => other += 1,
+        }
+    }
+
+    // Lead with the most critical category
+    if security > 0 {
+        parts.push(format!(
+            "{security} unread security {}", if security == 1 { "advisory" } else { "advisories" }
+        ));
+    }
+    if breaking > 0 {
+        parts.push(format!(
+            "{breaking} breaking {}",
+            if breaking == 1 { "change" } else { "changes" }
+        ));
+    }
+    if updates > 0 {
+        parts.push(format!(
+            "{updates} version {}",
+            if updates == 1 { "update" } else { "updates" }
+        ));
+    }
+    if other > 0 && parts.is_empty() {
+        parts.push(format!(
+            "{other} unread {}",
+            if other == 1 { "signal" } else { "signals" }
+        ));
+    }
+
+    let categories = parts.join(", ");
+
+    // Version context
+    let ver = version
+        .map(|v| format!(" v{v}"))
+        .unwrap_or_default();
+
+    // Engagement recency
+    let recency = if days_since >= 999 {
+        "never reviewed".to_string()
+    } else if days_since > 30 {
+        format!("last reviewed {days_since}d ago")
+    } else {
+        format!("{days_since}d since last review")
+    };
+
+    // Highlight the most notable missed item
+    let highlight = missed
+        .iter()
+        .find(|m| {
+            let c = classify_missed_item(&m.title);
+            c == "security advisory" || c == "breaking change"
+        })
+        .or_else(|| missed.first());
+
+    let mut explanation = format!("{dep}{ver}: {categories} · {recency}");
+
+    if let Some(item) = highlight {
+        let short_title: String = item.title.chars().take(80).collect();
+        explanation.push_str(&format!(" — notably \"{short_title}\""));
+    }
+
+    explanation
+}
+
+fn build_gap_actions(missed: &[MissedItem]) -> Vec<EvidenceAction> {
+    let mut actions = Vec::with_capacity(3);
+    let has_security = missed.iter().any(|m| classify_missed_item(&m.title) == "security advisory");
+    let has_breaking = missed.iter().any(|m| classify_missed_item(&m.title) == "breaking change");
+    let has_update = missed.iter().any(|m| classify_missed_item(&m.title) == "version update");
+
+    if has_security {
+        actions.push(EvidenceAction {
+            action_id: "review_security".to_string(),
+            label: "Review advisories".to_string(),
+            description: "Check unread security advisories for this dependency.".to_string(),
+        });
+    }
+    if has_breaking {
+        actions.push(EvidenceAction {
+            action_id: "check_breaking".to_string(),
+            label: "Check breaking changes".to_string(),
+            description: "Review breaking changes before your next upgrade.".to_string(),
+        });
+    }
+    if has_update && !has_security && !has_breaking {
+        actions.push(EvidenceAction {
+            action_id: "review_updates".to_string(),
+            label: "Review updates".to_string(),
+            description: "Catch up on version updates for this dependency.".to_string(),
+        });
+    }
+    if actions.is_empty() {
+        actions.push(EvidenceAction {
+            action_id: "investigate".to_string(),
+            label: "Investigate".to_string(),
+            description: "Review missed signals for this dependency.".to_string(),
+        });
+    }
+    actions
 }
 
 impl KnowledgeGap {
@@ -709,30 +841,11 @@ impl KnowledgeGap {
     pub fn to_evidence_item(&self) -> EvidenceItem {
         let title = truncate_gap_title(&format!("Knowledge gap: {}", self.dependency));
 
-        let days_phrase = if self.days_since_last_engagement >= 999 {
-            "never engaged with signals for this dep".to_string()
-        } else {
-            format!(
-                "{} day{} since last engagement",
-                self.days_since_last_engagement,
-                if self.days_since_last_engagement == 1 {
-                    ""
-                } else {
-                    "s"
-                }
-            )
-        };
-        let explanation = format!(
-            "{} ({}). {}. {} missed {}.",
-            self.dependency,
-            self.version.as_deref().unwrap_or("no version"),
-            days_phrase,
-            self.missed_items.len(),
-            if self.missed_items.len() == 1 {
-                "signal"
-            } else {
-                "signals"
-            },
+        let explanation = build_gap_explanation(
+            &self.dependency,
+            self.version.as_deref(),
+            self.days_since_last_engagement,
+            &self.missed_items,
         );
 
         // Build citations from missed items; cap at top 5 to keep the
@@ -768,11 +881,7 @@ impl KnowledgeGap {
             evidence,
             affected_projects: vec![self.project_path.clone()],
             affected_deps: vec![self.dependency.clone()],
-            suggested_actions: vec![EvidenceAction {
-                action_id: "investigate".to_string(),
-                label: "Investigate".to_string(),
-                description: "Review missed signals for this dependency.".to_string(),
-            }],
+            suggested_actions: build_gap_actions(&self.missed_items),
             precedents: Vec::new(),
             refutation_condition: None,
             lens_hints: LensHints {
@@ -1005,5 +1114,63 @@ mod tests {
         let item = sample_gap().to_evidence_item();
         assert_eq!(item.affected_projects, vec!["/proj/a".to_string()]);
         assert_eq!(item.affected_deps, vec!["tokio".to_string()]);
+    }
+
+    #[test]
+    fn gap_explanation_categorizes_missed_signals() {
+        let g = sample_gap();
+        let item = g.to_evidence_item();
+        assert!(item.explanation.contains("security"), "should mention security: {}", item.explanation);
+        assert!(item.explanation.contains("tokio v1.36.0"), "should include version: {}", item.explanation);
+        assert!(item.explanation.contains("30d"), "should mention days since review: {}", item.explanation);
+    }
+
+    #[test]
+    fn gap_explanation_highlights_notable_item() {
+        let g = sample_gap();
+        let item = g.to_evidence_item();
+        assert!(item.explanation.contains("notably"), "should highlight a notable item: {}", item.explanation);
+        assert!(item.explanation.contains("CVE-2026-1234"), "should mention the CVE: {}", item.explanation);
+    }
+
+    #[test]
+    fn gap_explanation_never_engaged() {
+        let mut g = sample_gap();
+        g.days_since_last_engagement = 999;
+        let item = g.to_evidence_item();
+        assert!(item.explanation.contains("never reviewed"), "should say never reviewed: {}", item.explanation);
+    }
+
+    #[test]
+    fn gap_actions_include_review_security_for_cve() {
+        let g = sample_gap();
+        let item = g.to_evidence_item();
+        assert!(item.suggested_actions.iter().any(|a| a.action_id == "review_security"),
+            "should have review_security action for security gaps");
+    }
+
+    #[test]
+    fn gap_actions_generic_for_plain_items() {
+        let mut g = sample_gap();
+        g.missed_items = vec![MissedItem {
+            item_id: 10,
+            title: "Tokio best practices discussion".to_string(),
+            url: None,
+            source_type: "hn".to_string(),
+            created_at: "2026-04-10 10:00:00".to_string(),
+        }];
+        let item = g.to_evidence_item();
+        assert!(item.suggested_actions.iter().any(|a| a.action_id == "investigate"),
+            "should fall back to investigate for generic items");
+    }
+
+    #[test]
+    fn gap_citation_relevance_note_is_descriptive() {
+        let g = sample_gap();
+        let item = g.to_evidence_item();
+        assert!(item.evidence[0].relevance_note.contains("Unread"),
+            "citation note should categorize: {}", item.evidence[0].relevance_note);
+        assert!(!item.evidence[0].relevance_note.contains("missed item #"),
+            "citation note should not be generic: {}", item.evidence[0].relevance_note);
     }
 }
