@@ -72,6 +72,10 @@ pub struct MissedSignal {
     /// Used by the frontend to group missed signals under their coverage gap.
     #[serde(default)]
     pub dep_name: Option<String>,
+    /// Whether the user has seen this item before (any interaction recorded).
+    /// false = "New for you", true = "Blind Spot" (shown but never engaged).
+    #[serde(default)]
+    pub was_shown: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -440,6 +444,7 @@ fn find_missed_signals(
             created_at: row.get(5)?,
             why_relevant: String::new(), // populated below
             dep_name: None,              // populated below
+            was_shown: false,            // query filters out impressioned items
         })
     })?;
 
@@ -468,6 +473,10 @@ fn find_missed_signals(
     // Old blog posts (>10 days) are capped at 3 slots so the list doesn't
     // become a stale-blog archive.
     let signals = rank_by_missed_priority(signals);
+
+    // Cap per-dep diversity: max 3 signals per matched dep to prevent the
+    // "5 items all saying Mentions react" wall-of-sameness problem.
+    let signals = cap_per_dep(signals, 3);
 
     Ok(signals)
 }
@@ -561,6 +570,26 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
     }
 
     kept
+}
+
+/// Cap per-dep diversity: at most `max_per_dep` signals per matched dep name.
+/// Signals with no dep_name are always kept (they passed on score alone).
+fn cap_per_dep(signals: Vec<MissedSignal>, max_per_dep: usize) -> Vec<MissedSignal> {
+    use std::collections::HashMap;
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    signals
+        .into_iter()
+        .filter(|s| {
+            match &s.dep_name {
+                Some(dep) => {
+                    let c = counts.entry(dep.to_lowercase()).or_insert(0);
+                    *c += 1;
+                    *c <= max_per_dep
+                }
+                None => true,
+            }
+        })
+        .collect()
 }
 
 /// Filter missed signals using two-layer stack awareness.
@@ -844,15 +873,28 @@ fn compute_why_relevant(
 ) -> (String, Option<String>) {
     let title_lower = title.to_lowercase();
 
+    // Dep names that are common English words — they produce false matches
+    // against nearly every article title ("open source", "next steps", etc.)
+    const GENERIC_DEP_NAMES: &[&str] = &[
+        "open", "next", "node", "vite", "test", "core", "path", "sync",
+        "once", "glob", "rand", "time", "lock", "send", "copy", "find",
+        "diff", "pick", "wrap", "trim", "data", "form", "icon", "link",
+        "text", "type", "util", "base", "flat", "safe", "fast", "make",
+        "pipe", "pump", "read", "call", "nano", "pure", "vary", "yaml",
+        "mime", "race", "uuid", "deep", "http", "https",
+    ];
+
     // Look for direct dep mentions, preferring longer names (more specific).
     let mut matched: Vec<&str> = direct_deps
         .iter()
         .filter_map(|d| {
             if d.package_name.len() < 4 {
-                return None; // Too generic
+                return None; // Too short
             }
-            // Check word-boundary match on the dep name.
             let dep_lower = d.package_name.to_lowercase();
+            if GENERIC_DEP_NAMES.contains(&dep_lower.as_str()) {
+                return None; // Common English word, not a meaningful match
+            }
             if has_word_boundary_match(&title_lower, &dep_lower) {
                 Some(d.package_name.as_str())
             } else {

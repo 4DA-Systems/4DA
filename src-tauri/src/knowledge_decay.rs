@@ -618,21 +618,28 @@ fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -
     }
 }
 
+fn quality_weight(title: &str) -> f32 {
+    match classify_missed_item(title) {
+        "security advisory" => 3.0,
+        "breaking change" => 2.5,
+        "version update" => 1.5,
+        "roadmap signal" => 1.0,
+        _ => 0.5,
+    }
+}
+
 fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> GapSeverity {
     let dep_lower = dep_name.to_lowercase();
 
-    // Check for security-related titles that specifically mention this dependency
     let has_security = missed.iter().any(|item| {
         let title_lower = item.title.to_lowercase();
-        let is_security = title_lower.contains("cve")
+        (title_lower.contains("cve")
             || title_lower.contains("vulnerability")
             || title_lower.contains("security")
-            || title_lower.contains("exploit");
-        // Only count as security if the dep name is also prominent in the title
-        is_security && title_lower.contains(&dep_lower)
+            || title_lower.contains("exploit"))
+            && title_lower.contains(&dep_lower)
     });
 
-    // Check for breaking changes
     let has_breaking = missed.iter().any(|item| {
         let title_lower = item.title.to_lowercase();
         (title_lower.contains("breaking")
@@ -642,11 +649,17 @@ fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> 
             && title_lower.contains(&dep_lower)
     });
 
+    // Quality-weighted gap score: 1 security advisory (3.0) outweighs
+    // 5 forum discussions (5 × 0.5 = 2.5).
+    let weighted_score: f32 = missed.iter().map(|m| quality_weight(&m.title)).sum();
+    let days_factor = if days_since >= 999 { 1.5 } else if days_since > 30 { 1.2 } else { 1.0 };
+    let gap_score = weighted_score * days_factor;
+
     if has_security {
         GapSeverity::Critical
-    } else if has_breaking || (days_since > 30 && missed.len() >= 3) {
+    } else if has_breaking || gap_score >= 5.0 {
         GapSeverity::High
-    } else if days_since > 14 || missed.len() >= 3 {
+    } else if gap_score >= 2.0 || days_since > 14 {
         GapSeverity::Medium
     } else {
         GapSeverity::Low
