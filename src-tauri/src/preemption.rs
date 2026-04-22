@@ -342,6 +342,11 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
               OR LOWER(si.title) LIKE '%security bug%'
               OR LOWER(si.title) LIKE '%breaking%'
               OR LOWER(si.title) LIKE '%deprecat%'
+              OR LOWER(si.title) LIKE '%end of life%'
+              OR LOWER(si.title) LIKE '%end-of-life%'
+              OR LOWER(si.title) LIKE '%drops support%'
+              OR LOWER(si.title) LIKE '%migration guide%'
+              OR LOWER(si.title) LIKE '%major release%'
               OR LOWER(si.title) LIKE '%advisory%'
           )
         ORDER BY si.created_at DESC
@@ -405,7 +410,13 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             || title_lower.contains("rce")
             || title_lower.contains("0day")
             || title_lower.contains("exploit");
-        let is_breaking = title_lower.contains("breaking") || title_lower.contains("deprecat");
+        let is_breaking = title_lower.contains("breaking")
+            || title_lower.contains("deprecat")
+            || title_lower.contains("end of life")
+            || title_lower.contains("end-of-life")
+            || title_lower.contains("drops support")
+            || title_lower.contains("migration guide")
+            || title_lower.contains("major release");
 
         let urgency = if is_critical {
             AlertUrgency::Critical

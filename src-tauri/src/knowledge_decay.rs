@@ -576,6 +576,40 @@ pub fn is_low_quality_signal(title: &str) -> bool {
         return true;
     }
 
+    // --- Showcase / side-project announcements ---
+    // Someone else's project using a dep is not intelligence about the dep.
+    if lower.starts_with("[showcase]")
+        || lower.starts_with("show hn:")
+        || lower.starts_with("i built ")
+        || lower.starts_with("i made ")
+        || lower.starts_with("just released my")
+        || lower.starts_with("i created ")
+    {
+        return true;
+    }
+    let showcase_phrases = [
+        "side project",
+        "my first app",
+        "weekend project",
+        "pet project",
+        "built with",
+        "made with",
+        "powered by",
+    ];
+    if showcase_phrases.iter().any(|p| lower.contains(p)) {
+        return true;
+    }
+
+    // --- Weekly roundup / newsletter digests ---
+    // These mention 10+ technologies by name but aren't about any single one.
+    if lower.starts_with("this week in ")
+        || lower.contains("weekly roundup")
+        || lower.contains("weekly digest")
+        || lower.contains("newsletter #")
+    {
+        return true;
+    }
+
     false
 }
 
