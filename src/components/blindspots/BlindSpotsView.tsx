@@ -6,48 +6,16 @@ import { memo, useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
-import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
-import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { recordTrustEvent } from '../../lib/trust-feedback';
-import { ArticleReader } from '../ArticleReader';
+import {
+  type DepRow, type DepStatus, URGENCY_ORDER,
+  getScoreTier, depFromItem, signalMatchesDep,
+} from './types';
+import { StackCoverageMap, UnmatchedSignals } from './StackCoverageMap';
 
-const SCORE_TIERS = [
-  { max: 25, color: 'text-green-400', bg: 'bg-green-500', labelKey: 'blindspots.score.good' },
-  { max: 50, color: 'text-yellow-400', bg: 'bg-yellow-500', labelKey: 'blindspots.score.moderate' },
-  { max: 75, color: 'text-orange-400', bg: 'bg-orange-500', labelKey: 'blindspots.score.significant' },
-  { max: 100, color: 'text-red-400', bg: 'bg-red-500', labelKey: 'blindspots.score.critical' },
-] as const;
-
-const URGENCY_COLORS: Record<Urgency, string> = {
-  critical: 'text-red-400',
-  high: 'text-orange-400',
-  medium: 'text-yellow-400',
-  watch: 'text-blue-400',
-};
-
-const UNLINKED_LIMIT = 5;
-
-function getScoreTier(score: number) {
-  return SCORE_TIERS.find(t => score <= t.max) ?? SCORE_TIERS[3];
-}
-
-function topicFromItem(item: EvidenceItem): string {
-  if (item.affected_deps.length > 0) return item.affected_deps[0]!;
-  return item.title;
-}
-
-function extractItemId(evidenceId: string): number | null {
-  const match = evidenceId.match(/bs_missed_(\d+)/);
-  return match ? parseInt(match[1]!, 10) : null;
-}
-
-function signalMatchesDep(signal: EvidenceItem, depName: string): boolean {
-  const lower = depName.toLowerCase();
-  return signal.affected_deps.some(d => d.toLowerCase() === lower)
-    || signal.title.toLowerCase().includes(lower);
-}
-
-// --- Score Bar ---------------------------------------------------------------
+// ============================================================================
+// Score Bar
+// ============================================================================
 
 const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
   const { t } = useTranslation();
@@ -69,220 +37,9 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
   );
 });
 
-// --- Missed Signal Row — title is the primary visible element ----------------
-
-const MissedSignalRow = memo(function MissedSignalRow({
-  item, onDismiss,
-}: {
-  item: EvidenceItem;
-  onDismiss?: (id: string) => void;
-}) {
-  const cite = item.evidence[0];
-  const numericId = extractItemId(item.id);
-  const freshness = cite && cite.freshness_days > 0
-    ? `${Math.round(cite.freshness_days)}d ago` : 'today';
-
-  return (
-    <div className="px-5 py-3 hover:bg-bg-tertiary/30 transition-colors group">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="mb-1 flex items-center gap-2">
-            {cite?.url ? (
-              <a
-                href={cite.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-white hover:text-amber-400 transition-colors leading-snug"
-                onClick={() => recordTrustEvent({
-                  eventType: 'acted_on', signalId: item.id,
-                  sourceType: 'missed_signal', topic: item.title, notes: 'blind_spot_click',
-                })}
-              >
-                {item.title}
-              </a>
-            ) : (
-              <span className="text-sm text-white leading-snug">{item.title}</span>
-            )}
-            <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${URGENCY_COLORS[item.urgency]}`}>
-              {item.urgency}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-text-muted">
-            {cite && (<><span>{cite.source}</span><span>·</span><span>{freshness}</span></>)}
-            {item.explanation && (<><span>·</span><span className="truncate">{item.explanation}</span></>)}
-          </div>
-          {numericId != null && (
-            <div className="mt-1.5">
-              <ArticleReader itemId={numericId} url={cite?.url ?? undefined} contentType={cite?.source} />
-            </div>
-          )}
-        </div>
-        {onDismiss && (
-          <button
-            onClick={() => onDismiss(item.id)}
-            className="text-xs text-text-muted hover:text-red-400 opacity-60 group-hover:opacity-100 transition-all shrink-0 px-2 py-1 rounded hover:bg-red-500/10"
-            title="Not relevant"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-    </div>
-  );
-});
-
-// --- Expandable Coverage Gap -------------------------------------------------
-
-const CoverageGapCard = memo(function CoverageGapCard({
-  gap, signals, onDismissSignal,
-}: {
-  gap: EvidenceItem;
-  signals: EvidenceItem[];
-  onDismissSignal: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const depName = topicFromItem(gap);
-
-  const handleToggle = useCallback(() => {
-    setExpanded(prev => !prev);
-    if (!expanded) {
-      recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', topic: depName, notes: 'blind_spot_gap_expand' });
-    }
-  }, [expanded, depName]);
-
-  return (
-    <div className="border-b border-border last:border-b-0">
-      <button
-        onClick={handleToggle}
-        className="w-full px-5 py-4 flex items-center gap-3 hover:bg-bg-tertiary/30 transition-colors text-left"
-      >
-        <span className={`text-[10px] transition-transform ${expanded ? 'rotate-90' : ''}`}>▶</span>
-        <span className="text-sm font-medium text-white flex-1">{gap.title}</span>
-        {signals.length > 0 && (
-          <span className="text-[10px] text-text-muted">
-            {signals.length} signal{signals.length === 1 ? '' : 's'}
-          </span>
-        )}
-        {gap.affected_projects.length > 0 && (
-          <span className="text-[10px] text-text-muted">
-            {gap.affected_projects.length} {gap.affected_projects.length === 1 ? 'project' : 'projects'}
-          </span>
-        )}
-        <span className={`text-[10px] px-1.5 py-0.5 rounded ${URGENCY_COLORS[gap.urgency]}`}>{gap.urgency}</span>
-      </button>
-      {expanded && (
-        <div className="bg-bg-tertiary/20 border-t border-border">
-          {signals.length > 0 ? (
-            <div className="divide-y divide-border/50">
-              {signals.map(s => <MissedSignalRow key={s.id} item={s} onDismiss={onDismissSignal} />)}
-            </div>
-          ) : (
-            <div className="px-5 py-4">
-              <p className="text-xs text-text-muted mb-2">{gap.explanation}</p>
-              <p className="text-[11px] text-text-muted italic">
-                No matching signals found — potential gap in source coverage for{' '}
-                <span className="text-white font-medium">{depName}</span>.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
-
-// --- Coverage Gaps Section ---------------------------------------------------
-
-const CoverageGapsSection = memo(function CoverageGapsSection({
-  gaps, allMissed, onDismissSignal,
-}: {
-  gaps: EvidenceItem[];
-  allMissed: EvidenceItem[];
-  onDismissSignal: (id: string) => void;
-}) {
-  const { t } = useTranslation();
-  const surfacedRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    for (const it of gaps) {
-      if (!surfacedRef.current.has(it.id)) {
-        surfacedRef.current.add(it.id);
-        recordTrustEvent({ eventType: 'surfaced', sourceType: 'gap', topic: topicFromItem(it), notes: 'blind_spot_uncovered_dep' });
-      }
-    }
-  }, [gaps]);
-
-  const signalsByGapId = useMemo(() => {
-    const map = new Map<string, EvidenceItem[]>();
-    for (const gap of gaps) {
-      const dep = topicFromItem(gap);
-      map.set(gap.id, allMissed.filter(s => signalMatchesDep(s, dep)));
-    }
-    return map;
-  }, [gaps, allMissed]);
-
-  if (gaps.length === 0) return null;
-
-  return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-sm font-medium text-white">
-          {t('blindspots.uncovered')} ({gaps.length})
-        </h3>
-        <p className="text-[11px] text-text-muted mt-0.5">Click to see the signals you missed</p>
-      </div>
-      <div>
-        {gaps.map(gap => (
-          <CoverageGapCard
-            key={gap.id} gap={gap}
-            signals={signalsByGapId.get(gap.id) ?? []}
-            onDismissSignal={onDismissSignal}
-          />
-        ))}
-      </div>
-    </div>
-  );
-});
-
-// --- Unlinked Missed Signals — limited with show-all toggle ------------------
-
-const UnlinkedMissedSection = memo(function UnlinkedMissedSection({
-  items, onDismiss,
-}: {
-  items: EvidenceItem[];
-  onDismiss: (id: string) => void;
-}) {
-  const { t } = useTranslation();
-  const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? items : items.slice(0, UNLINKED_LIMIT);
-  const hiddenCount = items.length - UNLINKED_LIMIT;
-
-  if (items.length === 0) return null;
-
-  return (
-    <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
-        <h3 className="text-sm font-medium text-white">
-          {t('blindspots.missed')} ({items.length})
-        </h3>
-        <p className="text-[11px] text-text-muted mt-0.5">Signals not tied to a specific coverage gap</p>
-      </div>
-      <div className="divide-y divide-border">
-        {visible.map(it => <MissedSignalRow key={it.id} item={it} onDismiss={onDismiss} />)}
-      </div>
-      {!showAll && hiddenCount > 0 && (
-        <button
-          onClick={() => setShowAll(true)}
-          className="w-full px-5 py-3 text-xs text-text-muted hover:text-white hover:bg-bg-tertiary/30 transition-colors border-t border-border"
-        >
-          Show {hiddenCount} more signal{hiddenCount === 1 ? '' : 's'}
-        </button>
-      )}
-    </div>
-  );
-});
-
-// --- Main View ---------------------------------------------------------------
+// ============================================================================
+// Main View — data shaping + layout
+// ============================================================================
 
 const BlindSpotsView = memo(function BlindSpotsView() {
   const { t } = useTranslation();
@@ -305,30 +62,88 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     recordTrustEvent({ eventType: 'dismissed', signalId: id, sourceType: 'missed_signal', notes: 'blind_spot_not_relevant' });
   }, []);
 
-  const buckets = useMemo(() => {
-    const uncovered: EvidenceItem[] = [];
-    const missed: EvidenceItem[] = [];
-    for (const it of report?.items ?? []) {
-      if (dismissed.has(it.id)) continue;
-      if (it.id.startsWith('bs_uncov_') || it.id.startsWith('bs_stale_')) uncovered.push(it);
-      else if (it.id.startsWith('bs_missed_')) missed.push(it);
+  const { depRows, unmatchedSignals } = useMemo(() => {
+    const items = (report?.items ?? []).filter(it => !dismissed.has(it.id));
+
+    const gaps = items.filter(it => it.id.startsWith('bs_uncov_') || it.id.startsWith('bs_stale_'));
+    const missed = items.filter(it => it.id.startsWith('bs_missed_'));
+
+    const depMap = new Map<string, DepRow>();
+
+    for (const gap of gaps) {
+      const dep = depFromItem(gap);
+      if (!dep) continue;
+      const key = dep.toLowerCase();
+      if (!depMap.has(key)) {
+        depMap.set(key, {
+          name: dep, status: 'blind_spot', urgency: gap.urgency,
+          gap, signals: [], projects: gap.affected_projects,
+        });
+      }
     }
-    return { uncovered, missed };
+
+    const matchedSignalIds = new Set<string>();
+
+    for (const signal of missed) {
+      for (const [, row] of depMap) {
+        if (signalMatchesDep(signal, row.name)) {
+          row.signals.push(signal);
+          matchedSignalIds.add(signal.id);
+          break;
+        }
+      }
+    }
+
+    for (const signal of missed) {
+      if (matchedSignalIds.has(signal.id)) continue;
+      const dep = depFromItem(signal);
+      if (!dep) continue;
+      const key = dep.toLowerCase();
+      if (!depMap.has(key)) {
+        depMap.set(key, {
+          name: dep, status: 'falling_behind', urgency: signal.urgency,
+          gap: null, signals: [], projects: [],
+        });
+      }
+      depMap.get(key)!.signals.push(signal);
+      matchedSignalIds.add(signal.id);
+    }
+
+    for (const row of depMap.values()) {
+      if (row.gap && (row.gap.urgency === 'critical' || row.gap.urgency === 'high')) {
+        row.status = 'blind_spot';
+      } else if (row.gap || row.signals.length >= 3) {
+        row.status = row.signals.length > 0 ? 'blind_spot' : 'falling_behind';
+      } else if (row.signals.length > 0) {
+        row.status = 'falling_behind';
+      } else {
+        row.status = 'well_covered';
+      }
+      row.signals.sort((a, b) => URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]);
+    }
+
+    const statusOrder: Record<DepStatus, number> = { blind_spot: 0, falling_behind: 1, well_covered: 2 };
+    const rows = Array.from(depMap.values()).sort((a, b) =>
+      statusOrder[a.status] - statusOrder[b.status]
+      || URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency]
+    );
+
+    const unmatched = missed.filter(m => !matchedSignalIds.has(m.id));
+    return { depRows: rows, unmatchedSignals: unmatched };
   }, [report, dismissed]);
 
-  const linkedSignalIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const gap of buckets.uncovered) {
-      const dep = topicFromItem(gap);
-      for (const s of buckets.missed) { if (signalMatchesDep(s, dep)) ids.add(s.id); }
+  const surfacedRef = useRef(new Set<string>());
+  useEffect(() => {
+    for (const row of depRows) {
+      if (row.status !== 'well_covered' && !surfacedRef.current.has(row.name)) {
+        surfacedRef.current.add(row.name);
+        recordTrustEvent({
+          eventType: 'surfaced', sourceType: 'gap',
+          topic: row.name, notes: `stack_map_${row.status}`,
+        });
+      }
     }
-    return ids;
-  }, [buckets.uncovered, buckets.missed]);
-
-  const unlinkedMissed = useMemo(
-    () => buckets.missed.filter(m => !linkedSignalIds.has(m.id)),
-    [buckets.missed, linkedSignalIds],
-  );
+  }, [depRows]);
 
   if (loading) {
     return (
@@ -356,16 +171,15 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   }
 
   const score = report.score ?? 0;
-  const totalActive = buckets.uncovered.length + buckets.missed.length;
-  const dc = dismissed.size;
-  const gapN = buckets.uncovered.length;
-  const sigN = buckets.missed.length;
+  const blindCount = depRows.filter(d => d.status === 'blind_spot').length;
+  const driftCount = depRows.filter(d => d.status === 'falling_behind').length;
+  const problemCount = blindCount + driftCount;
 
-  const scoreContext = dc > 0
-    ? `${dc} reviewed this session. ${totalActive} active: ${gapN} gap${gapN === 1 ? '' : 's'}, ${sigN} signal${sigN === 1 ? '' : 's'}.`
-    : totalActive > 0
-      ? `${gapN} coverage gap${gapN === 1 ? '' : 's'} in your stack and ${sigN} signal${sigN === 1 ? '' : 's'} you haven't engaged with.`
-      : 'Your stack coverage is excellent.';
+  const scoreContext = problemCount === 0
+    ? 'Your stack coverage is excellent.'
+    : `${blindCount > 0 ? `${blindCount} blind spot${blindCount === 1 ? '' : 's'}` : ''}${
+        blindCount > 0 && driftCount > 0 ? ', ' : ''
+      }${driftCount > 0 ? `${driftCount} drifting` : ''} across your ${depRows.length} tracked dependencies.`;
 
   return (
     <div className="space-y-4 pb-8">
@@ -375,14 +189,14 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       </div>
       <ScoreBar score={score} />
       <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>
-      {totalActive === 0 ? (
+      {depRows.length === 0 && unmatchedSignals.length === 0 ? (
         <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
           <p className="text-sm text-text-muted">{t('blindspots.empty')}</p>
         </div>
       ) : (
         <>
-          <CoverageGapsSection gaps={buckets.uncovered} allMissed={buckets.missed} onDismissSignal={handleDismiss} />
-          <UnlinkedMissedSection items={unlinkedMissed} onDismiss={handleDismiss} />
+          <StackCoverageMap depRows={depRows} onDismissSignal={handleDismiss} />
+          <UnmatchedSignals items={unmatchedSignals} onDismiss={handleDismiss} />
         </>
       )}
     </div>
