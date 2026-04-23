@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 mod anti_patterns;
+mod archetype;
 pub(crate) mod calibration;
 mod calibration_analysis;
 pub(crate) mod decision_outcomes;
@@ -27,6 +28,9 @@ pub(crate) use digest::run_autophagy_cycle;
 
 // Scoring pipeline integrations
 pub(crate) use anti_patterns::load_anti_patterns;
+pub(crate) use archetype::{
+    archetype_penalty_for_item, detect_archetypes, load_archetype_penalties, store_archetypes,
+};
 pub(crate) use calibration::load_calibration_deltas;
 pub(crate) use calibration::store_calibrations;
 pub(crate) use calibration_analysis::bridge_accuracy_feedback;

@@ -954,6 +954,13 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
         .collect();
     // Phase 9 — attach precedents via the AWE spine.
     crate::awe_spine::enrich_items(&mut items);
+
+    // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
+    // validation. Critical/High items bypass; Medium/Watch get deliberated.
+    // Gracefully degrades when LLM is unavailable (items pass through unchanged).
+    let user_context = crate::adversarial::build_user_context_summary();
+    items = crate::adversarial::filter_batch(items, &user_context).await;
+
     Ok(EvidenceFeed::from_items(items))
 }
 
