@@ -65,7 +65,7 @@ import { createDatabase, FourDADatabase, type DatabaseValidationResult } from ".
 const server = new Server(
   {
     name: "4da-server",
-    version: "4.5.0",
+    version: "4.6.0",
   },
   {
     capabilities: {
@@ -322,7 +322,7 @@ async function main() {
 
   // Version
   if (args.includes("--version") || args.includes("-v")) {
-    console.log("@4da/mcp-server 4.5.0");
+    console.log("@4da/mcp-server 4.6.0");
     return;
   }
 

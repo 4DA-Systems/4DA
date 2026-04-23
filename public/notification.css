@@ -60,7 +60,7 @@ html, body {
   z-index: 1;
   width: 408px;
   height: 134px;
-  background: rgba(14, 14, 14, 0.95);
+  background: #0E0E0E;
   border-radius: 14px;
   padding: 14px 16px 14px 20px;
   display: flex;
@@ -69,8 +69,8 @@ html, body {
   border: none;
   /* Depth: card floats above desktop */
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+    0 12px 48px rgba(0, 0, 0, 0.7),
+    0 4px 16px rgba(0, 0, 0, 0.4);
   overflow: visible;
   /* Enter animation */
   opacity: 0;
@@ -108,7 +108,7 @@ html, body {
   position: absolute;
   inset: 1px;
   border-radius: 13px;
-  background: rgba(14, 14, 14, 0.95);
+  background: #0E0E0E;
   z-index: -1;
 }
 
