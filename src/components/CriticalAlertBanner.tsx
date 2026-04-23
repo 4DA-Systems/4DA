@@ -125,7 +125,7 @@ export function CriticalAlertBanner() {
   if (criticalAlerts.length === 0) return null;
 
   return (
-    <div className="mx-4 mt-2 mb-1 bg-amber-500/8 border border-amber-500/30 rounded-lg overflow-hidden">
+    <div className="mx-4 mt-2 mb-1 bg-amber-500/15 border border-amber-500/30 rounded-lg overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2">
         <div className="flex items-center gap-2">
@@ -151,7 +151,7 @@ export function CriticalAlertBanner() {
         {criticalAlerts.map(alert => (
           <div
             key={alert.id}
-            className="flex items-start justify-between gap-2 text-xs bg-amber-500/5 rounded px-2 py-1.5"
+            className="flex items-start justify-between gap-2 text-xs bg-amber-500/10 rounded px-2 py-1.5"
           >
             <div className="flex-1 min-w-0">
               <div className="text-amber-200 font-medium truncate">
