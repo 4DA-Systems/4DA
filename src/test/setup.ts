@@ -8,7 +8,7 @@
 
 import '@testing-library/jest-dom';
 
-// Polyfill ResizeObserver for JSDOM (used by GAME WebGL components)
+// Polyfill ResizeObserver for JSDOM (used by WebGL components)
 if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = class ResizeObserver {
     observe() {}
@@ -33,7 +33,7 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
 }
 
 // Mock HTMLCanvasElement.getContext — jsdom does not implement any canvas
-// contexts, so any GAME-compiler component or briefing-atmosphere render
+// contexts, so any fourda-component or briefing-atmosphere render
 // spams "Error: Not implemented: HTMLCanvasElement.prototype.getContext"
 // during every test file that imports one. Return a chainable no-op
 // context object so the calling code thinks it succeeded.

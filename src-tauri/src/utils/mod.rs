@@ -20,7 +20,8 @@ pub(crate) use scraping::scrape_article_content;
 #[allow(unused_imports)] // Used by scraping submodule via super::text::MAX_CONTENT_LENGTH
 pub(crate) use text::MAX_CONTENT_LENGTH;
 pub(crate) use text::{
-    build_embedding_text, chunk_text, decode_html_entities, preprocess_content, truncate_utf8,
+    build_embedding_text, chunk_text, decode_html_entities, preprocess_content, strip_html_tags,
+    truncate_utf8,
 };
 pub(crate) use topics::{check_exclusions, detect_trend_topics, extract_topics};
 pub(crate) use url::{validate_deep_link_url, validate_safe_url};
