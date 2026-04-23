@@ -57,6 +57,7 @@
     "validate": "node scripts/check-file-sizes.cjs && pnpm run validate:components && pnpm run validate:commands && pnpm run validate:wiring && pnpm run validate:cold-boot && pnpm run validate:vite-smoke && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "validate:rust": "cd src-tauri && cargo fmt --check && cargo clippy -- -D warnings && cargo test",
     "validate:mcp": "cd mcp-4da-server && pnpm run build",
+    "validate:mcp-sync": "node scripts/check-mcp-server-sync.cjs",
     "validate:translations": "node scripts/validate-translations.cjs",
     "i18n:types": "npx i18next-resources-for-ts interface -i ./src/locales/en -o ./src/types/i18n-resources.d.ts",
     "i18n:status": "node scripts/i18n-sync.cjs status",
