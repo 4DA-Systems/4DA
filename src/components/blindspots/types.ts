@@ -15,7 +15,7 @@ export interface DepRow {
 
 export const STATUS_CONFIG: Record<DepStatus, { label: string; color: string; dot: string }> = {
   blind_spot: { label: 'Blind Spot', color: 'text-red-400', dot: 'bg-red-400' },
-  falling_behind: { label: 'Falling Behind', color: 'text-yellow-400', dot: 'bg-yellow-400' },
+  falling_behind: { label: 'Drifting', color: 'text-yellow-400', dot: 'bg-yellow-400' },
   well_covered: { label: 'Covered', color: 'text-green-400', dot: 'bg-green-400' },
 };
 

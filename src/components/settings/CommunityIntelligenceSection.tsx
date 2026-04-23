@@ -69,6 +69,7 @@ export function CommunityIntelligenceSection() {
         <div>
           <h3 className="text-white font-medium text-sm">
             {t('settings.community.title', 'Community Intelligence')}
+            <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded-full font-medium uppercase tracking-wider">Coming soon</span>
           </h3>
           <p className="text-text-muted text-xs">
             {t('settings.community.subtitle', 'Help improve scoring for all 4DA users')}
@@ -119,6 +120,7 @@ export function CommunityIntelligenceSection() {
         </div>
 
         <button
+          disabled
           onClick={() => {
             if (status.enabled) {
               void handleToggle();
@@ -128,7 +130,7 @@ export function CommunityIntelligenceSection() {
               setShowConfirm(true);
             }
           }}
-          className={`relative w-10 h-5 rounded-full transition-colors ${
+          className={`relative w-10 h-5 rounded-full transition-colors opacity-50 cursor-not-allowed ${
             status.enabled ? 'bg-green-500/40' : 'bg-gray-600'
           }`}
         >
@@ -144,8 +146,9 @@ export function CommunityIntelligenceSection() {
       {showConfirm && !status.enabled && (
         <div className="mt-2 flex items-center gap-2">
           <button
+            disabled
             onClick={() => { void confirmEnable(); }}
-            className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded hover:bg-blue-500/30 transition-colors"
+            className="px-3 py-1.5 bg-blue-500/20 text-blue-400 text-xs rounded hover:bg-blue-500/30 transition-colors opacity-50 cursor-not-allowed"
           >
             {t('settings.community.confirmEnable', 'Yes, enable')}
           </button>

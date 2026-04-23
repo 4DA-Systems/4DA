@@ -103,18 +103,23 @@ export const ProValuePanel = memo(function ProValuePanel() {
         </div>
 
         {/* Stats Grid */}
-        {!isTrialCta && (
-          <div className="grid grid-cols-3 gap-3">
-            {STATS_CONFIG.map(({ key, labelKey }) => (
-              <div key={key} className="text-center p-2.5 bg-bg-primary rounded-lg border border-border">
-                <div className="text-lg font-semibold text-white">
-                  {report[key as keyof ProValueReport] as number}
+        {!isTrialCta && (() => {
+          const activeStats = STATS_CONFIG.filter(({ key }) => (report[key as keyof ProValueReport] as number) > 0);
+          if (activeStats.length === 0) return null;
+          const cols = activeStats.length <= 2 ? 'grid-cols-2' : 'grid-cols-3';
+          return (
+            <div className={`grid ${cols} gap-3`}>
+              {activeStats.map(({ key, labelKey }) => (
+                <div key={key} className="text-center p-2.5 bg-bg-primary rounded-lg border border-border">
+                  <div className="text-lg font-semibold text-white">
+                    {report[key as keyof ProValueReport] as number}
+                  </div>
+                  <div className="text-xs text-text-muted mt-0.5">{t(labelKey)}</div>
                 </div>
-                <div className="text-xs text-text-muted mt-0.5">{t(labelKey)}</div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Data Depth Indicator */}
         {!isTrialCta && (report.total_feedback_events > 0 || report.data_age_days > 0) && (

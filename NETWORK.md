@@ -196,6 +196,19 @@ The domains and URLs are the same as listed under LLM Integration above.
 ### Ed25519 License Verification (Offline)
 - **No network calls.** Signed license keys (`4DA-{payload}.{signature}`) are verified locally using an embedded ed25519 public key. This is purely cryptographic, no server contact required.
 
+#### License Recovery (User-Initiated)
+
+| Detail | Value |
+| --- | --- |
+| When | User clicks "Recover License by Email" in Settings |
+| Endpoint | `https://4da.ai/api/streets/activate` |
+| Data sent | Email address (query parameter) |
+| Data received | License key, tier |
+| User consent | Explicit — user initiates via button click |
+
+This endpoint is the only 4DA-operated server the application contacts.
+All other network calls go to third-party APIs (content sources, LLM providers, Keygen).
+
 ---
 
 ## Update Checks

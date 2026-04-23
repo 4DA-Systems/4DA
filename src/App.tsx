@@ -183,7 +183,7 @@ function App() {
     let relevantCount = 0, topCount = 0;
     for (const r of state.relevanceResults) {
       if (r.relevant) relevantCount++;
-      if (r.top_score >= 0.72) topCount++;
+      if (r.top_score >= 0.6) topCount++;
     }
     return { relevantCount, topCount, total: state.relevanceResults.length };
   }, [state.analysisComplete, state.loading, state.relevanceResults]);

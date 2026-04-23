@@ -486,6 +486,8 @@
   "feed.viewAll": "View all {{count}}",
   "pulse.noData": "No intelligence gathered yet. Run an analysis to get started.",
   "pulse.newSinceLastSession": "{{newItems}} new items since last session. {{newRelevant}} newly relevant.",
+  "pulse.newSinceLastSession_one": "{{newItems}} new item since last session. {{newRelevant}} newly relevant.",
+  "pulse.newSinceLastSession_other": "{{newItems}} new items since last session. {{newRelevant}} newly relevant.",
   "pulse.noNewItems": "No new items since last session.",
   "pulse.itemsAnalyzed": "{{count}} items analyzed, {{relevant}} relevant to you.",
   "pulse.signalsNeedAttention": "{{count}} need your attention.",

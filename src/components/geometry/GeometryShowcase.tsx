@@ -15,6 +15,7 @@ interface GeometryEntry {
   dimension: string;
   role: string;
   description: string;
+  caption: string;
   verify?: string;
   render: (size: number) => ReactNode;
 }
@@ -26,6 +27,7 @@ const FOUNDATIONS: GeometryEntry[] = [
     vertices: 4, edges: 6, dimension: '3D',
     role: 'Foundation',
     description: 'Four non-negotiable invariants: privacy (INV-004), BYOK (INV-031), local-first (INV-032), zero-config (INV-002). Each enforces every other \u2014 BYOK requires privacy, privacy requires local-first, local-first enables zero-config. Remove any vertex and the solid collapses.',
+    caption: '4 principles, 6 connections \u2014 remove one and it collapses',
     verify: '.ai/INVARIANTS.md',
     render: (size: number) => (
       <PlatonicSVG
@@ -43,6 +45,7 @@ const FOUNDATIONS: GeometryEntry[] = [
     vertices: 5, edges: 10, dimension: '4D',
     role: 'Identity',
     description: '4 Dimensional Autonomy \u2014 the name is literal. Four architectural invariants plus your context. ACE scans your projects, learns your stack, maps your interests. The system has four pillars; your context makes five. Rotation speeds are golden-ratio-derived for non-repeating motion.',
+    caption: '4 pillars + your context \u2014 the fifth vertex is you',
     verify: 'src-tauri/src/ace/',
     render: (size: number) => <PentachoronSVG size={size} />,
   },
@@ -52,6 +55,7 @@ const FOUNDATIONS: GeometryEntry[] = [
     vertices: 5, edges: 10, dimension: '0D\u20264D',
     role: 'Emergence',
     description: 'The simplex progression: each dimension adds one vertex fully connected to all before it. Point, line, triangle, tetrahedron, pentachoron \u2014 minimum structure, maximum volume at every scale. Five phases animate the journey from 0D to 4D.',
+    caption: 'Each dimension adds one vertex connected to all before it',
     render: (size: number) => <SimplexUnfoldSVG size={size} />,
   },
 ];
@@ -63,6 +67,7 @@ const FAMILY: GeometryEntry[] = [
     vertices: 12, edges: 30, dimension: '3D',
     role: 'Network',
     description: '12 vertices, each connected to exactly 5 neighbours. Any node reaches any other in 3 hops. The most efficient triangulated sphere \u2014 design target for the distributed Team Relay network.',
+    caption: '12 nodes, each 3 hops from any other \u2014 network topology',
     verify: 'docs/strategy/TEAM-RELAY-ARCHITECTURE.md',
     render: (size: number) => (
       <PlatonicSVG
@@ -80,6 +85,7 @@ const FAMILY: GeometryEntry[] = [
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Dual',
     description: 'The icosahedron\u2019s mathematical dual \u2014 same 30 edges, pentagons where triangles were. Every Platonic solid has a dual. 4DA\u2019s visual language honours the full family.',
+    caption: 'The icosahedron turned inside out \u2014 mathematical duality',
     render: (size: number) => (
       <PlatonicSVG
         vertices={DODECAHEDRON.vertices}
@@ -96,6 +102,7 @@ const FAMILY: GeometryEntry[] = [
     vertices: 20, edges: 30, dimension: '3D',
     role: 'Bridge',
     description: 'Five interlocking tetrahedra whose vertices coincide with the dodecahedron\u2019s. The proof these solids aren\u2019t arbitrary \u2014 shared vertices, edges, and duality connect the entire Platonic family.',
+    caption: '5 interlocking tetrahedra \u2014 proof the family is connected',
     render: (size: number) => <CompoundFiveSVG size={size} />,
   },
 ];
@@ -126,8 +133,8 @@ function GeometryCard({ geo, isExpanded, onToggle }: {
       <div className="text-center mt-1.5">
         <span className="text-xs font-medium text-white">{geo.name}</span>
         <span className="text-[9px] text-accent-gold font-medium ml-1.5">{geo.role}</span>
-        <div className="text-[9px] text-text-muted">
-          {geo.dimension}{' \u00B7 '}{geo.vertices}{'v \u00B7 '}{geo.edges}{'e'}
+        <div className="text-[10px] text-text-muted/80 mt-0.5 leading-snug px-1">
+          {geo.caption}
         </div>
       </div>
       {isExpanded && (
