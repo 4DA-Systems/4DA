@@ -56,7 +56,7 @@ pub(crate) fn preprocess_content(content: &str) -> String {
 }
 
 /// Remove HTML tags while preserving text content.
-fn strip_html_tags(text: &str) -> String {
+pub(crate) fn strip_html_tags(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let mut in_tag = false;
     for ch in text.chars() {

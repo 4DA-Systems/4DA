@@ -36,7 +36,7 @@ dist-ssr
 # Playwright MCP runtime state (console logs, page snapshots)
 .playwright-mcp/
 
-# Temporary GAME renderer outputs — NEVER track at repo root
+# Temporary renderer outputs — NEVER track at repo root
 /living-*.png
 /primordial-*.png
 /singularity-*.png
@@ -278,9 +278,9 @@ coverage/
 site/_site/
 target-test/
 
-# GAME compiler shader artifacts (embedded in .js components)
-src/lib/game-components/*.wgsl
-src/lib/game-components/*.frag
+# Shader artifacts (embedded in .js components)
+src/lib/fourda-components/*.wgsl
+src/lib/fourda-components/*.frag
 
 # 4DA World (separate repo)
 4DA-WORLD-DOCUMENTS/

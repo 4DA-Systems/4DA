@@ -189,9 +189,11 @@ pub(crate) fn generate_relevance_explanation(
     parts.join(" · ")
 }
 
-/// Extract a short meaningful phrase from matched context text
+/// Extract a short meaningful phrase from matched context text.
+/// Strips HTML tags first — matched text can contain raw markup from RSS/scraped content.
 pub(crate) fn extract_short_phrase(matched_text: &str) -> String {
-    let clean = matched_text.trim().trim_end_matches("...");
+    let stripped = crate::utils::strip_html_tags(matched_text);
+    let clean = stripped.trim().trim_end_matches("...");
     let phrase = clean
         .find(['.', '\n'])
         .filter(|&pos| pos > 10)
@@ -200,7 +202,7 @@ pub(crate) fn extract_short_phrase(matched_text: &str) -> String {
     if phrase.len() < 10 {
         String::new()
     } else {
-        phrase.to_string()
+        phrase.split_whitespace().collect::<Vec<_>>().join(" ")
     }
 }
 

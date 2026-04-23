@@ -99,13 +99,6 @@ export function SystemHealthSection() {
     );
   }
 
-  const overallState = summary
-    ? summary.unavailable > 0 ? 'degraded' : summary.degraded > 0 ? 'partial' : 'healthy'
-    : 'unknown';
-
-  const overallColor = overallState === 'healthy' ? 'text-green-400' :
-    overallState === 'partial' ? 'text-yellow-400' : 'text-red-400';
-
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       {/* Header */}
@@ -126,9 +119,11 @@ export function SystemHealthSection() {
           </div>
         </div>
         {summary && (
-          <span className={`text-xs font-medium ${overallColor}`}>
-            {summary.full}/{summary.total} {t('settings.systemHealth.operational', 'operational')}
-          </span>
+          <div className="flex items-center gap-2 text-[10px] font-medium">
+            <span className="text-green-400">{summary.full} full</span>
+            {summary.degraded > 0 && <span className="text-yellow-400">{summary.degraded} degraded</span>}
+            {summary.unavailable > 0 && <span className="text-red-400">{summary.unavailable} unavailable</span>}
+          </div>
         )}
       </div>
 

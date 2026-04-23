@@ -246,46 +246,41 @@ check('MCP tool wiring', () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════
-// CHECK 4: TIER_VIEWS cross-file consistency
+// CHECK 4: TABS ↔ VALID_VIEWS consistency
 // ═════════════════════════════════════════════════════════════════════════
-check('TIER_VIEWS consistency', () => {
+check('TABS ↔ VALID_VIEWS consistency', () => {
   const tabbar = readFileSafe(path.join(SRC, 'components', 'ViewTabBar.tsx')) ?? '';
   const uiSlice = readFileSafe(path.join(SRC, 'store', 'ui-slice.ts')) ?? '';
 
-  function extractTierViews(content, constName) {
-    const re = new RegExp(`${constName}\\s*:\\s*Record<ViewTier,\\s*ViewId\\[\\]>\\s*=\\s*\\{([\\s\\S]*?)^\\};`, 'm');
-    const m = content.match(re);
-    if (!m) return null;
-    const body = m[1];
-    const tiers = {};
-    const tierRe = /(\w+):\s*\[([^\]]*)\]/g;
-    let tm;
-    while ((tm = tierRe.exec(body)) !== null) {
-      const views = tm[2].split(',').map((s) => s.trim().replace(/['"]/g, '')).filter(Boolean);
-      tiers[tm[1]] = views.sort();
-    }
-    return tiers;
+  // Extract view IDs from TABS array in ViewTabBar.tsx
+  const tabIds = [];
+  const tabRe = /id:\s*'(\w+)'/g;
+  const tabSection = tabbar.match(/const TABS[\s\S]*?\];/);
+  if (!tabSection) return { ok: false, details: 'Cannot parse TABS in ViewTabBar.tsx' };
+  let m;
+  while ((m = tabRe.exec(tabSection[0])) !== null) {
+    tabIds.push(m[1]);
   }
 
-  const tabbarTiers = extractTierViews(tabbar, 'TIER_VIEWS');
-  const sliceTiers = extractTierViews(uiSlice, 'UI_SLICE_TIER_VIEWS');
+  // Extract view IDs from VALID_VIEWS array in ui-slice.ts
+  const sliceMatch = uiSlice.match(/VALID_VIEWS[^=]*=\s*\[([^\]]*)\]/);
+  if (!sliceMatch) return { ok: false, details: 'Cannot parse VALID_VIEWS in ui-slice.ts' };
+  const sliceIds = sliceMatch[1].split(',').map((s) => s.trim().replace(/['"]/g, '')).filter(Boolean);
 
-  if (!tabbarTiers) return { ok: false, details: 'Cannot parse TIER_VIEWS in ViewTabBar.tsx' };
-  if (!sliceTiers) return { ok: false, details: 'Cannot parse UI_SLICE_TIER_VIEWS in ui-slice.ts' };
-
-  const tiers = Object.keys(tabbarTiers);
+  const tabSorted = [...tabIds].sort();
+  const sliceSorted = [...sliceIds].sort();
   const issues = [];
-  for (const t of tiers) {
-    const a = JSON.stringify(tabbarTiers[t]);
-    const b = JSON.stringify(sliceTiers[t] ?? []);
-    if (a !== b) {
-      issues.push(`${t}: ViewTabBar=${a} vs ui-slice=${b}`);
-    }
+
+  if (JSON.stringify(tabSorted) !== JSON.stringify(sliceSorted)) {
+    const inTabOnly = tabSorted.filter((v) => !sliceSorted.includes(v));
+    const inSliceOnly = sliceSorted.filter((v) => !tabSorted.includes(v));
+    if (inTabOnly.length > 0) issues.push(`In TABS but not VALID_VIEWS: ${inTabOnly.join(', ')}`);
+    if (inSliceOnly.length > 0) issues.push(`In VALID_VIEWS but not TABS: ${inSliceOnly.join(', ')}`);
   }
 
   return {
     ok: issues.length === 0,
-    details: issues.length > 0 ? issues.join('\n    ') : `${tiers.length} tiers consistent`,
+    details: issues.length > 0 ? issues.join('\n    ') : `${tabIds.length} views consistent`,
   };
 });
 
