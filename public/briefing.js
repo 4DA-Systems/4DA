@@ -18,8 +18,13 @@ var wisdomSection = document.getElementById('wisdom-section');
 var wisdomList = document.getElementById('wisdom-list');
 var synthesisSection = document.getElementById('synthesis-section');
 var synthesisText = document.getElementById('synthesis-text');
+var preemptionSection = document.getElementById('preemption-section');
+var preemptionList = document.getElementById('preemption-list');
 var gapsSection = document.getElementById('gaps-section');
 var gapsList = document.getElementById('gaps-list');
+var blindSpotScore = document.getElementById('blind-spot-score');
+var wisdomSynthesisSection = document.getElementById('wisdom-synthesis-section');
+var wisdomSynthesisText = document.getElementById('wisdom-synthesis-text');
 var ongoingSection = document.getElementById('ongoing-section');
 var ongoingLine = document.getElementById('ongoing-line');
 var totalCount = document.getElementById('total-count');
@@ -57,6 +62,12 @@ function truncate(str, max) {
 function formatScore(score) {
   if (score == null) return '';
   return Math.round(score * 100) + '%';
+}
+
+function isAbstention(text) {
+  if (!text) return true;
+  var lower = text.toLowerCase();
+  return lower.indexOf('low signal') === 0 || lower.indexOf('no noteworthy') !== -1;
 }
 
 /** Extract date string from title like "4DA Intelligence Briefing — 02 Apr 2026" */
@@ -185,9 +196,28 @@ function buildChainsHtml(chains) {
   return html;
 }
 
+function buildPreemptionHtml(alerts) {
+  var html = '';
+  for (var i = 0; i < alerts.length; i++) {
+    var alert = alerts[i];
+    var title = escapeHtml(truncate(alert.title, 70));
+    var urgency = escapeHtml(alert.urgency || 'high');
+    var explanation = escapeHtml(truncate(alert.explanation, 160));
+    var dotClass = urgency === 'critical' ? 'critical' : 'alert';
+    html += '<div class="preemption-row urgency-' + urgency + '">'
+      + '<div class="preemption-header">'
+      + '<span class="priority-dot ' + dotClass + '"></span>'
+      + '<span class="preemption-title">' + title + '</span>'
+      + '</div>'
+      + (explanation ? '<div class="preemption-explanation">' + explanation + '</div>' : '')
+      + '</div>';
+  }
+  return html;
+}
+
 function renderBriefing(data) {
-  // LLM Synthesis
-  if (data.synthesis) {
+  // LLM Synthesis (hide if abstention — adds no value)
+  if (data.synthesis && !isAbstention(data.synthesis)) {
     synthesisSection.style.display = '';
     synthesisText.textContent = data.synthesis;
   } else {
@@ -201,6 +231,7 @@ function renderBriefing(data) {
   if (data.labels) {
     var labelMap = {
       'label-header': data.labels.header,
+      'label-preemption': data.labels.preemption,
       'label-escalating': data.labels.escalating,
       'label-wisdom': data.labels.wisdom,
       'label-signals': data.labels.signals,
@@ -214,6 +245,14 @@ function renderBriefing(data) {
     trackingLabel = data.labels.tracking || trackingLabel;
     signalsTodaySuffix = data.labels.signals_today_suffix || signalsTodaySuffix;
     emptyStateText = data.labels.empty_state || emptyStateText;
+  }
+
+  // Preemption alerts
+  if (data.preemption_alerts && data.preemption_alerts.length > 0) {
+    preemptionSection.style.display = '';
+    preemptionList.innerHTML = buildPreemptionHtml(data.preemption_alerts);
+  } else {
+    preemptionSection.style.display = 'none';
   }
 
   // Escalating chains
@@ -232,6 +271,14 @@ function renderBriefing(data) {
     wisdomSection.style.display = 'none';
   }
 
+  // AWE behavioral wisdom synthesis
+  if (data.wisdom_synthesis) {
+    wisdomSynthesisSection.style.display = '';
+    wisdomSynthesisText.textContent = data.wisdom_synthesis;
+  } else {
+    wisdomSynthesisSection.style.display = 'none';
+  }
+
   // Signal items
   if (!data.items || data.items.length === 0) {
     itemsList.innerHTML = '<div class="empty-state">' + emptyStateText + '</div>';
@@ -243,12 +290,26 @@ function renderBriefing(data) {
     itemsList.innerHTML = html;
   }
 
-  // Knowledge gaps
-  if (data.knowledge_gaps && data.knowledge_gaps.length > 0) {
+  // Knowledge gaps + blind spot score
+  var hasGaps = data.knowledge_gaps && data.knowledge_gaps.length > 0;
+  var hasScore = data.blind_spot_score != null;
+  if (hasGaps || hasScore) {
     gapsSection.style.display = '';
-    gapsList.innerHTML = buildGapsHtml(data.knowledge_gaps);
+    if (hasGaps) {
+      gapsList.innerHTML = buildGapsHtml(data.knowledge_gaps);
+    } else {
+      gapsList.innerHTML = '';
+    }
+    if (hasScore) {
+      blindSpotScore.style.display = '';
+      var score = Math.round(data.blind_spot_score);
+      blindSpotScore.textContent = score + '% coverage gap';
+    } else {
+      blindSpotScore.style.display = 'none';
+    }
   } else {
     gapsSection.style.display = 'none';
+    blindSpotScore.style.display = 'none';
   }
 
   // Ongoing topics
@@ -385,9 +446,17 @@ async function init() {
 
     // Async synthesis arrives after initial briefing
     await listen('briefing-synthesis', function (event) {
-      if (event.payload && synthesisSection && synthesisText) {
+      if (event.payload && !isAbstention(event.payload) && synthesisSection && synthesisText) {
         synthesisSection.style.display = '';
         synthesisText.textContent = event.payload;
+      }
+    });
+
+    // AWE wisdom synthesis arrives async
+    await listen('awe-wisdom-synthesis', function (event) {
+      if (event.payload && event.payload.wisdom && wisdomSynthesisSection && wisdomSynthesisText) {
+        wisdomSynthesisSection.style.display = '';
+        wisdomSynthesisText.textContent = event.payload.wisdom;
       }
     });
 

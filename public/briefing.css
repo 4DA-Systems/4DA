@@ -46,7 +46,7 @@ html, body {
 
 .briefing-window {
   width: 560px;
-  height: 480px;
+  height: 640px;
   position: relative;
   display: flex;
   align-items: center;
@@ -79,7 +79,7 @@ html, body {
   position: relative;
   z-index: 1;
   width: 528px;
-  max-height: 456px;
+  max-height: 616px;
   background: var(--bg-card);
   border-radius: 16px;
   padding: 20px 24px 14px 24px;
@@ -233,8 +233,64 @@ html, body {
 }
 
 .section-label--urgent { color: var(--accent-red); }
+.section-label--critical { color: var(--accent-red); }
 .section-label--wisdom { color: var(--accent-gold); }
 .section-label--caution { color: var(--accent-amber); }
+
+/* ========================================================================
+   Preemption Alerts
+   ======================================================================== */
+
+.preemption-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preemption-row {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.05);
+  border-left: 2px solid rgba(239, 68, 68, 0.3);
+}
+
+.preemption-row.urgency-critical {
+  background: rgba(239, 68, 68, 0.07);
+  border-left-color: rgba(239, 68, 68, 0.5);
+}
+
+.preemption-row:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.preemption-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.preemption-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preemption-explanation {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  padding: 3px 0 0 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 
 /* ========================================================================
    Escalating Chains
@@ -346,6 +402,31 @@ html, body {
   font-style: italic;
   color: var(--text-secondary);
   line-height: 1.45;
+}
+
+/* ========================================================================
+   AWE Wisdom Synthesis
+   ======================================================================== */
+
+.wisdom-synthesis-section {
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  background: rgba(212, 175, 55, 0.03);
+  border-radius: 8px;
+  border-left: 2px solid rgba(212, 175, 55, 0.2);
+}
+
+.wisdom-synthesis-text {
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--accent-gold);
+  opacity: 0.85;
+  max-height: 60px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 /* ========================================================================
@@ -508,6 +589,13 @@ html, body {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--text-muted);
+}
+
+.blind-spot-score {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-amber);
+  padding: 0 0 6px 2px;
 }
 
 /* ========================================================================

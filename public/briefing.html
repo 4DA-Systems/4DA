@@ -29,6 +29,12 @@
           <div id="synthesis-text" class="synthesis-text"></div>
         </div>
 
+        <!-- Preemption alerts (critical/high urgency) -->
+        <div id="preemption-section" class="section preemption-section" style="display:none">
+          <div class="section-label section-label--critical" id="label-preemption">PREEMPTION</div>
+          <div id="preemption-list" class="preemption-list"></div>
+        </div>
+
         <!-- Escalating chains -->
         <div id="chains-section" class="section chains-section" style="display:none">
           <div class="section-label section-label--urgent" id="label-escalating">ESCALATING</div>
@@ -41,6 +47,11 @@
           <div id="wisdom-list" class="wisdom-list"></div>
         </div>
 
+        <!-- AWE Behavioral Wisdom Synthesis (arrives async) -->
+        <div id="wisdom-synthesis-section" class="section wisdom-synthesis-section" style="display:none">
+          <div id="wisdom-synthesis-text" class="wisdom-synthesis-text"></div>
+        </div>
+
         <!-- Top signals -->
         <div id="items-section" class="section items-section">
           <div class="section-label" id="label-signals">SIGNALS</div>
@@ -50,6 +61,7 @@
         <!-- Knowledge gaps / blind spots -->
         <div id="gaps-section" class="section gaps-section" style="display:none">
           <div class="section-label section-label--caution" id="label-blindspots">BLIND SPOTS</div>
+          <div id="blind-spot-score" class="blind-spot-score" style="display:none"></div>
           <div id="gaps-list" class="gaps-list"></div>
         </div>
 
