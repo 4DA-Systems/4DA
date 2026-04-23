@@ -208,7 +208,6 @@ mod delegation;
 mod delegation;
 mod dependency_commands;
 mod dependency_health;
-mod desktop_pin;
 mod developer_dna;
 mod diagnostics;
 mod digest;

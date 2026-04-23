@@ -50,6 +50,7 @@ src-tauri/ort-runtime/
 
 # Tauri build artifacts
 src-tauri/target/
+src-tauri/target-codex-audit/
 src-tauri/fourda-macros/target/
 src-tauri/fourda-macros/Cargo.lock
 
