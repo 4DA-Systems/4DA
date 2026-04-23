@@ -9,7 +9,7 @@
 //! knowledge gaps, signal priorities, and AWE wisdom signals.
 //!
 //! The briefing window is:
-//! - 560×480 logical pixels, positioned bottom-right above the taskbar
+//! - 560×640 logical pixels, positioned bottom-right above the taskbar
 //! - Transparent, borderless, always-on-top for 8 seconds then normal z-order
 //! - Pre-created on app startup (hidden) for instant display
 //! - Visible in taskbar, accessible via Alt+Tab
@@ -29,7 +29,7 @@ const WINDOW_LABEL: &str = "briefing";
 
 /// Briefing window dimensions (logical pixels).
 const WINDOW_WIDTH: u32 = 560;
-const WINDOW_HEIGHT: u32 = 480;
+const WINDOW_HEIGHT: u32 = 640;
 
 /// Auto-dismiss after 5 minutes of no interaction.
 /// Previous value of 60s was too short — users routinely missed the briefing
@@ -298,15 +298,16 @@ pub async fn briefing_open_url(url: String) -> crate::error::Result<()> {
 
 /// Manually trigger the morning briefing for testing.
 ///
-/// Bypasses the once-per-day and time-window checks. Builds a briefing from
-/// current analysis state or DB items, displays the briefing window, and
-/// fires the OS notification — exactly like the scheduler path.
+/// Bypasses the once-per-day and time-window checks. Uses the full enrichment
+/// pipeline (quality gate, dedupe, knowledge gaps, chains, AWE wisdom,
+/// preemption alerts, blind spot score) and spawns async LLM synthesis —
+/// identical output to the scheduled path.
 #[tauri::command]
 pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<String> {
-    use crate::monitoring_briefing::BriefingNotification;
-
     let user_lang = crate::i18n::get_user_language();
-    let items: Vec<crate::monitoring_briefing::BriefingItem> = {
+
+    // Fetch raw items from analysis state or DB (same logic as check_morning_briefing)
+    let raw_items: Vec<crate::monitoring_briefing::BriefingItem> = {
         let analysis_state = crate::get_analysis_state().lock();
         if let Some(ref results) = analysis_state.results {
             results
@@ -314,7 +315,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 .filter(|r| r.relevant && !r.excluded)
                 .filter(|r| r.detected_lang == user_lang)
                 .filter(|r| r.top_score >= 0.15)
-                .take(8)
+                .take(25)
                 .map(|r| crate::monitoring_briefing::BriefingItem {
                     title: r.title.clone(),
                     source_type: r.source_type.clone(),
@@ -329,7 +330,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 .collect()
         } else if let Ok(db) = crate::get_database() {
             let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-            db.get_relevant_items_since(period_start, 0.15, 8, &user_lang)
+            db.get_relevant_items_since(period_start, 0.15, 25, &user_lang)
                 .ok()
                 .map(|db_items| {
                     db_items
@@ -353,31 +354,54 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         }
     };
 
-    if items.is_empty() {
+    if raw_items.is_empty() {
         return Ok("No items available for briefing — run an analysis first".into());
     }
 
-    let total_relevant = items.len();
-    let now = chrono::Local::now();
-    let briefing = BriefingNotification {
-        title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
-        items,
-        total_relevant,
-        ongoing_topics: vec![],
-        knowledge_gaps: vec![],
-        escalating_chains: vec![],
-        wisdom_signals: vec![],
-        synthesis: None,
-        wisdom_synthesis: None,
-        preemption_alerts: vec![],
-        blind_spot_score: None,
-        labels: Some(crate::monitoring_briefing::build_briefing_labels(&user_lang)),
-    };
+    // Run full enrichment pipeline (skip novelty so manual trigger always shows content)
+    let briefing =
+        crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
 
+    let total = briefing.items.len();
+    let gaps = briefing.knowledge_gaps.len();
+    let chains = briefing.escalating_chains.len();
+    let wisdom = briefing.wisdom_signals.len();
+    let preemption = briefing.preemption_alerts.len();
+
+    // Show briefing window + OS notification
     crate::monitoring_notifications::send_morning_briefing_notification(&app, &briefing);
 
-    info!(target: "4da::briefing", items = total_relevant, "Manual briefing triggered");
-    Ok(format!("Briefing triggered with {} items", total_relevant))
+    // Spawn async LLM synthesis (same as scheduler path)
+    {
+        let app_synth = app.clone();
+        let briefing_synth = briefing.clone();
+        tauri::async_runtime::spawn(async move {
+            match crate::monitoring_briefing::synthesize_morning_briefing(&briefing_synth).await {
+                Ok(synthesis) => {
+                    info!(target: "4da::briefing", "Manual briefing synthesis ready");
+                    let _ = app_synth.emit_to("briefing", "briefing-synthesis", &synthesis);
+                }
+                Err(e) => {
+                    info!(target: "4da::briefing", reason = %e, "Manual synthesis skipped");
+                }
+            }
+        });
+    }
+
+    info!(
+        target: "4da::briefing",
+        items = total,
+        gaps = gaps,
+        chains = chains,
+        wisdom = wisdom,
+        preemption = preemption,
+        "Manual briefing triggered (full enrichment)"
+    );
+
+    Ok(format!(
+        "Briefing triggered: {} items, {} gaps, {} chains, {} wisdom, {} preemption",
+        total, gaps, chains, wisdom, preemption
+    ))
 }
 
 #[cfg(test)]
@@ -387,7 +411,7 @@ mod tests {
     #[test]
     fn test_window_constants() {
         assert_eq!(WINDOW_WIDTH, 560);
-        assert_eq!(WINDOW_HEIGHT, 480);
+        assert_eq!(WINDOW_HEIGHT, 640);
         assert_eq!(AUTO_DISMISS_MS, 300_000);
         assert_eq!(ALWAYS_ON_TOP_MS, 8_000);
         assert_eq!(WINDOW_LABEL, "briefing");

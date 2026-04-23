@@ -130,6 +130,117 @@ pub struct BriefingNotification {
 }
 
 // ============================================================================
+// Enrichment Pipeline
+// ============================================================================
+
+/// Build an enriched briefing from raw items.
+///
+/// Applies the full quality pipeline: quality gate → dedupe → cap → novelty →
+/// knowledge gaps → escalating chains → AWE wisdom → preemption alerts →
+/// blind spot score. Called by both the scheduled briefing and manual trigger.
+///
+/// When `skip_novelty` is true (manual trigger), the novelty filter is skipped
+/// so the user always sees content for testing purposes, and no history is
+/// recorded to avoid polluting the novelty database.
+pub(crate) fn build_enriched_briefing(
+    raw_items: Vec<BriefingItem>,
+    lang: &str,
+    skip_novelty: bool,
+) -> BriefingNotification {
+    let now = chrono::Local::now();
+
+    // Quality gate — drops garbled/marketing/clickbait titles.
+    let quality_filtered: Vec<BriefingItem> = raw_items
+        .into_iter()
+        .filter(|item| {
+            match crate::briefing_quality::is_briefing_worthy(&item.title, &item.source_type) {
+                Ok(()) => true,
+                Err(reason) => {
+                    tracing::debug!(
+                        target: "4da::briefing",
+                        title = %item.title,
+                        source = %item.source_type,
+                        reject_reason = reason.as_str(),
+                        "briefing-quality gate rejected item"
+                    );
+                    false
+                }
+            }
+        })
+        .collect();
+
+    // Intra-batch fuzzy dedupe — collapses semantic duplicates.
+    let deduped = crate::briefing_dedupe::dedupe_briefing_items(quality_filtered);
+
+    // Cap at the widget's display budget.
+    let items: Vec<BriefingItem> = deduped.into_iter().take(8).collect();
+
+    // Novelty detection: filter items seen in last 3 days, track ongoing topics
+    let today = now.format("%Y-%m-%d").to_string();
+    let (items, ongoing_topics) = if skip_novelty {
+        (items, vec![])
+    } else {
+        apply_novelty_filter(items, &today)
+    };
+
+    let total_relevant = items.len();
+
+    // Detect knowledge gaps: declared tech with no recent signals
+    let knowledge_gaps = detect_knowledge_gaps();
+
+    // Detect escalating signal chains for top-level briefing section
+    let escalating_chains = detect_escalating_chains();
+
+    // Recall AWE wisdom signals — validated principles and anti-patterns
+    let wisdom_signals = recall_awe_wisdom();
+
+    // Collect preemption alerts for briefing (critical + high only, max 3)
+    let preemption_alerts = match crate::preemption::get_preemption_feed() {
+        Ok(feed) => feed
+            .alerts
+            .iter()
+            .filter(|a| {
+                matches!(
+                    a.urgency,
+                    crate::preemption::AlertUrgency::Critical
+                        | crate::preemption::AlertUrgency::High
+                )
+            })
+            .take(3)
+            .map(|a| BriefingPreemptionAlert {
+                title: a.title.clone(),
+                urgency: format!("{:?}", a.urgency).to_lowercase(),
+                explanation: a.explanation.clone(),
+            })
+            .collect(),
+        Err(_) => Vec::new(),
+    };
+
+    // Collect blind spot score
+    let blind_spot_score = crate::blind_spots::generate_blind_spot_report()
+        .ok()
+        .map(|r| r.overall_score);
+
+    // Build translated labels
+    let labels = build_briefing_labels(lang);
+
+    BriefingNotification {
+        title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
+        items,
+        total_relevant,
+        ongoing_topics,
+        knowledge_gaps,
+        escalating_chains,
+        wisdom_signals,
+        synthesis: None,
+        wisdom_synthesis: None,
+        preemption_alerts,
+        blind_spot_score,
+        labels: Some(labels),
+    }
+}
+
+// ============================================================================
 // Morning Briefing Check
 // ============================================================================
 
@@ -275,46 +386,12 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         }
     };
 
-    // Apply briefing-quality gate — drops garbled/marketing/clickbait titles.
-    let quality_filtered: Vec<BriefingItem> = raw_items
-        .into_iter()
-        .filter(|item| {
-            match crate::briefing_quality::is_briefing_worthy(&item.title, &item.source_type) {
-                Ok(()) => true,
-                Err(reason) => {
-                    tracing::debug!(
-                        target: "4da::briefing",
-                        title = %item.title,
-                        source = %item.source_type,
-                        reject_reason = reason.as_str(),
-                        "briefing-quality gate rejected item"
-                    );
-                    false
-                }
-            }
-        })
-        .collect();
+    // Apply quality gate + dedupe + enrichment via shared pipeline
+    let briefing = build_enriched_briefing(raw_items, &user_lang, false);
 
-    // Apply intra-batch fuzzy dedupe — collapses semantic duplicates.
-    // See `briefing_dedupe.rs` for the similarity rules and thresholds.
-    let deduped = crate::briefing_dedupe::dedupe_briefing_items(quality_filtered);
-
-    // Finally cap at the widget's display budget.
-    let items: Vec<BriefingItem> = deduped.into_iter().take(8).collect();
-
-    if items.is_empty() {
+    if briefing.items.is_empty() && briefing.ongoing_topics.is_empty() {
         return None;
     }
-
-    // 4b. Novelty detection: filter items seen in last 3 days, track ongoing topics
-    let (items, ongoing_topics) = apply_novelty_filter(items, &today);
-
-    if items.is_empty() {
-        // All items were ongoing — nothing novel. Still fire but with empty-state.
-        // Don't return None — user should see "Your stack is quiet" in the briefing.
-    }
-
-    let total_relevant = items.len();
 
     // 5. Mark as fired today — persist to settings AND in-memory state
     {
@@ -330,59 +407,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         }
     }
 
-    // 6. Detect knowledge gaps: declared tech with no recent signals
-    let knowledge_gaps = detect_knowledge_gaps();
-
-    // 7. Detect escalating signal chains for top-level briefing section
-    let escalating_chains = detect_escalating_chains();
-
-    // 8. Recall AWE wisdom signals — validated principles and anti-patterns
-    let wisdom_signals = recall_awe_wisdom();
-
-    // 9. Collect preemption alerts for briefing (critical + high only, max 3)
-    let preemption_alerts = match crate::preemption::get_preemption_feed() {
-        Ok(feed) => feed
-            .alerts
-            .iter()
-            .filter(|a| {
-                matches!(
-                    a.urgency,
-                    crate::preemption::AlertUrgency::Critical
-                        | crate::preemption::AlertUrgency::High
-                )
-            })
-            .take(3)
-            .map(|a| BriefingPreemptionAlert {
-                title: a.title.clone(),
-                urgency: format!("{:?}", a.urgency).to_lowercase(),
-                explanation: a.explanation.clone(),
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
-
-    // 10. Collect blind spot score
-    let blind_spot_score = crate::blind_spots::generate_blind_spot_report()
-        .ok()
-        .map(|r| r.overall_score);
-
-    // 11. Build translated labels for the briefing window
-    let labels = build_briefing_labels(&user_lang);
-
-    Some(BriefingNotification {
-        title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
-        items,
-        total_relevant,
-        ongoing_topics,
-        knowledge_gaps,
-        escalating_chains,
-        wisdom_signals,
-        synthesis: None,
-        wisdom_synthesis: None,
-        preemption_alerts,
-        blind_spot_score,
-        labels: Some(labels),
-    })
+    Some(briefing)
 }
 
 /// Build translated labels for the briefing window.
