@@ -430,29 +430,38 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
 }
 
 fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<Vec<MissedItem>> {
-    // Title-only matching (content LIKE is too noisy for short dep names)
+    // Title-only matching (content LIKE is too noisy for short dep names).
+    // content_type filtering: drop noise categories at the DB level using the
+    // classification already computed at ingestion by content_dna. Items with
+    // NULL content_type (legacy rows) pass through and get title-based fallback.
     let pattern = format!("%{package_name}%");
 
     let mut stmt = conn.prepare(
-        "SELECT si.id, si.title, si.url, si.source_type, si.created_at
+        "SELECT si.id, si.title, si.url, si.source_type, si.created_at, si.content_type
              FROM source_items si
              LEFT JOIN feedback f ON f.source_item_id = si.id
              WHERE si.title LIKE ?1
                AND si.created_at >= datetime('now', '-30 days')
                AND f.id IS NULL
+               AND (si.content_type IS NULL
+                    OR si.content_type NOT IN ('show_and_tell','tutorial','question',
+                                               'help_request','hiring','clickbait'))
              ORDER BY si.created_at DESC
              LIMIT 30",
     )?;
 
-    let candidates: Vec<MissedItem> = stmt
+    let candidates: Vec<(MissedItem, Option<String>)> = stmt
         .query_map(params![pattern], |row| {
-            Ok(MissedItem {
-                item_id: row.get(0)?,
-                title: row.get(1)?,
-                url: row.get(2)?,
-                source_type: row.get(3)?,
-                created_at: row.get(4)?,
-            })
+            Ok((
+                MissedItem {
+                    item_id: row.get(0)?,
+                    title: row.get(1)?,
+                    url: row.get(2)?,
+                    source_type: row.get(3)?,
+                    created_at: row.get(4)?,
+                },
+                row.get::<_, Option<String>>(5)?,
+            ))
         })?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
@@ -471,12 +480,14 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
     let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
     let items: Vec<MissedItem> = candidates
         .into_iter()
-        .filter(|item| has_word_boundary_match(&item.title, &dep_lower))
-        .filter(|item| {
+        .filter(|(item, _ct)| has_word_boundary_match(&item.title, &dep_lower))
+        .filter(|(item, _ct)| {
             let normalized = normalize_gap_title(&item.title);
-            seen_titles.insert(normalized) // true if this is NEW (not a duplicate)
+            seen_titles.insert(normalized)
         })
-        .filter(|item| !is_low_quality_signal(&item.title))
+        // Title-based fallback only for legacy items without stored content_type
+        .filter(|(item, ct)| ct.is_some() || !is_low_quality_signal(&item.title))
+        .map(|(item, _ct)| item)
         .take(5)
         .collect();
 

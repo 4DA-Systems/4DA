@@ -76,6 +76,10 @@ pub struct MissedSignal {
     /// false = "New for you", true = "Blind Spot" (shown but never engaged).
     #[serde(default)]
     pub was_shown: bool,
+    /// Content classification from ingestion (security_advisory, release_notes, etc.).
+    /// Used for urgency mapping and noise filtering instead of title pattern matching.
+    #[serde(default)]
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -416,8 +420,13 @@ fn find_missed_signals(
 
     // Fetch more than 15 initially so the priority-aware post-sort has room
     // to promote security items and filter out old blog posts before trimming.
+    //
+    // content_type filtering: drop noise categories at the DB level using the
+    // classification already computed at ingestion by content_dna. Items with
+    // NULL content_type (legacy rows) pass through and get title-based fallback.
     let sql = format!(
-        "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score, si.created_at
+        "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
+                si.created_at, si.content_type
          FROM source_items si
          LEFT JOIN interactions i ON i.item_id = si.id
          LEFT JOIN user_events ue ON (
@@ -429,6 +438,9 @@ fn find_missed_signals(
            AND si.created_at < datetime('now', '-{feed_window} days')
            AND i.item_id IS NULL
            AND ue.id IS NULL
+           AND (si.content_type IS NULL
+                OR si.content_type NOT IN ('show_and_tell','tutorial','question',
+                                           'help_request','hiring','clickbait'))
          ORDER BY si.relevance_score DESC
          LIMIT 40",
         days = days,
@@ -454,6 +466,7 @@ fn find_missed_signals(
             source_type: row.get(3)?,
             relevance_score: row.get(4)?,
             created_at: row.get(5)?,
+            content_type: row.get(6)?,
             why_relevant: String::new(), // populated below
             dep_name: None,              // populated below
             was_shown: false,            // query filters out impressioned items
@@ -462,8 +475,11 @@ fn find_missed_signals(
 
     let mut signals: Vec<MissedSignal> = rows.flatten().collect();
 
-    // Filter low-quality noise: tutorials, beginner content, off-topic career posts.
-    signals.retain(|s| !crate::knowledge_decay::is_low_quality_signal(&s.title));
+    // Title-based fallback for legacy items without stored content_type.
+    // Items WITH content_type were already filtered at the SQL level.
+    signals.retain(|s| {
+        s.content_type.is_some() || !crate::knowledge_decay::is_low_quality_signal(&s.title)
+    });
 
     // Populate `why_relevant` and `dep_name` by looking for dep mentions in titles.
     for signal in &mut signals {
@@ -496,21 +512,26 @@ fn find_missed_signals(
     Ok(signals)
 }
 
-/// Classify a signal's content priority tier based on title text.
-/// Tier 4 = security, Tier 3 = breaking/deprecation, Tier 2 = releases,
-/// Tier 1 = everything else (blog, Q&A, showcase).
-fn has_standalone_word(haystack: &str, word: &str) -> bool {
-    haystack
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|w| w == word)
+/// Map stored content_type to a priority tier.
+/// Returns None if content_type is absent (legacy item — fall back to title).
+fn content_type_tier(ct: Option<&str>) -> Option<u8> {
+    match ct {
+        Some("security_advisory") => Some(4),
+        Some("breaking_change") => Some(3),
+        Some("release_notes") => Some(2),
+        Some("deep_dive" | "discussion") => Some(1),
+        Some(_) => Some(0), // noise types that survived SQL filter
+        None => None,
+    }
 }
 
-fn title_priority_tier(title: &str) -> u8 {
+/// Title-based fallback for items without stored content_type.
+fn title_priority_tier_fallback(title: &str) -> u8 {
     let t = title.to_lowercase();
     if t.contains("cve-")
         || t.contains("vulnerability")
         || t.contains("security advisory")
-        || has_standalone_word(&t, "rce")
+        || t.contains("remote code execution")
         || t.contains("zero-day")
         || t.contains("zeroday")
         || t.contains("exploit")
@@ -537,6 +558,13 @@ fn title_priority_tier(title: &str) -> u8 {
     1
 }
 
+/// Resolve priority tier: use stored content_type when available,
+/// fall back to title pattern matching for legacy items.
+fn signal_priority_tier(signal: &MissedSignal) -> u8 {
+    content_type_tier(signal.content_type.as_deref())
+        .unwrap_or_else(|| title_priority_tier_fallback(&signal.title))
+}
+
 /// Re-rank missed signals so high-urgency content surfaces above opinion/blog
 /// content, even when relevance scores are similar. Also caps older non-urgent
 /// content so the panel stays focused on recent-enough material.
@@ -559,8 +587,8 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
 
     // Sort by (priority_tier DESC, relevance DESC).
     signals.sort_by(|a, b| {
-        let tier_a = title_priority_tier(&a.title);
-        let tier_b = title_priority_tier(&b.title);
+        let tier_a = signal_priority_tier(a);
+        let tier_b = signal_priority_tier(b);
         tier_b.cmp(&tier_a).then_with(|| {
             b.relevance_score
                 .partial_cmp(&a.relevance_score)
@@ -575,7 +603,7 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
         if kept.len() >= FINAL_LIMIT {
             break;
         }
-        let tier = title_priority_tier(&s.title);
+        let tier = signal_priority_tier(&s);
         let age = age_days(&s.created_at);
         if tier == 1 && age > OLD_DAYS_THRESHOLD {
             if old_tier1_count >= OLD_BLOG_CAP {
@@ -1381,11 +1409,11 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
         relevance_note: truncate_note(&m.why_relevant),
     };
 
-    // Map urgency from content priority tier + relevance score.
-    // Tier 1 (generic blog/showcase) caps at Watch regardless of score.
-    // Tier 2 (registry releases) caps at Medium.
-    // Tier 3-4 (breaking changes, security) use score-based urgency.
-    let tier = title_priority_tier(&m.title);
+    // Map urgency from content classification + relevance score.
+    // Uses stored content_type (set at ingestion by content_dna) with
+    // title-based fallback for legacy items. This is structurally sound:
+    // a blog post CAN'T get Critical because its content_type caps it.
+    let tier = signal_priority_tier(m);
     let urgency = match tier {
         4 => {
             if m.relevance_score >= 0.7 { Urgency::Critical } else { Urgency::High }
@@ -1541,7 +1569,8 @@ mod tests {
                 relevance_score REAL DEFAULT 0.0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 content_hash TEXT,
-                last_seen TEXT
+                last_seen TEXT,
+                content_type TEXT DEFAULT NULL
             );
 
             CREATE TABLE project_dependencies (
@@ -1822,6 +1851,7 @@ mod tests {
                 why_relevant: String::new(),
                 dep_name: None,
                 was_shown: false,
+                content_type: Some("discussion".into()),
             })
             .collect();
 
@@ -1995,6 +2025,7 @@ mod tests {
             why_relevant: "Matches tokio in 2 of your projects".into(),
             dep_name: Some("tokio".into()),
             was_shown: false,
+            content_type: Some("security_advisory".into()),
         }
     }
 
@@ -2103,20 +2134,58 @@ mod tests {
     }
 
     #[test]
-    fn rce_word_boundary_prevents_source_false_positive() {
-        assert!(has_standalone_word("critical rce vulnerability", "rce"));
-        assert!(has_standalone_word("[rce] openssl flaw", "rce"));
-        assert!(has_standalone_word("rce in libxml2", "rce"));
-        assert!(!has_standalone_word("open source project", "rce"));
-        assert!(!has_standalone_word("open-source tool", "rce"));
-        assert!(!has_standalone_word("resource management", "rce"));
-        assert!(!has_standalone_word("workforce planning", "rce"));
+    fn content_type_security_gets_critical_urgency() {
+        let mut m = missed_sample();
+        m.content_type = Some("security_advisory".into());
+        m.relevance_score = 0.8;
+        let item = missed_signal_to_evidence_item(&m);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
     }
 
     #[test]
-    fn tier1_blog_post_gets_watch_urgency() {
+    fn content_type_discussion_gets_watch_urgency() {
         let mut m = missed_sample();
+        m.content_type = Some("discussion".into());
         m.title = "We Scored 28 Famous Open Source PRs for Deploy Risk".into();
+        m.relevance_score = 0.8;
+        let item = missed_signal_to_evidence_item(&m);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Watch);
+    }
+
+    #[test]
+    fn content_type_release_gets_medium_urgency() {
+        let mut m = missed_sample();
+        m.content_type = Some("release_notes".into());
+        m.title = "npm: react v19.2.5".into();
+        let item = missed_signal_to_evidence_item(&m);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Medium);
+    }
+
+    #[test]
+    fn content_type_breaking_gets_high_urgency() {
+        let mut m = missed_sample();
+        m.content_type = Some("breaking_change".into());
+        m.relevance_score = 0.85;
+        m.title = "React drops support for IE11".into();
+        let item = missed_signal_to_evidence_item(&m);
+        assert_eq!(item.urgency, crate::evidence::Urgency::High);
+    }
+
+    #[test]
+    fn null_content_type_falls_back_to_title() {
+        let mut m = missed_sample();
+        m.content_type = None;
+        m.title = "Critical CVE-2026-99999 in tokio".into();
+        m.relevance_score = 0.8;
+        let item = missed_signal_to_evidence_item(&m);
+        assert_eq!(item.urgency, crate::evidence::Urgency::Critical);
+    }
+
+    #[test]
+    fn null_content_type_blog_gets_watch() {
+        let mut m = missed_sample();
+        m.content_type = None;
+        m.title = "Open source Playwright tool for testing".into();
         m.relevance_score = 0.8;
         let item = missed_signal_to_evidence_item(&m);
         assert_eq!(item.urgency, crate::evidence::Urgency::Watch);
