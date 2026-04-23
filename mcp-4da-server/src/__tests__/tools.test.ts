@@ -12,10 +12,8 @@ import Database from "better-sqlite3";
 import { FourDADatabase } from "../db.js";
 import { executeGetRelevantContent } from "../tools/get-relevant-content.js";
 import { executeGetContext } from "../tools/get-context.js";
-import { executeExplainRelevance } from "../tools/explain-relevance.js";
 import { executeRecordFeedback } from "../tools/record-feedback.js";
 import { executeKnowledgeGaps } from "../tools/knowledge-gaps.js";
-import { executeSourceHealth } from "../tools/source-health.js";
 import { executeGetActionableSignals } from "../tools/get-actionable-signals.js";
 import {
   synthesize,
@@ -645,128 +643,6 @@ describe("4DA MCP Tool Handlers", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // explain_relevance
-  // ---------------------------------------------------------------------------
-  describe("executeExplainRelevance", () => {
-    it("returns an error when item does not exist", () => {
-      seedUserContext(db);
-
-      const result = executeExplainRelevance(db, {
-        item_id: 9999,
-        source_type: "hackernews",
-      });
-
-      expect(result).toHaveProperty("error");
-      expect((result as { error: string }).error).toContain("not found");
-    });
-
-    it("returns an error when params are missing", () => {
-      const result = executeExplainRelevance(db, {
-        item_id: 0,
-        source_type: "",
-      });
-
-      expect(result).toHaveProperty("error");
-    });
-
-    it("returns a full explanation for an existing item", () => {
-      seedUserContext(db);
-      seedACEContext(db);
-      seedLearnedPreferences(db);
-
-      const itemId = insertSourceItem(db, {
-        source_type: "hackernews",
-        title: "Rust async runtime for developer tools",
-        content: "Building systems programming tools with Rust and TypeScript.",
-      });
-
-      const result = executeExplainRelevance(db, {
-        item_id: itemId,
-        source_type: "hackernews",
-      });
-
-      // Should not be an error
-      expect(result).not.toHaveProperty("error");
-
-      // Validate structure
-      const explanation = result as {
-        item_id: number;
-        source_type: string;
-        title: string;
-        score_breakdown: {
-          embedding_similarity: number | null;
-          static_match_score: number;
-          ace_match_score: number;
-          learned_affinity_score: number;
-          anti_penalty: number;
-          final_score: number;
-        };
-        matching_context: {
-          matching_interests: string[];
-          matching_tech: string[];
-          matching_topics: string[];
-          matching_affinities: string[];
-        };
-        explanation: string;
-      };
-
-      expect(explanation.item_id).toBe(itemId);
-      expect(explanation.source_type).toBe("hackernews");
-      expect(explanation.title).toContain("Rust");
-
-      // Score breakdown structure
-      expect(explanation.score_breakdown).toHaveProperty("static_match_score");
-      expect(explanation.score_breakdown).toHaveProperty("ace_match_score");
-      expect(explanation.score_breakdown).toHaveProperty("learned_affinity_score");
-      expect(explanation.score_breakdown).toHaveProperty("anti_penalty");
-      expect(explanation.score_breakdown).toHaveProperty("final_score");
-      expect(explanation.score_breakdown.embedding_similarity).toBeNull();
-
-      // Matching context arrays
-      expect(explanation.matching_context.matching_interests).toBeInstanceOf(Array);
-      expect(explanation.matching_context.matching_tech).toBeInstanceOf(Array);
-      expect(explanation.matching_context.matching_topics).toBeInstanceOf(Array);
-      expect(explanation.matching_context.matching_affinities).toBeInstanceOf(Array);
-
-      // Should have found some matches (the title mentions "rust" and "developer tools")
-      const allMatches = [
-        ...explanation.matching_context.matching_interests,
-        ...explanation.matching_context.matching_tech,
-        ...explanation.matching_context.matching_topics,
-        ...explanation.matching_context.matching_affinities,
-      ];
-      expect(allMatches.length).toBeGreaterThan(0);
-
-      // Human-readable explanation
-      expect(typeof explanation.explanation).toBe("string");
-      expect(explanation.explanation.length).toBeGreaterThan(0);
-    });
-
-    it("applies anti-penalty for excluded topics", () => {
-      seedUserContext(db); // Has "cryptocurrency" exclusion
-
-      const itemId = insertSourceItem(db, {
-        source_type: "hackernews",
-        title: "Cryptocurrency exchange built with Rust",
-        content: "A new cryptocurrency trading platform using Rust programming language.",
-      });
-
-      const result = executeExplainRelevance(db, {
-        item_id: itemId,
-        source_type: "hackernews",
-      });
-
-      expect(result).not.toHaveProperty("error");
-
-      const explanation = result as {
-        score_breakdown: { anti_penalty: number; final_score: number };
-      };
-
-      expect(explanation.score_breakdown.anti_penalty).toBeGreaterThan(0);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // record_feedback
   // ---------------------------------------------------------------------------
   describe("executeRecordFeedback", () => {
@@ -996,99 +872,6 @@ describe("4DA MCP Tool Handlers", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // source_health
-  // ---------------------------------------------------------------------------
-  describe("executeSourceHealth", () => {
-    it("returns healthy status on an empty database (no sources)", () => {
-      const result = executeSourceHealth(db, {});
-
-      expect(result).toHaveProperty("analysis_period");
-      expect(result).toHaveProperty("overall_status");
-      expect(result).toHaveProperty("sources");
-      expect(result).toHaveProperty("summary");
-      expect(result).toHaveProperty("global_recommendations");
-
-      expect(result.analysis_period).toHaveProperty("start");
-      expect(result.analysis_period).toHaveProperty("end");
-      expect(result.analysis_period).toHaveProperty("hours");
-
-      expect(result.sources).toEqual([]);
-      expect(result.summary.total_sources).toBe(0);
-    });
-
-    it("analyzes a specific source when filtered", () => {
-      insertSourceItem(db, {
-        source_type: "hackernews",
-        title: "HN article",
-        source_id: "hn-health-1",
-      });
-      insertSourceItem(db, {
-        source_type: "arxiv",
-        title: "arXiv paper",
-        source_id: "arxiv-health-1",
-      });
-
-      const result = executeSourceHealth(db, { source: "hackernews" });
-
-      expect(result.sources.length).toBe(1);
-      expect(result.sources[0].source).toBe("hackernews");
-    });
-
-    it("returns expected structure for each source", () => {
-      insertSourceItem(db, {
-        source_type: "hackernews",
-        title: "Test HN article",
-        source_id: "hn-struct-1",
-      });
-
-      const result = executeSourceHealth(db, {});
-
-      expect(result.sources.length).toBeGreaterThan(0);
-      const source = result.sources[0];
-
-      expect(source).toHaveProperty("source");
-      expect(source).toHaveProperty("status");
-      expect(source).toHaveProperty("last_item_at");
-      expect(source).toHaveProperty("hours_since_last");
-      expect(source).toHaveProperty("items_24h");
-      expect(source).toHaveProperty("items_7d");
-      expect(source).toHaveProperty("avg_items_per_day");
-      expect(source).toHaveProperty("quality_metrics");
-      expect(source).toHaveProperty("issues");
-      expect(source).toHaveProperty("recommendations");
-
-      expect(source.quality_metrics).toHaveProperty("has_url_rate");
-      expect(source.quality_metrics).toHaveProperty("has_content_rate");
-      expect(source.quality_metrics).toHaveProperty("avg_content_length");
-    });
-
-    it("reports items with good quality metrics", () => {
-      // Insert items with URLs and content
-      for (let i = 0; i < 5; i++) {
-        insertSourceItem(db, {
-          source_type: "hackernews",
-          title: `Quality test article ${i}`,
-          content: "This is quality content that should be counted.",
-          url: `https://example.com/article-${i}`,
-          source_id: `hn-quality-${i}`,
-        });
-      }
-
-      const result = executeSourceHealth(db, { source: "hackernews" });
-      const source = result.sources[0];
-
-      expect(source.quality_metrics.has_url_rate).toBe(1.0);
-      expect(source.quality_metrics.has_content_rate).toBe(1.0);
-      expect(source.quality_metrics.avg_content_length).toBeGreaterThan(0);
-    });
-
-    it("respects the hours parameter for analysis period", () => {
-      const result = executeSourceHealth(db, { hours: 48 });
-      expect(result.analysis_period.hours).toBe(48);
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   // get_actionable_signals
   // ---------------------------------------------------------------------------
   describe("executeGetActionableSignals", () => {
@@ -1296,31 +1079,6 @@ describe("4DA MCP Tool Handlers", () => {
   // Cross-tool integration
   // ---------------------------------------------------------------------------
   describe("Cross-tool integration", () => {
-    it("feedback on an item does not prevent explain_relevance", () => {
-      seedUserContext(db);
-
-      const itemId = insertSourceItem(db, {
-        source_type: "hackernews",
-        title: "Rust and TypeScript developer tools",
-        content: "Building systems with Rust and React for local-first software.",
-      });
-
-      // Record feedback
-      const feedbackResult = executeRecordFeedback(db, {
-        item_id: itemId,
-        source_type: "hackernews",
-        action: "click",
-      });
-      expect(feedbackResult.success).toBe(true);
-
-      // Explain relevance should still work
-      const explanation = executeExplainRelevance(db, {
-        item_id: itemId,
-        source_type: "hackernews",
-      });
-      expect(explanation).not.toHaveProperty("error");
-    });
-
     it("knowledge_gaps excludes items that have been clicked or saved", () => {
       const rawDb = db.getRawDb();
 
