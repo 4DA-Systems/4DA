@@ -44,6 +44,9 @@ pub enum ValidationError {
     #[error("explanation required after AWE spine wired (Phase 9+)")]
     #[allow(dead_code)] // Gated on a future phase flag; checker wired in Phase 9.
     ExplanationRequired,
+    #[error("explanation lacks grounded reasoning (no causal connectors found)")]
+    #[allow(dead_code)] // Gated — will warn in dev, not block, until Phase 10.
+    ReasoningNotGrounded,
 }
 
 /// Kinds that are user-surfaced and require at least one citation.
@@ -64,6 +67,16 @@ fn validate_action(a: &Action) -> Result<(), ValidationError> {
         return Err(ValidationError::UnknownActionId(a.action_id.clone()));
     }
     Ok(())
+}
+
+/// Check whether an explanation contains grounded reasoning structure.
+///
+/// Looks for causal connectors ("because", "since", "due to", etc.) that
+/// indicate the explanation connects evidence to a conclusion rather than
+/// just restating the title. This is a soft check — currently logged as a
+/// warning in dev builds, not a hard validation failure.
+pub fn check_grounded_reasoning(explanation: &str) -> bool {
+    crate::adversarial::has_grounded_reasoning(explanation)
 }
 
 /// Validate an `EvidenceItem` against the canonical schema.

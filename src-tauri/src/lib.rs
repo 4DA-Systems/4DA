@@ -143,6 +143,7 @@ pub(crate) use state::{
 };
 
 mod accuracy;
+mod adversarial;
 mod ace;
 mod ace_commands;
 mod agent_brief;
