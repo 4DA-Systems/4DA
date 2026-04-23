@@ -98,8 +98,8 @@ const result = await invoke<ReturnType>('command_name', {
 | `src-tauri/src/commands.rs` | Tauri commands | `#[tauri::command]` |
 | `src-tauri/src/commands/*.rs` | Command modules | `#[tauri::command]` |
 | `src/App.tsx` + `src/components/*.tsx` | Frontend invokes | `invoke<` |
-| `mcp-4da-server/src/schema-registry.ts` | MCP tool registry | `TOOL_REGISTRY` (36 tools) |
-| `mcp-4da-server/src/schemas/*.json` | MCP tool schemas | 35 JSON schema files |
+| `mcp-4da-server/src/schema-registry.ts` | MCP tool registry | `TOOL_REGISTRY` (14 tools) |
+| `mcp-4da-server/src/schemas/*.json` | MCP tool schemas | 14 JSON schema files |
 | `mcp-4da-server/src/types.ts` | MCP types | interfaces |
 
 ---
@@ -160,7 +160,7 @@ ls mcp-4da-server/src/tools/ | grep -v index | grep -v __tests__
 ```
 
 **Architecture:** Tools use a schema registry pattern (not inline `toolDefinition` objects).
-- `schema-registry.ts` — canonical list of all 36 tools with slim summaries
+- `schema-registry.ts` — canonical list of all 14 tools with slim summaries
 - `schemas/*.json` — full JSON Schema files exposed as MCP Resources
 - `tools/*.ts` — implementation files export `execute*` functions
 

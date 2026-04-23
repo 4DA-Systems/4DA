@@ -106,104 +106,53 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 ```
 "Check my dependency health"                  -> dependency_health
-"Which deps should I upgrade first?"          -> upgrade_planner
 "Scan for vulnerabilities"                    -> vulnerability_scan
-"What's happening in the ecosystem?"          -> ecosystem_pulse
+"Which deps should I upgrade first?"          -> upgrade_planner
 "What should I know before I start coding?"   -> what_should_i_know
-"Record a decision: we chose Postgres"        -> decision_memory
-"Does switching to MySQL align with our decisions?" -> check_decision_alignment
+"What's happening in the ecosystem?"          -> ecosystem_pulse
 "What's my tech stack?"                       -> get_context
+"Record a decision: we chose Postgres"        -> decision_memory
+"Does switching to MySQL align?"              -> check_decision_alignment
 "Remember: never use ORM for batch inserts"   -> agent_memory
 ```
 
-## Standalone Tools (9)
+## All 14 Tools
 
-These work immediately with zero setup. No desktop app needed.
+### Dependency Security
 
 | Tool | What it does |
 |------|-------------|
 | `vulnerability_scan` | Live CVE scanning via OSV.dev. Severity, fix versions, CVSS scores. |
 | `dependency_health` | Health score (0-100) + version freshness, deprecation, CVE counts per dependency. |
 | `upgrade_planner` | Ranked upgrade recommendations. Quick wins vs. breaking changes. Risk-sorted. |
-| `ecosystem_pulse` | Live ecosystem news from Hacker News, filtered by your detected tech stack. |
+
+### Intelligence
+
+| Tool | What it does |
+|------|-------------|
 | `what_should_i_know` | Pre-task intelligence briefing: vulns, decisions, signals, ecosystem updates. |
+| `ecosystem_pulse` | Live ecosystem news from Hacker News, filtered by your detected tech stack. |
 | `get_context` | Your tech stack, resolved dependency versions, interests, affinities. |
-| `decision_memory` | Record, query, and enforce architectural decisions across sessions. |
+| `get_relevant_content`* | Scored content feed — articles, advisories, releases ranked by relevance. |
+| `get_actionable_signals`* | Classified alerts: security advisories, breaking changes, trending repos. |
+| `knowledge_gaps`* | Dependencies you use daily but never read about. Surfaces missed CVEs and updates. |
+| `record_feedback`* | Save or dismiss items to teach 4DA what matters. Sharpens future scoring. |
+
+### Decisions & Memory
+
+| Tool | What it does |
+|------|-------------|
+| `decision_memory` | Record, query, and manage architectural decisions across sessions. |
 | `check_decision_alignment` | Verify if a proposed technology change aligns with recorded decisions. |
 | `agent_memory` | Persistent memory that survives across sessions, agents, and editors. |
 
-## All 39 Tools
+### Identity
 
-### Dependency Intelligence
-
-| Tool | Description |
+| Tool | What it does |
 |------|-------------|
-| `vulnerability_scan` | Scan dependencies for known CVEs via OSV.dev. Zero config. npm, Rust, Python, Go. |
-| `dependency_health` | Dependency health: version freshness, deprecation, CVEs across 4 ecosystems. |
-| `upgrade_planner` | Ranked upgrade recommendations prioritized by CVE severity, deprecation, version distance. |
-| `ecosystem_pulse` | Live ecosystem news relevant to your tech stack from Hacker News. |
-| `project_health` | Dependency inventory + security score + vulnerable package list. |
-| `get_actionable_signals` | Classified alerts: security advisories, breaking changes, trending repos. |
-| `knowledge_gaps` | Dependencies you use daily but never read about. |
+| `developer_dna`* | Your tech identity: primary stack, engagement patterns, blind spots. |
 
-### Project Context
-
-| Tool | Description |
-|------|-------------|
-| `get_context` | Your tech stack, resolved versions, interests, ACE-detected topics. |
-| `developer_dna` | Full tech identity: primary stack, dependencies, engagement patterns, blind spots. |
-| `export_context_packet` | Portable context snapshot for session or agent handoff. |
-
-### Decision Memory
-
-| Tool | Description |
-|------|-------------|
-| `decision_memory` | Record, query, and enforce architectural decisions across sessions. |
-| `tech_radar` | Technology adoption signals from your decisions + content trends. |
-| `check_decision_alignment` | Verify if a proposed change aligns with your recorded decisions. |
-
-### Agent Autonomy
-
-| Tool | Description |
-|------|-------------|
-| `agent_memory` | Persistent memory that survives across sessions, agents, and editors. |
-| `agent_session_brief` | Tailored startup context so agents resume where you left off. |
-| `delegation_score` | Autonomy assessment: should the agent proceed or ask the human? |
-| `what_should_i_know` | Pre-task briefing: advisories, decisions, signals, ecosystem news. |
-| `record_agent_feedback` | Record whether agent recommendations were used or rejected. |
-| `get_agent_feedback_stats` | Agent recommendation accuracy: source usefulness, top items, trends. |
-
-### Content Intelligence
-
-Requires the [4DA desktop app](https://4da.ai) for full functionality. Scores and analyzes content from Hacker News, GitHub, arXiv, Reddit, and 7 other sources against your tech stack.
-
-| Tool | Description |
-|------|-------------|
-| `get_relevant_content` | Filtered content feed: only items that pass the 5-axis scoring gate. |
-| `daily_briefing` | AI-generated executive summary of today's discoveries. |
-| `explain_relevance` | Full axis breakdown of why a specific item scored the way it did. |
-| `record_feedback` | Teach 4DA what matters: save, dismiss, or mark items irrelevant. |
-| `score_autopsy` | Forensic analysis of how any item's relevance score was computed. |
-| `trend_analysis` | Statistical patterns, anomalies, and predictions across your feed. |
-| `context_analysis` | Recommendations to sharpen your scoring context. |
-| `topic_connections` | Knowledge graph of how your content topics relate. |
-| `signal_chains` | Causal chains connecting related events across sources over time. |
-| `semantic_shifts` | Detects when topics you follow are shifting in meaning or sentiment. |
-| `attention_report` | Where you spend attention vs. where your codebase actually needs it. |
-| `preemption_feed` | Forward-looking alerts on risks and ecosystem shifts affecting your stack. |
-| `trust_summary` | Intelligence quality metrics: precision, action rate, false positives. |
-| `reverse_mentions` | Where your projects are being discussed across monitored sources. |
-| `autophagy_status` | Self-cleaning intelligence health: calibration accuracy, anti-patterns. |
-| `decision_windows` | Time-bounded opportunities that need your attention now. |
-| `compound_advantage` | How much intelligence leverage your decisions are generating. |
-
-### Diagnostic
-
-| Tool | Description |
-|------|-------------|
-| `source_health` | Source fetching status and data quality diagnostics. |
-| `config_validator` | Configuration validation and issue detection. |
-| `llm_status` | LLM and Ollama provider availability check. |
+*\* Requires the [4DA desktop app](https://4da.ai) for full data.*
 
 ## Standalone vs. Full Mode
 
@@ -215,13 +164,12 @@ The MCP server works without the desktop app. On first run it creates a local da
 | Dependency health (4 registries) | Yes | Yes |
 | Upgrade planner | Yes | Yes |
 | Ecosystem news (Hacker News) | Yes | Yes |
+| Pre-task intelligence briefing | Yes | Yes |
 | Tech stack detection + resolved versions | Yes | Yes |
 | Decision memory + alignment checking | Yes | Yes |
 | Agent memory (cross-session) | Yes | Yes |
-| Pre-task intelligence briefing | Yes | Yes |
-| Content scoring (HN, GitHub, arXiv, etc.) | -- | Yes |
-| Daily AI briefings | -- | Yes |
-| Trend analysis + signal chains | -- | Yes |
+| Scored content feed (20+ sources) | -- | Yes |
+| Actionable signals + knowledge gaps | -- | Yes |
 | Compound intelligence (learns over time) | -- | Yes |
 
 > **[Download 4DA](https://github.com/runyourempire/4DA/releases/latest)** for the full experience.
@@ -261,7 +209,7 @@ npx @4da/mcp-server --version    # Print version
 No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy) and generic tech keywords to [HN Algolia](https://hn.algolia.com/api). The same public data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls.
 
 **Do I need the 4DA desktop app?**
-No. Nine tools work standalone: vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds content intelligence from 10+ sources that compounds over time.
+No. 9 tools work standalone: vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds scored content from 20+ sources that compounds over time.
 
 **Which AI tools does this work with?**
 Any tool that supports [MCP](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code (Copilot), and any custom MCP client.

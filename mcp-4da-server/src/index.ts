@@ -13,23 +13,18 @@
  * Do NOT expose this server over a network without adding proper auth.
  */
 /**
- * 4DA MCP Server v4.5.0 — Dependency Intelligence Platform
+ * 4DA MCP Server v4.6.0 — Dependency Intelligence for AI Coding Agents
  *
- * 38 tools across 9 categories. Live vulnerability scanning (OSV.dev),
- * ecosystem news, persistent project memory, and tech stack awareness for any MCP host.
+ * 14 tools across 5 categories. Live vulnerability scanning (OSV.dev),
+ * ecosystem news, persistent memory, and tech stack awareness for any MCP host.
  *
  * Categories (canonical — matches schema-registry.ts `ToolCategory`):
- *   Core (4)                    — content feed, context, relevance, feedback
- *   Intelligence (11)           — briefings, signals, autopsy, trends, topics,
- *                                 chains, shifts, attention, trust, preemption
- *   Diagnostic (3)              — source health, config, LLM status
- *   Knowledge & Health (4)      — gaps, project health, mentions, context export
- *   Decision Intelligence (3)   — decision memory, tech radar, alignment checks
- *   Agent Autonomy (6)          — persistent memory, session briefs, delegation,
- *                                 agent feedback record + stats, what_should_i_know
- *   Developer DNA / Identity (1)— tech identity profile
- *   Intelligence Metabolism (3) — autophagy, decision windows, compound advantage
- *   Security (1)                — live vulnerability scanning via OSV.dev
+ *   Security (3)      — vulnerability scanning, dependency health, upgrade planning
+ *   Intelligence (7)  — briefing, ecosystem pulse, context, content feed,
+ *                       actionable signals, knowledge gaps, feedback
+ *   Decisions (2)     — decision memory, alignment checking
+ *   Agent (1)         — cross-session persistent memory
+ *   Identity (1)      — developer DNA profile
  */
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -422,7 +417,7 @@ async function main() {
   });
 
   const toolCount = getSlimToolList().length;
-  console.error(`4DA MCP Server v4.5.0 started — ${toolCount} tools, stdio transport`);
+  console.error(`4DA MCP Server v4.6.0 started — ${toolCount} tools, stdio transport`);
   console.error("  Use --http for Streamable HTTP, --setup to configure editors, --doctor to check health");
 }
 

@@ -50,7 +50,7 @@ mcp-4da-server/
 | Suite | Tests | Purpose |
 |-------|-------|---------|
 | db.test.ts | 9 | Database validation, path resolution, query retry |
-| tools.test.ts | 62 | Contract tests for all 36 tools |
+| tools.test.ts | 62 | Contract tests for all 14 tools |
 | **Total** | **71** | |
 
 ### Test Patterns
