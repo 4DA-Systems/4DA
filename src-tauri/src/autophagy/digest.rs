@@ -109,7 +109,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         }
     }
 
-    // Run all 6 analyzers (each returns empty vec on failure, never panics)
+    // Run all 7 analyzers (each returns empty vec on failure, never panics)
     let calibrations = super::calibration::analyze_calibration(conn, max_age_days);
     let topic_calibrations =
         super::calibration_analysis::analyze_topic_calibration(conn, max_age_days);
@@ -117,6 +117,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     let source_autopsies = super::source_autopsy::analyze_sources(conn, max_age_days);
     let anti_patterns = super::anti_patterns::detect_anti_patterns(conn, 0.35);
     let decision_outcomes = super::decision_outcomes::analyze_decision_window_outcomes(conn);
+    let archetypes = super::archetype::detect_archetypes(conn, max_age_days);
 
     // Store source-level calibration results
     let calibrations_produced = (calibrations.len() + topic_calibrations.len()) as i64;
@@ -153,6 +154,16 @@ pub(crate) fn run_autophagy_cycle_with_ace(
     if !anti_patterns.is_empty() {
         if let Err(e) = super::anti_patterns::store_anti_patterns(conn, &anti_patterns) {
             warn!(target: "4da::autophagy", error = %e, "Failed to store anti-patterns");
+        }
+    }
+
+    // Store dismissal archetypes
+    let archetypes_detected = archetypes.len() as i64;
+    if !archetypes.is_empty() {
+        if let Err(e) = super::archetype::store_archetypes(conn, &archetypes) {
+            warn!(target: "4da::autophagy", error = %e, "Failed to store dismissal archetypes");
+        } else {
+            info!(target: "4da::autophagy", count = archetypes_detected, "Detected dismissal archetypes");
         }
     }
 
@@ -232,6 +243,7 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         topic_decay_rates_updated,
         source_autopsies_produced,
         anti_patterns_detected,
+        archetypes_detected,
         decision_outcomes_analyzed,
         duration_ms,
         "Autophagy cycle complete"
