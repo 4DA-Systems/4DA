@@ -2,7 +2,7 @@
 // Standalone vanilla JS — no React, no bundler dependency.
 // Uses window.__TAURI__ globals (withGlobalTauri: true in tauri.conf.json).
 
-var AUTO_DISMISS_MS = 60000;
+var AUTO_DISMISS_MS = 300000;
 
 // ---------------------------------------------------------------------------
 // DOM references
