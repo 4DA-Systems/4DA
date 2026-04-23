@@ -959,6 +959,14 @@ fn compute_boosts(
         .unwrap_or(0.0)
         .clamp(-0.10, 0.10);
 
+    // TitanCA-inspired archetype penalty: recurring dismissal patterns get penalized
+    let archetype_penalty = crate::autophagy::archetype_penalty_for_item(
+        &ctx.archetype_penalties,
+        input.source_type,
+        input.title,
+        None,
+    );
+
     // Sum all boosts -> cap -> dampen -> add
     let total_raw = dep_boost
         + raw.stack_boost
@@ -968,6 +976,7 @@ fn compute_boosts(
         + skill_gap_boost
         + calibration_correction
         + anti_pattern_correction
+        - archetype_penalty
         + raw.taste_boost;
 
     let total_capped = total_raw.clamp(BOOST_CAP_MIN, BOOST_CAP_MAX);

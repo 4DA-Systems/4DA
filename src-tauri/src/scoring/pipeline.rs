@@ -567,6 +567,15 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score + calibration_correction).clamp(0.0, 1.0);
 
+    // TitanCA-inspired archetype penalty: recurring dismissal patterns get penalized
+    let archetype_penalty = crate::autophagy::archetype_penalty_for_item(
+        &ctx.archetype_penalties,
+        input.source_type,
+        input.title,
+        Some(content_type.slug()),
+    );
+    let base_score = (base_score - archetype_penalty).clamp(0.0, 1.0);
+
     // Stack pain point match for ACE axis confirmation
     let stack_pain_match = crate::stacks::scoring::has_pain_point_match(
         input.title,

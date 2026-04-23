@@ -142,6 +142,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         topic_half_lives,
         source_autopsies,
         anti_pattern_penalties,
+        archetype_penalties,
         sovereign_profile,
     ) = {
         let dp = crate::domain_profile::build_domain_profile(&shared_conn);
@@ -153,11 +154,12 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         // Autophagy intelligence: per-source engagement rates and anti-pattern penalties
         let sa = crate::autophagy::load_source_autopsies(&shared_conn);
         let ap = crate::autophagy::load_anti_patterns(&shared_conn);
+        let arch = crate::autophagy::load_archetype_penalties(&shared_conn);
         // Unified profile (non-fatal if assembly fails)
         let sp = Some(crate::sovereign_developer_profile::assemble_profile(
             &shared_conn,
         ));
-        (dp, cs, ow, cd, thl, sa, ap, sp)
+        (dp, cs, ow, cd, thl, sa, ap, arch, sp)
     };
 
     // ── ACE Auto-Enrichment: promote high-confidence detected tech into domain profile ──
@@ -355,6 +357,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         topic_half_lives,
         source_autopsies,
         anti_pattern_penalties,
+        archetype_penalties,
         contradicted_topics,
         sovereign_profile,
         dominant_persona,
