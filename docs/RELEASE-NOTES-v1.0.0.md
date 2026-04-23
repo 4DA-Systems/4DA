@@ -55,7 +55,7 @@ No account required. No configuration needed. No sign-up.
 npx @4da/mcp-server --setup
 ```
 
-The MCP server works standalone — no desktop app required. 36 tools for context analysis, signal chains, decision memory, and more.
+The MCP server works standalone — no desktop app required. 14 tools for vulnerability scanning, dependency health, decision memory, and more.
 
 ## Privacy
 

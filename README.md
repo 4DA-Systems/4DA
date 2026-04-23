@@ -184,7 +184,7 @@ Your Codebase                    External Sources
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server, CLI
+- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server (14 tools), CLI
 
 **Signal** — $12/month or $99/year (45-day free trial).
 - Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
@@ -250,7 +250,7 @@ Free is not a demo. It's the full scoring engine, all sources, behavior learning
 </details>
 
 <details>
-<summary><strong>MCP Integration</strong> — 39 tools across dependency intelligence, project context, decision memory, agent autonomy, content intelligence, and diagnostics</summary>
+<summary><strong>MCP Integration</strong> — 14 tools for dependency security, intelligence, decisions, and agent memory</summary>
 
 Plug your intelligence system directly into Claude Code, Cursor, Windsurf, VS Code (Copilot), or any MCP-compatible tool.
 
@@ -258,7 +258,7 @@ Plug your intelligence system directly into Claude Code, Cursor, Windsurf, VS Co
 npx @4da/mcp-server
 ```
 
-9 tools work standalone with zero setup (vulnerability scanning, dependency health, upgrade planning, ecosystem news, decision memory, agent memory, and more). The full 39-tool suite activates with the desktop app. [Full tool reference.](mcp-4da-server/)
+9 tools work standalone with zero setup (vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, decision memory, agent memory). 5 more activate with the desktop app (scored content feed, actionable signals, knowledge gaps, feedback learning, developer DNA). Every tool reliably returns useful data. [Full tool reference.](mcp-4da-server/)
 
 </details>
 

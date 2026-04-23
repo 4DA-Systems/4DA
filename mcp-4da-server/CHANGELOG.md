@@ -1,5 +1,41 @@
 # Changelog
 
+## 4.6.0 (2026-04-24)
+
+### Breaking: Tool consolidation — 39 → 14 tools
+
+Removed 25 tools that returned empty, broken, or low-value data through MCP.
+Every remaining tool reliably returns useful, actionable information.
+
+**Kept (14):**
+- `vulnerability_scan` — live CVE scanning (standalone)
+- `dependency_health` — health score + version freshness (standalone)
+- `upgrade_planner` — ranked upgrade recommendations (standalone)
+- `what_should_i_know` — pre-task intelligence briefing (standalone)
+- `ecosystem_pulse` — filtered ecosystem news (standalone)
+- `get_context` — tech stack + interests (standalone)
+- `get_relevant_content` — scored content feed (full mode)
+- `get_actionable_signals` — classified alerts (full mode)
+- `knowledge_gaps` — dependency blind spots (full mode)
+- `record_feedback` — save/dismiss to teach the system (full mode)
+- `decision_memory` — persistent architectural decisions (standalone)
+- `check_decision_alignment` — verify tech choices (standalone)
+- `agent_memory` — cross-session persistent memory (standalone)
+- `developer_dna` — tech identity profile (full mode)
+
+**Removed:** explain_relevance, score_autopsy, trend_analysis, daily_briefing,
+context_analysis, topic_connections, signal_chains, semantic_shifts,
+attention_report, source_health, config_validator, llm_status,
+export_context_packet, reverse_mentions, project_health, tech_radar,
+agent_session_brief, delegation_score, autophagy_status, decision_windows,
+compound_advantage, record_agent_feedback, get_agent_feedback_stats,
+trust_summary, preemption_feed
+
+**Fixed:**
+- `get_relevant_content` now uses Rust-computed PASIFA scores when the desktop
+  app database is present, instead of the simplified TypeScript keyword scorer.
+  Results are dramatically more accurate.
+
 ## 1.0.0 (2026-02-27)
 
 Initial public release.
