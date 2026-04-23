@@ -7,13 +7,13 @@
    ======================================================================== */
 
 :root {
-  --bg-card: rgba(10, 10, 10, 0.95);
-  --bg-section: rgba(255, 255, 255, 0.02);
-  --border: #2A2A2A;
-  --border-subtle: #1F1F1F;
+  --bg-card: #0A0A0A;
+  --bg-section: rgba(255, 255, 255, 0.03);
+  --border: #333333;
+  --border-subtle: #232323;
   --text-primary: #FFFFFF;
-  --text-secondary: #A0A0A0;
-  --text-muted: #6A6A6A;
+  --text-secondary: #B0B0B0;
+  --text-muted: #757575;
   --accent-gold: #D4AF37;
   --accent-red: #EF4444;
   --accent-amber: #F59E0B;
@@ -86,10 +86,11 @@ html, body {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
+  border-top: 1px solid rgba(212, 175, 55, 0.25);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.3),
-    0 0 1px rgba(255, 255, 255, 0.05);
+    0 12px 48px rgba(0, 0, 0, 0.7),
+    0 4px 16px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
   overflow: hidden;
 
   /* Enter animation */
@@ -195,14 +196,16 @@ html, body {
 
 .synthesis-section {
   margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 10px 12px;
+  background: var(--bg-section);
+  border-radius: 8px;
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
 }
 
 .synthesis-text {
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -222,10 +225,10 @@ html, body {
 .section-label {
   font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
   padding-left: 2px;
 }
 
@@ -359,14 +362,15 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 8px 10px;
-  border-radius: 6px;
+  padding: 9px 12px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .briefing-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .item-header {
@@ -548,20 +552,20 @@ html, body {
 .open-app-btn {
   font-family: var(--font-ui);
   font-size: 10px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 12px;
+  border-radius: 6px;
+  padding: 5px 16px;
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
 .open-app-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
-  border-color: #3A3A3A;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(212, 175, 55, 0.3);
 }
 
 /* ========================================================================
