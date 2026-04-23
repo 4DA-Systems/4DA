@@ -199,9 +199,8 @@ pub(crate) async fn filter_batch(
                     // Update the item with grounded explanation and adjusted confidence
                     let mut updated = item;
                     updated.explanation = verdict.grounded_explanation;
-                    updated.confidence = Confidence::llm_assessed(
-                        verdict.adjusted_confidence.clamp(0.0, 1.0),
-                    );
+                    updated.confidence =
+                        Confidence::llm_assessed(verdict.adjusted_confidence.clamp(0.0, 1.0));
                     passed.push(updated);
                 } else {
                     filtered_count += 1;
@@ -277,9 +276,7 @@ pub(crate) fn has_grounded_reasoning(explanation: &str) -> bool {
 
     // Check 2: at least one causal connector
     let lower = explanation.to_lowercase();
-    let has_connector = CAUSAL_CONNECTORS
-        .iter()
-        .any(|conn| lower.contains(conn));
+    let has_connector = CAUSAL_CONNECTORS.iter().any(|conn| lower.contains(conn));
 
     if !has_connector {
         return false;
@@ -440,24 +437,16 @@ fn parse_verdict(raw: &str) -> Option<DeliberationVerdict> {
     Some(DeliberationVerdict {
         should_surface: parsed.should_surface.unwrap_or(true),
         adjusted_confidence: parsed.confidence.unwrap_or(0.5).clamp(0.0, 1.0),
-        grounded_explanation: parsed
-            .grounded_explanation
-            .unwrap_or_default(),
+        grounded_explanation: parsed.grounded_explanation.unwrap_or_default(),
         signal_argument: parsed.signal_argument.unwrap_or_default(),
         noise_argument: parsed.noise_argument.unwrap_or_default(),
         reasoning_chain: ReasoningChain {
-            claim: chain
-                .and_then(|c| c.claim.clone())
-                .unwrap_or_default(),
+            claim: chain.and_then(|c| c.claim.clone()).unwrap_or_default(),
             evidence_points: chain
                 .and_then(|c| c.evidence_points.clone())
                 .unwrap_or_default(),
-            connection: chain
-                .and_then(|c| c.connection.clone())
-                .unwrap_or_default(),
-            conclusion: chain
-                .and_then(|c| c.conclusion.clone())
-                .unwrap_or_default(),
+            connection: chain.and_then(|c| c.connection.clone()).unwrap_or_default(),
+            conclusion: chain.and_then(|c| c.conclusion.clone()).unwrap_or_default(),
         },
     })
 }
@@ -471,10 +460,7 @@ fn strip_code_fences(raw: &str) -> String {
     if let Some(start) = trimmed.find("```") {
         let after_fence = &trimmed[start + 3..];
         // Skip optional language tag (e.g., "json")
-        let content_start = after_fence
-            .find('\n')
-            .map(|i| i + 1)
-            .unwrap_or(0);
+        let content_start = after_fence.find('\n').map(|i| i + 1).unwrap_or(0);
         let content = &after_fence[content_start..];
 
         if let Some(end) = content.rfind("```") {
@@ -498,21 +484,13 @@ pub(crate) fn build_user_context_summary() -> String {
 
     if let Ok(ace) = crate::get_ace_engine() {
         if let Ok(tech) = ace.get_detected_tech() {
-            let top_tech: Vec<&str> = tech
-                .iter()
-                .take(10)
-                .map(|t| t.name.as_str())
-                .collect();
+            let top_tech: Vec<&str> = tech.iter().take(10).map(|t| t.name.as_str()).collect();
             if !top_tech.is_empty() {
                 parts.push(format!("Tech stack: {}", top_tech.join(", ")));
             }
         }
         if let Ok(topics) = ace.get_active_topics() {
-            let top_topics: Vec<&str> = topics
-                .iter()
-                .take(5)
-                .map(|t| t.topic.as_str())
-                .collect();
+            let top_topics: Vec<&str> = topics.iter().take(5).map(|t| t.topic.as_str()).collect();
             if !top_topics.is_empty() {
                 parts.push(format!("Active topics: {}", top_topics.join(", ")));
             }
