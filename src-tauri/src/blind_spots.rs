@@ -483,8 +483,7 @@ fn find_missed_signals(
 
     // Populate `why_relevant` and `dep_name` by looking for dep mentions in titles.
     for signal in &mut signals {
-        let (why, dep) =
-            compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
+        let (why, dep) = compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
         signal.why_relevant = why;
         signal.dep_name = dep;
     }
@@ -925,12 +924,11 @@ fn compute_why_relevant(
     // Dep names that are common English words — they produce false matches
     // against nearly every article title ("open source", "next steps", etc.)
     const GENERIC_DEP_NAMES: &[&str] = &[
-        "open", "next", "node", "vite", "test", "core", "path", "sync",
-        "once", "glob", "rand", "time", "lock", "send", "copy", "find",
-        "diff", "pick", "wrap", "trim", "data", "form", "icon", "link",
-        "text", "type", "util", "base", "flat", "safe", "fast", "make",
-        "pipe", "pump", "read", "call", "nano", "pure", "vary", "yaml",
-        "mime", "race", "uuid", "deep", "http", "https",
+        "open", "next", "node", "vite", "test", "core", "path", "sync", "once", "glob", "rand",
+        "time", "lock", "send", "copy", "find", "diff", "pick", "wrap", "trim", "data", "form",
+        "icon", "link", "text", "type", "util", "base", "flat", "safe", "fast", "make", "pipe",
+        "pump", "read", "call", "nano", "pure", "vary", "yaml", "mime", "race", "uuid", "deep",
+        "http", "https",
     ];
 
     // Look for direct dep mentions, preferring longer names (more specific).
@@ -1416,14 +1414,26 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
     let tier = signal_priority_tier(m);
     let urgency = match tier {
         4 => {
-            if m.relevance_score >= 0.7 { Urgency::Critical } else { Urgency::High }
+            if m.relevance_score >= 0.7 {
+                Urgency::Critical
+            } else {
+                Urgency::High
+            }
         }
         3 => {
-            if m.relevance_score >= 0.8 { Urgency::High } else { Urgency::Medium }
+            if m.relevance_score >= 0.8 {
+                Urgency::High
+            } else {
+                Urgency::Medium
+            }
         }
         2 => Urgency::Medium,
         _ => {
-            if m.relevance_score >= 0.9 { Urgency::Medium } else { Urgency::Watch }
+            if m.relevance_score >= 0.9 {
+                Urgency::Medium
+            } else {
+                Urgency::Watch
+            }
         }
     };
 

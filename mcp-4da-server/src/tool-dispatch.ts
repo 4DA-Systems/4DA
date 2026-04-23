@@ -2,9 +2,7 @@
 /**
  * Tool Dispatch Registry
  *
- * Map-based dispatch replacing the monolithic switch statement in index.ts.
- * All 33 execute functions are imported once and mapped by tool name.
- *
+ * Map-based dispatch for the 14 active tools.
  * Adding a new tool = add to this map + schema-registry + barrel export.
  */
 
@@ -13,39 +11,14 @@ import type { FourDADatabase } from "./db.js";
 import {
   executeGetRelevantContent,
   executeGetContext,
-  executeExplainRelevance,
   executeRecordFeedback,
-  executeScoreAutopsy,
-  executeTrendAnalysis,
-  executeDailyBriefing,
-  executeContextAnalysis,
-  executeSourceHealth,
-  executeTopicConnections,
-  executeConfigValidator,
-  executeLLMStatus,
   executeGetActionableSignals,
-  executeExportContextPacket,
   executeKnowledgeGaps,
-  executeSignalChains,
-  executeSemanticShifts,
-  executeReverseMentions,
-  executeAttentionReport,
-  executeProjectHealth,
   executeDecisionMemory,
-  executeTechRadar,
   executeCheckDecisionAlignment,
   executeAgentMemory,
-  executeAgentSessionBrief,
-  executeDelegationScore,
   executeDeveloperDna,
-  executeAutophagyStatus,
-  executeDecisionWindows,
-  executeCompoundAdvantage,
-  executeRecordAgentFeedback,
-  executeGetAgentFeedbackStats,
   executeWhatShouldIKnow,
-  executeTrustSummary,
-  executePreemptionFeed,
   executeVulnerabilityScan,
   executeEcosystemPulse,
   executeDependencyHealth,
@@ -57,10 +30,6 @@ import { getLiveIntelligence } from "./live-singleton.js";
 /**
  * Executor signature — all tool execute functions follow this shape.
  * Awaiting a sync return resolves immediately, so we can await uniformly.
- *
- * Uses `any` for params because each tool defines its own strict param type —
- * type safety is enforced inside each tool file, not at the dispatch boundary.
- * (The original switch statement used `as unknown as XParams` on every call.)
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type ToolExecutor = (db: FourDADatabase, params: any) => unknown | Promise<unknown>;
@@ -69,69 +38,29 @@ export type ToolExecutor = (db: FourDADatabase, params: any) => unknown | Promis
  * Dispatch map — tool name → execute function
  */
 const DISPATCH_MAP: Record<string, ToolExecutor> = {
-  // Core
-  get_relevant_content: executeGetRelevantContent,
-  get_context: executeGetContext,
-  explain_relevance: executeExplainRelevance,
-  record_feedback: executeRecordFeedback,
-
-  // Intelligence
-  score_autopsy: executeScoreAutopsy,
-  trend_analysis: executeTrendAnalysis,
-  daily_briefing: executeDailyBriefing,
-  context_analysis: executeContextAnalysis,
-  topic_connections: executeTopicConnections,
-  get_actionable_signals: executeGetActionableSignals,
-  signal_chains: executeSignalChains,
-  semantic_shifts: executeSemanticShifts,
-  attention_report: executeAttentionReport,
-
-  // Diagnostic
-  source_health: executeSourceHealth,
-  config_validator: executeConfigValidator,
-  llm_status: executeLLMStatus,
-
-  // Knowledge & Health
-  export_context_packet: executeExportContextPacket,
-  knowledge_gaps: executeKnowledgeGaps,
-  reverse_mentions: executeReverseMentions,
-  project_health: executeProjectHealth,
-
-  // Decision Intelligence
-  decision_memory: executeDecisionMemory,
-  tech_radar: executeTechRadar,
-  check_decision_alignment: executeCheckDecisionAlignment,
-
-  // Agent Autonomy
-  agent_memory: executeAgentMemory,
-  agent_session_brief: executeAgentSessionBrief,
-  delegation_score: executeDelegationScore,
-
-  // Developer DNA
-  developer_dna: executeDeveloperDna,
-
-  // Intelligence Metabolism
-  autophagy_status: executeAutophagyStatus,
-  decision_windows: executeDecisionWindows,
-  compound_advantage: executeCompoundAdvantage,
-
-  // Agent Feedback
-  record_agent_feedback: executeRecordAgentFeedback,
-  get_agent_feedback_stats: executeGetAgentFeedbackStats,
-
-  // Synthesis
-  what_should_i_know: executeWhatShouldIKnow,
-
-  // Trust & Preemption
-  trust_summary: executeTrustSummary,
-  preemption_feed: executePreemptionFeed,
-
-  // Live Intelligence
+  // Dependency Security
   vulnerability_scan: (db, params) => executeVulnerabilityScan(db, params, getLiveIntelligence()),
-  ecosystem_pulse: (db, params) => executeEcosystemPulse(db, params, getLiveIntelligence()),
   dependency_health: (db, params) => executeDependencyHealth(db, params, getLiveIntelligence()),
   upgrade_planner: (db, params) => executeUpgradePlanner(db, params, getLiveIntelligence()),
 
+  // Intelligence
+  what_should_i_know: executeWhatShouldIKnow,
+  ecosystem_pulse: (db, params) => executeEcosystemPulse(db, params, getLiveIntelligence()),
+  get_context: executeGetContext,
+  get_relevant_content: executeGetRelevantContent,
+  get_actionable_signals: executeGetActionableSignals,
+  knowledge_gaps: executeKnowledgeGaps,
+  record_feedback: executeRecordFeedback,
+
+  // Decisions
+  decision_memory: executeDecisionMemory,
+  check_decision_alignment: executeCheckDecisionAlignment,
+
+  // Agent
+  agent_memory: executeAgentMemory,
+
+  // Identity
+  developer_dna: executeDeveloperDna,
 };
 
 /**

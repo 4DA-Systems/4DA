@@ -10,10 +10,11 @@
 //!
 //! The briefing window is:
 //! - 560×480 logical pixels, positioned bottom-right above the taskbar
-//! - Transparent, borderless, pinned to desktop level (behind all windows)
+//! - Transparent, borderless, always-on-top for 8 seconds then normal z-order
 //! - Pre-created on app startup (hidden) for instant display
-//! - Only visible when the user exposes their desktop
-//! - Never steals focus, never interrupts fullscreen applications
+//! - Visible in taskbar, accessible via Alt+Tab
+//! - Auto-dismisses after 5 minutes of no interaction
+//! - Never steals focus on creation (focused: false)
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -30,8 +31,14 @@ const WINDOW_LABEL: &str = "briefing";
 const WINDOW_WIDTH: u32 = 560;
 const WINDOW_HEIGHT: u32 = 480;
 
-/// Auto-dismiss after 60 seconds of no interaction.
-const AUTO_DISMISS_MS: u64 = 60_000;
+/// Auto-dismiss after 5 minutes of no interaction.
+/// Previous value of 60s was too short — users routinely missed the briefing
+/// because it vanished before they noticed it.
+const AUTO_DISMISS_MS: u64 = 300_000;
+
+/// Duration (ms) the briefing stays always-on-top before dropping to normal z-order.
+/// Long enough to catch the user's eye, short enough to not block their work.
+const ALWAYS_ON_TOP_MS: u64 = 8_000;
 
 // ============================================================================
 // Auto-dismiss cancellation
@@ -60,8 +67,8 @@ pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()>
     .decorations(false)
     .transparent(true)
     .shadow(false)
-    .always_on_top(false)
-    .skip_taskbar(true)
+    .always_on_top(true)
+    .skip_taskbar(false)
     .focused(false)
     .resizable(false)
     .visible(false)
@@ -80,8 +87,9 @@ pub fn mark_ready() {
 
 /// Show the briefing window with enriched morning briefing data.
 ///
-/// Centers the window on the primary monitor, emits the data payload,
-/// and starts a 60-second auto-dismiss timer.
+/// Positions bottom-right above the taskbar, emits the data payload,
+/// shows always-on-top for 8 seconds (so the user notices it), then
+/// drops to normal z-order. Auto-dismisses after 5 minutes.
 pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotification) {
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
@@ -170,23 +178,41 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
         warn!(target: "4da::briefing", error = %e, "Failed to emit briefing data");
     }
 
+    // Re-raise to always-on-top for this showing (may have been dropped by
+    // a previous show cycle or by the auto-drop timer).
+    let _ = window.set_always_on_top(true);
+
     // Show the window without stealing focus — never interrupt the user.
+    // The window is always-on-top so it appears above other windows, ensuring
+    // the user actually sees it. After ALWAYS_ON_TOP_MS it drops to normal
+    // z-order so it doesn't obstruct ongoing work.
     if let Err(e) = window.show() {
         warn!(target: "4da::briefing", error = %e, "Failed to show briefing window");
         return;
     }
-    // Pin to desktop level — behind all normal windows, at the same z-order
-    // as desktop icons. Only visible when the desktop is exposed.
-    crate::desktop_pin::pin_to_desktop(&window);
 
     info!(
         target: "4da::briefing",
         items = briefing.items.len(),
         gaps = briefing.knowledge_gaps.len(),
-        "Intelligence briefing shown"
+        "Intelligence briefing shown (always-on-top for {}s, auto-dismiss in {}s)",
+        ALWAYS_ON_TOP_MS / 1000,
+        AUTO_DISMISS_MS / 1000,
     );
 
-    // Start auto-dismiss timer (60 seconds).
+    // After ALWAYS_ON_TOP_MS, drop to normal z-order so the briefing doesn't
+    // block the user's work. The window remains visible and in the taskbar.
+    {
+        let aot_window = window.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(ALWAYS_ON_TOP_MS)).await;
+            if let Err(e) = aot_window.set_always_on_top(false) {
+                tracing::debug!(target: "4da::briefing", error = %e, "Failed to drop always-on-top (non-fatal)");
+            }
+        });
+    }
+
+    // Start auto-dismiss timer.
     let cancelled = Arc::new(AtomicBool::new(false));
     {
         let mut guard = DISMISS_CANCEL.lock();
@@ -270,6 +296,90 @@ pub async fn briefing_open_url(url: String) -> crate::error::Result<()> {
     Ok(())
 }
 
+/// Manually trigger the morning briefing for testing.
+///
+/// Bypasses the once-per-day and time-window checks. Builds a briefing from
+/// current analysis state or DB items, displays the briefing window, and
+/// fires the OS notification — exactly like the scheduler path.
+#[tauri::command]
+pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<String> {
+    use crate::monitoring_briefing::BriefingNotification;
+
+    let user_lang = crate::i18n::get_user_language();
+    let items: Vec<crate::monitoring_briefing::BriefingItem> = {
+        let analysis_state = crate::get_analysis_state().lock();
+        if let Some(ref results) = analysis_state.results {
+            results
+                .iter()
+                .filter(|r| r.relevant && !r.excluded)
+                .filter(|r| r.detected_lang == user_lang)
+                .filter(|r| r.top_score >= 0.15)
+                .take(8)
+                .map(|r| crate::monitoring_briefing::BriefingItem {
+                    title: r.title.clone(),
+                    source_type: r.source_type.clone(),
+                    score: r.top_score,
+                    signal_type: r.signal_type.clone(),
+                    url: r.url.clone(),
+                    item_id: Some(r.id as i64),
+                    signal_priority: r.signal_priority.clone(),
+                    description: r.signal_action.clone(),
+                    matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                })
+                .collect()
+        } else if let Ok(db) = crate::get_database() {
+            let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
+            db.get_relevant_items_since(period_start, 0.15, 8, &user_lang)
+                .ok()
+                .map(|db_items| {
+                    db_items
+                        .into_iter()
+                        .map(|i| crate::monitoring_briefing::BriefingItem {
+                            title: i.title,
+                            source_type: i.source_type,
+                            score: i.relevance_score.unwrap_or(0.0) as f32,
+                            signal_type: None,
+                            url: i.url,
+                            item_id: Some(i.id),
+                            signal_priority: None,
+                            description: None,
+                            matched_deps: vec![],
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        } else {
+            vec![]
+        }
+    };
+
+    if items.is_empty() {
+        return Ok("No items available for briefing — run an analysis first".into());
+    }
+
+    let total_relevant = items.len();
+    let now = chrono::Local::now();
+    let briefing = BriefingNotification {
+        title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
+        items,
+        total_relevant,
+        ongoing_topics: vec![],
+        knowledge_gaps: vec![],
+        escalating_chains: vec![],
+        wisdom_signals: vec![],
+        synthesis: None,
+        wisdom_synthesis: None,
+        preemption_alerts: vec![],
+        blind_spot_score: None,
+        labels: Some(crate::monitoring_briefing::build_briefing_labels(&user_lang)),
+    };
+
+    crate::monitoring_notifications::send_morning_briefing_notification(&app, &briefing);
+
+    info!(target: "4da::briefing", items = total_relevant, "Manual briefing triggered");
+    Ok(format!("Briefing triggered with {} items", total_relevant))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,7 +388,8 @@ mod tests {
     fn test_window_constants() {
         assert_eq!(WINDOW_WIDTH, 560);
         assert_eq!(WINDOW_HEIGHT, 480);
-        assert_eq!(AUTO_DISMISS_MS, 60_000);
+        assert_eq!(AUTO_DISMISS_MS, 300_000);
+        assert_eq!(ALWAYS_ON_TOP_MS, 8_000);
         assert_eq!(WINDOW_LABEL, "briefing");
     }
 
