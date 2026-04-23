@@ -337,6 +337,9 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                       <div className="text-xs text-text-muted mt-1">
                         {t('documents.addFiles')}
                       </div>
+                      <div className="text-[11px] text-text-muted/70 mt-2 max-w-xs mx-auto leading-relaxed">
+                        Indexes PDF, Word, and text files from your configured directories to personalise scoring.
+                      </div>
                     </>
                   )}
                 </div>

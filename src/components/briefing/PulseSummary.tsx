@@ -63,6 +63,7 @@ export const PulseSummary = memo(function PulseSummary({
       parts.push(t('pulse.newSinceLastSession', {
         newItems: diff.new_items,
         newRelevant: diff.new_relevant,
+        count: diff.new_items,
       }));
     } else if (diff?.has_previous && diff.new_items === 0) {
       parts.push(t('pulse.noNewItems'));
