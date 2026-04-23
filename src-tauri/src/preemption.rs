@@ -305,11 +305,47 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         ""
     };
 
-    // Note: this query uses title-only LIKE matching (not content LIKE) --
-    // content LIKE on 23K rows with avg 669 chars is the slowest part of
-    // the legacy path. Title-only is 10-30x faster and catches the same
-    // "CVE-2026-XXXX affects react" headlines we care about.
-    //
+    // Runtime column detection for `content_type` on source_items.
+    // When present, use the stored classification as a fast indexed lookup
+    // with LIKE fallback only for NULL (legacy) items.
+    let has_content_type = conn
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'content_type'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|c| c > 0)
+        .unwrap_or(false);
+
+    // content_type fast path: use the stored classification (indexed) when
+    // available, with LIKE fallback for legacy items or pre-Phase-55 DBs.
+    let title_like_fallback = "\
+              LOWER(si.title) LIKE '%cve%'
+              OR LOWER(si.title) LIKE '%ghsa%'
+              OR LOWER(si.title) LIKE '%vulnerab%'
+              OR LOWER(si.title) LIKE '%security advisory%'
+              OR LOWER(si.title) LIKE '%security patch%'
+              OR LOWER(si.title) LIKE '%security update%'
+              OR LOWER(si.title) LIKE '%security flaw%'
+              OR LOWER(si.title) LIKE '%security issue%'
+              OR LOWER(si.title) LIKE '%security bug%'
+              OR LOWER(si.title) LIKE '%breaking%'
+              OR LOWER(si.title) LIKE '%deprecat%'
+              OR LOWER(si.title) LIKE '%end of life%'
+              OR LOWER(si.title) LIKE '%end-of-life%'
+              OR LOWER(si.title) LIKE '%drops support%'
+              OR LOWER(si.title) LIKE '%migration guide%'
+              OR LOWER(si.title) LIKE '%major release%'
+              OR LOWER(si.title) LIKE '%advisory%'";
+    let content_type_filter = if has_content_type {
+        format!(
+            "si.content_type IN ('security_advisory', 'breaking_change') \
+             OR (si.content_type IS NULL AND ({title_like_fallback}))"
+        )
+    } else {
+        title_like_fallback.to_string()
+    };
+
     // Min package_name length 5 -- avoids noise from 4-char generic names
     // ("conf", "cors", "http", "core") that would match too broadly.
     // Dev deps always excluded -- test/lint tools aren't runtime attack surface.
@@ -330,25 +366,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
           {direct_filter}
           {relevance_filter}
           AND si.created_at >= datetime('now', '-30 days')
-          AND (
-              LOWER(si.title) LIKE '%cve%'
-              OR LOWER(si.title) LIKE '%ghsa%'
-              OR LOWER(si.title) LIKE '%vulnerab%'
-              OR LOWER(si.title) LIKE '%security advisory%'
-              OR LOWER(si.title) LIKE '%security patch%'
-              OR LOWER(si.title) LIKE '%security update%'
-              OR LOWER(si.title) LIKE '%security flaw%'
-              OR LOWER(si.title) LIKE '%security issue%'
-              OR LOWER(si.title) LIKE '%security bug%'
-              OR LOWER(si.title) LIKE '%breaking%'
-              OR LOWER(si.title) LIKE '%deprecat%'
-              OR LOWER(si.title) LIKE '%end of life%'
-              OR LOWER(si.title) LIKE '%end-of-life%'
-              OR LOWER(si.title) LIKE '%drops support%'
-              OR LOWER(si.title) LIKE '%migration guide%'
-              OR LOWER(si.title) LIKE '%major release%'
-              OR LOWER(si.title) LIKE '%advisory%'
-          )
+          AND ({content_type_filter})
         ORDER BY si.created_at DESC
         LIMIT 100"
     );
@@ -960,7 +978,8 @@ mod tests {
                 source_type TEXT NOT NULL,
                 content TEXT,
                 relevance_score REAL DEFAULT 0.0,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                content_type TEXT DEFAULT NULL
             );
             CREATE TABLE project_dependencies (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1200,6 +1219,22 @@ mod tests {
         )
         .unwrap();
         assert!(!has_is_direct_column(&conn));
+    }
+
+    #[test]
+    fn content_type_fast_path_finds_classified_items() {
+        let conn = setup_test_db();
+        insert_dep(&conn, "/proj/a", "react", true, false);
+        // Title has no security keywords — would be missed by LIKE fallback.
+        // content_type = 'security_advisory' should surface it via fast path.
+        conn.execute(
+            "INSERT INTO source_items (title, source_type, content, created_at, content_type)
+             VALUES ('React server component issue disclosed', 'osv', '', datetime('now', '-3 days'), 'security_advisory')",
+            [],
+        ).unwrap();
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+        assert_eq!(alerts.len(), 1, "content_type fast path should find the item");
     }
 
     #[test]

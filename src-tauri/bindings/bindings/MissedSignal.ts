@@ -10,4 +10,9 @@ dep_name: string | null,
  * Whether the user has seen this item before (any interaction recorded).
  * false = "New for you", true = "Blind Spot" (shown but never engaged).
  */
-was_shown: boolean, };
+was_shown: boolean, 
+/**
+ * Content classification from ingestion (security_advisory, release_notes, etc.).
+ * Used for urgency mapping and noise filtering instead of title pattern matching.
+ */
+content_type: string | null, };
