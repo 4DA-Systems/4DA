@@ -1541,7 +1541,14 @@ pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
 pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_blind_spots").map_err(|e| e.to_string())?;
     let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
-    Ok(blind_spot_report_to_feed(&report))
+    let mut feed = blind_spot_report_to_feed(&report);
+
+    // TitanCA-inspired adversarial deliberation — signal/noise validation.
+    // Critical/High bypass; Medium/Watch get deliberated. Fail-open on LLM unavailable.
+    let user_context = crate::adversarial::build_user_context_summary();
+    feed.items = crate::adversarial::filter_batch(feed.items, &user_context).await;
+
+    Ok(feed)
 }
 
 // ============================================================================

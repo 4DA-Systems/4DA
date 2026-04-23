@@ -107,6 +107,8 @@ pub(crate) struct ScoringContext {
     pub source_autopsies: HashMap<String, f32>,
     /// Anti-pattern penalties from autophagy bias detection: source_type -> penalty (-0.15 to +0.20)
     pub anti_pattern_penalties: HashMap<String, f32>,
+    /// Dismissal archetype penalties from TitanCA-inspired learning: archetype_id -> penalty (0.0-0.25)
+    pub archetype_penalties: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
     /// Topics with contradictory signals (both high affinity AND anti-topic).

@@ -148,5 +148,14 @@ pub fn validate_item(item: &EvidenceItem) -> Result<(), ValidationError> {
         }
     }
 
+    // Grounded reasoning check (soft gate — warn in dev, will become hard in Phase 10+)
+    if !item.explanation.is_empty() && !check_grounded_reasoning(&item.explanation) {
+        tracing::debug!(
+            target: "4da::evidence::validate",
+            id = %item.id,
+            "explanation lacks grounded reasoning — will become hard gate in Phase 10"
+        );
+    }
+
     Ok(())
 }
