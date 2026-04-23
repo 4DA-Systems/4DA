@@ -2,12 +2,11 @@
 /**
  * what_should_i_know tool
  *
- * Single entry point for external AI agents to get task-relevant intelligence
- * before starting work. Synthesizes multiple intelligence layers:
- * - Actionable signals (security alerts, breaking changes)
+ * Pre-task intelligence briefing for AI coding agents. Synthesizes:
+ * - Live vulnerability data + actionable signals
  * - Decision windows (time-bounded opportunities)
- * - Signal chains (escalating causal narratives)
- * - Session brief (decisions, concerns, memories)
+ * - AWE wisdom (validated principles, anti-patterns)
+ * - Ecosystem news (HN headlines relevant to tech stack)
  *
  * Filters everything for relevance to the described task and involved files.
  */
@@ -16,9 +15,6 @@ import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import type { FourDADatabase } from "../db.js";
 import { executeGetActionableSignals } from "./get-actionable-signals.js";
-import { executeSourceHealth } from "./source-health.js";
-import { executeSignalChains } from "./signal-chains.js";
-import { executeAgentSessionBrief } from "./agent-session-brief.js";
 import { findAweBinary } from "./decision-memory.js";
 import { getLiveIntelligence } from "../live-singleton.js";
 
@@ -46,13 +42,6 @@ interface DecisionWindow {
   urgency: number;
 }
 
-interface ActiveSignal {
-  chain_name: string;
-  priority: string;
-  suggested_action: string;
-  link_count: number;
-}
-
 interface WisdomEntry {
   type: string;
   subject: string;
@@ -73,7 +62,6 @@ interface WhatShouldIKnowResult {
   files: string[];
   advisories: Advisory[];
   decision_windows: DecisionWindow[];
-  active_signals: ActiveSignal[];
   relevant_wisdom: WisdomEntry[];
   ecosystem_news: EcosystemNewsItem[];
   delegation_assessment: {
@@ -310,44 +298,7 @@ export function executeWhatShouldIKnow(
     // Live intel unavailable — non-fatal
   }
 
-  // ── 2. Source Health (CVE/security check) ─────────────────────────────
-  try {
-    const healthResult = executeSourceHealth(db, { hours: 48 });
-    if (healthResult.overall_status === "critical") {
-      advisories.unshift({
-        title: "Source health critical — some data sources are failing",
-        signal_type: "system_health",
-        priority: "high",
-        action: "Run source_health for details. Content may be stale.",
-        url: null,
-      });
-    }
-  } catch {
-    // Health check unavailable — non-fatal
-  }
-
-  // ── 3. Signal Chains ──────────────────────────────────────────────────
-  let activeSignals: ActiveSignal[] = [];
-  try {
-    const chainResult = executeSignalChains(db, {
-      resolution: "open",
-      min_priority: "medium",
-    });
-
-    activeSignals = chainResult.chains
-      .filter((c) => matchesKeywords((c.chain_name || "") + " " + (c.suggested_action || ""), keywords))
-      .slice(0, 5)
-      .map((c) => ({
-        chain_name: c.chain_name,
-        priority: c.overall_priority,
-        suggested_action: c.suggested_action,
-        link_count: Array.isArray(c.links) ? c.links.length : 0,
-      }));
-  } catch {
-    // Chains unavailable — non-fatal
-  }
-
-  // ── 4. Decision Windows ───────────────────────────────────────────────
+  // ── 2. Decision Windows ───────────────────────────────────────────────
   let decisionWindows: DecisionWindow[] = [];
   try {
     const windows = getOpenDecisionWindows(db);
@@ -364,64 +315,10 @@ export function executeWhatShouldIKnow(
     // Windows unavailable — non-fatal
   }
 
-  // ── 5. Session Brief (decisions, memories, ecosystem) ─────────────────
+  // ── 3. Relevant Wisdom (AWE + decisions) ──────────────────────────────
   let relevantWisdom: WisdomEntry[] = [];
-  try {
-    const brief = executeAgentSessionBrief(db, {
-      include_decisions: true,
-      include_memories: true,
-    }) as {
-      active_decisions?: Array<{ subject: string; decision: string; type: string }>;
-      ecosystem_changes?: Array<{ change_type: string; subject: string; summary: string }>;
-      agent_memories?: Array<{ memory_type: string; subject: string; content: string }>;
-    };
 
-    // Filter active decisions for relevance
-    if (brief.active_decisions) {
-      for (const d of brief.active_decisions) {
-        if (matchesKeywords(d.subject + " " + d.decision, keywords)) {
-          relevantWisdom.push({
-            type: "decision",
-            subject: d.subject,
-            detail: d.decision,
-          });
-        }
-      }
-    }
-
-    // Filter ecosystem changes for relevance
-    if (brief.ecosystem_changes) {
-      for (const ec of brief.ecosystem_changes) {
-        if (matchesKeywords(ec.subject + " " + ec.summary, keywords)) {
-          relevantWisdom.push({
-            type: ec.change_type,
-            subject: ec.subject,
-            detail: ec.summary,
-          });
-        }
-      }
-    }
-
-    // Filter agent memories for relevance
-    if (brief.agent_memories) {
-      for (const m of brief.agent_memories) {
-        if (matchesKeywords(m.subject + " " + m.content, keywords)) {
-          relevantWisdom.push({
-            type: m.memory_type,
-            subject: m.subject,
-            detail: m.content,
-          });
-        }
-      }
-    }
-
-    // Cap wisdom entries
-    relevantWisdom = relevantWisdom.slice(0, 10);
-  } catch {
-    // Brief unavailable — non-fatal
-  }
-
-  // ── 5b. AWE Wisdom Engine (validated principles, decision stats) ──────
+  // AWE Wisdom Engine (validated principles, decision stats)
   try {
     const aweWisdom = getAweWisdom();
     if (aweWisdom) {
@@ -435,7 +332,7 @@ export function executeWhatShouldIKnow(
     // AWE unavailable — non-fatal
   }
 
-  // ── 5c. Ecosystem News (HN headlines relevant to tech stack) ──────────
+  // ── 4. Ecosystem News (HN headlines relevant to tech stack) ───────────
   let ecosystemNews: EcosystemNewsItem[] = [];
   try {
     const hnIntel = getLiveIntelligence();
@@ -455,9 +352,8 @@ export function executeWhatShouldIKnow(
     // Headlines unavailable — non-fatal
   }
 
-  // ── 6. Delegation Assessment ──────────────────────────────────────────
-  const signalDensity =
-    advisories.length + decisionWindows.length + activeSignals.length;
+  // ── 5. Delegation Assessment ──────────────────────────────────────────
+  const signalDensity = advisories.length + decisionWindows.length;
 
   const hasSecuritySignals = advisories.some(
     (a) => a.signal_type === "security_alert" && (a.priority === "critical" || a.priority === "high"),
@@ -480,16 +376,13 @@ export function executeWhatShouldIKnow(
     delegationReason = "No significant advisories or constraints detected for this task.";
   }
 
-  // ── 7. Summary ────────────────────────────────────────────────────────
+  // ── 6. Summary ────────────────────────────────────────────────────────
   const parts: string[] = [];
   if (advisories.length > 0) {
     parts.push(`${advisories.length} advisor${advisories.length !== 1 ? "ies" : "y"}`);
   }
   if (decisionWindows.length > 0) {
     parts.push(`${decisionWindows.length} decision window${decisionWindows.length !== 1 ? "s" : ""}`);
-  }
-  if (activeSignals.length > 0) {
-    parts.push(`${activeSignals.length} signal chain${activeSignals.length !== 1 ? "s" : ""}`);
   }
   if (relevantWisdom.length > 0) {
     parts.push(`${relevantWisdom.length} relevant decision${relevantWisdom.length !== 1 ? "s" : ""}/memor${relevantWisdom.length !== 1 ? "ies" : "y"}`);
@@ -508,7 +401,6 @@ export function executeWhatShouldIKnow(
     files,
     advisories,
     decision_windows: decisionWindows,
-    active_signals: activeSignals,
     relevant_wisdom: relevantWisdom,
     ecosystem_news: ecosystemNews,
     delegation_assessment: {
