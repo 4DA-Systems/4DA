@@ -21,6 +21,22 @@
 
 ---
 
+### T-TITANICA-INTEGRATION-2026-04-24
+
+**Scope:** Wire remaining TitanCA techniques into production pipelines.
+
+**Files:**
+- `src-tauri/src/scoring/mod.rs` (archetype penalties field)
+- `src-tauri/src/scoring/context.rs` (archetype loading)
+- `src-tauri/src/scoring/pipeline_v2.rs` (archetype penalty application)
+- `src-tauri/src/scoring/pipeline.rs` (archetype penalty V1 fallback)
+- `src-tauri/src/blind_spots.rs` (adversarial deliberation)
+- `src-tauri/src/evidence/validate.rs` (grounded reasoning gate)
+
+**Commit Lock:** not held
+
+---
+
 ### T-WAR-ROOM-RECOVERY-2026-04-19 (Waves 12-27 COMPLETE, pushed to origin)
 
 **Scope:** Recovery of stuck Wave 12 SPDX commit. Previous terminal hung on
