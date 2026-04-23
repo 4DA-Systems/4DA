@@ -700,7 +700,6 @@ fn chain_to_alert(
     }
 }
 
-
 // ============================================================================
 // Helpers
 // ============================================================================
@@ -762,7 +761,6 @@ fn freshness_from_timestamp(timestamp: &str) -> f32 {
         })
         .unwrap_or(0.0)
 }
-
 
 /// Truncate a string to a maximum length, appending "..." if truncated.
 fn truncate(s: &str, max_len: usize) -> String {
@@ -1241,7 +1239,11 @@ mod tests {
         ).unwrap();
 
         let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
-        assert_eq!(alerts.len(), 1, "content_type fast path should find the item");
+        assert_eq!(
+            alerts.len(),
+            1,
+            "content_type fast path should find the item"
+        );
     }
 
     #[test]

@@ -692,10 +692,7 @@ pub async fn record_interaction(
 /// snooze period expires. Recorded as a distinct interaction type so the
 /// trust model treats it as "deferred" rather than "rejected."
 #[tauri::command]
-pub async fn snooze_item(
-    source_item_id: i64,
-    days: u32,
-) -> Result<serde_json::Value> {
+pub async fn snooze_item(source_item_id: i64, days: u32) -> Result<serde_json::Value> {
     let days = days.clamp(1, 30);
     let conn = crate::state::open_db_connection()?;
 
@@ -820,7 +817,11 @@ pub async fn get_watched_items() -> Result<serde_json::Value> {
 pub async fn set_blind_spot_sensitivity(sensitivity: String) -> Result<serde_json::Value> {
     let valid = ["aggressive", "normal", "relaxed"];
     if !valid.contains(&sensitivity.as_str()) {
-        return Err(format!("Invalid sensitivity: {sensitivity}. Must be one of: {}", valid.join(", ")).into());
+        return Err(format!(
+            "Invalid sensitivity: {sensitivity}. Must be one of: {}",
+            valid.join(", ")
+        )
+        .into());
     }
     let manager = get_settings_manager();
     let mut guard = manager.lock();

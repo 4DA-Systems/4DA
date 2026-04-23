@@ -708,7 +708,8 @@ export class FourDADatabase {
   // ===========================================================================
 
   /**
-   * Get relevant content items with computed relevance scores
+   * Get relevant content items scored by the Rust pipeline (preferred) or
+   * TypeScript fallback scoring when Rust scores are unavailable.
    */
   getRelevantContent(
     minScore: number = 0.35,
@@ -721,10 +722,95 @@ export class FourDADatabase {
       .replace("T", " ")
       .slice(0, 19);
 
-    // Get user context for scoring
+    const hasRustScores = this.hasColumn("source_items", "relevance_score");
+
+    if (hasRustScores) {
+      return this.getRelevantContentFromRust(minScore, sourceType, limit, sinceDate);
+    }
+    return this.getRelevantContentFallback(minScore, sourceType, limit, sinceDate);
+  }
+
+  private hasColumn(table: string, column: string): boolean {
+    try {
+      const cols = this.db.pragma(`table_info(${table})`) as Array<{ name: string }>;
+      return cols.some((c) => c.name === column);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Use Rust-computed relevance_score from the desktop app's scoring pipeline.
+   * These scores are from the full 5-axis PASIFA engine — much more accurate.
+   */
+  private getRelevantContentFromRust(
+    minScore: number,
+    sourceType: string | undefined,
+    limit: number,
+    sinceDate: string,
+  ): RelevantItem[] {
+    let query = `
+      SELECT id, source_type, source_id, url, title, content, content_hash,
+             created_at, last_seen, relevance_score, content_type
+      FROM source_items
+      WHERE relevance_score >= ?
+        AND datetime(created_at) >= datetime(?)
+    `;
+    const params: (string | number)[] = [minScore, sinceDate];
+
+    if (sourceType) {
+      query += ` AND source_type = ?`;
+      params.push(sourceType);
+    }
+
+    query += ` ORDER BY relevance_score DESC LIMIT ?`;
+    params.push(limit);
+
+    const stmt = this.db.prepare(query);
+    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null }>;
+
+    const now = Date.now();
+    return items.map((item) => {
+      const createdAt = new Date(item.created_at.replace(" ", "T") + "Z");
+      const hoursAgo = Math.round((now - createdAt.getTime()) / (1000 * 60 * 60));
+      const discoveredAgo =
+        hoursAgo < 1
+          ? "< 1 hour ago"
+          : hoursAgo < 24
+            ? `${hoursAgo} hours ago`
+            : `${Math.round(hoursAgo / 24)} days ago`;
+
+      const necessity = this.getNecessityForItem(item.id);
+
+      return {
+        id: item.id,
+        source_type: item.source_type,
+        source_id: item.source_id,
+        url: item.url,
+        title: item.title,
+        content: item.content.substring(0, 500),
+        relevance_score: Math.round(item.relevance_score * 100) / 100,
+        created_at: item.created_at,
+        discovered_ago: discoveredAgo,
+        necessity_score: necessity.score,
+        necessity_reason: necessity.reason,
+        necessity_category: necessity.category,
+        necessity_urgency: necessity.urgency,
+      };
+    });
+  }
+
+  /**
+   * Fallback: TypeScript keyword scoring for standalone mode (no Rust pipeline).
+   */
+  private getRelevantContentFallback(
+    minScore: number,
+    sourceType: string | undefined,
+    limit: number,
+    sinceDate: string,
+  ): RelevantItem[] {
     const context = this.getUserContext(true, true);
 
-    // Build query - get recent items
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash, created_at, last_seen
       FROM source_items
@@ -738,12 +824,11 @@ export class FourDADatabase {
     }
 
     query += ` ORDER BY created_at DESC LIMIT ?`;
-    params.push(limit * 5); // Get more to filter
+    params.push(limit * 5);
 
     const stmt = this.db.prepare(query);
     const items = stmt.all(...params) as SourceItem[];
 
-    // Compute relevance scores and filter
     const scoredItems: RelevantItem[] = [];
     const now = Date.now();
 
@@ -760,7 +845,6 @@ export class FourDADatabase {
               ? `${hoursAgo} hours ago`
               : `${Math.round(hoursAgo / 24)} days ago`;
 
-        // Look up persisted necessity scores from Rust analysis pipeline
         const necessity = this.getNecessityForItem(item.id);
 
         scoredItems.push({
@@ -769,7 +853,7 @@ export class FourDADatabase {
           source_id: item.source_id,
           url: item.url,
           title: item.title,
-          content: item.content.substring(0, 500), // Truncate for readability
+          content: item.content.substring(0, 500),
           relevance_score: Math.round(score * 100) / 100,
           created_at: item.created_at,
           discovered_ago: discoveredAgo,
@@ -781,7 +865,6 @@ export class FourDADatabase {
       }
     }
 
-    // Sort by relevance and limit
     return scoredItems
       .sort((a, b) => b.relevance_score - a.relevance_score)
       .slice(0, limit);

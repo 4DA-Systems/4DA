@@ -143,9 +143,9 @@ pub(crate) use state::{
 };
 
 mod accuracy;
-mod adversarial;
 mod ace;
 mod ace_commands;
+mod adversarial;
 mod agent_brief;
 mod agent_memory;
 mod ai_costs;
@@ -717,6 +717,7 @@ pub fn run() {
             // Briefing window
             briefing_window::briefing_item_clicked,
             briefing_window::briefing_open_url,
+            briefing_window::trigger_morning_briefing,
             // Briefing snapshot — Sovereign Cold Boot instant-paint
             briefing_snapshot::get_briefing_snapshot,
             // AWE page-specific commands

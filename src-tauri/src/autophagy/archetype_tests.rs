@@ -53,7 +53,12 @@ fn insert_item(
     conn.execute(
         "INSERT INTO source_items (source_type, source_id, title, content_type)
          VALUES (?1, ?2, ?3, ?4)",
-        params![source_type, format!("id_{}", title.len()), title, content_type],
+        params![
+            source_type,
+            format!("id_{}", title.len()),
+            title,
+            content_type
+        ],
     )
     .unwrap();
     conn.last_insert_rowid()
@@ -136,7 +141,10 @@ fn test_detect_archetypes_below_threshold() {
 
     let archetypes = detect_archetypes(&conn, 90);
     let golang = archetypes.iter().find(|a| a.topic == "golang");
-    assert!(golang.is_none(), "50% dismissal should not trigger archetype");
+    assert!(
+        golang.is_none(),
+        "50% dismissal should not trigger archetype"
+    );
 }
 
 #[test]
@@ -156,7 +164,10 @@ fn test_detect_archetypes_insufficient_samples() {
 
     let archetypes = detect_archetypes(&conn, 90);
     let terraform = archetypes.iter().find(|a| a.topic == "terraform");
-    assert!(terraform.is_none(), "4 samples should not trigger archetype");
+    assert!(
+        terraform.is_none(),
+        "4 samples should not trigger archetype"
+    );
 }
 
 #[test]
@@ -197,7 +208,10 @@ fn test_detect_archetypes_no_content_type_column() {
         conn.execute(
             "INSERT INTO source_items (source_type, source_id, title)
              VALUES ('hackernews', ?1, ?2)",
-            params![format!("hn_{i}"), format!("Docker container orchestration tips {i}")],
+            params![
+                format!("hn_{i}"),
+                format!("Docker container orchestration tips {i}")
+            ],
         )
         .unwrap();
         conn.execute(
@@ -209,7 +223,10 @@ fn test_detect_archetypes_no_content_type_column() {
 
     let archetypes = detect_archetypes(&conn, 90);
     let docker = archetypes.iter().find(|a| a.topic == "docker");
-    assert!(docker.is_some(), "Should detect archetype even without content_type column");
+    assert!(
+        docker.is_some(),
+        "Should detect archetype even without content_type column"
+    );
     assert_eq!(docker.unwrap().content_type, "unknown");
 }
 
@@ -323,7 +340,10 @@ fn test_load_archetype_penalties_roundtrip() {
 #[test]
 fn test_archetype_penalty_for_item_match() {
     let mut penalties = HashMap::new();
-    penalties.insert("kubernetes:hackernews:security_advisory".to_string(), 0.2_f32);
+    penalties.insert(
+        "kubernetes:hackernews:security_advisory".to_string(),
+        0.2_f32,
+    );
     let penalty = archetype_penalty_for_item(
         &penalties,
         "hackernews",
@@ -336,7 +356,10 @@ fn test_archetype_penalty_for_item_match() {
 #[test]
 fn test_archetype_penalty_for_item_no_match() {
     let mut penalties = HashMap::new();
-    penalties.insert("kubernetes:hackernews:security_advisory".to_string(), 0.2_f32);
+    penalties.insert(
+        "kubernetes:hackernews:security_advisory".to_string(),
+        0.2_f32,
+    );
     let penalty = archetype_penalty_for_item(
         &penalties,
         "reddit",
@@ -421,7 +444,10 @@ fn test_detect_and_load_integration() {
     }
 
     let archetypes = detect_archetypes(&conn, 90);
-    assert!(!archetypes.is_empty(), "Should detect at least one archetype");
+    assert!(
+        !archetypes.is_empty(),
+        "Should detect at least one archetype"
+    );
 
     store_archetypes(&conn, &archetypes).expect("store");
 

@@ -243,6 +243,7 @@ interface CommandMap {
   get_morning_briefing_config: { params: Record<string, never>; result: { enabled: boolean; time: string } };
   set_briefing_time: { params: { time: string }; result: { briefing_time: string; message: string } };
   trigger_briefing_preview: { params: Record<string, never>; result: { message: string } };
+  trigger_morning_briefing: { params: Record<string, never>; result: string };
   record_interaction: { params: { sourceItemId: number; action: string }; result: { success: boolean } };
   snooze_item: { params: { sourceItemId: number; days: number }; result: { success: boolean; snooze_days: number } };
   watch_item: { params: { sourceItemId: number; topic: string; title: string }; result: { success: boolean; topic: string } };

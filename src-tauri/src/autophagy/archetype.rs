@@ -19,9 +19,9 @@ use tracing::{debug, info, warn};
 
 /// Stop words excluded from topic keyword extraction.
 const STOP_WORDS: &[&str] = &[
-    "the", "a", "an", "is", "in", "on", "at", "to", "for", "of", "and", "or", "but", "not",
-    "with", "this", "that", "from", "by", "as", "it", "its", "are", "was", "be", "has", "had",
-    "have", "new", "how", "why", "what", "when", "you", "your",
+    "the", "a", "an", "is", "in", "on", "at", "to", "for", "of", "and", "or", "but", "not", "with",
+    "this", "that", "from", "by", "as", "it", "its", "are", "was", "be", "has", "had", "have",
+    "new", "how", "why", "what", "when", "you", "your",
 ];
 
 /// Minimum sample size to declare a valid archetype (avoids false positives).
@@ -198,10 +198,7 @@ pub(crate) fn detect_archetypes(conn: &Connection, max_age_days: i64) -> Vec<Dis
 /// Each archetype is stored with `digest_type = 'dismissal_archetype'` and subject
 /// set to the archetype_id. Previous non-superseded entries for the same subject
 /// are pointed at the new row via `superseded_by`.
-pub(crate) fn store_archetypes(
-    conn: &Connection,
-    archetypes: &[DismissalArchetype],
-) -> Result<()> {
+pub(crate) fn store_archetypes(conn: &Connection, archetypes: &[DismissalArchetype]) -> Result<()> {
     for archetype in archetypes {
         let data = serde_json::to_string(&serde_json::json!({
             "topic": archetype.topic,

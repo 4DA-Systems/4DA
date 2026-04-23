@@ -699,7 +699,13 @@ fn classify_severity(missed: &[MissedItem], days_since: u32, dep_name: &str) -> 
     // Quality-weighted gap score: 1 security advisory (3.0) outweighs
     // 5 forum discussions (5 × 0.5 = 2.5).
     let weighted_score: f32 = missed.iter().map(|m| quality_weight(&m.title)).sum();
-    let days_factor = if days_since >= 999 { 1.5 } else if days_since > 30 { 1.2 } else { 1.0 };
+    let days_factor = if days_since >= 999 {
+        1.5
+    } else if days_since > 30 {
+        1.2
+    } else {
+        1.0
+    };
     let gap_score = weighted_score * days_factor;
 
     if has_security {
@@ -800,7 +806,12 @@ fn build_gap_explanation(
     // Lead with the most critical category
     if security > 0 {
         parts.push(format!(
-            "{security} unread security {}", if security == 1 { "advisory" } else { "advisories" }
+            "{security} unread security {}",
+            if security == 1 {
+                "advisory"
+            } else {
+                "advisories"
+            }
         ));
     }
     if breaking > 0 {
@@ -825,9 +836,7 @@ fn build_gap_explanation(
     let categories = parts.join(", ");
 
     // Version context
-    let ver = version
-        .map(|v| format!(" v{v}"))
-        .unwrap_or_default();
+    let ver = version.map(|v| format!(" v{v}")).unwrap_or_default();
 
     // Engagement recency
     let recency = if days_since >= 999 {
@@ -859,9 +868,15 @@ fn build_gap_explanation(
 
 fn build_gap_actions(missed: &[MissedItem]) -> Vec<EvidenceAction> {
     let mut actions = Vec::with_capacity(3);
-    let has_security = missed.iter().any(|m| classify_missed_item(&m.title) == "security advisory");
-    let has_breaking = missed.iter().any(|m| classify_missed_item(&m.title) == "breaking change");
-    let has_update = missed.iter().any(|m| classify_missed_item(&m.title) == "version update");
+    let has_security = missed
+        .iter()
+        .any(|m| classify_missed_item(&m.title) == "security advisory");
+    let has_breaking = missed
+        .iter()
+        .any(|m| classify_missed_item(&m.title) == "breaking change");
+    let has_update = missed
+        .iter()
+        .any(|m| classify_missed_item(&m.title) == "version update");
 
     if has_security {
         actions.push(EvidenceAction {
@@ -1180,17 +1195,37 @@ mod tests {
     fn gap_explanation_categorizes_missed_signals() {
         let g = sample_gap();
         let item = g.to_evidence_item();
-        assert!(item.explanation.contains("security"), "should mention security: {}", item.explanation);
-        assert!(item.explanation.contains("tokio v1.36.0"), "should include version: {}", item.explanation);
-        assert!(item.explanation.contains("30d"), "should mention days since review: {}", item.explanation);
+        assert!(
+            item.explanation.contains("security"),
+            "should mention security: {}",
+            item.explanation
+        );
+        assert!(
+            item.explanation.contains("tokio v1.36.0"),
+            "should include version: {}",
+            item.explanation
+        );
+        assert!(
+            item.explanation.contains("30d"),
+            "should mention days since review: {}",
+            item.explanation
+        );
     }
 
     #[test]
     fn gap_explanation_highlights_notable_item() {
         let g = sample_gap();
         let item = g.to_evidence_item();
-        assert!(item.explanation.contains("notably"), "should highlight a notable item: {}", item.explanation);
-        assert!(item.explanation.contains("CVE-2026-1234"), "should mention the CVE: {}", item.explanation);
+        assert!(
+            item.explanation.contains("notably"),
+            "should highlight a notable item: {}",
+            item.explanation
+        );
+        assert!(
+            item.explanation.contains("CVE-2026-1234"),
+            "should mention the CVE: {}",
+            item.explanation
+        );
     }
 
     #[test]
@@ -1198,15 +1233,23 @@ mod tests {
         let mut g = sample_gap();
         g.days_since_last_engagement = 999;
         let item = g.to_evidence_item();
-        assert!(item.explanation.contains("never reviewed"), "should say never reviewed: {}", item.explanation);
+        assert!(
+            item.explanation.contains("never reviewed"),
+            "should say never reviewed: {}",
+            item.explanation
+        );
     }
 
     #[test]
     fn gap_actions_include_review_security_for_cve() {
         let g = sample_gap();
         let item = g.to_evidence_item();
-        assert!(item.suggested_actions.iter().any(|a| a.action_id == "review_security"),
-            "should have review_security action for security gaps");
+        assert!(
+            item.suggested_actions
+                .iter()
+                .any(|a| a.action_id == "review_security"),
+            "should have review_security action for security gaps"
+        );
     }
 
     #[test]
@@ -1220,17 +1263,27 @@ mod tests {
             created_at: "2026-04-10 10:00:00".to_string(),
         }];
         let item = g.to_evidence_item();
-        assert!(item.suggested_actions.iter().any(|a| a.action_id == "investigate"),
-            "should fall back to investigate for generic items");
+        assert!(
+            item.suggested_actions
+                .iter()
+                .any(|a| a.action_id == "investigate"),
+            "should fall back to investigate for generic items"
+        );
     }
 
     #[test]
     fn gap_citation_relevance_note_is_descriptive() {
         let g = sample_gap();
         let item = g.to_evidence_item();
-        assert!(item.evidence[0].relevance_note.contains("Unread"),
-            "citation note should categorize: {}", item.evidence[0].relevance_note);
-        assert!(!item.evidence[0].relevance_note.contains("missed item #"),
-            "citation note should not be generic: {}", item.evidence[0].relevance_note);
+        assert!(
+            item.evidence[0].relevance_note.contains("Unread"),
+            "citation note should categorize: {}",
+            item.evidence[0].relevance_note
+        );
+        assert!(
+            !item.evidence[0].relevance_note.contains("missed item #"),
+            "citation note should not be generic: {}",
+            item.evidence[0].relevance_note
+        );
     }
 }
