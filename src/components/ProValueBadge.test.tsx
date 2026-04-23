@@ -37,7 +37,7 @@ describe('ProValueBadge', () => {
     expect(container.innerHTML).toBe('');
   });
 
-  it('renders signals count when signals_detected > 0', () => {
+  it('returns null when only signals_detected > 0 (vanity metric removed)', () => {
     setMockState({
       proValueReport: {
         signals_detected: 5,
@@ -46,8 +46,8 @@ describe('ProValueBadge', () => {
         period_days: 30,
       },
     });
-    render(<ProValueBadge />);
-    expect(screen.getByText(/pro\.signals/)).toBeInTheDocument();
+    const { container } = render(<ProValueBadge />);
+    expect(container.innerHTML).toBe('');
   });
 
   it('renders gaps count when knowledge_gaps_caught > 0', () => {
@@ -95,8 +95,8 @@ describe('ProValueBadge', () => {
     setMockState({
       proValueReport: {
         signals_detected: 5,
-        knowledge_gaps_caught: 0,
-        estimated_hours_saved: 0,
+        knowledge_gaps_caught: 3,
+        estimated_hours_saved: 1.5,
         period_days: 30,
       },
     });

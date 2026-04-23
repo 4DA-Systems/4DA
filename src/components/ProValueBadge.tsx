@@ -15,15 +15,14 @@ export const ProValueBadge = memo(function ProValueBadge() {
 
   if (!report) return null;
 
-  const { signals_detected, knowledge_gaps_caught, estimated_hours_saved } = report;
+  const { knowledge_gaps_caught, estimated_hours_saved } = report;
 
   // Don't show if there's nothing to report
-  if (signals_detected === 0 && knowledge_gaps_caught === 0 && estimated_hours_saved === 0) {
+  if (knowledge_gaps_caught === 0 && estimated_hours_saved === 0) {
     return null;
   }
 
   const parts: string[] = [];
-  if (signals_detected > 0) parts.push(t('pro.signals', { count: signals_detected }));
   if (knowledge_gaps_caught > 0) parts.push(t('pro.gaps', { count: knowledge_gaps_caught }));
   if (estimated_hours_saved > 0) parts.push(t('pro.hoursSaved', { hours: estimated_hours_saved.toFixed(1) }));
 
