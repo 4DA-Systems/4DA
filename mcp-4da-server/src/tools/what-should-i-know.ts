@@ -189,12 +189,11 @@ function getAweWisdom(): string | null {
     const aweBin = findAweBinary();
     if (!aweBin) return null;
 
-    // Quick existence check for the wisdom database
-    const dbPath = process.platform === "win32"
-      ? `${process.env.APPDATA || ""}\\awe\\wisdom.db`
-      : `${process.env.HOME || ""}/.local/share/awe/wisdom.db`;
+    const configPath = process.platform === "win32"
+      ? `${process.env.APPDATA || ""}\\awe\\config.toml`
+      : `${process.env.HOME || ""}/.config/awe/config.toml`;
 
-    if (!existsSync(dbPath)) return null;
+    if (!existsSync(configPath)) return null;
 
     let section = "AWE WISDOM ENGINE\n";
 
@@ -210,22 +209,21 @@ function getAweWisdom(): string | null {
     }
 
     try {
-      const wisdomOutput = execSync(
-        `"${aweBin}" wisdom --domain software-engineering`,
+      const recallOutput = execSync(
+        `"${aweBin}" recall "software engineering decisions" --domain software-engineering --max 5`,
         {
           timeout: 5000,
           encoding: "utf-8",
           stdio: ["ignore", "pipe", "ignore"],
         },
       );
-      if (wisdomOutput && wisdomOutput.includes("VALIDATED")) {
-        section += wisdomOutput.trim() + "\n";
+      if (recallOutput && recallOutput.trim().length > 0) {
+        section += recallOutput.trim() + "\n";
       }
     } catch {
-      // wisdom command failed — continue without it
+      // recall command failed — continue without it
     }
 
-    // Only return if we got something beyond the header
     return section.length > "AWE WISDOM ENGINE\n".length ? section : null;
   } catch {
     return null;
