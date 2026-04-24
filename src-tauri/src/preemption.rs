@@ -950,8 +950,7 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
             }
         })
         .collect();
-    // Phase 9 — attach precedents via the AWE spine.
-    crate::awe_spine::enrich_items(&mut items);
+    // Phase 9 — AWE spine enrichment removed (AWE v2 is a standalone repo).
 
     // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
     // validation. Critical/High items bypass; Medium/Watch get deliberated.

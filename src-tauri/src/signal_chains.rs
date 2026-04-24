@@ -751,7 +751,7 @@ pub fn get_signal_chains_predicted() -> Result<EvidenceFeed> {
     crate::settings::require_signal_feature("get_signal_chains_predicted")?;
     let conn = crate::open_db_connection()?;
     let chains = detect_chains(&conn)?;
-    let mut items: Vec<EvidenceItem> = chains
+    let items: Vec<EvidenceItem> = chains
         .into_iter()
         .filter_map(|c| {
             let prediction = predict_chain_lifecycle(&c);
@@ -777,8 +777,6 @@ pub fn get_signal_chains_predicted() -> Result<EvidenceFeed> {
             }
         })
         .collect();
-    // Phase 9 — attach precedents via the AWE spine.
-    crate::awe_spine::enrich_items(&mut items);
     Ok(EvidenceFeed::from_items(items))
 }
 

@@ -210,56 +210,8 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         gaps
     };
 
-    // Wisdom signals from AWE
-    let wisdom_signals: Vec<serde_json::Value> = {
-        if let Some(path) = crate::context_commands::find_awe_binary() {
-            if let Ok(output) = crate::context_commands::run_awe_with_timeout(
-                std::process::Command::new(&path).args([
-                    "wisdom",
-                    "--domain",
-                    "software-engineering",
-                ]),
-                10,
-            ) {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let mut signals = Vec::new();
-                let mut current_type = "";
-                for line in stdout.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.contains("VALIDATED PRINCIPLES") {
-                        current_type = "principle";
-                    } else if trimmed.contains("ANTI-PATTERNS") {
-                        current_type = "anti-pattern";
-                    } else if trimmed.starts_with('[') && !current_type.is_empty() {
-                        if let Some(end) = trimmed.find(']') {
-                            let conf = trimmed[1..end]
-                                .trim_end_matches('%')
-                                .parse::<f64>()
-                                .unwrap_or(0.0)
-                                / 100.0;
-                            let text = trimmed[end + 1..].trim();
-                            if !text.is_empty() && conf > 0.0 {
-                                signals.push(serde_json::json!({ "text": text, "confidence": conf, "signal_type": current_type }));
-                            }
-                        }
-                    }
-                }
-                signals.sort_by(|a, b| {
-                    b["confidence"]
-                        .as_f64()
-                        .unwrap_or(0.0)
-                        .partial_cmp(&a["confidence"].as_f64().unwrap_or(0.0))
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                });
-                signals.truncate(3);
-                signals
-            } else {
-                vec![]
-            }
-        } else {
-            vec![]
-        }
-    };
+    // AWE v1 removed — wisdom signals will come from AWE v2 standalone binary
+    let wisdom_signals: Vec<serde_json::Value> = vec![];
 
     // GAME: track briefing generation
     if let Ok(db) = crate::get_database() {
