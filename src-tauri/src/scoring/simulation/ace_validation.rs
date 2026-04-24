@@ -79,6 +79,7 @@ fn ace_dependency_match_boosts_score() {
             is_dev: false,
             is_direct: true,
             version: Some("1.36".to_string()),
+            ecosystem: "rust".to_string(),
         },
     );
 
@@ -388,6 +389,7 @@ fn ace_context_increases_confirmation_signals() {
             is_dev: false,
             is_direct: true,
             version: Some("1.36".to_string()),
+            ecosystem: "rust".to_string(),
         },
     );
     ace_full

@@ -29,6 +29,7 @@ pub(super) struct DepInfoSpec {
     pub is_dev: bool,
     pub is_direct: bool,
     pub search_terms: Vec<&'static str>,
+    pub ecosystem: &'static str,
 }
 
 /// Full enrichment data for a single persona.
@@ -165,6 +166,7 @@ fn rust_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["tokio", "async runtime"],
+                ecosystem: "rust",
             },
             DepInfoSpec {
                 package_name: "serde",
@@ -172,6 +174,7 @@ fn rust_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["serde", "serialization"],
+                ecosystem: "rust",
             },
             DepInfoSpec {
                 package_name: "sqlx",
@@ -179,6 +182,7 @@ fn rust_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["sqlx", "sql"],
+                ecosystem: "rust",
             },
         ],
         dependency_names: string_set(&["tokio", "serde", "sqlx", "tauri", "anyhow", "thiserror"]),
@@ -242,6 +246,7 @@ fn python_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["torch", "pytorch"],
+                ecosystem: "python",
             },
             DepInfoSpec {
                 package_name: "transformers",
@@ -249,6 +254,7 @@ fn python_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["transformers", "huggingface"],
+                ecosystem: "python",
             },
             DepInfoSpec {
                 package_name: "numpy",
@@ -256,6 +262,7 @@ fn python_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["numpy"],
+                ecosystem: "python",
             },
         ],
         dependency_names: string_set(&["torch", "transformers", "numpy", "pandas", "scikit-learn"]),
@@ -315,6 +322,7 @@ fn fullstack_ts_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["react"],
+                ecosystem: "javascript",
             },
             DepInfoSpec {
                 package_name: "next",
@@ -322,6 +330,7 @@ fn fullstack_ts_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["next", "nextjs"],
+                ecosystem: "javascript",
             },
             DepInfoSpec {
                 package_name: "prisma",
@@ -329,6 +338,7 @@ fn fullstack_ts_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["prisma", "orm"],
+                ecosystem: "javascript",
             },
         ],
         dependency_names: string_set(&["react", "next", "prisma", "typescript", "tailwindcss"]),
@@ -394,6 +404,7 @@ fn devops_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["helm", "kubernetes helm"],
+                ecosystem: "go",
             },
             DepInfoSpec {
                 package_name: "prometheus",
@@ -401,6 +412,7 @@ fn devops_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["prometheus", "monitoring"],
+                ecosystem: "go",
             },
         ],
         dependency_names: string_set(&["helm", "prometheus", "grafana", "terraform", "kubernetes"]),
@@ -459,6 +471,7 @@ fn mobile_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["react-native", "react native"],
+                ecosystem: "javascript",
             },
             DepInfoSpec {
                 package_name: "expo",
@@ -466,6 +479,7 @@ fn mobile_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["expo"],
+                ecosystem: "javascript",
             },
         ],
         dependency_names: string_set(&["react-native", "expo", "typescript", "metro"]),
@@ -573,6 +587,7 @@ fn power_user_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["tokio", "async runtime"],
+                ecosystem: "rust",
             },
             DepInfoSpec {
                 package_name: "torch",
@@ -580,6 +595,7 @@ fn power_user_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["torch", "pytorch"],
+                ecosystem: "python",
             },
             DepInfoSpec {
                 package_name: "react",
@@ -587,6 +603,7 @@ fn power_user_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["react"],
+                ecosystem: "javascript",
             },
         ],
         dependency_names: string_set(&["tokio", "serde", "torch", "react", "postgres", "redis"]),
@@ -641,6 +658,7 @@ fn context_switcher_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["tokio", "async runtime"],
+                ecosystem: "rust",
             },
             DepInfoSpec {
                 package_name: "gin",
@@ -648,6 +666,7 @@ fn context_switcher_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["gin", "go web"],
+                ecosystem: "go",
             },
         ],
         dependency_names: string_set(&["tokio", "axum", "gin", "grpc", "kafka"]),
@@ -717,6 +736,7 @@ fn niche_specialist_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["ghc", "haskell compiler"],
+                ecosystem: "haskell",
             },
             DepInfoSpec {
                 package_name: "cabal",
@@ -724,6 +744,7 @@ fn niche_specialist_enrichment() -> PersonaEnrichment {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["cabal", "haskell build"],
+                ecosystem: "haskell",
             },
         ],
         dependency_names: string_set(&["ghc", "cabal", "nix", "stack"]),
