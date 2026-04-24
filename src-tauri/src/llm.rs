@@ -496,6 +496,11 @@ impl LLMClient {
                 .to_string()
         };
 
+        // Re-validate URL at use-time to prevent SSRF from tampered settings
+        if self.provider.provider != "ollama" {
+            crate::url_validation::validate_not_internal(&url)?;
+        }
+
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
             "content": system

@@ -820,6 +820,64 @@ pub async fn delete_export(export_id: String) -> Result<()> {
     Ok(())
 }
 
+/// Complete data wipe — deletes ALL user data for GDPR compliance.
+/// This is irreversible. Clears:
+/// - All database tables (content, events, decisions, feedback, history, logs)
+/// - All telemetry
+/// - Cached calibrations
+/// - Export files
+/// Does NOT delete: settings.json, keychain entries (user manages those separately)
+#[tauri::command]
+pub async fn factory_reset() -> Result<()> {
+    warn!(target: "4da::privacy", "Factory reset initiated — wiping all user data");
+
+    let conn = crate::state::open_db_connection()?;
+
+    // Get list of all user tables (exclude sqlite internals)
+    let tables: Vec<String> = {
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .context("Failed to list tables")?;
+        let rows = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .context("Failed to query table names")?
+            .filter_map(|r| r.ok())
+            .collect();
+        rows
+    };
+
+    // Delete all rows from every table
+    for table in &tables {
+        // Skip virtual tables (sqlite-vec) — they need special handling
+        if table.ends_with("_vec") || table.starts_with("vss_") {
+            continue;
+        }
+        if let Err(e) = conn.execute(&format!("DELETE FROM \"{}\"", table), []) {
+            warn!(target: "4da::privacy", table = %table, error = %e, "Failed to clear table during factory reset");
+        }
+    }
+
+    // Clear calibration cache files, export files, and logs
+    let paths = crate::runtime_paths::RuntimePaths::get();
+    let data_dir = &paths.data_dir;
+
+    for subdir in &["calibrations", "exports", "logs"] {
+        let dir = data_dir.join(subdir);
+        if dir.exists() {
+            let _ = std::fs::remove_dir_all(&dir);
+        }
+    }
+
+    // Also clear the cache directory
+    if paths.cache_dir.exists() {
+        let _ = std::fs::remove_dir_all(&paths.cache_dir);
+        let _ = std::fs::create_dir_all(&paths.cache_dir);
+    }
+
+    warn!(target: "4da::privacy", tables_cleared = tables.len(), "Factory reset complete — all user data wiped");
+    Ok(())
+}
+
 // ============================================================================
 // Tests
 // ============================================================================

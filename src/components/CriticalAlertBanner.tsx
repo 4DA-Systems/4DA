@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
+import { isSafeUrl } from '../utils/sanitize-html';
 import type { SourceRelevance } from '../types/analysis';
 
 interface CriticalAlert {
@@ -196,7 +197,7 @@ export function CriticalAlertBanner() {
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {alert.url != null && alert.url !== '' && (
+              {alert.url != null && alert.url !== '' && isSafeUrl(alert.url) && (
                 <button
                   onClick={() => {
                     import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
