@@ -10,6 +10,72 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
 
 // ============================================================================
+// Sensitive string wrapper
+// ============================================================================
+
+/// A string wrapper that zeroizes on drop — every clone is independently wiped.
+#[derive(Default, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SensitiveString(String);
+
+impl SensitiveString {
+    pub fn new(s: String) -> Self {
+        Self(s)
+    }
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl Clone for SensitiveString {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl Drop for SensitiveString {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl std::fmt::Debug for SensitiveString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
+
+impl std::fmt::Display for SensitiveString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<String> for SensitiveString {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+impl PartialEq for SensitiveString {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl PartialEq<str> for SensitiveString {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+// ============================================================================
 // Settings Types
 // ============================================================================
 
@@ -699,7 +765,7 @@ pub struct Settings {
     pub nitter_instance: Option<String>,
     /// X API Bearer Token (BYOK)
     #[serde(default)]
-    pub x_api_key: String,
+    pub x_api_key: SensitiveString,
     /// YouTube channel IDs to monitor (free, no API key needed)
     #[serde(default)]
     pub youtube_channels: Vec<String>,
@@ -776,14 +842,7 @@ impl std::fmt::Debug for Settings {
                 "twitter_handles",
                 &format!("[{} handles]", self.twitter_handles.len()),
             )
-            .field(
-                "x_api_key",
-                &if self.x_api_key.is_empty() {
-                    "(empty)"
-                } else {
-                    "[REDACTED]"
-                },
-            )
+            .field("x_api_key", &self.x_api_key)
             .field(
                 "youtube_channels",
                 &format!("[{} channels]", self.youtube_channels.len()),
@@ -934,13 +993,6 @@ impl Settings {
     }
 }
 
-impl Drop for Settings {
-    fn drop(&mut self) {
-        // x_api_key lives on Settings directly (not in a sub-struct with its own Drop)
-        self.x_api_key.zeroize();
-    }
-}
-
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -957,7 +1009,7 @@ impl Default for Settings {
             rss_feeds: vec![],
             twitter_handles: vec![],
             nitter_instance: None,
-            x_api_key: String::new(),
+            x_api_key: SensitiveString::default(),
             youtube_channels: vec![],
             github_languages: vec![],
             predictive: PredictiveConfig::default(),

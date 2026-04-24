@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { isSafeUrl } from '../../utils/sanitize-html';
 
 interface SsoConfig {
   provider_type: string;
@@ -91,7 +92,12 @@ export function SsoConfigPanel() {
     try {
       const url = await cmd('initiate_sso_login');
       // Open the IdP login page in the system browser
-      window.open(url as unknown as string, '_blank');
+      if (isSafeUrl(url as string)) {
+        window.open(url as unknown as string, '_blank', 'noopener,noreferrer');
+      } else {
+        setStatus({ ok: false, msg: 'SSO login URL is not a valid HTTPS endpoint' });
+        return;
+      }
       setStatus({ ok: true, msg: 'SSO login initiated. Complete authentication in your browser.' });
     } catch {
       setStatus({ ok: false, msg: 'Failed to initiate SSO login' });
