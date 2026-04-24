@@ -138,14 +138,14 @@ describe('briefing-slice', () => {
       expect(aiBriefing.content).toBeNull();
     });
 
-    it('sets error on invoke rejection', async () => {
-      vi.mocked(invoke).mockRejectedValueOnce(new Error('Connection failed'));
+    it('sets user-friendly error on invoke rejection', async () => {
+      vi.mocked(invoke).mockRejectedValueOnce(new Error('Connection refused'));
 
       await useAppStore.getState().generateBriefing();
 
       const { aiBriefing } = useAppStore.getState();
       expect(aiBriefing.loading).toBe(false);
-      expect(aiBriefing.error).toContain('Connection failed');
+      expect(aiBriefing.error).toBe('Network request failed. Check your internet connection.');
     });
   });
 

@@ -165,19 +165,48 @@ export function SetupAIProvider({
       {/* Provider selector */}
       {!ollamaReady && !pullingModels && (
         <>
-          {/* LOCAL section — recommended */}
+          {/* CLOUD section — recommended for best results */}
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.localLabel')}</span>
-              <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('onboarding.setupAi.recommended')}</span>
+              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.cloudLabel')}</span>
+              <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('onboarding.setupAi.bestResults')}</span>
             </div>
-            <p className="text-[10px] text-green-400/80 mb-2">{t('onboarding.setupAi.privacyMessage')}</p>
+            <p className="text-[10px] text-text-muted mb-2">{t('onboarding.setupAi.byokExplainer')}</p>
+            <div className="grid grid-cols-3 gap-2">
+              {(['anthropic', 'openai', 'openai-compatible'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => onProviderChange(p)}
+                  className={`p-3 rounded-lg text-center transition-all ${
+                    provider === p
+                      ? 'bg-green-500/15 border-2 border-green-500/50'
+                      : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-white">
+                    {p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : t('onboarding.setupAi.otherLabel')}
+                  </div>
+                  <div className="text-[10px] text-text-muted mt-0.5">
+                    {p === 'anthropic' ? 'Claude' : p === 'openai' ? 'GPT' : t('onboarding.setupAi.otherDesc')}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* LOCAL section — privacy-first alternative */}
+          <div>
+            <div className="flex items-center gap-2 mb-2 mt-1">
+              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.localLabel')}</span>
+              <span className="text-[9px] px-1.5 py-0.5 bg-bg-tertiary text-text-muted rounded font-medium">{t('onboarding.setupAi.zeroCloud')}</span>
+            </div>
+            <p className="text-[10px] text-text-muted mb-2">{t('onboarding.setupAi.localTradeoff')}</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onProviderChange('ollama')}
                 className={`p-3 rounded-lg text-start transition-all ${
                   provider === 'ollama'
-                    ? 'bg-green-500/15 border-2 border-green-500/50'
+                    ? 'bg-orange-500/20 border-2 border-orange-500'
                     : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                 }`}
               >
@@ -190,7 +219,6 @@ export function SetupAIProvider({
                   key={server.name}
                   onClick={() => {
                     onProviderChange('openai-compatible');
-                    // Signal the parent that base_url should be set
                     onApiKeyChange('');
                   }}
                   className="p-3 rounded-lg text-start bg-bg-tertiary border-2 border-transparent hover:border-border transition-all"
@@ -201,33 +229,6 @@ export function SetupAIProvider({
                   </div>
                   <div className="text-[10px] text-text-muted mt-0.5">
                     {server.model_count} {server.model_count === 1 ? 'model' : 'models'} &middot; {server.base_url}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* CLOUD section */}
-          <div>
-            <div className="flex items-center gap-2 mb-2 mt-1">
-              <span className="text-xs font-medium text-text-secondary uppercase tracking-wider">{t('onboarding.setupAi.cloudLabel')}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {(['anthropic', 'openai', 'openai-compatible'] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => onProviderChange(p)}
-                  className={`p-3 rounded-lg text-center transition-all ${
-                    provider === p
-                      ? 'bg-orange-500/20 border-2 border-orange-500'
-                      : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
-                  }`}
-                >
-                  <div className="text-sm font-medium text-white">
-                    {p === 'anthropic' ? 'Anthropic' : p === 'openai' ? 'OpenAI' : t('onboarding.setupAi.otherLabel')}
-                  </div>
-                  <div className="text-[10px] text-text-muted mt-0.5">
-                    {p === 'anthropic' ? 'Claude' : p === 'openai' ? 'GPT' : t('onboarding.setupAi.otherDesc')}
                   </div>
                 </button>
               ))}

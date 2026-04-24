@@ -186,7 +186,7 @@ interface CommandMap {
   set_rerank_config: { params: { enabled: boolean; maxItems: number; minScore: number; dailyTokenLimit: number; dailyCostLimit: number }; result: void };
   set_llm_limits: { params: { dailyTokenLimit: number; dailyCostLimitCents: number }; result: void };
   test_llm_connection: { params: Record<string, never>; result: { success: boolean; message: string } };
-  check_synthesis_capability: { params: Record<string, never>; result: { can_synthesize: boolean; provider: string; model: string; params_billions: number | null; min_params_billions: number; guidance: string } };
+  check_synthesis_capability: { params: Record<string, never>; result: { can_synthesize: boolean; can_explain: boolean; provider: string; model: string; params_billions: number | null; min_params_billions: number; guidance: string } };
   check_ollama_status: { params: { baseUrl: string | null }; result: { operational: boolean; models: string[]; error: string | null } };
   mark_onboarding_complete: { params: Record<string, never>; result: void };
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
@@ -1980,6 +1980,8 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'natural_language_query',
   'synthesize_search',
   'generate_briefing',
+  'generate_ai_briefing',
+  'get_blind_spots',
   'setup_and_verify_ollama',
   'translate_content',
   'translate_content_batch',
