@@ -16,10 +16,10 @@ use crate::monitoring_notifications::truncate_safe;
 
 /// Minimum relevance score for an item to appear in the morning briefing.
 /// The briefing is a flagship surface — every bad signal erodes trust.
-/// 0.35 keeps genuinely relevant content while cutting noise that scored
-/// on a single weak keyword match. Critical/alert priority items bypass
-/// this via the signal classifier's own 0.30 threshold.
-pub(crate) const BRIEFING_SCORE_FLOOR: f32 = 0.35;
+/// 0.50 keeps genuinely relevant content while cutting noise that scored
+/// on weak keyword matches. Critical/alert priority items bypass this
+/// via the signal classifier's own 0.30 threshold.
+pub(crate) const BRIEFING_SCORE_FLOOR: f32 = 0.50;
 
 // ============================================================================
 // Morning Briefing Types
@@ -909,6 +909,12 @@ pub(crate) async fn synthesize_morning_briefing(
 
     if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {
         return Err("No LLM configured".into());
+    }
+
+    if !crate::ollama::can_synthesize(&llm_settings).await {
+        return Err(
+            "Model below synthesis capability threshold (requires 7B+ local or cloud API)".into(),
+        );
     }
 
     let (tech_summary, topics_summary) = {

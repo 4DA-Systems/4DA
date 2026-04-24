@@ -661,6 +661,7 @@ pub fn run() {
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
             settings_commands::cancel_ollama_pull,
+            settings_commands::check_synthesis_capability,
             settings_commands::list_provider_models,
             settings_commands::detect_local_servers,
             settings_commands::get_llm_key_for_mcp,

@@ -565,6 +565,150 @@ pub(crate) async fn ensure_models_available(llm_model: &str, base_url: &str, app
     warm_model(llm_model, base_url, app).await;
 }
 
+// ============================================================================
+// Model Capability Detection
+// ============================================================================
+
+/// Minimum parameter count (in billions) required for reliable synthesis.
+///
+/// Models below this threshold produce hallucinated narratives, fake
+/// connections between unrelated signals, and confidently wrong project
+/// assessments. Observed with Llama 3.2 (3B): every prompt variant
+/// produced unusable output. The 7B floor is based on testing with
+/// Llama 3.1 8B, Qwen 2.5 7B, and Mistral 7B — all produce usable
+/// single-signal summaries with the constrained briefing prompt.
+const SYNTHESIS_MIN_PARAMS_B: f64 = 7.0;
+
+/// Query Ollama's `/api/show` endpoint for a model's parameter count.
+///
+/// Returns the parameter count in billions (e.g., 3.2 for llama3.2,
+/// 8.0 for llama3.1:8b). Returns `None` if Ollama is unreachable,
+/// the model isn't found, or the response doesn't contain param info.
+pub(crate) async fn get_model_params_billions(
+    model: &str,
+    base_url: &str,
+) -> Option<f64> {
+    let url = format!("{}/api/show", base_url.trim_end_matches('/'));
+
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .ok()?;
+
+    let body = serde_json::json!({ "name": model });
+
+    let response = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let data: serde_json::Value = response.json().await.ok()?;
+
+    // Primary: details.parameter_size (e.g., "3.2B", "8B", "70B")
+    if let Some(size_str) = data
+        .get("details")
+        .and_then(|d| d.get("parameter_size"))
+        .and_then(|v| v.as_str())
+    {
+        if let Some(billions) = parse_param_size(size_str) {
+            return Some(billions);
+        }
+    }
+
+    // Fallback: model_info.general.parameter_count (raw integer)
+    if let Some(count) = data
+        .get("model_info")
+        .and_then(|mi| mi.get("general.parameter_count"))
+        .and_then(|v| v.as_u64())
+    {
+        return Some(count as f64 / 1_000_000_000.0);
+    }
+
+    None
+}
+
+/// Parse Ollama's parameter_size string into billions.
+/// Handles: "3.2B", "8B", "70B", "0.5B", "137M", "1.5B"
+fn parse_param_size(s: &str) -> Option<f64> {
+    let s = s.trim();
+    if let Some(num_str) = s.strip_suffix('B') {
+        num_str.trim().parse::<f64>().ok()
+    } else if let Some(num_str) = s.strip_suffix('M') {
+        num_str.trim().parse::<f64>().ok().map(|m| m / 1000.0)
+    } else {
+        None
+    }
+}
+
+/// Check whether the user's configured LLM can reliably synthesize
+/// a morning intelligence brief.
+///
+/// Cloud APIs (Anthropic, OpenAI) always return true — all current
+/// cloud models exceed the synthesis capability floor.
+///
+/// Ollama models must have ≥7B parameters. Below that, free-form
+/// generation produces hallucinated narratives and confidently wrong
+/// advice. The briefing skips synthesis entirely for small models
+/// and shows ranked signals without a narrative — accurate over impressive.
+pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> bool {
+    match provider.provider.as_str() {
+        "anthropic" | "openai" | "openai-compatible" => {
+            // Cloud models all exceed synthesis floor.
+            // Still need a valid API key.
+            !provider.api_key.is_empty()
+        }
+        "ollama" => {
+            let base_url = provider
+                .base_url
+                .as_deref()
+                .unwrap_or("http://localhost:11434");
+            let model = if provider.model.is_empty() {
+                "llama3.2"
+            } else {
+                &provider.model
+            };
+
+            match get_model_params_billions(model, base_url).await {
+                Some(params) => {
+                    let capable = params >= SYNTHESIS_MIN_PARAMS_B;
+                    if !capable {
+                        info!(
+                            target: "4da::ollama",
+                            model,
+                            params_b = params,
+                            min_b = SYNTHESIS_MIN_PARAMS_B,
+                            "Model below synthesis threshold — briefing will show ranked signals only"
+                        );
+                    }
+                    capable
+                }
+                None => {
+                    // Can't determine model size — conservative: skip synthesis.
+                    // A wrong synthesis is worse than no synthesis.
+                    warn!(
+                        target: "4da::ollama",
+                        model,
+                        "Could not determine model parameters — skipping synthesis"
+                    );
+                    false
+                }
+            }
+        }
+        _ => false,
+    }
+}
+
+// ============================================================================
+// Model Size Estimation
+// ============================================================================
+
 /// Conservative size estimate (MB) for the models a user might be missing.
 /// Used by the consent banner. Errs on the high side so users don't feel
 /// the download was bigger than promised.
@@ -632,6 +776,43 @@ mod size_estimate_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_param_size_billions() {
+        assert_eq!(parse_param_size("3.2B"), Some(3.2));
+        assert_eq!(parse_param_size("8B"), Some(8.0));
+        assert_eq!(parse_param_size("70B"), Some(70.0));
+        assert_eq!(parse_param_size("0.5B"), Some(0.5));
+        assert_eq!(parse_param_size("1.5B"), Some(1.5));
+    }
+
+    #[test]
+    fn parse_param_size_millions() {
+        assert_eq!(parse_param_size("137M"), Some(0.137));
+        assert_eq!(parse_param_size("500M"), Some(0.5));
+    }
+
+    #[test]
+    fn parse_param_size_invalid() {
+        assert_eq!(parse_param_size(""), None);
+        assert_eq!(parse_param_size("big"), None);
+        assert_eq!(parse_param_size("3.2"), None);
+    }
+
+    #[test]
+    fn small_model_below_synthesis_floor() {
+        assert!(3.2 < SYNTHESIS_MIN_PARAMS_B);
+        assert!(1.0 < SYNTHESIS_MIN_PARAMS_B);
+        assert!(0.5 < SYNTHESIS_MIN_PARAMS_B);
+    }
+
+    #[test]
+    fn capable_model_above_synthesis_floor() {
+        assert!(7.0 >= SYNTHESIS_MIN_PARAMS_B);
+        assert!(8.0 >= SYNTHESIS_MIN_PARAMS_B);
+        assert!(14.0 >= SYNTHESIS_MIN_PARAMS_B);
+        assert!(70.0 >= SYNTHESIS_MIN_PARAMS_B);
+    }
 
     #[test]
     fn test_mark_warm_and_check() {

@@ -31,7 +31,7 @@ pnpm run validate:sizes    # Check file size limits
 2. **BYOK** — user provides API keys, never stored remotely
 3. **Local first** — works offline with Ollama fallback
 4. **Minimal** — no feature bloat, every element earns its place
-5. **Zero-config value** — a new user should see useful content within 60 seconds
+5. **Accurate first** — never show intelligence the system can't stand behind. Correct results from a capable model beat fast results from a weak one. If the model can't do the job, don't fake it.
 
 ## Architecture
 

@@ -234,15 +234,20 @@ fn scenario_grounded_synthesis_is_accepted() {
     );
 }
 
-/// Scenario 7: Abstention is always acceptable.
-/// The short "Low signal" line has no salient terms to verify so the
-/// groundedness check must default to accept.
+/// Scenario 7: Abstention text is intentionally generic.
+/// The "Low signal" line has zero salient terms, so the specificity
+/// floor correctly rejects it. This is expected — in production, the
+/// abstention is a backend-generated fallback that bypasses groundedness
+/// validation entirely. It's never sent through is_acceptable().
 #[test]
-fn scenario_abstention_always_passes_groundedness() {
-    let corpus: Vec<String> = vec![]; // empty corpus is fine
+fn scenario_abstention_is_generic_and_would_be_rejected() {
+    let corpus: Vec<String> = vec![];
     let abstention = "Low signal — no noteworthy intelligence overnight.";
     let report = validate_groundedness(abstention, &corpus);
-    assert!(report.is_acceptable(0.8));
+    assert!(
+        !report.is_acceptable(0.8),
+        "abstention has 0 salient terms — specificity floor should reject"
+    );
 }
 
 /// Scenario 8: The specific production-screenshot bug.
