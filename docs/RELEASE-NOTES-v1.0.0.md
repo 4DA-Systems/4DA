@@ -82,7 +82,7 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 
 Free is not a demo. It's the full intelligence engine with 20+ sources, AI briefings, and MCP integration. Signal adds compound intelligence features for developers who want the system to learn faster.
 
-**45-day free trial** of Signal — no credit card required.
+**14-day free trial** of Signal — no credit card required.
 
 ## Build from Source
 
