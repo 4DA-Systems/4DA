@@ -89,14 +89,18 @@ function setCors(req, res) {
 // Shared: generate + store license for a customer
 // ---------------------------------------------------------------------------
 
-async function generateAndStoreLicense(stripe, customerId, email, tier) {
-  // Map legacy tiers to new naming
-  const effectiveTier = (tier === 'community' || tier === 'cohort') ? 'signal' : tier;
+async function generateAndStoreLicense(stripe, customerId, email, tier, billingPeriod) {
+  // Legacy tiers all map to signal
+  const effectiveTier = (tier === 'community' || tier === 'cohort' || tier === 'pro') ? 'signal' : tier;
   const features = [effectiveTier];
 
   const now = new Date();
   const expiresAt = new Date(now);
-  expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  if (billingPeriod === 'lifetime') {
+    expiresAt.setFullYear(2099);
+  } else {
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+  }
 
   const payload = {
     tier: effectiveTier,
@@ -154,12 +158,13 @@ async function handleCheckoutCompleted(stripe, session) {
   const email = session.customer_email || session.customer_details?.email;
   const customerId = await resolveCustomerId(stripe, session.customer, email);
   const tier = session.metadata?.streets_tier || 'signal';
+  const billingPeriod = session.metadata?.billing_period;
 
   if (!email) {
     throw new Error(`No customer email in session ${session.id}`);
   }
 
-  const { licenseKey } = await generateAndStoreLicense(stripe, customerId, email, tier);
+  const { licenseKey } = await generateAndStoreLicense(stripe, customerId, email, tier, billingPeriod);
   console.log('License generated:', email, 'tier:', tier, 'customer:', customerId, 'len:', licenseKey.length);
   return { license_generated: true };
 }

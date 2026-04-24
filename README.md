@@ -186,7 +186,7 @@ Your Codebase                    External Sources
 **Free** — $0 forever. No credit card. No account. No expiration.
 - All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), behavior learning, STREETS Playbook (all 7 modules), MCP server (14 tools), CLI
 
-**Signal** — $12/month or $99/year (45-day free trial).
+**Signal** — $12/month or $99/year (14-day free trial).
 - Everything in Free, plus: Signal tab intelligence (Key Signals + analytics), Score Autopsy (5-axis breakdown), Developer DNA profiling, signal chain analysis, knowledge gap detection, semantic shift tracking, attention analytics, standing queries, project health radar
 
 Free is not a demo. It's the full scoring engine, all sources, behavior learning, and MCP integration.

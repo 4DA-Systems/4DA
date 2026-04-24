@@ -83,14 +83,18 @@ export default async function handler(req, res) {
 
   try {
     const stripe = getStripe();
-    const session = await stripe.checkout.sessions.create({
+    const sessionParams = {
       mode: config.mode,
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       metadata: config.metadata,
       success_url: `${siteUrl}/signal/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${siteUrl}/signal`,
-    });
+    };
+    if (config.mode === 'payment') {
+      sessionParams.customer_creation = 'always';
+    }
+    const session = await stripe.checkout.sessions.create(sessionParams);
 
     return res.status(200).json({ url: session.url });
   } catch (err) {
