@@ -220,6 +220,7 @@ pub(super) fn enrich_persona(
                     is_dev: dep.is_dev,
                     is_direct: dep.is_direct,
                     search_terms: dep.search_terms.iter().map(|s| s.to_string()).collect(),
+                    ecosystem: dep.ecosystem.to_string(),
                 }
             });
         }

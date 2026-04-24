@@ -16,6 +16,9 @@ pub(crate) struct DepInfo {
     /// Searchable terms extracted from the package name
     /// e.g. "@tanstack/react-query" -> ["tanstack-react-query", "tanstack", "react-query"]
     pub search_terms: Vec<String>,
+    /// Ecosystem/language from the manifest (e.g. "rust", "javascript", "python").
+    /// Used for cross-referencing CVE advisories against the correct ecosystem.
+    pub ecosystem: String,
 }
 
 /// A dependency that matched content
@@ -30,6 +33,9 @@ pub(crate) struct DepMatch {
     pub is_direct: bool,
     /// Installed version from the user's lockfile (e.g. "2.8.1")
     pub version: Option<String>,
+    /// Ecosystem of the matched dependency (e.g. "rust", "javascript").
+    /// Critical for rejecting cross-ecosystem CVE false positives.
+    pub ecosystem: String,
 }
 
 /// Version comparison between installed and mentioned
@@ -471,6 +477,7 @@ pub(crate) fn load_dependency_intelligence() -> (HashSet<String>, HashMap<String
                 is_dev: dep.is_dev,
                 is_direct: dep.is_direct,
                 search_terms,
+                ecosystem: dep.language,
             },
         );
     }
@@ -564,6 +571,7 @@ pub(crate) fn match_dependencies(
             is_dev: info.is_dev,
             is_direct: info.is_direct,
             version: info.version.clone(),
+            ecosystem: info.ecosystem.clone(),
         });
     }
 
@@ -850,6 +858,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["tokio".to_string()],
+                ecosystem: "rust".to_string(),
             },
         );
 
@@ -877,6 +886,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["react".to_string()],
+                ecosystem: "javascript".to_string(),
             },
         );
 
@@ -908,6 +918,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["got".to_string()],
+                ecosystem: "javascript".to_string(),
             },
         );
 
@@ -936,6 +947,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["got".to_string()],
+                ecosystem: "javascript".to_string(),
             },
         );
 
@@ -964,6 +976,7 @@ mod tests {
                 is_dev: true,
                 is_direct: true,
                 search_terms: vec!["vitest".to_string()],
+                ecosystem: "javascript".to_string(),
             },
         );
 
@@ -994,6 +1007,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: extract_search_terms("@tanstack/react-query"),
+                ecosystem: "javascript".to_string(),
             },
         );
 
@@ -1038,6 +1052,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec!["tokio".to_string()],
+                ecosystem: "rust".to_string(),
             },
         );
 
@@ -1050,6 +1065,7 @@ mod tests {
                 is_dev: false,
                 is_direct: false,
                 search_terms: vec!["tokio".to_string()],
+                ecosystem: "rust".to_string(),
             },
         );
 
@@ -1104,6 +1120,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: extract_search_terms("@sentry/react"),
+                ecosystem: "javascript".to_string(),
             },
         );
 
@@ -1140,6 +1157,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: extract_search_terms("pdf-extract"),
+                ecosystem: "rust".to_string(),
             },
         );
 
@@ -1175,6 +1193,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: extract_search_terms("pdf-extract"),
+                ecosystem: "rust".to_string(),
             },
         );
 
