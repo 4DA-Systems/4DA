@@ -25,6 +25,7 @@ use crate::{
 
 use super::pipeline::{ScoringInput, ScoringOptions};
 use super::*;
+use crate::sources::cve_matching::normalize_ecosystem;
 
 // ============================================================================
 // Security evidence extraction helpers
@@ -334,6 +335,38 @@ fn strip_security_metadata(content: &str) -> &str {
         .map_or(content, |(description, _metadata)| description)
 }
 
+/// Extract affected package ecosystems from CVE/OSV content metadata.
+///
+/// Parses the "Affected: pkg1 (eco1), pkg2 (eco2)" line embedded in security
+/// advisory content. Returns the list of (package_name, ecosystem) pairs.
+/// Empty result when the content doesn't have the expected format.
+fn extract_advisory_ecosystems(content: &str) -> Vec<(String, String)> {
+    let affected_line = content
+        .lines()
+        .find(|line| line.starts_with("Affected: "));
+    let line = match affected_line {
+        Some(l) => &l["Affected: ".len()..],
+        None => return Vec::new(),
+    };
+
+    let mut result = Vec::new();
+    for entry in line.split(", ") {
+        let trimmed = entry.trim();
+        if let Some(paren_start) = trimmed.rfind('(') {
+            if trimmed.ends_with(')') {
+                let name = trimmed[..paren_start].trim().to_lowercase();
+                let eco = trimmed[paren_start + 1..trimmed.len() - 1]
+                    .trim()
+                    .to_lowercase();
+                if !name.is_empty() && !eco.is_empty() {
+                    result.push((name, eco));
+                }
+            }
+        }
+    }
+    result
+}
+
 /// Return whichever content should be used for dependency matching. For CVE
 /// and OSV source items the synthetic metadata block is stripped; all other
 /// sources use the content verbatim.
@@ -447,6 +480,26 @@ fn extract_signals(
             // Recompute dep_match_score from the surviving deps.
             let total: f32 = deps.iter().map(|d| d.confidence).sum();
             score = (total / 2.0).min(1.0);
+        }
+
+        // Ecosystem cross-reference: reject matches where the advisory's
+        // affected packages are from a different ecosystem than the user's dep.
+        // e.g. a Maven/Java CVE should never match a Rust "crypto" crate.
+        if matches!(input.source_type, "cve" | "osv") && !deps.is_empty() {
+            let advisory_affected = extract_advisory_ecosystems(input.content);
+            if !advisory_affected.is_empty() {
+                deps.retain(|d| {
+                    if d.ecosystem.is_empty() {
+                        return true; // no ecosystem info → can't reject
+                    }
+                    let dep_eco = normalize_ecosystem(&d.ecosystem);
+                    advisory_affected
+                        .iter()
+                        .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco)
+                });
+                let total: f32 = deps.iter().map(|d| d.confidence).sum();
+                score = (total / 2.0).min(1.0);
+            }
         }
 
         (deps, score)
@@ -1515,10 +1568,22 @@ pub(crate) fn score_item(
     // ── Security applicability + critical alert gate ────────────────────
     let is_security_source = matches!(input.source_type, "cve" | "osv");
     let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
-        let has_strong_dep = raw
-            .matched_deps
-            .iter()
-            .any(|d| !d.is_dev && d.confidence >= 0.40);
+        // Ecosystem-verified strong dep: confidence >= 0.40, not dev, AND
+        // either the dep has no ecosystem info (can't reject) or the advisory's
+        // affected packages include the dep's ecosystem.
+        let advisory_ecosystems = extract_advisory_ecosystems(input.content);
+        let has_strong_dep = raw.matched_deps.iter().any(|d| {
+            if d.is_dev || d.confidence < 0.40 {
+                return false;
+            }
+            if d.ecosystem.is_empty() || advisory_ecosystems.is_empty() {
+                return true; // can't verify ecosystem → allow (conservative)
+            }
+            let dep_eco = normalize_ecosystem(&d.ecosystem);
+            advisory_ecosystems
+                .iter()
+                .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco)
+        });
         let has_any_dep = !raw.matched_deps.is_empty();
         let all_dev = raw.matched_deps.iter().all(|d| d.is_dev);
         let all_transitive = raw.matched_deps.iter().all(|d| !d.is_direct);
@@ -1866,5 +1931,91 @@ mod tests {
             check_version_affected(Some("2.0.0"), Some(">= 3.0.0"), Some("2.5.0")),
             Some(true),
         );
+    }
+
+    // ========================================================================
+    // Ecosystem cross-reference tests
+    // ========================================================================
+
+    #[test]
+    fn test_extract_advisory_ecosystems_standard() {
+        let content = "SSRF vulnerability.\n\nSeverity: HIGH\nAffected: lmdeploy (pip)\nCVSS: 7.5";
+        let result = extract_advisory_ecosystems(content);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "lmdeploy");
+        assert_eq!(result[0].1, "pip");
+    }
+
+    #[test]
+    fn test_extract_advisory_ecosystems_multiple() {
+        let content = "Vuln.\n\nSeverity: HIGH\nAffected: lodash (npm), express (npm)\nCVSS: 9.8";
+        let result = extract_advisory_ecosystems(content);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].1, "npm");
+        assert_eq!(result[1].0, "express");
+    }
+
+    #[test]
+    fn test_extract_advisory_ecosystems_maven() {
+        let content = "Crypto vuln.\n\nSeverity: HIGH\nAffected: org.bouncycastle:bcpkix-jdk18on (maven)";
+        let result = extract_advisory_ecosystems(content);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "org.bouncycastle:bcpkix-jdk18on");
+        assert_eq!(result[0].1, "maven");
+    }
+
+    #[test]
+    fn test_extract_advisory_ecosystems_no_affected_line() {
+        let content = "Just a description with no metadata";
+        let result = extract_advisory_ecosystems(content);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_extract_advisory_ecosystems_empty() {
+        let result = extract_advisory_ecosystems("");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_ecosystem_mismatch_rejects_maven_vs_rust() {
+        // Bouncy Castle (maven) should NOT match a Rust "crypto" dep
+        let content = "Crypto vuln.\n\nSeverity: HIGH\nAffected: org.bouncycastle:bcpkix-jdk18on (maven)";
+        let ecosystems = extract_advisory_ecosystems(content);
+        assert!(!ecosystems.is_empty());
+
+        let dep_ecosystem = "rust";
+        let dep_eco_normalized = normalize_ecosystem(dep_ecosystem);
+        let matches = ecosystems
+            .iter()
+            .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco_normalized);
+        assert!(!matches, "Maven CVE should not match a Rust dependency");
+    }
+
+    #[test]
+    fn test_ecosystem_match_rust_to_rust() {
+        let content = "Buffer overflow.\n\nSeverity: HIGH\nAffected: tokio (rust)";
+        let ecosystems = extract_advisory_ecosystems(content);
+
+        let dep_ecosystem = "rust";
+        let dep_eco_normalized = normalize_ecosystem(dep_ecosystem);
+        let matches = ecosystems
+            .iter()
+            .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco_normalized);
+        assert!(matches, "Rust CVE should match a Rust dependency");
+    }
+
+    #[test]
+    fn test_ecosystem_mismatch_rejects_pip_vs_rust() {
+        // LMDeploy (pip/python) should NOT match Rust "image" dep
+        let content = "SSRF via Image Loading.\n\nSeverity: HIGH\nAffected: lmdeploy (pip)";
+        let ecosystems = extract_advisory_ecosystems(content);
+
+        let dep_ecosystem = "rust";
+        let dep_eco_normalized = normalize_ecosystem(dep_ecosystem);
+        let matches = ecosystems
+            .iter()
+            .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco_normalized);
+        assert!(!matches, "Python/pip CVE should not match a Rust dependency");
     }
 }

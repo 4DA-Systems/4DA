@@ -541,6 +541,7 @@ mod tests {
                 is_dev: false,
                 is_direct: true,
                 search_terms: vec![],
+                ecosystem: "javascript".to_string(),
             },
         );
         let ace_ctx = ACEContext {

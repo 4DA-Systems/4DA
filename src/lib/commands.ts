@@ -700,6 +700,7 @@ interface CommandMap {
   export_section: { params: { section: string; format: string }; result: string };
   list_exports: { params: Record<string, never>; result: ExportManifest[] };
   delete_export: { params: { exportId: string }; result: void };
+  factory_reset: { params: Record<string, never>; result: void };
 
   // -- Dependency Intelligence --
   get_dependency_overview: { params: Record<string, never>; result: DependencyOverview };
