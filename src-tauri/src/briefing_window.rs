@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(WINDOW_WIDTH, 560);
         assert_eq!(WINDOW_HEIGHT, 780);
         assert_eq!(AUTO_DISMISS_MS, 300_000);
-        assert_eq!(ALWAYS_ON_TOP_MS, 8_000);
+        assert_eq!(ALWAYS_ON_TOP_MS, 30_000);
         assert_eq!(WINDOW_LABEL, "briefing");
     }
 

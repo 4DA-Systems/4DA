@@ -53,12 +53,18 @@ pub struct GroundednessReport {
 impl GroundednessReport {
     /// Is this output safe to show the user at the given threshold?
     pub fn is_acceptable(&self, threshold: f32) -> bool {
-        // Small numbers of terms produce noisy ratios — require at
-        // least 3 total salient terms for a confident verdict. Below
-        // that, default to "acceptable" to avoid rejecting legitimate
-        // brief summaries that happen to mention few proper nouns.
-        if self.total_terms < 3 {
-            return true;
+        // A good synthesis MUST reference something specific from the
+        // signals — at least 2 salient terms (a technology name, a
+        // version, a project). Fewer than 2 means the output is too
+        // generic (e.g. "Prioritize configuring your tech stack") and
+        // isn't grounded in any actual signal content.
+        if self.total_terms < 2 {
+            return false;
+        }
+        // With exactly 2 terms, require both to be grounded — one
+        // miss out of two is a 50% hallucination rate.
+        if self.total_terms == 2 {
+            return self.grounded_terms == self.total_terms;
         }
         self.confidence >= threshold
     }
@@ -207,11 +213,28 @@ fn extract_salient_terms(text: &str) -> Vec<String> {
     flush(&mut cap_run, &mut out, &mut seen);
 
     // --- Phase 3: notable single-capitalized tokens ------------------------
-    // Disabled: single capitalized words like "Reactive", "Improving",
-    // "Security" are common English and cause false rejections. The
-    // multi-word phrase detector (Phase 2) and version detector (Phase 1)
-    // catch the real hallucination risks (invented tech names like
-    // "TanStack Start" and fake versions like "v5.3.1").
+    // Re-enabled with stopword filter (2026-04-25). Previously disabled
+    // because "Reactive", "Security", etc. caused false rejections, but
+    // the stopword list now covers 200+ common English words. This phase
+    // catches hallucinated proper nouns like "Stripe" or "Postgres" that
+    // don't appear in any source item — critical for the specificity
+    // floor (is_acceptable rejects output with <2 salient terms).
+    for token in &tokens {
+        let stripped = token.trim_matches(|c: char| !c.is_alphanumeric());
+        if let Some(first) = stripped.chars().next() {
+            if first.is_uppercase()
+                && stripped.len() >= 3
+                && !is_stopword(stripped)
+                && stripped.chars().filter(|c| c.is_alphabetic()).count() >= 3
+            {
+                let key = stripped.to_lowercase();
+                if !seen.contains(&key) {
+                    seen.insert(key);
+                    out.push(stripped.to_string());
+                }
+            }
+        }
+    }
 
     out
 }
@@ -538,6 +561,70 @@ fn is_stopword(word: &str) -> bool {
         "Repositories",
         "Repo",
         "Repos",
+        // Common verbs that get capitalized at sentence starts
+        "Recommend",
+        "Recommended",
+        "Upgrade",
+        "Downgrade",
+        "Install",
+        "Installed",
+        "Configure",
+        "Configured",
+        "Migrate",
+        "Migrating",
+        "Migration",
+        "Deploy",
+        "Deployed",
+        "Implement",
+        "Implemented",
+        "Implement",
+        "Evaluate",
+        "Evaluated",
+        "Run",
+        "Running",
+        "Start",
+        "Started",
+        "Stop",
+        "Stopped",
+        "Enable",
+        "Enabled",
+        "Disable",
+        "Disabled",
+        "Include",
+        "Including",
+        "Require",
+        "Required",
+        "Requires",
+        "Suggest",
+        "Suggests",
+        "Suggested",
+        "Indicate",
+        "Indicates",
+        "Continue",
+        "Continues",
+        "Continued",
+        "Prioritize",
+        "Prevent",
+        "Avoid",
+        "Reduce",
+        "Improve",
+        "Address",
+        "Ensure",
+        "Verify",
+        "Validate",
+        "Review",
+        "Audit",
+        "Scan",
+        "Benchmark",
+        "Monitor",
+        "Switch",
+        "Replace",
+        "Remove",
+        "Delete",
+        "Fix",
+        "Patch",
+        "Pin",
+        "Lock",
     ];
     STOPWORDS.iter().any(|&s| s.eq_ignore_ascii_case(word))
 }
@@ -654,13 +741,13 @@ mod tests {
     }
 
     #[test]
-    fn small_term_count_defaults_to_acceptable() {
-        // A terse 1-sentence briefing with zero proper nouns is the
-        // "stack is quiet overnight" case — we should NOT reject it
-        // just because there is nothing to verify.
+    fn generic_output_with_no_terms_is_rejected() {
+        // A synthesis with zero salient terms is too generic to be
+        // useful — it's not referencing anything specific from the
+        // signals. The specificity floor rejects this.
         let output = "Your stack is quiet overnight.";
         let r = validate_groundedness(output, &[]);
-        assert!(r.is_acceptable(0.8));
+        assert!(!r.is_acceptable(0.8));
     }
 
     #[test]
@@ -746,7 +833,11 @@ mod tests {
     }
 
     #[test]
-    fn llm_expansion_does_not_cause_false_rejection() {
+    fn llm_expansion_with_few_terms_rejected_by_specificity_floor() {
+        // This output rephrases a title without naming specific
+        // technologies — the kind of vague synthesis a small model
+        // produces. The specificity floor correctly rejects it because
+        // it extracts fewer than 2 salient terms (only "LLMs").
         let output = "Meanwhile, Large Language Models (LLMs) continue to show \
                       limited environmental curiosity in agent scenarios.";
         let c = corpus(&[
@@ -755,10 +846,8 @@ mod tests {
         ]);
         let r = validate_groundedness(output, &c);
         assert!(
-            r.is_acceptable(0.65),
-            "confidence was {} — expected ≥0.65 (ungrounded: {:?})",
-            r.confidence,
-            r.ungrounded_terms
+            !r.is_acceptable(0.65),
+            "vague rephrasing with <2 salient terms should be rejected"
         );
     }
 }
