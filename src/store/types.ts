@@ -438,7 +438,6 @@ export type AppStore =
   & import('./team-slice').TeamSlice
   & import('./enterprise-slice').EnterpriseSlice
   & import('./team-intelligence-slice').TeamIntelligenceSlice
-  & import('./awe-slice').AweSlice
   & import('./preemption-slice').PreemptionSlice
   & import('./blind-spots-slice').BlindSpotsSlice
   & import('./trust-slice').TrustSlice;

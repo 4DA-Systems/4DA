@@ -314,7 +314,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 .iter()
                 .filter(|r| r.relevant && !r.excluded)
                 .filter(|r| r.detected_lang == user_lang)
-                .filter(|r| r.top_score >= 0.15)
+                .filter(|r| r.top_score >= crate::monitoring_briefing::BRIEFING_SCORE_FLOOR)
                 .take(25)
                 .map(|r| crate::monitoring_briefing::BriefingItem {
                     title: r.title.clone(),
@@ -330,7 +330,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 .collect()
         } else if let Ok(db) = crate::get_database() {
             let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-            db.get_relevant_items_since(period_start, 0.15, 25, &user_lang)
+            db.get_relevant_items_since(period_start, crate::monitoring_briefing::BRIEFING_SCORE_FLOOR.into(), 25, &user_lang)
                 .ok()
                 .map(|db_items| {
                     db_items

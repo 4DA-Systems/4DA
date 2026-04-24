@@ -46,7 +46,7 @@ pub enum ArtifactKind {
     Rerank,
     /// LLM-generated per-item summary (content_commands).
     Summary,
-    /// Morning briefing synthesis prose (awe_synthesis / monitoring).
+    /// Morning briefing synthesis prose (monitoring).
     Briefing,
     /// Intelligence Console search synthesis output.
     SearchSynthesis,

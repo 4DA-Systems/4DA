@@ -1276,7 +1276,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
 
     // Synthesize at least one inferred citation so the schema's
     // "evidence required for user-surfaced kinds" rule holds. Real
-    // citations land in Phase 9 via the AWE spine.
+    // citations reserved for future enrichment.
     let citation = EvidenceCitation {
         source: format!("dep-coverage:{}", d.dep_type),
         title: truncate_title(&format!("{} coverage gap", d.name)),
@@ -1518,7 +1518,7 @@ pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
         items.push(recommendation_to_evidence_item(r, idx));
     }
 
-    let mut validated: Vec<EvidenceItem> = items
+    let validated: Vec<EvidenceItem> = items
         .into_iter()
         .filter(|item| match crate::evidence::validate_item(item) {
             Ok(()) => true,
@@ -1533,9 +1533,6 @@ pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
             }
         })
         .collect();
-    // Phase 9 — attach precedents via the AWE spine.
-    crate::awe_spine::enrich_items(&mut validated);
-
     EvidenceFeed::from_items_with_score(validated, report.overall_score)
 }
 

@@ -982,7 +982,7 @@ pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
     crate::settings::require_signal_feature("get_knowledge_gaps")?;
     let conn = crate::open_db_connection()?;
     let gaps = detect_knowledge_gaps(&conn)?;
-    let mut items: Vec<EvidenceItem> = gaps
+    let items: Vec<EvidenceItem> = gaps
         .iter()
         .map(|g| g.to_evidence_item())
         .filter(|item| match crate::evidence::validate_item(item) {
@@ -998,8 +998,6 @@ pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
             }
         })
         .collect();
-    // Phase 9 — attach precedents via the AWE spine.
-    crate::awe_spine::enrich_items(&mut items);
     Ok(EvidenceFeed::from_items(items))
 }
 // ============================================================================

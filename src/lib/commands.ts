@@ -174,31 +174,6 @@ interface CommandMap {
   clear_context: { params: Record<string, never>; result: string };
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };
-  sync_awe_wisdom: { params: Record<string, never>; result: string };
-  get_awe_summary: { params: Record<string, never>; result: string };
-  run_awe_transmute: { params: { query: string; mode: string }; result: string };
-  run_awe_quick_check: { params: { query: string }; result: string };
-  run_awe_consequence_scan: { params: { query: string }; result: string };
-  run_awe_feedback: { params: { decisionId: string; outcome: string; details: string }; result: string };
-  run_awe_recall: { params: { domain: string }; result: string };
-  run_awe_calibration: { params: { domain: string }; result: string };
-  // AWE page-specific commands
-  get_awe_pattern_match: { params: { query: string; domain: string }; result: string };
-  get_awe_decision_history: { params: { domain: string; limit: number }; result: string };
-  get_awe_pending_decisions: { params: { limit: number }; result: string };
-  get_awe_wisdom_well: { params: { domain: string }; result: string };
-  get_awe_growth_trajectory: { params: { domain: string }; result: string };
-  submit_awe_batch_feedback: { params: { feedbacks: Array<{ decision_id: string; outcome: string; details: string }> }; result: string };
-  run_awe_auto_feedback: { params: Record<string, never>; result: string };
-  run_awe_autonomous_now: { params: Record<string, never>; result: string };
-  run_awe_purge: { params: { dryRun: boolean }; result: string };
-  get_awe_candidates: { params: { domain: string }; result: string };
-  record_awe_interaction_feedback: { params: { itemTitle: string; interaction: string; sourceType: string }; result: string };
-  // AWE Synthesis (behavioral data bridge)
-  get_behavioral_context: { params: Record<string, never>; result: string };
-  synthesize_wisdom: { params: Record<string, never>; result: string };
-  synthesize_topic_context: { params: { topics: string[] }; result: string };
-  refresh_awe_context: { params: Record<string, never>; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
 
