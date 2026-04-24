@@ -586,10 +586,13 @@ pub fn run() {
     // Set Windows AUMID so OS notifications show "4DA" instead of inheriting parent process name
     #[cfg(target_os = "windows")]
     {
-        use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
-        let aumid: Vec<u16> = "com.4da.app\0".encode_utf16().collect();
-        unsafe {
-            SetCurrentProcessExplicitAppUserModelID(aumid.as_ptr());
+        #[allow(unsafe_code)]
+        {
+            use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+            let aumid: Vec<u16> = "com.4da.app\0".encode_utf16().collect();
+            unsafe {
+                SetCurrentProcessExplicitAppUserModelID(aumid.as_ptr());
+            }
         }
     }
 
