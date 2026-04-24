@@ -291,6 +291,12 @@ impl Database {
         success: bool,
         output_preview: Option<&str>,
     ) -> SqliteResult<()> {
+        // Sanitize output_preview to prevent secret leakage in stored logs
+        let sanitized_output = output_preview.map(|s| {
+            let truncated = if s.len() > 500 { &s[..500] } else { s };
+            crate::llm::sanitize_api_error(truncated)
+        });
+
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO command_history (command, working_dir, exit_code, success, output_preview)
@@ -300,7 +306,7 @@ impl Database {
                 working_dir,
                 exit_code,
                 success as i32,
-                output_preview
+                sanitized_output.as_deref()
             ],
         )?;
         conn.execute(

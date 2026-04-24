@@ -12,7 +12,7 @@
 #[cfg(test)]
 mod tests {
     use crate::llm::{LLMClient, LLMResponse};
-    use crate::settings::{LLMProvider, LicenseConfig, Settings};
+    use crate::settings::{LLMProvider, LicenseConfig, SensitiveString, Settings};
 
     // Realistic test keys that look like real secrets.
     // Using distinct patterns makes assertions unambiguous.
@@ -33,7 +33,7 @@ mod tests {
             openai_api_key: FAKE_OPENAI_EMBED_KEY.to_string(),
             embedding_model: String::new(),
         };
-        s.x_api_key = FAKE_X_BEARER.to_string();
+        s.x_api_key = SensitiveString::new(FAKE_X_BEARER.to_string());
         s.license = LicenseConfig {
             tier: "pro".to_string(),
             license_key: FAKE_LICENSE_KEY.to_string(),

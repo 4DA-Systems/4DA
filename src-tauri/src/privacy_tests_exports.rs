@@ -10,7 +10,7 @@
 #[cfg(test)]
 mod tests {
     use crate::llm::LLMClient;
-    use crate::settings::{LLMProvider, LicenseConfig, Settings};
+    use crate::settings::{LLMProvider, LicenseConfig, SensitiveString, Settings};
 
     // Realistic test keys — same constants as privacy_tests.rs
     const FAKE_ANTHROPIC_KEY: &str = "sk-ant-api03-TESTKEYDONOTUSE-1234567890abcdef";
@@ -30,7 +30,7 @@ mod tests {
             openai_api_key: FAKE_OPENAI_EMBED_KEY.to_string(),
             embedding_model: String::new(),
         };
-        s.x_api_key = FAKE_X_BEARER.to_string();
+        s.x_api_key = SensitiveString::new(FAKE_X_BEARER.to_string());
         s.license = LicenseConfig {
             tier: "pro".to_string(),
             license_key: FAKE_LICENSE_KEY.to_string(),
@@ -348,7 +348,7 @@ mod tests {
         let sensitive_fields: Vec<(&str, &str)> = vec![
             ("llm.api_key", &s.llm.api_key),
             ("llm.openai_api_key", &s.llm.openai_api_key),
-            ("x_api_key", &s.x_api_key),
+            ("x_api_key", s.x_api_key.as_str()),
             ("license.license_key", &s.license.license_key),
         ];
 
@@ -404,7 +404,7 @@ mod tests {
             "OpenAI embedding key must survive round-trip"
         );
         assert_eq!(
-            restored.x_api_key, FAKE_X_BEARER,
+            restored.x_api_key.as_str(), FAKE_X_BEARER,
             "X Bearer Token must survive round-trip"
         );
         assert_eq!(

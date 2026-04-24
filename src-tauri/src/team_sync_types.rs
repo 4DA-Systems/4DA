@@ -118,6 +118,14 @@ pub struct TeamRelayConfig {
     pub sync_interval_secs: Option<u64>,
 }
 
+impl Drop for TeamRelayConfig {
+    fn drop(&mut self) {
+        if let Some(ref mut token) = self.auth_token {
+            zeroize::Zeroize::zeroize(token);
+        }
+    }
+}
+
 /// Status of the team sync system
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]

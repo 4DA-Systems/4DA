@@ -273,10 +273,13 @@ pub async fn toolkit_kill_process(pid: u32) -> Result<String> {
 
 #[tauri::command]
 pub async fn toolkit_env_snapshot(working_dir: Option<String>) -> Result<EnvSnapshot> {
-    let work_dir = working_dir.map_or_else(
-        || std::env::current_dir().unwrap_or_default(),
-        std::path::PathBuf::from,
-    );
+    let work_dir = match working_dir {
+        Some(dir) => {
+            let validated = crate::ipc_guard::validate_path_input("working_dir", &dir)?;
+            std::path::PathBuf::from(validated)
+        }
+        None => std::env::current_dir().unwrap_or_default(),
+    };
 
     tokio::task::spawn_blocking(move || {
         let run = |prog: &str, args: &[&str]| -> Option<String> {

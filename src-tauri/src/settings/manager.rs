@@ -216,7 +216,7 @@ impl SettingsManager {
                         let mut clean_settings = settings.clone();
                         clean_settings.llm.api_key = String::new();
                         clean_settings.llm.openai_api_key = String::new();
-                        clean_settings.x_api_key = String::new();
+                        clean_settings.x_api_key = SensitiveString::default();
                         clean_settings.translation.api_key = String::new();
                         if report.migrated.contains(&"license_key".to_string()) {
                             clean_settings.license.license_key = String::new();
@@ -261,7 +261,7 @@ impl SettingsManager {
         }
         if let Ok(Some(key)) = keystore::get_secret("x_api_key") {
             if !key.is_empty() {
-                settings.x_api_key = key;
+                settings.x_api_key = SensitiveString::new(key);
             }
         }
         if let Ok(Some(key)) = keystore::get_secret("license_key") {
@@ -308,7 +308,7 @@ impl SettingsManager {
             disk_settings.llm.openai_api_key = String::new();
         }
         if keystore::has_secret("x_api_key") {
-            disk_settings.x_api_key = String::new();
+            disk_settings.x_api_key = SensitiveString::default();
         }
         if keystore::has_secret("license_key") {
             disk_settings.license.license_key = String::new();
@@ -378,6 +378,24 @@ impl SettingsManager {
         {
             use std::os::unix::fs::PermissionsExt;
             let _ = fs::set_permissions(&self.settings_path, fs::Permissions::from_mode(0o600));
+        }
+
+        #[cfg(windows)]
+        {
+            // Restrict settings.json to current user only (remove inherited permissions)
+            let path_str = self.settings_path.to_string_lossy();
+            if let Ok(user) = std::env::var("USERNAME") {
+                use std::os::windows::process::CommandExt;
+                let _ = std::process::Command::new("icacls")
+                    .args([
+                        path_str.as_ref(),
+                        "/inheritance:r",
+                        "/grant:r",
+                        &format!("{user}:(F)"),
+                    ])
+                    .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                    .output();
+            }
         }
 
         Ok(())
@@ -605,7 +623,7 @@ impl SettingsManager {
 
     /// Get X API Bearer Token
     pub fn get_x_api_key(&self) -> String {
-        self.settings.x_api_key.clone()
+        self.settings.x_api_key.as_str().to_string()
     }
 
     /// Set X API Bearer Token
@@ -613,7 +631,7 @@ impl SettingsManager {
         if !key.is_empty() {
             let _ = keystore::store_secret("x_api_key", &key);
         }
-        self.settings.x_api_key = key;
+        self.settings.x_api_key = SensitiveString::new(key);
         self.save()
     }
 
