@@ -160,11 +160,6 @@ mod autophagy;
 // Wave 4 — adapt cold-boot grace period to launch context
 mod autophagy_commands;
 mod autophagy_pulse;
-mod awe_bridge;
-mod awe_commands;
-/// Intelligence Reconciliation Phase 9 — precedent-enrichment spine.
-mod awe_spine;
-mod awe_synthesis;
 mod blind_spots;
 mod boot_context;
 mod briefing_snapshot;
@@ -613,14 +608,6 @@ pub fn run() {
             context_commands::clear_context,
             context_commands::index_context,
             context_commands::index_project_readmes,
-            context_commands::sync_awe_wisdom,
-            context_commands::get_awe_summary,
-            context_commands::run_awe_transmute,
-            context_commands::run_awe_quick_check,
-            context_commands::run_awe_consequence_scan,
-            context_commands::run_awe_feedback,
-            context_commands::run_awe_recall,
-            context_commands::run_awe_calibration,
             // Intelligence Reconciliation Phase 7 — Git decision miner.
             git_decision_miner::mine_git_decisions,
             // Intelligence Reconciliation Phase 8 — Curated corpus.
@@ -719,23 +706,7 @@ pub fn run() {
             briefing_window::trigger_morning_briefing,
             // Briefing snapshot — Sovereign Cold Boot instant-paint
             briefing_snapshot::get_briefing_snapshot,
-            // AWE page-specific commands
-            awe_commands::get_awe_pattern_match,
-            awe_commands::get_awe_decision_history,
-            awe_commands::get_awe_pending_decisions,
-            awe_commands::get_awe_wisdom_well,
-            awe_commands::get_awe_growth_trajectory,
-            awe_commands::submit_awe_batch_feedback,
-            awe_commands::run_awe_auto_feedback,
-            awe_commands::run_awe_autonomous_now,
-            awe_commands::run_awe_purge,
-            awe_commands::get_awe_candidates,
-            awe_commands::record_awe_interaction_feedback,
-            // AWE Synthesis (behavioral data bridge)
-            awe_synthesis::get_behavioral_context,
-            awe_synthesis::synthesize_wisdom,
-            awe_synthesis::synthesize_topic_context,
-            awe_synthesis::refresh_awe_context,
+            // AWE commands removed — AWE being rebuilt from scratch in separate repo
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,

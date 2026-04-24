@@ -233,24 +233,6 @@ export const BriefingView = memo(function BriefingView() {
                   <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
                 </div>
               ) : null}
-              {freeBriefing.wisdom_signals && freeBriefing.wisdom_signals.length > 0 && (
-                <div>
-                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">{t('briefing.sectionWisdom')}</h3>
-                  <div className="space-y-2">
-                    {freeBriefing.wisdom_signals.map((signal, i) => (
-                      <div key={i} className="pl-2 border-l-2 border-[#D4AF37]/25 py-1">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[8px] font-mono font-bold tracking-wider text-[#D4AF37]/80 bg-[#D4AF37]/10 px-1.5 rounded">
-                            {signal.signal_type === 'anti-pattern' ? 'AVOID' : 'VALIDATED'}
-                          </span>
-                          <span className="text-[10px] font-mono text-text-muted">{Math.round(signal.confidence * 100)}%</span>
-                        </div>
-                        <p className="text-xs text-text-secondary italic leading-relaxed">{signal.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
               <div>
                 <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">{t('briefing.sectionSignals')}</h3>
                 <div className="space-y-1">

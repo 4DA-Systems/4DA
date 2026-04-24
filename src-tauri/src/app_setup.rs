@@ -553,17 +553,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         });
     });
 
-    // AWE: sync wisdom into context on startup (non-blocking, best-effort)
-    // This ensures PASIFA scoring is informed by decision history from the first analysis.
-    tauri::async_runtime::spawn(async {
-        match crate::context_commands::sync_awe_wisdom().await {
-            Ok(msg) => info!(target: "4da::awe", msg = %msg, "AWE wisdom synced on startup"),
-            Err(e) => {
-                warn!(target: "4da::awe", error = %e, "AWE startup sync failed (non-fatal — AWE may not be installed)")
-            }
-        }
-    });
-
     // Intelligence Reconciliation Phase 13 — Auto-seed on first launch.
     // Runs the git decision miner against configured context_dirs to populate
     // AWE's Wisdom Graph with personal priors. Non-blocking, best-effort.
@@ -933,46 +922,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     });
                 }
 
-                // AWE behavioral wisdom synthesis
-                {
-                    let app_wisdom = briefing_handle.clone();
-                    tauri::async_runtime::spawn(async move {
-                        match crate::awe_synthesis::build_behavioral_context() {
-                            Ok(ctx) => {
-                                if let Err(e) = crate::awe_synthesis::write_context_file(&ctx) {
-                                    warn!(target: "4da::awe", error = %e, "Failed to write AWE context file");
-                                }
-                                match crate::awe_synthesis::synthesize_daily_wisdom(&ctx).await {
-                                    Ok(wisdom) => {
-                                        info!(target: "4da::awe_synthesis", "Startup wisdom synthesis ready");
-                                        let _ = app_wisdom.emit(
-                                            "awe-wisdom-synthesis",
-                                            serde_json::json!({ "wisdom": wisdom }),
-                                        );
-                                    }
-                                    Err(e) => {
-                                        info!(target: "4da::awe_synthesis", reason = %e, "Wisdom synthesis skipped");
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                warn!(target: "4da::awe_synthesis", error = %e, "Behavioral context failed");
-                            }
-                        }
-                    });
-                }
-
-                // AWE daily jobs — wisdom sync + auto-feedback
-                tauri::async_runtime::spawn(async {
-                    if let Err(e) = crate::context_commands::sync_awe_wisdom().await {
-                        warn!(target: "4da::awe", error = %e, "Startup AWE wisdom sync failed");
-                    }
-                });
-                tauri::async_runtime::spawn(async {
-                    if let Err(e) = crate::awe_commands::run_awe_auto_feedback().await {
-                        warn!(target: "4da::awe", error = %e, "Startup AWE auto-feedback failed");
-                    }
-                });
             }
         });
     }
