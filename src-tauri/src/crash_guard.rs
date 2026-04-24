@@ -43,8 +43,9 @@ fn zeroize_sensitive_memory() {
         settings.llm.api_key.zeroize();
         settings.llm.openai_api_key.zeroize();
 
-        // X (Twitter) API key
-        settings.x_api_key.zeroize();
+        // X (Twitter) API key — replace with default, dropping the old
+        // SensitiveString which zeroizes its contents on drop.
+        settings.x_api_key = Default::default();
 
         // License key
         settings.license.license_key.zeroize();

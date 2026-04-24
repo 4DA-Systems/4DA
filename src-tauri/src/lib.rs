@@ -583,7 +583,9 @@ pub fn run() {
         }
     }
 
-    // Set Windows AUMID so OS notifications show "4DA" instead of inheriting parent process name
+    // Set Windows AUMID so OS notifications show "4DA" instead of inheriting parent process name.
+    // Two-part fix: (1) set process AUMID for taskbar grouping, (2) register in HKCU so the
+    // Windows toast notification subsystem resolves "com.4da.app" → DisplayName "4DA".
     #[cfg(target_os = "windows")]
     {
         #[allow(unsafe_code)]
@@ -593,6 +595,15 @@ pub fn run() {
             unsafe {
                 SetCurrentProcessExplicitAppUserModelID(aumid.as_ptr());
             }
+        }
+
+        // Register notification identity in HKCU (no admin required, works in dev mode)
+        if let Ok(hkcu) = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+            .create_subkey("Software\\Classes\\AppUserModelId\\com.4da.app")
+        {
+            let (key, _) = hkcu;
+            let _ = key.set_value("DisplayName", &"4DA");
+            let _ = key.set_value("ShowInSettings", &1u32);
         }
     }
 
@@ -1012,6 +1023,7 @@ pub fn run() {
             data_export::export_section,
             data_export::list_exports,
             data_export::delete_export,
+            data_export::factory_reset,
             // Enterprise: Audit Log
             audit::get_audit_log,
             audit::get_audit_summary_cmd,

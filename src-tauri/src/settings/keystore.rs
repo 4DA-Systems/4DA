@@ -161,7 +161,7 @@ pub fn migrate_from_plaintext(settings: &super::Settings) -> Result<MigrationRep
     let key_values: Vec<(&str, &str)> = vec![
         ("llm_api_key", &settings.llm.api_key),
         ("openai_api_key", &settings.llm.openai_api_key),
-        ("x_api_key", &settings.x_api_key),
+        ("x_api_key", settings.x_api_key.as_str()),
         ("license_key", &settings.license.license_key),
         ("translation_api_key", &settings.translation.api_key),
     ];
@@ -224,6 +224,7 @@ pub fn known_key_names() -> &'static [&'static str] {
 
 #[cfg(test)]
 mod tests {
+    use super::super::types::SensitiveString;
     use super::*;
 
     /// Test that store/retrieve/delete round-trip works or falls back gracefully.
@@ -295,7 +296,7 @@ mod tests {
     fn test_migrate_from_plaintext_with_keys() {
         let mut settings = super::super::Settings::default();
         settings.llm.api_key = "sk-test-anthropic".to_string();
-        settings.x_api_key = "bearer-test-x".to_string();
+        settings.x_api_key = SensitiveString::new("bearer-test-x".to_string());
         // openai_api_key and license_key left empty
 
         let report = migrate_from_plaintext(&settings);
