@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // =============================================================================
-// STREETS E2E Test — Full Stripe → License → Rust Verification Chain
+// Signal E2E Test — Full Stripe → License → Rust Verification Chain
 //
 // Tests the entire billing pipeline:
-//   1. Checkout session creation (all 3 tiers)
+//   1. Checkout session creation (monthly, annual, lifetime)
 //   2. Simulated webhook: create customer + payment → license generation
 //   3. Activate endpoint: retrieve license by email
 //   4. License format + crypto verification (Node.js side)
@@ -49,9 +49,9 @@ loadEnv(resolve(__dirname, '.env.test'));
 const required = [
   'STRIPE_SECRET_KEY',
   'LICENSE_PRIVATE_KEY_HEX',
-  'STREETS_PRICE_COMMUNITY',
-  'STREETS_PRICE_ANNUAL',
-  'STREETS_PRICE_COHORT',
+  'SIGNAL_PRICE_MONTHLY',
+  'SIGNAL_PRICE_ANNUAL',
+  'SIGNAL_PRICE_LIFETIME',
   'SITE_URL',
 ];
 
@@ -160,21 +160,21 @@ async function cleanupTestCustomer(email) {
 }
 
 // =============================================================================
-// TEST 1: Checkout Session Creation (all 3 tiers)
+// TEST 1: Checkout Session Creation (all 3 plans)
 // =============================================================================
 console.log('\n--- Test 1: Checkout Session Creation ---');
 
-for (const tier of ['community', 'annual', 'cohort']) {
+for (const plan of ['monthly', 'annual', 'lifetime']) {
   try {
-    const resp = await fetch(`${SITE_URL}/api/streets/checkout`, {
+    const resp = await fetch(`${SITE_URL}/api/signal/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tier }),
+      body: JSON.stringify({ plan }),
     });
     const data = await resp.json();
-    assert(resp.ok && data.url && data.url.includes('checkout.stripe.com'), `${tier} checkout returns Stripe URL`);
+    assert(resp.ok && data.url && data.url.includes('checkout.stripe.com'), `${plan} checkout returns Stripe URL`);
   } catch (err) {
-    assert(false, `${tier} checkout: ${err.message}`);
+    assert(false, `${plan} checkout: ${err.message}`);
   }
 }
 
@@ -217,11 +217,11 @@ await stripe.customers.update(customer.id, {
 });
 assert(true, 'Test card attached (4242...4242)');
 
-// Create subscription (Community tier)
+// Create subscription (Signal monthly)
 const subscription = await stripe.subscriptions.create({
   customer: customer.id,
-  items: [{ price: process.env.STREETS_PRICE_COMMUNITY }],
-  metadata: { streets_tier: 'signal', test: 'true' },
+  items: [{ price: process.env.SIGNAL_PRICE_MONTHLY }],
+  metadata: { streets_tier: 'signal', billing_period: 'monthly', test: 'true' },
   default_payment_method: pm.id,
 });
 assert(subscription.status === 'active', `Subscription active: ${subscription.id}`);
@@ -355,29 +355,30 @@ try {
 }
 
 // =============================================================================
-// TEST 6: Cohort License (One-time payment tier)
+// TEST 6: Lifetime License (One-time payment)
 // =============================================================================
-console.log('\n--- Test 6: Cohort License Generation ---');
+console.log('\n--- Test 6: Lifetime License Generation ---');
 
-// Legacy cohort keys should still verify (backwards compat)
-const cohortPayload = {
+const lifetimeExpiry = new Date('2099-01-01T00:00:00.000Z');
+const lifetimePayload = {
   tier: 'signal',
   email: TEST_EMAIL,
-  expires_at: expiresAt.toISOString(),
+  expires_at: lifetimeExpiry.toISOString(),
   issued_at: now.toISOString(),
   features: ['signal'],
 };
 
-const cohortKey = generateLicenseKey(cohortPayload);
-assert(cohortKey.startsWith('4DA-'), 'Signal key has prefix');
-assert(cohortKey.length < 500, `Signal key within limit (${cohortKey.length} chars)`);
+const lifetimeKey = generateLicenseKey(lifetimePayload);
+assert(lifetimeKey.startsWith('4DA-'), 'Lifetime key has prefix');
+assert(lifetimeKey.length < 500, `Lifetime key within limit (${lifetimeKey.length} chars)`);
 
 try {
-  const decoded = verifyLicenseKey(cohortKey);
-  assert(decoded.tier === 'signal', 'Signal tier decoded');
+  const decoded = verifyLicenseKey(lifetimeKey);
+  assert(decoded.tier === 'signal', 'Lifetime tier is signal');
   assert(decoded.features.includes('signal'), 'Has signal feature');
+  assert(new Date(decoded.expires_at).getFullYear() === 2099, 'Lifetime expiry is 2099');
 } catch (err) {
-  assert(false, `Signal verification: ${err.message}`);
+  assert(false, `Lifetime verification: ${err.message}`);
 }
 
 // =============================================================================
