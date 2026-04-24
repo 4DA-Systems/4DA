@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor } from '../../utils/score';
+import { useAppStore } from '../../store';
 import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
 import { FeedbackButtons } from './FeedbackButtons';
@@ -21,6 +23,39 @@ function formatTimeAgo(dateStr: string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function WhyThisMatters({ explanation }: { explanation: string | undefined }) {
+  const { t } = useTranslation();
+  const provider = useAppStore(useShallow((s) => s.settingsForm.provider));
+
+  if (!explanation || explanation.includes('No judgment provided by LLM')) return null;
+
+  const isLocalModel = provider === 'ollama';
+  const cleanText = explanation.replace(/^Filtered:\s*/i, '');
+
+  return (
+    <div className="mb-3 p-2 bg-bg-primary/50 rounded border border-accent-gold/30">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-xs text-accent-gold font-medium">
+          {t('results.whyThisMatters')}
+        </span>
+        {isLocalModel && (
+          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400/70">
+            {t('results.localAnalysis')}
+          </span>
+        )}
+      </div>
+      <div className="text-xs text-text-secondary leading-relaxed">
+        {cleanText}
+      </div>
+      {isLocalModel && (
+        <p className="text-[9px] text-text-muted mt-1.5">
+          {t('results.byokHint')}
+        </p>
+      )}
+    </div>
+  );
 }
 
 interface ResultItemExpandedProps {
@@ -158,16 +193,7 @@ export function ResultItemExpanded({
       )}
 
       {/* Why This Matters - Full Display */}
-      {item.explanation && !item.explanation.includes('No judgment provided by LLM') && (
-        <div className="mb-3 p-2 bg-bg-primary/50 rounded border border-accent-gold/30">
-          <div className="text-xs text-accent-gold font-medium mb-1">
-            {t('results.whyThisMatters')}
-          </div>
-          <div className="text-xs text-text-secondary leading-relaxed">
-            {item.explanation.replace(/^Filtered:\s*/i, '')}
-          </div>
-        </div>
-      )}
+      <WhyThisMatters explanation={item.explanation} />
 
       {/* Feedback / Triage Buttons */}
       {item.score_breakdown?.necessity_category === 'security_vulnerability' ? (

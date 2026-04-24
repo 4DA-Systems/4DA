@@ -553,6 +553,7 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
     };
 
     let capable = crate::ollama::can_synthesize(&llm_settings).await;
+    let can_explain = crate::ollama::can_explain(&llm_settings).await;
 
     let (model_name, model_params, provider) = if llm_settings.provider == "ollama" {
         let base_url = llm_settings
@@ -576,6 +577,7 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
 
     Ok(serde_json::json!({
         "can_synthesize": capable,
+        "can_explain": can_explain,
         "provider": provider,
         "model": model_name,
         "params_billions": model_params,
