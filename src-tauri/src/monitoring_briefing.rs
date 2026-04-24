@@ -13,6 +13,13 @@ use tracing::{info, warn};
 use crate::monitoring::MonitoringState;
 use crate::monitoring_notifications::truncate_safe;
 
+/// Minimum relevance score for an item to appear in the morning briefing.
+/// The briefing is a flagship surface — every bad signal erodes trust.
+/// 0.35 keeps genuinely relevant content while cutting noise that scored
+/// on a single weak keyword match. Critical/alert priority items bypass
+/// this via the signal classifier's own 0.30 threshold.
+pub(crate) const BRIEFING_SCORE_FLOOR: f32 = 0.35;
+
 // ============================================================================
 // Morning Briefing Types
 // ============================================================================
@@ -114,8 +121,8 @@ pub struct BriefingNotification {
     /// LLM-synthesized intelligence narrative (populated async after initial delivery)
     #[serde(default)]
     pub synthesis: Option<String>,
-    /// AWE behavioral wisdom — personalized insight from 4DA's behavioral data
-    /// Populated async alongside synthesis by awe_synthesis::synthesize_daily_wisdom
+    /// Behavioral wisdom — personalized insight from 4DA's behavioral data
+    /// Reserved for future enrichment
     #[serde(default)]
     pub wisdom_synthesis: Option<String>,
     /// Preemption alerts — critical/high urgency items from the preemption engine
@@ -172,15 +179,39 @@ pub(crate) fn build_enriched_briefing(
     // Intra-batch fuzzy dedupe — collapses semantic duplicates.
     let deduped = crate::briefing_dedupe::dedupe_briefing_items(quality_filtered);
 
-    // Cap at the widget's display budget.
-    let items: Vec<BriefingItem> = deduped.into_iter().take(8).collect();
+    // Priority-aware sort: critical/alert first, then by score descending.
+    // The briefing is a curated surface — high-priority items MUST lead.
+    let mut sorted = deduped;
+    sorted.sort_by(|a, b| {
+        let pa = priority_rank(a.signal_priority.as_deref());
+        let pb = priority_rank(b.signal_priority.as_deref());
+        pa.cmp(&pb).then_with(|| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    });
 
-    // Novelty detection: filter items seen in last 3 days, track ongoing topics
+    // Cap at the widget's display budget. Prefer fewer high-quality items
+    // over a full list of mediocre ones.
+    let items: Vec<BriefingItem> = sorted.into_iter().take(8).collect();
+
+    // Novelty detection: filter items seen in last 3 days, track ongoing topics.
+    // If novelty filter removes ALL items, keep the top 3 as "still relevant"
+    // rather than showing an empty briefing — a repeat signal beats "nothing new."
     let today = now.format("%Y-%m-%d").to_string();
     let (items, ongoing_topics) = if skip_novelty {
         (items, vec![])
     } else {
-        apply_novelty_filter(items, &today)
+        let pre_filter = items.clone();
+        let (novel, ongoing) = apply_novelty_filter(items, &today);
+        if novel.is_empty() && !pre_filter.is_empty() {
+            // All items were seen recently — keep top 3 so the briefing has content
+            let fallback: Vec<BriefingItem> = pre_filter.into_iter().take(3).collect();
+            (fallback, ongoing)
+        } else {
+            (novel, ongoing)
+        }
     };
 
     let total_relevant = items.len();
@@ -245,6 +276,15 @@ pub(crate) fn build_enriched_briefing(
 // ============================================================================
 
 /// Parse "HH:MM" time string, returning (hour, minute). Defaults to (8, 0) on parse failure.
+fn priority_rank(p: Option<&str>) -> u8 {
+    match p {
+        Some("critical") => 0,
+        Some("alert") => 1,
+        Some("advisory") => 2,
+        _ => 3, // "watch" or None
+    }
+}
+
 fn parse_briefing_time(time_str: &str) -> (u32, u32) {
     let parts: Vec<&str> = time_str.split(':').collect();
     if parts.len() == 2 {
@@ -338,7 +378,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 .iter()
                 .filter(|r| r.relevant && !r.excluded)
                 .filter(|r| r.detected_lang == user_lang) // Language gate
-                .filter(|r| r.top_score >= 0.15) // Score gate — no 0% items
+                .filter(|r| r.top_score >= BRIEFING_SCORE_FLOOR)
                 // Pull a bigger pool so the briefing-quality + dedupe gates
                 // have headroom to filter without starving the brief below
                 // its target size. 25 → ~8 after rejections is realistic.
@@ -361,7 +401,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             // or vacation still get a briefing from their last active session.
             if let Ok(db) = crate::get_database() {
                 let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-                db.get_relevant_items_since(period_start, 0.15, 25, &user_lang)
+                db.get_relevant_items_since(period_start, BRIEFING_SCORE_FLOOR.into(), 25, &user_lang)
                     .ok()
                     .map(|db_items| {
                         db_items
@@ -389,7 +429,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // Apply quality gate + dedupe + enrichment via shared pipeline
     let briefing = build_enriched_briefing(raw_items, &user_lang, false);
 
-    if briefing.items.is_empty() && briefing.ongoing_topics.is_empty() {
+    if briefing.items.is_empty() {
         return None;
     }
 
@@ -737,67 +777,10 @@ fn detect_escalating_chains() -> Vec<ChainSummary> {
 /// `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` for the
 /// bugs this wrapper defends against by construction.
 fn recall_awe_wisdom() -> Vec<WisdomSignal> {
-    // Resolve config via the typed wrapper's single source of truth. Returns
-    // None if AWE is not installed / discoverable — same semantics as the
-    // old `find_awe_binary()` check, just routed through the wrapper so the
-    // caller depends on one abstraction instead of two.
-    let client = match crate::external::awe::AweClientConfig::from_default_paths() {
-        Some(cfg) => crate::external::awe::AweClient::new(cfg),
-        None => return vec![],
-    };
-
-    let wisdom_output = match client.wisdom("software-engineering") {
-        Ok(o) => o,
-        Err(e) => {
-            // The typed wrapper has already done the KNOWN_ERROR_PATTERNS
-            // scan + exit-code check + timeout handling. Any error here is
-            // already categorized (BinaryNotFound / Timeout / KnownError /
-            // ExitFailed / ParseError / SpawnFailed) — we just log and
-            // gracefully degrade the briefing.
-            tracing::warn!(target: "4da::briefing", error = %e, "AWE wisdom recall failed for briefing");
-            return vec![];
-        }
-    };
-
-    let stdout = wisdom_output.raw_output;
-    let mut signals = Vec::new();
-    let mut current_type = "";
-
-    for line in stdout.lines() {
-        let trimmed = line.trim();
-        if trimmed.contains("VALIDATED PRINCIPLES") {
-            current_type = "principle";
-        } else if trimmed.contains("ANTI-PATTERNS") {
-            current_type = "anti-pattern";
-        } else if trimmed.starts_with('[') && !current_type.is_empty() {
-            // Parse "[85%] statement text"
-            if let Some(bracket_end) = trimmed.find(']') {
-                let confidence_str = &trimmed[1..bracket_end];
-                let confidence = confidence_str
-                    .trim_end_matches('%')
-                    .parse::<f32>()
-                    .unwrap_or(0.0)
-                    / 100.0;
-                let text = trimmed[bracket_end + 1..].trim().to_string();
-                if !text.is_empty() && confidence > 0.0 {
-                    signals.push(WisdomSignal {
-                        text,
-                        confidence,
-                        signal_type: current_type.to_string(),
-                    });
-                }
-            }
-        }
-    }
-
-    // Sort by confidence descending, take top 5
-    signals.sort_by(|a, b| {
-        b.confidence
-            .partial_cmp(&a.confidence)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    signals.truncate(5);
-    signals
+    // AWE v1 integration removed — AWE v2 is a standalone repo.
+    // This stub preserves the briefing pipeline shape; AWE v2 will
+    // re-populate wisdom signals via its own MCP tools.
+    vec![]
 }
 
 // ============================================================================

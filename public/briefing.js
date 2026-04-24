@@ -108,8 +108,15 @@ function invokeTauri(command, args) {
 // Rendering
 // ---------------------------------------------------------------------------
 
+function inferPriority(item) {
+  if (item.signal_priority) return item.signal_priority;
+  if (item.score >= 0.75) return 'alert';
+  if (item.score >= 0.50) return 'advisory';
+  return 'watch';
+}
+
 function buildItemHtml(item) {
-  var priority = escapeHtml(item.signal_priority || 'watch');
+  var priority = escapeHtml(inferPriority(item));
   var title = escapeHtml(truncate(item.title, 80));
   var desc = escapeHtml(truncate(item.description, 200));
   var sourceType = escapeHtml(item.source_type || '');
