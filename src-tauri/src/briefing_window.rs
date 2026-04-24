@@ -9,7 +9,7 @@
 //! knowledge gaps, signal priorities, and AWE wisdom signals.
 //!
 //! The briefing window is:
-//! - 560×640 logical pixels, positioned bottom-right above the taskbar
+//! - 560×780 logical pixels, positioned bottom-right above the taskbar
 //! - Transparent, borderless, always-on-top for 8 seconds then normal z-order
 //! - Pre-created on app startup (hidden) for instant display
 //! - Visible in taskbar, accessible via Alt+Tab
@@ -29,7 +29,7 @@ const WINDOW_LABEL: &str = "briefing";
 
 /// Briefing window dimensions (logical pixels).
 const WINDOW_WIDTH: u32 = 560;
-const WINDOW_HEIGHT: u32 = 640;
+const WINDOW_HEIGHT: u32 = 780;
 
 /// Auto-dismiss after 5 minutes of no interaction.
 /// Previous value of 60s was too short — users routinely missed the briefing
@@ -37,8 +37,10 @@ const WINDOW_HEIGHT: u32 = 640;
 const AUTO_DISMISS_MS: u64 = 300_000;
 
 /// Duration (ms) the briefing stays always-on-top before dropping to normal z-order.
-/// Long enough to catch the user's eye, short enough to not block their work.
-const ALWAYS_ON_TOP_MS: u64 = 8_000;
+/// Must be long enough for async LLM synthesis to arrive (~5-10s) plus reading time.
+/// The window never steals focus, so "always-on-top" just means visible — the user
+/// can still click through to their IDE. JS hover/click handles actual dismissal.
+const ALWAYS_ON_TOP_MS: u64 = 30_000;
 
 // ============================================================================
 // Auto-dismiss cancellation
@@ -411,7 +413,7 @@ mod tests {
     #[test]
     fn test_window_constants() {
         assert_eq!(WINDOW_WIDTH, 560);
-        assert_eq!(WINDOW_HEIGHT, 640);
+        assert_eq!(WINDOW_HEIGHT, 780);
         assert_eq!(AUTO_DISMISS_MS, 300_000);
         assert_eq!(ALWAYS_ON_TOP_MS, 8_000);
         assert_eq!(WINDOW_LABEL, "briefing");

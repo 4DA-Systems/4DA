@@ -4,6 +4,17 @@
 
 var AUTO_DISMISS_MS = 300000;
 
+function cleanSynthesis(text) {
+  if (!text) return text;
+  return text
+    .replace(/\[\d[\d, ]*\]/g, '')   // Strip citation brackets
+    .replace(/\*\*/g, '')             // Strip markdown bold
+    .replace(/^#+\s+/gm, '')         // Strip markdown headers
+    .replace(/^[-*]\s+/gm, '')       // Strip bullet markers
+    .replace(/  +/g, ' ')            // Collapse double spaces
+    .trim();
+}
+
 // ---------------------------------------------------------------------------
 // DOM references
 // ---------------------------------------------------------------------------
@@ -27,7 +38,6 @@ var wisdomSynthesisSection = document.getElementById('wisdom-synthesis-section')
 var wisdomSynthesisText = document.getElementById('wisdom-synthesis-text');
 var ongoingSection = document.getElementById('ongoing-section');
 var ongoingLine = document.getElementById('ongoing-line');
-var totalCount = document.getElementById('total-count');
 var dismissBtn = document.getElementById('dismiss-btn');
 var openAppBtn = document.getElementById('open-app-btn');
 
@@ -37,8 +47,6 @@ var isHovering = false;
 // i18n: translatable strings (populated from Rust payload, defaults to English)
 var gapDaysSuffix = 'd since last signal';
 var trackingLabel = 'Tracking:';
-var signalsTodaySuffix = ' today';
-var emptyStateText = 'Your stack is quiet. Nothing new.';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -56,12 +64,7 @@ function escapeHtml(str) {
 
 function truncate(str, max) {
   if (!str) return '';
-  return str.length > max ? str.slice(0, max) + '\u2026' : str;
-}
-
-function formatScore(score) {
-  if (score == null) return '';
-  return Math.round(score * 100) + '%';
+  return str.length > max ? str.slice(0, max) + '…' : str;
 }
 
 function isAbstention(text) {
@@ -73,10 +76,29 @@ function isAbstention(text) {
 /** Extract date string from title like "4DA Intelligence Briefing — 02 Apr 2026" */
 function parseDateFromTitle(title) {
   if (!title) return '';
-  var parts = title.split('\u2014'); // em dash
+  var parts = title.split('—'); // em dash
   if (parts.length < 2) parts = title.split('—');
   if (parts.length < 2) parts = title.split('-');
   return (parts[parts.length - 1] || '').trim();
+}
+
+/** Human-readable source type label */
+function sourceLabel(sourceType) {
+  var map = {
+    'arxiv': 'paper',
+    'papers_with_code': 'paper',
+    'hackernews': 'discussion',
+    'reddit': 'discussion',
+    'lobsters': 'discussion',
+    'github': 'repo',
+    'devto': 'article',
+    'rss': 'feed',
+    'producthunt': 'launch',
+    'youtube': 'video',
+    'twitter': 'post',
+    'x': 'post'
+  };
+  return map[sourceType] || sourceType || '';
 }
 
 // ---------------------------------------------------------------------------
@@ -108,42 +130,25 @@ function invokeTauri(command, args) {
 // Rendering
 // ---------------------------------------------------------------------------
 
-function inferPriority(item) {
-  if (item.signal_priority) return item.signal_priority;
-  if (item.score >= 0.75) return 'alert';
-  if (item.score >= 0.50) return 'advisory';
-  return 'watch';
-}
-
 function buildItemHtml(item) {
-  var priority = escapeHtml(inferPriority(item));
-  var title = escapeHtml(truncate(item.title, 80));
-  var desc = escapeHtml(truncate(item.description, 200));
-  var sourceType = escapeHtml(item.source_type || '');
-  var score = formatScore(item.score);
+  var title = escapeHtml(truncate(item.title, 90));
+  var source = escapeHtml(sourceLabel(item.source_type));
   var itemId = item.item_id != null ? item.item_id : '';
   var url = item.url || '';
 
   var depsHtml = '';
   if (item.matched_deps && item.matched_deps.length > 0) {
-    depsHtml = '<div class="item-deps">';
     for (var i = 0; i < Math.min(item.matched_deps.length, 3); i++) {
       depsHtml += '<span class="dep-pill">' + escapeHtml(item.matched_deps[i]) + '</span>';
     }
-    depsHtml += '</div>';
   }
 
-  return '<div class="briefing-item priority-' + priority + '" data-item-id="' + itemId + '" data-url="' + escapeHtml(url) + '">'
-    + '<div class="item-header">'
-    + '<span class="priority-dot ' + priority + '"></span>'
+  return '<div class="briefing-item" data-item-id="' + itemId + '" data-url="' + escapeHtml(url) + '">'
+    + '<div class="item-row">'
+    + '<span class="item-source-badge">' + source + '</span>'
     + '<span class="item-title">' + title + '</span>'
     + '</div>'
-    + (desc ? '<div class="item-description">' + desc + '</div>' : '')
-    + '<div class="item-meta">'
-    + '<span class="item-source">' + sourceType + '</span>'
-    + (score ? '<span class="item-score">' + score + '</span>' : '')
-    + depsHtml
-    + '</div>'
+    + (depsHtml ? '<div class="item-deps">' + depsHtml + '</div>' : '')
     + '</div>';
 }
 
@@ -152,17 +157,13 @@ function buildWisdomHtml(signals) {
   for (var i = 0; i < signals.length; i++) {
     var signal = signals[i];
     var text = escapeHtml(signal.text || '');
-    var confidence = signal.confidence != null ? Math.round(signal.confidence * 100) : 0;
     var isAntiPattern = signal.signal_type === 'anti-pattern';
     var typeClass = isAntiPattern ? 'wisdom-anti-pattern' : 'wisdom-principle';
     var typeLabel = isAntiPattern ? 'AVOID' : 'VALIDATED';
 
     html += '<div class="wisdom-row ' + typeClass + '">'
-      + '<div class="wisdom-meta">'
       + '<span class="wisdom-type-badge">' + typeLabel + '</span>'
-      + '<span class="wisdom-confidence">' + confidence + '%</span>'
-      + '</div>'
-      + '<div class="wisdom-text">' + text + '</div>'
+      + '<span class="wisdom-text">' + text + '</span>'
       + '</div>';
   }
   return html;
@@ -190,13 +191,10 @@ function buildChainsHtml(chains) {
     var phase = escapeHtml(chain.phase || 'active');
     var links = chain.link_count || 0;
     var action = escapeHtml(truncate(chain.action, 120));
-    var conf = chain.confidence != null ? Math.round(chain.confidence * 100) + '%' : '';
     html += '<div class="chain-row">'
-      + '<span class="priority-dot ' + (phase === 'peak' ? 'critical' : 'alert') + '"></span>'
-      + '<span class="chain-name">' + name + '</span>'
       + '<span class="chain-phase">' + phase.toUpperCase() + '</span>'
+      + '<span class="chain-name">' + name + '</span>'
       + '<span class="chain-links">' + links + ' signals</span>'
-      + (conf ? '<span class="chain-confidence">' + conf + '</span>' : '')
       + '</div>'
       + (action ? '<div class="chain-action">' + action + '</div>' : '');
   }
@@ -210,10 +208,8 @@ function buildPreemptionHtml(alerts) {
     var title = escapeHtml(truncate(alert.title, 70));
     var urgency = escapeHtml(alert.urgency || 'high');
     var explanation = escapeHtml(truncate(alert.explanation, 160));
-    var dotClass = urgency === 'critical' ? 'critical' : 'alert';
     html += '<div class="preemption-row urgency-' + urgency + '">'
       + '<div class="preemption-header">'
-      + '<span class="priority-dot ' + dotClass + '"></span>'
       + '<span class="preemption-title">' + title + '</span>'
       + '</div>'
       + (explanation ? '<div class="preemption-explanation">' + explanation + '</div>' : '')
@@ -223,14 +219,6 @@ function buildPreemptionHtml(alerts) {
 }
 
 function renderBriefing(data) {
-  // LLM Synthesis (hide if abstention — adds no value)
-  if (data.synthesis && !isAbstention(data.synthesis)) {
-    synthesisSection.style.display = '';
-    synthesisText.textContent = data.synthesis;
-  } else {
-    synthesisSection.style.display = 'none';
-  }
-
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
 
@@ -250,8 +238,14 @@ function renderBriefing(data) {
     }
     gapDaysSuffix = data.labels.gap_days_suffix || gapDaysSuffix;
     trackingLabel = data.labels.tracking || trackingLabel;
-    signalsTodaySuffix = data.labels.signals_today_suffix || signalsTodaySuffix;
-    emptyStateText = data.labels.empty_state || emptyStateText;
+  }
+
+  // LLM Synthesis — the hero section. Gets the most real estate.
+  if (data.synthesis && !isAbstention(data.synthesis)) {
+    synthesisSection.style.display = '';
+    synthesisText.textContent = cleanSynthesis(data.synthesis);
+  } else {
+    synthesisSection.style.display = 'none';
   }
 
   // Preemption alerts
@@ -286,10 +280,12 @@ function renderBriefing(data) {
     wisdomSynthesisSection.style.display = 'none';
   }
 
-  // Signal items
+  // Signal items — compact list, no scores
   if (!data.items || data.items.length === 0) {
-    itemsList.innerHTML = '<div class="empty-state">' + emptyStateText + '</div>';
+    itemsList.innerHTML = '';
+    document.getElementById('items-section').style.display = 'none';
   } else {
+    document.getElementById('items-section').style.display = '';
     var html = '';
     for (var i = 0; i < data.items.length; i++) {
       html += buildItemHtml(data.items[i]);
@@ -297,27 +293,16 @@ function renderBriefing(data) {
     itemsList.innerHTML = html;
   }
 
-  // Knowledge gaps + blind spot score
+  // Knowledge gaps — show specific topics, not percentages
   var hasGaps = data.knowledge_gaps && data.knowledge_gaps.length > 0;
-  var hasScore = data.blind_spot_score != null;
-  if (hasGaps || hasScore) {
+  if (hasGaps) {
     gapsSection.style.display = '';
-    if (hasGaps) {
-      gapsList.innerHTML = buildGapsHtml(data.knowledge_gaps);
-    } else {
-      gapsList.innerHTML = '';
-    }
-    if (hasScore) {
-      blindSpotScore.style.display = '';
-      var score = Math.round(data.blind_spot_score);
-      blindSpotScore.textContent = score + '% coverage gap';
-    } else {
-      blindSpotScore.style.display = 'none';
-    }
+    gapsList.innerHTML = buildGapsHtml(data.knowledge_gaps);
   } else {
     gapsSection.style.display = 'none';
-    blindSpotScore.style.display = 'none';
   }
+  // Hide blind spot percentage — it's a vanity metric without a denominator
+  blindSpotScore.style.display = 'none';
 
   // Ongoing topics
   if (data.ongoing_topics && data.ongoing_topics.length > 0) {
@@ -326,13 +311,6 @@ function renderBriefing(data) {
     ongoingLine.innerHTML = '<span class="ongoing-label">' + trackingLabel + '</span> ' + topics;
   } else {
     ongoingSection.style.display = 'none';
-  }
-
-  // Footer
-  if (data.total_relevant != null) {
-    totalCount.textContent = data.total_relevant + ' signal' + (data.total_relevant !== 1 ? 's' : '') + signalsTodaySuffix;
-  } else {
-    totalCount.textContent = '';
   }
 }
 
@@ -394,12 +372,8 @@ openAppBtn.addEventListener('click', function (e) {
   invokeTauri('briefing_item_clicked', {});
 });
 
-// Click outside the card to dismiss
-document.addEventListener('click', function (e) {
-  if (!card.contains(e.target)) {
-    hideBriefing();
-  }
-});
+// Dismiss only via the X button — clicking outside should not dismiss,
+// because tools like Lightshot require clicking the desktop first.
 
 // Item click delegation
 itemsList.addEventListener('click', function (e) {
@@ -455,7 +429,7 @@ async function init() {
     await listen('briefing-synthesis', function (event) {
       if (event.payload && !isAbstention(event.payload) && synthesisSection && synthesisText) {
         synthesisSection.style.display = '';
-        synthesisText.textContent = event.payload;
+        synthesisText.textContent = cleanSynthesis(event.payload);
       }
     });
 
