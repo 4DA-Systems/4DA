@@ -207,36 +207,11 @@ fn extract_salient_terms(text: &str) -> Vec<String> {
     flush(&mut cap_run, &mut out, &mut seen);
 
     // --- Phase 3: notable single-capitalized tokens ------------------------
-    // Things like "Stripe" or "Postgres" that appear alone. Only count
-    // tokens of ≥5 chars that look like product names.
-    for token in &tokens {
-        let stripped: String = token.chars().filter(|c| c.is_alphanumeric()).collect();
-        if stripped.len() < 5 {
-            continue;
-        }
-        let mut chars = stripped.chars();
-        // Short-circuit on empty first — prior len < 5 guard means we
-        // should never hit this, but let-else is the idiomatic way to
-        // avoid clippy's unwrap_used lint.
-        let Some(first) = chars.next() else { continue };
-        if !first.is_uppercase() {
-            continue;
-        }
-        if chars.any(|c| c.is_uppercase()) {
-            // Mixed-case inside (e.g., "TypeScript") still counts, but
-            // screaming-case "ALLCAPS" acronyms we skip because they
-            // match too many things.
-            continue;
-        }
-        if is_stopword(&stripped) {
-            continue;
-        }
-        let key = stripped.to_lowercase();
-        if !seen.contains(&key) {
-            seen.insert(key);
-            out.push(stripped);
-        }
-    }
+    // Disabled: single capitalized words like "Reactive", "Improving",
+    // "Security" are common English and cause false rejections. The
+    // multi-word phrase detector (Phase 2) and version detector (Phase 1)
+    // catch the real hallucination risks (invented tech names like
+    // "TanStack Start" and fake versions like "v5.3.1").
 
     out
 }
@@ -331,6 +306,238 @@ fn is_stopword(word: &str) -> bool {
         "Although",
         "Unless",
         "Whereas",
+        "Meanwhile",
+        "However",
+        "Therefore",
+        "Furthermore",
+        "Additionally",
+        "Moreover",
+        "Nevertheless",
+        "Nonetheless",
+        "Consequently",
+        "Subsequently",
+        "Accordingly",
+        "Overall",
+        "Notably",
+        "Specifically",
+        "Importantly",
+        "Essentially",
+        "Particularly",
+        "Ultimately",
+        "Interestingly",
+        "Several",
+        "Various",
+        "Multiple",
+        "Significant",
+        "Large",
+        "Small",
+        "Major",
+        "Minor",
+        "Recent",
+        "Current",
+        "Previous",
+        "First",
+        "Second",
+        "Third",
+        "Final",
+        "Early",
+        "Late",
+        "Next",
+        "Last",
+        "Other",
+        "Another",
+        "Every",
+        "Each",
+        "Both",
+        "Many",
+        "Most",
+        "Some",
+        "Any",
+        "All",
+        "Such",
+        "Same",
+        "New",
+        "Old",
+        "Modern",
+        "Legacy",
+        "Popular",
+        "Common",
+        "General",
+        "Specific",
+        "Special",
+        "Potential",
+        "Possible",
+        "Available",
+        "Existing",
+        "Different",
+        "Similar",
+        "Certain",
+        "Related",
+        "Based",
+        "Given",
+        "Note",
+        "Keep",
+        "Make",
+        "Take",
+        "Use",
+        "Using",
+        "Action",
+        "Impact",
+        "Focus",
+        "Language",
+        "Models",
+        "Model",
+        "System",
+        "Systems",
+        "Paper",
+        "Papers",
+        "Research",
+        "Study",
+        "Approach",
+        "Method",
+        "Results",
+        "Analysis",
+        // Synthesis vocabulary: words the LLM uses when clustering/summarizing
+        "Cluster",
+        "Clusters",
+        "Signal",
+        "Signals",
+        "Source",
+        "Sources",
+        "Theme",
+        "Themes",
+        "Thread",
+        "Threads",
+        "Trend",
+        "Trends",
+        "Publish",
+        "Published",
+        "Publishing",
+        "Hit",
+        "Mass",
+        "Three",
+        "Two",
+        "Four",
+        "Five",
+        "Six",
+        "Seven",
+        "Eight",
+        "Nine",
+        "Ten",
+        "Dozen",
+        "Half",
+        "Zero",
+        "Fast",
+        "Slow",
+        "Quick",
+        "Rapid",
+        "Growing",
+        "Rising",
+        "Emerging",
+        "Maturing",
+        "Accelerating",
+        "Increasing",
+        "Gaining",
+        "Traction",
+        "Momentum",
+        "Security",
+        "Secure",
+        "Supply",
+        "Chain",
+        "Audit",
+        "Auditing",
+        "Hardening",
+        "Compiler",
+        "Optimizations",
+        "Optimization",
+        "Performance",
+        "Improvements",
+        "Improvement",
+        "Build",
+        "Builds",
+        "Config",
+        "Configuration",
+        "Changes",
+        "Change",
+        "Teams",
+        "Team",
+        "Guides",
+        "Guide",
+        "Week",
+        "Weeks",
+        "Month",
+        "Months",
+        "Year",
+        "Years",
+        "Separately",
+        "Worth",
+        "Evaluating",
+        "Evaluate",
+        "Independent",
+        "Independently",
+        "Testing",
+        "Test",
+        "Tests",
+        "Tooling",
+        "Tool",
+        "Tools",
+        "Framework",
+        "Frameworks",
+        "Library",
+        "Libraries",
+        "Package",
+        "Packages",
+        "Version",
+        "Versions",
+        "Pinned",
+        "Release",
+        "Releases",
+        "Breaking",
+        "Feature",
+        "Features",
+        "Area",
+        "Areas",
+        "Demand",
+        "Attention",
+        "Immediate",
+        "Nothing",
+        "Scatter",
+        "Across",
+        "Unrelated",
+        "Enough",
+        "Demand",
+        "Act",
+        "Check",
+        "Look",
+        "Approach",
+        "Approaches",
+        "Development",
+        "Developer",
+        "Developers",
+        "Engineering",
+        "Production",
+        "Deployment",
+        "Pipeline",
+        "Pipelines",
+        "Workflow",
+        "Workflows",
+        "Integration",
+        "Continuous",
+        "Practices",
+        "Practice",
+        "Patterns",
+        "Code",
+        "Codebase",
+        "Application",
+        "Applications",
+        "Project",
+        "Projects",
+        "Open",
+        "Weights",
+        "Repository",
+        "Repositories",
+        "Repo",
+        "Repos",
     ];
     STOPWORDS.iter().any(|&s| s.eq_ignore_ascii_case(word))
 }
@@ -358,6 +565,18 @@ fn is_term_grounded(term: &str, corpus_lower: &[String]) -> bool {
         for entry in corpus_lower {
             if words.iter().all(|w| entry.contains(*w)) {
                 return true;
+            }
+        }
+
+        // Partial grounding: if any 2+ word subsequence appears in the corpus,
+        // the phrase is partially grounded (e.g., "Vulnerability Alerts GitHub
+        // Actions" is grounded if "GitHub Actions" appears in any entry).
+        for window_size in (2..words.len()).rev() {
+            for window in words.windows(window_size) {
+                let sub = window.join(" ");
+                if corpus_lower.iter().any(|c| c.contains(&sub)) {
+                    return true;
+                }
             }
         }
     }
@@ -524,5 +743,22 @@ mod tests {
     fn is_term_grounded_rejects_unrelated() {
         let c = vec!["react 19.2".to_string()];
         assert!(!is_term_grounded("Stripe", &c));
+    }
+
+    #[test]
+    fn llm_expansion_does_not_cause_false_rejection() {
+        let output = "Meanwhile, Large Language Models (LLMs) continue to show \
+                      limited environmental curiosity in agent scenarios.";
+        let c = corpus(&[
+            "Agents Explore but Agents Ignore: LLMs Lack Environmental Curiosity",
+            "Beyond the YAML File: Understanding Real-World GitHub Actions Workflow Adoption",
+        ]);
+        let r = validate_groundedness(output, &c);
+        assert!(
+            r.is_acceptable(0.65),
+            "confidence was {} — expected ≥0.65 (ungrounded: {:?})",
+            r.confidence,
+            r.ungrounded_terms
+        );
     }
 }
