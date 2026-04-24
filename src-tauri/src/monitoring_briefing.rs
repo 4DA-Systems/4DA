@@ -1123,6 +1123,10 @@ BANNED:
         "Insight:", "Insights:", "Alert:", "Alerts:",
         "Cluster 1:", "Cluster 2:", "Cluster:",
         "Theme 1:", "Theme 2:", "Theme:",
+        "Strongest Cluster:", "Strongest Clusters:",
+        "Strongest Clusters", "Strongest Signal:",
+        "Primary Cluster:", "Secondary Cluster:",
+        "Top Cluster:", "Top Clusters:",
     ];
     for prefix in &label_prefixes {
         // Case-insensitive prefix removal at line start
