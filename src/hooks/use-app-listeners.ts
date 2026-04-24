@@ -90,8 +90,7 @@ export function useAppListeners({
     const handler = (event: PromiseRejectionEvent) => {
       if (event.reason?.name === 'CommandTimeoutError') {
         event.preventDefault();
-        const command = event.reason?.command ?? 'unknown';
-        addToast('error', `Operation timed out: ${command}. Please try again.`);
+        addToast('error', 'Operation timed out. Please try again in a moment.');
       }
     };
     window.addEventListener('unhandledrejection', handler);

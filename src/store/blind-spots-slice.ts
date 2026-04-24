@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
 import { cmd } from '../lib/commands';
+import { translateError } from '../utils/error-messages';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 
 // ============================================================================
@@ -31,7 +32,7 @@ export const createBlindSpotsSlice: StateCreator<AppStore, [], [], BlindSpotsSli
       const report = await cmd('get_blind_spots');
       set({ blindSpotReport: report, blindSpotsLoading: false });
     } catch (error) {
-      set({ blindSpotsError: String(error), blindSpotsLoading: false });
+      set({ blindSpotsError: translateError(error), blindSpotsLoading: false });
     }
   },
 });

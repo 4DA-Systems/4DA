@@ -705,6 +705,38 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
     }
 }
 
+/// Minimum parameter count for high-quality analysis explanations.
+/// Below this, LLM "Why this matters" text is verbose, hedgy, and
+/// sometimes hallucinates article content. The frontend hides the
+/// explanation box when the model is below this tier and shows the
+/// pipeline's deterministic explanation instead.
+const ANALYSIS_QUALITY_MIN_PARAMS_B: f64 = 14.0;
+
+/// Check whether the configured LLM produces reliable analysis text.
+/// Cloud APIs always qualify. Local models need 14B+ parameters for
+/// explanations that a senior developer wouldn't laugh at.
+pub(crate) async fn can_explain(provider: &crate::settings::LLMProvider) -> bool {
+    match provider.provider.as_str() {
+        "anthropic" | "openai" | "openai-compatible" => !provider.api_key.is_empty(),
+        "ollama" => {
+            let base_url = provider
+                .base_url
+                .as_deref()
+                .unwrap_or("http://localhost:11434");
+            let model = if provider.model.is_empty() {
+                "llama3.2"
+            } else {
+                &provider.model
+            };
+            match get_model_params_billions(model, base_url).await {
+                Some(params) => params >= ANALYSIS_QUALITY_MIN_PARAMS_B,
+                None => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 // ============================================================================
 // Model Size Estimation
 // ============================================================================

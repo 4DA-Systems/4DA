@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { translateError } from '../utils/error-messages';
 import type { AppStore, BriefingSlice, BriefingState, FreeBriefingData, InstantBriefingSnapshot } from './types';
 
 const initialBriefingState: BriefingState = {
@@ -110,7 +111,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
         aiBriefing: {
           ...state.aiBriefing,
           loading: false,
-          error: `Error: ${error}`,
+          error: translateError(error),
         },
       }));
     }
