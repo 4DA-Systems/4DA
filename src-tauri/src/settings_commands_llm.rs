@@ -539,3 +539,54 @@ pub async fn cancel_ollama_pull() -> Result<String> {
     info!(target: "4da::ollama", "Ollama pull cancellation requested");
     Ok("Cancellation requested".to_string())
 }
+
+/// Check whether the configured LLM can produce accurate briefing synthesis.
+///
+/// Returns capability info the settings UI uses to show educational guidance
+/// about model requirements. This is where users learn WHY their model choice
+/// matters — not in the briefing itself, which should be pure signal.
+#[tauri::command]
+pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
+    let llm_settings = {
+        let settings = crate::get_settings_manager().lock();
+        settings.get().llm.clone()
+    };
+
+    let capable = crate::ollama::can_synthesize(&llm_settings).await;
+
+    let (model_name, model_params, provider) = if llm_settings.provider == "ollama" {
+        let base_url = llm_settings
+            .base_url
+            .as_deref()
+            .unwrap_or("http://localhost:11434");
+        let model = if llm_settings.model.is_empty() {
+            "llama3.2".to_string()
+        } else {
+            llm_settings.model.clone()
+        };
+        let params = crate::ollama::get_model_params_billions(&model, base_url).await;
+        (model, params, "ollama".to_string())
+    } else {
+        (
+            llm_settings.model.clone(),
+            None,
+            llm_settings.provider.clone(),
+        )
+    };
+
+    Ok(serde_json::json!({
+        "can_synthesize": capable,
+        "provider": provider,
+        "model": model_name,
+        "params_billions": model_params,
+        "min_params_billions": 7.0,
+        "guidance": if capable {
+            "Your model supports AI-powered briefing synthesis."
+        } else {
+            "Briefing synthesis requires a 7B+ parameter model or a cloud API key (Anthropic/OpenAI). \
+             Your briefing shows accurately ranked signals. For AI narrative synthesis, \
+             either pull a larger Ollama model (e.g. ollama pull llama3.1:8b) \
+             or configure a cloud provider in Settings → Intelligence."
+        }
+    }))
+}
