@@ -193,6 +193,7 @@ export function AIProviderSection({
                   ...f,
                   provider: newProvider,
                   model: defaultModel,
+                  apiKey: '',
                   baseUrl: newProvider === 'ollama'
                     ? 'http://localhost:11434'
                     : newProvider === 'openai-compatible'
@@ -203,19 +204,44 @@ export function AIProviderSection({
               }}
               className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
-              <option value="local">{t('settings.ai.builtInLocal')}</option>
-              <option value="anthropic">{t('settings.ai.providerAnthropic')}</option>
+              <option value="anthropic">{t('settings.ai.providerAnthropic')} ({t('settings.ai.recommended')})</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
               <option value="openai-compatible">{t('settings.ai.providerOpenAICompatible')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
+              <option value="local">{t('settings.ai.builtInLocal')}</option>
             </select>
           </div>
 
+          {/* BYOK nudge for local/Ollama users */}
+          {(settingsForm.provider === 'ollama' || settingsForm.provider === 'local') && (
+            <div className="p-3 bg-green-900/15 border border-green-500/30 rounded-lg">
+              <p className="text-xs text-green-400 font-medium mb-1">{t('settings.ai.byokNudgeTitle')}</p>
+              <p className="text-xs text-text-muted leading-relaxed">{t('settings.ai.byokNudgeBody')}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const registryModels = getProviderModels('anthropic', modelRegistry);
+                  setSettingsForm((f) => ({
+                    ...f,
+                    provider: 'anthropic',
+                    model: registryModels[0] ?? 'claude-haiku-4-5-20251001',
+                    apiKey: '',
+                    baseUrl: '',
+                  }));
+                  setValidation({ status: 'idle', message: '', models: [] });
+                }}
+                className="mt-2 text-xs px-3 py-1.5 bg-green-500/20 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors font-medium"
+              >
+                {t('settings.ai.switchToCloud')}
+              </button>
+            </div>
+          )}
+
           {settingsForm.provider === 'local' && (
-            <div className="bg-bg-secondary rounded-lg p-3 border border-green-500/20">
-              <p className="text-xs text-green-400 font-medium mb-1">{t('settings.ai.builtInModel')}</p>
+            <div className="bg-bg-secondary rounded-lg p-3 border border-amber-500/20">
+              <p className="text-xs text-amber-400 font-medium mb-1">{t('settings.ai.builtInModel')}</p>
               <p className="text-xs text-text-muted">
-                {t('settings.ai.builtInDescription')}
+                {t('settings.ai.localOnlyNote')}
               </p>
             </div>
           )}
