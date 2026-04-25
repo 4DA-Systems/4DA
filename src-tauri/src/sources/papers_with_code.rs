@@ -240,7 +240,9 @@ impl Source for PapersWithCodeSource {
                 let content = content_parts.join("\n\n");
 
                 // Build metadata
-                let mut metadata = serde_json::json!({});
+                let mut metadata = serde_json::json!({
+                    "source_name": "papers_with_code",
+                });
                 if let Some(ref authors) = paper.authors {
                     metadata["authors"] = serde_json::json!(authors);
                 }
