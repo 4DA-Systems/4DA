@@ -1024,14 +1024,16 @@ PRIORITY ORDER for picking clusters:
 4. Everything else -- skip unless it compounds with (1) or (2)
 
 WHAT GOOD LOOKS LIKE:
-"Tokio 1.38.x has a confirmed RCE via malformed HTTP/2 frames -- if you're on 1.38.0-1.38.5, upgrade to 1.38.6 today. This is the second tokio CVE this quarter, suggesting the HTTP/2 surface area needs an audit beyond just patching.
+"Tokio 1.38.x has a confirmed RCE via malformed HTTP/2 frames -- if you're on 1.38.0-1.38.5, upgrade to 1.38.6 today. Upstream says the HTTP/2 parser rewrite lands in 1.39, so this is a stopgap patch.
 
-Embedding fine-tuning research shows 35% retrieval precision gains on domain-specific corpora -- worth prototyping against your scoring pipeline given the current relevance accuracy work."
+Embedding fine-tuning research shows significant retrieval gains on domain-specific corpora -- worth prototyping against your scoring pipeline given the current relevance accuracy work."
 
 WHAT BAD LOOKS LIKE:
 "Tokio has a CVE. Upgrade tokio." -- Restating the signal title adds zero value. The signal list already says this. You must add context the title doesn't: severity, pattern, compound risk, or architectural implication.
 
-"Async Traits, Hidden Allocs: Profiling Rust Futures highlights hidden allocation issues in async traits." -- NEVER paste a paper/article title as a sentence. Instead say what it means: "New profiling data shows async trait objects allocate 2-3x more than expected -- audit hot paths if you use dyn Future."
+"Async Traits, Hidden Allocs: Profiling Rust Futures highlights hidden allocation issues in async traits." -- NEVER paste a paper/article title as a sentence. Describe the actionable finding: "Rust async profiling reveals hidden allocations in trait objects -- audit hot paths if you use dyn Future."
+
+"memory usage by 2-3x more than expected" -- NEVER invent specific numbers, percentages, or statistics. If the signal doesn't state a number, you can't either. "Hidden allocations" is fine. "2-3x more" when the signal never said that is fabrication.
 
 "GitHub Actions hardening is on the rise. In another domain, researchers are exploring LLM curiosity. Meanwhile, fuzz drivers are gaining traction." -- Summarizing every signal sequentially. That is a for-loop, not intelligence.
 
@@ -1050,6 +1052,7 @@ QUALITY RULES:
 6. Use plain ASCII dashes (--) not unicode em dashes.
 7. NEVER speculate about implications not stated in the signals. "could impact your X" without evidence is hallucination. Stick to what the signals actually say.
 8. If only 1 cluster is strong, write 1 cluster. Don't force a second cluster from weak signals.
+9. NEVER invent numbers, percentages, or statistics not explicitly stated in the signals. "2-3x", "35%", "second this quarter" are claims -- they must come from the input, not your imagination.
 
 BANNED:
 - Restating signal titles without adding context or connecting dots
@@ -1060,7 +1063,8 @@ BANNED:
 - Citation brackets [1] [2], markdown, headers, bullets, numbered lists
 - Covering more than 2 clusters -- pick the best, skip the rest
 - Horizontal rules (---), separators, or dividers between clusters -- use a blank line only
-- Unicode em dashes or special characters -- use plain ASCII only"#;
+- Unicode em dashes or special characters -- use plain ASCII only
+- Fabricated numbers/percentages/statistics not present in the signals"#;
 
     // Append language instruction for non-English users
     let lang = crate::i18n::get_user_language();
@@ -1110,6 +1114,9 @@ BANNED:
         elapsed_ms = start.elapsed().as_millis(),
         "Morning brief synthesis complete"
     );
+
+    // DEV DIAGNOSTIC: print raw synthesis to stderr for live testing
+    eprintln!("[SYNTH-RAW] {} tokens, {}ms:\n{}", response.input_tokens + response.output_tokens, start.elapsed().as_millis(), response.content);
 
     // --- Post-synthesis cleanup: strip citations and enforce word limit ------
     let mut synthesis = response.content.clone();
@@ -1233,11 +1240,18 @@ BANNED:
 
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
+    // DEV DIAGNOSTIC: print groundedness results to stderr
+    eprintln!("[SYNTH-GROUND] confidence={:.2} total={} grounded={} ungrounded={:?}",
+        report.confidence, report.total_terms, report.grounded_terms,
+        &report.ungrounded_terms);
+    eprintln!("[SYNTH-CLEAN] {}", response.content);
+
     // The threshold is conservative — require 65% of salient terms to
     // be grounded. Anything below suggests the LLM invented content.
     const GROUNDEDNESS_THRESHOLD: f32 = 0.35;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
+        eprintln!("[SYNTH-REJECTED] Failed groundedness: {:.2} < {:.2} (or <2 terms)", report.confidence, GROUNDEDNESS_THRESHOLD);
         tracing::warn!(
             target: "4da::briefing",
             confidence = report.confidence,
@@ -1254,6 +1268,7 @@ BANNED:
         ));
     }
 
+    eprintln!("[SYNTH-ACCEPTED] Groundedness passed: {:.2}", report.confidence);
     tracing::info!(
         target: "4da::briefing",
         confidence = report.confidence,
