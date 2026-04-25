@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { AppStore, SettingsSlice, SettingsForm, OllamaStatus } from './types';
+import { normalizeOllamaStatus } from '../utils/normalize-ollama';
 import { translateError } from '../utils/error-messages';
 import { setActivityTrackingEnabled } from '../hooks/use-telemetry';
 
@@ -95,6 +96,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       return;
     }
 
+    const isCloud = settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local';
     try {
       await Promise.all([
         cmd('set_llm_provider', {
@@ -110,6 +112,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
           dailyTokenLimit: settingsForm.dailyTokenLimit,
           dailyCostLimit: settingsForm.dailyCostLimit,
         }),
+        ...(isCloud ? [cmd('set_privacy_config', { cloud_llm_disclosure_accepted: true })] : []),
       ]);
 
       set({ settingsStatus: 'Settings saved!' });
@@ -146,7 +149,8 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
   checkOllamaStatus: async (baseUrl?: string) => {
     try {
-      const status = await cmd('check_ollama_status', { baseUrl: baseUrl ?? null }) as unknown as OllamaStatus;
+      const raw = await cmd('check_ollama_status', { baseUrl: baseUrl ?? null }) as unknown as Record<string, unknown>;
+      const status = normalizeOllamaStatus(raw);
       set({ ollamaStatus: status });
       if (status.running && status.models.length > 0) {
         set({ ollamaModels: status.models });
