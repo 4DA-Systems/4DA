@@ -166,22 +166,18 @@ const V2_GATE: [(f32, f32); 6] = [
 
 const BOOST_CAP_MIN: f32 = -0.15;
 const BOOST_CAP_MAX: f32 = 0.45;
-const KNN_CENTER: f32 = 0.49;
-
 /// Maximum gate ceiling bonus for strong signals (creates mid-band spread).
 /// Strong 2-signal items can reach 0.72 + 0.12 = 0.84 vs weak at 0.72.
 /// Only applies at 2+ signals — 0-1 signal ceilings are intentionally hard.
 const STRENGTH_BONUS_MAX: f32 = 0.12;
-const KNN_SCALE: f32 = 12.0;
 
 // ============================================================================
 // KNN-specific calibration
 // ============================================================================
 
 /// Calibrate a raw KNN distance-derived score using a sigmoid stretch.
-/// Same shape as `calibrate_score` but with KNN-tuned parameters:
-/// center=0.49 (slightly higher than cosine's 0.48) and scale=12 (conservative).
-/// This suppresses KNN noise from high-distance matches that V1 over-counted.
+/// Uses adaptive parameters from embedding_calibration — auto-adapts to
+/// whatever embedding model the user runs.
 fn calibrate_knn(raw: f32) -> f32 {
     if raw <= 0.0 {
         return 0.0;
@@ -189,7 +185,9 @@ fn calibrate_knn(raw: f32) -> f32 {
     if raw >= 1.0 {
         return 1.0;
     }
-    1.0 / (1.0 + ((KNN_CENTER - raw) * KNN_SCALE).exp())
+    let center = crate::embedding_calibration::get_sigmoid_center();
+    let scale = crate::embedding_calibration::get_sigmoid_scale();
+    1.0 / (1.0 + ((center - raw) * scale).exp())
 }
 
 // ============================================================================

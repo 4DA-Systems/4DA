@@ -8,6 +8,9 @@
 //! watching based on their actual dependencies, projects, and stack.
 //! "You have 6 active Rust deps but haven't engaged with Rust signals in 21 days."
 
+use std::sync::Mutex;
+use std::time::Instant;
+
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -18,6 +21,23 @@ use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
 };
+
+// ============================================================================
+// Report-level cache (5-minute TTL)
+// ============================================================================
+
+static BLIND_SPOT_CACHE: Lazy<Mutex<Option<(Instant, BlindSpotReport)>>> =
+    Lazy::new(|| Mutex::new(None));
+
+const CACHE_TTL_SECS: u64 = 300; // 5 minutes
+
+/// Invalidate the blind-spot report cache. Call this after analysis completion
+/// or when the user's dependency set changes.
+pub fn invalidate_blind_spot_cache() {
+    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
+        *guard = None;
+    }
+}
 
 // ============================================================================
 // Types
@@ -121,7 +141,32 @@ fn blind_spot_threshold_days() -> u32 {
 }
 
 /// Generate a comprehensive blind spot report.
+///
+/// Results are cached for 5 minutes to avoid redundant computation on
+/// rapid tab switches. Call `invalidate_blind_spot_cache()` to force a
+/// fresh report (e.g. after an analysis run completes).
 pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
+    // Check cache first
+    if let Ok(guard) = BLIND_SPOT_CACHE.lock() {
+        if let Some((cached_at, ref report)) = *guard {
+            if cached_at.elapsed().as_secs() < CACHE_TTL_SECS {
+                return Ok(report.clone());
+            }
+        }
+    }
+
+    let report = generate_blind_spot_report_uncached()?;
+
+    // Store in cache
+    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
+        *guard = Some((Instant::now(), report.clone()));
+    }
+
+    Ok(report)
+}
+
+/// Inner implementation — always runs fresh queries.
+fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     let conn = crate::open_db_connection()?;
     let threshold_days = blind_spot_threshold_days();
 
@@ -251,8 +296,10 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
 ///   most-used deps come first via sort order, so the cap is rarely reached.
 /// - Short dep names (< 4 chars) are skipped — too generic for reliable LIKE
 ///   matching ("go", "c", "r" would match everything).
-/// - Deps with zero available signals in the window are skipped early,
-///   avoiding the remaining two queries for each.
+/// - **Batched query**: all three metrics (available_count, interacted_count,
+///   days_since_last) are computed in a single SQL query via a temp table +
+///   LEFT JOIN. This replaces the previous N+1 pattern (3 queries × 50 deps
+///   = 150 sequential queries → 2-3 queries total).
 ///
 /// Schema correction (was a bug): `interactions` has `timestamp` NOT
 /// `created_at`. The previous query silently errored via `.unwrap_or(999)`,
@@ -266,88 +313,192 @@ fn find_uncovered_deps(
     const MAX_DEPS_TO_PROCESS: usize = 50;
     const MIN_DEP_NAME_LEN: usize = 4;
 
+    // Filter and cap the dep list before touching the DB.
+    let eligible_deps: Vec<&DepCoverage> = deps
+        .iter()
+        .filter(|d| d.package_name.len() >= MIN_DEP_NAME_LEN)
+        .take(MAX_DEPS_TO_PROCESS)
+        .collect();
+
+    if eligible_deps.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // ── Step 1: Create temp table with dep names ────────────────────────
+    // Using a temp table avoids SQLite's lack of VALUES-as-CTE support and
+    // keeps parameter binding straightforward.
+    if let Err(e) = conn.execute_batch(
+        "CREATE TEMP TABLE IF NOT EXISTS _blind_spot_deps (name TEXT NOT NULL)",
+    ) {
+        warn!(
+            target: "4da::blind_spots",
+            "Failed to create temp table for batched dep query: {e}"
+        );
+        return Ok(Vec::new());
+    }
+
+    // Clear any stale rows from a previous call in the same connection.
+    let _ = conn.execute("DELETE FROM _blind_spot_deps", []);
+
+    // Batch-insert dep names. Using a single prepared statement with
+    // repeated execution is fast for ≤50 rows.
+    {
+        let mut insert_stmt = match conn.prepare("INSERT INTO _blind_spot_deps (name) VALUES (?1)")
+        {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(
+                    target: "4da::blind_spots",
+                    "Failed to prepare dep insert: {e}"
+                );
+                let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+                return Ok(Vec::new());
+            }
+        };
+        for dep in &eligible_deps {
+            if let Err(e) = insert_stmt.execute(params![dep.package_name]) {
+                warn!(
+                    target: "4da::blind_spots",
+                    "Failed to insert dep '{}' into temp table: {e}",
+                    dep.package_name
+                );
+            }
+        }
+    }
+
+    // ── Step 2: Single batched query for all three metrics ──────────────
+    //
+    // For each dep name in _blind_spot_deps:
+    //   - available: COUNT of source_items whose title LIKE '%dep_name%'
+    //     within the threshold window
+    //   - interacted: COUNT(DISTINCT) of those items that have an interaction
+    //   - days_since: days since the most recent interaction on ANY item
+    //     matching the dep name (not limited to the window), defaulting to
+    //     999 if never interacted
+    //
+    // The query uses two subqueries (available + interacted from the window,
+    // days_since from all time) correlated on the dep name, matching the
+    // exact semantics of the original per-dep queries.
+    let window = format!("-{threshold_days} days");
+
+    let batch_sql = "
+        SELECT
+            d.name,
+            COALESCE(w.available, 0) AS available,
+            COALESCE(w.interacted, 0) AS interacted,
+            COALESCE(ds.days_since, 999) AS days_since
+        FROM _blind_spot_deps d
+        LEFT JOIN (
+            SELECT
+                bd.name AS dep_name,
+                COUNT(*) AS available,
+                COUNT(DISTINCT CASE WHEN i.item_id IS NOT NULL THEN si.id END) AS interacted
+            FROM _blind_spot_deps bd
+            JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
+            LEFT JOIN interactions i ON i.item_id = si.id
+            WHERE si.created_at >= datetime('now', ?1)
+            GROUP BY bd.name
+        ) w ON w.dep_name = d.name
+        LEFT JOIN (
+            SELECT
+                bd2.name AS dep_name,
+                CAST(julianday('now') - julianday(MAX(i2.timestamp)) AS INTEGER) AS days_since
+            FROM _blind_spot_deps bd2
+            JOIN source_items si2 ON si2.title LIKE '%' || bd2.name || '%'
+            JOIN interactions i2 ON i2.item_id = si2.id
+            GROUP BY bd2.name
+        ) ds ON ds.dep_name = d.name
+    ";
+
+    let mut stmt = match conn.prepare(batch_sql) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(
+                target: "4da::blind_spots",
+                "Failed to prepare batched dep coverage query: {e}"
+            );
+            let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+            return Ok(Vec::new());
+        }
+    };
+
+    // Build a lookup from dep name → (ecosystem, projects) for result assembly.
+    let dep_lookup: std::collections::HashMap<&str, &DepCoverage> = eligible_deps
+        .iter()
+        .map(|d| (d.package_name.as_str(), *d))
+        .collect();
+
+    let rows = match stmt.query_map(params![window], |row| {
+        Ok((
+            row.get::<_, String>(0)?,  // name
+            row.get::<_, u32>(1)?,     // available
+            row.get::<_, u32>(2)?,     // interacted
+            row.get::<_, u32>(3)?,     // days_since
+        ))
+    }) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(
+                target: "4da::blind_spots",
+                "Failed to execute batched dep coverage query: {e}"
+            );
+            let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+            return Ok(Vec::new());
+        }
+    };
+
     let mut uncovered = Vec::new();
-    let mut processed = 0usize;
 
-    for dep in deps {
-        if processed >= MAX_DEPS_TO_PROCESS {
-            break;
-        }
-        if dep.package_name.len() < MIN_DEP_NAME_LEN {
-            continue;
-        }
-        processed += 1;
+    for row_result in rows {
+        let (name, available, interacted, days_since) = match row_result {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    target: "4da::blind_spots",
+                    "Failed to read batched dep row: {e}"
+                );
+                continue;
+            }
+        };
 
-        let search_term = format!("%{}%", dep.package_name);
+        // Same filtering logic as the original per-dep loop:
 
-        let window = format!("-{threshold_days} days");
-
-        let available: u32 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM source_items
-                 WHERE title LIKE ?1
-                   AND created_at >= datetime('now', ?2)",
-                params![search_term, window],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        // Early exit: no available signals means nothing to miss — not a blind spot.
+        // No available signals → not a blind spot.
         if available == 0 {
             continue;
         }
 
-        let interacted: u32 = conn
-            .query_row(
-                "SELECT COUNT(DISTINCT si.id) FROM source_items si
-                 JOIN interactions i ON i.item_id = si.id
-                 WHERE si.title LIKE ?1
-                   AND si.created_at >= datetime('now', ?2)",
-                params![search_term, window],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        // Days since last interaction. Uses `i.timestamp` (the real column).
-        // NULL handling: if never interacted, we use 999 (never engaged).
-        let days_since: u32 = conn
-            .query_row(
-                "SELECT COALESCE(
-                    CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER),
-                    999
-                 )
-                 FROM source_items si
-                 JOIN interactions i ON i.item_id = si.id
-                 WHERE si.title LIKE ?1",
-                params![search_term],
-                |row| row.get(0),
-            )
-            .unwrap_or(999);
-
-        // Skip if user has recently interacted.
+        // Recently interacted → not a blind spot.
         if days_since < 14 && interacted > 0 {
             continue;
         }
 
         let not_seen = available.saturating_sub(interacted);
 
-        // If the user has interacted recently AND there are no new unseen
-        // signals, there's nothing to surface.
+        // Interacted recently AND no new unseen signals → nothing to surface.
         if not_seen == 0 && days_since < 30 {
             continue;
         }
 
-        let risk_level = classify_dep_risk(days_since, not_seen, dep.projects.len());
+        let dep_info = match dep_lookup.get(name.as_str()) {
+            Some(d) => *d,
+            None => continue,
+        };
+
+        let risk_level = classify_dep_risk(days_since, not_seen, dep_info.projects.len());
 
         uncovered.push(UncoveredDep {
-            name: dep.package_name.clone(),
-            dep_type: dep.ecosystem.clone(),
-            projects_using: dep.projects.clone(),
+            name: dep_info.package_name.clone(),
+            dep_type: dep_info.ecosystem.clone(),
+            projects_using: dep_info.projects.clone(),
             days_since_last_signal: days_since,
             available_signal_count: not_seen,
             risk_level,
         });
     }
+
+    // ── Step 3: Cleanup temp table ──────────────────────────────────────
+    let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
 
     // Sort by risk: critical first, then by days since last signal.
     uncovered.sort_by(|a, b| {

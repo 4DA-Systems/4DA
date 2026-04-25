@@ -220,6 +220,15 @@ pub(crate) async fn reembed_all_items() {
         failed = fail_count,
         "Re-embed complete"
     );
+
+    // Re-calibrate sigmoid parameters for the new embedding model's distribution.
+    if success_count > 0 {
+        if let Ok(db_handle) = crate::state::get_database() {
+            let conn = db_handle.conn.lock();
+            let model = get_embedding_model();
+            crate::embedding_calibration::initialize_calibration(&conn, &model);
+        }
+    }
 }
 
 #[cfg(test)]
