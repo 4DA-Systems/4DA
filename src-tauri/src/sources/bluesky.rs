@@ -180,6 +180,7 @@ impl BlueskySource {
 
                 let mut metadata = serde_json::json!({
                     "author_handle": post.author.handle,
+                    "source_name": "bluesky",
                 });
 
                 if let Some(likes) = post.like_count {

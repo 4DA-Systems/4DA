@@ -346,6 +346,7 @@ fn package_to_source_item(package_name: &str, info: &NpmPackageInfo) -> SourceIt
         "latest_version": latest_version,
         "deprecated": is_deprecated,
         "ecosystem": "npm",
+        "source_name": "npm",
     });
     if let Some(date) = &published_date {
         metadata["published_date"] = serde_json::json!(date);
