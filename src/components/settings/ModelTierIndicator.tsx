@@ -33,7 +33,11 @@ const TIER_NOTES: Record<TierResponse['tier'], string> = {
   basic: 'Small models use pipeline scoring with heuristic explanations. Upgrade to a larger model for LLM-powered analysis text and adversarial deliberation.',
 };
 
-export const ModelTierIndicator = memo(function ModelTierIndicator() {
+interface ModelTierIndicatorProps {
+  refreshKey?: number;
+}
+
+export const ModelTierIndicator = memo(function ModelTierIndicator({ refreshKey }: ModelTierIndicatorProps) {
   const { t } = useTranslation();
   const [data, setData] = useState<TierResponse | null>(null);
   const [probing, setProbing] = useState(false);
@@ -49,7 +53,7 @@ export const ModelTierIndicator = memo(function ModelTierIndicator() {
     }
   }, [t]);
 
-  useEffect(() => { fetchTier(); }, [fetchTier]);
+  useEffect(() => { fetchTier(); }, [fetchTier, refreshKey]);
 
   const handleProbe = useCallback(async () => {
     setProbing(true);

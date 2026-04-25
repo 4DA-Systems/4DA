@@ -211,13 +211,21 @@ impl SettingsManager {
             match keystore::migrate_from_plaintext(&settings) {
                 Ok(report) => {
                     if !report.migrated.is_empty() {
-                        // Clear all secret keys from the JSON file (keep in-memory copy).
-                        // Keys are stored in the platform keychain and hydrated on load.
+                        // Only clear keys that were ACTUALLY migrated to the keychain.
+                        // Keys that failed migration stay in plaintext as a fallback.
                         let mut clean_settings = settings.clone();
-                        clean_settings.llm.api_key = String::new();
-                        clean_settings.llm.openai_api_key = String::new();
-                        clean_settings.x_api_key = SensitiveString::default();
-                        clean_settings.translation.api_key = String::new();
+                        if report.migrated.contains(&"llm_api_key".to_string()) {
+                            clean_settings.llm.api_key = String::new();
+                        }
+                        if report.migrated.contains(&"openai_api_key".to_string()) {
+                            clean_settings.llm.openai_api_key = String::new();
+                        }
+                        if report.migrated.contains(&"x_api_key".to_string()) {
+                            clean_settings.x_api_key = SensitiveString::default();
+                        }
+                        if report.migrated.contains(&"translation_api_key".to_string()) {
+                            clean_settings.translation.api_key = String::new();
+                        }
                         if report.migrated.contains(&"license_key".to_string()) {
                             clean_settings.license.license_key = String::new();
                         }
