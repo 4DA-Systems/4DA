@@ -106,6 +106,7 @@ impl LobstersSource {
 
                 let mut metadata = serde_json::json!({
                     "tags": story.tags,
+                    "source_name": "lobsters",
                 });
 
                 if let Some(score) = story.score {

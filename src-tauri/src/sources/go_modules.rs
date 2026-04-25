@@ -155,6 +155,7 @@ impl Source for GoModulesSource {
                             "module_path": entry.path,
                             "version": entry.version,
                             "ecosystem": "go",
+                            "source_name": "go_modules",
                         });
                         if let Some(ref ts) = entry.timestamp {
                             metadata["timestamp"] = serde_json::json!(ts);

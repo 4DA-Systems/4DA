@@ -574,6 +574,7 @@ fn vuln_to_source_item(vuln: &OsvVulnerability) -> SourceItem {
     let mut metadata = serde_json::json!({
         "severity": severity_str,
         "affected_packages": affected_pkgs,
+        "source_name": "osv",
     });
     if !fixed_versions.is_empty() {
         metadata["fixed_versions"] = serde_json::json!(fixed_versions);

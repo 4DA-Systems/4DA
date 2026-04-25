@@ -205,6 +205,7 @@ impl CratesIoSource {
             "downloads": downloads,
             "yanked": has_yanked,
             "ecosystem": "crates.io",
+            "source_name": "crates_io",
         });
         if !categories.is_empty() {
             metadata["categories"] = serde_json::json!(categories);
@@ -285,6 +286,7 @@ impl CratesIoSource {
                     "downloads": downloads,
                     "ecosystem": "crates.io",
                     "discovery": true,
+                    "source_name": "crates_io",
                 });
                 if let Some(updated) = &krate.updated_at {
                     metadata["updated_at"] = serde_json::json!(updated);

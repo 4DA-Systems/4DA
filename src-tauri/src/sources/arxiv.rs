@@ -239,6 +239,7 @@ impl ArxivSource {
                         "categories": entry.categories,
                         "published": entry.published,
                         "arxiv_url": entry.id,
+                        "source_name": "arxiv",
                     }))
             })
             .collect();

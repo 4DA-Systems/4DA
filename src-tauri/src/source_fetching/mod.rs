@@ -22,16 +22,17 @@ use tracing::{info, warn};
 // ============================================================================
 
 /// Extract feed_origin from a SourceItem's metadata.
-/// RSS items have "feed_url", YouTube have "channel_id", Twitter have "handle".
+/// Checks keys in priority order: feed_url (RSS), channel_id (YouTube),
+/// handle (Twitter), subreddit (Reddit), language (GitHub), source_name (single-endpoint).
 pub(crate) fn extract_feed_origin(item: &crate::sources::SourceItem) -> Option<String> {
     item.metadata.as_ref().and_then(|m| {
         m.get("feed_url")
+            .or_else(|| m.get("channel_id"))
+            .or_else(|| m.get("handle"))
+            .or_else(|| m.get("subreddit"))
+            .or_else(|| m.get("language"))
+            .or_else(|| m.get("source_name"))
             .and_then(|v| v.as_str().map(String::from))
-            .or_else(|| {
-                m.get("channel_id")
-                    .and_then(|v| v.as_str().map(String::from))
-            })
-            .or_else(|| m.get("handle").and_then(|v| v.as_str().map(String::from)))
     })
 }
 
@@ -786,5 +787,237 @@ mod retry_tests {
     #[test]
     fn max_retry_attempts_matches_backoff_array() {
         assert_eq!(MAX_RETRY_ATTEMPTS, RETRY_BACKOFF_SECS.len());
+    }
+}
+
+// ============================================================================
+// Tests for merge logic and feed_origin extraction
+// ============================================================================
+
+#[cfg(test)]
+mod merge_and_origin_tests {
+    use super::*;
+    use crate::sources::SourceItem;
+
+    // ===== extract_feed_origin tests =====
+
+    #[test]
+    fn extract_feed_origin_from_rss_metadata() {
+        let item = SourceItem::new("rss", "1", "Test")
+            .with_metadata(serde_json::json!({"feed_url": "https://blog.rust-lang.org/feed.xml"}));
+        assert_eq!(
+            extract_feed_origin(&item),
+            Some("https://blog.rust-lang.org/feed.xml".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_feed_origin_from_youtube_metadata() {
+        let item = SourceItem::new("youtube", "1", "Test")
+            .with_metadata(serde_json::json!({"channel_id": "UCsBjURrPoezykLs9EqgamOA"}));
+        assert_eq!(
+            extract_feed_origin(&item),
+            Some("UCsBjURrPoezykLs9EqgamOA".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_feed_origin_from_twitter_metadata() {
+        let item = SourceItem::new("twitter", "1", "Test")
+            .with_metadata(serde_json::json!({"handle": "rustlang"}));
+        assert_eq!(extract_feed_origin(&item), Some("rustlang".to_string()));
+    }
+
+    #[test]
+    fn extract_feed_origin_no_metadata() {
+        let item = SourceItem::new("hackernews", "1", "Test");
+        assert_eq!(extract_feed_origin(&item), None);
+    }
+
+    #[test]
+    fn extract_feed_origin_empty_metadata() {
+        let item = SourceItem::new("hackernews", "1", "Test").with_metadata(serde_json::json!({}));
+        assert_eq!(extract_feed_origin(&item), None);
+    }
+
+    #[test]
+    fn extract_feed_origin_priority_order() {
+        // If multiple keys present, feed_url wins over channel_id wins over handle
+        let item = SourceItem::new("rss", "1", "Test").with_metadata(serde_json::json!({
+            "feed_url": "https://example.com/feed",
+            "channel_id": "UC123",
+            "handle": "test"
+        }));
+        assert_eq!(
+            extract_feed_origin(&item),
+            Some("https://example.com/feed".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_feed_origin_non_string_value_skipped() {
+        let item = SourceItem::new("rss", "1", "Test")
+            .with_metadata(serde_json::json!({"feed_url": 12345}));
+        assert_eq!(extract_feed_origin(&item), None);
+    }
+
+    #[test]
+    fn extract_feed_origin_subreddit_key() {
+        let item = SourceItem::new("reddit", "1", "Test")
+            .with_metadata(serde_json::json!({"subreddit": "rust"}));
+        assert_eq!(extract_feed_origin(&item), Some("rust".to_string()));
+    }
+
+    #[test]
+    fn extract_feed_origin_language_key() {
+        let item = SourceItem::new("github", "1", "Test")
+            .with_metadata(serde_json::json!({"language": "Rust", "stars": 100}));
+        assert_eq!(extract_feed_origin(&item), Some("Rust".to_string()));
+    }
+
+    #[test]
+    fn extract_feed_origin_source_name_key() {
+        let item = SourceItem::new("hackernews", "1", "Test")
+            .with_metadata(serde_json::json!({"source_name": "hackernews", "score": 42}));
+        assert_eq!(extract_feed_origin(&item), Some("hackernews".to_string()));
+    }
+
+    // ===== Merge algorithm tests (testing the pure logic) =====
+
+    /// Tests the merge algorithm that all three loader functions use:
+    /// defaults - disabled + custom (deduplicated)
+    fn merge_sources(
+        defaults: Vec<String>,
+        disabled: Vec<String>,
+        custom: Vec<String>,
+    ) -> Vec<String> {
+        let mut result = defaults;
+        result.retain(|f| !disabled.contains(f));
+        for item in custom {
+            if !result.contains(&item) {
+                result.push(item);
+            }
+        }
+        result
+    }
+
+    #[test]
+    fn merge_custom_appends_to_defaults() {
+        let defaults = vec!["a".into(), "b".into()];
+        let custom = vec!["c".into()];
+        let result = merge_sources(defaults, vec![], custom);
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn merge_custom_never_replaces_defaults() {
+        let defaults = vec!["a".into(), "b".into(), "c".into()];
+        let custom = vec!["d".into()];
+        let result = merge_sources(defaults, vec![], custom);
+        assert_eq!(result.len(), 4);
+        assert!(result.contains(&"a".to_string()));
+        assert!(result.contains(&"b".to_string()));
+        assert!(result.contains(&"c".to_string()));
+        assert!(result.contains(&"d".to_string()));
+    }
+
+    #[test]
+    fn merge_disabled_removes_from_defaults() {
+        let defaults = vec!["a".into(), "b".into(), "c".into()];
+        let disabled = vec!["b".into()];
+        let result = merge_sources(defaults, disabled, vec![]);
+        assert_eq!(result, vec!["a", "c"]);
+    }
+
+    #[test]
+    fn merge_duplicate_custom_deduped() {
+        let defaults = vec!["a".into(), "b".into()];
+        let custom = vec!["a".into(), "c".into()]; // "a" is already in defaults
+        let result = merge_sources(defaults, vec![], custom);
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn merge_all_defaults_disabled() {
+        let defaults = vec!["a".into(), "b".into()];
+        let disabled = vec!["a".into(), "b".into()];
+        let custom = vec!["c".into()];
+        let result = merge_sources(defaults, disabled, custom);
+        assert_eq!(result, vec!["c"]);
+    }
+
+    #[test]
+    fn merge_empty_custom_returns_defaults() {
+        let defaults = vec!["a".into(), "b".into()];
+        let result = merge_sources(defaults, vec![], vec![]);
+        assert_eq!(result, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn merge_empty_defaults_returns_custom() {
+        let result = merge_sources(vec![], vec![], vec!["x".into()]);
+        assert_eq!(result, vec!["x"]);
+    }
+
+    #[test]
+    fn merge_preserves_order_defaults_first() {
+        let defaults = vec!["d1".into(), "d2".into()];
+        let custom = vec!["c1".into(), "c2".into()];
+        let result = merge_sources(defaults, vec![], custom);
+        assert_eq!(result, vec!["d1", "d2", "c1", "c2"]);
+    }
+
+    #[test]
+    fn merge_disabled_nonexistent_is_harmless() {
+        let defaults = vec!["a".into()];
+        let disabled = vec!["z".into()]; // "z" not in defaults
+        let result = merge_sources(defaults, disabled, vec![]);
+        assert_eq!(result, vec!["a"]);
+    }
+
+    // ===== Default source list sanity checks =====
+
+    #[test]
+    fn default_rss_feeds_not_empty() {
+        let feeds = load_default_rss_feeds();
+        assert!(
+            feeds.len() >= 10,
+            "Should have at least 10 default RSS feeds"
+        );
+        for feed in &feeds {
+            assert!(
+                feed.starts_with("https://"),
+                "Default RSS feed should be HTTPS: {}",
+                feed
+            );
+        }
+    }
+
+    #[test]
+    fn default_youtube_channels_not_empty() {
+        let channels = load_default_youtube_channels();
+        assert!(!channels.is_empty(), "Should have default YouTube channels");
+    }
+
+    #[test]
+    fn default_twitter_handles_not_empty() {
+        let handles = load_default_twitter_handles();
+        assert!(!handles.is_empty(), "Should have default Twitter handles");
+        for handle in &handles {
+            assert!(
+                !handle.starts_with('@'),
+                "Default handle should not start with @: {}",
+                handle
+            );
+        }
+    }
+
+    #[test]
+    fn default_rss_feeds_no_duplicates() {
+        let feeds = load_default_rss_feeds();
+        let mut seen = std::collections::HashSet::new();
+        for feed in &feeds {
+            assert!(seen.insert(feed), "Duplicate default RSS feed: {}", feed);
+        }
     }
 }
