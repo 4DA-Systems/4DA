@@ -925,7 +925,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         }
                     });
                 }
-
             }
         });
     }

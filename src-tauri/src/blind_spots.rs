@@ -327,9 +327,9 @@ fn find_uncovered_deps(
     // ── Step 1: Create temp table with dep names ────────────────────────
     // Using a temp table avoids SQLite's lack of VALUES-as-CTE support and
     // keeps parameter binding straightforward.
-    if let Err(e) = conn.execute_batch(
-        "CREATE TEMP TABLE IF NOT EXISTS _blind_spot_deps (name TEXT NOT NULL)",
-    ) {
+    if let Err(e) =
+        conn.execute_batch("CREATE TEMP TABLE IF NOT EXISTS _blind_spot_deps (name TEXT NOT NULL)")
+    {
         warn!(
             target: "4da::blind_spots",
             "Failed to create temp table for batched dep query: {e}"
@@ -430,10 +430,10 @@ fn find_uncovered_deps(
 
     let rows = match stmt.query_map(params![window], |row| {
         Ok((
-            row.get::<_, String>(0)?,  // name
-            row.get::<_, u32>(1)?,     // available
-            row.get::<_, u32>(2)?,     // interacted
-            row.get::<_, u32>(3)?,     // days_since
+            row.get::<_, String>(0)?, // name
+            row.get::<_, u32>(1)?,    // available
+            row.get::<_, u32>(2)?,    // interacted
+            row.get::<_, u32>(3)?,    // days_since
         ))
     }) {
         Ok(r) => r,

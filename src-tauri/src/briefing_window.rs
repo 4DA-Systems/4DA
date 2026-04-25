@@ -332,25 +332,30 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 .collect()
         } else if let Ok(db) = crate::get_database() {
             let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-            db.get_relevant_items_since(period_start, crate::monitoring_briefing::BRIEFING_SCORE_FLOOR.into(), 25, &user_lang)
-                .ok()
-                .map(|db_items| {
-                    db_items
-                        .into_iter()
-                        .map(|i| crate::monitoring_briefing::BriefingItem {
-                            title: i.title,
-                            source_type: i.source_type,
-                            score: i.relevance_score.unwrap_or(0.0) as f32,
-                            signal_type: None,
-                            url: i.url,
-                            item_id: Some(i.id),
-                            signal_priority: None,
-                            description: None,
-                            matched_deps: vec![],
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
+            db.get_relevant_items_since(
+                period_start,
+                crate::monitoring_briefing::BRIEFING_SCORE_FLOOR.into(),
+                25,
+                &user_lang,
+            )
+            .ok()
+            .map(|db_items| {
+                db_items
+                    .into_iter()
+                    .map(|i| crate::monitoring_briefing::BriefingItem {
+                        title: i.title,
+                        source_type: i.source_type,
+                        score: i.relevance_score.unwrap_or(0.0) as f32,
+                        signal_type: None,
+                        url: i.url,
+                        item_id: Some(i.id),
+                        signal_priority: None,
+                        description: None,
+                        matched_deps: vec![],
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
         } else {
             vec![]
         }
@@ -361,8 +366,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
     }
 
     // Run full enrichment pipeline (skip novelty so manual trigger always shows content)
-    let briefing =
-        crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
+    let briefing = crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
 
     let total = briefing.items.len();
     let gaps = briefing.knowledge_gaps.len();

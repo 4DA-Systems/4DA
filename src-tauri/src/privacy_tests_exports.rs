@@ -404,7 +404,8 @@ mod tests {
             "OpenAI embedding key must survive round-trip"
         );
         assert_eq!(
-            restored.x_api_key.as_str(), FAKE_X_BEARER,
+            restored.x_api_key.as_str(),
+            FAKE_X_BEARER,
             "X Bearer Token must survive round-trip"
         );
         assert_eq!(

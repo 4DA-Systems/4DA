@@ -836,7 +836,9 @@ pub async fn factory_reset() -> Result<()> {
     // Get list of all user tables (exclude sqlite internals)
     let tables: Vec<String> = {
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+            )
             .context("Failed to list tables")?;
         let rows = stmt
             .query_map([], |row| row.get::<_, String>(0))

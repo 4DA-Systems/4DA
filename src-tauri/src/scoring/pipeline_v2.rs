@@ -339,9 +339,7 @@ fn strip_security_metadata(content: &str) -> &str {
 /// advisory content. Returns the list of (package_name, ecosystem) pairs.
 /// Empty result when the content doesn't have the expected format.
 fn extract_advisory_ecosystems(content: &str) -> Vec<(String, String)> {
-    let affected_line = content
-        .lines()
-        .find(|line| line.starts_with("Affected: "));
+    let affected_line = content.lines().find(|line| line.starts_with("Affected: "));
     let line = match affected_line {
         Some(l) => &l["Affected: ".len()..],
         None => return Vec::new(),
@@ -1955,7 +1953,8 @@ mod tests {
 
     #[test]
     fn test_extract_advisory_ecosystems_maven() {
-        let content = "Crypto vuln.\n\nSeverity: HIGH\nAffected: org.bouncycastle:bcpkix-jdk18on (maven)";
+        let content =
+            "Crypto vuln.\n\nSeverity: HIGH\nAffected: org.bouncycastle:bcpkix-jdk18on (maven)";
         let result = extract_advisory_ecosystems(content);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].0, "org.bouncycastle:bcpkix-jdk18on");
@@ -1978,7 +1977,8 @@ mod tests {
     #[test]
     fn test_ecosystem_mismatch_rejects_maven_vs_rust() {
         // Bouncy Castle (maven) should NOT match a Rust "crypto" dep
-        let content = "Crypto vuln.\n\nSeverity: HIGH\nAffected: org.bouncycastle:bcpkix-jdk18on (maven)";
+        let content =
+            "Crypto vuln.\n\nSeverity: HIGH\nAffected: org.bouncycastle:bcpkix-jdk18on (maven)";
         let ecosystems = extract_advisory_ecosystems(content);
         assert!(!ecosystems.is_empty());
 
@@ -2014,6 +2014,9 @@ mod tests {
         let matches = ecosystems
             .iter()
             .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco_normalized);
-        assert!(!matches, "Python/pip CVE should not match a Rust dependency");
+        assert!(
+            !matches,
+            "Python/pip CVE should not match a Rust dependency"
+        );
     }
 }

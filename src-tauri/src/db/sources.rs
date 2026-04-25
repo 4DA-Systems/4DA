@@ -1589,9 +1589,7 @@ mod tests {
         let bad = db.get_feed_health("https://bad.com/feed", "rss").unwrap();
         assert_eq!(bad.consecutive_failures, 1);
 
-        let good = db
-            .get_feed_health("https://good.com/feed", "rss")
-            .unwrap();
+        let good = db.get_feed_health("https://good.com/feed", "rss").unwrap();
         assert_eq!(good.consecutive_failures, 0);
     }
 

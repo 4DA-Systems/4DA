@@ -457,7 +457,9 @@ impl Source for TwitterSource {
                         } else {
                             warn!(handle = %handle, error = %e, "Failed to fetch tweets");
                         }
-                        self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                        self.feed_errors
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
                             .push((handle.clone(), e.to_string()));
                     }
                 },
@@ -468,7 +470,9 @@ impl Source for TwitterSource {
                     } else {
                         warn!(handle = %handle, error = %e, "Failed to look up user");
                     }
-                    self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                    self.feed_errors
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
                         .push((handle.clone(), e.to_string()));
                 }
             }

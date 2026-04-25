@@ -145,7 +145,8 @@ mod tests {
         assert!(
             (cal - 0.5).abs() < 0.05,
             "At sigmoid center ({}), calibrated should be ~0.5, got {}",
-            center, cal
+            center,
+            cal
         );
     }
 

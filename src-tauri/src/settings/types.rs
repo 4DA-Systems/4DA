@@ -862,7 +862,10 @@ impl std::fmt::Debug for Settings {
             )
             .field(
                 "disabled_default_youtube_channels",
-                &format!("[{} disabled]", self.disabled_default_youtube_channels.len()),
+                &format!(
+                    "[{} disabled]",
+                    self.disabled_default_youtube_channels.len()
+                ),
             )
             .field(
                 "disabled_default_twitter_handles",
