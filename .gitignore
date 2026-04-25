@@ -252,6 +252,13 @@ test_stderr.txt
 test_stdout.txt
 tmp_test.txt
 
+# Dev scratch scripts
+trigger*.mjs
+
+# Runtime data (JSON)
+data/*.json
+!data/settings.example.json
+
 # Database backups
 data/*.backup.*
 
