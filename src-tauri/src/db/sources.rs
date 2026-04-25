@@ -1619,4 +1619,52 @@ mod tests {
         db.reset_feed_health("https://bad.com/feed", "rss").unwrap();
         assert!(!db.is_feed_circuit_open("https://bad.com/feed", "rss"));
     }
+
+    #[test]
+    fn test_circuit_auto_resets_after_30_minutes() {
+        let db = test_db();
+        for _ in 0..5 {
+            db.record_feed_failure("https://stale.com/feed", "rss", "timeout")
+                .unwrap();
+        }
+        assert!(db.is_feed_circuit_open("https://stale.com/feed", "rss"));
+
+        // Backdate circuit_opened_at to 31 minutes ago
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE feed_health SET circuit_opened_at = datetime('now', '-31 minutes') WHERE feed_origin = ?1",
+            rusqlite::params!["https://stale.com/feed"],
+        )
+        .unwrap();
+        drop(conn);
+
+        // Circuit should auto-reset (half-open)
+        assert!(!db.is_feed_circuit_open("https://stale.com/feed", "rss"));
+
+        // Verify health record was updated
+        let health = db.get_feed_health("https://stale.com/feed", "rss").unwrap();
+        assert!(!health.circuit_open);
+        assert_eq!(health.consecutive_failures, 0);
+    }
+
+    #[test]
+    fn test_circuit_stays_open_before_30_minutes() {
+        let db = test_db();
+        for _ in 0..5 {
+            db.record_feed_failure("https://recent.com/feed", "rss", "timeout")
+                .unwrap();
+        }
+        assert!(db.is_feed_circuit_open("https://recent.com/feed", "rss"));
+
+        // Backdate to only 29 minutes ago — should still be open
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE feed_health SET circuit_opened_at = datetime('now', '-29 minutes') WHERE feed_origin = ?1",
+            rusqlite::params!["https://recent.com/feed"],
+        )
+        .unwrap();
+        drop(conn);
+
+        assert!(db.is_feed_circuit_open("https://recent.com/feed", "rss"));
+    }
 }

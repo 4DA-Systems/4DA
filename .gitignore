@@ -58,6 +58,7 @@ src-tauri/fourda-macros/Cargo.lock
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/*.db.bak*
 
 # Runtime usage stats (changes every session)
 data/usage.json
