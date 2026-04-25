@@ -88,6 +88,15 @@ pub async fn get_twitter_handles() -> Result<serde_json::Value> {
         "count": handles.len()
     }))
 }
+/// Validate a Twitter handle: 1-15 chars, alphanumeric or underscore only.
+fn is_valid_twitter_handle(handle: &str) -> bool {
+    !handle.is_empty()
+        && handle.len() <= 15
+        && handle
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 /// Set all Twitter handles (replacing existing)
 #[tauri::command]
 pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Value> {
@@ -106,6 +115,17 @@ pub async fn set_twitter_handles(handles: Vec<String>) -> Result<serde_json::Val
         .iter()
         .map(|h| h.trim_start_matches('@').to_string())
         .collect();
+
+    // Validate handle format: 1-15 chars, alphanumeric or underscore
+    for handle in &clean_handles {
+        if !is_valid_twitter_handle(handle) {
+            return Err(format!(
+                "Invalid Twitter handle '{}': must be 1-15 alphanumeric/underscore characters",
+                handle
+            )
+            .into());
+        }
+    }
 
     let mut settings_guard = get_settings_manager().lock();
     settings_guard.set_twitter_handles(clean_handles.clone())?;
@@ -726,5 +746,24 @@ mod tests {
         html.push_str("</head></html>");
         let feeds = discover_feed_links(&html, "https://example.com");
         assert!(feeds.len() <= 5);
+    }
+
+    #[test]
+    fn test_twitter_handle_format_validation() {
+        // Valid handles
+        assert!(is_valid_twitter_handle("rustlang"));
+        assert!(is_valid_twitter_handle("_test_"));
+        assert!(is_valid_twitter_handle("a"));
+        assert!(is_valid_twitter_handle("A1_b2_C3"));
+
+        // Invalid handles
+        assert!(!is_valid_twitter_handle(""));
+        assert!(!is_valid_twitter_handle(
+            "this_handle_is_too_long_for_twitter"
+        ));
+        assert!(!is_valid_twitter_handle("has spaces"));
+        assert!(!is_valid_twitter_handle("has.dots"));
+        assert!(!is_valid_twitter_handle("has-dashes"));
+        assert!(!is_valid_twitter_handle("has@symbol"));
     }
 }

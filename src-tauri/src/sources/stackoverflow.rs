@@ -135,6 +135,7 @@ impl StackOverflowSource {
                     "score": q.score,
                     "answer_count": answer_count,
                     "tags": question_tags,
+                    "source_name": "stackoverflow",
                 });
 
                 if let Some(is_answered) = q.is_answered {

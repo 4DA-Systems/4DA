@@ -101,6 +101,7 @@ impl DevtoSource {
 
                 let mut metadata = serde_json::json!({
                     "tags": article.tag_list,
+                    "source_name": "devto",
                 });
 
                 if let Some(reactions) = article.positive_reactions_count {

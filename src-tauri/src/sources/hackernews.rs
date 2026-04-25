@@ -90,17 +90,20 @@ impl HackerNewsSource {
                                 let title = story.title.unwrap_or_else(|| "[No title]".to_string());
                                 let content = story.text.unwrap_or_default();
 
-                                let mut item =
-                                    SourceItem::new("hackernews", &id.to_string(), &title)
-                                        .with_url(story.url.clone())
-                                        .with_content(content);
-
-                                if let (Some(score), Some(by)) = (story.score, story.by) {
-                                    item = item.with_metadata(serde_json::json!({
-                                        "score": score,
-                                        "author": by,
-                                    }));
+                                let mut metadata = serde_json::json!({
+                                    "source_name": "hackernews",
+                                });
+                                if let Some(score) = story.score {
+                                    metadata["score"] = serde_json::json!(score);
                                 }
+                                if let Some(by) = story.by {
+                                    metadata["author"] = serde_json::json!(by);
+                                }
+
+                                let item = SourceItem::new("hackernews", &id.to_string(), &title)
+                                    .with_url(story.url.clone())
+                                    .with_content(content)
+                                    .with_metadata(metadata);
 
                                 Some(item)
                             }
