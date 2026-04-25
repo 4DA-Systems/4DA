@@ -27,7 +27,10 @@ pub(crate) fn extract_feed_origin(item: &crate::sources::SourceItem) -> Option<S
     item.metadata.as_ref().and_then(|m| {
         m.get("feed_url")
             .and_then(|v| v.as_str().map(String::from))
-            .or_else(|| m.get("channel_id").and_then(|v| v.as_str().map(String::from)))
+            .or_else(|| {
+                m.get("channel_id")
+                    .and_then(|v| v.as_str().map(String::from))
+            })
             .or_else(|| m.get("handle").and_then(|v| v.as_str().map(String::from)))
     })
 }

@@ -584,10 +584,7 @@ const SYNTHESIS_MIN_PARAMS_B: f64 = 7.0;
 /// Returns the parameter count in billions (e.g., 3.2 for llama3.2,
 /// 8.0 for llama3.1:8b). Returns `None` if Ollama is unreachable,
 /// the model isn't found, or the response doesn't contain param info.
-pub(crate) async fn get_model_params_billions(
-    model: &str,
-    base_url: &str,
-) -> Option<f64> {
+pub(crate) async fn get_model_params_billions(model: &str, base_url: &str) -> Option<f64> {
     let url = format!("{}/api/show", base_url.trim_end_matches('/'));
 
     let client = reqwest::Client::builder()
@@ -598,12 +595,7 @@ pub(crate) async fn get_model_params_billions(
 
     let body = serde_json::json!({ "name": model });
 
-    let response = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .ok()?;
+    let response = client.post(&url).json(&body).send().await.ok()?;
 
     if !response.status().is_success() {
         return None;
