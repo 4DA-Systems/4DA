@@ -143,6 +143,27 @@ pub fn has_secret(key_name: &str) -> bool {
     }
 }
 
+/// Verify that a secret can survive a round-trip through the keychain.
+///
+/// Writes the value, then reads it back via a FRESH entry handle and
+/// compares. Returns `true` only if the read-back matches exactly.
+/// This catches platforms where `set_password` reports success but the
+/// credential isn't actually persisted (observed on some Windows setups
+/// where Credential Manager silently drops writes).
+pub fn verify_round_trip(key_name: &str, expected: &str) -> bool {
+    if expected.is_empty() {
+        return false;
+    }
+    // Use a fresh Entry to avoid any in-memory cache on the same handle.
+    match keyring::Entry::new(SERVICE_NAME, key_name) {
+        Ok(entry) => match entry.get_password() {
+            Ok(ref val) if val == expected => true,
+            _ => false,
+        },
+        Err(_) => false,
+    }
+}
+
 /// Migrate API keys from plaintext settings to the platform keychain.
 ///
 /// For each known key field in `Settings`:

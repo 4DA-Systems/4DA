@@ -116,6 +116,9 @@ semver = "1"
 # System startup (launch at login)
 tauri-plugin-autostart = "2"
 
+# AI agent introspection & control (MCP server, zero-cost in release builds)
+victauri-plugin = { path = "../../runyourempire/victauri/crates/victauri-plugin" }
+
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
 ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }

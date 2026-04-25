@@ -24,7 +24,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
 
     let db = get_database()?;
     let mut total_cached = 0;
-    let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String)> = Vec::new();
+    let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String, Option<String>)> = Vec::new();
 
     // Build ALL sources from the canonical factory (single source of truth)
     let all_sources = crate::sources::build_all_sources();
@@ -61,12 +61,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                         .flatten()
                         .is_none()
                     {
+                        let feed_origin = super::extract_feed_origin(&item);
                         new_items_to_embed.push((
                             st.to_string(),
                             item.source_id,
                             item.url,
                             item.title,
                             item.content,
+                            feed_origin,
                         ));
                     } else {
                         db.touch_source_item(st, &item.source_id).ok();
@@ -94,13 +96,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
         // Decode HTML entities at ingestion time
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
-            .map(|(st, sid, url, title, content)| {
+            .map(|(st, sid, url, title, content, feed_origin)| {
                 (
                     st,
                     sid,
                     url,
                     crate::decode_html_entities(&title),
                     crate::decode_html_entities(&content),
+                    feed_origin,
                 )
             })
             .collect();
@@ -108,10 +111,10 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
         // Detect language from title text (before embedding)
         let new_items_to_embed: Vec<_> = new_items_to_embed
             .into_iter()
-            .map(|(st, sid, url, title, content)| {
+            .map(|(st, sid, url, title, content, feed_origin)| {
                 let detected_lang =
                     crate::language_detect::detect_language_with_content(&title, &content);
-                (st, sid, url, title, content, detected_lang)
+                (st, sid, url, title, content, detected_lang, feed_origin)
             })
             .collect();
 
@@ -121,8 +124,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
             let translation_requests: Vec<crate::content_translation::TranslationRequest> =
                 new_items_to_embed
                     .iter()
-                    .filter(|(_, _, _, _, _, detected)| detected != &user_lang)
-                    .map(|(_, sid, _, title, _, _)| {
+                    .filter(|(_, _, _, _, _, detected, _)| detected != &user_lang)
+                    .map(|(_, sid, _, title, _, _, _)| {
                         crate::content_translation::TranslationRequest {
                             id: sid.clone(),
                             text: title.clone(),
@@ -156,7 +159,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
 
         let texts: Vec<String> = new_items_to_embed
             .iter()
-            .map(|(_, _, _, title, content, _)| build_embedding_text(title, content))
+            .map(|(_, _, _, title, content, _, _)| build_embedding_text(title, content))
             .collect();
 
         match embed_texts(&texts).await {
@@ -173,13 +176,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     String,
                     Option<String>,
                     Option<String>,
+                    Option<String>,
                 )> = new_items_to_embed
                     .into_iter()
                     .zip(embeddings.into_iter())
                     .filter(|(_, embedding)| !embedding.iter().all(|&v| v == 0.0))
                     .map(
                         |(
-                            (source_type, source_id, url, title, content, detected_lang),
+                            (source_type, source_id, url, title, content, detected_lang, feed_origin),
                             embedding,
                         )| {
                             let content_type = crate::entity_extraction::classify_for_storage(
@@ -199,6 +203,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                                 detected_lang,
                                 content_type,
                                 cve_ids,
+                                feed_origin,
                             )
                         },
                     )
@@ -252,6 +257,7 @@ pub(crate) fn process_source_items(
                     title: cached.title,
                     url: cached.url,
                     content: cached.content,
+                    feed_origin: cached.feed_origin,
                 },
                 cached.embedding,
             ));
@@ -263,6 +269,7 @@ pub(crate) fn process_source_items(
                 title: item.title.clone(),
                 url: item.url.clone(),
                 content: item.content.clone(),
+                feed_origin: super::extract_feed_origin(&item),
             };
 
             let embed_text = build_embedding_text(&item.title, &item.content);
