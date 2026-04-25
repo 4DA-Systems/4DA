@@ -1115,9 +1115,6 @@ BANNED:
         "Morning brief synthesis complete"
     );
 
-    // DEV DIAGNOSTIC: print raw synthesis to stderr for live testing
-    eprintln!("[SYNTH-RAW] {} tokens, {}ms:\n{}", response.input_tokens + response.output_tokens, start.elapsed().as_millis(), response.content);
-
     // --- Post-synthesis cleanup: strip citations and enforce word limit ------
     let mut synthesis = response.content.clone();
 
@@ -1240,18 +1237,11 @@ BANNED:
 
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
-    // DEV DIAGNOSTIC: print groundedness results to stderr
-    eprintln!("[SYNTH-GROUND] confidence={:.2} total={} grounded={} ungrounded={:?}",
-        report.confidence, report.total_terms, report.grounded_terms,
-        &report.ungrounded_terms);
-    eprintln!("[SYNTH-CLEAN] {}", response.content);
-
     // The threshold is conservative — require 65% of salient terms to
     // be grounded. Anything below suggests the LLM invented content.
     const GROUNDEDNESS_THRESHOLD: f32 = 0.35;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
-        eprintln!("[SYNTH-REJECTED] Failed groundedness: {:.2} < {:.2} (or <2 terms)", report.confidence, GROUNDEDNESS_THRESHOLD);
         tracing::warn!(
             target: "4da::briefing",
             confidence = report.confidence,
@@ -1268,7 +1258,6 @@ BANNED:
         ));
     }
 
-    eprintln!("[SYNTH-ACCEPTED] Groundedness passed: {:.2}", report.confidence);
     tracing::info!(
         target: "4da::briefing",
         confidence = report.confidence,

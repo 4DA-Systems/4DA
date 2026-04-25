@@ -10,8 +10,10 @@ import type { ModelRegistryData } from '../../store/types';
 
 export type { SettingsForm, AIProviderSectionProps };
 
-// Fallback provider model options (used while registry loads)
-const fallbackModels: Record<string, string[]> = {
+// Curated model lists — these are the models users should see.
+// Registry data (LiteLLM) is only used for pricing, not for dropdown population,
+// because it includes hundreds of old/deprecated model names.
+const curatedModels: Record<string, string[]> = {
   anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
   openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
   ollama: ['llama3.2', 'gemma3', 'qwen2.5', 'deepseek-r1', 'mistral', 'phi4'],
@@ -28,24 +30,12 @@ const popularEndpoints: { name: string; url: string }[] = [
   { name: 'llama.cpp', url: 'http://localhost:8080/v1' },
 ];
 
-/** Get models for a provider from registry, falling back to hardcoded defaults. */
-function getProviderModels(provider: string, registry: ModelRegistryData | null | undefined): string[] {
-  if (registry && registry.providers[provider]?.length) {
-    return registry.providers[provider].map(m => m.id);
-  }
-  return fallbackModels[provider] ?? [];
+/** Get models for a provider. Uses curated list for known providers,
+ *  registry only for openai-compatible (unknown endpoints). */
+function getProviderModels(provider: string, _registry: ModelRegistryData | null | undefined): string[] {
+  return curatedModels[provider] ?? [];
 }
 
-/** Format registry freshness as human-readable string. */
-function formatFreshness(fetchedAt: number): string {
-  if (fetchedAt === 0) return 'bundled defaults';
-  const now = Math.floor(Date.now() / 1000);
-  const diffSecs = now - fetchedAt;
-  if (diffSecs < 60) return 'just now';
-  if (diffSecs < 3600) return `${Math.floor(diffSecs / 60)}m ago`;
-  if (diffSecs < 86400) return `${Math.floor(diffSecs / 3600)}h ago`;
-  return `${Math.floor(diffSecs / 86400)}d ago`;
-}
 
 export function AIProviderSection({
   settings,
@@ -55,7 +45,7 @@ export function AIProviderSection({
   ollamaModels,
   checkOllamaStatus,
   modelRegistry,
-  onRefreshRegistry,
+  onRefreshRegistry: _onRefreshRegistry,
 }: AIProviderSectionProps) {
   const { t } = useTranslation();
 
@@ -281,6 +271,9 @@ export function AIProviderSection({
               {validation.status === 'invalid' && (
                 <p className="mt-1.5 text-xs text-amber-400">{validation.message}</p>
               )}
+              <p className="mt-2 text-[10px] text-text-muted leading-relaxed">
+                Your API key connects directly to the provider. 4DA never stores or proxies your key remotely.
+              </p>
             </div>
           )}
 
@@ -296,9 +289,10 @@ export function AIProviderSection({
                 {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
                   ? ollamaModels
                   : getProviderModels(settingsForm.provider, modelRegistry)
-                ).map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
+                ).map((m) => {
+                  const name = typeof m === 'string' ? m : (m as Record<string, string>)?.name ?? '';
+                  return name ? <option key={name} value={name}>{name}</option> : null;
+                })}
               </select>
               {settingsForm.provider === 'ollama' && (
                 <div className="flex items-center gap-2 mt-2">
@@ -313,22 +307,6 @@ export function AIProviderSection({
                   >
                     {t('settings.ai.recheck')}
                   </button>
-                </div>
-              )}
-              {/* Registry freshness + refresh */}
-              {settingsForm.provider !== 'ollama' && modelRegistry && (
-                <div className="flex items-center gap-2 mt-2">
-                  <p className="text-[10px] text-text-muted">
-                    {t('settings.ai.registryLastUpdated', { time: formatFreshness(modelRegistry.fetched_at) })}
-                  </p>
-                  {onRefreshRegistry && (
-                    <button
-                      onClick={onRefreshRegistry}
-                      className="text-[10px] px-2 py-0.5 text-text-muted hover:text-orange-400 bg-bg-tertiary rounded transition-colors"
-                    >
-                      {t('settings.ai.refreshModels')}
-                    </button>
-                  )}
                 </div>
               )}
             </div>
