@@ -187,6 +187,19 @@ pub(crate) async fn apply_llm_reranking(
         settings.get().llm.clone()
     };
 
+    // Gate: skip reranking for Basic-tier models (small local models that
+    // can't reliably produce structured JSON judgments). They still get
+    // pipeline scoring and heuristic explanations from scoring/explanation.rs.
+    let tier = crate::llm_capability::get_model_tier(&llm_settings);
+    if !tier.supports_reranking() {
+        debug!(
+            target: "4da::rerank",
+            tier = %tier,
+            "LLM model tier does not support reranking, skipping"
+        );
+        return None;
+    }
+
     // Construct the advisory core. It carries its own ModelIdentity and
     // prompt_version so every AdvisorSignal and provenance row this rerank
     // pass writes share a single source of truth. Intelligence Mesh Phase 4

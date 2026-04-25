@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 use crate::context_engine;
+use crate::embedding_calibration;
 use crate::scoring_config;
 use fourda_macros::score_component;
 
 /// Calibrate a raw similarity score (typically compressed in [0.3-0.6]) into
-/// a spread distribution using a sigmoid stretch. Centers at 0.48 (empirical
-/// midpoint for text-embedding-3-small L2 distances) and scales to use the
-/// full [0.05-0.95] range. This fixes the "everything scores 45-50%" problem.
+/// a spread distribution using a sigmoid stretch. Uses adaptive parameters
+/// from `embedding_calibration` (auto-computed from observed distribution,
+/// known-model lookup, or DSL defaults). This fixes the "everything scores
+/// 45-50%" problem regardless of which embedding model the user runs.
 #[score_component(output_range = "0.0..=1.0")]
 pub(crate) fn calibrate_score(raw: f32) -> f32 {
     if raw <= 0.0 {
@@ -15,10 +17,9 @@ pub(crate) fn calibrate_score(raw: f32) -> f32 {
     if raw >= 1.0 {
         return 1.0;
     }
-    // Sigmoid stretch: 1 / (1 + exp((center - raw) * scale))
-    // center=0.48, scale=12 maps the typical [0.40-0.56] band to [0.15-0.85]
-    // (scale=20 was too aggressive, compressing near edges)
-    1.0 / (1.0 + ((scoring_config::SIGMOID_CENTER - raw) * scoring_config::SIGMOID_SCALE).exp())
+    let center = embedding_calibration::get_sigmoid_center();
+    let scale = embedding_calibration::get_sigmoid_scale();
+    1.0 / (1.0 + ((center - raw) * scale).exp())
 }
 
 /// Compute interest score by comparing item embedding against interest embeddings
@@ -138,12 +139,13 @@ mod tests {
 
     #[test]
     fn test_calibrate_score_midpoint() {
-        // At the sigmoid center (0.48), output should be close to 0.5
-        let cal = calibrate_score(0.48);
+        // At the sigmoid center, output should be close to 0.5
+        let center = crate::embedding_calibration::get_sigmoid_center();
+        let cal = calibrate_score(center);
         assert!(
             (cal - 0.5).abs() < 0.05,
-            "At sigmoid center, calibrated should be ~0.5, got {}",
-            cal
+            "At sigmoid center ({}), calibrated should be ~0.5, got {}",
+            center, cal
         );
     }
 

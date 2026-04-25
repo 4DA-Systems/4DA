@@ -177,6 +177,24 @@ pub(crate) async fn filter_batch(
     items: Vec<EvidenceItem>,
     user_context: &str,
 ) -> Vec<EvidenceItem> {
+    // Gate: skip adversarial deliberation for Basic-tier models. Small models
+    // produce unreliable verdicts that would incorrectly filter good items.
+    let llm_settings = {
+        let mgr = crate::get_settings_manager();
+        let guard = mgr.lock();
+        guard.get().llm.clone()
+    };
+    let tier = crate::llm_capability::get_model_tier(&llm_settings);
+    if !tier.supports_adversarial() {
+        debug!(
+            target: "4da::adversarial",
+            tier = %tier,
+            count = items.len(),
+            "LLM model tier does not support adversarial deliberation, passing items through"
+        );
+        return items;
+    }
+
     let total = items.len();
     let mut passed = Vec::with_capacity(total);
     let mut filtered_count: usize = 0;

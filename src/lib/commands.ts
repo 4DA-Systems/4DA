@@ -510,6 +510,10 @@ interface CommandMap {
   // -- Embedding Model --
   get_embedding_model_info: { params: Record<string, never>; result: { model: string; reembed_in_progress: boolean; multilingual_model: string } };
 
+  // -- LLM Capability Tier --
+  get_llm_capability_tier: { params: Record<string, never>; result: { tier: string; supports_reranking: boolean; supports_adversarial: boolean; supports_llm_explanations: boolean; supports_briefing_synthesis: boolean; provider: string; model: string } };
+  probe_llm_capability: { params: Record<string, never>; result: { tier: string; supports_reranking: boolean; supports_adversarial: boolean; supports_llm_explanations: boolean; supports_briefing_synthesis: boolean; probed: boolean } };
+
   // -- STREETS Localization --
   get_regional_data: { params: Record<string, never>; result: RegionalData };
   calculate_electricity_cost: { params: { watts: number; hoursPerDay: number }; result: ElectricityCostResult };
