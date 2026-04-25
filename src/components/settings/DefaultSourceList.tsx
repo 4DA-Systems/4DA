@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState } from 'react';
+import type { FeedHealth } from '../../lib/commands';
+import { FeedHealthDot } from './FeedHealthDot';
 
 interface DefaultSourceListProps {
   defaults: string[];
   disabled: string[];
   onToggle: (item: string, enabled: boolean) => void;
   label: string;
+  healthMap?: Record<string, FeedHealth>;
+  sourceType?: string;
+  onResetHealth?: (feedOrigin: string, sourceType: string) => void;
 }
 
 export function DefaultSourceList({
@@ -13,6 +18,9 @@ export function DefaultSourceList({
   disabled,
   onToggle,
   label,
+  healthMap,
+  sourceType,
+  onResetHealth,
 }: DefaultSourceListProps) {
   const [expanded, setExpanded] = useState(false);
   const activeCount = defaults.length - disabled.length;
@@ -48,6 +56,12 @@ export function DefaultSourceList({
               >
                 <span className="font-mono text-[11px] text-text-muted truncate flex-1 mr-2">
                   {item}
+                  {healthMap && sourceType && (
+                    <FeedHealthDot
+                      health={healthMap[item]}
+                      onReset={onResetHealth ? () => onResetHealth(item, sourceType) : undefined}
+                    />
+                  )}
                 </span>
                 <button
                   onClick={() => onToggle(item, !isEnabled)}

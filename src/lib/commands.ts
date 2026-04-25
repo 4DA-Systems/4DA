@@ -183,6 +183,19 @@ export interface YouTubeChannelValidation {
   message?: string;
 }
 
+/** Per-feed health status from the circuit breaker. */
+export interface FeedHealth {
+  feed_origin: string;
+  source_type: string;
+  consecutive_failures: number;
+  total_successes: number;
+  total_failures: number;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_error: string | null;
+  circuit_open: boolean;
+}
+
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
@@ -521,6 +534,7 @@ interface CommandMap {
   fetch_single_feed: { params: { url: string }; result: { success: boolean; items_added: number } };
   fetch_single_youtube_channel: { params: { channelId: string }; result: { success: boolean; items_added: number } };
   reset_feed_health: { params: { feedOrigin: string; sourceType: string }; result: { success: boolean; feed_origin: string; source_type: string } };
+  get_feed_health_status: { params: { sourceType: string }; result: FeedHealth[] };
 
   // -- Locale & i18n --
   get_locale: { params: Record<string, never>; result: { country: string; language: string; currency: string } };

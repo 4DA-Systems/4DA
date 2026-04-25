@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
-import type { RssFeedValidation, YouTubeChannelValidation } from '../../lib/commands';
+import type { RssFeedValidation, YouTubeChannelValidation, FeedHealth } from '../../lib/commands';
 import { reportError } from '../../lib/error-reporter';
 import { translateError } from '../../utils/error-messages';
 import { parseSourceInput } from '../../utils/source-input-parser';
@@ -35,6 +35,9 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult>(null);
 
+  // Per-feed health keyed by feed_origin
+  const [feedHealthMap, setFeedHealthMap] = useState<Record<string, FeedHealth>>({});
+
   const loadSources = useCallback(async () => {
     try {
       const [rss, youtube, twitter, xKeyExists, github, defRss, defYt, defTw, disRss, disYt, disTw] = await Promise.all([
@@ -61,6 +64,18 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
       setDisabledDefaultRss(disRss.disabled);
       setDisabledDefaultYoutube(disYt.disabled);
       setDisabledDefaultTwitter(disTw.disabled);
+
+      // Load per-feed health
+      const [rssHealth, ytHealth, twHealth] = await Promise.all([
+        cmd('get_feed_health_status', { sourceType: 'rss' }).catch(() => []),
+        cmd('get_feed_health_status', { sourceType: 'youtube' }).catch(() => []),
+        cmd('get_feed_health_status', { sourceType: 'twitter' }).catch(() => []),
+      ]);
+      const hMap: Record<string, FeedHealth> = {};
+      for (const h of [...rssHealth, ...ytHealth, ...twHealth]) {
+        hMap[h.feed_origin] = h;
+      }
+      setFeedHealthMap(hMap);
     } catch (error) {
       reportError('SourceConfigPanel.load', error);
     }
@@ -254,6 +269,20 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
     catch (error) { onStatusChange(`Error: ${translateError(error)}`); }
   }, [disabledDefaultTwitter, onStatusChange]);
 
+  const resetFeedHealth = useCallback(async (feedOrigin: string, sourceType: string) => {
+    try {
+      await cmd('reset_feed_health', { feedOrigin, sourceType });
+      setFeedHealthMap((prev) => {
+        const next = { ...prev };
+        delete next[feedOrigin];
+        return next;
+      });
+      flash(t('sources.health.reset', 'Feed health reset'));
+    } catch (error) {
+      onStatusChange(`Error: ${translateError(error)}`);
+    }
+  }, [flash, onStatusChange, t]);
+
   const activeDefaultRss = defaultRssFeeds.length - disabledDefaultRss.length;
   const activeDefaultYoutube = defaultYoutubeChannels.length - disabledDefaultYoutube.length;
   const activeDefaultTwitter = defaultTwitterHandles.length - disabledDefaultTwitter.length;
@@ -278,6 +307,8 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
     defaultRssFeeds, disabledDefaultRss, toggleDefaultRss,
     defaultYoutubeChannels, disabledDefaultYoutube, toggleDefaultYoutube,
     defaultTwitterHandles, disabledDefaultTwitter, toggleDefaultTwitter,
+    // Health
+    feedHealthMap, resetFeedHealth,
     // Totals
     totalSources,
   };
