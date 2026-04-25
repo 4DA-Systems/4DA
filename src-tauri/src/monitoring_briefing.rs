@@ -402,25 +402,30 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             // or vacation still get a briefing from their last active session.
             if let Ok(db) = crate::get_database() {
                 let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
-                db.get_relevant_items_since(period_start, BRIEFING_SCORE_FLOOR.into(), 25, &user_lang)
-                    .ok()
-                    .map(|db_items| {
-                        db_items
-                            .into_iter()
-                            .map(|i| BriefingItem {
-                                title: i.title,
-                                source_type: i.source_type,
-                                score: i.relevance_score.unwrap_or(0.0) as f32,
-                                signal_type: None,
-                                url: i.url,
-                                item_id: Some(i.id),
-                                signal_priority: None,
-                                description: None,
-                                matched_deps: vec![],
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default()
+                db.get_relevant_items_since(
+                    period_start,
+                    BRIEFING_SCORE_FLOOR.into(),
+                    25,
+                    &user_lang,
+                )
+                .ok()
+                .map(|db_items| {
+                    db_items
+                        .into_iter()
+                        .map(|i| BriefingItem {
+                            title: i.title,
+                            source_type: i.source_type,
+                            score: i.relevance_score.unwrap_or(0.0) as f32,
+                            signal_type: None,
+                            url: i.url,
+                            item_id: Some(i.id),
+                            signal_priority: None,
+                            description: None,
+                            matched_deps: vec![],
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
             } else {
                 vec![]
             }
@@ -1122,7 +1127,11 @@ BANNED:
     while let Some(start_bracket) = synthesis.find('[') {
         if let Some(end_bracket) = synthesis[start_bracket..].find(']') {
             let inner = &synthesis[start_bracket + 1..start_bracket + end_bracket];
-            if inner.len() <= 10 && inner.chars().all(|c| c.is_ascii_digit() || c == ',' || c == ' ') {
+            if inner.len() <= 10
+                && inner
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || c == ',' || c == ' ')
+            {
                 synthesis.replace_range(start_bracket..start_bracket + end_bracket + 1, "");
                 continue;
             }
@@ -1138,8 +1147,8 @@ BANNED:
     // Normalize unicode dashes to plain ASCII (prevents encoding artifacts in display)
     synthesis = synthesis.replace('\u{2014}', "--"); // em dash
     synthesis = synthesis.replace('\u{2013}', "--"); // en dash
-    synthesis = synthesis.replace('\u{2018}', "'");  // left single quote
-    synthesis = synthesis.replace('\u{2019}', "'");  // right single quote
+    synthesis = synthesis.replace('\u{2018}', "'"); // left single quote
+    synthesis = synthesis.replace('\u{2019}', "'"); // right single quote
     synthesis = synthesis.replace('\u{201C}', "\""); // left double quote
     synthesis = synthesis.replace('\u{201D}', "\""); // right double quote
 
@@ -1152,17 +1161,40 @@ BANNED:
 
     // Strip LLM section labels that leak despite being banned in the prompt
     let label_prefixes = [
-        "Top Signal:", "Top Signals:", "Key Signal:", "Key Signals:",
-        "Next Steps:", "Next Step:", "Action:", "Actions:",
-        "Summary:", "Situation:", "Priority:", "Pattern:",
-        "Recommendation:", "Recommendations:", "Note:", "Notes:",
-        "Insight:", "Insights:", "Alert:", "Alerts:",
-        "Cluster 1:", "Cluster 2:", "Cluster:",
-        "Theme 1:", "Theme 2:", "Theme:",
-        "Strongest Cluster:", "Strongest Clusters:",
-        "Strongest Clusters", "Strongest Signal:",
-        "Primary Cluster:", "Secondary Cluster:",
-        "Top Cluster:", "Top Clusters:",
+        "Top Signal:",
+        "Top Signals:",
+        "Key Signal:",
+        "Key Signals:",
+        "Next Steps:",
+        "Next Step:",
+        "Action:",
+        "Actions:",
+        "Summary:",
+        "Situation:",
+        "Priority:",
+        "Pattern:",
+        "Recommendation:",
+        "Recommendations:",
+        "Note:",
+        "Notes:",
+        "Insight:",
+        "Insights:",
+        "Alert:",
+        "Alerts:",
+        "Cluster 1:",
+        "Cluster 2:",
+        "Cluster:",
+        "Theme 1:",
+        "Theme 2:",
+        "Theme:",
+        "Strongest Cluster:",
+        "Strongest Clusters:",
+        "Strongest Clusters",
+        "Strongest Signal:",
+        "Primary Cluster:",
+        "Secondary Cluster:",
+        "Top Cluster:",
+        "Top Clusters:",
     ];
     for prefix in &label_prefixes {
         // Case-insensitive prefix removal at line start

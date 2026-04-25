@@ -530,15 +530,14 @@ fn discover_feed_links(html: &str, base_url: &str) -> Vec<String> {
             if let Some(end) = inner.find(quote) {
                 let href = &inner[..end];
                 // Resolve relative URL
-                let resolved =
-                    if href.starts_with("http://") || href.starts_with("https://") {
-                        href.to_string()
-                    } else if let Some(ref base) = base {
-                        base.join(href)
-                            .map_or_else(|_| href.to_string(), |u| u.to_string())
-                    } else {
-                        href.to_string()
-                    };
+                let resolved = if href.starts_with("http://") || href.starts_with("https://") {
+                    href.to_string()
+                } else if let Some(ref base) = base {
+                    base.join(href)
+                        .map_or_else(|_| href.to_string(), |u| u.to_string())
+                } else {
+                    href.to_string()
+                };
                 if !feeds.contains(&resolved) {
                     feeds.push(resolved);
                 }
@@ -592,8 +591,8 @@ pub async fn validate_youtube_channel(channel_id: String) -> Result<serde_json::
         .await
         .map_err(|e| format!("Could not read response: {}", e))?;
 
-    let channel_name = crate::sources::youtube::extract_tag(&body, "title")
-        .unwrap_or_else(|| channel_id.clone());
+    let channel_name =
+        crate::sources::youtube::extract_tag(&body, "title").unwrap_or_else(|| channel_id.clone());
 
     let entry_count = body.matches("<entry>").count();
 

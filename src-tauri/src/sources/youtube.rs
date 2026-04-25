@@ -385,7 +385,9 @@ impl Source for YouTubeSource {
                 }
                 Err(e) => {
                     warn!(channel = %channel.name, error = %e, "Failed to fetch YouTube feed");
-                    self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                    self.feed_errors
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
                         .push((channel.channel_id.clone(), e.to_string()));
                 }
             }

@@ -223,7 +223,10 @@ impl SettingsManager {
                             verified_count += 1;
                         }
                         if report.migrated.contains(&"openai_api_key".to_string())
-                            && keystore::verify_round_trip("openai_api_key", &settings.llm.openai_api_key)
+                            && keystore::verify_round_trip(
+                                "openai_api_key",
+                                &settings.llm.openai_api_key,
+                            )
                         {
                             clean_settings.llm.openai_api_key = String::new();
                             verified_count += 1;
@@ -235,13 +238,19 @@ impl SettingsManager {
                             verified_count += 1;
                         }
                         if report.migrated.contains(&"translation_api_key".to_string())
-                            && keystore::verify_round_trip("translation_api_key", &settings.translation.api_key)
+                            && keystore::verify_round_trip(
+                                "translation_api_key",
+                                &settings.translation.api_key,
+                            )
                         {
                             clean_settings.translation.api_key = String::new();
                             verified_count += 1;
                         }
                         if report.migrated.contains(&"license_key".to_string())
-                            && keystore::verify_round_trip("license_key", &settings.license.license_key)
+                            && keystore::verify_round_trip(
+                                "license_key",
+                                &settings.license.license_key,
+                            )
                         {
                             clean_settings.license.license_key = String::new();
                             verified_count += 1;
