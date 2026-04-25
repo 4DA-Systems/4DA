@@ -146,24 +146,30 @@ pub async fn set_llm_provider(
     let manager = get_settings_manager();
     let mut guard = manager.lock();
 
-    // Store keys in platform keychain before creating the provider struct
-    if !api_key.is_empty() {
+    // If the incoming key is empty, preserve the existing key — the caller
+    // didn't change it (the frontend never sends the actual key back).
+    let effective_api_key = if api_key.is_empty() {
+        guard.get().llm.api_key.clone()
+    } else {
         let _ = crate::settings::keystore::store_secret("llm_api_key", &api_key);
-    }
-    if let Some(ref oai_key) = openai_api_key {
-        if !oai_key.is_empty() {
-            let _ = crate::settings::keystore::store_secret("openai_api_key", oai_key);
+        api_key
+    };
+    let effective_openai_key = match openai_api_key {
+        Some(ref k) if !k.is_empty() => {
+            let _ = crate::settings::keystore::store_secret("openai_api_key", k);
+            k.clone()
         }
-    }
+        _ => guard.get().llm.openai_api_key.clone(),
+    };
 
     // Preserve the existing embedding model setting when updating LLM provider
     let existing_embedding_model = guard.get().llm.embedding_model.clone();
     let llm_provider = LLMProvider {
         provider,
-        api_key,
+        api_key: effective_api_key,
         model,
         base_url,
-        openai_api_key: openai_api_key.unwrap_or_default(),
+        openai_api_key: effective_openai_key,
         embedding_model: existing_embedding_model,
     };
 

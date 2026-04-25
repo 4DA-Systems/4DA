@@ -253,8 +253,12 @@ export function AIProviderSection({
                   );
                 }}
                 placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
-                className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono"
+                className={`w-full px-4 py-2 bg-bg-secondary border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono ${settings?.llm.has_api_key && !settingsForm.apiKey ? 'border-green-500/40' : 'border-border'}`}
               />
+              {/* Saved key indicator — shown when key exists in secure storage and user hasn't typed a replacement */}
+              {settings?.llm.has_api_key && !settingsForm.apiKey && validation.status === 'idle' && (
+                <p className="mt-1.5 text-xs text-green-400">&#x2713; API key saved in secure storage. Leave blank to keep it.</p>
+              )}
               {/* Real-time validation feedback */}
               {validation.status === 'checking' && (
                 <div className="flex items-center gap-2 mt-1.5 text-xs text-text-muted">
