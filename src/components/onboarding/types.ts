@@ -6,15 +6,7 @@ export interface ApiKeyState {
   provider: 'anthropic' | 'openai' | 'ollama';
 }
 
-export interface OllamaStatus {
-  running: boolean;
-  version: string | null;
-  models: string[];
-  base_url: string;
-  error?: string;
-  has_embedding_model?: boolean;
-  has_llm_model?: boolean;
-}
+export type { OllamaStatus } from '../../store/types';
 
 export interface PullProgress {
   model: string;

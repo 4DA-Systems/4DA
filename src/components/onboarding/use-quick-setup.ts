@@ -5,6 +5,7 @@ import { cmd } from '../../lib/commands';
 import { listen } from '@tauri-apps/api/event';
 
 import type { OllamaStatus, PullProgress } from './types';
+import { normalizeOllamaStatus } from '../../utils/normalize-ollama';
 import { fallbackSuggestions, SECTION_KEY, getPersistedSections } from './onboarding-constants';
 import type { SectionState } from './onboarding-constants';
 import type { ExperienceLevel } from './setup-experience';
@@ -101,7 +102,8 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       for (let attempt = 0; attempt < 5; attempt++) {
         await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 3000));
         try {
-          const s = await cmd('check_ollama_status', { baseUrl: null }) as unknown as OllamaStatus;
+          const raw = await cmd('check_ollama_status', { baseUrl: null }) as unknown as Record<string, unknown>;
+          const s = normalizeOllamaStatus(raw);
           if (s.running && s.models.length > 0) {
             refreshed = s;
             break;
@@ -124,7 +126,8 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     let cancelled = false;
     (async () => {
       try {
-        const status = await cmd('check_ollama_status', { baseUrl: null }) as unknown as OllamaStatus;
+        const rawStatus = await cmd('check_ollama_status', { baseUrl: null }) as unknown as Record<string, unknown>;
+        const status = normalizeOllamaStatus(rawStatus);
         if (cancelled) return;
         setOllamaStatus(status);
 

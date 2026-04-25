@@ -250,8 +250,8 @@ pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthI
         return;
     }
 
-    // Ollama doesn't need an API key.
-    if provider == "ollama" {
+    // Ollama and local don't need an API key.
+    if provider == "ollama" || provider == "local" {
         return;
     }
 
@@ -891,8 +891,21 @@ pub(crate) fn generate_diagnostic_report() -> DiagnosticReport {
 /// Returns startup health issues for the frontend to optionally display.
 #[tauri::command]
 pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
-    // Re-run checks so frontend gets a fresh snapshot.
-    run_startup_health_check()
+    let mut issues = run_startup_health_check();
+
+    // Filter out false-positive "API key is empty" when the in-memory settings
+    // (hydrated from keychain on startup) DO have the key.  The disk-based check
+    // can't always reach the keychain on every OS/config combination.
+    if let Some(guard) = crate::get_settings_manager().try_lock() {
+        let has_key = !guard.get().llm.api_key.is_empty();
+        if has_key {
+            issues.retain(|i| {
+                !(i.component == "embedding" && i.message.contains("API key is empty"))
+            });
+        }
+    }
+
+    issues
 }
 
 /// Returns a full diagnostic report for support/troubleshooting.

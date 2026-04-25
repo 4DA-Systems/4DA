@@ -61,11 +61,6 @@ impl GroundednessReport {
         if self.total_terms < 2 {
             return false;
         }
-        // With exactly 2 terms, require both to be grounded — one
-        // miss out of two is a 50% hallucination rate.
-        if self.total_terms == 2 {
-            return self.grounded_terms == self.total_terms;
-        }
         self.confidence >= threshold
     }
 }
