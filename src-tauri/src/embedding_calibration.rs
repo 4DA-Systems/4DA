@@ -100,9 +100,7 @@ pub(crate) fn initialize_calibration(conn: &rusqlite::Connection, model_name: &s
 
     debug!(
         model = model_name,
-        "No calibration data, using defaults (center={}, scale={})",
-        DEFAULT_CENTER,
-        DEFAULT_SCALE
+        "No calibration data, using defaults (center={}, scale={})", DEFAULT_CENTER, DEFAULT_SCALE
     );
 }
 
@@ -253,6 +251,9 @@ mod tests {
     fn known_model_ordering_matters() {
         // nomic-embed-text-v2 must match before nomic-embed-text
         let (c, _) = lookup_known_model("nomic-embed-text-v2-moe").unwrap();
-        assert!((c - 0.40).abs() < 0.01, "v2 variant should match v2 entry, not base");
+        assert!(
+            (c - 0.40).abs() < 0.01,
+            "v2 variant should match v2 entry, not base"
+        );
     }
 }

@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Context management Tauri commands.
 //!
 //! Extracted from lib.rs. Contains context file reading, indexing,
@@ -472,5 +472,4 @@ mod tests {
         // Has lowercase — not screaming case
         assert!(!is_meta_doc("My_Custom_Doc.md"));
     }
-
 }

@@ -161,7 +161,7 @@ pub(crate) fn get_model_tier(settings: &LLMProvider) -> ModelTier {
         "anthropic" => ModelTier::Full,
         "openai" => ModelTier::Full,
         "ollama" => ModelTier::Basic, // Conservative default for unknown Ollama models
-        _ => ModelTier::Good, // OpenAI-compatible could be anything, assume Good
+        _ => ModelTier::Good,         // OpenAI-compatible could be anything, assume Good
     }
 }
 
@@ -189,7 +189,8 @@ pub(crate) async fn probe_model_capability(settings: &LLMProvider) -> Result<Mod
     );
 
     let client = LLMClient::new(settings.clone());
-    let system = "You are a JSON-only assistant. Respond with ONLY valid JSON, no markdown, no explanation.";
+    let system =
+        "You are a JSON-only assistant. Respond with ONLY valid JSON, no markdown, no explanation.";
 
     let probe_prompt = concat!(
         "Rate this article for a Rust/React developer. Return ONLY JSON:\n",
@@ -372,20 +373,14 @@ mod tests {
 
     #[test]
     fn test_known_tier_ollama_large() {
-        assert_eq!(
-            lookup_known_tier("llama3.1:70b"),
-            Some(ModelTier::Good)
-        );
+        assert_eq!(lookup_known_tier("llama3.1:70b"), Some(ModelTier::Good));
         assert_eq!(lookup_known_tier("mixtral"), Some(ModelTier::Good));
     }
 
     #[test]
     fn test_known_tier_ollama_small() {
         assert_eq!(lookup_known_tier("llama3.2"), Some(ModelTier::Basic));
-        assert_eq!(
-            lookup_known_tier("llama3.2:3b"),
-            Some(ModelTier::Basic)
-        );
+        assert_eq!(lookup_known_tier("llama3.2:3b"), Some(ModelTier::Basic));
     }
 
     #[test]
@@ -395,8 +390,7 @@ mod tests {
 
     #[test]
     fn test_probe_response_perfect() {
-        let response =
-            r#"[{"id": "1", "score": 5, "reason": "Critical tokio memory safety CVE requires immediate upgrade for all Rust async projects"}]"#;
+        let response = r#"[{"id": "1", "score": 5, "reason": "Critical tokio memory safety CVE requires immediate upgrade for all Rust async projects"}]"#;
         assert_eq!(evaluate_probe_response(response), ModelTier::Full);
     }
 
@@ -408,15 +402,15 @@ mod tests {
 
     #[test]
     fn test_probe_response_wrong_score() {
-        let response =
-            r#"[{"id": "1", "score": 2, "reason": "Generic security update"}]"#;
+        let response = r#"[{"id": "1", "score": 2, "reason": "Generic security update"}]"#;
         // Valid JSON, correct structure, wrong score, non-grounded reason
         assert_eq!(evaluate_probe_response(response), ModelTier::Good);
     }
 
     #[test]
     fn test_probe_response_invalid_json() {
-        let response = "I'd rate this article 5/5 because it's about a critical security vulnerability.";
+        let response =
+            "I'd rate this article 5/5 because it's about a critical security vulnerability.";
         assert_eq!(evaluate_probe_response(response), ModelTier::Basic);
     }
 

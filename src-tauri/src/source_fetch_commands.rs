@@ -17,10 +17,7 @@ use crate::sources::Source;
 
 /// Fetch a single RSS feed immediately, embed items, and store in database
 #[tauri::command]
-pub async fn fetch_single_feed(
-    url: String,
-    app: tauri::AppHandle,
-) -> Result<serde_json::Value> {
+pub async fn fetch_single_feed(url: String, app: tauri::AppHandle) -> Result<serde_json::Value> {
     use tauri::Emitter;
 
     validate_input_length(&url, "Feed URL", 2000)?;
@@ -68,8 +65,7 @@ pub async fn fetch_single_youtube_channel(
 
     validate_input_length(&channel_id, "Channel ID", 100)?;
 
-    let source =
-        crate::sources::youtube::YouTubeSource::with_channels(vec![channel_id.clone()]);
+    let source = crate::sources::youtube::YouTubeSource::with_channels(vec![channel_id.clone()]);
     let items = source
         .fetch_items()
         .await
@@ -114,7 +110,9 @@ async fn embed_and_store_items(items: &[crate::sources::SourceItem]) -> Result<u
         .collect();
 
     // Embed all texts
-    let embeddings = crate::embed_texts(&texts_to_embed).await.unwrap_or_default();
+    let embeddings = crate::embed_texts(&texts_to_embed)
+        .await
+        .unwrap_or_default();
 
     // Build upsert tuples matching batch_upsert_source_items signature
     let upsert_items: Vec<_> = items
@@ -127,8 +125,7 @@ async fn embed_and_store_items(items: &[crate::sources::SourceItem]) -> Result<u
                 &item.content,
                 &item.source_type,
             );
-            let cve_ids =
-                crate::entity_extraction::extract_cve_ids(&item.title, &item.content);
+            let cve_ids = crate::entity_extraction::extract_cve_ids(&item.title, &item.content);
             let feed_origin = crate::source_fetching::extract_feed_origin(item);
             let embedding = embeddings
                 .get(i)
@@ -178,7 +175,9 @@ pub async fn reset_feed_health(
 
     let db = crate::get_database()?;
     db.reset_feed_health(&feed_origin, &source_type)
-        .map_err(|e| crate::error::FourDaError::Internal(format!("Failed to reset feed health: {e}")))?;
+        .map_err(|e| {
+            crate::error::FourDaError::Internal(format!("Failed to reset feed health: {e}"))
+        })?;
 
     info!(
         target: "4da::sources",
@@ -200,9 +199,7 @@ pub async fn reset_feed_health(
 
 /// Get per-feed health records for a given source type
 #[tauri::command]
-pub async fn get_feed_health_status(
-    source_type: String,
-) -> Result<Vec<crate::db::FeedHealth>> {
+pub async fn get_feed_health_status(source_type: String) -> Result<Vec<crate::db::FeedHealth>> {
     validate_input_length(&source_type, "Source type", 50)?;
     let db = crate::get_database()?;
     Ok(db.get_all_feed_health(&source_type))

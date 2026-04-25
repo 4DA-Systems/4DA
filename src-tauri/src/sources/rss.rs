@@ -382,7 +382,9 @@ impl Source for RssSource {
                     if !response.status().is_success() {
                         let err_msg = format!("HTTP {}", response.status());
                         warn!(url = feed_url, status = %response.status(), "Feed returned error status");
-                        self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                        self.feed_errors
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
                             .push((feed_url.clone(), err_msg));
                         continue;
                     }
@@ -396,7 +398,9 @@ impl Source for RssSource {
                                 size = len,
                                 "RSS feed too large — skipping"
                             );
-                            self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                            self.feed_errors
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
                                 .push((feed_url.clone(), format!("Feed too large: {} bytes", len)));
                             continue;
                         }
@@ -424,14 +428,18 @@ impl Source for RssSource {
                         }
                         Err(e) => {
                             warn!(url = feed_url, error = %e, "Failed to read feed body");
-                            self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                            self.feed_errors
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
                                 .push((feed_url.clone(), e.to_string()));
                         }
                     }
                 }
                 Err(e) => {
                     warn!(url = feed_url, error = %e, "Failed to fetch feed");
-                    self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                    self.feed_errors
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
                         .push((feed_url.clone(), e.to_string()));
                 }
             }

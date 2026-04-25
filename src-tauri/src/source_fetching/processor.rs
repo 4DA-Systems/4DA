@@ -24,7 +24,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
 
     let db = get_database()?;
     let mut total_cached = 0;
-    let mut new_items_to_embed: Vec<(String, String, Option<String>, String, String, Option<String>)> = Vec::new();
+    let mut new_items_to_embed: Vec<(
+        String,
+        String,
+        Option<String>,
+        String,
+        String,
+        Option<String>,
+    )> = Vec::new();
 
     // Build ALL sources from the canonical factory (single source of truth)
     let all_sources = crate::sources::build_all_sources();
@@ -183,7 +190,15 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     .filter(|(_, embedding)| !embedding.iter().all(|&v| v == 0.0))
                     .map(
                         |(
-                            (source_type, source_id, url, title, content, detected_lang, feed_origin),
+                            (
+                                source_type,
+                                source_id,
+                                url,
+                                title,
+                                content,
+                                detected_lang,
+                                feed_origin,
+                            ),
                             embedding,
                         )| {
                             let content_type = crate::entity_extraction::classify_for_storage(
