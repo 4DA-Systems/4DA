@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DefaultSourceList } from './settings/DefaultSourceList';
+import { FeedHealthDot } from './settings/FeedHealthDot';
 import { SourcePreview } from './settings/SourcePreview';
 import { ValidationFeedback } from './settings/ValidationFeedback';
 import { useSourceConfig } from './settings/useSourceConfig';
@@ -92,7 +93,10 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     key={feed}
                     className="flex items-center justify-between px-3 py-1.5 bg-bg-secondary rounded border border-border group"
                   >
-                    <span className="font-mono text-xs text-text-secondary truncate">{feed}</span>
+                    <span className="font-mono text-xs text-text-secondary truncate">
+                      {feed}
+                      <FeedHealthDot health={s.feedHealthMap[feed]} onReset={() => s.resetFeedHealth(feed, 'rss')} />
+                    </span>
                     <button
                       onClick={() => s.removeRssFeed(feed)}
                       aria-label={t('sources.rss.removeFeed', 'Remove feed')}
@@ -111,6 +115,9 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               disabled={s.disabledDefaultRss}
               onToggle={s.toggleDefaultRss}
               label={t('sources.defaults.rss', 'Default RSS feeds')}
+              healthMap={s.feedHealthMap}
+              sourceType="rss"
+              onResetHealth={s.resetFeedHealth}
             />
           </div>
 
@@ -144,6 +151,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-400 text-xs rounded border border-red-500/20 group"
                   >
                     {ch.length > 20 ? ch.slice(0, 8) + '...' + ch.slice(-8) : ch}
+                    <FeedHealthDot health={s.feedHealthMap[ch]} onReset={() => s.resetFeedHealth(ch, 'youtube')} />
                     <button
                       onClick={() => s.removeYoutubeChannel(ch)}
                       aria-label={t('sources.youtube.removeChannel', 'Remove channel')}
@@ -162,6 +170,9 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               disabled={s.disabledDefaultYoutube}
               onToggle={s.toggleDefaultYoutube}
               label={t('sources.defaults.youtube', 'Default YouTube channels')}
+              healthMap={s.feedHealthMap}
+              sourceType="youtube"
+              onResetHealth={s.resetFeedHealth}
             />
           </div>
 
@@ -240,6 +251,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded border border-blue-500/20 group"
                   >
                     @{h}
+                    <FeedHealthDot health={s.feedHealthMap[h]} onReset={() => s.resetFeedHealth(h, 'twitter')} />
                     <button
                       onClick={() => s.removeTwitterHandle(h)}
                       aria-label={t('sources.twitter.removeHandle', 'Remove handle')}
@@ -258,6 +270,9 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               disabled={s.disabledDefaultTwitter}
               onToggle={s.toggleDefaultTwitter}
               label={t('sources.defaults.twitter', 'Default Twitter/X handles')}
+              healthMap={s.feedHealthMap}
+              sourceType="twitter"
+              onResetHealth={s.resetFeedHealth}
             />
 
             {/* X API Key */}

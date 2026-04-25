@@ -783,6 +783,7 @@ pub fn run() {
             source_fetch_commands::fetch_single_feed,
             source_fetch_commands::fetch_single_youtube_channel,
             source_fetch_commands::reset_feed_health,
+            source_fetch_commands::get_feed_health_status,
             // Digest & Briefing
             digest_config::get_digest_config,
             digest_config::set_digest_config,

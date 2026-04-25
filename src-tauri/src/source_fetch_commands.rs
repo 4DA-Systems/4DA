@@ -193,3 +193,17 @@ pub async fn reset_feed_health(
         "source_type": source_type,
     }))
 }
+
+// ============================================================================
+// Feed Health: Query status
+// ============================================================================
+
+/// Get per-feed health records for a given source type
+#[tauri::command]
+pub async fn get_feed_health_status(
+    source_type: String,
+) -> Result<Vec<crate::db::FeedHealth>> {
+    validate_input_length(&source_type, "Source type", 50)?;
+    let db = crate::get_database()?;
+    Ok(db.get_all_feed_health(&source_type))
+}
