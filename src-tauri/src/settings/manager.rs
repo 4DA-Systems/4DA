@@ -449,6 +449,12 @@ impl SettingsManager {
         if !provider.openai_api_key.is_empty() {
             let _ = keystore::store_secret("openai_api_key", &provider.openai_api_key);
         }
+        // BYOK = consent. Providing an API key for a cloud provider IS the
+        // privacy disclosure acceptance — no separate gate needed.
+        let is_cloud = !matches!(provider.provider.as_str(), "ollama" | "none" | "local");
+        if is_cloud && !provider.api_key.is_empty() {
+            self.settings.privacy.cloud_llm_disclosure_accepted = true;
+        }
         self.settings.llm = provider;
         self.save()
     }
