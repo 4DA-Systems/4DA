@@ -96,7 +96,6 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
       return;
     }
 
-    const isCloud = settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local';
     try {
       await Promise.all([
         cmd('set_llm_provider', {
@@ -112,7 +111,6 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
           dailyTokenLimit: settingsForm.dailyTokenLimit,
           dailyCostLimit: settingsForm.dailyCostLimit,
         }),
-        ...(isCloud ? [cmd('set_privacy_config', { cloudLlmDisclosureAccepted: true })] : []),
       ]);
 
       set({ settingsStatus: 'Settings saved!' });
