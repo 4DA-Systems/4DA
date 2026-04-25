@@ -45,6 +45,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
   const [saveState, setSaveState] = useState<ButtonState>('idle');
   const [testState, setTestState] = useState<ButtonState>('idle');
   const [inlineStatus, setInlineStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [tierRefreshKey, setTierRefreshKey] = useState(0);
 
   const handleSave = useCallback(async () => {
     setSaveState('loading');
@@ -52,6 +53,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
     try {
       await saveSettings();
       setSaveState('success');
+      setTierRefreshKey(k => k + 1);
       setInlineStatus({ type: 'success', message: t('settings.ai.settingsSaved') });
       setTimeout(() => { setSaveState('idle'); setInlineStatus(null); }, 3000);
     } catch {
@@ -91,7 +93,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
         </PanelErrorBoundary>
 
         <PanelErrorBoundary name="Model Tier">
-          <ModelTierIndicator />
+          <ModelTierIndicator refreshKey={tierRefreshKey} />
         </PanelErrorBoundary>
 
         {/* Inline status feedback — always visible near the buttons */}
