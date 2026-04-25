@@ -102,6 +102,7 @@ pub use types::{
 pub(crate) use types::{GenericSourceItem, ANALYSIS_TIMEOUT_SECS};
 
 mod commands;
+pub(crate) mod embedding_calibration;
 mod embeddings;
 mod events;
 pub(crate) mod reembed;
@@ -258,6 +259,7 @@ mod job_queue;
 mod knowledge_decay;
 pub(crate) mod language_detect;
 mod llm;
+pub(crate) mod llm_capability;
 mod llm_judge;
 mod llm_stream;
 mod local_audit;
@@ -1051,6 +1053,9 @@ pub fn run() {
             sso::get_sso_session,
             sso::validate_sso_callback,
             sso::logout_sso,
+            // LLM Capability Tier Detection
+            llm_capability::get_llm_capability_tier,
+            llm_capability::probe_llm_capability,
             // Model Registry
             model_registry::get_model_registry,
             model_registry::refresh_model_registry,

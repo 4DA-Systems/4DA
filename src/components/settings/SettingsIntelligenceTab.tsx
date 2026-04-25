@@ -3,6 +3,7 @@ import { memo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { AIProviderSection } from './AIProviderSection';
+import { ModelTierIndicator } from './ModelTierIndicator';
 import { LicenseSection } from './LicenseSection';
 import { ProValuePanel } from '../ProValuePanel';
 
@@ -87,6 +88,10 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
             modelRegistry={modelRegistry}
             onRefreshRegistry={onRefreshRegistry}
           />
+        </PanelErrorBoundary>
+
+        <PanelErrorBoundary name="Model Tier">
+          <ModelTierIndicator />
         </PanelErrorBoundary>
 
         {/* Inline status feedback — always visible near the buttons */}

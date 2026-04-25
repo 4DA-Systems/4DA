@@ -425,10 +425,14 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Validate license integrity (reset tier if no key present)
     crate::settings::validate_license_on_startup();
 
-    // Check if embedding model has changed — trigger background re-embed if needed
+    // Initialize embedding calibration — adapts sigmoid parameters to the
+    // current model's similarity distribution. Must run BEFORE first analysis.
+    // Check if embedding model has changed — trigger background re-embed if needed.
     if let Ok(db) = get_database() {
+        let model_name = crate::reembed::get_embedding_model();
         let needs_reembed = {
             let conn = db.conn.lock();
+            crate::embedding_calibration::initialize_calibration(&conn, &model_name);
             crate::reembed::check_embedding_model_changed(&conn)
         };
         if needs_reembed {
