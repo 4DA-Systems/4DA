@@ -50,6 +50,19 @@ pub struct SourceHealthRecord {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+pub struct FeedHealth {
+    pub feed_origin: String,
+    pub source_type: String,
+    pub consecutive_failures: i64,
+    pub total_successes: i64,
+    pub total_failures: i64,
+    pub last_success_at: Option<String>,
+    pub last_failure_at: Option<String>,
+    pub last_error: Option<String>,
+    pub circuit_open: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct FeedbackTopicSummary {
     pub topic: String,
     pub saves: i64,
@@ -115,7 +128,7 @@ impl Database {
     }
 
     /// Batch upsert source items in a transaction (much faster than individual calls).
-    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang, content_type, cve_ids).
+    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang, content_type, cve_ids, feed_origin).
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
@@ -127,6 +140,7 @@ impl Database {
             String,
             Vec<f32>,
             String,
+            Option<String>,
             Option<String>,
             Option<String>,
         )],
@@ -143,14 +157,15 @@ impl Database {
                  embedding = ?5, detected_lang = ?6, \
                  content_type = COALESCE(?7, source_items.content_type), \
                  cve_ids = COALESCE(?8, source_items.cve_ids), \
-                 last_seen = datetime('now') WHERE id = ?9",
+                 feed_origin = COALESCE(?9, source_items.feed_origin), \
+                 last_seen = datetime('now') WHERE id = ?10",
             )?;
             let mut update_vec_stmt =
                 tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
             let mut insert_stmt = tx.prepare_cached(
                 "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, \
-                 embedding, detected_lang, content_type, cve_ids, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'))",
+                 embedding, detected_lang, content_type, cve_ids, feed_origin, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))",
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
@@ -165,6 +180,7 @@ impl Database {
                 detected_lang,
                 content_type,
                 cve_ids,
+                feed_origin,
             ) in items
             {
                 let content_hash = hash_content_parts(&[title, content]);
@@ -184,6 +200,7 @@ impl Database {
                         detected_lang,
                         content_type,
                         cve_ids,
+                        feed_origin,
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
@@ -198,7 +215,8 @@ impl Database {
                         embedding_blob,
                         detected_lang,
                         content_type,
-                        cve_ids
+                        cve_ids,
+                        feed_origin
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;
@@ -329,7 +347,7 @@ impl Database {
     ) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
              FROM source_items
              WHERE source_type = ?1 AND source_id = ?2
              AND (embedding_status IS NULL OR embedding_status = 'complete')"
@@ -351,6 +369,7 @@ impl Database {
                 detected_lang: row
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
             })
         })?;
 
@@ -398,7 +417,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
              FROM source_items
              WHERE source_type = ?1
              ORDER BY last_seen DESC
@@ -421,6 +440,7 @@ impl Database {
                 detected_lang: row
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
             })
         })?;
 
@@ -479,6 +499,7 @@ impl Database {
                 SELECT id, source_type, source_id, url, title, content, content_hash,
                        embedding, created_at, last_seen,
                        COALESCE(detected_lang, 'en') AS detected_lang,
+                       feed_origin,
                        ROW_NUMBER() OVER (
                          PARTITION BY source_type
                          ORDER BY last_seen DESC
@@ -487,7 +508,7 @@ impl Database {
                 WHERE last_seen >= ?1
              )
              SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, detected_lang
+                    embedding, created_at, last_seen, detected_lang, feed_origin
              FROM ranked
              WHERE rn <= ?2
              ORDER BY last_seen DESC
@@ -512,6 +533,7 @@ impl Database {
                     detected_lang: row
                         .get::<_, String>(10)
                         .unwrap_or_else(|_| "en".to_string()),
+                    feed_origin: row.get(11).ok().flatten(),
                 })
             },
         )?;
@@ -529,7 +551,7 @@ impl Database {
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
              FROM source_items
              WHERE last_seen >= ?1
              ORDER BY last_seen DESC
@@ -552,6 +574,7 @@ impl Database {
                 detected_lang: row
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
             })
         })?;
 
@@ -589,7 +612,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
              FROM source_items
              WHERE last_seen > ?1
              ORDER BY last_seen DESC
@@ -612,6 +635,7 @@ impl Database {
                 detected_lang: row
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
             })
         })?;
 
@@ -863,6 +887,149 @@ impl Database {
             }
             _ => false,
         }
+    }
+
+    // ========================================================================
+    // Per-Feed Health Tracking (circuit breaker per feed/channel/handle)
+    // ========================================================================
+
+    /// Record a successful fetch for a specific feed/channel/handle.
+    /// Resets consecutive failures and closes the circuit.
+    pub fn record_feed_success(&self, feed_origin: &str, source_type: &str) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO feed_health (feed_origin, source_type, total_successes, last_success_at, updated_at)
+             VALUES (?1, ?2, 1, datetime('now'), datetime('now'))
+             ON CONFLICT(feed_origin, source_type) DO UPDATE SET
+               consecutive_failures = 0,
+               total_successes = total_successes + 1,
+               last_success_at = datetime('now'),
+               circuit_open = 0,
+               circuit_opened_at = NULL,
+               updated_at = datetime('now')",
+            params![feed_origin, source_type],
+        )?;
+        Ok(())
+    }
+
+    /// Record a failed fetch for a specific feed/channel/handle.
+    /// Opens the circuit after 5 consecutive failures.
+    pub fn record_feed_failure(
+        &self,
+        feed_origin: &str,
+        source_type: &str,
+        error: &str,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO feed_health (feed_origin, source_type, consecutive_failures, total_failures, last_failure_at, last_error, updated_at)
+             VALUES (?1, ?2, 1, 1, datetime('now'), ?3, datetime('now'))
+             ON CONFLICT(feed_origin, source_type) DO UPDATE SET
+               consecutive_failures = consecutive_failures + 1,
+               total_failures = total_failures + 1,
+               last_failure_at = datetime('now'),
+               last_error = ?3,
+               circuit_open = CASE WHEN consecutive_failures + 1 >= 5 THEN 1 ELSE circuit_open END,
+               circuit_opened_at = CASE WHEN consecutive_failures + 1 >= 5 AND circuit_open = 0 THEN datetime('now') ELSE circuit_opened_at END,
+               updated_at = datetime('now')",
+            params![feed_origin, source_type, error],
+        )?;
+        Ok(())
+    }
+
+    /// Check if a specific feed's circuit breaker is open.
+    /// Auto-resets after 30 minutes (half-open state).
+    pub fn is_feed_circuit_open(&self, feed_origin: &str, source_type: &str) -> bool {
+        let conn = self.conn.lock();
+        let result = conn.query_row(
+            "SELECT circuit_open, circuit_opened_at FROM feed_health WHERE feed_origin = ?1 AND source_type = ?2",
+            params![feed_origin, source_type],
+            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+        );
+        match result {
+            Ok((1, Some(opened_at))) => {
+                let stale = conn
+                    .query_row(
+                        "SELECT datetime(?1, '+30 minutes') <= datetime('now')",
+                        params![opened_at],
+                        |row| row.get::<_, bool>(0),
+                    )
+                    .unwrap_or(false);
+                if stale {
+                    let _ = conn.execute(
+                        "UPDATE feed_health SET circuit_open = 0, consecutive_failures = 0, updated_at = datetime('now') WHERE feed_origin = ?1 AND source_type = ?2",
+                        params![feed_origin, source_type],
+                    );
+                    false
+                } else {
+                    true
+                }
+            }
+            _ => false,
+        }
+    }
+
+    /// Get health record for a specific feed.
+    pub fn get_feed_health(&self, feed_origin: &str, source_type: &str) -> Option<FeedHealth> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT feed_origin, source_type, consecutive_failures, total_successes, total_failures, last_success_at, last_failure_at, last_error, circuit_open
+             FROM feed_health WHERE feed_origin = ?1 AND source_type = ?2",
+            params![feed_origin, source_type],
+            |row| {
+                Ok(FeedHealth {
+                    feed_origin: row.get(0)?,
+                    source_type: row.get(1)?,
+                    consecutive_failures: row.get(2)?,
+                    total_successes: row.get(3)?,
+                    total_failures: row.get(4)?,
+                    last_success_at: row.get(5)?,
+                    last_failure_at: row.get(6)?,
+                    last_error: row.get(7)?,
+                    circuit_open: row.get::<_, i64>(8)? != 0,
+                })
+            },
+        )
+        .ok()
+    }
+
+    /// Get all feed health records for a source type (for UI listing).
+    pub fn get_all_feed_health(&self, source_type: &str) -> Vec<FeedHealth> {
+        let conn = self.conn.lock();
+        let mut stmt = match conn.prepare(
+            "SELECT feed_origin, source_type, consecutive_failures, total_successes, total_failures, last_success_at, last_failure_at, last_error, circuit_open
+             FROM feed_health WHERE source_type = ?1 ORDER BY feed_origin",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+
+        stmt.query_map(params![source_type], |row| {
+            Ok(FeedHealth {
+                feed_origin: row.get(0)?,
+                source_type: row.get(1)?,
+                consecutive_failures: row.get(2)?,
+                total_successes: row.get(3)?,
+                total_failures: row.get(4)?,
+                last_success_at: row.get(5)?,
+                last_failure_at: row.get(6)?,
+                last_error: row.get(7)?,
+                circuit_open: row.get::<_, i64>(8)? != 0,
+            })
+        })
+        .ok()
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Reset a feed's circuit breaker (manual user override).
+    pub fn reset_feed_health(&self, feed_origin: &str, source_type: &str) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE feed_health SET consecutive_failures = 0, circuit_open = 0, circuit_opened_at = NULL, updated_at = datetime('now') WHERE feed_origin = ?1 AND source_type = ?2",
+            params![feed_origin, source_type],
+        )?;
+        Ok(())
     }
 
     /// Get feedback summary aggregated by topic for scoring boost.
@@ -1366,5 +1533,92 @@ mod tests {
             sources.contains("cve"),
             "get_items_tiered must include CVE items even when Reddit has 500 items"
         );
+    }
+
+    // ========================================================================
+    // Per-Feed Health Tests
+    // ========================================================================
+
+    #[test]
+    fn test_feed_health_success_resets_failures() {
+        let db = test_db();
+        db.record_feed_failure("https://example.com/feed", "rss", "timeout")
+            .unwrap();
+        db.record_feed_failure("https://example.com/feed", "rss", "timeout")
+            .unwrap();
+
+        let health = db
+            .get_feed_health("https://example.com/feed", "rss")
+            .unwrap();
+        assert_eq!(health.consecutive_failures, 2);
+
+        db.record_feed_success("https://example.com/feed", "rss")
+            .unwrap();
+
+        let health = db
+            .get_feed_health("https://example.com/feed", "rss")
+            .unwrap();
+        assert_eq!(health.consecutive_failures, 0);
+        assert!(!health.circuit_open);
+        assert_eq!(health.total_successes, 1);
+        assert_eq!(health.total_failures, 2);
+    }
+
+    #[test]
+    fn test_feed_circuit_opens_after_5_failures() {
+        let db = test_db();
+        for _ in 0..5 {
+            db.record_feed_failure("https://bad.com/feed", "rss", "connection refused")
+                .unwrap();
+        }
+
+        let health = db.get_feed_health("https://bad.com/feed", "rss").unwrap();
+        assert!(health.circuit_open);
+        assert_eq!(health.consecutive_failures, 5);
+        assert!(db.is_feed_circuit_open("https://bad.com/feed", "rss"));
+    }
+
+    #[test]
+    fn test_feed_health_independent_per_feed() {
+        let db = test_db();
+        db.record_feed_failure("https://bad.com/feed", "rss", "error")
+            .unwrap();
+        db.record_feed_success("https://good.com/feed", "rss")
+            .unwrap();
+
+        let bad = db.get_feed_health("https://bad.com/feed", "rss").unwrap();
+        assert_eq!(bad.consecutive_failures, 1);
+
+        let good = db
+            .get_feed_health("https://good.com/feed", "rss")
+            .unwrap();
+        assert_eq!(good.consecutive_failures, 0);
+    }
+
+    #[test]
+    fn test_get_all_feed_health_filters_by_type() {
+        let db = test_db();
+        db.record_feed_success("https://feed1.com", "rss").unwrap();
+        db.record_feed_success("UCtest123", "youtube").unwrap();
+
+        let rss_health = db.get_all_feed_health("rss");
+        assert_eq!(rss_health.len(), 1);
+        assert_eq!(rss_health[0].feed_origin, "https://feed1.com");
+
+        let yt_health = db.get_all_feed_health("youtube");
+        assert_eq!(yt_health.len(), 1);
+    }
+
+    #[test]
+    fn test_reset_feed_health() {
+        let db = test_db();
+        for _ in 0..5 {
+            db.record_feed_failure("https://bad.com/feed", "rss", "error")
+                .unwrap();
+        }
+        assert!(db.is_feed_circuit_open("https://bad.com/feed", "rss"));
+
+        db.reset_feed_health("https://bad.com/feed", "rss").unwrap();
+        assert!(!db.is_feed_circuit_open("https://bad.com/feed", "rss"));
     }
 }

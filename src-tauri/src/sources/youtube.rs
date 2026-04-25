@@ -20,6 +20,8 @@ pub struct YouTubeSource {
     client: reqwest::Client,
     /// Channel IDs to monitor (YouTube channel IDs like "UCsBjURrPoezykLs9EqgamOA")
     channels: Vec<YouTubeChannel>,
+    /// Per-channel errors recorded during the last `fetch_items()` call
+    feed_errors: std::sync::Mutex<Vec<(String, String)>>,
 }
 
 /// A YouTube channel to follow
@@ -41,6 +43,7 @@ impl YouTubeSource {
             },
             client: super::shared_client(),
             channels: default_channels(),
+            feed_errors: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -276,6 +279,14 @@ fn default_channels() -> Vec<YouTubeChannel> {
     ]
 }
 
+/// Return just the channel_id strings from the default channels list
+pub fn default_channel_ids() -> Vec<String> {
+    default_channels()
+        .into_iter()
+        .map(|c| c.channel_id)
+        .collect()
+}
+
 impl Default for YouTubeSource {
     fn default() -> Self {
         Self::new()
@@ -323,6 +334,9 @@ impl Source for YouTubeSource {
             return Ok(Vec::new());
         }
 
+        // Clear per-feed errors from previous run
+        *self.feed_errors.lock().unwrap_or_else(|e| e.into_inner()) = Vec::new();
+
         info!(
             channel_count = self.channels.len(),
             "Fetching YouTube feeds"
@@ -358,6 +372,7 @@ impl Source for YouTubeSource {
                             "views": entry.views,
                             "star_rating": entry.star_rating,
                             "video_id": entry.video_id,
+                            "channel_id": channel.channel_id,
                         });
 
                         let item = SourceItem::new("youtube", &entry.video_id, &entry.title)
@@ -370,6 +385,8 @@ impl Source for YouTubeSource {
                 }
                 Err(e) => {
                     warn!(channel = %channel.name, error = %e, "Failed to fetch YouTube feed");
+                    self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                        .push((channel.channel_id.clone(), e.to_string()));
                 }
             }
         }
@@ -384,6 +401,13 @@ impl Source for YouTubeSource {
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
         // YouTube feed already includes description, no extra scraping needed
         Ok(item.content.clone())
+    }
+
+    fn feed_errors(&self) -> Vec<(String, String)> {
+        self.feed_errors
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 
