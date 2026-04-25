@@ -48,6 +48,8 @@ export interface OllamaStatus {
   models: string[];
   base_url: string;
   error?: string;
+  has_embedding_model?: boolean;
+  has_llm_model?: boolean;
 }
 
 export interface DiscoveredContext {
