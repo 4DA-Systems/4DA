@@ -112,7 +112,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
           dailyTokenLimit: settingsForm.dailyTokenLimit,
           dailyCostLimit: settingsForm.dailyCostLimit,
         }),
-        ...(isCloud ? [cmd('set_privacy_config', { cloud_llm_disclosure_accepted: true })] : []),
+        ...(isCloud ? [cmd('set_privacy_config', { cloudLlmDisclosureAccepted: true })] : []),
       ]);
 
       set({ settingsStatus: 'Settings saved!' });

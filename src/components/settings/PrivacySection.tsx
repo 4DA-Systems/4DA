@@ -50,7 +50,7 @@ export function PrivacySection() {
   const handleToggle = async (next: boolean) => {
     setSaving(true);
     try {
-      await cmd('set_privacy_config', { crash_reporting_opt_in: next });
+      await cmd('set_privacy_config', { crashReportingOptIn: next });
       setOptedIn(next);
     } catch {
       // On failure, state stays. User will see the toggle didn't move.
@@ -62,7 +62,7 @@ export function PrivacySection() {
   const handleActivityToggle = async (next: boolean) => {
     setSaving(true);
     try {
-      await cmd('set_privacy_config', { activity_tracking_opt_in: next });
+      await cmd('set_privacy_config', { activityTrackingOptIn: next });
       setActivityOptedIn(next);
       // Flip runtime telemetry gate immediately — don't wait for reload.
       setActivityTrackingEnabled(next);
