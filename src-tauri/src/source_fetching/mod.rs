@@ -18,6 +18,21 @@ use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
 // ============================================================================
+// Feed origin extraction
+// ============================================================================
+
+/// Extract feed_origin from a SourceItem's metadata.
+/// RSS items have "feed_url", YouTube have "channel_id", Twitter have "handle".
+pub(crate) fn extract_feed_origin(item: &crate::sources::SourceItem) -> Option<String> {
+    item.metadata.as_ref().and_then(|m| {
+        m.get("feed_url")
+            .and_then(|v| v.as_str().map(String::from))
+            .or_else(|| m.get("channel_id").and_then(|v| v.as_str().map(String::from)))
+            .or_else(|| m.get("handle").and_then(|v| v.as_str().map(String::from)))
+    })
+}
+
+// ============================================================================
 // Self-healing retry logic
 // ============================================================================
 
@@ -282,33 +297,108 @@ impl AdapterFailureTracker {
 // Settings loader helpers
 // ============================================================================
 
-/// Load RSS feed URLs from settings (falls back to curated defaults if empty)
+/// Load RSS feed URLs from settings — merges custom feeds on top of defaults,
+/// filtering out any defaults the user has explicitly disabled.
 pub(crate) fn load_rss_feeds_from_settings() -> Vec<String> {
     let settings = get_settings_manager().lock();
-    let feeds = settings.get_rss_feeds();
+    let custom = settings.get_rss_feeds();
+    let disabled = settings.get_disabled_default_rss_feeds();
     drop(settings);
-    if feeds.is_empty() {
-        load_default_rss_feeds()
-    } else {
-        feeds
+
+    let mut feeds = load_default_rss_feeds();
+    feeds.retain(|f| !disabled.contains(f));
+    for url in custom {
+        if !feeds.contains(&url) {
+            feeds.push(url);
+        }
     }
+
+    // Filter out circuit-broken feeds
+    if let Ok(db) = crate::get_database() {
+        feeds.retain(|f| {
+            if db.is_feed_circuit_open(f, "rss") {
+                info!(target: "4da::sources", feed = %f, "Skipping circuit-broken RSS feed");
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    feeds
 }
 
-/// Load Twitter handles and X API key from settings
+/// Load Twitter handles and X API key from settings — merges custom handles
+/// on top of defaults, filtering out any defaults the user has disabled.
 pub(crate) fn load_twitter_settings() -> (Vec<String>, String) {
     let settings = get_settings_manager().lock();
-    let handles = settings.get_twitter_handles();
+    let custom = settings.get_twitter_handles();
+    let disabled = settings.get_disabled_default_twitter_handles();
     let api_key = settings.get_x_api_key();
     drop(settings);
+
+    let mut handles = load_default_twitter_handles();
+    handles.retain(|h| !disabled.contains(h));
+    for h in custom {
+        if !handles.contains(&h) {
+            handles.push(h);
+        }
+    }
+
+    // Filter out circuit-broken handles
+    if let Ok(db) = crate::get_database() {
+        handles.retain(|h| {
+            if db.is_feed_circuit_open(h, "twitter") {
+                info!(target: "4da::sources", feed = %h, "Skipping circuit-broken Twitter handle");
+                false
+            } else {
+                true
+            }
+        });
+    }
+
     (handles, api_key)
 }
 
-/// Load YouTube channel IDs from settings
+/// Load YouTube channel IDs from settings — merges custom channels on top
+/// of defaults, filtering out any defaults the user has disabled.
 pub(crate) fn load_youtube_channels_from_settings() -> Vec<String> {
     let settings = get_settings_manager().lock();
-    let channels = settings.get_youtube_channels();
+    let custom = settings.get_youtube_channels();
+    let disabled = settings.get_disabled_default_youtube_channels();
     drop(settings);
+
+    let mut channels = load_default_youtube_channels();
+    channels.retain(|c| !disabled.contains(c));
+    for ch in custom {
+        if !channels.contains(&ch) {
+            channels.push(ch);
+        }
+    }
+
+    // Filter out circuit-broken channels
+    if let Ok(db) = crate::get_database() {
+        channels.retain(|c| {
+            if db.is_feed_circuit_open(c, "youtube") {
+                info!(target: "4da::sources", feed = %c, "Skipping circuit-broken YouTube channel");
+                false
+            } else {
+                true
+            }
+        });
+    }
+
     channels
+}
+
+/// Default YouTube channel IDs from the YouTube source adapter
+pub(crate) fn load_default_youtube_channels() -> Vec<String> {
+    crate::sources::youtube::default_channel_ids()
+}
+
+/// Default Twitter handles from the Twitter source adapter
+pub(crate) fn load_default_twitter_handles() -> Vec<String> {
+    crate::sources::twitter::default_handle_list()
 }
 
 /// Load GitHub languages from settings (defaults if empty)

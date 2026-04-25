@@ -211,39 +211,67 @@ impl SettingsManager {
             match keystore::migrate_from_plaintext(&settings) {
                 Ok(report) => {
                     if !report.migrated.is_empty() {
-                        // Only clear keys that were ACTUALLY migrated to the keychain.
-                        // Keys that failed migration stay in plaintext as a fallback.
+                        // Only clear keys that survive a round-trip verification.
+                        // The migration may report success but the credential may
+                        // not actually persist (observed on some Windows setups).
                         let mut clean_settings = settings.clone();
-                        if report.migrated.contains(&"llm_api_key".to_string()) {
+                        let mut verified_count = 0u32;
+                        if report.migrated.contains(&"llm_api_key".to_string())
+                            && keystore::verify_round_trip("llm_api_key", &settings.llm.api_key)
+                        {
                             clean_settings.llm.api_key = String::new();
+                            verified_count += 1;
                         }
-                        if report.migrated.contains(&"openai_api_key".to_string()) {
+                        if report.migrated.contains(&"openai_api_key".to_string())
+                            && keystore::verify_round_trip("openai_api_key", &settings.llm.openai_api_key)
+                        {
                             clean_settings.llm.openai_api_key = String::new();
+                            verified_count += 1;
                         }
-                        if report.migrated.contains(&"x_api_key".to_string()) {
+                        if report.migrated.contains(&"x_api_key".to_string())
+                            && keystore::verify_round_trip("x_api_key", settings.x_api_key.as_str())
+                        {
                             clean_settings.x_api_key = SensitiveString::default();
+                            verified_count += 1;
                         }
-                        if report.migrated.contains(&"translation_api_key".to_string()) {
+                        if report.migrated.contains(&"translation_api_key".to_string())
+                            && keystore::verify_round_trip("translation_api_key", &settings.translation.api_key)
+                        {
                             clean_settings.translation.api_key = String::new();
+                            verified_count += 1;
                         }
-                        if report.migrated.contains(&"license_key".to_string()) {
+                        if report.migrated.contains(&"license_key".to_string())
+                            && keystore::verify_round_trip("license_key", &settings.license.license_key)
+                        {
                             clean_settings.license.license_key = String::new();
+                            verified_count += 1;
                         }
 
-                        if let Some(parent) = settings_path.parent() {
-                            let _ = fs::create_dir_all(parent);
-                        }
-                        if let Ok(json) = serde_json::to_string_pretty(&clean_settings) {
-                            let tmp_path = settings_path.with_extension("json.tmp");
-                            if fs::write(&tmp_path, &json).is_ok() {
-                                let _ = atomic_replace(&tmp_path, &settings_path);
+                        if verified_count > 0 {
+                            if let Some(parent) = settings_path.parent() {
+                                let _ = fs::create_dir_all(parent);
                             }
+                            if let Ok(json) = serde_json::to_string_pretty(&clean_settings) {
+                                let tmp_path = settings_path.with_extension("json.tmp");
+                                if fs::write(&tmp_path, &json).is_ok() {
+                                    let _ = atomic_replace(&tmp_path, &settings_path);
+                                }
+                            }
+                            info!(
+                                target: "4da::keystore",
+                                verified = verified_count,
+                                reported = report.migrated.len(),
+                                "Cleared verified keys from settings.json after keychain migration"
+                            );
                         }
-                        info!(
-                            target: "4da::keystore",
-                            count = report.migrated.len(),
-                            "Cleared plaintext keys from settings.json after keychain migration"
-                        );
+                        if verified_count < report.migrated.len() as u32 {
+                            warn!(
+                                target: "4da::keystore",
+                                reported = report.migrated.len(),
+                                verified = verified_count,
+                                "Keychain round-trip verification failed for some keys — keeping plaintext fallback"
+                            );
+                        }
                     }
                 }
                 Err(e) => {
@@ -304,24 +332,25 @@ impl SettingsManager {
         let tmp_path = self.settings_path.with_extension("json.tmp");
         let _ = fs::remove_file(&tmp_path); // ignore error if doesn't exist
 
-        // Clone settings and clear SECRET fields that are safely in the keychain.
-        // Only strip a key from disk if it's verified in the keychain -- otherwise
-        // keep the plaintext version so the app still works without a keychain.
-        // On load, keys are hydrated from keychain back into memory.
+        // Clone settings and clear SECRET fields that are VERIFIED in the keychain.
+        // Uses round-trip verification: only strip a key from disk if reading it
+        // back from the keychain returns the exact same value. This prevents data
+        // loss on platforms where the keychain reports write-success but silently
+        // drops the credential (observed on some Windows configurations).
         let mut disk_settings = self.settings.clone();
-        if keystore::has_secret("llm_api_key") {
+        if keystore::verify_round_trip("llm_api_key", &self.settings.llm.api_key) {
             disk_settings.llm.api_key = String::new();
         }
-        if keystore::has_secret("openai_api_key") {
+        if keystore::verify_round_trip("openai_api_key", &self.settings.llm.openai_api_key) {
             disk_settings.llm.openai_api_key = String::new();
         }
-        if keystore::has_secret("x_api_key") {
+        if keystore::verify_round_trip("x_api_key", self.settings.x_api_key.as_str()) {
             disk_settings.x_api_key = SensitiveString::default();
         }
-        if keystore::has_secret("license_key") {
+        if keystore::verify_round_trip("license_key", &self.settings.license.license_key) {
             disk_settings.license.license_key = String::new();
         }
-        if keystore::has_secret("translation_api_key") {
+        if keystore::verify_round_trip("translation_api_key", &self.settings.translation.api_key) {
             disk_settings.translation.api_key = String::new();
         }
         // Team relay auth_token is a JWT — always strip from disk.
@@ -672,6 +701,39 @@ impl SettingsManager {
     /// Set all YouTube channel IDs (replacing existing)
     pub fn set_youtube_channels(&mut self, channels: Vec<String>) -> Result<()> {
         self.settings.youtube_channels = channels;
+        self.save()
+    }
+
+    /// Get disabled default RSS feeds
+    pub fn get_disabled_default_rss_feeds(&self) -> Vec<String> {
+        self.settings.disabled_default_rss_feeds.clone()
+    }
+
+    /// Set disabled default RSS feeds
+    pub fn set_disabled_default_rss_feeds(&mut self, feeds: Vec<String>) -> Result<()> {
+        self.settings.disabled_default_rss_feeds = feeds;
+        self.save()
+    }
+
+    /// Get disabled default YouTube channels
+    pub fn get_disabled_default_youtube_channels(&self) -> Vec<String> {
+        self.settings.disabled_default_youtube_channels.clone()
+    }
+
+    /// Set disabled default YouTube channels
+    pub fn set_disabled_default_youtube_channels(&mut self, channels: Vec<String>) -> Result<()> {
+        self.settings.disabled_default_youtube_channels = channels;
+        self.save()
+    }
+
+    /// Get disabled default Twitter handles
+    pub fn get_disabled_default_twitter_handles(&self) -> Vec<String> {
+        self.settings.disabled_default_twitter_handles.clone()
+    }
+
+    /// Set disabled default Twitter handles
+    pub fn set_disabled_default_twitter_handles(&mut self, handles: Vec<String>) -> Result<()> {
+        self.settings.disabled_default_twitter_handles = handles;
         self.save()
     }
 

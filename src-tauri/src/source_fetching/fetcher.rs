@@ -190,6 +190,25 @@ pub(crate) async fn fetch_all_sources(
                 db.record_source_health(source_type, true, item_count as i64, elapsed_ms, None)
                     .ok();
                 db.update_source_fetch_time(source_type).ok();
+
+                // Record per-feed health from returned items
+                {
+                    let feed_origins: std::collections::HashSet<String> = items
+                        .iter()
+                        .filter_map(|item| super::extract_feed_origin(item))
+                        .collect();
+                    for origin in &feed_origins {
+                        db.record_feed_success(origin, source_type).ok();
+                    }
+                    // Record per-feed errors (feeds that failed internally)
+                    for (feed_id, error_msg) in source.feed_errors() {
+                        if !feed_origins.contains(&feed_id) {
+                            db.record_feed_failure(&feed_id, source_type, &error_msg)
+                                .ok();
+                        }
+                    }
+                }
+
                 let _ = app.emit(
                     "source-fetched",
                     serde_json::json!({
@@ -273,6 +292,7 @@ pub(crate) async fn fetch_all_sources(
                                 title: cached.title,
                                 url: cached.url,
                                 content: cached.content,
+                                feed_origin: cached.feed_origin,
                             },
                             cached.embedding,
                         ));
@@ -316,6 +336,7 @@ pub(crate) async fn fetch_all_sources(
                             title: item.title.clone(),
                             url: item.url.clone(),
                             content: content.clone(),
+                            feed_origin: super::extract_feed_origin(&item),
                         };
 
                         let embed_text = build_embedding_text(&item.title, &content);
@@ -518,6 +539,7 @@ pub(crate) async fn fetch_all_sources(
                         detected_lang,
                         content_type,
                         cve_ids,
+                        item.feed_origin.clone(),
                     ));
                 }
                 all_items.push((item, embedding));
@@ -1029,6 +1051,7 @@ pub(crate) async fn fetch_all_sources_deep(
                         detected_lang,
                         content_type,
                         cve_ids,
+                        item.feed_origin.clone(),
                     ));
                 }
                 all_items.push((item, embedding));

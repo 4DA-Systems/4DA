@@ -83,6 +83,53 @@ pub struct TwitterSource {
     client: reqwest::Client,
     handles: Vec<String>,
     api_key: String,
+    /// Per-handle errors recorded during the last `fetch_items()` call
+    feed_errors: std::sync::Mutex<Vec<(String, String)>>,
+}
+
+/// Return the default Twitter handles as a standalone list
+pub fn default_handle_list() -> Vec<String> {
+    vec![
+        // Core developer advocates
+        "ThePrimeagen".into(),
+        "dan_abramov".into(),
+        "kentcdodds".into(),
+        "addyosmani".into(),
+        "traversymedia".into(),
+        // Rust / systems
+        "jonhoo".into(),
+        "m_ou_se".into(),
+        "fasterthanlime".into(),
+        // AI/ML
+        "karpathy".into(),
+        "ylecun".into(),
+        "svpino".into(),
+        "AndrewYNg".into(),
+        // Web platform
+        "leeerob".into(),
+        "rauchg".into(),
+        "Rich_Harris".into(),
+        "ryanflorence".into(),
+        "wesbos".into(),
+        // DevOps / Cloud
+        "kelseyhightower".into(),
+        "jessfraz".into(),
+        // Security
+        "taviso".into(),
+        "SwiftOnSecurity".into(),
+        // Tech journalists / commentators
+        "benthompson".into(),
+        "dhh".into(),
+        "paulg".into(),
+        // Open source
+        "mitchellh".into(),
+        "antirez".into(),
+        "matklad".into(),
+        // Indie hackers
+        "levelsio".into(),
+        "marc_louvion".into(),
+        "t3dotgg".into(),
+    ]
 }
 
 impl TwitterSource {
@@ -96,48 +143,9 @@ impl TwitterSource {
                 custom: None,
             },
             client: super::shared_client(),
-            handles: vec![
-                // Core developer advocates
-                "ThePrimeagen".into(),
-                "dan_abramov".into(),
-                "kentcdodds".into(),
-                "addyosmani".into(),
-                "traversymedia".into(),
-                // Rust / systems
-                "jonhoo".into(),
-                "m_ou_se".into(),
-                "fasterthanlime".into(),
-                // AI/ML
-                "karpathy".into(),
-                "ylecun".into(),
-                "svpino".into(),
-                "AndrewYNg".into(),
-                // Web platform
-                "leeerob".into(),
-                "rauchg".into(),
-                "Rich_Harris".into(),
-                "ryanflorence".into(),
-                "wesbos".into(),
-                // DevOps / Cloud
-                "kelseyhightower".into(),
-                "jessfraz".into(),
-                // Security
-                "taviso".into(),
-                "SwiftOnSecurity".into(),
-                // Tech journalists / commentators
-                "benthompson".into(),
-                "dhh".into(),
-                "paulg".into(),
-                // Open source
-                "mitchellh".into(),
-                "antirez".into(),
-                "matklad".into(),
-                // Indie hackers
-                "levelsio".into(),
-                "marc_louvion".into(),
-                "t3dotgg".into(),
-            ],
+            handles: default_handle_list(),
             api_key: String::new(),
+            feed_errors: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -265,6 +273,7 @@ impl TwitterSource {
                 let metrics = tweet.public_metrics.as_ref();
                 let metadata = serde_json::json!({
                     "author": author,
+                    "handle": username,
                     "created_at": tweet.created_at,
                     "likes": metrics.map_or(0, |m| m.like_count),
                     "retweets": metrics.map_or(0, |m| m.retweet_count),
@@ -354,6 +363,7 @@ impl TwitterSource {
                 let metrics = tweet.public_metrics.as_ref();
                 let metadata = serde_json::json!({
                     "author": author,
+                    "handle": author_username,
                     "created_at": tweet.created_at,
                     "likes": metrics.map_or(0, |m| m.like_count),
                     "retweets": metrics.map_or(0, |m| m.retweet_count),
@@ -418,6 +428,9 @@ impl Source for TwitterSource {
             return Ok(Vec::new());
         }
 
+        // Clear per-feed errors from previous run
+        *self.feed_errors.lock().unwrap_or_else(|e| e.into_inner()) = Vec::new();
+
         info!(handles = self.handles.len(), "Fetching tweets via X API v2");
 
         let mut all_items = Vec::new();
@@ -444,6 +457,8 @@ impl Source for TwitterSource {
                         } else {
                             warn!(handle = %handle, error = %e, "Failed to fetch tweets");
                         }
+                        self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                            .push((handle.clone(), e.to_string()));
                     }
                 },
                 Err(e) => {
@@ -453,6 +468,8 @@ impl Source for TwitterSource {
                     } else {
                         warn!(handle = %handle, error = %e, "Failed to look up user");
                     }
+                    self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                        .push((handle.clone(), e.to_string()));
                 }
             }
 
@@ -514,6 +531,13 @@ impl Source for TwitterSource {
     async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
         // Tweets already have their full text as content
         Ok(item.content.clone())
+    }
+
+    fn feed_errors(&self) -> Vec<(String, String)> {
+        self.feed_errors
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 

@@ -350,7 +350,7 @@ impl Database {
     pub fn get_source_item_by_id(&self, id: i64) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
         conn.query_row(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en')
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
              FROM source_items WHERE id = ?1",
             params![id],
             |row| {
@@ -367,6 +367,7 @@ impl Database {
                     created_at: parse_datetime(row.get::<_, String>(8)?),
                     last_seen: parse_datetime(row.get::<_, String>(9)?),
                     detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
+                    feed_origin: row.get(11).ok().flatten(),
                 })
             },
         ).optional()
