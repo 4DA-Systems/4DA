@@ -42,6 +42,8 @@ pub struct RssSource {
     client: reqwest::Client,
     /// Feed URLs to fetch
     feed_urls: Vec<String>,
+    /// Per-feed errors recorded during the last `fetch_items()` call
+    feed_errors: std::sync::Mutex<Vec<(String, String)>>,
 }
 
 impl RssSource {
@@ -70,6 +72,7 @@ impl RssSource {
                 "https://jvns.ca/atom.xml".to_string(),
                 "https://danluu.com/atom.xml".to_string(),
             ],
+            feed_errors: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -358,6 +361,9 @@ impl Source for RssSource {
             return Ok(Vec::new());
         }
 
+        // Clear per-feed errors from previous run
+        *self.feed_errors.lock().unwrap_or_else(|e| e.into_inner()) = Vec::new();
+
         info!(feed_count = self.feed_urls.len(), "Fetching RSS feeds");
 
         let mut all_items = Vec::new();
@@ -374,7 +380,10 @@ impl Source for RssSource {
             {
                 Ok(response) => {
                     if !response.status().is_success() {
+                        let err_msg = format!("HTTP {}", response.status());
                         warn!(url = feed_url, status = %response.status(), "Feed returned error status");
+                        self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                            .push((feed_url.clone(), err_msg));
                         continue;
                     }
 
@@ -387,6 +396,8 @@ impl Source for RssSource {
                                 size = len,
                                 "RSS feed too large — skipping"
                             );
+                            self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                                .push((feed_url.clone(), format!("Feed too large: {} bytes", len)));
                             continue;
                         }
                     }
@@ -413,11 +424,15 @@ impl Source for RssSource {
                         }
                         Err(e) => {
                             warn!(url = feed_url, error = %e, "Failed to read feed body");
+                            self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                                .push((feed_url.clone(), e.to_string()));
                         }
                     }
                 }
                 Err(e) => {
                     warn!(url = feed_url, error = %e, "Failed to fetch feed");
+                    self.feed_errors.lock().unwrap_or_else(|e| e.into_inner())
+                        .push((feed_url.clone(), e.to_string()));
                 }
             }
         }
@@ -506,6 +521,13 @@ impl Source for RssSource {
 
         // Fall back to feed description
         Ok(item.content.clone())
+    }
+
+    fn feed_errors(&self) -> Vec<(String, String)> {
+        self.feed_errors
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 }
 

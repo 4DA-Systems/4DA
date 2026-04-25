@@ -769,6 +769,15 @@ pub struct Settings {
     /// YouTube channel IDs to monitor (free, no API key needed)
     #[serde(default)]
     pub youtube_channels: Vec<String>,
+    /// RSS feeds from defaults that user has disabled
+    #[serde(default)]
+    pub disabled_default_rss_feeds: Vec<String>,
+    /// YouTube channels from defaults that user has disabled
+    #[serde(default)]
+    pub disabled_default_youtube_channels: Vec<String>,
+    /// Twitter handles from defaults that user has disabled
+    #[serde(default)]
+    pub disabled_default_twitter_handles: Vec<String>,
     /// GitHub programming languages to track trending repos
     #[serde(default)]
     pub github_languages: Vec<String>,
@@ -846,6 +855,18 @@ impl std::fmt::Debug for Settings {
             .field(
                 "youtube_channels",
                 &format!("[{} channels]", self.youtube_channels.len()),
+            )
+            .field(
+                "disabled_default_rss_feeds",
+                &format!("[{} disabled]", self.disabled_default_rss_feeds.len()),
+            )
+            .field(
+                "disabled_default_youtube_channels",
+                &format!("[{} disabled]", self.disabled_default_youtube_channels.len()),
+            )
+            .field(
+                "disabled_default_twitter_handles",
+                &format!("[{} disabled]", self.disabled_default_twitter_handles.len()),
             )
             .field("github_languages", &self.github_languages)
             .field("license", &self.license)
@@ -1011,6 +1032,9 @@ impl Default for Settings {
             nitter_instance: None,
             x_api_key: SensitiveString::default(),
             youtube_channels: vec![],
+            disabled_default_rss_feeds: vec![],
+            disabled_default_youtube_channels: vec![],
+            disabled_default_twitter_handles: vec![],
             github_languages: vec![],
             predictive: PredictiveConfig::default(),
             serendipity: SerendipityConfig::default(),

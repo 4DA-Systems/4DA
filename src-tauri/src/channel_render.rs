@@ -561,6 +561,7 @@ mod tests {
                 created_at: Utc::now(),
                 last_seen: Utc::now(),
                 detected_lang: "en".to_string(),
+                feed_origin: None,
             },
             0.9,
         )];

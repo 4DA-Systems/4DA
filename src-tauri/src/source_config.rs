@@ -11,7 +11,7 @@ use crate::get_settings_manager;
 use crate::sources::MAX_SOURCES;
 
 /// Validate string input length
-fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<()> {
+pub(crate) fn validate_input_length(value: &str, field: &str, max_len: usize) -> Result<()> {
     if value.len() > max_len {
         return Err(format!(
             "{} too long ({} chars, max {})",
@@ -327,6 +327,283 @@ pub async fn set_github_languages(languages: Vec<String>) -> Result<serde_json::
     }))
 }
 
+// ============================================================================
+// Default Feed List Commands
+// ============================================================================
+
+/// Get the built-in default RSS feed URLs
+#[tauri::command]
+pub async fn get_default_rss_feeds() -> Result<serde_json::Value> {
+    let feeds = crate::source_fetching::load_default_rss_feeds();
+    Ok(serde_json::json!({ "feeds": feeds }))
+}
+
+/// Get the built-in default YouTube channel IDs
+#[tauri::command]
+pub async fn get_default_youtube_channels() -> Result<serde_json::Value> {
+    let channels = crate::source_fetching::load_default_youtube_channels();
+    Ok(serde_json::json!({ "channels": channels }))
+}
+
+/// Get the built-in default Twitter handles
+#[tauri::command]
+pub async fn get_default_twitter_handles() -> Result<serde_json::Value> {
+    let handles = crate::source_fetching::load_default_twitter_handles();
+    Ok(serde_json::json!({ "handles": handles }))
+}
+
+// ============================================================================
+// Disabled Default Commands
+// ============================================================================
+
+/// Get the list of default RSS feeds that the user has disabled
+#[tauri::command]
+pub async fn get_disabled_default_rss_feeds() -> Result<serde_json::Value> {
+    let settings = get_settings_manager().lock();
+    let disabled = settings.get_disabled_default_rss_feeds();
+    Ok(serde_json::json!({ "disabled": disabled }))
+}
+
+/// Set which default RSS feeds are disabled
+#[tauri::command]
+pub async fn set_disabled_default_rss_feeds(feeds: Vec<String>) -> Result<serde_json::Value> {
+    let mut settings = get_settings_manager().lock();
+    settings.set_disabled_default_rss_feeds(feeds)?;
+    Ok(serde_json::json!({ "success": true }))
+}
+
+/// Get the list of default YouTube channels that the user has disabled
+#[tauri::command]
+pub async fn get_disabled_default_youtube_channels() -> Result<serde_json::Value> {
+    let settings = get_settings_manager().lock();
+    let disabled = settings.get_disabled_default_youtube_channels();
+    Ok(serde_json::json!({ "disabled": disabled }))
+}
+
+/// Set which default YouTube channels are disabled
+#[tauri::command]
+pub async fn set_disabled_default_youtube_channels(
+    channels: Vec<String>,
+) -> Result<serde_json::Value> {
+    let mut settings = get_settings_manager().lock();
+    settings.set_disabled_default_youtube_channels(channels)?;
+    Ok(serde_json::json!({ "success": true }))
+}
+
+/// Get the list of default Twitter handles that the user has disabled
+#[tauri::command]
+pub async fn get_disabled_default_twitter_handles() -> Result<serde_json::Value> {
+    let settings = get_settings_manager().lock();
+    let disabled = settings.get_disabled_default_twitter_handles();
+    Ok(serde_json::json!({ "disabled": disabled }))
+}
+
+/// Set which default Twitter handles are disabled
+#[tauri::command]
+pub async fn set_disabled_default_twitter_handles(
+    handles: Vec<String>,
+) -> Result<serde_json::Value> {
+    let mut settings = get_settings_manager().lock();
+    settings.set_disabled_default_twitter_handles(handles)?;
+    Ok(serde_json::json!({ "success": true }))
+}
+
+// ============================================================================
+// Feed Validation Commands
+// ============================================================================
+
+/// Validate an RSS/Atom feed URL by fetching it and checking structure
+#[tauri::command]
+pub async fn validate_rss_feed(url: String) -> Result<serde_json::Value> {
+    validate_input_length(&url, "Feed URL", 2000)?;
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return Err("URL must start with http:// or https://".into());
+    }
+    crate::url_validation::validate_not_internal(&url)?;
+
+    let client = crate::sources::shared_client();
+    let resp = client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10))
+        .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/1.0)")
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach URL: {}", e))?;
+
+    if !resp.status().is_success() {
+        return Ok(serde_json::json!({
+            "valid": false,
+            "reason": "http_error",
+            "status": resp.status().as_u16(),
+            "message": format!("URL returned HTTP {}", resp.status())
+        }));
+    }
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("Could not read response: {}", e))?;
+
+    let is_xml = content_type.contains("xml")
+        || content_type.contains("rss")
+        || content_type.contains("atom");
+    let is_html = content_type.contains("html")
+        || body.trim_start().starts_with("<!DOCTYPE")
+        || body.trim_start().starts_with("<html");
+    let has_rss_tags = body.contains("<rss") || body.contains("<item>");
+    let has_atom_tags = body.contains("<feed") || body.contains("<entry>");
+
+    if is_xml || has_rss_tags || has_atom_tags {
+        let rss_source = crate::sources::rss::RssSource::new();
+        let entries = rss_source.parse_feed(&body, &url);
+        let feed_title = crate::sources::rss::RssSource::extract_tag(&body, "title")
+            .unwrap_or_else(|| url.clone());
+
+        if entries.is_empty() {
+            return Ok(serde_json::json!({
+                "valid": false,
+                "reason": "empty_feed",
+                "message": "Feed parsed but contains no items"
+            }));
+        }
+
+        return Ok(serde_json::json!({
+            "valid": true,
+            "feed_title": feed_title,
+            "item_count": entries.len(),
+            "format": if has_atom_tags && !has_rss_tags { "atom" } else { "rss" },
+            "sample_title": entries.first().map(|e| &e.title)
+        }));
+    }
+
+    if is_html {
+        let discovered = discover_feed_links(&body, &url);
+        return Ok(serde_json::json!({
+            "valid": false,
+            "reason": "html_not_feed",
+            "message": "This URL is an HTML page, not an RSS feed",
+            "discovered_feeds": discovered
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "valid": false,
+        "reason": "unknown_format",
+        "message": "Could not detect RSS or Atom feed at this URL"
+    }))
+}
+
+/// Discover RSS/Atom feed links from an HTML page
+fn discover_feed_links(html: &str, base_url: &str) -> Vec<String> {
+    let mut feeds = Vec::new();
+    let base = url::Url::parse(base_url).ok();
+
+    // Look for <link rel="alternate" type="application/rss+xml" href="...">
+    // and <link rel="alternate" type="application/atom+xml" href="...">
+    for segment in html.split("<link") {
+        let lower = segment.to_lowercase();
+        if !lower.contains("alternate") {
+            continue;
+        }
+        if !lower.contains("rss+xml") && !lower.contains("atom+xml") {
+            continue;
+        }
+
+        // Extract href
+        if let Some(href_start) = segment.find("href=") {
+            let after_href = &segment[href_start + 5..];
+            let quote = if after_href.starts_with('"') {
+                '"'
+            } else if after_href.starts_with('\'') {
+                '\''
+            } else {
+                continue;
+            };
+            let inner = &after_href[1..];
+            if let Some(end) = inner.find(quote) {
+                let href = &inner[..end];
+                // Resolve relative URL
+                let resolved =
+                    if href.starts_with("http://") || href.starts_with("https://") {
+                        href.to_string()
+                    } else if let Some(ref base) = base {
+                        base.join(href)
+                            .map_or_else(|_| href.to_string(), |u| u.to_string())
+                    } else {
+                        href.to_string()
+                    };
+                if !feeds.contains(&resolved) {
+                    feeds.push(resolved);
+                }
+            }
+        }
+
+        if feeds.len() >= 5 {
+            break;
+        }
+    }
+
+    feeds
+}
+
+/// Validate a YouTube channel ID by fetching its Atom feed
+#[tauri::command]
+pub async fn validate_youtube_channel(channel_id: String) -> Result<serde_json::Value> {
+    validate_input_length(&channel_id, "Channel ID", 100)?;
+
+    let url = format!(
+        "https://www.youtube.com/feeds/videos.xml?channel_id={}",
+        channel_id
+    );
+
+    let client = crate::sources::shared_client();
+    let resp = client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("Could not reach YouTube: {}", e))?;
+
+    if resp.status() == 404 {
+        return Ok(serde_json::json!({
+            "valid": false,
+            "reason": "not_found",
+            "message": "No YouTube channel found with this ID"
+        }));
+    }
+
+    if !resp.status().is_success() {
+        return Ok(serde_json::json!({
+            "valid": false,
+            "reason": "http_error",
+            "message": format!("YouTube returned HTTP {}", resp.status())
+        }));
+    }
+
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("Could not read response: {}", e))?;
+
+    let channel_name = crate::sources::youtube::extract_tag(&body, "title")
+        .unwrap_or_else(|| channel_id.clone());
+
+    let entry_count = body.matches("<entry>").count();
+
+    Ok(serde_json::json!({
+        "valid": true,
+        "channel_name": channel_name,
+        "video_count": entry_count,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,5 +676,56 @@ mod tests {
         assert!(validate_not_internal("http://169.254.169.254/latest/meta-data/").is_err());
         // Public addresses should pass
         assert!(validate_not_internal("https://example.com/feed.xml").is_ok());
+    }
+
+    #[test]
+    fn test_discover_feed_links_rss() {
+        let html = r#"<html><head>
+            <link rel="alternate" type="application/rss+xml" href="/feed.xml" />
+        </head></html>"#;
+        let feeds = discover_feed_links(html, "https://example.com/blog");
+        assert_eq!(feeds.len(), 1);
+        assert_eq!(feeds[0], "https://example.com/feed.xml");
+    }
+
+    #[test]
+    fn test_discover_feed_links_atom() {
+        let html = r#"<html><head>
+            <link rel="alternate" type="application/atom+xml" href="https://example.com/atom.xml" />
+        </head></html>"#;
+        let feeds = discover_feed_links(html, "https://example.com");
+        assert_eq!(feeds.len(), 1);
+        assert_eq!(feeds[0], "https://example.com/atom.xml");
+    }
+
+    #[test]
+    fn test_discover_feed_links_no_feeds() {
+        let html = r#"<html><head><title>No feeds</title></head></html>"#;
+        let feeds = discover_feed_links(html, "https://example.com");
+        assert!(feeds.is_empty());
+    }
+
+    #[test]
+    fn test_discover_feed_links_deduplicates() {
+        let html = r#"<html><head>
+            <link rel="alternate" type="application/rss+xml" href="/feed.xml" />
+            <link rel="alternate" type="application/rss+xml" href="/feed.xml" />
+        </head></html>"#;
+        let feeds = discover_feed_links(html, "https://example.com");
+        assert_eq!(feeds.len(), 1);
+    }
+
+    #[test]
+    fn test_discover_feed_links_max_five() {
+        let mut html = String::from("<html><head>");
+        for i in 0..10 {
+            html.push_str(&format!(
+                r#"<link rel="alternate" type="application/rss+xml" href="/feed{}.xml" />"#,
+                i
+            ));
+        }
+        html.push_str("</head></html>");
+        let feeds = discover_feed_links(&html, "https://example.com");
+        assert!(feeds.len() <= 5);
     }
 }

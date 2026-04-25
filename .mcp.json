@@ -31,6 +31,10 @@
       "args": [
         "@playwright/mcp@latest"
       ]
+    },
+    "victauri": {
+      "url": "http://127.0.0.1:7373/mcp",
+      "_comment": "Victauri MCP — available when 4DA is running in debug mode (pnpm run tauri dev)"
     }
   }
 }

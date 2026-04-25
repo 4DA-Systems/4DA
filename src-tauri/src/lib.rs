@@ -301,6 +301,7 @@ mod signal_terminal_events;
 mod signal_terminal_pages;
 mod signals;
 mod source_config;
+mod source_fetch_commands;
 mod source_fetching;
 pub mod sources;
 mod standing_queries;
@@ -628,6 +629,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(victauri_plugin::init())
         .invoke_handler(tauri::generate_handler![
             // Context
             context_commands::get_context_files,
@@ -766,6 +768,21 @@ pub fn run() {
             source_config::set_youtube_channels,
             source_config::get_github_languages,
             source_config::set_github_languages,
+            source_config::get_default_rss_feeds,
+            source_config::get_default_youtube_channels,
+            source_config::get_default_twitter_handles,
+            source_config::get_disabled_default_rss_feeds,
+            source_config::set_disabled_default_rss_feeds,
+            source_config::get_disabled_default_youtube_channels,
+            source_config::set_disabled_default_youtube_channels,
+            source_config::get_disabled_default_twitter_handles,
+            source_config::set_disabled_default_twitter_handles,
+            // Source validation & immediate fetch
+            source_config::validate_rss_feed,
+            source_config::validate_youtube_channel,
+            source_fetch_commands::fetch_single_feed,
+            source_fetch_commands::fetch_single_youtube_channel,
+            source_fetch_commands::reset_feed_health,
             // Digest & Briefing
             digest_config::get_digest_config,
             digest_config::set_digest_config,

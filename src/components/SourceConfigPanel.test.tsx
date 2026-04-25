@@ -46,6 +46,24 @@ describe('SourceConfigPanel', () => {
           return Promise.resolve(false);
         case 'get_github_languages':
           return Promise.resolve({ languages: [], count: 0 });
+        case 'get_default_rss_feeds':
+          return Promise.resolve({ feeds: [] });
+        case 'get_default_youtube_channels':
+          return Promise.resolve({ channels: [] });
+        case 'get_default_twitter_handles':
+          return Promise.resolve({ handles: [] });
+        case 'get_disabled_default_rss_feeds':
+        case 'get_disabled_default_youtube_channels':
+        case 'get_disabled_default_twitter_handles':
+          return Promise.resolve({ disabled: [] });
+        case 'validate_rss_feed':
+          return Promise.resolve({ valid: true, feed_title: 'Test Feed', item_count: 10, format: 'rss' });
+        case 'validate_youtube_channel':
+          return Promise.resolve({ valid: true, channel_name: 'Test Channel', video_count: 5 });
+        case 'fetch_single_feed':
+          return Promise.resolve({ success: true, items_added: 10 });
+        case 'fetch_single_youtube_channel':
+          return Promise.resolve({ success: true, items_added: 5 });
         default:
           return Promise.resolve({});
       }
@@ -117,6 +135,14 @@ describe('SourceConfigPanel', () => {
         return Promise.resolve(false);
       if (cmd === 'get_github_languages')
         return Promise.resolve({ languages: [], count: 0 });
+      if (cmd === 'get_default_rss_feeds')
+        return Promise.resolve({ feeds: [] });
+      if (cmd === 'get_default_youtube_channels')
+        return Promise.resolve({ channels: [] });
+      if (cmd === 'get_default_twitter_handles')
+        return Promise.resolve({ handles: [] });
+      if (cmd?.startsWith('get_disabled_default_'))
+        return Promise.resolve({ disabled: [] });
       return Promise.resolve({});
     });
 
@@ -155,6 +181,14 @@ describe('SourceConfigPanel', () => {
         return Promise.resolve(true);
       if (cmd === 'get_github_languages')
         return Promise.resolve({ languages: [], count: 0 });
+      if (cmd === 'get_default_rss_feeds')
+        return Promise.resolve({ feeds: [] });
+      if (cmd === 'get_default_youtube_channels')
+        return Promise.resolve({ channels: [] });
+      if (cmd === 'get_default_twitter_handles')
+        return Promise.resolve({ handles: [] });
+      if (cmd?.startsWith('get_disabled_default_'))
+        return Promise.resolve({ disabled: [] });
       return Promise.resolve({});
     });
 
@@ -195,6 +229,14 @@ describe('SourceConfigPanel', () => {
         return Promise.resolve(false);
       if (cmd === 'get_github_languages')
         return Promise.resolve({ languages: ['rust', 'typescript'], count: 2 });
+      if (cmd === 'get_default_rss_feeds')
+        return Promise.resolve({ feeds: [] });
+      if (cmd === 'get_default_youtube_channels')
+        return Promise.resolve({ channels: [] });
+      if (cmd === 'get_default_twitter_handles')
+        return Promise.resolve({ handles: [] });
+      if (cmd?.startsWith('get_disabled_default_'))
+        return Promise.resolve({ disabled: [] });
       return Promise.resolve({});
     });
 

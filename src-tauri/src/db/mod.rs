@@ -59,6 +59,9 @@ pub struct StoredSourceItem {
     /// BCP-47 language code detected from title text (e.g. "en", "ja", "de").
     /// Defaults to "en" for items ingested before language detection was added.
     pub detected_lang: String,
+    /// Canonical feed URL that produced this item (e.g. RSS feed URL).
+    /// Used for per-feed health tracking in custom sources.
+    pub feed_origin: Option<String>,
 }
 
 /// Similarity result from vector search
@@ -490,7 +493,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT s.id, s.source_type, s.source_id, s.url, s.title, s.content,
                     s.content_hash, s.embedding, s.created_at, s.last_seen, v.distance,
-                    COALESCE(s.detected_lang, 'en')
+                    COALESCE(s.detected_lang, 'en'), s.feed_origin
              FROM source_vec v
              JOIN source_items s ON s.id = v.rowid
              WHERE v.embedding MATCH ?1 AND k = ?2
@@ -513,6 +516,7 @@ impl Database {
                 detected_lang: row
                     .get::<_, String>(11)
                     .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(12).ok().flatten(),
             })
         })?;
 

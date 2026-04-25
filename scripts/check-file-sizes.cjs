@@ -25,6 +25,7 @@ const THRESHOLDS = {
 const EXCEPTIONS = {
   // Rust — files that structurally exceed 1500-line error threshold
   'src-tauri/src/db/migrations.rs':        'DB schema migrations — sequential by nature',
+  'src-tauri/src/db/sources.rs':           'Source item DB layer — CRUD + batch upsert + feed_health circuit breaker (6 methods + 5 tests)',
   'src-tauri/src/settings/mod.rs':         'Settings management — serialization + validation',
   'src-tauri/src/lib.rs':                  'App entrypoint — Tauri plugin registration',
   'src-tauri/src/sources/adapter_resilience_tests.rs': 'Resilience tests — 146 edge-case tests across all 10 source adapters',

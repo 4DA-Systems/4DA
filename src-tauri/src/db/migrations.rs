@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 59;
+        const TARGET_VERSION: i64 = 61;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2206,6 +2206,66 @@ impl Database {
                 )?;
             }
 
+            // Phase 60: Feed origin tracking for per-feed health
+            if current_version < 60 {
+                Self::run_versioned_migration(
+                    &conn,
+                    59,
+                    60,
+                    "Phase 60: feed_origin column on source_items",
+                    |c| {
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name='feed_origin'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE source_items ADD COLUMN feed_origin TEXT;
+                                 CREATE INDEX IF NOT EXISTS idx_source_feed_origin ON source_items(feed_origin);",
+                            )?;
+                            info!(target: "4da::db", "Added feed_origin column + index to source_items");
+                        }
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 61: Per-feed health tracking for circuit breaking
+            if current_version < 61 {
+                Self::run_versioned_migration(
+                    &conn,
+                    60,
+                    61,
+                    "Phase 61: feed_health table for per-feed circuit breaking",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS feed_health (
+                                feed_origin TEXT NOT NULL,
+                                source_type TEXT NOT NULL,
+                                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                                total_successes INTEGER NOT NULL DEFAULT 0,
+                                total_failures INTEGER NOT NULL DEFAULT 0,
+                                last_success_at TEXT,
+                                last_failure_at TEXT,
+                                last_error TEXT,
+                                circuit_open INTEGER NOT NULL DEFAULT 0,
+                                circuit_opened_at TEXT,
+                                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                PRIMARY KEY (feed_origin, source_type)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_feed_health_source_type ON feed_health(source_type);
+                            CREATE INDEX IF NOT EXISTS idx_feed_health_circuit ON feed_health(circuit_open) WHERE circuit_open = 1;",
+                        )?;
+                        info!(target: "4da::db", "Created feed_health table with circuit breaker support");
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -2963,6 +3023,8 @@ mod tests {
             "trust_events",
             "precision_stats",
             "preemption_wins",
+            // Phase 61: Per-feed health
+            "feed_health",
         ];
         for table in &expected {
             assert!(

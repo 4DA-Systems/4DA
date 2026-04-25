@@ -162,6 +162,27 @@ interface BriefingSnapshotResult {
   briefing: BriefingSnapshotPayload;
 }
 
+/** Validation result for RSS feed URL. */
+export interface RssFeedValidation {
+  valid: boolean;
+  feed_title?: string;
+  item_count?: number;
+  format?: string;
+  reason?: string;
+  message?: string;
+  discovered_feeds?: string[];
+  sample_title?: string;
+}
+
+/** Validation result for YouTube channel ID. */
+export interface YouTubeChannelValidation {
+  valid: boolean;
+  channel_name?: string;
+  video_count?: number;
+  reason?: string;
+  message?: string;
+}
+
 /** Full IPC contract: command name → parameter type & return type. */
 interface CommandMap {
   // -- Analysis & Core --
@@ -485,7 +506,21 @@ interface CommandMap {
   set_x_api_key: { params: { key: string }; result: void };
   get_github_languages: { params: Record<string, never>; result: { languages: string[]; count: number } };
   set_github_languages: { params: { languages: string[] }; result: void };
+  get_default_rss_feeds: { params: Record<string, never>; result: { feeds: string[] } };
+  get_default_youtube_channels: { params: Record<string, never>; result: { channels: string[] } };
+  get_default_twitter_handles: { params: Record<string, never>; result: { handles: string[] } };
+  get_disabled_default_rss_feeds: { params: Record<string, never>; result: { disabled: string[] } };
+  set_disabled_default_rss_feeds: { params: { feeds: string[] }; result: { success: boolean } };
+  get_disabled_default_youtube_channels: { params: Record<string, never>; result: { disabled: string[] } };
+  set_disabled_default_youtube_channels: { params: { channels: string[] }; result: { success: boolean } };
+  get_disabled_default_twitter_handles: { params: Record<string, never>; result: { disabled: string[] } };
+  set_disabled_default_twitter_handles: { params: { handles: string[] }; result: { success: boolean } };
   get_sources: { params: Record<string, never>; result: SourceInfo[] };
+  validate_rss_feed: { params: { url: string }; result: RssFeedValidation };
+  validate_youtube_channel: { params: { channelId: string }; result: YouTubeChannelValidation };
+  fetch_single_feed: { params: { url: string }; result: { success: boolean; items_added: number } };
+  fetch_single_youtube_channel: { params: { channelId: string }; result: { success: boolean; items_added: number } };
+  reset_feed_health: { params: { feedOrigin: string; sourceType: string }; result: { success: boolean; feed_origin: string; source_type: string } };
 
   // -- Locale & i18n --
   get_locale: { params: Record<string, never>; result: { country: string; language: string; currency: string } };

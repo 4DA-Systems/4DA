@@ -122,6 +122,9 @@ CONFIDENCE_SCORE_IMPLEMENTATION.md
 SHIP_READINESS_VERIFICATION.md
 README-MARKETING.md
 
+# Planning artifacts (phase plans, summaries, roadmaps)
+.planning/
+
 # Internal planning docs — never at repo root.
 # Canonical homes: .claude/plans/ (session-local) or docs/strategy/ (curated).
 # The pre-commit doc-location gate enforces this in addition to these patterns.

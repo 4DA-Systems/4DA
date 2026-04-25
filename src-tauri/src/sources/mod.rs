@@ -409,6 +409,14 @@ pub trait Source: Send + Sync {
         SourceManifest::default()
     }
 
+    /// Per-feed errors from the last `fetch_items()` call.
+    /// Multi-feed sources (RSS, YouTube, Twitter) override this to report
+    /// which individual feeds failed, even when the adapter succeeds overall.
+    /// Returns `Vec<(feed_origin, error_message)>`.
+    fn feed_errors(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+
     /// Check if enough time has passed since last fetch
     fn should_fetch(&self, last_fetch: Option<std::time::SystemTime>) -> bool {
         match last_fetch {
