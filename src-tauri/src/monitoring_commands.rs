@@ -320,12 +320,30 @@ pub async fn set_close_to_tray(enabled: bool) -> Result<serde_json::Value> {
 /// state. If OS registration fails (permissions, unsupported desktop, etc.),
 /// the response includes `registration_failed: true` so the frontend can warn
 /// the user instead of silently lying about the state.
+///
+/// Debug builds refuse to register — the debug binary is a console-subsystem
+/// executable that expects a Vite dev server. Registering it for autostart
+/// causes a broken boot loop (console window + "can't reach this page").
 #[tauri::command]
 pub async fn set_launch_at_startup(
     app: tauri::AppHandle,
     enabled: bool,
 ) -> Result<serde_json::Value> {
     use tauri_plugin_autostart::ManagerExt;
+
+    // Guard: debug builds must never register for autostart.
+    // The debug binary is PE console-subsystem (shows a black terminal window)
+    // and expects a Vite dev server at localhost:4444 that won't exist at boot.
+    #[cfg(debug_assertions)]
+    if enabled {
+        warn!(target: "4da::settings", "Autostart refused: debug builds cannot register for system startup");
+        return Ok(serde_json::json!({
+            "launch_at_startup": false,
+            "registration_failed": true,
+            "message": "Autostart is only available in production builds. Debug builds require a dev server that won't be running at system startup."
+        }));
+    }
+
     let autostart = app.autolaunch();
 
     // Attempt the OS-level registration
