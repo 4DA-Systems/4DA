@@ -317,8 +317,8 @@ pub(crate) fn load_rss_feeds_from_settings() -> Vec<String> {
         }
     }
 
-    // Filter out circuit-broken feeds
-    if let Ok(db) = crate::get_database() {
+    // Filter out circuit-broken feeds (skip during DB init to avoid OnceCell deadlock)
+    if let Some(db) = crate::try_get_database() {
         feeds.retain(|f| {
             if db.is_feed_circuit_open(f, "rss") {
                 info!(target: "4da::sources", feed = %f, "Skipping circuit-broken RSS feed");
@@ -349,8 +349,8 @@ pub(crate) fn load_twitter_settings() -> (Vec<String>, String) {
         }
     }
 
-    // Filter out circuit-broken handles
-    if let Ok(db) = crate::get_database() {
+    // Filter out circuit-broken handles (skip during DB init to avoid OnceCell deadlock)
+    if let Some(db) = crate::try_get_database() {
         handles.retain(|h| {
             if db.is_feed_circuit_open(h, "twitter") {
                 info!(target: "4da::sources", feed = %h, "Skipping circuit-broken Twitter handle");
@@ -380,8 +380,8 @@ pub(crate) fn load_youtube_channels_from_settings() -> Vec<String> {
         }
     }
 
-    // Filter out circuit-broken channels
-    if let Ok(db) = crate::get_database() {
+    // Filter out circuit-broken channels (skip during DB init to avoid OnceCell deadlock)
+    if let Some(db) = crate::try_get_database() {
         channels.retain(|c| {
             if db.is_feed_circuit_open(c, "youtube") {
                 info!(target: "4da::sources", feed = %c, "Skipping circuit-broken YouTube channel");
