@@ -244,7 +244,7 @@ For each persona, assess:
 ### 5C. Threshold Sensitivity
 Read `src-tauri/src/scoring/pipeline.rs` for current threshold logic:
 - Base threshold value
-- Confidence-weighted adjustment
+- Auto-tuning adjustment
 - Bootstrap mode threshold
 - How much room exists between the threshold and the separation gap edges
 
