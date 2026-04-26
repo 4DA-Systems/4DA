@@ -94,7 +94,7 @@
 | # | Title | Target Keyword | Status |
 |---|-------|---------------|--------|
 | 1 | Why I Stopped Using daily.dev | daily.dev alternative privacy | [ ] Draft |
-| 2 | How 5-Axis Scoring Kills 99% of Noise | developer news noise filter | [ ] Draft |
+| 2 | How 5-Axis Scoring Kills 92% of Noise (Measured) | developer news noise filter | [ ] Draft |
 | 3 | The Case for Local-First Dev Tools | local first developer tools 2026 | [ ] Draft |
 | 4 | Privacy-First Alternative to Feedly | Feedly alternative developer privacy | [ ] Draft |
 | 5 | Give Claude Code Your Tech Stack | Claude Code MCP server tech stack | [ ] Draft |

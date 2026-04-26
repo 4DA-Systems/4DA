@@ -102,7 +102,7 @@ That is what 4DA is built for.
 
 <!-- POST 2 -->
 
-# How 5-Axis Relevance Scoring Kills 99% of Developer News Noise
+# How 5-Axis Relevance Scoring Kills 92% of Developer News Noise (Measured)
 
 *developer news noise filter scoring | ~1,700 words | 8 min read*
 

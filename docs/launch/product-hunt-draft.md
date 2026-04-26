@@ -20,7 +20,7 @@ Your codebase decides what you read. Not an algorithm.
 ## Description (260 chars max)
 
 ```
-4DA scans your local projects and scores developer content from 20+ sources against your actual code. 5-axis gate rejects 99% as noise. What survives matters to YOUR stack. Runs locally, zero telemetry, free tier includes everything. Win/Mac/Linux.
+4DA scans your local projects and scores developer content from 20+ sources against your actual code. 5-axis gate rejects 92% as noise (98% noise accuracy, measured across 9 developer personas). What survives matters to YOUR stack. Runs locally, zero telemetry, free tier includes everything. Win/Mac/Linux.
 ```
 
 (249 chars)
@@ -36,7 +36,7 @@ I tried the existing tools. Feedly collects feeds but scores nothing. daily.dev 
 
 The fix was staring at me: my Cargo.toml already knows what matters. My package.json. My go.mod. Your codebase is the most accurate signal of what is professionally relevant to you -- not your clicks, not your subscriptions, not a topic checklist you set up once.
 
-So I built 4DA. It scans your local projects, builds a technology profile, and scores every piece of content across 5 independent axes: context match, interest alignment, codebase relevance, dependency impact, and learned preferences. An item needs 2+ independent confirming signals to pass. A single signal -- even a strong one -- gets capped below the threshold. This is what produces the 99% rejection rate, and why what survives is actually useful.
+So I built 4DA. It scans your local projects, builds a technology profile, and scores every piece of content across 5 independent axes: context match, interest alignment, codebase relevance, dependency impact, and learned preferences. An item needs 2+ independent confirming signals to pass. A single signal -- even a strong one -- gets capped below the threshold. In benchmark testing across 9 developer personas with 215 labeled items, this produces a 92% rejection rate with 98% noise accuracy — and why what survives is actually useful. Your actual rejection rate is shown in the Evidence tab.
 
 Stack: Rust backend with Tauri 2.0, React + TypeScript frontend, SQLite with sqlite-vec for vector search, local embeddings via Ollama. 3,639 tests passing. 13 languages supported. ~15 MB installed.
 

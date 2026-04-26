@@ -70,8 +70,8 @@ export function OverviewSection() {
         </Paragraph>
         <Paragraph>
           4DA's thesis: a machine that knows your codebase, your tech stack, your recent work, and
-          your declared interests can reject 99%+ of content and show you only what matters —
-          without ever sending your data anywhere.
+          your declared interests can filter most content and show you only what matters —
+          without ever sending your data anywhere. Tested at 92% rejection across 9 developer personas.
         </Paragraph>
       </Card>
       <Card>
