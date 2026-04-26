@@ -17,7 +17,7 @@ jobs:
     runs-on: [self-hosted, windows, 4da]
     defaults:
       run:
-        shell: bash
+        shell: pwsh
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -55,21 +55,24 @@ jobs:
 
       - name: Run tests and verify count floor
         run: |
-          set +e
-          OUTPUT=$(pnpm run test -- --run 2>&1)
-          EXIT_CODE=$?
-          set -e
-          echo "$OUTPUT" | tail -15
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Tests exited with code $EXIT_CODE"
+          pnpm run test -- --run 2>&1 | Out-File -FilePath test-output.txt -Encoding utf8
+          $testExit = $LASTEXITCODE
+          $output = Get-Content test-output.txt
+          $output | Select-Object -Last 15
+          if ($testExit -ne 0) {
+            Write-Output "::error::Tests exited with code $testExit"
             exit 1
-          fi
-          COUNT=$(echo "$OUTPUT" | sed -n 's/.*[^0-9]\([0-9][0-9]*\) passed.*/\1/p' | tail -1)
-          echo "Frontend tests passed: $COUNT"
-          if [ -z "$COUNT" ] || [ "$COUNT" -lt 1000 ]; then
-            echo "::error::Frontend test count dropped below 1000 (got ${COUNT:-0})"
+          }
+          $count = 0
+          foreach ($line in $output) {
+            if ($line -match '(\d+)\s+passed') { $count = [int]$Matches[1] }
+          }
+          Write-Output "Frontend tests passed: $count"
+          if ($count -lt 1000) {
+            Write-Output "::error::Frontend test count dropped below 1000 (got $count)"
             exit 1
-          fi
+          }
+          Remove-Item test-output.txt -ErrorAction SilentlyContinue
 
   mcp-server:
     name: MCP Server
@@ -77,20 +80,23 @@ jobs:
     runs-on: [self-hosted, windows, 4da]
     defaults:
       run:
-        shell: bash
+        shell: pwsh
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           clean: false
 
       - name: Install dependencies
-        run: cd mcp-4da-server && pnpm install --frozen-lockfile
+        working-directory: mcp-4da-server
+        run: pnpm install --frozen-lockfile
 
       - name: Build
-        run: cd mcp-4da-server && pnpm run build
+        working-directory: mcp-4da-server
+        run: pnpm run build
 
       - name: Run tests
-        run: cd mcp-4da-server && pnpm run test
+        working-directory: mcp-4da-server
+        run: pnpm run test
 
   rust:
     name: Rust (${{ matrix.label }})
@@ -108,7 +114,8 @@ jobs:
             test-floor: 0
     defaults:
       run:
-        shell: bash
+        shell: pwsh
+        working-directory: src-tauri
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
@@ -116,50 +123,53 @@ jobs:
 
       - name: Check formatting
         if: matrix.label == 'default'
-        run: cd src-tauri && cargo fmt --check
+        run: cargo fmt --check
 
       - name: Clippy lints
-        run: cd src-tauri && cargo clippy ${{ matrix.cargo-features }} -- -D warnings
+        run: cargo clippy ${{ matrix.cargo-features }} -- -D warnings
 
       - name: Install cargo-audit
         if: matrix.label == 'default'
+        working-directory: .
         run: cargo install cargo-audit --locked
 
       - name: Security audit
         if: matrix.label == 'default'
-        run: cd src-tauri && cargo audit
+        run: cargo audit
 
       - name: Supply chain policy check
         if: matrix.label == 'default'
         run: |
           cargo install cargo-deny --locked
-          cd src-tauri && cargo deny check
+          cargo deny check
 
       - name: Compile-gate (cargo test --no-run)
         # Fast-fail if the test binary stops compiling. Wave 1 blocker was a
         # silent compile break in the test tree that only showed up after
         # the slow full test run — this step catches it in seconds.
-        run: cd src-tauri && cargo test --lib ${{ matrix.cargo-features }} --no-run
+        run: cargo test --lib ${{ matrix.cargo-features }} --no-run
 
       - name: Run unit tests and verify count floor
         run: |
-          cd src-tauri
-          set +e
-          OUTPUT=$(cargo test --lib ${{ matrix.cargo-features }} 2>&1)
-          EXIT_CODE=$?
-          set -e
-          echo "$OUTPUT" | tail -10
-          if [ $EXIT_CODE -ne 0 ]; then
-            echo "::error::Tests exited with code $EXIT_CODE"
+          cargo test --lib ${{ matrix.cargo-features }} 2>&1 | Out-File -FilePath test-output.txt -Encoding utf8
+          $testExit = $LASTEXITCODE
+          $output = Get-Content test-output.txt
+          $output | Select-Object -Last 10
+          if ($testExit -ne 0) {
+            Write-Output "::error::Tests exited with code $testExit"
             exit 1
-          fi
-          COUNT=$(echo "$OUTPUT" | sed -n 's/.*ok\. \([0-9]*\) passed.*/\1/p' | tail -1)
-          echo "Rust tests passed: $COUNT"
-          FLOOR=${{ matrix.test-floor }}
-          if [ "$FLOOR" -gt 0 ] && { [ -z "$COUNT" ] || [ "$COUNT" -lt "$FLOOR" ]; }; then
-            echo "::error::Rust test count dropped below $FLOOR (got ${COUNT:-0})"
+          }
+          $count = 0
+          foreach ($line in $output) {
+            if ($line -match 'ok\.\s+(\d+)\s+passed') { $count = [int]$Matches[1] }
+          }
+          Write-Output "Rust tests passed: $count"
+          $floor = [int]'${{ matrix.test-floor }}'
+          if ($floor -gt 0 -and $count -lt $floor) {
+            Write-Output "::error::Rust test count dropped below $floor (got $count)"
             exit 1
-          fi
+          }
+          Remove-Item test-output.txt -ErrorAction SilentlyContinue
 
   # ── Cross-platform validation (GitHub-hosted runners) ──
   rust-macos:
