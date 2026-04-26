@@ -24,7 +24,7 @@ The scoring pipeline uses 5 independent axes:
 4. **Learned Behavior** — Based on what you've saved, dismissed, and clicked before
 5. **Dependencies** — Does it affect packages in your lock files?
 
-An item needs **2 or more** of these signals to pass. Everything else gets rejected. Typical rejection rate: 99%+.
+An item needs **2 or more** of these signals to pass. Everything else gets rejected. In benchmark testing across 9 developer personas with 215 labeled items: 92% overall rejection rate, 98% of actual noise correctly identified.
 
 That means from 500 articles across 20 sources, you might see 5-8 that genuinely matter to you. Not because an algorithm wants your engagement — because they actually affect your work.
 
@@ -76,7 +76,7 @@ The MCP server is free. It works standalone or alongside the full desktop app.
 
 Three things surprised me:
 
-**The scoring pipeline is the product.** I thought the UI and the AI briefings would be the differentiator. They're not. The 5-axis confirmation gate — the rule that an item needs 2+ independent signals to pass — is what makes 4DA feel different from every other content tool. It's the reason 99% of content gets rejected instead of dumped into a feed.
+**The scoring pipeline is the product.** I thought the UI and the AI briefings would be the differentiator. They're not. The 5-axis confirmation gate — the rule that an item needs 2+ independent signals to pass — is what makes 4DA feel different from every other content tool. It's the reason 92% of content gets rejected instead of dumped into a feed — with 98% of actual noise correctly caught (measured across 9 developer personas, 215 labeled items each).
 
 **Compound intelligence is real.** After 7 days of use, the scoring noticeably improves. After 30 days, it's like having a research assistant who knows exactly what you need. The feedback loop (save, dismiss, click) feeds back into the scoring weights, and the accuracy tracking shows measurable improvement over time.
 
