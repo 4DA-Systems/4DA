@@ -46,7 +46,7 @@ src-tauri/              # Rust backend
     extractors/         # File format extractors (PDF, Office, etc.)
     scoring/            # PASIFA scoring algorithm (multi-module)
     settings/           # Settings management + keychain + validation
-    sources/            # Content source adapters (HN, Reddit, RSS, GitHub)
+    sources/            # 20+ content source adapters (HN, Reddit, RSS, GitHub, arXiv, dev.to, Lobsters, ProductHunt, Bluesky, crates.io, npm, PyPI, HuggingFace, PapersWithCode, CVE/OSV, StackOverflow, X/Twitter, YouTube, Go modules)
   src/embeddings.rs     # Local embedding via Ollama
 data/                   # Runtime data (gitignored)
   settings.json         # User config (use settings.example.json as template)
@@ -152,7 +152,7 @@ Internal planning / strategy / audit / checklist / roadmap docs **must not live 
 3. Curated docs go to `docs/strategy/` **only after** (a) explicit user approval per-file AND (b) addition to `scripts/doc-allowlist.json`. Same for `.ai/`.
 4. Never write such docs at repo root, to `.ai/`, or to a mixed dir without updating the allowlist.
 
-**PII** (`runyourempirehq@gmail.com`, `4dasystems@gmail.com`) must never enter tracked content. Use role-based aliases (`hello@4da.ai`). Business-statutory info (ABN, ACN, TM serials) is fine on legal pages only.
+**PII** (`[operator-personal-email]`, `[operator-legacy-email]`) must never enter tracked content. Use role-based aliases (`hello@4da.ai`). Actual patterns are stored as SHA-256 hashes in the enforcement scripts (`scripts/check-doc-location.cjs`, `scripts/public-readiness-audit.cjs`). Business-statutory info (ABN, ACN, TM serials) is fine on legal pages only.
 
 **Escape hatches** (for root + mixed-dir rules, NOT for PII): add `<!-- public-ok: <reason> -->` to the first 10 lines, or add the filename to `scripts/doc-allowlist.json`.
 
