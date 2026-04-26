@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { recordTrustEvent } from '../../lib/trust-feedback';
+import { useColdStartGate } from '../../hooks/use-cold-start-gate';
 import {
   type DepRow, type DepStatus, URGENCY_ORDER,
   getScoreTier, depFromItem, signalMatchesDep,
@@ -43,6 +44,7 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
 
 const BlindSpotsView = memo(function BlindSpotsView() {
   const { t } = useTranslation();
+  const isColdStart = useColdStartGate();
   const { report, loading, error } = useAppStore(
     useShallow((s) => ({
       report: s.blindSpotReport,
@@ -163,6 +165,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     );
   }
   if (!report) {
+    // Intelligence Doctrine Rule 6: silent until data arrives
+    if (isColdStart) return null;
     return (
       <div className="flex items-center justify-center py-20 text-text-muted text-sm">
         {t('blindspots.empty')}

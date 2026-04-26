@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { ProGate } from './ProGate';
 import { useTranslatedContent } from './ContentTranslationProvider';
+import { useColdStartGate } from '../hooks/use-cold-start-gate';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../src-tauri/bindings/bindings/Urgency';
 
@@ -29,6 +30,7 @@ function depNameFromItem(item: EvidenceItem): string {
 export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const { t } = useTranslation();
   const { getTranslated } = useTranslatedContent();
+  const isColdStart = useColdStartGate();
   const [items, setItems] = useState<EvidenceItem[]>([]);
   const [expanded, setExpanded] = useState(false);
 
@@ -47,6 +49,9 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const urgentCount = items.filter(
     (it) => it.urgency === 'critical' || it.urgency === 'high',
   ).length;
+
+  // Intelligence Doctrine Rule 6: silent until data arrives
+  if (isColdStart && items.length === 0) return null;
 
   return (
     <ProGate feature={t('knowledgeGaps.feature')}>
