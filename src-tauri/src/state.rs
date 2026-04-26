@@ -263,8 +263,12 @@ pub(crate) fn open_db_connection() -> Result<rusqlite::Connection> {
 
 static DATABASE: OnceCell<Arc<Database>> = OnceCell::new();
 
+pub(crate) fn try_get_database() -> Option<&'static Arc<Database>> {
+    DATABASE.get()
+}
+
 pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
-    Ok(DATABASE.get_or_try_init(|| {
+    DATABASE.get_or_try_init(|| {
         let db_path = get_db_path();
 
         info!(target: "4da::db", path = ?db_path, "Initializing database");
@@ -343,16 +347,23 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
             }
         };
 
-        // Register all sources at startup (enables source enable/disable enforcement)
-        // Register ALL sources in DB for enable/disable control.
-        // Uses build_all_sources() so new sources get DB rows automatically.
+        info!(target: "4da::db", "Database ready");
+        Ok(Arc::new(db))
+    })?;
+
+    // Register all sources at startup (enables source enable/disable enforcement).
+    // MUST be outside get_or_try_init: build_all_sources() → load_*_from_settings()
+    // calls get_database() internally (for circuit-breaker checks), which would
+    // re-enter the OnceCell and deadlock.
+    static SOURCES_REGISTERED: std::sync::Once = std::sync::Once::new();
+    let db = DATABASE.get().expect("database just initialized");
+    SOURCES_REGISTERED.call_once(|| {
         for source in crate::sources::build_all_sources() {
             db.register_source(source.source_type(), source.name()).ok();
         }
+    });
 
-        info!(target: "4da::db", "Database ready");
-        Ok(Arc::new(db))
-    })?)
+    Ok(db)
 }
 
 // ============================================================================
