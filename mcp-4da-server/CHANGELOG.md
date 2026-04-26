@@ -87,7 +87,7 @@ Initial public release.
 ### Features
 
 - 11 content sources: Hacker News, Reddit, Twitter/X, GitHub, RSS, YouTube, arXiv, Dev.to, Lobsters, Product Hunt, custom feeds
-- PASIFA scoring algorithm — 5-axis codebase-aware relevance with confidence weighting
+- PASIFA scoring algorithm — 5-axis codebase-aware relevance with confidence calibration
 - Privacy-first — all data stays local, zero telemetry
 - BYOK — bring your own API keys, never stored remotely
 - Works offline with Ollama fallback for embeddings

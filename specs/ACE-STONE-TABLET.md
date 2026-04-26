@@ -60,7 +60,7 @@ The Autonomous Context Engine is the brain of 4DA. It must achieve:
 │  │              ┌───────────────────────┐                               │   │
 │  │              │  UNIFIED INTEREST     │                               │   │
 │  │              │       MODEL           │                               │   │
-│  │              │ (Confidence-Weighted) │                               │   │
+│  │              │ (Confidence-Calibrated)│                               │   │
 │  │              └───────────┬───────────┘                               │   │
 │  └──────────────────────────┼──────────────────────────────────────────┘   │
 │                             │                                               │
