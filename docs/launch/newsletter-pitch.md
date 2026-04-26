@@ -8,7 +8,7 @@ Customizable 3-paragraph pitch for newsletter outreach. Adjust paragraph 3 per n
 
 - "Desktop app that scores developer content against your actual codebase"
 - "4DA: 5-axis relevance scoring for developer content (Rust + Tauri)"
-- "Open-source tool that rejects 99% of developer content as noise"
+- "Open-source tool that rejects 92% of developer content as noise (measured)"
 
 ---
 
@@ -19,7 +19,7 @@ Hi [NAME],
 
 4DA is a desktop app that scans your local projects and scores developer content from 20+ sources (HN, GitHub, Reddit, arXiv, CVE databases, package registries, and more) against your actual codebase. It runs locally, collects zero telemetry, requires no account, and the full scoring engine is free.
 
-What makes it different from feed readers or personalized news tools: 4DA uses a 5-axis confirmation gate that evaluates content across context match, interest alignment, codebase relevance, dependency impact, and learned preferences. An item needs 2+ independent signals to pass -- a single signal gets capped and rejected. The result is a 99% rejection rate. What survives is genuinely relevant to what you are building, not what you clicked on last week. Built with Rust and Tauri 2.0, 3,639 tests passing, 13 languages supported, FSL-1.1-Apache-2.0 licensed.
+What makes it different from feed readers or personalized news tools: 4DA uses a 5-axis confirmation gate that evaluates content across context match, interest alignment, codebase relevance, dependency impact, and learned preferences. An item needs 2+ independent signals to pass -- a single signal gets capped and rejected. The result: in benchmark testing across 9 developer personas with 215 labeled items, 92% of content is rejected with 98% noise accuracy. What survives is genuinely relevant to what you are building, not what you clicked on last week. Built with Rust and Tauri 2.0, 3,639 tests passing, 13 languages supported, FSL-1.1-Apache-2.0 licensed.
 
 [PARAGRAPH 3 -- customize per newsletter below]
 
@@ -49,7 +49,7 @@ I think your readers would find the Rust implementation details interesting. The
 ### TLDR
 
 ```
-For a TLDR mention, the core pitch: 4DA is a free, privacy-first desktop app (Rust + Tauri) that scores developer content from 20+ sources against your actual codebase using 5-axis relevance scoring. 99% rejection rate. Zero telemetry. Works offline via Ollama. Ships a 33-tool MCP server for AI coding assistants. Signal tier ($12/mo) adds compound intelligence. FSL-1.1-Apache-2.0 licensed. Available for Windows, macOS, and Linux at https://4da.ai.
+For a TLDR mention, the core pitch: 4DA is a free, privacy-first desktop app (Rust + Tauri) that scores developer content from 20+ sources against your actual codebase using 5-axis relevance scoring. 92% rejection rate (measured across 9 test personas). Zero telemetry. Works offline via Ollama. Ships a 33-tool MCP server for AI coding assistants. Signal tier ($12/mo) adds compound intelligence. FSL-1.1-Apache-2.0 licensed. Available for Windows, macOS, and Linux at https://4da.ai.
 ```
 
 ### Changelog
@@ -70,6 +70,6 @@ This started as a personal tool after I tracked my HN consumption for a month an
 
 - **Personalize the subject line.** Reference a recent issue or article from their newsletter that connects to 4DA's angle (privacy, Rust tooling, developer productivity, MCP/AI).
 - **Keep it short.** Newsletter editors get dozens of pitches. The 3-paragraph structure respects their time.
-- **Do not oversell.** Let the specifics (99% rejection, 5-axis gate, 3,639 tests, zero telemetry) do the work. No superlatives.
+- **Do not oversell.** Let the specifics (92% rejection / 98% noise accuracy across 9 test personas, 5-axis gate, 3,639 tests, zero telemetry) do the work. No superlatives.
 - **Offer assets.** Screenshots, technical write-ups, or a 15-minute call. Make their job easier.
 - **Follow up once.** If no reply in 7 days, one follow-up referencing a specific detail from their newsletter. Then stop.
