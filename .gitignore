@@ -1,3 +1,6 @@
+# Private internal docs — launch strategy, credentials, honest assessments
+docs/private/
+
 # Logs
 logs
 *.log
@@ -31,6 +34,7 @@ dist-ssr
 .claude/settings.local.json
 .claude/analyzer-state.json
 .claude/knowledge/
+.claude/pii-patterns.json
 *.local.md
 
 # Playwright MCP runtime state (console logs, page snapshots)
