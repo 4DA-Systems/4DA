@@ -9,6 +9,7 @@ import { useAppStore } from '../../store';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { recordTrustEvent } from '../../lib/trust-feedback';
+import { useColdStartGate } from '../../hooks/use-cold-start-gate';
 
 // ============================================================================
 // Constants
@@ -370,6 +371,7 @@ const ItemCard = memo(function ItemCard({
 
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
+  const isColdStart = useColdStartGate();
   const surfacedRef = useRef(new Set<string>());
   // Persist dismissals in localStorage with 7-day TTL so they survive
   // page reloads. Without this, dismissed items reappear on refresh —
@@ -473,8 +475,8 @@ const PreemptionView = memo(function PreemptionView() {
         </div>
       )}
 
-      {/* Empty state */}
-      {feed && sortedItems.length === 0 && (
+      {/* Empty state — silent during cold start (Doctrine Rule 6) */}
+      {feed && sortedItems.length === 0 && !isColdStart && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-3">
             <span className="text-green-400 text-lg">&#x2713;</span>
