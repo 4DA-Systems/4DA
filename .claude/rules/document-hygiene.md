@@ -53,12 +53,14 @@ Before writing any `*.md` whose filename contains any of the block patterns (see
 
 Personal email addresses, home addresses, phone numbers that belong to the operator (not the business) must not appear in any tracked file. The gate enforces this for known personal identifiers:
 
-- `runyourempirehq@gmail.com`
-- `4dasystems@gmail.com`
+- `[operator-personal-email]`
+- `[operator-legacy-email]`
+
+Actual patterns are stored as SHA-256 hashes in the enforcement scripts (`scripts/check-doc-location.cjs` and `scripts/public-readiness-audit.cjs`). The scripts tokenize file content and compare hashes — no literal PII appears in tracked code.
 
 Replace with role-based aliases (`hello@4da.ai`, `legal@4da.ai`, etc.) or move the file to a gitignored location. Business info that is **statutorily public** (ABN, ACN, trademark serial numbers) is fine on legal pages (terms, privacy, contact) but should not appear in ops/internal docs.
 
-Extend the PII list in `scripts/check-doc-location.cjs` when new categories are identified. The audit script picks up the same list.
+To add new PII patterns: compute the SHA-256 hash of the normalized (lowercased) string and add it to the `PII_HASHES` array in both enforcement scripts.
 
 ### 6. Escape hatches must be explicit and justified
 

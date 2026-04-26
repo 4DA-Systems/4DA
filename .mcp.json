@@ -21,10 +21,10 @@
     "awe": {
       "command": "node",
       "args": [
-        "D:\\runyourempire\\awe\\mcp-server\\dist\\index.js"
+        "./awe-mcp-server/dist/index.js"
       ],
       "env": {},
-      "_comment": "AWE path is absolute — update for production or other machines. MCP JSON does not support env var interpolation."
+      "_comment": "AWE MCP server. Clone the awe repo and build, or symlink awe-mcp-server/ to your local awe/mcp-server/ directory."
     },
     "playwright": {
       "command": "npx",

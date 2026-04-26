@@ -15,7 +15,7 @@ All intelligence output flows through `EvidenceItem`. Urgency is `Urgency`. Conf
 
 ### 2. No new tabs without doctrine signoff
 
-Main nav is locked at five tabs: Briefing · Preemption · Blind Spots · Evidence · Results. A new tab requires a written justification against the five-tab reconciliation, reviewed against the "what unique job does this tab do that existing tabs can't?" test.
+Main nav is locked at five tabs: Brief · Preemption · Blind Spots · Signal · Playbook. A new tab requires a written justification against the five-tab reconciliation, reviewed against the "what unique job does this tab do that existing tabs can't?" test.
 
 ### 3. No vanity metrics
 
