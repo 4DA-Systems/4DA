@@ -136,19 +136,32 @@ pub(crate) fn generate_report(
 pub(crate) fn record_weekly_accuracy(conn: &rusqlite::Connection) -> anyhow::Result<()> {
     let period = chrono::Utc::now().format("%Y-W%W").to_string();
 
-    // Count items scored this week (from source_items created this week)
+    // Count items scored this week from the authoritative scoring_stats table.
+    // Falls back to source_items count if no scoring runs recorded yet.
     let total_scored: u32 = conn
         .query_row(
+            "SELECT COALESCE(SUM(total_scored), 0) FROM scoring_stats WHERE created_at >= datetime('now', '-7 days')",
+            [],
+            |row| row.get::<_, u32>(0),
+        )
+        .unwrap_or(0);
+    let total_scored: u32 = if total_scored > 0 {
+        total_scored
+    } else {
+        conn.query_row(
             "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-7 days')",
             [],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .unwrap_or(0)
+    };
 
-    // Count items that passed threshold (approximate: items with embedding that scored > 0)
+    // Count items that actually passed the scoring threshold this week.
+    // Uses scoring_stats (written by the scoring pipeline with real relevant_count)
+    // rather than the old "has embedding" proxy which was wildly inaccurate.
     let total_relevant: u32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-7 days') AND embedding IS NOT NULL",
+            "SELECT COALESCE(SUM(relevant_count), 0) FROM scoring_stats WHERE created_at >= datetime('now', '-7 days')",
             [],
             |row| row.get(0),
         )

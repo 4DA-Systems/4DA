@@ -43,7 +43,7 @@ A working developer receives thousands of content signals per day — Hacker New
 
 The result: developers either consume too much (noise fatigue) or too little (miss critical signals). Both outcomes are expensive.
 
-4DA's thesis is simple: **a machine that knows your codebase, your tech stack, your recent work, and your declared interests can reject 99%+ of content and show you only what matters — without ever sending your data anywhere.**
+4DA's thesis is simple: **a machine that knows your codebase, your tech stack, your recent work, and your declared interests can reject the vast majority of content and show you only what matters — without ever sending your data anywhere.** In benchmark testing across 9 simulated developer personas with 215 labeled items, the confirmation gate rejects 92% of content overall, with 98% of actual noise correctly identified.
 
 This requires three innovations:
 1. A scoring algorithm that measures relevance across multiple dimensions simultaneously
@@ -90,7 +90,7 @@ Confirming Axes | Score Multiplier | Score Ceiling
 5               | 1.25             | 1.00
 ```
 
-With 0-1 confirming axes, content is heavily penalised — the ceiling ensures it cannot reach the relevance threshold regardless of any single strong signal. This is the mechanism behind the 99%+ rejection rate.
+With 0-1 confirming axes, content is heavily penalised — the ceiling ensures it cannot reach the relevance threshold regardless of any single strong signal. This is the mechanism behind the measured 92% rejection rate (98% noise accuracy across 9 developer personas with 215 labeled items per persona).
 
 **Why this matters:** Most recommendation systems optimise for recall (show more, miss less). PASIFA optimises for precision (show less, be right). A single false positive — irrelevant content surfaced to the user — erodes trust faster than ten correct recommendations build it. (Principle W-3: Trust Is Asymmetric.)
 

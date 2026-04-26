@@ -100,6 +100,11 @@ const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | 
             {rejectionPct}%
           </div>
           <div className="text-[10px] text-text-muted">{t('evidence.pulseNoise')}</div>
+          {pulse.items_analyzed_7d > 0 && (
+            <div className="text-[9px] text-text-muted tabular-nums mt-0.5">
+              {pulse.items_analyzed_7d.toLocaleString()} → {pulse.items_surfaced_7d}
+            </div>
+          )}
         </div>
       </div>
 

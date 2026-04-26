@@ -16,7 +16,7 @@ Show HN: 4DA – Desktop app that scores developer content against your actual c
 ```
 I built a desktop app that reads your Cargo.toml, package.json, go.mod (and 30+ other manifest formats), builds a local profile of your projects, then scores content from 20+ sources against that profile. Everything runs locally. Your codebase context never leaves your machine.
 
-The scoring uses a 5-axis confirmation gate. Each piece of content is evaluated independently on context match, interest alignment, codebase relevance (via project scanning), dependency impact, and learned preferences from your feedback. An item needs 2+ independent signals to pass. A single signal -- no matter how strong -- gets capped below the threshold and rejected. Typical result: 99% of content is filtered as noise, leaving 5-15 items per day that actually relate to what you're building.
+The scoring uses a 5-axis confirmation gate. Each piece of content is evaluated independently on context match, interest alignment, codebase relevance (via project scanning), dependency impact, and learned preferences from your feedback. An item needs 2+ independent signals to pass. A single signal -- no matter how strong -- gets capped below the threshold and rejected. Tested across 9 developer personas (215 labeled items each): 92% of content is filtered as noise, with 98% of actual noise correctly rejected. What survives — typically 5-15 items per day — actually relates to what you're building. Your real rejection rate is shown in the Evidence tab.
 
 Sources include HN, Reddit, arXiv, GitHub Trending, CVE databases, npm/crates.io/PyPI registries, Stack Overflow, Lobsters, YouTube, and RSS. No manual keywords or topic setup -- it discovers your stack by scanning your local projects.
 
