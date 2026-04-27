@@ -197,7 +197,7 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
         if item.excluded || grouped_indices.contains(&i) {
             continue;
         }
-        let topics = extract_topics(&item.title, "");
+        let topics = extract_topics(&item.title, "", &[]);
         for topic in &topics {
             // Skip short/stopword topics
             if topic.len() < 3 {
@@ -231,7 +231,7 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
         std::collections::HashMap::new();
 
     for &gi in &grouped_indices {
-        let grouped_topics = extract_topics(&results[gi].title, "");
+        let grouped_topics = extract_topics(&results[gi].title, "", &[]);
         for topic in &grouped_topics {
             if topic.len() < 3 {
                 continue;

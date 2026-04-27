@@ -378,7 +378,7 @@ fn extract_signals(
     ctx: &ScoringContext,
     matches: &[RelevanceMatch],
 ) -> RawSignals {
-    let topics = extract_topics(input.title, input.content);
+    let topics = extract_topics(input.title, input.content, input.source_tags);
 
     // Raw context: best KNN score from embedding similarity
     let raw_context = matches.first().map_or(0.0, |m| m.similarity);
@@ -1154,7 +1154,7 @@ fn classify_signals(
         return (None, None, None, None, None);
     };
 
-    let topics = crate::extract_topics(input.title, input.content);
+    let topics = crate::extract_topics(input.title, input.content, input.source_tags);
     let corroboration = super::pipeline::build_corroboration(db, &topics, matched_deps);
     match clf.classify(
         input.title,
@@ -1255,7 +1255,7 @@ pub(crate) fn score_item(
     options: &ScoringOptions,
     classifier: Option<&signals::SignalClassifier>,
 ) -> SourceRelevance {
-    let topics = extract_topics(input.title, input.content);
+    let topics = extract_topics(input.title, input.content, input.source_tags);
 
     // ── Exclusion check (before any scoring work) ──────────────────────
     let excluded_by = check_exclusions(&topics, &ctx.exclusions)
@@ -1852,6 +1852,7 @@ mod tests {
             embedding: &[],
             created_at: None,
             detected_lang: "en",
+            source_tags: &[],
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "desc text.");
@@ -1869,6 +1870,7 @@ mod tests {
             embedding: &[],
             created_at: None,
             detected_lang: "en",
+            source_tags: &[],
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "summary.");
@@ -1885,6 +1887,7 @@ mod tests {
             embedding: &[],
             created_at: None,
             detected_lang: "en",
+            source_tags: &[],
         };
         // Non-security source content is passed through verbatim
         let cleaned = dep_match_content_for(&input);

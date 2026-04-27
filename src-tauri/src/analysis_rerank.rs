@@ -843,6 +843,7 @@ mod tests {
             last_seen: chrono::Utc::now(),
             detected_lang: "en".to_string(),
             feed_origin: None,
+            tags: None,
         }
     }
 

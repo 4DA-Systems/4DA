@@ -35,6 +35,7 @@ pub(crate) struct GenericSourceItem {
     pub url: Option<String>,
     pub content: String,
     pub feed_origin: Option<String>,
+    pub tags: Option<String>,
 }
 
 /// Relevance match between an HN item and context

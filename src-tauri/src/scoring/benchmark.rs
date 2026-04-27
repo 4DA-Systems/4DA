@@ -44,6 +44,7 @@ pub(super) fn bench_input<'a>(
         embedding,
         created_at: None,
         detected_lang: "en",
+        source_tags: &[],
     }
 }
 

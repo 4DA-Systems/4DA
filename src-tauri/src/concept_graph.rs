@@ -85,7 +85,7 @@ pub fn build_concept_graph(conn: &Connection) -> Result<Vec<ConceptEdge>> {
         .context("Failed to execute concept graph query")?
         .filter_map(|r| r.ok())
         .map(|(title, content, quality)| {
-            let topics = extract_topics(&title, &content);
+            let topics = extract_topics(&title, &content, &[]);
             ItemTopics { topics, quality }
         })
         .collect();
@@ -321,7 +321,7 @@ pub fn select_serendipity_item(
 
     for row in rows.flatten() {
         let (id, title, content, quality) = row;
-        let item_topics = extract_topics(&title, &content);
+        let item_topics = extract_topics(&title, &content, &[]);
 
         // Check if any of this item's topics are in the distant neighbor set
         let matches = item_topics.iter().any(|t| distant_set.contains(t.as_str()));

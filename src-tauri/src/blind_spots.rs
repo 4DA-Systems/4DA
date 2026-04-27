@@ -919,7 +919,7 @@ fn filter_by_negative_stack(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
     signals
         .into_iter()
         .filter(|signal| {
-            let topics = crate::extract_topics(&signal.title, "");
+            let topics = crate::extract_topics(&signal.title, "", &[]);
 
             // Layer 1: Competing-tech negative stack
             if let Some(ref ns) = negative_stack {

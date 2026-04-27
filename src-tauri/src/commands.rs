@@ -258,7 +258,7 @@ pub(crate) async fn mcp_score_autopsy(
 
     // Build matching context from ACE
     let ace_ctx = scoring::get_ace_context();
-    let topics = extract_topics(&item.title, "");
+    let topics = extract_topics(&item.title, "", &[]);
 
     let matching_interests: Vec<String> = {
         let ctx_engine = get_context_engine().ok();

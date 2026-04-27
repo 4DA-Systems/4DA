@@ -353,20 +353,53 @@ const TITLE_STOPWORDS: &[&str] = &[
     "version",
 ];
 
-/// Extract topics/keywords from text for context matching
-/// Returns lowercase keywords suitable for exclusion/interest matching
-/// Optimized: O(1) HashSet lookup for single-word topics, linear scan only for multi-word phrases
-pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
-    // Combine title and first part of content
+/// Extract topics/keywords from text and structured source tags for context matching.
+/// Returns lowercase keywords suitable for exclusion/interest matching.
+/// Optimized: O(1) HashSet lookup for single-word topics, linear scan only for multi-word phrases.
+///
+/// `source_tags` are structured tags from source metadata (SO tags, Dev.to tags, arXiv categories
+/// mapped to topic vocabulary, etc.). These are trusted — they bypass text scanning and are
+/// accepted directly if they match our topic vocabulary, ensuring all sources get fair signal
+/// generation regardless of their content format.
+pub(crate) fn extract_topics(title: &str, content: &str, source_tags: &[String]) -> Vec<String> {
+    let mut topics = Vec::new();
+    let mut seen = HashSet::new();
+
+    // Phase 1: Structured source tags (highest priority — pre-validated by source community)
+    for tag in source_tags {
+        let lower = tag.to_lowercase();
+        // Accept tags that match our vocabulary directly
+        if SINGLE_WORD_TOPICS.contains(lower.as_str()) && seen.insert(lower.clone()) {
+            topics.push(lower);
+            continue;
+        }
+        // Check multi-word phrases
+        for &phrase in MULTI_WORD_TOPICS {
+            if lower == phrase && seen.insert(phrase.to_string()) {
+                topics.push(phrase.to_string());
+            }
+        }
+        // Accept hyphenated compound tags by checking each component
+        // e.g., "async-await" → check "async" and "await"
+        if lower.contains('-') {
+            for part in lower.split('-') {
+                if part.len() >= 2
+                    && SINGLE_WORD_TOPICS.contains(part)
+                    && seen.insert(part.to_string())
+                {
+                    topics.push(part.to_string());
+                }
+            }
+        }
+    }
+
+    // Phase 2: Text-based extraction from title + content (same as before)
     let text = format!(
         "{} {}",
         title,
         content.chars().take(500).collect::<String>()
     );
     let text_lower = text.to_lowercase();
-
-    let mut topics = Vec::new();
-    let mut seen = HashSet::new();
 
     // O(1) lookup for single-word topics: split into words, check each against HashSet
     for word in text_lower.split(|c: char| !c.is_alphanumeric() && c != '+' && c != '#') {
@@ -375,14 +408,14 @@ pub(crate) fn extract_topics(title: &str, content: &str) -> Vec<String> {
         }
     }
 
-    // Linear scan for multi-word phrases (only ~5 entries)
+    // Linear scan for multi-word phrases (only ~19 entries)
     for &phrase in MULTI_WORD_TOPICS {
         if text_lower.contains(phrase) && seen.insert(phrase.to_string()) {
             topics.push(phrase.to_string());
         }
     }
 
-    // Also extract capitalized words from title as potential topics
+    // Phase 3: Capitalized words from title as potential topics
     for word in title.split_whitespace() {
         let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
         if clean.len() > 2 && clean.chars().next().is_some_and(char::is_uppercase) {
@@ -407,7 +440,7 @@ pub(crate) fn detect_trend_topics<'a>(
 ) -> Vec<String> {
     let mut topic_counts: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
     for (title, content) in items {
-        let topics = extract_topics(title, content);
+        let topics = extract_topics(title, content, &[]);
         for topic in topics {
             *topic_counts.entry(topic).or_insert(0) += 1;
         }
@@ -443,6 +476,7 @@ mod tests {
         let topics = extract_topics(
             "Rust async patterns for Tauri apps",
             "A guide to async Rust",
+            &[],
         );
         assert!(!topics.is_empty());
         // Should extract meaningful words, not stopwords
@@ -453,7 +487,7 @@ mod tests {
 
     #[test]
     fn test_extract_topics_empty() {
-        let topics = extract_topics("", "");
+        let topics = extract_topics("", "", &[]);
         assert!(topics.is_empty());
     }
 
@@ -463,6 +497,7 @@ mod tests {
         let topics = extract_topics(
             "Building a Rust web server",
             "Using async/await with PostgreSQL database",
+            &[],
         );
         assert!(
             topics.contains(&"rust".to_string()),
@@ -481,6 +516,7 @@ mod tests {
         let topics2 = extract_topics(
             "Machine Learning with Python",
             "Deep learning and open source tools",
+            &[],
         );
         assert!(
             topics2.contains(&"machine learning".to_string()),
@@ -500,11 +536,11 @@ mod tests {
         );
 
         // Test special character handling (c++)
-        let topics3 = extract_topics("C++ programming", "Using C++ for systems programming");
+        let topics3 = extract_topics("C++ programming", "Using C++ for systems programming", &[]);
         assert!(topics3.contains(&"c++".to_string()), "Should extract 'c++'");
 
         // Test no duplicates
-        let topics4 = extract_topics("Rust Rust Rust", "rust rust rust everywhere");
+        let topics4 = extract_topics("Rust Rust Rust", "rust rust rust everywhere", &[]);
         let rust_count = topics4.iter().filter(|t| *t == "rust").count();
         assert_eq!(rust_count, 1, "Should not have duplicates");
     }
@@ -526,14 +562,14 @@ mod tests {
 
     #[test]
     fn test_extract_topics_multiword_phrases() {
-        let topics = extract_topics("Machine Learning with Open Source tools", "");
+        let topics = extract_topics("Machine Learning with Open Source tools", "", &[]);
         assert!(topics.contains(&"machine learning".to_string()));
         assert!(topics.contains(&"open source".to_string()));
     }
 
     #[test]
     fn test_extract_topics_no_stopwords() {
-        let topics = extract_topics("The Best New Way For Your Project", "");
+        let topics = extract_topics("The Best New Way For Your Project", "", &[]);
         // None of these stopwords should appear in topics (they're in the exclusion list)
         assert!(!topics.contains(&"the".to_string()));
         assert!(!topics.contains(&"best".to_string()));
@@ -546,7 +582,7 @@ mod tests {
 
     #[test]
     fn test_extract_topics_known_single_keywords() {
-        let topics = extract_topics("docker kubernetes aws", "");
+        let topics = extract_topics("docker kubernetes aws", "", &[]);
         assert!(topics.contains(&"docker".to_string()));
         assert!(topics.contains(&"kubernetes".to_string()));
         assert!(topics.contains(&"aws".to_string()));
@@ -554,7 +590,7 @@ mod tests {
 
     #[test]
     fn test_extract_topics_capitalized_words_from_title() {
-        let topics = extract_topics("Building Tauri Desktop Apps", "");
+        let topics = extract_topics("Building Tauri Desktop Apps", "", &[]);
         assert!(topics.contains(&"tauri".to_string()));
     }
 
@@ -562,7 +598,7 @@ mod tests {
     fn test_extract_topics_content_truncation() {
         // Content is truncated to first 500 chars
         let long_content = "x ".repeat(300); // 600 chars
-        let topics = extract_topics("Rust", &long_content);
+        let topics = extract_topics("Rust", &long_content, &[]);
         assert!(topics.contains(&"rust".to_string()));
     }
 

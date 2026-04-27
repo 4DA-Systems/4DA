@@ -128,7 +128,7 @@ impl Database {
     }
 
     /// Batch upsert source items in a transaction (much faster than individual calls).
-    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang, content_type, cve_ids, feed_origin).
+    /// Tuple: (source_type, source_id, url, title, content, embedding, detected_lang, content_type, cve_ids, feed_origin, tags).
     #[allow(clippy::type_complexity)]
     pub fn batch_upsert_source_items(
         &self,
@@ -140,6 +140,7 @@ impl Database {
             String,
             Vec<f32>,
             String,
+            Option<String>,
             Option<String>,
             Option<String>,
             Option<String>,
@@ -158,14 +159,15 @@ impl Database {
                  content_type = COALESCE(?7, source_items.content_type), \
                  cve_ids = COALESCE(?8, source_items.cve_ids), \
                  feed_origin = COALESCE(?9, source_items.feed_origin), \
-                 last_seen = datetime('now') WHERE id = ?10",
+                 tags = COALESCE(?10, source_items.tags), \
+                 last_seen = datetime('now') WHERE id = ?11",
             )?;
             let mut update_vec_stmt =
                 tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
             let mut insert_stmt = tx.prepare_cached(
                 "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, \
-                 embedding, detected_lang, content_type, cve_ids, feed_origin, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))",
+                 embedding, detected_lang, content_type, cve_ids, feed_origin, tags, last_seen)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, datetime('now'))",
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
@@ -181,6 +183,7 @@ impl Database {
                 content_type,
                 cve_ids,
                 feed_origin,
+                tags,
             ) in items
             {
                 let content_hash = hash_content_parts(&[title, content]);
@@ -201,6 +204,7 @@ impl Database {
                         content_type,
                         cve_ids,
                         feed_origin,
+                        tags,
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
@@ -216,7 +220,8 @@ impl Database {
                         detected_lang,
                         content_type,
                         cve_ids,
-                        feed_origin
+                        feed_origin,
+                        tags
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;
@@ -347,7 +352,7 @@ impl Database {
     ) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
              FROM source_items
              WHERE source_type = ?1 AND source_id = ?2
              AND (embedding_status IS NULL OR embedding_status = 'complete')"
@@ -370,6 +375,7 @@ impl Database {
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
             })
         })?;
 
@@ -417,7 +423,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
              FROM source_items
              WHERE source_type = ?1
              ORDER BY last_seen DESC
@@ -441,6 +447,7 @@ impl Database {
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
             })
         })?;
 
@@ -499,7 +506,7 @@ impl Database {
                 SELECT id, source_type, source_id, url, title, content, content_hash,
                        embedding, created_at, last_seen,
                        COALESCE(detected_lang, 'en') AS detected_lang,
-                       feed_origin,
+                       feed_origin, tags,
                        ROW_NUMBER() OVER (
                          PARTITION BY source_type
                          ORDER BY last_seen DESC
@@ -508,7 +515,7 @@ impl Database {
                 WHERE last_seen >= ?1
              )
              SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, detected_lang, feed_origin
+                    embedding, created_at, last_seen, detected_lang, feed_origin, tags
              FROM ranked
              WHERE rn <= ?2
              ORDER BY last_seen DESC
@@ -534,6 +541,7 @@ impl Database {
                         .get::<_, String>(10)
                         .unwrap_or_else(|_| "en".to_string()),
                     feed_origin: row.get(11).ok().flatten(),
+                    tags: row.get(12).ok().flatten(),
                 })
             },
         )?;
@@ -551,7 +559,7 @@ impl Database {
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
              FROM source_items
              WHERE last_seen >= ?1
              ORDER BY last_seen DESC
@@ -575,6 +583,7 @@ impl Database {
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
             })
         })?;
 
@@ -612,7 +621,7 @@ impl Database {
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin
+            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags
              FROM source_items
              WHERE last_seen > ?1
              ORDER BY last_seen DESC
@@ -636,6 +645,7 @@ impl Database {
                     .get::<_, String>(10)
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
             })
         })?;
 

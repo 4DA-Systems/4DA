@@ -21,6 +21,7 @@ mod tests {
             embedding,
             created_at: None,
             detected_lang: "en",
+            source_tags: &[],
         }
     }
 
@@ -773,6 +774,7 @@ mod tests {
             embedding: &interest_embedding,
             created_at: None,
             detected_lang: "en",
+            source_tags: &[],
         };
 
         let normal_input = ScoringInput {
@@ -784,6 +786,7 @@ mod tests {
             embedding: &interest_embedding,
             created_at: None,
             detected_lang: "en",
+            source_tags: &[],
         };
 
         let long_result = score_item(&long_input, &ctx, &db, &options, None);
@@ -907,6 +910,7 @@ mod tests {
             embedding: &interest_embedding,
             created_at: None,
             detected_lang: mismatched_lang,
+            source_tags: &[],
         };
         let options = ScoringOptions {
             apply_freshness: false,
