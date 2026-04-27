@@ -49,9 +49,6 @@
   "docs/strategy/": {
     "_comment": "Architecture protocols and canonical schemas only. Pricing/tier plans, playbooks, trajectories, audits belong in .claude/plans/.",
     "files": [
-      "MUSE-ARCHITECTURE.md",
-      "MUSE-CONTEXT-PROTOCOL.md",
-      "MUSE-STRATEGY.md",
       "EVIDENCE-ITEM-SCHEMA.md",
       "INTELLIGENCE-RECONCILIATION.md",
       "INTELLIGENCE-MESH.md",
