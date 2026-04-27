@@ -109,7 +109,7 @@ fn compute_topic_engagement(
         std::collections::HashMap::new();
 
     for (title, relevant) in &rows {
-        let topics = crate::extract_topics(title, "");
+        let topics = crate::extract_topics(title, "", &[]);
         for topic in topics {
             let entry = topic_counts.entry(topic).or_insert((0, 0));
             entry.0 += 1;
@@ -241,7 +241,7 @@ fn compute_trend(conn: &rusqlite::Connection, period_days: u32) -> Result<Vec<Tr
         std::collections::HashMap::new();
 
     for (date, title) in &rows {
-        let topics = crate::extract_topics(title, "");
+        let topics = crate::extract_topics(title, "", &[]);
         let day_entry = daily.entry(date.clone()).or_default();
         for topic in topics.into_iter().take(3) {
             *day_entry.entry(topic).or_insert(0) += 1;

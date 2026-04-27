@@ -123,6 +123,7 @@ fn validate_persona(
                 embedding,
                 created_at: created_at.as_ref(),
                 detected_lang: "en",
+                source_tags: &[],
             };
             let result = scoring::score_item(&input, ctx, db, &options, None);
             (

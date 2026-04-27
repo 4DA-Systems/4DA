@@ -279,6 +279,9 @@ pub(crate) async fn fetch_all_sources(
                         hasher.finish()
                     };
 
+                    // Extract tags from metadata before any ownership moves
+                    let source_tags = super::extract_source_tags(&item);
+
                     // Check cache first
                     if let Ok(Some(cached)) = db.get_source_item(source_type, &item.source_id) {
                         if let Err(e) = db.touch_source_item(source_type, &item.source_id) {
@@ -293,6 +296,7 @@ pub(crate) async fn fetch_all_sources(
                                 url: cached.url,
                                 content: cached.content,
                                 feed_origin: cached.feed_origin,
+                                tags: cached.tags.or(source_tags.clone()),
                             },
                             cached.embedding,
                         ));
@@ -337,6 +341,7 @@ pub(crate) async fn fetch_all_sources(
                             url: item.url.clone(),
                             content: content.clone(),
                             feed_origin: super::extract_feed_origin(&item),
+                            tags: source_tags,
                         };
 
                         let embed_text = build_embedding_text(&item.title, &content);
@@ -540,6 +545,7 @@ pub(crate) async fn fetch_all_sources(
                         content_type,
                         cve_ids,
                         item.feed_origin.clone(),
+                        item.tags.clone(),
                     ));
                 }
                 all_items.push((item, embedding));
@@ -1052,6 +1058,7 @@ pub(crate) async fn fetch_all_sources_deep(
                         content_type,
                         cve_ids,
                         item.feed_origin.clone(),
+                        item.tags.clone(),
                     ));
                 }
                 all_items.push((item, embedding));

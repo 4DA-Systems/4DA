@@ -9,4 +9,4 @@
 
 ## Active Terminals
 
-(none)
+_None_

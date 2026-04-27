@@ -294,10 +294,12 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         }
     };
 
-    // Bridge ACE topic affinities into feedback boosts.
-    // Only high-confidence (>0.6), significant signal (>|0.2|).
-    // Scaled to 50% weight vs explicit feedback (save/dismiss).
-    let affinity_boosts_bridged = bridge_topic_affinities(&mut feedback_boosts);
+    // NOTE: bridge_topic_affinities previously merged topic_affinities into
+    // feedback_boosts, but this double-counted the same engagement signal:
+    // one click updated topic_affinities → fed BOTH affinity_mult (multiplicative,
+    // up to 1.7x) AND feedback_boost (additive, via this bridge).
+    // Removed to eliminate quadruple-counting of engagement signals.
+    let affinity_boosts_bridged = 0_usize;
 
     // Detect contradicted topics (both high affinity AND anti-topic).
     // Lightweight query — just topic names for necessity scoring.

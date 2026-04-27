@@ -46,7 +46,7 @@ pub(crate) fn gather_channel_sources(
     let ace_ctx = get_ace_context();
 
     for item in items {
-        let item_topics = extract_topics(&item.title, &item.content);
+        let item_topics = extract_topics(&item.title, &item.content, &[]);
         let item_topics_lower: Vec<String> = item_topics.iter().map(|t| t.to_lowercase()).collect();
 
         // Score by keyword overlap between channel topics and item topics/title
@@ -97,7 +97,7 @@ pub(crate) fn preview_channel_sources(
     let mut matched_titles: Vec<(String, f64)> = Vec::new();
 
     for item in items {
-        let item_topics = extract_topics(&item.title, &item.content);
+        let item_topics = extract_topics(&item.title, &item.content, &[]);
         let item_topics_lower: Vec<String> = item_topics.iter().map(|t| t.to_lowercase()).collect();
 
         let hit_count = topics_lower
@@ -562,6 +562,7 @@ mod tests {
                 last_seen: Utc::now(),
                 detected_lang: "en".to_string(),
                 feed_origin: None,
+                tags: None,
             },
             0.9,
         )];

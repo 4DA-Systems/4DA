@@ -184,6 +184,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                     Option<String>,
                     Option<String>,
                     Option<String>,
+                    Option<String>,
                 )> = new_items_to_embed
                     .into_iter()
                     .zip(embeddings.into_iter())
@@ -219,6 +220,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                                 content_type,
                                 cve_ids,
                                 feed_origin,
+                                None,
                             )
                         },
                     )
@@ -273,6 +275,7 @@ pub(crate) fn process_source_items(
                     url: cached.url,
                     content: cached.content,
                     feed_origin: cached.feed_origin,
+                    tags: None,
                 },
                 cached.embedding,
             ));
@@ -285,6 +288,7 @@ pub(crate) fn process_source_items(
                 url: item.url.clone(),
                 content: item.content.clone(),
                 feed_origin: super::extract_feed_origin(&item),
+                tags: None,
             };
 
             let embed_text = build_embedding_text(&item.title, &item.content);

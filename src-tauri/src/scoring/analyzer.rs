@@ -114,6 +114,12 @@ pub(crate) async fn score_items_full(
             }
         }
 
+        let parsed_tags: Vec<String> = item
+            .tags
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
         results.push(scoring::score_item(
             &scoring::ScoringInput {
                 id: item.id as u64,
@@ -124,6 +130,7 @@ pub(crate) async fn score_items_full(
                 embedding: &item.embedding,
                 created_at: Some(&item.created_at),
                 detected_lang: &item.detected_lang,
+                source_tags: &parsed_tags,
             },
             &scoring_ctx,
             db,
@@ -304,6 +311,12 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
 
     let mut new_results: Vec<SourceRelevance> = Vec::new();
     for item in &items {
+        let parsed_tags: Vec<String> = item
+            .tags
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default();
+
         new_results.push(scoring::score_item(
             &scoring::ScoringInput {
                 id: item.id as u64,
@@ -314,6 +327,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
                 embedding: &item.embedding,
                 created_at: Some(&item.created_at),
                 detected_lang: &item.detected_lang,
+                source_tags: &parsed_tags,
             },
             &scoring_ctx,
             db,
@@ -501,7 +515,7 @@ pub(crate) fn run_post_analysis_hooks(results: &[SourceRelevance]) {
         let mut topic_titles: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
         for item in results.iter().filter(|r| r.relevant) {
-            let topics = crate::extract_topics(&item.title, "");
+            let topics = crate::extract_topics(&item.title, "", &[]);
             for topic in topics {
                 topic_scores
                     .entry(topic.clone())

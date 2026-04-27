@@ -27,6 +27,7 @@ mod tests {
             Option<String>,
             Option<String>,
             Option<String>,
+            Option<String>,
         )> = (0..1000)
             .map(|i| {
                 let source_id = format!("bulk_{}", i);
@@ -39,6 +40,7 @@ mod tests {
                     format!("Content for stress test item number {}", i),
                     emb,
                     "en".to_string(),
+                    None,
                     None,
                     None,
                     None,
