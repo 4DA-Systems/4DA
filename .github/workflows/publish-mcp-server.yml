@@ -7,10 +7,11 @@ on:
 
 jobs:
   publish:
-    name: Build, Test & Publish to npm
+    name: Build, Test & Publish to npm + MCP Registry
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     defaults:
       run:
         working-directory: mcp-4da-server
@@ -44,3 +45,18 @@ jobs:
       - run: pnpm publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+
+      - name: Sync server.json version with tag
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/mcp-v}"
+          jq --arg v "$TAG_VERSION" '.version = $v | .packages[0].version = $v' server.json > server.tmp && mv server.tmp server.json
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
