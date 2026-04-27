@@ -130,5 +130,5 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 
 - Agent definitions: `.claude/agents/`
 - Slash commands: `.claude/commands/`
-- Rules: `.claude/rules/` (document hygiene, intelligence doctrine, AWE integration, worktree hygiene)
-- MCP servers: memory (persistent decisions/learnings), 4da (14 tools), awe (7 wisdom tools)
+- Rules: `.claude/rules/` (document hygiene, intelligence doctrine, worktree hygiene)
+- MCP servers: memory (persistent decisions/learnings), 4da (14 tools)
