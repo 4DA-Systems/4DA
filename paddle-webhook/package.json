@@ -8,7 +8,7 @@
     "deploy": "vercel --prod"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.6.0",
     "typescript": "^5.7.0",
     "vercel": "^39.0.0"
   }
