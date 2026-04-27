@@ -490,10 +490,14 @@ impl SettingsManager {
     /// from the on-disk JSON. The in-memory `settings.llm` retains the keys.
     pub fn set_llm_provider(&mut self, provider: LLMProvider) -> Result<()> {
         if !provider.api_key.is_empty() {
-            let _ = keystore::store_secret("llm_api_key", &provider.api_key);
+            if let Ok(false) = keystore::store_secret("llm_api_key", &provider.api_key) {
+                tracing::warn!(target: "4da::keystore", "Keychain unavailable for llm_api_key — plaintext fallback");
+            }
         }
         if !provider.openai_api_key.is_empty() {
-            let _ = keystore::store_secret("openai_api_key", &provider.openai_api_key);
+            if let Ok(false) = keystore::store_secret("openai_api_key", &provider.openai_api_key) {
+                tracing::warn!(target: "4da::keystore", "Keychain unavailable for openai_api_key — plaintext fallback");
+            }
         }
         // BYOK = consent. Providing an API key for a cloud provider IS the
         // privacy disclosure acceptance — no separate gate needed.
@@ -681,7 +685,9 @@ impl SettingsManager {
     /// Set X API Bearer Token
     pub fn set_x_api_key(&mut self, key: String) -> Result<()> {
         if !key.is_empty() {
-            let _ = keystore::store_secret("x_api_key", &key);
+            if let Ok(false) = keystore::store_secret("x_api_key", &key) {
+                tracing::warn!(target: "4da::keystore", "Keychain unavailable for x_api_key — plaintext fallback");
+            }
         }
         self.settings.x_api_key = SensitiveString::new(key);
         self.save()

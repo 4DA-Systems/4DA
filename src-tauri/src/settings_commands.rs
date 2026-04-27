@@ -7,7 +7,7 @@
 //! LLM commands, license/trial/context/STREETS commands, and tests are in
 //! sibling modules to stay under file-size limits.
 
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::error::Result;
 use crate::settings::{LLMProvider, LlmLimitsConfig, RerankConfig};
@@ -151,12 +151,18 @@ pub async fn set_llm_provider(
     let effective_api_key = if api_key.is_empty() {
         guard.get().llm.api_key.clone()
     } else {
-        let _ = crate::settings::keystore::store_secret("llm_api_key", &api_key);
+        match crate::settings::keystore::store_secret("llm_api_key", &api_key) {
+            Ok(true) => info!(target: "4da::settings", "API key stored in platform keychain"),
+            Ok(false) => warn!(target: "4da::settings", "Keychain unavailable — API key will persist in settings.json (plaintext fallback)"),
+            Err(e) => warn!(target: "4da::settings", error = %e, "Keychain write error — API key will persist in settings.json"),
+        }
         api_key
     };
     let effective_openai_key = match openai_api_key {
         Some(ref k) if !k.is_empty() => {
-            let _ = crate::settings::keystore::store_secret("openai_api_key", k);
+            if let Ok(false) = crate::settings::keystore::store_secret("openai_api_key", k) {
+                warn!(target: "4da::settings", "Keychain unavailable for OpenAI key — plaintext fallback");
+            }
             k.clone()
         }
         _ => guard.get().llm.openai_api_key.clone(),
