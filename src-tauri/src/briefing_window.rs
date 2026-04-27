@@ -66,6 +66,7 @@ pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()>
         WINDOW_LABEL,
         WebviewUrl::App("briefing.html".into()),
     )
+    .title("4DA — Daily Brief")
     .decorations(false)
     .transparent(true)
     .shadow(false)
