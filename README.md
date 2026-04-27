@@ -4,6 +4,7 @@
 
 <br />
 
+[![CI](https://github.com/runyourempire/4DA/actions/workflows/validate.yml/badge.svg)](https://github.com/runyourempire/4DA/actions/workflows/validate.yml)
 [![License: FSL-1.1](https://img.shields.io/badge/License-FSL--1.1--Apache--2.0-blue.svg)](LICENSE)
 [![MCP Server](https://img.shields.io/npm/v/@4da/mcp-server?label=MCP%20Server&color=gold)](https://www.npmjs.com/package/@4da/mcp-server)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-brightgreen.svg)](#download)
@@ -306,15 +307,11 @@ Reads from the same database as the desktop app. No extra setup.
   <em>Signal — the items that earn their place, confirmed through 2+ independent axes</em>
 </p>
 
-<p align="center">
-  <img src="site/screenshots/05-playbook.png" alt="STREETS Playbook" width="800" />
-  <br />
-  <em>Playbook — the STREETS sovereignty playbook, seven modules, always free</em>
-</p>
-
 ---
 
 ## Development
+
+4DA is built by a solo engineer with AI-assisted development (Claude Code). All code is human-reviewed. The test suite (3,400+ tests across Rust and TypeScript) and CI pipeline verify correctness on every commit. The scoring algorithm is hand-designed and [benchmarked](#benchmarks) against 9 developer personas with labeled test data.
 
 ```bash
 pnpm tauri dev              # Dev server (localhost:4444)
@@ -322,6 +319,18 @@ cargo test                  # Rust tests (from src-tauri/)
 pnpm test                   # Frontend tests
 pnpm validate:all           # Full validation (lint + types + tests + build)
 ```
+
+### Benchmarks
+
+The scoring claims in this README are tested, not asserted. The benchmark suite runs the full PASIFA pipeline against 9 simulated developer personas (Rust systems, Python ML, fullstack TypeScript, DevOps/SRE, mobile, bootstrap/first-run, power user, stack switcher, niche specialist) with labeled test items scored as relevant or noise.
+
+```bash
+cd src-tauri
+cargo test scoring::benchmark -- --nocapture    # Full benchmark with output
+cargo test scoring::simulation -- --nocapture   # Persona simulation suite
+```
+
+Source: [`src-tauri/src/scoring/benchmark.rs`](src-tauri/src/scoring/benchmark.rs) (1,335 lines, 27 tests) and [`src-tauri/src/scoring/simulation/`](src-tauri/src/scoring/simulation/) (persona definitions, domain embeddings, enrichment data).
 
 ---
 

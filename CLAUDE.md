@@ -120,89 +120,15 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 - `ARCHITECTURE.md` — system structure reference
 - `FAILURE_MODES.md` — known fragile areas and previous regressions
 
-## Intelligence Reconciliation (2026-04-16 — IN PROGRESS)
-
-Before touching ANY intelligence surface (Briefing, Preemption, Blind Spots, Evidence, AWE, Knowledge Decay, Signal Chains), read:
-
-- `docs/strategy/INTELLIGENCE-RECONCILIATION.md` — THE plan: 12→5 tab collapse, AWE as invisible spine, one canonical type.
-- `docs/strategy/EVIDENCE-ITEM-SCHEMA.md` — the canonical `EvidenceItem` contract every intelligence surface must emit.
-- `.claude/rules/intelligence-doctrine.md` — the ten enforced rules (no new types, no vanity metrics, no AWE panels, etc).
-
-The Momentum tab is **being deleted**. AWE becomes infrastructure, not a feature. Five parallel intelligence systems are collapsing into one pipeline. Do NOT add new Alert/Gap/Recommendation/Insight struct variants — extend `EvidenceItem` via ADR instead.
-
 ## Never Commit
 
 - `data/settings.json` — contains user API keys. Use `data/settings.example.json` as template.
 - `data/*.db` — runtime databases
 - `src-tauri/target/` — Rust build artifacts
 
-## Document Hygiene (Planning-Doc Protocol)
-
-Internal planning / strategy / audit / checklist / roadmap docs **must not live at the repo root** or in tracked subdirectories without being on the allowlist. The pre-commit gate (`scripts/check-doc-location.cjs`) rejects commits that try. Full framework: `.claude/rules/document-hygiene.md`.
-
-**Layered system:**
-- **Allowlist source of truth**: `scripts/doc-allowlist.json` — per-directory lists of what may be tracked.
-- **Pre-commit gate**: `scripts/check-doc-location.cjs` — blocks root-pattern violations, mixed-dir violations, and PII.
-- **On-demand audit**: `pnpm run audit:public-ready` — runs over ALL tracked files, required before flipping the repo public.
-
-**Planning-doc protocol for Claude.** Before writing any `*.md` whose name contains `PLAN`, `STRATEGY`, `AUDIT`, `CHECKLIST`, `ROADMAP`, `TRAJECTORY`, `VIRAL`, `LAUNCH`, `FORTIFICATION`, `EXECUTION`, `ASCENT`, `BATTLE`, `MASTER`, `BARRIER`, `IMPROVEMENTS`, `CRITICAL`, `DEVELOPER-OS`, `NOTIFICATION-INTELLIGENCE`, `INTELLIGENCE-CONSOLE`, `whats-next`, `NEXT-STEPS`, `MISSION_`, `SHIP_`, `FIRST-CONTACT`:
-
-1. **Default**: use TodoWrite + in-conversation reasoning — no file.
-2. If a persistent doc is needed: write to `.claude/plans/` (gitignored, never leaks).
-3. Curated docs go to `docs/strategy/` **only after** (a) explicit user approval per-file AND (b) addition to `scripts/doc-allowlist.json`. Same for `.ai/`.
-4. Never write such docs at repo root, to `.ai/`, or to a mixed dir without updating the allowlist.
-
-**PII** (`[operator-personal-email]`, `[operator-legacy-email]`) must never enter tracked content. Use role-based aliases (`hello@4da.ai`). Actual patterns are stored as SHA-256 hashes in the enforcement scripts (`scripts/check-doc-location.cjs`, `scripts/public-readiness-audit.cjs`). Business-statutory info (ABN, ACN, TM serials) is fine on legal pages only.
-
-**Escape hatches** (for root + mixed-dir rules, NOT for PII): add `<!-- public-ok: <reason> -->` to the first 10 lines, or add the filename to `scripts/doc-allowlist.json`.
-
-## AWE Integration (Artificial Wisdom Engine)
-
-AWE is the judgment layer that transmutes intelligence into calibrated wisdom. It runs as an MCP server with 7 tools backed by a Rust engine.
-
-**When to use AWE tools:**
-- `awe_transmute` — Before any **high-stakes decision** (architecture changes, irreversible actions, new abstractions). Returns bias detection, consequence modeling, confidence calibration, and trade-off analysis.
-- `awe_quick_check` — Fast sanity check on any decision. Use liberally — it's cheap.
-- `awe_consequence_scan` — Before irreversible actions. Models 1st/2nd/3rd order consequences with reversibility scoring.
-- `awe_feedback` — **After every decision outcome is known.** This is critical — AWE compounds by learning from outcomes. Feed it confirmed/refuted/partial results.
-- `awe_recall` — At session start or before decisions in a domain. Retrieves accumulated principles, anti-patterns, and precedents.
-- `awe_calibration` — Periodic check on AWE's judgment quality per domain.
-
-**Automated integration (hooks handle this):**
-- Session start: AWE wisdom (principles/anti-patterns) injected automatically
-- Session start: Previous session's AWE decisions queued for feedback
-- Session end: Recent AWE decisions captured in pending.json for next-session feedback
-- Wisdom Gate 2: Destructive action warnings include `awe_consequence_scan` reminder
-
-**Decision recording flow:**
-1. Identify a significant decision → `awe_quick_check` (fast bias scan)
-2. If high-stakes → `awe_transmute` (full pipeline, auto-persists to Wisdom Graph)
-3. Also record in `remember_decision` (MCP memory) for session memory
-4. When outcome is known → `awe_feedback` with decision_id
-
-**Three decision stores — clear routing:**
-| Store | Purpose | When to use |
-|-------|---------|-------------|
-| **AWE** (`awe_transmute`) | Judgment-augmented decisions with consequence modeling | Architectural choices, irreversible actions, design trade-offs |
-| **MCP Memory** (`remember_decision`) | Dev session memory that survives context compaction | Learnings, gotchas, workflow decisions, code locations |
-| **4DA Decision Memory** (`decision_memory`) | Tech stack tracking and alignment checking | Auto-inferred tech choices, `check_decision_alignment` queries |
-
-Do NOT record the same decision in all three. Route by purpose. AWE is for decisions that need judgment. Memory is for session persistence. 4DA is for tech alignment.
-
-**AWE binary:** `D:\runyourempire\awe\target\release\awe.exe`
-**Wisdom database:** `%APPDATA%\awe\wisdom.db` (87 decisions, 1 validated principle, compounding)
-
-## Worktree Hygiene
-
-Subagents spawned with `isolation: "worktree"` create a new worktree under `.claude/worktrees/agent-<hash>/` and a matching branch `worktree-agent-<hash>`. After the subagent's commits are merged into main, the worktree directory and branch remain — neither the subagent nor the orchestrator cleans up. Over time these accumulate and trigger sentinel alarms.
-
-**Prevention:** `node scripts/cleanup-orphaned-worktrees.cjs` — dry-run by default, shows what would be removed. Add `--execute` to apply. Safe by design: refuses to remove any branch whose tip is NOT reachable from main, or any worktree with uncommitted changes. Reflog preserves everything for 90 days. Suggested cadence: run nightly or via a pre-push hook.
-
-**2026-04-12 cleanup:** 11 dead `worktree-agent-*` branches + 4 stale `.claude/worktrees/agent-*` directories deleted. All verified safe (every branch tip was reachable from main; all directories were empty or held only stale snapshots with zero unique content).
-
 ## Claude-Specific
 
-- Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
-- Slash commands: `.claude/commands/` (project-specific commands)
+- Agent definitions: `.claude/agents/`
+- Slash commands: `.claude/commands/`
+- Rules: `.claude/rules/` (document hygiene, intelligence doctrine, AWE integration, worktree hygiene)
 - MCP servers: memory (persistent decisions/learnings), 4da (14 tools), awe (7 wisdom tools)
-- Hooks: wisdom gates (PreToolUse), consequence processing + AWE wisdom injection (UserPromptSubmit), session capture + AWE feedback tracking (Stop), prompt analyzer
