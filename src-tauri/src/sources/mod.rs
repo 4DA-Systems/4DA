@@ -133,6 +133,92 @@ impl SourceItem {
             format!("{}\n\n{}", self.title, self.content)
         }
     }
+
+    /// Extract structured tags from source metadata.
+    ///
+    /// Different sources store tags under different keys:
+    /// - SO/Dev.to/Lobsters/HF: `metadata.tags`
+    /// - GitHub: `metadata.topics`
+    /// - crates.io: `metadata.keywords` + `metadata.categories`
+    /// - arXiv: `metadata.categories` (mapped from taxonomy codes)
+    pub fn extract_structured_tags(&self) -> Vec<String> {
+        let meta = match &self.metadata {
+            Some(m) => m,
+            None => return Vec::new(),
+        };
+
+        let mut tags = Vec::new();
+
+        // Primary: "tags" (SO, Dev.to, Lobsters, HuggingFace)
+        if let Some(arr) = meta.get("tags").and_then(|v| v.as_array()) {
+            for val in arr {
+                if let Some(s) = val.as_str() {
+                    tags.push(s.to_lowercase());
+                }
+            }
+        }
+
+        // GitHub: "topics"
+        if let Some(arr) = meta.get("topics").and_then(|v| v.as_array()) {
+            for val in arr {
+                if let Some(s) = val.as_str() {
+                    tags.push(s.to_lowercase());
+                }
+            }
+        }
+
+        // crates.io: "keywords"
+        if let Some(arr) = meta.get("keywords").and_then(|v| v.as_array()) {
+            for val in arr {
+                if let Some(s) = val.as_str() {
+                    tags.push(s.to_lowercase());
+                }
+            }
+        }
+
+        // arXiv/crates.io: "categories" — map taxonomy codes to topic vocabulary
+        if let Some(cats) = meta.get("categories") {
+            let cat_strs: Vec<String> = if let Some(arr) = cats.as_array() {
+                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+            } else if let Some(s) = cats.as_str() {
+                s.split_whitespace().map(String::from).collect()
+            } else {
+                Vec::new()
+            };
+
+            for cat in cat_strs {
+                let lower = cat.to_lowercase();
+                // arXiv taxonomy mapping
+                let mapped = match lower.as_str() {
+                    "cs.ai" => Some("ai"),
+                    "cs.lg" | "cs.ml" | "stat.ml" => Some("machine learning"),
+                    "cs.cl" | "cs.lt" => Some("nlp"),
+                    "cs.cv" => Some("computer vision"),
+                    "cs.cr" => Some("security"),
+                    "cs.db" => Some("database"),
+                    "cs.dc" | "cs.ds" => Some("distributed"),
+                    "cs.pl" => Some("programming languages"),
+                    "cs.se" => Some("software engineering"),
+                    "cs.ne" => Some("neural networks"),
+                    "cs.ir" => Some("information retrieval"),
+                    "cs.os" => Some("operating systems"),
+                    "cs.ni" | "cs.networking" => Some("networking"),
+                    "cs.ro" => Some("robotics"),
+                    _ => None,
+                };
+
+                if let Some(topic) = mapped {
+                    tags.push(topic.to_string());
+                } else {
+                    // crates.io categories are already descriptive (e.g., "encoding", "no-std")
+                    tags.push(lower);
+                }
+            }
+        }
+
+        tags.dedup();
+        tags
+    }
 }
 
 // ============================================================================

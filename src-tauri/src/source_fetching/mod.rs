@@ -36,6 +36,18 @@ pub(crate) fn extract_feed_origin(item: &crate::sources::SourceItem) -> Option<S
     })
 }
 
+/// Extract structured tags from source item metadata and serialize as JSON.
+///
+/// Returns `None` if no tags found, or a JSON array string like `["rust","async"]`.
+pub(crate) fn extract_source_tags(item: &crate::sources::SourceItem) -> Option<String> {
+    let tags = item.extract_structured_tags();
+    if tags.is_empty() {
+        None
+    } else {
+        serde_json::to_string(&tags).ok()
+    }
+}
+
 // ============================================================================
 // Self-healing retry logic
 // ============================================================================

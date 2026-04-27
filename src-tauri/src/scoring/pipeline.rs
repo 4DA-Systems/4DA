@@ -103,6 +103,10 @@ pub(crate) struct ScoringInput<'a> {
     pub embedding: &'a [f32],
     pub created_at: Option<&'a chrono::DateTime<chrono::Utc>>,
     pub detected_lang: &'a str,
+    /// Structured tags from source metadata (e.g., SO tags, Dev.to tags, arXiv categories).
+    /// Enables source-fair topic extraction by providing structured signal
+    /// alongside text-based extraction.
+    pub source_tags: &'a [String],
 }
 
 /// Options controlling which scoring stages are applied
@@ -121,7 +125,7 @@ pub(crate) fn score_item(
     options: &ScoringOptions,
     classifier: Option<&signals::SignalClassifier>,
 ) -> SourceRelevance {
-    let topics = extract_topics(input.title, input.content);
+    let topics = extract_topics(input.title, input.content, input.source_tags);
 
     // Check exclusions
     let excluded_by = check_exclusions(&topics, &ctx.exclusions)

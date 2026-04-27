@@ -76,6 +76,7 @@ pub(super) fn sim_input<'a>(
         embedding,
         created_at: None,
         detected_lang: "en",
+        source_tags: &[],
     }
 }
 

@@ -92,7 +92,7 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
     let mut topic_items: HashMap<String, Vec<(i64, String, String, String)>> = HashMap::new();
 
     for (id, title, source_type, created_at, content) in &items {
-        let topics = crate::extract_topics(title, content);
+        let topics = crate::extract_topics(title, content, &[]);
         for topic in topics {
             topic_items.entry(topic).or_default().push((
                 *id,
@@ -588,7 +588,7 @@ fn query_items_in_range_between(
 fn count_topics(items: &[(String, String)]) -> HashMap<String, u32> {
     let mut counts: HashMap<String, u32> = HashMap::new();
     for (title, content) in items {
-        let topics = crate::extract_topics(title, content);
+        let topics = crate::extract_topics(title, content, &[]);
         for topic in topics {
             *counts.entry(topic).or_insert(0) += 1;
         }

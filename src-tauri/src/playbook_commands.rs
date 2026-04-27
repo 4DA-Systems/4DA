@@ -356,7 +356,7 @@ pub fn mark_lesson_complete(
         if let Ok(raw) = std::fs::read_to_string(&path) {
             let lessons = parse_lessons(&raw);
             if let Some(lesson) = lessons.get(lesson_idx as usize) {
-                let topics = crate::extract_topics(&lesson.title, &lesson.content);
+                let topics = crate::extract_topics(&lesson.title, &lesson.content, &[]);
                 if let Ok(ace) = crate::get_ace_engine() {
                     for topic in topics.iter().take(5) {
                         let topic_lower = topic.to_lowercase();

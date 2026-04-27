@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 61;
+        const TARGET_VERSION: i64 = 62;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2261,6 +2261,32 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_feed_health_circuit ON feed_health(circuit_open) WHERE circuit_open = 1;",
                         )?;
                         info!(target: "4da::db", "Created feed_health table with circuit breaker support");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 62: Structured tags for source-fair topic extraction
+            if current_version < 62 {
+                Self::run_versioned_migration(
+                    &conn,
+                    61,
+                    62,
+                    "Phase 62: structured tags column for source-fair scoring",
+                    |c| {
+                        let has_column = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('source_items') WHERE name = 'tags'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|count| count > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute_batch(
+                                "ALTER TABLE source_items ADD COLUMN tags TEXT DEFAULT NULL;",
+                            )?;
+                            info!(target: "4da::db", "Added tags column to source_items for source-fair scoring");
+                        }
                         Ok(())
                     },
                 )?;

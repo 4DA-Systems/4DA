@@ -124,12 +124,9 @@ impl StackOverflowSource {
             .map(|q| {
                 let question_tags = q.tags.clone().unwrap_or_default();
                 let answer_count = q.answer_count.unwrap_or(0);
-                let content = format!(
-                    "Tags: {} | Score: {} | Answers: {}",
-                    question_tags.join(", "),
-                    q.score,
-                    answer_count
-                );
+                // Tags flow through metadata → extract_structured_tags() → extract_topics().
+                // Content is empty because SO API doesn't return question body in list endpoints.
+                let content = String::new();
 
                 let mut metadata = serde_json::json!({
                     "score": q.score,

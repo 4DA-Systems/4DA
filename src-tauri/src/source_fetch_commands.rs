@@ -143,6 +143,7 @@ async fn embed_and_store_items(items: &[crate::sources::SourceItem]) -> Result<u
                 content_type,
                 cve_ids,
                 feed_origin,
+                crate::source_fetching::extract_source_tags(item),
             )
         })
         .collect();

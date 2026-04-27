@@ -62,6 +62,9 @@ pub struct StoredSourceItem {
     /// Canonical feed URL that produced this item (e.g. RSS feed URL).
     /// Used for per-feed health tracking in custom sources.
     pub feed_origin: Option<String>,
+    /// JSON-serialized structured tags from source metadata (SO tags, GitHub topics, etc.).
+    /// Parsed at scoring time for source-fair topic extraction.
+    pub tags: Option<String>,
 }
 
 /// Similarity result from vector search
@@ -493,7 +496,7 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT s.id, s.source_type, s.source_id, s.url, s.title, s.content,
                     s.content_hash, s.embedding, s.created_at, s.last_seen, v.distance,
-                    COALESCE(s.detected_lang, 'en'), s.feed_origin
+                    COALESCE(s.detected_lang, 'en'), s.feed_origin, s.tags
              FROM source_vec v
              JOIN source_items s ON s.id = v.rowid
              WHERE v.embedding MATCH ?1 AND k = ?2
@@ -517,6 +520,7 @@ impl Database {
                     .get::<_, String>(11)
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(12).ok().flatten(),
+                tags: row.get(13).ok().flatten(),
             })
         })?;
 
