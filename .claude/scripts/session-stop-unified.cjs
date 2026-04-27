@@ -164,13 +164,6 @@ function writeWisdomDigest(modifiedFiles, recentCommits) {
         processed: false,
       };
 
-      // Track AWE decisions for feedback loop
-      const aweDecisions = getRecentAweDecisions();
-      if (aweDecisions.length > 0) {
-        digest.aweDecisionIds = aweDecisions;
-        digest.aweFeedbackProcessed = false;
-      }
-
       saveJSON(PENDING_FILE, digest);
     }
   } catch (_) {}
@@ -293,38 +286,6 @@ function categorizeSession(files) {
     }
   }
   return [...areas];
-}
-
-function getRecentAweDecisions() {
-  const AWE_BIN = 'D:\\runyourempire\\awe\\target\\release\\awe.exe';
-  try {
-    if (!fs.existsSync(AWE_BIN)) return [];
-    // Only capture decisions from this session window (last 2 hours)
-    // awe.exe history returns most recent first — we filter by timestamp later
-    const output = execSync(`"${AWE_BIN}" history --limit 5`, {
-      encoding: 'utf8',
-      timeout: 5000,
-      env: { ...process.env },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-
-    // Parse decision IDs and summaries from the output
-    // Format: "  dc_UUID | domain | NN% confidence"
-    //         "    Decision text"
-    const decisions = [];
-    const lines = output.split('\n');
-    for (let i = 0; i < lines.length; i++) {
-      const match = lines[i].match(/^\s+(dc_[\w-]+)\s+\|/);
-      if (match) {
-        const nextLine = lines[i + 1] || '';
-        decisions.push({
-          id: match[1],
-          query: nextLine.trim().substring(0, 100),
-        });
-      }
-    }
-    return decisions;
-  } catch (e) { return []; }
 }
 
 function loadOpsState() {

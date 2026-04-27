@@ -10,10 +10,6 @@
           },
           {
             "type": "command",
-            "command": "node $(git rev-parse --show-toplevel)/.claude/scripts/wisdom-auto.cjs"
-          },
-          {
-            "type": "command",
             "command": "node $(git rev-parse --show-toplevel)/.claude/scripts/analyze-prompt.cjs"
           },
           {
@@ -23,17 +19,6 @@
           {
             "type": "command",
             "command": "node $(git rev-parse --show-toplevel)/.claude/scripts/sentinel-hook.cjs"
-          }
-        ]
-      }
-    ],
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node $(git rev-parse --show-toplevel)/.claude/scripts/wisdom-gate.cjs"
           }
         ]
       }
