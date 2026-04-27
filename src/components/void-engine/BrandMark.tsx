@@ -87,7 +87,7 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
   const { glowOpacity, edgeColor, vertexColor, faceColor, stateLabel, rotSpeed } = useMemo(() => {
     if (!signal) {
       return {
-        glowOpacity: 0.15,
+        glowOpacity: 0.25,
         edgeColor: '#C8B560',
         vertexColor: '#D4AF37',
         faceColor: '#D4AF37',
@@ -97,8 +97,8 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
     }
 
     const glow = signal.error > 0.5
-      ? 0.05
-      : 0.12 + signal.heat * 0.15 + signal.pulse * 0.1 + signal.burst * 0.2;
+      ? 0.15
+      : 0.25 + signal.heat * 0.2 + signal.pulse * 0.15 + signal.burst * 0.25;
 
     let edge = '#C8B560';
     let vertex = '#D4AF37';
@@ -256,9 +256,25 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
 
   // Face fill opacity: front-facing = brighter, back-facing = dimmer
   const faceOpacity = (depth: number, facing: number) => {
-    const base = 0.03 + 0.05 * depthBright(depth);
-    return facing > 0 ? base * 1.5 : base * 0.5;
+    const base = 0.06 + 0.08 * depthBright(depth);
+    return facing > 0 ? base * 1.6 : base * 0.6;
   };
+
+  // Ambient breathing cycle — keeps the mark alive even in idle state
+  const [breathPhase, setBreathPhase] = useState(0);
+  useEffect(() => {
+    let frame = 0;
+    const interval = setInterval(() => {
+      frame += 1;
+      setBreathPhase(frame);
+    }, 100); // 10fps is enough for a slow breath
+    return () => clearInterval(interval);
+  }, []);
+
+  // Breath oscillates between 0 and 1 on a 4-second cycle
+  const breath = (Math.sin(breathPhase * 0.157) + 1) / 2; // 0.157 ≈ 2π / 40 steps = 4s at 10fps
+  const breathScale = 1 + breath * 0.04; // 1.0 → 1.04
+  const breathGlow = glowOpacity + breath * 0.18; // adds up to 0.18 to base glow
 
   const showLabel = size >= 100;
 
@@ -293,7 +309,11 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
         viewBox="0 0 100 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ display: 'block' }}
+        style={{
+          display: 'block',
+          transform: `scale(${breathScale})`,
+          transition: 'transform 0.3s ease',
+        }}
       >
         <defs>
           <filter id={`glow-${filterId}`} x="-50%" y="-50%" width="200%" height="200%">
@@ -317,8 +337,8 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
           ))}
         </g>
 
-        {/* Edge glow layer */}
-        <g opacity={glowOpacity} filter={`url(#glow-${filterId})`}>
+        {/* Edge glow layer — breathes with ambient pulse */}
+        <g opacity={breathGlow} filter={`url(#glow-${filterId})`}>
           {edges.map((e, i) => (
             <line
               key={`g${i}`}
