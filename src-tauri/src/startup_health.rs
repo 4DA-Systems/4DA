@@ -66,6 +66,9 @@ pub(crate) fn run_startup_health_check() -> Vec<HealthIssue> {
         check_macos_keychain(&mut issues);
     }
 
+    // Cross-platform keychain probe — log-only, not user-facing.
+    check_keychain_functional();
+
     // Cross-platform cloud-sync detection (OneDrive/Google Drive/Dropbox).
     // iCloud is handled inside check_icloud_interference on macOS.
     check_cloud_sync_interference(&data_dir, &mut issues);
@@ -848,6 +851,42 @@ fn check_macos_keychain(issues: &mut Vec<HealthIssue>) {
 }
 
 // ============================================================================
+// Cross-platform keychain functional probe
+// ============================================================================
+
+/// Write-read-delete probe on the platform keychain.
+///
+/// Catches the scenario where the `keyring` crate reports write success but
+/// the credential silently drops (observed on some Windows machines). When
+/// the probe fails, API keys fall back to plaintext in settings.json — which
+/// is standard for desktop apps (VS Code, Chrome, etc. all do this). The
+/// result is logged for diagnostics but never shown to the user — plaintext
+/// local storage on a single-user machine is not a degraded security posture.
+fn check_keychain_functional() {
+    let probe_key = "4da_health_probe";
+    let probe_val = "probe-ok";
+
+    let stored = crate::settings::keystore::store_secret(probe_key, probe_val);
+    let functional = match stored {
+        Ok(true) => crate::settings::keystore::verify_round_trip(probe_key, probe_val),
+        _ => false,
+    };
+    let _ = crate::settings::keystore::delete_secret(probe_key);
+
+    if functional {
+        info!(
+            target: "4da::startup",
+            "Keychain probe OK — credentials stored in OS credential manager"
+        );
+    } else {
+        info!(
+            target: "4da::startup",
+            "Keychain unavailable — credentials stored locally in settings.json (standard for desktop apps)"
+        );
+    }
+}
+
+// ============================================================================
 // Diagnostic Report (for support)
 // ============================================================================
 
@@ -894,9 +933,13 @@ pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
     let mut issues = run_startup_health_check();
 
     // Filter out false-positive "API key is empty" when the in-memory settings
-    // (hydrated from keychain on startup) DO have the key.  The disk-based check
-    // can't always reach the keychain on every OS/config combination.
-    if let Some(guard) = crate::get_settings_manager().try_lock() {
+    // (hydrated from keychain on startup) DO have the key. The disk-based check
+    // reads settings.json directly, which has keys stripped after keychain
+    // migration. Use lock() instead of try_lock() — this is a non-hot path
+    // called once on mount, and try_lock() was silently failing during startup
+    // when another thread held the mutex, letting the false-positive through.
+    {
+        let guard = crate::get_settings_manager().lock();
         let has_key = !guard.get().llm.api_key.is_empty();
         if has_key {
             issues.retain(|i| {
