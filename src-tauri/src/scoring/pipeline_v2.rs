@@ -835,6 +835,10 @@ fn compute_quality_composite(
     //   - stack_competing_mult: redundant with competing_mult + negative_stack_prior
     //   - content_analysis_mult: falls back to 1.0 on cache miss, expensive
 
+    // Source tier authority: slight scoring adjustment by source classification
+    let tier = crate::source_tiers::SourceTier::default_for_source(input.source_type);
+    let tier_authority_mult = tier.authority_multiplier();
+
     // Full-strength multipliers — no dampening. Each multiplier expresses its
     // complete signal. The confirmation gate (Phase 7) prevents score inflation;
     // what changes is the FLOOR — bad items drop further, good items stay at ceiling.
@@ -848,7 +852,8 @@ fn compute_quality_composite(
         * raw.affinity_mult
         * anti_mult
         * domain_quality_mult
-        * negative_stack_prior;
+        * negative_stack_prior
+        * tier_authority_mult;
 
     let quality_score = (relevance_score * composite).clamp(0.0, 1.0);
 

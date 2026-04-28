@@ -193,9 +193,11 @@ pub(crate) fn build_enriched_briefing(
         })
     });
 
-    // Cap at the widget's display budget. Prefer fewer high-quality items
-    // over a full list of mediocre ones.
-    let items: Vec<BriefingItem> = sorted.into_iter().take(8).collect();
+    // Diversity slots: guarantee at least 1 item per source that produced
+    // results, then fill remaining slots from the global ranking. This
+    // prevents high-scoring source types (security, fresh news) from
+    // dominating the entire briefing.
+    let items: Vec<BriefingItem> = apply_diversity_slots(sorted, 8);
 
     // Novelty detection: filter items seen in last 3 days, track ongoing topics.
     // If novelty filter removes ALL items, keep the top 3 as "still relevant"
@@ -270,6 +272,78 @@ pub(crate) fn build_enriched_briefing(
         blind_spot_score,
         labels: Some(labels),
     }
+}
+
+// ============================================================================
+// Diversity Slot Selection
+// ============================================================================
+
+/// Select briefing items with source diversity guarantees.
+///
+/// Ensures at least one item per source type that produced results, then
+/// fills remaining slots from the global ranking (already priority-sorted).
+/// This prevents a single dominant source type (e.g. security advisories)
+/// from consuming all briefing slots.
+///
+/// Items are assumed to be pre-sorted by priority then score descending.
+/// The final output preserves priority ordering: diversity picks are
+/// re-sorted by the same priority-then-score comparator.
+fn apply_diversity_slots(items: Vec<BriefingItem>, max_items: usize) -> Vec<BriefingItem> {
+    if items.is_empty() || max_items == 0 {
+        return vec![];
+    }
+
+    // Single source or fits entirely — no diversity logic needed
+    let source_count = {
+        let mut seen = std::collections::HashSet::new();
+        for item in &items {
+            seen.insert(item.source_type.clone());
+        }
+        seen.len()
+    };
+    if source_count <= 1 || items.len() <= max_items {
+        return items.into_iter().take(max_items).collect();
+    }
+
+    // Best item per source (first occurrence wins since list is pre-sorted)
+    let mut best_per_source: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    for (idx, item) in items.iter().enumerate() {
+        best_per_source
+            .entry(item.source_type.clone())
+            .or_insert(idx);
+    }
+
+    // Collect diversity picks (indices)
+    let mut selected_indices: Vec<usize> = best_per_source.into_values().collect();
+    selected_indices.sort_unstable(); // preserve original ordering
+
+    // If diversity picks alone exceed budget, keep the best ones by
+    // original sort order (priority-then-score).
+    if selected_indices.len() >= max_items {
+        selected_indices.truncate(max_items);
+    } else {
+        // Fill remaining slots from the global ranking, skipping already-selected
+        let selected_set: std::collections::HashSet<usize> =
+            selected_indices.iter().copied().collect();
+        for idx in 0..items.len() {
+            if selected_indices.len() >= max_items {
+                break;
+            }
+            if !selected_set.contains(&idx) {
+                selected_indices.push(idx);
+            }
+        }
+    }
+
+    // Sort selected indices to preserve original priority-then-score ordering
+    selected_indices.sort_unstable();
+
+    // Collect items by index (indices are unique and sorted, so no double-moves)
+    selected_indices
+        .into_iter()
+        .map(|idx| items[idx].clone())
+        .collect()
 }
 
 // ============================================================================
@@ -1476,5 +1550,153 @@ mod tests {
         // Verify it's set
         let guard = state.last_morning_briefing_date.lock();
         assert_eq!(*guard, Some("2026-03-19".to_string()));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Diversity slot tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    fn make_briefing_item(title: &str, source: &str, score: f32) -> BriefingItem {
+        BriefingItem {
+            title: title.to_string(),
+            source_type: source.to_string(),
+            score,
+            signal_type: None,
+            url: None,
+            item_id: None,
+            signal_priority: None,
+            description: None,
+            matched_deps: vec![],
+        }
+    }
+
+    #[test]
+    fn test_diversity_empty_input() {
+        let result = apply_diversity_slots(vec![], 8);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_diversity_zero_max() {
+        let items = vec![make_briefing_item("A", "hackernews", 0.9)];
+        let result = apply_diversity_slots(items, 0);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_diversity_single_source_passthrough() {
+        // All items from one source — no diversity logic needed
+        let items = vec![
+            make_briefing_item("A", "hackernews", 0.9),
+            make_briefing_item("B", "hackernews", 0.8),
+            make_briefing_item("C", "hackernews", 0.7),
+        ];
+        let result = apply_diversity_slots(items, 8);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].title, "A");
+    }
+
+    #[test]
+    fn test_diversity_fits_within_budget() {
+        // 3 items, budget of 8 — all should be returned as-is
+        let items = vec![
+            make_briefing_item("A", "hackernews", 0.9),
+            make_briefing_item("B", "reddit", 0.8),
+            make_briefing_item("C", "cve", 0.7),
+        ];
+        let result = apply_diversity_slots(items, 8);
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn test_diversity_guarantees_one_per_source() {
+        // 10 items: 8 from hackernews (high scores), 1 reddit, 1 cve (lower scores)
+        // Without diversity: top-8 would be all hackernews
+        // With diversity: reddit and cve each get a guaranteed slot
+        let mut items = Vec::new();
+        for i in 0..8 {
+            items.push(make_briefing_item(
+                &format!("HN-{i}"),
+                "hackernews",
+                0.90 - (i as f32 * 0.01),
+            ));
+        }
+        items.push(make_briefing_item("Reddit item", "reddit", 0.60));
+        items.push(make_briefing_item("CVE item", "cve", 0.55));
+
+        // Pre-sort by score descending (as build_enriched_briefing does)
+        items.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        let result = apply_diversity_slots(items, 8);
+        assert_eq!(result.len(), 8);
+
+        let sources: Vec<&str> = result.iter().map(|i| i.source_type.as_str()).collect();
+        assert!(
+            sources.contains(&"reddit"),
+            "reddit must have a diversity slot; got sources: {:?}",
+            sources
+        );
+        assert!(
+            sources.contains(&"cve"),
+            "cve must have a diversity slot; got sources: {:?}",
+            sources
+        );
+    }
+
+    #[test]
+    fn test_diversity_preserves_priority_ordering() {
+        // Items pre-sorted by priority then score
+        let items = vec![
+            BriefingItem {
+                signal_priority: Some("critical".to_string()),
+                ..make_briefing_item("Critical CVE", "cve", 0.95)
+            },
+            make_briefing_item("HN-1", "hackernews", 0.90),
+            make_briefing_item("HN-2", "hackernews", 0.85),
+            make_briefing_item("HN-3", "hackernews", 0.80),
+            make_briefing_item("HN-4", "hackernews", 0.75),
+            make_briefing_item("HN-5", "hackernews", 0.70),
+            make_briefing_item("HN-6", "hackernews", 0.65),
+            make_briefing_item("HN-7", "hackernews", 0.60),
+            make_briefing_item("Reddit low", "reddit", 0.50),
+        ];
+
+        let result = apply_diversity_slots(items, 8);
+
+        // Critical item must still be first
+        assert_eq!(result[0].title, "Critical CVE");
+        // Reddit must appear somewhere
+        assert!(result.iter().any(|i| i.source_type == "reddit"));
+    }
+
+    #[test]
+    fn test_diversity_more_sources_than_budget() {
+        // 10 different sources, budget of 8 — must truncate diversity picks
+        let mut items = Vec::new();
+        for i in 0..10 {
+            items.push(make_briefing_item(
+                &format!("Item-{i}"),
+                &format!("source-{i}"),
+                0.90 - (i as f32 * 0.05),
+            ));
+        }
+        let result = apply_diversity_slots(items, 8);
+        assert_eq!(result.len(), 8);
+
+        // Should keep the top 8 by original sort order
+        assert_eq!(result[0].title, "Item-0");
+        assert_eq!(result[7].title, "Item-7");
+    }
+
+    #[test]
+    fn test_diversity_single_item() {
+        let items = vec![make_briefing_item("Only one", "hackernews", 0.9)];
+        let result = apply_diversity_slots(items, 8);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].title, "Only one");
     }
 }
