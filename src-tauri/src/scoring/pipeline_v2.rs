@@ -84,7 +84,7 @@ fn extract_fixed_version(content: &str) -> Option<String> {
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("Fixed in:") || trimmed.starts_with("Patched in:") {
-            let version = trimmed.splitn(2, ':').nth(1)?.trim();
+            let version = trimmed.split_once(':')?.1.trim();
             if !version.is_empty() {
                 return Some(version.to_string());
             }
@@ -98,7 +98,7 @@ fn extract_affected_range(content: &str) -> Option<String> {
     for line in content.lines() {
         let trimmed = line.trim();
         if trimmed.starts_with("Affected:") {
-            let range = trimmed.splitn(2, ':').nth(1)?.trim();
+            let range = trimmed.split_once(':')?.1.trim();
             if !range.is_empty() {
                 return Some(range.to_string());
             }
