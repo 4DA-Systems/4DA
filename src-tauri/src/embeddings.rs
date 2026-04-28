@@ -163,16 +163,16 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
             {
                 Ok(validate_embeddings(result))
             } else {
-                // Ollama not available — return zero vectors as graceful fallback
-                // Scoring will work on non-embedding axes (keyword, dependency, source affinity)
+                // No embedding provider — scoring via keyword matching with ACE context synthesis
+                // (10 topics + 15 deps feed into keyword/dependency/source-affinity axes)
                 tracing::debug!(
                     target: "4da::embeddings",
-                    "No embedding provider configured and Ollama not reachable. Using zero vectors."
+                    "No embedding provider available — scoring via keyword matching with ACE context synthesis"
                 );
                 crate::capabilities::report_degraded(
                     crate::capabilities::Capability::EmbeddingSearch,
                     "No embedding provider available",
-                    "Keyword matching only (no semantic search)",
+                    "Keyword matching with context synthesis (install Ollama for semantic search)",
                 );
                 Ok(texts
                     .iter()

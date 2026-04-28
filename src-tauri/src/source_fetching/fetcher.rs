@@ -470,7 +470,7 @@ pub(crate) async fn fetch_all_sources(
                 .map(|(_, text)| text.clone())
                 .collect();
 
-            // Try to embed, with fallback to zero vectors (keyword-only scoring)
+            // Embed texts — falls back to keyword scoring with ACE context synthesis when no provider is available
             let embeddings = match embed_texts(&texts).await {
                 Ok(emb) => {
                     let is_zero_fallback = emb.first().is_some_and(|v| v.iter().all(|&x| x == 0.0));
@@ -479,7 +479,7 @@ pub(crate) async fn fetch_all_sources(
                             "embedding-mode",
                             serde_json::json!({
                                 "mode": "keyword-only",
-                                "reason": "No embedding provider available"
+                                "detail": "Keyword matching with ACE context synthesis active"
                             }),
                         );
                     } else if let Err(e) =
@@ -491,14 +491,17 @@ pub(crate) async fn fetch_all_sources(
                 }
                 Err(e) => {
                     warn!(target: "4da::embed", error = %e, count = texts.len(),
-                        "Embedding service unavailable - using fallback (keyword-only scoring)");
+                        "Semantic embeddings unavailable — scoring via keyword matching with ACE context synthesis");
                     let _ = app.emit(
                         "embedding-mode",
-                        serde_json::json!({ "mode": "keyword-only", "reason": e.to_string() }),
+                        serde_json::json!({
+                            "mode": "keyword-only",
+                            "detail": "Keyword matching with ACE context synthesis active"
+                        }),
                     );
                     // Record embedding failure to local error telemetry
                     crate::telemetry::record_error_async("embedding", &format!("{e}"), None);
-                    // Create zero vectors as fallback - items will score via keyword matching only
+                    // Keyword scoring with ACE context synthesis (topics + deps) is a real scoring tier
                     vec![vec![0.0f32; 384]; texts.len()]
                 }
             };

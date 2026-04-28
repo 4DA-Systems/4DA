@@ -49,8 +49,8 @@ pub(crate) fn stem(word: &str) -> String {
     w
 }
 
-/// Returns true if two words share the same stem.
-pub(crate) fn stems_match(a: &str, b: &str) -> bool {
+#[cfg(test)]
+fn stems_match(a: &str, b: &str) -> bool {
     stems_equiv(&stem(a), &stem(b))
 }
 
@@ -175,16 +175,6 @@ const SUFFIX_RULES: &[(&str, &str)] = &[
     // -s (but not -ss like "class" or "process")
     // Handled specially below
 ];
-
-/// Extended stem that also handles trailing -s (but not -ss).
-pub(crate) fn stem_extended(word: &str) -> String {
-    let s = stem(word);
-    if s.len() >= 4 && s.ends_with('s') && !s.ends_with("ss") {
-        s[..s.len() - 1].to_string()
-    } else {
-        s
-    }
-}
 
 #[cfg(test)]
 mod tests {
