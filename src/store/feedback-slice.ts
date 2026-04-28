@@ -89,12 +89,16 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         feedbackGiven: { ...state.feedbackGiven, [itemId]: actionType },
       }));
 
+      const actionData = actionType === 'click'
+        ? JSON.stringify({ type: 'click', dwell_time_seconds: 0, pattern: 'engaged' })
+        : null;
+
       // Backend calls are non-blocking: one failure doesn't prevent the others
       const results = await Promise.allSettled([
         cmd('ace_record_interaction', {
           item_id: itemId,
           action_type: actionType,
-          action_data: null,
+          action_data: actionData,
           item_topics: topics,
           item_source: item.source_type || 'hackernews',
         }),

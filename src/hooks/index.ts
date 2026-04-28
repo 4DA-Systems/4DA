@@ -16,6 +16,7 @@ export { useItemSummary } from './use-item-summary';
 export type { ItemSummaryState } from './use-item-summary';
 export { useLicense } from './use-license';
 export { useViewTracking } from './use-view-tracking';
+export { useDwellTracking } from './use-dwell-tracking';
 export { useUiZoom } from './use-ui-zoom';
 export { useContentTranslation } from './use-content-translation';
 export { useColdStartGate } from './use-cold-start-gate';
