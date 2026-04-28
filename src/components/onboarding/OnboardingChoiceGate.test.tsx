@@ -30,7 +30,7 @@ describe('OnboardingChoiceGate', () => {
       />,
     );
 
-    expect(screen.getByText('Start using 4DA')).toBeInTheDocument();
+    expect(screen.getByText(/skip for now/i)).toBeInTheDocument();
     expect(screen.getByText('Continue setup')).toBeInTheDocument();
   });
 
@@ -64,7 +64,7 @@ describe('OnboardingChoiceGate', () => {
     expect(mockStartUsing).not.toHaveBeenCalled();
   });
 
-  it('shows background analysis hint text', () => {
+  it('shows skip hint text when no provider configured', () => {
     render(
       <OnboardingChoiceGate
         isAnimating={false}
@@ -74,7 +74,7 @@ describe('OnboardingChoiceGate', () => {
       />,
     );
 
-    expect(screen.getByText('Analysis continues in the background')).toBeInTheDocument();
+    expect(screen.getByText(/add an AI provider later/i)).toBeInTheDocument();
   });
 
   it('applies animation classes when isAnimating is true', () => {
@@ -116,7 +116,7 @@ describe('OnboardingChoiceGate', () => {
     );
 
     expect(
-      screen.getByText('Recommended: configure an AI provider for the best experience'),
+      screen.getByText(/understands meaning.*surfaces.*more relevant/i),
     ).toBeInTheDocument();
   });
 

@@ -160,9 +160,9 @@ export function BriefingNoDataState() {
         {embeddingMode === 'keyword-only' && (
           <button
             onClick={() => setShowSettings(true)}
-            className="text-xs text-amber-400 hover:text-amber-300 transition-colors mt-3"
+            className="text-xs text-amber-400/80 hover:text-amber-300 transition-colors mt-4 px-3 py-1.5 bg-amber-500/5 rounded-lg border border-amber-500/10 hover:border-amber-500/20"
           >
-            {t('briefing.configureAiHint', 'Keyword mode active — configure AI provider in Settings for better results')}
+            {t('briefing.configureAiHint', 'Keyword matching active — add an AI provider in Settings for semantic understanding')}
           </button>
         )}
       </div>

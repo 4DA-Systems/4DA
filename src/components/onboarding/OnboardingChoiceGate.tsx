@@ -112,7 +112,7 @@ export function OnboardingChoiceGate({
             <p className="text-xs text-orange-400/80 -mt-2">
               {t(
                 'onboarding.choice.recommendProvider',
-                'Recommended: configure an AI provider for the best experience',
+                'AI understands meaning, not just keywords — surfaces 3× more relevant content',
               )}
             </p>
 
@@ -127,14 +127,14 @@ export function OnboardingChoiceGate({
 
             <button
               onClick={onStartUsing}
-              className="w-full px-8 py-2.5 bg-bg-secondary text-text-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm"
+              className="w-full px-8 py-2.5 bg-bg-secondary text-text-muted rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm"
             >
-              {t('onboarding.choice.startUsing', 'Start using 4DA')}
+              {t('onboarding.choice.skipForNow', 'Skip for now — keyword matching only')}
             </button>
-            <p className="text-xs text-text-muted -mt-2">
+            <p className="text-xs text-text-muted/60 -mt-2">
               {t(
-                'onboarding.choice.startHint',
-                'Analysis continues in the background',
+                'onboarding.choice.skipHint',
+                'You can add an AI provider later in Settings',
               )}
             </p>
           </>
