@@ -135,6 +135,10 @@ pub struct BriefingNotification {
     /// Translated labels for the briefing window (i18n)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub labels: Option<BriefingLabels>,
+    /// First-briefing personalization: natural-language context line proving the
+    /// system understood the user's profile. Only set on the very first briefing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub personalization_context: Option<String>,
 }
 
 // ============================================================================
@@ -258,6 +262,10 @@ pub(crate) fn build_enriched_briefing(
     // Build translated labels
     let labels = build_briefing_labels(lang);
 
+    // First-briefing personalization: if no previous briefing exists in history,
+    // generate a context line showing the user their detected stack + interests.
+    let personalization_context = build_first_briefing_context();
+
     BriefingNotification {
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
@@ -271,6 +279,7 @@ pub(crate) fn build_enriched_briefing(
         preemption_alerts,
         blind_spot_score,
         labels: Some(labels),
+        personalization_context,
     }
 }
 
@@ -881,6 +890,66 @@ fn recall_awe_wisdom() -> Vec<WisdomSignal> {
 }
 
 // ============================================================================
+// First-Briefing Personalization
+// ============================================================================
+
+/// Build a personalization context line for the first briefing.
+///
+/// Returns `Some("Based on your Rust + TypeScript stack and interest in ...")` if
+/// this is the user's first briefing and we have onboarding data to reference.
+/// Returns `None` for subsequent briefings or when no profile data exists.
+fn build_first_briefing_context() -> Option<String> {
+    // Check if this is the first briefing by looking at briefing_item_history.
+    // If the table has any rows, the user has already seen a briefing.
+    let conn = crate::open_db_connection().ok()?;
+    let has_prior: bool = conn
+        .query_row(
+            "SELECT COUNT(*) > 0 FROM briefing_item_history",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(true); // If query fails (table missing), assume not first briefing
+
+    if has_prior {
+        return None;
+    }
+
+    // Gather stack from ACE context
+    let ace_ctx = crate::scoring::get_ace_context();
+    let tech: Vec<&str> = ace_ctx
+        .detected_tech
+        .iter()
+        .filter(|t| crate::domain_profile::is_display_worthy(&t.to_lowercase()))
+        .take(4)
+        .map(|s| s.as_str())
+        .collect();
+
+    // Gather interests from context engine
+    let interest_names: Vec<String> = match crate::get_context_engine() {
+        Ok(engine) => engine
+            .get_static_identity()
+            .ok()
+            .map(|id| id.interests.iter().take(3).map(|i| i.topic.clone()).collect())
+            .unwrap_or_default(),
+        Err(_) => vec![],
+    };
+
+    if tech.is_empty() && interest_names.is_empty() {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    if !tech.is_empty() {
+        parts.push(format!("your {} stack", tech.join(" + ")));
+    }
+    if !interest_names.is_empty() {
+        parts.push(format!("interest in {}", interest_names.join(", ")));
+    }
+
+    Some(format!("Based on {}, here's what matters today.", parts.join(" and ")))
+}
+
+// ============================================================================
 // CLI Briefing Generator
 // ============================================================================
 
@@ -1478,6 +1547,7 @@ mod tests {
             preemption_alerts: vec![],
             blind_spot_score: None,
             labels: None,
+            personalization_context: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);

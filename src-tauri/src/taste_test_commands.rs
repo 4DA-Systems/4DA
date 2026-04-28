@@ -76,6 +76,14 @@ pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> 
     crate::taste_test::db::save_taste_result(&conn, &profile, &responses, &latencies)?;
     crate::taste_test::db::apply_taste_to_context(&conn, &profile)?;
 
+    // Bridge taste test responses into synthetic interactions so the scoring
+    // pipeline's feedback_interaction_count sees real signal from day one.
+    // Written to the main DB (same as context engine) because that's where
+    // build_scoring_context() counts implicit interactions for bootstrap mode.
+    if let Err(e) = crate::taste_test::db::generate_synthetic_feedback(&conn, &responses) {
+        tracing::warn!(target: "taste_test", error = %e, "Failed to generate synthetic feedback");
+    }
+
     // Seed continuous posterior in ACE DB from taste test persona weights
     if let Ok(ace) = crate::state::get_ace_engine() {
         let ace_conn = ace.get_conn().lock();

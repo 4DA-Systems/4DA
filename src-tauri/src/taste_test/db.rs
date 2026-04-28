@@ -211,6 +211,71 @@ pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Resu
     Ok(())
 }
 
+/// Generate synthetic feedback interactions from taste test responses.
+///
+/// Maps each user response to a signal in the interactions table so that
+/// the scoring pipeline's feedback_interaction_count and bootstrap mode
+/// see real engagement data from the very first session.
+///
+/// - Interested / StrongInterest → positive signal (equivalent to Save)
+/// - NotInterested → negative signal (equivalent to Dismiss)
+pub fn generate_synthetic_feedback(
+    conn: &Connection,
+    responses: &[(usize, TasteResponse)],
+) -> Result<usize> {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS interactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_item_id INTEGER,
+            item_id INTEGER,
+            action TEXT,
+            action_type TEXT,
+            action_data TEXT,
+            item_topics TEXT,
+            item_source TEXT,
+            signal_strength REAL DEFAULT 0.5,
+            timestamp TEXT DEFAULT (datetime('now'))
+        )",
+    )
+    .context("Failed to ensure interactions table")?;
+
+    let items = super::items::calibration_items();
+    let mut inserted = 0usize;
+
+    for (slot, response) in responses {
+        let (signal_strength, action_type) = match response {
+            TasteResponse::StrongInterest => (1.0f64, "taste_strong_interest"),
+            TasteResponse::Interested => (0.7, "taste_interested"),
+            TasteResponse::NotInterested => (-0.8, "taste_not_interested"),
+        };
+
+        let card_title = items
+            .iter()
+            .find(|c| c.slot == *slot)
+            .map(|c| c.category_hint.as_str())
+            .unwrap_or("General");
+        let topics = serde_json::to_string(&[card_title]).unwrap_or_else(|_| "[]".to_string());
+
+        conn.execute(
+            "INSERT INTO interactions (action_type, item_topics, item_source, signal_strength)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![action_type, topics, "taste_test", signal_strength],
+        )
+        .with_context(|| format!("Failed to insert synthetic feedback for slot {slot}"))?;
+        inserted += 1;
+    }
+
+    if inserted > 0 {
+        tracing::info!(
+            target: "4da::taste_test",
+            inserted,
+            "Synthetic feedback generated from taste test responses"
+        );
+    }
+
+    Ok(inserted)
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -315,5 +380,64 @@ mod tests {
             )
             .unwrap();
         assert!(count > 0, "Should have written inferred interests");
+    }
+
+    #[test]
+    fn test_generate_synthetic_feedback() {
+        let conn = setup_test_db();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                item_id INTEGER,
+                action_type TEXT,
+                action_data TEXT,
+                item_topics TEXT,
+                item_source TEXT,
+                signal_strength REAL DEFAULT 0.5,
+                timestamp TEXT DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+
+        let responses = vec![
+            (0, TasteResponse::Interested),
+            (1, TasteResponse::NotInterested),
+            (6, TasteResponse::StrongInterest),
+        ];
+
+        let inserted = generate_synthetic_feedback(&conn, &responses).unwrap();
+        assert_eq!(inserted, 3);
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM interactions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(total, 3);
+
+        let positive: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE signal_strength > 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(positive, 2, "Interested + StrongInterest = 2 positive");
+
+        let negative: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE signal_strength < 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(negative, 1, "NotInterested = 1 negative");
+
+        let taste_source: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM interactions WHERE item_source = 'taste_test'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(taste_source, 3, "All should have source 'taste_test'");
     }
 }

@@ -284,6 +284,7 @@ mod tests {
             preemption_alerts: vec![],
             blind_spot_score: None,
             labels: None,
+            personalization_context: None,
         }
     }
 
