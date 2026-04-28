@@ -156,10 +156,7 @@ pub fn verify_round_trip(key_name: &str, expected: &str) -> bool {
     }
     // Use a fresh Entry to avoid any in-memory cache on the same handle.
     match keyring::Entry::new(SERVICE_NAME, key_name) {
-        Ok(entry) => match entry.get_password() {
-            Ok(ref val) if val == expected => true,
-            _ => false,
-        },
+        Ok(entry) => matches!(entry.get_password(), Ok(ref val) if val == expected),
         Err(_) => false,
     }
 }

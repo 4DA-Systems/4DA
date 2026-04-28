@@ -5,7 +5,6 @@
 /// Uses suffix-stripping rules tuned for developer content (not a full
 /// Porter/Snowball stemmer — those over-stem technical terms). Returns
 /// the stemmed form for comparison; original text is never modified.
-
 /// Collapse a doubled final consonant: "debugg" → "debug", "shipp" → "ship".
 /// Only fires after suffix stripping produces an artificial double.
 fn collapse_doubled_final(s: &str) -> String {
