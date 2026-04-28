@@ -27,6 +27,8 @@ var chainsSection = document.getElementById('chains-section');
 var chainsList = document.getElementById('chains-list');
 var wisdomSection = document.getElementById('wisdom-section');
 var wisdomList = document.getElementById('wisdom-list');
+var personalizationSection = document.getElementById('personalization-section');
+var personalizationText = document.getElementById('personalization-text');
 var synthesisSection = document.getElementById('synthesis-section');
 var synthesisText = document.getElementById('synthesis-text');
 var preemptionSection = document.getElementById('preemption-section');
@@ -238,6 +240,14 @@ function renderBriefing(data) {
     }
     gapDaysSuffix = data.labels.gap_days_suffix || gapDaysSuffix;
     trackingLabel = data.labels.tracking || trackingLabel;
+  }
+
+  // First-briefing personalization context line
+  if (data.personalization_context) {
+    personalizationSection.style.display = '';
+    personalizationText.textContent = data.personalization_context;
+  } else {
+    personalizationSection.style.display = 'none';
   }
 
   // LLM Synthesis — the hero section. Gets the most real estate.

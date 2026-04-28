@@ -1321,6 +1321,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         preemption_alerts: vec![],
                         blind_spot_score: None,
                         labels: None,
+                        personalization_context: None,
                     };
                     drop(analysis_state); // release lock before disk I/O
                     crate::briefing_snapshot::save_snapshot(&briefing);

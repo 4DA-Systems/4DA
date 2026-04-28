@@ -533,6 +533,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
         preemption_alerts: vec![],
         blind_spot_score: None,
         labels: None,
+        personalization_context: None,
     };
 
     crate::briefing_window::show_briefing(&app, &preview);
