@@ -33,6 +33,7 @@ const EXCEPTIONS = {
   'src-tauri/src/scoring/context.rs':                  'Scoring context builder + 47 production-grade ACE synthesis tests (27 tests are production-readiness proofs)',
   'src-tauri/src/sso.rs':                              'SSO module — enterprise feature-gated, OAuth/SAML auth + 33 tests',
   'src-tauri/src/app_setup.rs':                        'App setup — Tauri setup() callback + pre-Tauri init + shutdown, all linear startup sequence',
+  'src-tauri/src/monitoring_briefing.rs':               'Briefing orchestration — enrichment + diversity slots + novelty + morning schedule + 22 tests',
   'src-tauri/src/blind_spots.rs':                      'TEMP: slated for collapse into EvidenceItem + materializer in Intelligence Reconciliation Phase 4 (docs/strategy/INTELLIGENCE-RECONCILIATION.md). Remove this exception when phase ships.',
   'src-tauri/src/preemption.rs':                       'TEMP: grown with 50-entry suppression list + EvidenceItem conversion in Intelligence Reconciliation. Split suppression into its own module post-launch.',
   'src/components/preemption/PreemptionView.tsx':      'TEMP: grown with dismiss persistence (localStorage) + undo bar + debounce guard in Phase 13 polish. Extract dismiss logic into a hook post-launch.',

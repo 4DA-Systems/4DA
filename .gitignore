@@ -364,3 +364,4 @@ src/types/i18n-resources.d.ts
 # Codex AI tool's local audit/scratch directory (user's personal workspace, not project source)
 /! codex audits/
 data/i18n-quality-report.json
+victauri-gauntlet/
