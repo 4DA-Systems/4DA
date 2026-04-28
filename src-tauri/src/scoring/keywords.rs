@@ -125,6 +125,51 @@ const SHORT_TECH_KEYWORDS: &[&str] = &[
     "vm", "k8", "tf", "gcp", "aws", "api", "cli", "css", "sql", "llm", "nlp", "cv",
 ];
 
+/// Negation patterns that indicate a term is mentioned in a negative context.
+/// Returns true if the term appears near a negation phrase in the text.
+fn is_negated_in_context(term: &str, text: &str) -> bool {
+    const NEGATION_PREFIXES: &[&str] = &[
+        "not ", "no ", "don't ", "doesn't ", "didn't ", "won't ", "isn't ", "aren't ",
+        "without ", "never ", "avoid ", "stop using ", "alternative to ", "instead of ",
+        "replace ", "replacing ", "moved away from ", "moving away from ", "migrating from ",
+        "leaving ", "dropped ", "dropping ", "removed ", "removing ",
+    ];
+
+    let text_lower = text.to_lowercase();
+    let term_lower = term.to_lowercase();
+
+    for (idx, _) in text_lower.match_indices(&term_lower) {
+        let before_start = idx.saturating_sub(30);
+        let before = &text_lower[before_start..idx];
+        if NEGATION_PREFIXES.iter().any(|neg| before.ends_with(neg) || before.contains(neg)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// BM25-inspired term density: rewards content where matched terms appear frequently
+/// relative to document length. Returns a multiplier in [1.0, 1.5].
+///
+/// Uses simplified BM25 formula: tf(t,d) = freq / (freq + k1 * (1 - b + b * dl/avgdl))
+/// where k1=1.2, b=0.75, avgdl=150 (typical dev article word count after truncation).
+fn term_density_multiplier(term: &str, text: &str) -> f32 {
+    let term_lower = term.to_lowercase();
+    let freq = text.matches(&term_lower).count() as f32;
+    if freq <= 1.0 {
+        return 1.0;
+    }
+
+    let word_count = text.split_whitespace().count().max(1) as f32;
+    let k1: f32 = 1.2;
+    let b: f32 = 0.75;
+    let avgdl: f32 = 150.0;
+    let tf = freq / (freq + k1 * (1.0 - b + b * word_count / avgdl));
+
+    // Map tf (range ~0.45-0.83 for typical values) to a 1.0-1.5 multiplier
+    (1.0 + tf * 0.6).min(1.5)
+}
+
 /// Keyword-based interest matching: boosts items that literally contain declared interest terms.
 /// Complements semantic matching which can miss exact keyword matches.
 #[score_component(output_range = "0.0..=1.0")]
@@ -175,10 +220,13 @@ pub(crate) fn compute_keyword_interest_score(
                 false
             };
 
-            if matched_title {
-                hits += 1.5; // title match = 1.5x weight
+            // Base hit weights: calibrated to leave room for density bonus
+            // within the [0, 1] output range (title_exact=0.80, content=0.55,
+            // alias same, stem slightly lower)
+            let mut term_hit = if matched_title {
+                0.80
             } else if matched_content {
-                hits += 1.0;
+                0.55
             } else {
                 // Slow path: try alias expansion
                 let alias_title_hit = aliases::get_aliases(term)
@@ -194,7 +242,7 @@ pub(crate) fn compute_keyword_interest_score(
                     .unwrap_or(false);
 
                 if alias_title_hit {
-                    hits += 1.5; // title alias match — same concept, full weight
+                    0.80
                 } else {
                     let alias_content_hit = aliases::get_aliases(term)
                         .map(|group| {
@@ -209,9 +257,9 @@ pub(crate) fn compute_keyword_interest_score(
                         .unwrap_or(false);
 
                     if alias_content_hit {
-                        hits += 1.0; // content alias match
+                        0.55
                     } else {
-                        // Stemmed match: check if any word in content shares a stem
+                        // Stemmed match
                         let term_stem = stemming::stem(term);
                         if term_stem.len() >= 3 {
                             let title_stem_hit = title_lower
@@ -223,14 +271,31 @@ pub(crate) fn compute_keyword_interest_score(
                                     .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
 
                             if title_stem_hit {
-                                hits += 1.2; // stemmed title match — slightly less than exact
+                                0.65
                             } else if content_stem_hit {
-                                hits += 0.8; // stemmed content match
+                                0.45
+                            } else {
+                                0.0
                             }
+                        } else {
+                            0.0
                         }
                     }
                 }
+            };
+
+            // Density bonus: push score up to 1.0 for content-dense matches
+            if term_hit > 0.0 {
+                let density = term_density_multiplier(term, &text_lower);
+                term_hit *= density;
             }
+
+            // Negation penalty: halve contribution when term appears in negative context
+            if term_hit > 0.0 && term.len() >= 3 && is_negated_in_context(term, &text_lower) {
+                term_hit *= 0.5;
+            }
+
+            hits += term_hit;
         }
 
         let divisor = counted_terms.max(1) as f32;
@@ -426,6 +491,82 @@ mod tests {
         assert_eq!(
             score, 0.0,
             "Should not false-match 'testing' from 'resting'"
+        );
+    }
+
+    #[test]
+    fn test_term_density_multiplier() {
+        // Single mention = no bonus
+        assert_eq!(term_density_multiplier("rust", "learning rust basics"), 1.0);
+        // Multiple mentions = density bonus
+        let dense = term_density_multiplier(
+            "rust",
+            "rust is great. rust performance. rust safety. rust ecosystem.",
+        );
+        assert!(dense > 1.0, "Dense content should get bonus, got {}", dense);
+        assert!(dense <= 1.5, "Density bonus should be capped at 1.5, got {}", dense);
+    }
+
+    #[test]
+    fn test_negation_detection() {
+        assert!(is_negated_in_context("react", "we don't use react anymore"));
+        assert!(is_negated_in_context("kubernetes", "alternative to kubernetes for small teams"));
+        assert!(is_negated_in_context("vue", "moving away from vue to react"));
+        assert!(!is_negated_in_context("rust", "learning rust for systems programming"));
+        assert!(!is_negated_in_context("python", "python data science tutorial"));
+    }
+
+    #[test]
+    fn test_negated_term_reduces_score() {
+        let make = |topic: &str| vec![context_engine::Interest {
+            id: Some(1),
+            topic: topic.to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+
+        let positive_score = compute_keyword_interest_score(
+            "Getting started with React",
+            "React is a great framework for building UIs",
+            &make("react"),
+        );
+        let negated_score = compute_keyword_interest_score(
+            "Why we stopped using React",
+            "We don't use react anymore, switched to Vue",
+            &make("react"),
+        );
+        assert!(
+            negated_score < positive_score,
+            "Negated context should score lower: positive={}, negated={}",
+            positive_score, negated_score,
+        );
+    }
+
+    #[test]
+    fn test_dense_content_scores_higher() {
+        let make = |topic: &str| vec![context_engine::Interest {
+            id: Some(1),
+            topic: topic.to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+
+        let sparse = compute_keyword_interest_score(
+            "Various tools for developers",
+            "Among many technologies including rust and others for building software applications in production environments with complex requirements",
+            &make("rust"),
+        );
+        let dense = compute_keyword_interest_score(
+            "Rust performance benchmarks",
+            "rust vs go benchmarks. rust async performance. rust memory safety. rust compiler optimizations",
+            &make("rust"),
+        );
+        assert!(
+            dense > sparse,
+            "Dense content should score higher: dense={}, sparse={}",
+            dense, sparse,
         );
     }
 }
