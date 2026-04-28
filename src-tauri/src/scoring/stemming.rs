@@ -6,6 +6,20 @@
 /// Porter/Snowball stemmer — those over-stem technical terms). Returns
 /// the stemmed form for comparison; original text is never modified.
 
+/// Collapse a doubled final consonant: "debugg" → "debug", "shipp" → "ship".
+/// Only fires after suffix stripping produces an artificial double.
+fn collapse_doubled_final(s: &str) -> String {
+    let bytes = s.as_bytes();
+    if bytes.len() >= 4 {
+        let last = bytes[bytes.len() - 1];
+        let prev = bytes[bytes.len() - 2];
+        if last == prev && last.is_ascii_lowercase() && !matches!(last, b'a' | b'e' | b'i' | b'o' | b'u') {
+            return s[..s.len() - 1].to_string();
+        }
+    }
+    s.to_string()
+}
+
 /// Stem a single word. Returns a lowercase stemmed form.
 /// Short words (< 4 chars) are returned as-is to avoid collisions.
 pub(crate) fn stem(word: &str) -> String {
@@ -18,7 +32,8 @@ pub(crate) fn stem(word: &str) -> String {
     for &(suffix, replacement) in SUFFIX_RULES {
         if let Some(base) = w.strip_suffix(suffix) {
             if base.len() >= 3 {
-                return format!("{base}{replacement}");
+                let result = format!("{base}{replacement}");
+                return collapse_doubled_final(&result);
             }
         }
     }
@@ -33,9 +48,23 @@ pub(crate) fn stem(word: &str) -> String {
 
 /// Returns true if two words share the same stem.
 pub(crate) fn stems_match(a: &str, b: &str) -> bool {
-    let sa = stem(a);
-    let sb = stem(b);
-    sa == sb
+    stems_equiv(&stem(a), &stem(b))
+}
+
+/// Compare two already-stemmed values with trailing-e tolerance.
+/// Handles: compile ("compile") vs compiler ("compil"), configure vs configurator, etc.
+pub(crate) fn stems_equiv(stem_a: &str, stem_b: &str) -> bool {
+    if stem_a == stem_b {
+        return true;
+    }
+    let (longer, shorter) = if stem_a.len() > stem_b.len() {
+        (stem_a, stem_b)
+    } else {
+        (stem_b, stem_a)
+    };
+    longer.len() == shorter.len() + 1
+        && longer.ends_with('e')
+        && longer.starts_with(shorter)
 }
 
 /// Suffix rules: (suffix_to_strip, replacement).
@@ -71,8 +100,11 @@ const SUFFIX_RULES: &[(&str, &str)] = &[
     ("ively", "ive"),
     // -ement → -e
     ("ement", "e"),
-    // -ation → -ate  (but careful: "nation" → "nate" is wrong)
-    // Skip this — too many false positives
+    // -ilation → -ile (compilation → compile)
+    ("ilation", "ile"),
+    // -ation → -ate (authentication → authenticate, validation → validate)
+    // Short-word guard prevents: nation (base "n" < 3), station (base "st" < 3)
+    ("ation", "ate"),
     // -ting → -t (testing → test, routing → rout... too aggressive for "routing")
     // Instead be selective:
     ("sting", "st"),    // testing → test
@@ -201,5 +233,36 @@ mod tests {
         assert!(stems_match("dependency", "dependencies"));
         assert!(stems_match("library", "libraries"));
         assert!(stems_match("query", "queries"));
+    }
+
+    #[test]
+    fn test_doubled_consonant_collapse() {
+        assert!(stems_match("debug", "debugging"));
+        assert!(stems_match("ship", "shipping"));
+        assert!(stems_match("log", "logging"));
+        assert!(stems_match("map", "mapping"));
+        assert!(stems_match("run", "running"));
+        assert!(stems_match("set", "setting"));
+    }
+
+    #[test]
+    fn test_ation_suffix() {
+        assert!(stems_match("authenticate", "authentication"));
+        assert!(stems_match("validate", "validation"));
+        assert!(stems_match("migrate", "migration"));
+    }
+
+    #[test]
+    fn test_compilation() {
+        assert!(stems_match("compile", "compilation"));
+        assert!(stems_match("compile", "compiler"));
+    }
+
+    #[test]
+    fn test_stems_equiv_trailing_e() {
+        assert!(stems_equiv("compile", "compil"));
+        assert!(stems_equiv("configure", "configur"));
+        assert!(!stems_equiv("rust", "rustic"));
+        assert!(!stems_equiv("test", "testing"));
     }
 }
