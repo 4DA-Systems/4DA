@@ -380,8 +380,8 @@ mod tests {
     #[test]
     fn test_no_stack_returns_neutral() {
         let mult = detect_ecosystem_shift(
-            &["drizzle".to_string()],
-            "Drizzle ORM is replacing Prisma",
+            &["biome".to_string()],
+            "Biome is replacing ESLint",
             &empty_stack(),
         );
         assert_eq!(mult, 1.0);
@@ -390,10 +390,10 @@ mod tests {
     #[test]
     fn test_ecosystem_shift_detected_with_two_keywords() {
         let stack = nextjs_stack();
-        // Title has "drizzle" and "prisma alternative" — 2 keyword matches
+        // Title has "biome" and "eslint alternative" — 2 keyword matches
         let mult = detect_ecosystem_shift(
-            &["drizzle".to_string(), "orm".to_string()],
-            "Why developers switching to Drizzle as a Prisma alternative",
+            &["biome".to_string(), "linter".to_string()],
+            "Why developers switching to Biome as an ESLint alternative",
             &stack,
         );
         assert!(
@@ -406,8 +406,8 @@ mod tests {
     #[test]
     fn test_ecosystem_shift_single_keyword_no_trigger() {
         let stack = nextjs_stack();
-        // Only "drizzle" matches — below 2-keyword threshold
-        let mult = detect_ecosystem_shift(&[], "Drizzle is an ORM", &stack);
+        // Only "biome" matches — below 2-keyword threshold
+        let mult = detect_ecosystem_shift(&[], "Biome is a formatter", &stack);
         assert_eq!(
             mult, 1.0,
             "Single keyword should not trigger shift, got {}",

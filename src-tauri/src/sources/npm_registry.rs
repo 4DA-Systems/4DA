@@ -47,8 +47,6 @@ const DEFAULT_PACKAGES: &[&str] = &[
     "tailwindcss",
     "express",
     "fastify",
-    "prisma",
-    "drizzle-orm",
     "zod",
     "trpc",
 ];

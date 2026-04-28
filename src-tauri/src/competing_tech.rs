@@ -21,7 +21,7 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
     (
         "rust",
         &[
-            "django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi",
+            "go", "django", "laravel", "rails", "spring", "flask", "gin", "echo", "fastapi",
         ],
     ),
     (
@@ -78,7 +78,7 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
     ),
     (
         "flask",
-        &["django", "fastapi", "express", "rails", "laravel"],
+        &["django", "fastapi", "express", "rails", "laravel", "spring"],
     ),
     (
         "fastapi",
@@ -104,6 +104,37 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
     (
         "spring",
         &["django", "rails", "laravel", "express", "fastapi"],
+    ),
+    // Systems languages
+    ("go", &["rust", "java", "csharp"]),
+    // State management (React ecosystem)
+    (
+        "redux",
+        &["zustand", "jotai", "mobx", "recoil", "valtio"],
+    ),
+    (
+        "zustand",
+        &["redux", "jotai", "mobx", "recoil", "valtio"],
+    ),
+    ("jotai", &["redux", "zustand", "mobx", "recoil"]),
+    ("mobx", &["redux", "zustand", "jotai", "recoil"]),
+    // Testing frameworks
+    ("jest", &["vitest", "mocha", "ava"]),
+    ("vitest", &["jest", "mocha", "ava"]),
+    ("pytest", &["unittest", "nose2"]),
+    ("unittest", &["pytest", "nose2"]),
+    // CI/CD platforms
+    (
+        "github-actions",
+        &["gitlab-ci", "circleci", "jenkins", "travis"],
+    ),
+    (
+        "gitlab-ci",
+        &["github-actions", "circleci", "jenkins"],
+    ),
+    (
+        "jenkins",
+        &["github-actions", "gitlab-ci", "circleci"],
     ),
     // Package managers
     ("pnpm", &["npm", "yarn"]),
@@ -153,20 +184,30 @@ pub fn compute_competing_penalty(
             None => continue,
         };
 
-        // Check if any competitor appears in the title or topics
-        let has_competitor = competitors.iter().any(|comp| {
+        // Check which competitor appears in the title or topics
+        let matched_competitor = competitors.iter().find(|comp| {
             has_word_boundary(&title_lower, comp)
                 || topics
                     .iter()
-                    .any(|t| t.to_lowercase() == *comp || t.to_lowercase().starts_with(comp))
+                    .any(|t| t.to_lowercase() == **comp || t.to_lowercase().starts_with(*comp))
         });
 
-        if !has_competitor {
+        let matched_competitor = match matched_competitor {
+            Some(comp) => comp,
+            None => continue,
+        };
+
+        // If the competitor is ALSO in the user's primary stack, skip.
+        // A Rust+Go developer should see Go content without penalty.
+        if user_primary_stack
+            .iter()
+            .any(|t| t.to_lowercase() == *matched_competitor)
+        {
             continue;
         }
 
-        // BUT: if the user's own tech ALSO appears, it's comparative content — allow it
-        // "Tauri vs Electron" is fine, "Electron 30 released" is not
+        // If the user's own tech ALSO appears, it's comparative content — allow it.
+        // "Tauri vs Electron" is fine, "Electron 30 released" is not.
         if has_word_boundary(&title_lower, &user_lower) {
             continue;
         }

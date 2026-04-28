@@ -271,7 +271,6 @@ impl Source for RedditSource {
             "artificial",
             "LocalLLaMA",
             "ChatGPT",
-            "ClaudeAI",
             "datascience",
             "dataengineering",
             "datasets",
@@ -292,6 +291,7 @@ impl Source for RedditSource {
             "tauri",
             "electronjs",
             "flutter",
+            "php",
         ];
 
         info!(
