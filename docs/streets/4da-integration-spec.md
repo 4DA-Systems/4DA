@@ -2,6 +2,7 @@
 
 **Author:** Lead Dev
 **Date:** 2026-02-18
+**Revised:** 2026-04-28
 **Status:** Design Draft
 **Purpose:** Define how STREETS connects to 4DA at the product level — not just marketing, but actual features.
 
@@ -9,18 +10,23 @@
 
 ## 1. Strategic Rationale
 
-STREETS is not a separate product bolted onto 4DA. It's the **monetization thesis** that makes 4DA indispensable for a specific, high-value user segment: developers who generate income from their skills.
+STREETS is not a separate product bolted onto 4DA. It's the **education layer** that makes 4DA's intelligence actionable for developers who want to earn independently.
+
+STREETS is free. All 7 modules, no email, no account, no paywall. It exists because this knowledge shouldn't cost anything.
 
 **The logic chain:**
-1. Developer uses 4DA to stay current (free tier)
-2. 4DA surfaces signals: trending frameworks, breaking changes, new techniques
-3. Developer realizes these signals = income opportunities (STREETS mindset)
-4. Developer upgrades to Signal for AI briefings, deeper intelligence
-5. Developer uses intelligence to build products, content, services
-6. Income justifies Signal subscription many times over
-7. Developer tells other developers (organic growth)
+1. Developer discovers STREETS (standalone page at 4da.ai/streets or inside 4DA)
+2. STREETS teaches the developer income mindset and the 8 revenue engines
+3. Developer uses 4DA to surface signals: trending frameworks, breaking changes, new techniques
+4. Developer recognizes these signals as income opportunities (STREETS mindset)
+5. Developer upgrades to Signal for AI briefings, deeper intelligence
+6. Intelligence helps the developer build products, content, services
+7. Income justifies Signal subscription many times over
+8. Developer shares STREETS with other developers who need it (organic growth)
 
 **Revenue impact:** STREETS transforms the value narrative of 4DA Signal from "nice to have intelligence" to "income-generating radar." The $12/mo Signal subscription pays for itself if it surfaces ONE opportunity per month.
+
+**Monetization model:** STREETS is free. Revenue comes from 4DA Signal subscriptions, not from STREETS itself. STREETS drives 4DA adoption by giving developers the framework to act on what 4DA surfaces.
 
 ---
 
@@ -78,7 +84,6 @@ pub struct OpportunitySignal {
 **Implementation approach:**
 - Phase 1: Rule-based detection from existing signal data (no LLM cost)
 - Phase 2: LLM-enhanced classification for Signal users (uses their BYOK key)
-- Phase 3: Community-validated opportunities (users confirm/dismiss)
 
 ### 2.2 STREETS Dashboard Panel (Signal Feature)
 
@@ -246,7 +251,7 @@ get_opportunity_history(options?: {
 
 ---
 
-## 3. Cross-Sell Integration
+## 3. Cross-Promotion
 
 ### 3.1 In-App STREETS Promotion (Non-Intrusive)
 
@@ -263,34 +268,30 @@ get_opportunity_history(options?: {
 
 ```typescript
 interface StreetsPricingConfig {
-  // STREETS Playbook — all 7 modules free inside 4DA
+  // STREETS Playbook — all 7 modules, completely free
   playbook: {
     price: 0,
     access: "free forever — no email, no account, no paywall",
+    includes: "all 7 modules, 42 lessons, 8 revenue engines, income stacking framework",
   },
 
-  // Community — accountability, networking, ongoing value
-  community: {
-    monthlyPrice: 29,
-    annualPrice: 249,  // save $99/year
-    includes: "Discord, office hours, case studies, templates",
-  },
-
-  // Cohort — structured live program
-  cohort: {
-    price: 499,
-    includes: "8-week live program, 1-on-1 strategy session, accountability group",
-  },
+  // Revenue comes from 4DA, not STREETS
+  // STREETS drives 4DA adoption; 4DA Signal is the paid product
+  revenueModel: "STREETS is free. 4DA Signal ($12/mo or $99/yr) is the upgrade path.",
 }
 ```
 
-### 3.3 Referral Loop
+### 3.3 Growth Loop
 
 ```
-STREETS Student completes Module T (Technical Moats)
-    → "Identify opportunities in your niche using 4DA"
-    → Link to 4DA download with UTM tracking
-    → Attribution: streets_module_t
+Developer discovers STREETS (search, word of mouth, 4da.ai/streets)
+    → Learns the 8 revenue engines and income stacking framework
+    → "How do I find these opportunities in real-time?"
+    → Discovers 4DA — the intelligence layer that surfaces signals
+    → Downloads 4DA (free)
+    → Sees opportunity signals mapped to STREETS engines
+    → Upgrades to Signal for AI briefings and deeper intelligence
+    → Shares STREETS with developers who need it (organic)
 
 4DA User sees Opportunity Signal
     → "Learn the full playbook for acting on signals like this"
@@ -305,7 +306,8 @@ STREETS Student completes Module T (Technical Moats)
 ### Phase 1: Content-Only (No Code Changes)
 **Timeline:** Immediate
 **What:**
-- Launch STREETS course as standalone content product
+- STREETS playbook live at 4da.ai/streets (standalone page)
+- All 7 modules free, embedded in 4DA app
 - Cross-promote on 4DA landing page and in README
 - Add "STREETS" link to 4DA app's About/Help section
 - No code changes to 4DA itself
@@ -324,14 +326,13 @@ STREETS Student completes Module T (Technical Moats)
 - Build STREETS panel component
 - Add opportunity section to daily briefing
 - Income readiness score in Developer DNA
-- In-app cross-sell (non-intrusive)
+- In-app cross-promotion (non-intrusive)
 
 ### Phase 4: Intelligence Loop (LLM-Enhanced)
 **Timeline:** 8-12 weeks
 **What:**
 - LLM-powered opportunity detection (Signal only, uses BYOK key)
 - Personalized opportunity scoring based on Developer DNA
-- Community-validated opportunities
 - New MCP tools
 
 ---
@@ -341,52 +342,36 @@ STREETS Student completes Module T (Technical Moats)
 | Metric | Target (Month 1) | Target (Month 3) |
 |--------|-------------------|-------------------|
 | STREETS playbook opens from 4DA | 500 | 2,000 |
-| Community signups from 4DA users | 10 | 50 |
 | 4DA downloads from STREETS landing page | 20 | 100 |
-| Cohort enrollments | 5 | 24 (full cohort) |
+| Signal upgrades attributed to STREETS | 5 | 30 |
 | Opportunity signals generated/day | 2-5 | 5-15 |
 | Opportunity explore rate | 30%+ | 40%+ |
 
 ### Revenue Attribution
 
 ```
-4DA Signal only:           $12/mo per user
-STREETS Playbook:          $0 (free inside 4DA — drives adoption)
-STREETS Community:         $29/mo per user (or $249/year)
-STREETS Cohort:            $499 per participant
+4DA Signal:            $12/mo per user (or $99/yr)
+STREETS Playbook:      $0 (free — drives 4DA adoption)
 
-At 200 Signal users + 150 Community members + 24 Cohort participants:
-  4DA MRR:         $2,400/mo
-  Community MRR:   $4,350/mo
-  Cohort Rev:      $11,976/quarter (24 seats x $499)
+At 200 Signal users (30 attributed to STREETS funnel):
+  4DA Signal MRR:      $2,400/mo
+  STREETS-attributed:  $360/mo (15% of Signal MRR)
 
-  Combined MRR:        ~$6,750/mo
-  Combined Annual:     ~$92,976
+STREETS ROI is measured by Signal conversion lift, not direct revenue.
 ```
 
 ---
 
-## 6. Open Questions
+## 6. Resolved Design Questions
 
 1. **Should STREETS be a separate domain or a section of 4da.ai?**
-   - Separate (4da.ai/streets): cleaner brand, dedicated SEO
-   - Section (4da.ai/streets): simpler infrastructure, shared authority
-   - **Recommendation:** Subdomain `4da.ai/streets` — keeps brand connection while allowing independent growth
+   **Decision:** `4da.ai/streets` — keeps brand connection, dedicated SEO, shared authority. STREETS is a gift within 4DA, also accessible standalone.
 
 2. **Should opportunity signals be free or Signal-only?**
-   - Free: drives upgrades by showing value ("you're seeing opportunities, imagine what Signal briefings add")
-   - Signal: cleaner tier separation, more upgrade incentive
-   - **Recommendation:** Show 1 opportunity/week on free, unlimited on Signal
+   **Decision:** Show 1 opportunity/week on free, unlimited on Signal.
 
 3. **Should STREETS content live in the 4DA repo or separate?**
-   - Same repo: easier to manage, single deploy
-   - Separate: cleaner separation, different release cadence
-   - **Recommendation:** Separate repo, linked via submodule or just URLs
-
-4. **Annual update model — who writes the 2027 edition?**
-   - Solo dev writes it (current model)
-   - Community contributes case studies, solo dev curates
-   - **Recommendation:** Hybrid — solo dev writes framework, community case studies fill it out
+   **Decision:** Same repo. Content is in `docs/streets/`, landing page in `site/`, in-app integration in main codebase. Single deploy, single source of truth.
 
 ---
 

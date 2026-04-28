@@ -875,7 +875,7 @@ Maintenant on parle. 2 000$/mois signifie que tes flux generent des revenus reel
 - **Assistant virtuel pour les taches non techniques : 500-800$/mois.** C'est l'embauche au meilleur ROI que tu puisses faire a ce stade. Un VA a distance (Philippines, Amerique latine) pour 10-15 heures/mois gere : tri des emails, relances de factures, planification, saisie de donnees, publication sur les reseaux sociaux, premier filtre du support client. Tu economises 10-15 heures/mois. A ton tarif effectif, ces heures valent 500-3 000$/mois.
 - **Infrastructure professionnelle d'email et facturation :** Migre de "envoyer des factures manuellement" vers la facturation automatisee (Stripe Billing, Lemon Squeezy). Cout : 0-50$/mois. Temps economise : 3-5 heures/mois.
 - **Un template de design payant pour tes produits :** 49-199$ en une fois. Les premieres impressions comptent. Une landing page professionnelle convertit 2-3x mieux qu'une improvisee.
-- **Les 7 modules STREETS sont gratuits dans 4DA.** Si tu n'as pas encore parcouru le playbook complet, maintenant est le moment. A 2 000$/mois, tu as prouve que tu peux executer. Les modules restants accelerent ce qui fonctionne. Considere rejoindre la Communaute (29$/mois) pour la responsabilisation et les etudes de cas d'autres developpeurs a ce stade.
+- **Les 7 modules STREETS sont gratuits dans 4DA.** Si tu n'as pas encore parcouru le playbook complet, maintenant est le moment. A 2 000$/mois, tu as prouve que tu peux executer. Les modules restants accelerent ce qui fonctionne.
 
 **Ta poche : 800-1 000$/mois**
 
@@ -1487,18 +1487,6 @@ La souverainete economique signifie :
 Ca prend du temps. Le developpeur qui fait 10K$/mois apres 12 mois d'execution constante a quelque chose de bien plus precieux que le developpeur qui fait 10K$ d'un seul lancement de produit chanceux. Le premier developpeur a un systeme. Le second a un billet de loterie.
 
 Les systemes battent les billets de loterie. A chaque fois. Sur chaque horizon temporel.
-
-### La Communaute
-
-Les membres de la Communaute STREETS (29$/mois ou 249$/an) ont acces a la communaute privee ou les developpeurs partagent :
-
-- **Rapports de revenus mensuels :** Vrais chiffres, vrais flux, vrais defis.
-- **Lancements de flux :** Ce qu'ils ont construit, quel prix ils ont fixe, ce qui s'est passe.
-- **Decisions d'elimination :** Ce qu'ils ont arrete et pourquoi. Ce sont parmi les posts les plus precieux.
-- **Victoires :** Premier dollar gagne. Premier mois a 1K$. Premier mois a 10K$. Ca compte.
-- **Echecs :** Produits qui ont echoue. Clients qui ont disparu. Algorithmes qui ont change. Ca compte encore plus.
-
-Tu apprends plus vite de 100 developpeurs qui executent STREETS simultanement que de n'importe quel cours, livre ou podcast — y compris celui-ci.
 
 ### La Mise a Jour Annuelle
 

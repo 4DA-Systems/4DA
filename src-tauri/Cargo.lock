@@ -7678,6 +7678,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
+ "flate2",
  "raw-window-handle",
  "regex",
  "rmcp",

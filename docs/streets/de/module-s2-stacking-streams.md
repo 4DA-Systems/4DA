@@ -876,7 +876,7 @@ Jetzt reden wir. $2.000/Monat bedeutet, deine Streams generieren echte, wiederho
 - **Virtueller Assistent fuer nicht-technische Aufgaben: $500-800/Monat.** Das ist die Einstellung mit dem hoechsten ROI, die du in diesem Stadium machen kannst. Ein Remote-VA (Philippinen, Lateinamerika) fuer 10-15 Stunden/Monat uebernimmt: E-Mail-Triage, Rechnungsnachverfolgung, Terminplanung, Dateneingabe, Social-Media-Postings, erster Kundensupport-Filter. Du sparst 10-15 Stunden/Monat. Zu deinem effektiven Satz sind diese Stunden $500-3.000/Monat wert.
 - **Professionelle E-Mail- und Abrechnungsinfrastruktur:** Wechsle von "Rechnungen manuell senden" zu automatisierter Abrechnung (Stripe Billing, Lemon Squeezy). Kosten: $0-50/Monat. Gesparte Zeit: 3-5 Stunden/Monat.
 - **Ein bezahltes Design-Template fuer deine Produkte:** $49-199 einmalig. Der erste Eindruck zaehlt. Eine professionelle Landing Page konvertiert 2-3x besser als eine zusammengebastelte.
-- **Alle 7 STREETS-Module sind kostenlos in 4DA.** Wenn du das komplette Playbook noch nicht durchgearbeitet hast, jetzt ist die Zeit. Bei $2.000/Monat hast du bewiesen, dass du ausfuehren kannst. Die verbleibenden Module beschleunigen, was funktioniert. Erwaege den Beitritt zur Community ($29/Monat) fuer Verantwortlichkeit und Fallstudien von anderen Entwicklern in diesem Stadium.
+- **Alle 7 STREETS-Module sind kostenlos in 4DA.** Wenn du das komplette Playbook noch nicht durchgearbeitet hast, jetzt ist die Zeit. Bei $2.000/Monat hast du bewiesen, dass du ausfuehren kannst. Die verbleibenden Module beschleunigen, was funktioniert.
 
 **Deine Tasche: $800-1.000/Monat**
 
@@ -1484,18 +1484,6 @@ Wirtschaftliche Souveraenitaet bedeutet:
 Das braucht Zeit. Der Entwickler, der $10K/Monat nach 12 Monaten konsequenter Ausfuehrung macht, hat etwas weit Wertvolleres als der Entwickler, der $10K von einem einzelnen gluecklichen Produktlaunch macht. Der erste Entwickler hat ein System. Der zweite hat einen Lottoschein.
 
 Systeme schlagen Lottoscheine. Jedes Mal. Ueber jeden Zeitraum.
-
-### Die Community
-
-STREETS Community-Mitglieder ($29/Monat oder $249/Jahr) haben Zugang zur privaten Community, in der Entwickler teilen:
-
-- **Monatliche Einnahmenberichte:** Echte Zahlen, echte Streams, echte Herausforderungen.
-- **Stream-Launches:** Was sie gebaut haben, welchen Preis sie gesetzt haben, was passiert ist.
-- **Beendigungsentscheidungen:** Was sie eingestellt haben und warum. Das sind einige der wertvollsten Beitraege.
-- **Erfolge:** Erster verdienter Dollar. Erster $1K-Monat. Erster $10K-Monat. Das zaehlt.
-- **Misserfolge:** Produkte, die gefloppt sind. Kunden, die verschwunden sind. Algorithmen, die sich verschoben haben. Das zaehlt mehr.
-
-Du lernst schneller von 100 Entwicklern, die STREETS gleichzeitig ausfuehren, als von jedem Kurs, Buch oder Podcast — einschliesslich diesem.
 
 ### Das jaehrliche Update
 

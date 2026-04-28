@@ -30,6 +30,7 @@ const EXCEPTIONS = {
   'src-tauri/src/lib.rs':                  'App entrypoint — Tauri plugin registration',
   'src-tauri/src/sources/adapter_resilience_tests.rs': 'Resilience tests — 146 edge-case tests across all 10 source adapters',
   'src-tauri/src/scoring/pipeline_v2.rs':              'V2 scoring pipeline — 8-phase architecture with all signal extraction and combination',
+  'src-tauri/src/scoring/context.rs':                  'Scoring context builder + 47 production-grade ACE synthesis tests (27 tests are production-readiness proofs)',
   'src-tauri/src/sso.rs':                              'SSO module — enterprise feature-gated, OAuth/SAML auth + 33 tests',
   'src-tauri/src/app_setup.rs':                        'App setup — Tauri setup() callback + pre-Tauri init + shutdown, all linear startup sequence',
   'src-tauri/src/blind_spots.rs':                      'TEMP: slated for collapse into EvidenceItem + materializer in Intelligence Reconciliation Phase 4 (docs/strategy/INTELLIGENCE-RECONCILIATION.md). Remove this exception when phase ships.',

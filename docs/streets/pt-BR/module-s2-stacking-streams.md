@@ -876,7 +876,7 @@ Agora sim. $2,000/mes significa que seus streams estao gerando revenue real e re
 - **Assistente virtual para tarefas nao-tecnicas: $500-800/mes.** Esta e a contratacao com o maior ROI que voce pode fazer neste estagio. Um VA offshore (Filipinas, America Latina) por 10-15 horas/mes cuida de: triagem de email, acompanhamento de faturas, agendamento, entrada de dados, publicacao em redes sociais, primeiro filtro de suporte ao cliente. Voce economiza 10-15 horas/mes. Na sua taxa efetiva, essas horas valem $500-3,000/mes.
 - **Infraestrutura de email e faturamento profissional:** Migre de "enviar faturas manualmente" para faturamento automatizado (Stripe Billing, Lemon Squeezy). Custo: $0-50/mes. Tempo economizado: 3-5 horas/mes.
 - **Um template de design pago para seus produtos:** $49-199 unica vez. Primeiras impressoes importam. Uma landing page profissional converte 2-3x melhor que uma improvisada.
-- **Todos os 7 modulos STREETS sao gratuitos dentro do 4DA.** Se voce ainda nao trabalhou o playbook inteiro, agora e a hora. A $2,000/mes, voce provou que sabe executar. Os modulos restantes aceleram o que esta funcionando. Considere entrar na Community ($29/mes) para accountability e case studies de outros developers neste estagio.
+- **Todos os 7 modulos STREETS sao gratuitos dentro do 4DA.** Se voce ainda nao trabalhou o playbook inteiro, agora e a hora. A $2,000/mes, voce provou que sabe executar. Os modulos restantes aceleram o que esta funcionando.
 
 **Seu bolso: $800-1,000/mes**
 
@@ -1487,18 +1487,6 @@ Soberania economica significa:
 Isso leva tempo. O desenvolvedor que ganha $10K/mes apos 12 meses de execucao consistente tem algo muito mais valioso do que o desenvolvedor que ganha $10K de um unico lancamento de produto com sorte. O primeiro desenvolvedor tem um sistema. O segundo tem um bilhete de loteria.
 
 Sistemas vencem bilhetes de loteria. Toda vez. Em todo horizonte temporal.
-
-### A Comunidade
-
-Membros da STREETS Community ($29/mes ou $249/ano) tem acesso a comunidade privada onde developers compartilham:
-
-- **Relatorios de revenue mensais:** Numeros reais, streams reais, desafios reais.
-- **Lancamentos de stream:** O que construiram, que preco colocaram, o que aconteceu.
-- **Decisoes de eliminacao:** O que encerraram e por que. Esses sao alguns dos posts mais valiosos.
-- **Vitorias:** Primeiro dolar ganho. Primeiro mes de $1K. Primeiro mes de $10K. Essas importam.
-- **Falhas:** Produtos que floparam. Clientes que desapareceram. Algoritmos que mudaram. Essas importam mais.
-
-Voce aprende mais rapido com 100 developers executando STREETS simultaneamente do que de qualquer curso, livro ou podcast — incluindo este.
 
 ### A Atualizacao Anual
 
