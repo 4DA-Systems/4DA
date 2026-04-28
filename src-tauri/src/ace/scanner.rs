@@ -399,18 +399,14 @@ impl ProjectScanner {
     }
 
     fn detect_rust_framework(&self, dep: &str, signal: &mut ProjectSignal) {
+        // Only actual web/app frameworks — runtimes, ORMs, and serialization
+        // libraries are detected via is_notable_dependency() in ace/context.rs
         let frameworks = [
             ("tauri", "tauri"),
             ("actix", "actix-web"),
             ("axum", "axum"),
             ("rocket", "rocket"),
             ("warp", "warp"),
-            ("tokio", "tokio"),
-            ("async-std", "async-std"),
-            ("sqlx", "sqlx"),
-            ("diesel", "diesel"),
-            ("serde", "serde"),
-            ("tonic", "grpc/tonic"),
         ];
 
         let dep_lower = dep.to_lowercase();
@@ -466,6 +462,8 @@ impl ProjectScanner {
     }
 
     fn detect_js_framework(&self, dep: &str, signal: &mut ProjectSignal) {
+        // Only actual web/app frameworks — ORMs, build tools, and CSS utility
+        // libraries are detected via is_notable_dependency() in ace/context.rs
         let frameworks = [
             ("react", "react"),
             ("vue", "vue"),
@@ -476,11 +474,6 @@ impl ProjectScanner {
             ("express", "express"),
             ("fastify", "fastify"),
             ("nestjs", "nestjs"),
-            ("prisma", "prisma"),
-            ("drizzle", "drizzle"),
-            ("vite", "vite"),
-            ("webpack", "webpack"),
-            ("tailwindcss", "tailwind"),
             ("electron", "electron"),
         ];
 
@@ -502,17 +495,12 @@ impl ProjectScanner {
         }
 
         // Look for common frameworks
+        // Only actual web frameworks — ML libraries, ORMs, and task queues
+        // are detected via is_notable_dependency() in ace/context.rs
         let python_frameworks = [
             ("django", "django"),
             ("flask", "flask"),
             ("fastapi", "fastapi"),
-            ("pandas", "pandas"),
-            ("numpy", "numpy"),
-            ("tensorflow", "tensorflow"),
-            ("torch", "pytorch"),
-            ("scikit-learn", "scikit-learn"),
-            ("sqlalchemy", "sqlalchemy"),
-            ("celery", "celery"),
         ];
 
         let content_lower = content.to_lowercase();
@@ -545,15 +533,12 @@ impl ProjectScanner {
                 signal.dependencies.push(dep_name.clone());
 
                 // Detect frameworks
+                // Only actual web frameworks — ML/data libraries are
+                // detected via is_notable_dependency() in ace/context.rs
                 let frameworks = [
                     ("django", "django"),
                     ("flask", "flask"),
                     ("fastapi", "fastapi"),
-                    ("pandas", "pandas"),
-                    ("numpy", "numpy"),
-                    ("tensorflow", "tensorflow"),
-                    ("torch", "pytorch"),
-                    ("scikit-learn", "scikit-learn"),
                 ];
 
                 for (pattern, framework) in frameworks {
@@ -595,11 +580,12 @@ impl ProjectScanner {
                     signal.dependencies.push(dep_path.to_string());
 
                     // Detect Go frameworks
+                    // Only actual web/CLI frameworks — ORMs are detected
+                    // via is_notable_dependency() in ace/context.rs
                     let frameworks = [
                         ("gin-gonic", "gin"),
                         ("echo", "echo"),
                         ("fiber", "fiber"),
-                        ("gorm", "gorm"),
                         ("cobra", "cobra"),
                     ];
 
@@ -1015,7 +1001,8 @@ pretty_assertions = "1.0"
         assert_eq!(signal.project_name, Some("my-project".to_string()));
         assert!(signal.dependencies.contains(&"tokio".to_string()));
         assert!(signal.dependencies.contains(&"serde".to_string()));
-        assert!(signal.frameworks.contains(&"tokio".to_string()));
+        // tokio is a runtime, not a framework — should NOT be in frameworks
+        assert!(!signal.frameworks.contains(&"tokio".to_string()));
         assert!(signal.frameworks.contains(&"axum".to_string()));
         assert_eq!(signal.project_license, Some("MIT".to_string()));
     }
@@ -1197,7 +1184,8 @@ axum = "0.7"
         // Regular dependencies should also be present
         assert!(signal.dependencies.contains(&"axum".to_string()));
         // Frameworks should be detected from workspace deps too
-        assert!(signal.frameworks.contains(&"tokio".to_string()));
+        // tokio is a runtime, not a framework — only axum should be detected
+        assert!(!signal.frameworks.contains(&"tokio".to_string()));
         assert!(signal.frameworks.contains(&"axum".to_string()));
     }
 

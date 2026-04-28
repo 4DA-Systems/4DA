@@ -438,7 +438,7 @@ pub static VUE_FRONTEND: StackProfile = StackProfile {
             from: "vue 3",
             to: "vue vapor",
             keywords: &["vue vapor", "vapor mode", "compile-time", "no virtual dom"],
-            boost: 1.20,
+            boost: 1.05,
         },
         EcosystemShift {
             from: "nuxt 3",
