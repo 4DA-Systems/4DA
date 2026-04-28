@@ -193,14 +193,14 @@ export function CelebrationState({
         </div>
       )}
 
-      {/* Basic Mode indicator */}
+      {/* Keyword-only mode indicator */}
       {embeddingMode === 'keyword-only' && (
         <div className="mb-6 px-4 py-3 bg-amber-500/10 border border-amber-500/30 rounded-lg max-w-sm mx-auto text-start">
           <p className="text-xs font-medium text-amber-400">
-            {t('firstRun.basicMode')}
+            {t('firstRun.keywordModeActive', 'Running on keyword matching')}
           </p>
           <p className="text-[11px] text-amber-400/70 mt-1">
-            {t('firstRun.basicModeHint')}
+            {t('firstRun.keywordModeHint', 'Add an AI provider in Settings to unlock semantic understanding — finds content keywords alone would miss.')}
           </p>
         </div>
       )}
