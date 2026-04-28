@@ -277,10 +277,9 @@ fn check_embedding(now: &str) -> ComponentHealth {
     // After the first real embedding attempt, the embedding pipeline updates
     // the EmbeddingSearch capability state. If it's been explicitly degraded
     // or restored, that's the authoritative answer.
-    let cap_state =
-        crate::capabilities::get_all_states()
-            .get(&crate::capabilities::Capability::EmbeddingSearch)
-            .cloned();
+    let cap_state = crate::capabilities::get_all_states()
+        .get(&crate::capabilities::Capability::EmbeddingSearch)
+        .cloned();
 
     match &cap_state {
         Some(crate::capabilities::CapabilityState::Degraded {
@@ -294,9 +293,7 @@ fn check_embedding(now: &str) -> ComponentHealth {
                 error_message: Some(format!("{reason} ({fallback})")),
             };
         }
-        Some(crate::capabilities::CapabilityState::Unavailable {
-            reason, ..
-        }) => {
+        Some(crate::capabilities::CapabilityState::Unavailable { reason, .. }) => {
             return ComponentHealth {
                 name: "embedding".into(),
                 status: HealthStatus::Failed,
@@ -327,10 +324,8 @@ fn check_embedding(now: &str) -> ComponentHealth {
     // explicit configuration — Ollama just needs to be running. We can't verify
     // Ollama connectivity synchronously here, but we should not report "degraded"
     // for a config that has a valid fallback path.
-    let provider_has_ollama_fallback = matches!(
-        llm.provider.as_str(),
-        "anthropic" | "none" | "local" | ""
-    );
+    let provider_has_ollama_fallback =
+        matches!(llm.provider.as_str(), "anthropic" | "none" | "local" | "");
 
     if has_openai_key || has_ollama || provider_has_ollama_fallback {
         ComponentHealth {

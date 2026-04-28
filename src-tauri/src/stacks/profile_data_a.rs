@@ -12,8 +12,6 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
     name: "Next.js Fullstack",
     core_tech: &["nextjs", "react", "vercel", "typescript"],
     companions: &[
-        "prisma",
-        "drizzle",
         "tailwindcss",
         "trpc",
         "zod",
@@ -67,17 +65,6 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
     ],
     ecosystem_shifts: &[
         EcosystemShift {
-            from: "prisma",
-            to: "drizzle",
-            keywords: &[
-                "drizzle",
-                "prisma alternative",
-                "orm migration",
-                "drizzle-orm",
-            ],
-            boost: 1.15,
-        },
-        EcosystemShift {
             from: "eslint",
             to: "biome",
             keywords: &["biome", "eslint alternative", "biome formatter", "biomejs"],
@@ -98,7 +85,6 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
         ("app router", 0.08),
         ("turbopack", 0.08),
         ("server action", 0.08),
-        ("app router", 0.08),
         ("server component", 0.08),
         ("rsc", 0.06),
         ("ssr", 0.06),
@@ -226,8 +212,6 @@ pub static RUST_SYSTEMS: StackProfile = StackProfile {
         ("unsafe", 0.06),
         ("borrow checker", 0.08),
         ("lifetime", 0.06),
-        ("async rust", 0.08),
-        ("wasm", 0.06),
     ],
     source_preferences: &[("lobsters", 0.15), ("hackernews", 0.05)],
     detection_markers: &[
@@ -378,9 +362,7 @@ pub static PYTHON_ML: StackProfile = StackProfile {
         ("deep learning", 0.08),
         ("neural network", 0.06),
         ("gpu", 0.06),
-        ("fine-tuning", 0.08),
         ("inference", 0.06),
-        ("rag", 0.08),
     ],
     source_preferences: &[("arxiv", 0.15), ("hackernews", 0.05)],
     detection_markers: &[
@@ -513,11 +495,9 @@ pub static GO_BACKEND: StackProfile = StackProfile {
         ("grpc", 0.08),
         ("goroutine", 0.08),
         ("k8s", 0.06),
-        ("goroutine", 0.08),
         ("concurrency", 0.06),
         ("api", 0.06),
         ("microservice", 0.08),
-        ("grpc", 0.08),
     ],
     source_preferences: &[("lobsters", 0.10), ("hackernews", 0.05)],
     detection_markers: &[

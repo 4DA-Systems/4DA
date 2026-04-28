@@ -461,6 +461,9 @@ pub fn is_display_worthy(tech: &str) -> bool {
         "netlify",
         "fly",
         "railway",
+        // ---- API / communication ----
+        "graphql",
+        "grpc",
         // ---- Databases (identity-level, not ORMs) ----
         "postgresql",
         "postgres",
@@ -477,6 +480,7 @@ pub fn is_display_worthy(tech: &str) -> bool {
         "neon",
         "turso",
         "surrealdb",
+        "kafka",
     ];
 
     DISPLAY_WORTHY.contains(&tech)

@@ -36,8 +36,6 @@
 {"statement":"Adopted yarn","verb":"adopt","subject":"yarn","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
 {"statement":"Adopted GraphQL","verb":"adopt","subject":"graphql","outcome":"partial","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
 {"statement":"Adopted tRPC","verb":"adopt","subject":"trpc","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
-{"statement":"Adopted Drizzle ORM","verb":"adopt","subject":"drizzle","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
-{"statement":"Adopted Prisma","verb":"adopt","subject":"prisma","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
 {"statement":"Adopted Tailwind CSS","verb":"adopt","subject":"tailwind","outcome":"confirmed","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
 {"statement":"Adopted shadcn/ui","verb":"adopt","subject":"shadcn","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}
 {"statement":"Adopted Biome","verb":"adopt","subject":"biome","outcome":"pending","source_commit":"curated","source_repo":"curated-corpus","timestamp":0}

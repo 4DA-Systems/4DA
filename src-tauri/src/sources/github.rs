@@ -67,6 +67,7 @@ impl GitHubSource {
             "cpp".to_string(),
             "zig".to_string(),
             "elixir".to_string(),
+            "php".to_string(),
         ])
     }
 
@@ -327,7 +328,7 @@ mod tests {
     #[test]
     fn test_default_languages() {
         let source = GitHubSource::new();
-        assert_eq!(source.languages.len(), 12);
+        assert_eq!(source.languages.len(), 13);
         assert!(source.languages.contains(&"rust".to_string()));
         assert!(source.languages.contains(&"typescript".to_string()));
         assert!(source.languages.contains(&"python".to_string()));
@@ -340,6 +341,7 @@ mod tests {
         assert!(source.languages.contains(&"cpp".to_string()));
         assert!(source.languages.contains(&"zig".to_string()));
         assert!(source.languages.contains(&"elixir".to_string()));
+        assert!(source.languages.contains(&"php".to_string()));
     }
 
     #[test]

@@ -372,10 +372,16 @@ pub(crate) fn synthesize_ace_interests(
         interests.iter().map(|i| i.topic.to_lowercase()).collect();
 
     // Phase 1: Detected tech → keyword interests (weight from tech_weights)
+    // Only promote display-worthy tech (languages, major frameworks, databases).
+    // ORMs, build tools, and utility libraries detected by ACE must NOT become
+    // synthesized interests — they pollute feeds with off-stack content.
     let mut tech_synth = 0usize;
     for tech_name in &ace_ctx.detected_tech {
         let lower = tech_name.to_lowercase();
         if existing.contains(&lower) {
+            continue;
+        }
+        if !crate::domain_profile::is_display_worthy(&lower) {
             continue;
         }
         let weight = ace_ctx.tech_weights.get(tech_name).copied().unwrap_or(0.4);
@@ -423,6 +429,9 @@ pub(crate) fn synthesize_ace_interests(
     }
 
     // Phase 3: Direct dependencies → low-weight keyword interests
+    // No display-worthy filter here: if a dep is in the user's actual
+    // package.json, content about it IS relevant. The Phase 1 filter
+    // only blocks inferred/detected tech that isn't identity-defining.
     let mut dep_synth = 0usize;
     for (dep_name, dep_info) in &ace_ctx.dependency_info {
         if dep_synth >= 15 {
@@ -913,10 +922,8 @@ mod tests {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
         for dep in ["log", "time", "rand", "base64", "regex"] {
-            ace.dependency_info.insert(
-                dep.to_string(),
-                make_dep(dep, true, false),
-            );
+            ace.dependency_info
+                .insert(dep.to_string(), make_dep(dep, true, false));
         }
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
@@ -1001,10 +1008,8 @@ mod tests {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
         for dep in ["cc", "ws", "fs"] {
-            ace.dependency_info.insert(
-                dep.to_string(),
-                make_dep(dep, true, false),
-            );
+            ace.dependency_info
+                .insert(dep.to_string(), make_dep(dep, true, false));
         }
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
@@ -1022,10 +1027,8 @@ mod tests {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
         for dep in ["log", "url", "syn"] {
-            ace.dependency_info.insert(
-                dep.to_string(),
-                make_dep(dep, true, false),
-            );
+            ace.dependency_info
+                .insert(dep.to_string(), make_dep(dep, true, false));
         }
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
@@ -1065,20 +1068,30 @@ mod tests {
         let mut interests = vec![make_interest("Rust", 1.0)];
         let mut ace = ACEContext::default();
         for tech in [
-            "python", "java", "go", "csharp", "ruby", "swift", "kotlin",
-            "scala", "haskell", "elixir",
+            "python", "java", "go", "csharp", "ruby", "swift", "kotlin", "scala", "haskell",
+            "elixir",
         ] {
             ace.detected_tech.push(tech.to_string());
         }
         for dep in [
-            "serde", "tokio", "axum", "sqlx", "tracing", "anyhow", "thiserror",
-            "clap", "reqwest", "hyper", "tower", "bytes", "futures", "parking_lot",
+            "serde",
+            "tokio",
+            "axum",
+            "sqlx",
+            "tracing",
+            "anyhow",
+            "thiserror",
+            "clap",
+            "reqwest",
+            "hyper",
+            "tower",
+            "bytes",
+            "futures",
+            "parking_lot",
             "dashmap",
         ] {
-            ace.dependency_info.insert(
-                dep.to_string(),
-                make_dep(dep, true, false),
-            );
+            ace.dependency_info
+                .insert(dep.to_string(), make_dep(dep, true, false));
         }
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
@@ -1157,8 +1170,16 @@ mod tests {
         }
         // 10 topics with high confidence
         for (i, topic) in [
-            "docker", "kubernetes", "terraform", "ci-cd", "observability",
-            "microservices", "grpc", "protobuf", "service-mesh", "istio",
+            "docker",
+            "kubernetes",
+            "terraform",
+            "ci-cd",
+            "observability",
+            "microservices",
+            "grpc",
+            "protobuf",
+            "service-mesh",
+            "istio",
         ]
         .iter()
         .enumerate()
@@ -1169,14 +1190,24 @@ mod tests {
         }
         // 15 deps
         for dep in [
-            "serde", "tokio", "axum", "sqlx", "tracing", "anyhow", "thiserror",
-            "clap", "reqwest", "hyper", "tower", "bytes", "futures", "parking_lot",
+            "serde",
+            "tokio",
+            "axum",
+            "sqlx",
+            "tracing",
+            "anyhow",
+            "thiserror",
+            "clap",
+            "reqwest",
+            "hyper",
+            "tower",
+            "bytes",
+            "futures",
+            "parking_lot",
             "dashmap",
         ] {
-            ace.dependency_info.insert(
-                dep.to_string(),
-                make_dep(dep, true, false),
-            );
+            ace.dependency_info
+                .insert(dep.to_string(), make_dep(dep, true, false));
         }
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
@@ -1206,10 +1237,8 @@ mod tests {
 
         let mut interests = vec![make_interest("Rust", 0.8)];
         let mut ace = ACEContext::default();
-        ace.dependency_info.insert(
-            "tokio".to_string(),
-            make_dep("tokio", true, false),
-        );
+        ace.dependency_info
+            .insert("tokio".to_string(), make_dep("tokio", true, false));
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
         let tokio_score = compute_keyword_interest_score(
@@ -1294,8 +1323,8 @@ mod tests {
 
         // Positive affinity on Rust, negative on Python
         let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 0.9);    // +0.9 * 0.2 = +0.18 → 0.68
-        affinities.insert("python".to_string(), -0.8);  // -0.8 * 0.2 = -0.16 → 0.34
+        affinities.insert("rust".to_string(), 0.9); // +0.9 * 0.2 = +0.18 → 0.68
+        affinities.insert("python".to_string(), -0.8); // -0.8 * 0.2 = -0.16 → 0.34
         apply_affinity_adjustments(&mut interests, &affinities);
 
         let rust_interest = interests.iter().find(|i| i.topic == "Rust").unwrap();
@@ -1541,10 +1570,7 @@ mod tests {
     fn test_realistic_rust_developer_profile() {
         use crate::scoring::keywords::compute_keyword_interest_score;
 
-        let mut interests = vec![
-            make_interest("Rust", 1.0),
-            make_interest("TypeScript", 0.7),
-        ];
+        let mut interests = vec![make_interest("Rust", 1.0), make_interest("TypeScript", 0.7)];
         let mut ace = ACEContext::default();
         ace.detected_tech = vec!["react".into(), "tailwindcss".into()];
         ace.tech_weights.insert("react".into(), 0.4);
@@ -1756,8 +1782,8 @@ mod tests {
 
         // After affinity: Rust boosted, Go suppressed
         let mut affinities = HashMap::new();
-        affinities.insert("rust".to_string(), 1.0);  // +0.2 → 0.7
-        affinities.insert("go".to_string(), -1.0);    // -0.2 → 0.3
+        affinities.insert("rust".to_string(), 1.0); // +0.2 → 0.7
+        affinities.insert("go".to_string(), -1.0); // -0.2 → 0.3
         apply_affinity_adjustments(&mut interests, &affinities);
 
         let rust_after = compute_keyword_interest_score(
@@ -1797,26 +1823,30 @@ mod tests {
     fn test_synthesis_with_unicode_tech_names() {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
-        ace.detected_tech.push("café-lib".to_string());
-        ace.detected_tech.push("naïve-bayes".to_string());
-        ace.tech_weights.insert("café-lib".into(), 0.5);
-        ace.tech_weights.insert("naïve-bayes".into(), 0.5);
+        // Use Phase 3 deps for unicode test — Phase 1 detected_tech applies
+        // the display-worthy filter which would reject unknown names.
+        ace.dependency_info
+            .insert("café-lib".to_string(), make_dep("café-lib", true, false));
+        ace.dependency_info.insert(
+            "naïve-bayes".to_string(),
+            make_dep("naïve-bayes", true, false),
+        );
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
         assert_eq!(
             interests.len(),
             2,
-            "unicode tech names must synthesize without panic; got {} interests",
+            "unicode dep names must synthesize without panic; got {} interests",
             interests.len()
         );
         assert!(
             interests.iter().any(|i| i.topic == "café-lib"),
-            "unicode tech name 'café-lib' must be preserved exactly"
+            "unicode dep name 'café-lib' must be preserved exactly"
         );
         assert!(
             interests.iter().any(|i| i.topic == "naïve-bayes"),
-            "unicode tech name 'naïve-bayes' must be preserved exactly"
+            "unicode dep name 'naïve-bayes' must be preserved exactly"
         );
     }
 
@@ -1824,10 +1854,8 @@ mod tests {
     fn test_empty_string_dep_name_handled() {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
-        ace.dependency_info.insert(
-            "".to_string(),
-            make_dep("", true, false),
-        );
+        ace.dependency_info
+            .insert("".to_string(), make_dep("", true, false));
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
@@ -1843,29 +1871,31 @@ mod tests {
     fn test_duplicate_deps_across_phases() {
         let mut interests = vec![];
         let mut ace = ACEContext::default();
-        // "tokio" appears in both detected_tech AND dependency_info
-        ace.detected_tech.push("tokio".to_string());
-        ace.tech_weights.insert("tokio".into(), 0.85);
-        ace.dependency_info.insert(
-            "tokio".to_string(),
-            make_dep("tokio", true, false),
-        );
+        // "rust" appears in both detected_tech AND dependency_info
+        // (display-worthy, so Phase 1 accepts it)
+        ace.detected_tech.push("rust".to_string());
+        ace.tech_weights.insert("rust".into(), 0.85);
+        ace.dependency_info
+            .insert("rust".to_string(), make_dep("rust", true, false));
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
-        let tokio_count = interests.iter().filter(|i| i.topic.to_lowercase() == "tokio").count();
+        let rust_count = interests
+            .iter()
+            .filter(|i| i.topic.to_lowercase() == "rust")
+            .count();
         assert_eq!(
-            tokio_count, 1,
-            "tokio appearing in both detected_tech and dependency_info must produce \
-             exactly 1 interest (dedup by lowercase); got {tokio_count}"
+            rust_count, 1,
+            "rust appearing in both detected_tech and dependency_info must produce \
+             exactly 1 interest (dedup by lowercase); got {rust_count}"
         );
         // Should keep the tech version (first phase wins) with weight 0.85
-        let tokio = interests.iter().find(|i| i.topic == "tokio").unwrap();
+        let rust_i = interests.iter().find(|i| i.topic == "rust").unwrap();
         assert!(
-            (tokio.weight - 0.85).abs() < 0.01,
-            "deduped tokio must keep Phase 1 (tech) weight 0.85, not Phase 3 (dep) 0.3; \
+            (rust_i.weight - 0.85).abs() < 0.01,
+            "deduped rust must keep Phase 1 (tech) weight 0.85, not Phase 3 (dep) 0.3; \
              got {:.3}",
-            tokio.weight
+            rust_i.weight
         );
     }
 
@@ -1877,9 +1907,9 @@ mod tests {
             make_interest("Gamma", 0.6),
         ];
         let mut ace = ACEContext::default();
-        ace.detected_tech = vec!["delta".into(), "epsilon".into()];
-        ace.tech_weights.insert("delta".into(), 0.5);
-        ace.tech_weights.insert("epsilon".into(), 0.5);
+        ace.detected_tech = vec!["python".into(), "kotlin".into()];
+        ace.tech_weights.insert("python".into(), 0.5);
+        ace.tech_weights.insert("kotlin".into(), 0.5);
 
         synthesize_ace_interests(&mut interests, &ace, &HashMap::new());
 
