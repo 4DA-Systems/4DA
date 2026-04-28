@@ -12,7 +12,7 @@ import {
   type DepRow, type DepStatus, URGENCY_ORDER,
   getScoreTier, depFromItem, signalMatchesDep,
 } from './types';
-import { StackCoverageMap, UnmatchedSignals } from './StackCoverageMap';
+import { TierSection, EmergingSignals, CoveredSection } from './StackCoverageMap';
 
 // ============================================================================
 // Score Bar
@@ -175,15 +175,18 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   }
 
   const score = report.score ?? 0;
-  const blindCount = depRows.filter(d => d.status === 'blind_spot').length;
-  const driftCount = depRows.filter(d => d.status === 'falling_behind').length;
-  const problemCount = blindCount + driftCount;
+  const stackDeps = depRows.filter(d => d.status === 'blind_spot');
+  const ecosystemDeps = depRows.filter(d => d.status === 'falling_behind');
+  const coveredDeps = depRows.filter(d => d.status === 'well_covered');
+  const problemCount = stackDeps.length + ecosystemDeps.length;
 
   const scoreContext = problemCount === 0
     ? 'Your stack coverage is excellent.'
-    : `${blindCount > 0 ? `${blindCount} blind spot${blindCount === 1 ? '' : 's'}` : ''}${
-        blindCount > 0 && driftCount > 0 ? ', ' : ''
-      }${driftCount > 0 ? `${driftCount} drifting` : ''} across your ${depRows.length} tracked dependencies.`;
+    : `${stackDeps.length > 0 ? `${stackDeps.length} uncovered ${stackDeps.length === 1 ? 'dependency' : 'dependencies'}` : ''}${
+        stackDeps.length > 0 && ecosystemDeps.length > 0 ? ', ' : ''
+      }${ecosystemDeps.length > 0 ? `${ecosystemDeps.length} drifting` : ''} across your ${depRows.length} tracked dependencies.`;
+
+  const hasContent = stackDeps.length > 0 || ecosystemDeps.length > 0 || unmatchedSignals.length > 0;
 
   return (
     <div className="space-y-4 pb-8">
@@ -193,14 +196,40 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       </div>
       <ScoreBar score={score} />
       <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>
-      {depRows.length === 0 && unmatchedSignals.length === 0 ? (
+      {!hasContent && coveredDeps.length === 0 ? (
         <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
           <p className="text-sm text-text-muted">{t('blindspots.empty')}</p>
         </div>
       ) : (
         <>
-          <StackCoverageMap depRows={depRows} onDismissSignal={handleDismiss} />
-          <UnmatchedSignals items={unmatchedSignals} onDismiss={handleDismiss} />
+          {(stackDeps.length > 0 || problemCount === 0) && (
+            <TierSection
+              dotColor="#EF4444"
+              borderColor="rgba(239, 68, 68, 0.2)"
+              title="Your Stack"
+              subtitle={`${stackDeps.length} uncovered ${stackDeps.length === 1 ? 'dependency' : 'dependencies'}`}
+              badgeText="Needs attention"
+              badgeColor="#EF4444"
+              depRows={stackDeps}
+              onDismissSignal={handleDismiss}
+              emptyText="All dependencies have signal coverage"
+            />
+          )}
+          {(ecosystemDeps.length > 0 || problemCount === 0) && (
+            <TierSection
+              dotColor="#F59E0B"
+              borderColor="rgba(245, 158, 11, 0.15)"
+              title="Your Ecosystem"
+              subtitle={`${ecosystemDeps.length} drifting ${ecosystemDeps.length === 1 ? 'topic' : 'topics'}`}
+              badgeText="Drifting"
+              badgeColor="#F59E0B"
+              depRows={ecosystemDeps}
+              onDismissSignal={handleDismiss}
+              emptyText="No ecosystem drift detected"
+            />
+          )}
+          <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
+          <CoveredSection depRows={coveredDeps} onDismissSignal={handleDismiss} />
         </>
       )}
     </div>

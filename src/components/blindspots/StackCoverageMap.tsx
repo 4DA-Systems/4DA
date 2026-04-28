@@ -7,10 +7,6 @@ import {
   type DepRow, STATUS_CONFIG, URGENCY_COLORS, MAX_SIGNALS_PER_DEP, extractItemId,
 } from './types';
 
-// ============================================================================
-// Signal Row
-// ============================================================================
-
 const SignalRow = memo(function SignalRow({
   item, onDismiss,
 }: {
@@ -69,10 +65,6 @@ const SignalRow = memo(function SignalRow({
     </div>
   );
 });
-
-// ============================================================================
-// Dep Coverage Row
-// ============================================================================
 
 const DepCoverageRow = memo(function DepCoverageRow({
   dep, onDismissSignal,
@@ -155,107 +147,112 @@ const DepCoverageRow = memo(function DepCoverageRow({
   );
 });
 
-// ============================================================================
-// Stack Coverage Map
-// ============================================================================
-
-export const StackCoverageMap = memo(function StackCoverageMap({
-  depRows, onDismissSignal,
-}: {
+interface TierSectionProps {
+  dotColor: string;
+  borderColor: string;
+  title: string;
+  subtitle: string;
+  badgeText: string;
+  badgeColor: string;
   depRows: DepRow[];
   onDismissSignal: (id: string) => void;
-}) {
-  const blindSpots = depRows.filter(d => d.status === 'blind_spot');
-  const fallingBehind = depRows.filter(d => d.status === 'falling_behind');
-  const covered = depRows.filter(d => d.status === 'well_covered');
-  const [showCovered, setShowCovered] = useState(false);
+  emptyText: string;
+}
 
+export const TierSection = memo(function TierSection({
+  dotColor, borderColor, title, subtitle,
+  badgeText, badgeColor,
+  depRows, onDismissSignal, emptyText,
+}: TierSectionProps) {
   return (
-    <div className="space-y-3">
-      {blindSpots.length > 0 && (
-        <div className="bg-bg-secondary rounded-lg border border-red-500/20 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-red-400" />
-            <h3 className="text-sm font-medium text-white flex-1">
-              Blind Spots ({blindSpots.length})
-            </h3>
-            <span className="text-[10px] text-red-400">Needs attention</span>
-          </div>
+    <section className="mb-4" aria-label={title}>
+      <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor }}>
+        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+          <h3 className="text-sm font-medium text-white flex-1">{title}</h3>
+          <span className="text-xs text-[#8A8A8A]">{subtitle}</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0" style={{ color: badgeColor }}>
+            {badgeText}
+          </span>
+        </div>
+        {depRows.length > 0 ? (
           <div>
-            {blindSpots.map(dep => (
+            {depRows.map(dep => (
               <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
             ))}
           </div>
-        </div>
-      )}
-
-      {fallingBehind.length > 0 && (
-        <div className="bg-bg-secondary rounded-lg border border-yellow-500/15 overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-yellow-400" />
-            <h3 className="text-sm font-medium text-white flex-1">
-              Falling Behind ({fallingBehind.length})
-            </h3>
-            <span className="text-[10px] text-yellow-400">Drifting</span>
+        ) : (
+          <div className="px-4 py-4">
+            <p className="text-xs text-[#8A8A8A]">{emptyText}</p>
           </div>
-          <div>
-            {fallingBehind.map(dep => (
-              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {covered.length > 0 && (
-        <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
-          <button
-            onClick={() => setShowCovered(prev => !prev)}
-            className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
-          >
-            <div className="w-2 h-2 rounded-full bg-green-400" />
-            <h3 className="text-sm font-medium text-white flex-1 text-left">
-              Well Covered ({covered.length})
-            </h3>
-            <span className="text-[10px] text-green-400">
-              {showCovered ? 'Hide' : 'Show'}
-            </span>
-          </button>
-          {showCovered && (
-            <div className="border-t border-border">
-              {covered.map(dep => (
-                <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </section>
   );
 });
 
-// ============================================================================
-// Unmatched Signals
-// ============================================================================
-
-export const UnmatchedSignals = memo(function UnmatchedSignals({
+export const EmergingSignals = memo(function EmergingSignals({
   items, onDismiss,
 }: {
   items: EvidenceItem[];
   onDismiss: (id: string) => void;
 }) {
-  if (items.length === 0) return null;
+  return (
+    <section className="mb-4" aria-label="Emerging">
+      <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(59, 130, 246, 0.2)' }}>
+        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
+          <h3 className="text-sm font-medium text-white flex-1">Emerging</h3>
+          <span className="text-xs text-[#8A8A8A]">
+            {items.length} {items.length === 1 ? 'signal' : 'signals'} in your neighborhood
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0 text-blue-400">Trending</span>
+        </div>
+        {items.length > 0 ? (
+          <div className="divide-y divide-border/50">
+            {items.map(it => <SignalRow key={it.id} item={it} onDismiss={onDismiss} />)}
+          </div>
+        ) : (
+          <div className="px-4 py-4">
+            <p className="text-xs text-[#8A8A8A]">No emerging signals detected</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+});
+
+export const CoveredSection = memo(function CoveredSection({
+  depRows, onDismissSignal,
+}: {
+  depRows: DepRow[];
+  onDismissSignal: (id: string) => void;
+}) {
+  const [showCovered, setShowCovered] = useState(false);
+
+  if (depRows.length === 0) return null;
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border overflow-hidden">
-      <div className="px-4 py-3 border-b border-border">
-        <h3 className="text-sm font-medium text-white">
-          Other Signals ({items.length})
+      <button
+        onClick={() => setShowCovered(prev => !prev)}
+        className="w-full px-4 py-3 flex items-center gap-2 hover:bg-bg-tertiary/30 transition-colors"
+      >
+        <div className="w-2 h-2 rounded-full bg-green-400" />
+        <h3 className="text-sm font-medium text-white flex-1 text-left">
+          Well Covered ({depRows.length})
         </h3>
-        <p className="text-[10px] text-text-muted mt-0.5">Relevant but not tied to a specific dependency</p>
-      </div>
-      <div className="divide-y divide-border/50">
-        {items.map(it => <SignalRow key={it.id} item={it} onDismiss={onDismiss} />)}
-      </div>
+        <span className="text-[10px] text-green-400">
+          {showCovered ? 'Hide' : 'Show'}
+        </span>
+      </button>
+      {showCovered && (
+        <div className="border-t border-border">
+          {depRows.map(dep => (
+            <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
+          ))}
+        </div>
+      )}
     </div>
   );
 });

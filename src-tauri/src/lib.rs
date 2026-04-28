@@ -303,6 +303,7 @@ mod signals;
 mod source_config;
 mod source_fetch_commands;
 mod source_fetching;
+pub(crate) mod source_tiers;
 pub mod sources;
 mod standing_queries;
 mod standing_queries_evaluation;
