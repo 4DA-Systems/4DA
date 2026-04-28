@@ -59,17 +59,21 @@ pub(crate) fn best_interest_specificity_weight(
 
         // Check if any term from this interest appears in the item
         let has_hit = terms.iter().any(|term| {
-            if term.len() < 2 {
+            if term.len() < 3 && !SHORT_TECH_KEYWORDS.contains(term) {
                 return false;
             }
-            // Fast path: direct substring
-            if title_lower.contains(term) || text_lower.contains(term) {
+            // Fast path: direct match (word-boundary for short terms)
+            if term.len() <= 2 {
+                if has_word_boundary_match(&title_lower, term) || has_word_boundary_match(&text_lower, term) {
+                    return true;
+                }
+            } else if title_lower.contains(term) || text_lower.contains(term) {
                 return true;
             }
             // Alias expansion
             if let Some(group) = aliases::get_aliases(term) {
                 if group.iter().any(|alias| {
-                    if alias.len() <= 2 {
+                    if alias.len() <= 2 || AMBIGUOUS_ALIASES.contains(alias) {
                         has_word_boundary_match(&title_lower, alias)
                             || has_word_boundary_match(&text_lower, alias)
                     } else {
@@ -85,7 +89,7 @@ pub(crate) fn best_interest_specificity_weight(
                 let words_match = title_lower
                     .split(|c: char| !c.is_alphanumeric())
                     .chain(text_lower.split(|c: char| !c.is_alphanumeric()))
-                    .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
+                    .any(|w| w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem));
                 if words_match {
                     return true;
                 }
@@ -125,6 +129,13 @@ const SHORT_TECH_KEYWORDS: &[&str] = &[
     "vm", "k8", "tf", "gcp", "aws", "api", "cli", "css", "sql", "llm", "nlp", "cv",
 ];
 
+/// Alias terms that are common English words and need word-boundary matching
+/// to avoid false positives (e.g., "express delivery" matching Express.js interest).
+const AMBIGUOUS_ALIASES: &[&str] = &[
+    "next", "solid", "fly", "echo", "fiber", "gin", "spring", "express",
+    "compose", "helm", "rest", "elastic", "container", "phoenix",
+];
+
 /// Negation patterns that indicate a term is mentioned in a negative context.
 /// Returns true if the term appears near a negation phrase in the text.
 fn is_negated_in_context(term: &str, text: &str) -> bool {
@@ -133,6 +144,8 @@ fn is_negated_in_context(term: &str, text: &str) -> bool {
         "without ", "never ", "avoid ", "stop using ", "alternative to ", "instead of ",
         "replace ", "replacing ", "moved away from ", "moving away from ", "migrating from ",
         "leaving ", "dropped ", "dropping ", "removed ", "removing ",
+        "don't use ", "doesn't use ", "didn't use ", "won't use ",
+        "not using ", "stopped using ", "quit ", "quitting ",
     ];
 
     let text_lower = text.to_lowercase();
@@ -141,11 +154,25 @@ fn is_negated_in_context(term: &str, text: &str) -> bool {
     for (idx, _) in text_lower.match_indices(&term_lower) {
         let before_start = idx.saturating_sub(30);
         let before = &text_lower[before_start..idx];
-        if NEGATION_PREFIXES.iter().any(|neg| before.ends_with(neg) || before.contains(neg)) {
+        if NEGATION_PREFIXES.iter().any(|neg| before.ends_with(neg)) {
             return true;
         }
     }
     false
+}
+
+/// Count word-boundary-aware occurrences of a term in text.
+fn count_word_occurrences(term: &str, text: &str) -> usize {
+    let mut count = 0;
+    for (i, _) in text.match_indices(term) {
+        let before_ok = i == 0 || !text.as_bytes().get(i.wrapping_sub(1)).map_or(false, |b| b.is_ascii_alphanumeric());
+        let after_pos = i + term.len();
+        let after_ok = after_pos >= text.len() || !text.as_bytes().get(after_pos).map_or(false, |b| b.is_ascii_alphanumeric());
+        if before_ok && after_ok {
+            count += 1;
+        }
+    }
+    count
 }
 
 /// BM25-inspired term density: rewards content where matched terms appear frequently
@@ -155,7 +182,7 @@ fn is_negated_in_context(term: &str, text: &str) -> bool {
 /// where k1=1.2, b=0.75, avgdl=150 (typical dev article word count after truncation).
 fn term_density_multiplier(term: &str, text: &str) -> f32 {
     let term_lower = term.to_lowercase();
-    let freq = text.matches(&term_lower).count() as f32;
+    let freq = count_word_occurrences(&term_lower, text) as f32;
     if freq <= 1.0 {
         return 1.0;
     }
@@ -197,102 +224,104 @@ pub(crate) fn compute_keyword_interest_score(
         let mut counted_terms = 0_usize;
         for term in &terms {
             // Skip generic short words, but allow known tech abbreviations
-            if term.len() < 2 {
-                continue;
-            }
             if term.len() < 3 && !SHORT_TECH_KEYWORDS.contains(term) {
                 continue;
             }
             counted_terms += 1;
 
-            // For very short terms (1-2 chars), require word boundary match to avoid false positives
-            // e.g. "go" shouldn't match "google", "algorithm"
-            let matched_title = if term.len() <= 2 {
-                has_word_boundary_match(&title_lower, term)
-            } else {
-                title_lower.contains(term)
-            };
-            let matched_content = if !matched_title && term.len() <= 2 {
-                has_word_boundary_match(&text_lower, term)
-            } else if !matched_title {
-                text_lower.contains(term)
-            } else {
-                false
-            };
-
-            // Base hit weights: calibrated to leave room for density bonus
-            // within the [0, 1] output range (title_exact=0.80, content=0.55,
-            // alias same, stem slightly lower)
-            let mut term_hit = if matched_title {
-                0.80
-            } else if matched_content {
-                0.55
-            } else {
-                // Slow path: try alias expansion
-                let alias_title_hit = aliases::get_aliases(term)
-                    .map(|group| {
-                        group.iter().any(|alias| {
-                            if alias.len() <= 2 {
-                                has_word_boundary_match(&title_lower, alias)
-                            } else {
-                                title_lower.contains(alias)
-                            }
-                        })
-                    })
-                    .unwrap_or(false);
-
-                if alias_title_hit {
-                    0.80
+            // Determine match and effective search term for density/negation
+            let (base_hit, search_term): (f32, Option<&str>) = {
+                // Direct match check (word-boundary for short terms)
+                let direct_title = if term.len() <= 2 {
+                    has_word_boundary_match(&title_lower, term)
                 } else {
-                    let alias_content_hit = aliases::get_aliases(term)
-                        .map(|group| {
-                            group.iter().any(|alias| {
-                                if alias.len() <= 2 {
+                    title_lower.contains(term)
+                };
+                let direct_content = if !direct_title {
+                    if term.len() <= 2 {
+                        has_word_boundary_match(&text_lower, term)
+                    } else {
+                        text_lower.contains(term)
+                    }
+                } else {
+                    false
+                };
+
+                if direct_title {
+                    (0.80, Some(*term))
+                } else if direct_content {
+                    (0.55, Some(*term))
+                } else {
+                    // Alias expansion — find which alias actually matched
+                    let alias_match: Option<(&str, bool)> = aliases::get_aliases(term)
+                        .and_then(|group| {
+                            for alias in group.iter() {
+                                let needs_boundary = alias.len() <= 2 || AMBIGUOUS_ALIASES.contains(alias);
+                                let in_title = if needs_boundary {
+                                    has_word_boundary_match(&title_lower, alias)
+                                } else {
+                                    title_lower.contains(alias)
+                                };
+                                if in_title {
+                                    return Some((*alias, true));
+                                }
+                                let in_content = if needs_boundary {
                                     has_word_boundary_match(&text_lower, alias)
                                 } else {
                                     text_lower.contains(alias)
+                                };
+                                if in_content {
+                                    return Some((*alias, false));
                                 }
-                            })
-                        })
-                        .unwrap_or(false);
+                            }
+                            None
+                        });
 
-                    if alias_content_hit {
-                        0.55
+                    if let Some((matched_alias, in_title)) = alias_match {
+                        (if in_title { 0.80 } else { 0.55 }, Some(matched_alias))
                     } else {
-                        // Stemmed match
+                        // Stemmed match (no effective term for density/negation)
                         let term_stem = stemming::stem(term);
                         if term_stem.len() >= 3 {
                             let title_stem_hit = title_lower
                                 .split(|c: char| !c.is_alphanumeric())
-                                .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
+                                .any(|w| w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem));
                             let content_stem_hit = !title_stem_hit
                                 && text_lower
                                     .split(|c: char| !c.is_alphanumeric())
-                                    .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
+                                    .any(|w| w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem));
 
                             if title_stem_hit {
-                                0.65
+                                (0.65, None)
                             } else if content_stem_hit {
-                                0.45
+                                (0.45, None)
                             } else {
-                                0.0
+                                (0.0, None)
                             }
                         } else {
-                            0.0
+                            (0.0, None)
                         }
                     }
                 }
             };
 
-            // Density bonus: push score up to 1.0 for content-dense matches
+            let mut term_hit = base_hit;
+
+            // Density bonus: only for direct/alias matches where we know the search term
             if term_hit > 0.0 {
-                let density = term_density_multiplier(term, &text_lower);
-                term_hit *= density;
+                if let Some(st) = search_term {
+                    let density = term_density_multiplier(st, &text_lower);
+                    term_hit *= density;
+                }
             }
 
-            // Negation penalty: halve contribution when term appears in negative context
-            if term_hit > 0.0 && term.len() >= 3 && is_negated_in_context(term, &text_lower) {
-                term_hit *= 0.5;
+            // Negation penalty: only for direct/alias matches
+            if term_hit > 0.0 {
+                if let Some(st) = search_term {
+                    if st.len() >= 3 && is_negated_in_context(st, &text_lower) {
+                        term_hit *= 0.5;
+                    }
+                }
             }
 
             hits += term_hit;
@@ -568,5 +597,92 @@ mod tests {
             "Dense content should score higher: dense={}, sparse={}",
             dense, sparse,
         );
+    }
+
+    #[test]
+    fn test_single_char_interest_r() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "R".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        let score = compute_keyword_interest_score(
+            "Statistical computing with R",
+            "R is widely used in data science",
+            &interests,
+        );
+        assert!(score > 0.0, "Single-char interest 'R' should match, got {}", score);
+    }
+
+    #[test]
+    fn test_single_char_interest_no_false_positive() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "R".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        // "R" should NOT match in "Rust" or "React" (not word-bounded)
+        let score = compute_keyword_interest_score(
+            "Getting started with Rust",
+            "Rust is a systems programming language",
+            &interests,
+        );
+        assert_eq!(score, 0.0, "Single-char 'R' should not match inside 'Rust'");
+    }
+
+    #[test]
+    fn test_ambiguous_alias_word_boundary() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "nextjs".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        // "next" alias should match when word-bounded
+        let score = compute_keyword_interest_score(
+            "Building apps with Next",
+            "Next is great for server rendering",
+            &interests,
+        );
+        assert!(score > 0.0, "Ambiguous alias 'next' should match with word boundary, got {}", score);
+    }
+
+    #[test]
+    fn test_weighted_interest() {
+        let low_weight = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 0.5,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        let full_weight = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        let low_score = compute_keyword_interest_score("Learning Rust", "rust guide", &low_weight);
+        let full_score = compute_keyword_interest_score("Learning Rust", "rust guide", &full_weight);
+        assert!(low_score < full_score, "Lower weight should produce lower score: low={}, full={}", low_score, full_score);
+    }
+
+    #[test]
+    fn test_empty_content() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        let title_only = compute_keyword_interest_score("Learning Rust basics", "", &interests);
+        assert!(title_only > 0.0, "Should match on title even with empty content, got {}", title_only);
     }
 }

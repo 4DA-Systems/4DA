@@ -56,6 +56,7 @@ const GROUPS: &[&[&str]] = &[
     &["dart"],
     &["r", "rlang"],
     // Frontend frameworks
+    &["nodejs", "node.js", "node"],
     &["react", "reactjs", "react.js"],
     &["nextjs", "next.js", "next"],
     &["vue", "vuejs", "vue.js"],
@@ -81,6 +82,10 @@ const GROUPS: &[&[&str]] = &[
     &["gin"],
     &["echo"],
     &["fiber"],
+    &["prisma"],
+    &["drizzle", "drizzle-orm"],
+    &["tokio"],
+    &["warp"],
     // Desktop/mobile
     &["tauri"],
     &["electron", "electronjs"],
@@ -95,6 +100,8 @@ const GROUPS: &[&[&str]] = &[
     &["rollup"],
     &["turbopack"],
     &["bun"],
+    // Runtimes
+    &["deno"],
     // Databases
     &["postgresql", "postgres", "pg"],
     &["mysql", "mariadb"],
@@ -146,6 +153,7 @@ const GROUPS: &[&[&str]] = &[
     &["openai"],
     &["anthropic", "claude"],
     &["ollama"],
+    &["github", "gh"],
     &["huggingface", "hugging-face", "hf"],
     // DevOps concepts
     &["cicd", "ci-cd", "ci/cd", "continuous-integration"],
