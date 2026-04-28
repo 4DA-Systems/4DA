@@ -263,11 +263,53 @@ fn check_database(conn: &Connection, now: &str) -> ComponentHealth {
 
 /// Check embedding availability.
 ///
-/// EMBEDDING_CLIENT is a Lazy<reqwest::Client> so it's always available.
-/// The real question is whether API keys are configured for embedding.
+/// Uses the capabilities system as ground truth when available (it tracks real
+/// embedding success/failure at runtime). Falls back to a config-based heuristic
+/// for the initial check before any embedding has been attempted.
+///
+/// The embedding pipeline always tries Ollama as a fallback for providers that
+/// don't have a native embedding API (e.g. Anthropic) or when no cloud key is
+/// configured. So the health check should not report "degraded" just because
+/// there's no cloud API key — Ollama may be handling embeddings successfully.
 fn check_embedding(now: &str) -> ComponentHealth {
-    // EMBEDDING_CLIENT (Lazy<reqwest::Client>) is always available once accessed.
-    // Check if settings have an embedding-capable API key configured.
+    // ----- 1. Consult the capabilities system (runtime ground truth) -----
+    //
+    // After the first real embedding attempt, the embedding pipeline updates
+    // the EmbeddingSearch capability state. If it's been explicitly degraded
+    // or restored, that's the authoritative answer.
+    let cap_state =
+        crate::capabilities::get_all_states()
+            .get(&crate::capabilities::Capability::EmbeddingSearch)
+            .cloned();
+
+    match &cap_state {
+        Some(crate::capabilities::CapabilityState::Degraded {
+            reason, fallback, ..
+        }) => {
+            // The embedding system has explicitly reported degradation.
+            return ComponentHealth {
+                name: "embedding".into(),
+                status: HealthStatus::Degraded,
+                last_check: now.into(),
+                error_message: Some(format!("{reason} ({fallback})")),
+            };
+        }
+        Some(crate::capabilities::CapabilityState::Unavailable {
+            reason, ..
+        }) => {
+            return ComponentHealth {
+                name: "embedding".into(),
+                status: HealthStatus::Failed,
+                last_check: now.into(),
+                error_message: Some(reason.clone()),
+            };
+        }
+        // Full — either embeddings are working, or no attempt has been made yet.
+        // Fall through to the config-based heuristic for a plausibility check.
+        _ => {}
+    }
+
+    // ----- 2. Config-based heuristic (startup / pre-first-embed) -----
     let settings_mgr = crate::get_settings_manager();
     let settings = settings_mgr.lock();
     let llm = &settings.get().llm;
@@ -280,15 +322,17 @@ fn check_embedding(now: &str) -> ComponentHealth {
             .as_ref()
             .is_some_and(|u| u.contains("localhost") || u.contains("127.0.0.1"));
 
-    if has_openai_key {
-        ComponentHealth {
-            name: "embedding".into(),
-            status: HealthStatus::Healthy,
-            last_check: now.into(),
-            error_message: None,
-        }
-    } else if has_ollama {
-        // Ollama can do embeddings but we can't verify connectivity here synchronously
+    // The embedding pipeline always falls back to Ollama at localhost:11434 for
+    // "anthropic", "none", and unknown providers. That fallback works without any
+    // explicit configuration — Ollama just needs to be running. We can't verify
+    // Ollama connectivity synchronously here, but we should not report "degraded"
+    // for a config that has a valid fallback path.
+    let provider_has_ollama_fallback = matches!(
+        llm.provider.as_str(),
+        "anthropic" | "none" | "local" | ""
+    );
+
+    if has_openai_key || has_ollama || provider_has_ollama_fallback {
         ComponentHealth {
             name: "embedding".into(),
             status: HealthStatus::Healthy,
@@ -296,11 +340,16 @@ fn check_embedding(now: &str) -> ComponentHealth {
             error_message: None,
         }
     } else {
+        // Provider is something unusual with no known embedding fallback and no
+        // cloud key configured. Report degraded — the capabilities system will
+        // correct this if Ollama turns out to be reachable.
         ComponentHealth {
             name: "embedding".into(),
             status: HealthStatus::Degraded,
             last_check: now.into(),
-            error_message: Some("No embedding API key configured".into()),
+            error_message: Some(
+                "No embedding provider available (configure API key or install Ollama)".into(),
+            ),
         }
     }
 }
