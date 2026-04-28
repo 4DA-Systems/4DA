@@ -1,39 +1,38 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+use super::aliases;
+
 /// Known 1-2 char programming language names that should match despite being short.
 /// Without this allowlist, "go", "r", "c", "d" are invisible to topic matching.
 const SHORT_LANGUAGE_NAMES: &[&str] = &["go", "r", "c", "d"];
-
-/// Canonical long-form mappings for short language names (e.g. "go" ↔ "golang").
-const SHORT_LANGUAGE_ALIASES: &[(&str, &str)] = &[("go", "golang")];
 
 /// Word-boundary-aware topic overlap check for positive signal paths.
 /// Prevents false substring matches like "frustrating" containing "rust"
 /// or "digital" containing "git". Splits on word boundaries (hyphen, slash,
 /// dot, underscore, space) and requires at least one part to match exactly.
+///
+/// Also checks the technology alias database (130+ groups) so "k8s" overlaps
+/// "kubernetes", "ts" overlaps "typescript", etc.
 pub(crate) fn topic_overlaps(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }
 
-    // Short language allowlist: exact match or alias match for known 1-2 char languages
     let a_lower = a.to_lowercase();
     let b_lower = b.to_lowercase();
+    if a_lower == b_lower {
+        return true;
+    }
+
+    // Check alias database (covers go↔golang, ts↔typescript, k8s↔kubernetes, etc.)
+    if aliases::are_aliases(&a_lower, &b_lower) {
+        return true;
+    }
+
+    // Short language allowlist: exact match only (aliases already checked above)
     let a_is_short = SHORT_LANGUAGE_NAMES.contains(&a_lower.as_str());
     let b_is_short = SHORT_LANGUAGE_NAMES.contains(&b_lower.as_str());
-    if a_is_short || b_is_short {
-        if a_lower == b_lower {
-            return true;
-        }
-        // Check alias pairs (e.g. "go" ↔ "golang")
-        for &(short, long) in SHORT_LANGUAGE_ALIASES {
-            if (a_lower == short && b_lower == long) || (a_lower == long && b_lower == short) {
-                return true;
-            }
-        }
-        // If both are short but don't match, or one is short and the other isn't a known alias
-        if a_is_short && b_is_short {
-            return false;
-        }
+    if a_is_short && b_is_short {
+        return false;
     }
 
     if a.len() < 3 || b.len() < 3 {
@@ -120,5 +119,25 @@ mod tests {
         assert!(!topic_overlaps("go", "google")); // not an alias
         assert!(!topic_overlaps("c", "css")); // not the same language
         assert!(!topic_overlaps("r", "react")); // not the same
+    }
+
+    #[test]
+    fn test_topic_overlaps_alias_database() {
+        // Tech aliases from the full database (not just hardcoded short languages)
+        assert!(topic_overlaps("kubernetes", "k8s"));
+        assert!(topic_overlaps("k8s", "kubernetes"));
+        assert!(topic_overlaps("typescript", "ts"));
+        assert!(topic_overlaps("ts", "typescript"));
+        assert!(topic_overlaps("javascript", "js"));
+        assert!(topic_overlaps("python", "py"));
+        assert!(topic_overlaps("postgresql", "postgres"));
+        assert!(topic_overlaps("docker", "containerization"));
+        assert!(topic_overlaps("react", "reactjs"));
+        assert!(topic_overlaps("graphql", "gql"));
+        assert!(topic_overlaps("machine-learning", "ml"));
+
+        // Non-aliases should still be rejected
+        assert!(!topic_overlaps("rust", "python"));
+        assert!(!topic_overlaps("docker", "kubernetes"));
     }
 }

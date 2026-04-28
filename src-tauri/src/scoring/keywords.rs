@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+use super::aliases;
 use super::calibration::BROAD_INTEREST_TERMS;
+use super::stemming;
 use super::utils::has_word_boundary_match;
 use crate::context_engine;
 use crate::scoring_config;
@@ -57,7 +59,38 @@ pub(crate) fn best_interest_specificity_weight(
 
         // Check if any term from this interest appears in the item
         let has_hit = terms.iter().any(|term| {
-            term.len() >= 2 && (title_lower.contains(term) || text_lower.contains(term))
+            if term.len() < 2 {
+                return false;
+            }
+            // Fast path: direct substring
+            if title_lower.contains(term) || text_lower.contains(term) {
+                return true;
+            }
+            // Alias expansion
+            if let Some(group) = aliases::get_aliases(term) {
+                if group.iter().any(|alias| {
+                    if alias.len() <= 2 {
+                        has_word_boundary_match(&title_lower, alias)
+                            || has_word_boundary_match(&text_lower, alias)
+                    } else {
+                        title_lower.contains(alias) || text_lower.contains(alias)
+                    }
+                }) {
+                    return true;
+                }
+            }
+            // Stemmed match
+            let term_stem = stemming::stem(term);
+            if term_stem.len() >= 3 {
+                let words_match = title_lower
+                    .split(|c: char| !c.is_alphanumeric())
+                    .chain(text_lower.split(|c: char| !c.is_alphanumeric()))
+                    .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
+                if words_match {
+                    return true;
+                }
+            }
+            false
         });
 
         if has_hit {
@@ -146,6 +179,57 @@ pub(crate) fn compute_keyword_interest_score(
                 hits += 1.5; // title match = 1.5x weight
             } else if matched_content {
                 hits += 1.0;
+            } else {
+                // Slow path: try alias expansion
+                let alias_title_hit = aliases::get_aliases(term)
+                    .map(|group| {
+                        group.iter().any(|alias| {
+                            if alias.len() <= 2 {
+                                has_word_boundary_match(&title_lower, alias)
+                            } else {
+                                title_lower.contains(alias)
+                            }
+                        })
+                    })
+                    .unwrap_or(false);
+
+                if alias_title_hit {
+                    hits += 1.5; // title alias match — same concept, full weight
+                } else {
+                    let alias_content_hit = aliases::get_aliases(term)
+                        .map(|group| {
+                            group.iter().any(|alias| {
+                                if alias.len() <= 2 {
+                                    has_word_boundary_match(&text_lower, alias)
+                                } else {
+                                    text_lower.contains(alias)
+                                }
+                            })
+                        })
+                        .unwrap_or(false);
+
+                    if alias_content_hit {
+                        hits += 1.0; // content alias match
+                    } else {
+                        // Stemmed match: check if any word in content shares a stem
+                        let term_stem = stemming::stem(term);
+                        if term_stem.len() >= 3 {
+                            let title_stem_hit = title_lower
+                                .split(|c: char| !c.is_alphanumeric())
+                                .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
+                            let content_stem_hit = !title_stem_hit
+                                && text_lower
+                                    .split(|c: char| !c.is_alphanumeric())
+                                    .any(|w| w.len() >= 3 && stemming::stem(w) == term_stem);
+
+                            if title_stem_hit {
+                                hits += 1.2; // stemmed title match — slightly less than exact
+                            } else if content_stem_hit {
+                                hits += 0.8; // stemmed content match
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -239,6 +323,18 @@ mod tests {
             "Focused user (1-2 interests) should get 1.0 weight even for broad terms"
         );
 
+        // Alias-expanded match: "kubernetes" in interests, "k8s" in title
+        let alias_interests = vec![make("kubernetes"), make("Rust"), make("TypeScript")];
+        let specificity = best_interest_specificity_weight(
+            "Scaling k8s clusters in production",
+            "",
+            &alias_interests,
+        );
+        assert!(
+            specificity > 0.0,
+            "Alias match should find 'kubernetes' via 'k8s' in title"
+        );
+
         // A specific interest should get full weight regardless of count
         let specific_interests = vec![context_engine::Interest {
             id: Some(2),
@@ -255,6 +351,81 @@ mod tests {
         assert_eq!(
             specificity, 1.00,
             "Specific interest should return 1.0 weight"
+        );
+    }
+
+    #[test]
+    fn test_keyword_stemming_match() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "testing".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        // "test" in title should match "testing" interest via stemming
+        let score = compute_keyword_interest_score("How to test your Rust code", "", &interests);
+        assert!(
+            score > 0.0,
+            "Stemmed match should produce positive score, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_keyword_alias_match() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "kubernetes".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        // "k8s" in title should match "kubernetes" interest via alias
+        let score =
+            compute_keyword_interest_score("Scaling k8s clusters in production", "", &interests);
+        assert!(
+            score > 0.0,
+            "Alias match should produce positive score, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_keyword_alias_reverse() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "ts".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        // "typescript" in title should match "ts" interest via alias
+        let score =
+            compute_keyword_interest_score("Advanced TypeScript patterns", "", &interests);
+        assert!(
+            score > 0.0,
+            "Reverse alias match should produce positive score, got {}",
+            score
+        );
+    }
+
+    #[test]
+    fn test_keyword_no_false_stemming() {
+        let interests = vec![context_engine::Interest {
+            id: Some(1),
+            topic: "testing".to_string(),
+            weight: 1.0,
+            source: context_engine::InterestSource::Explicit,
+            embedding: None,
+        }];
+        // "resting" should NOT match "testing" via stemming — different stems (rest vs test)
+        // And "resting" does not contain the substring "testing"
+        let score =
+            compute_keyword_interest_score("A resting period for developers", "", &interests);
+        assert_eq!(
+            score, 0.0,
+            "Should not false-match 'testing' from 'resting'"
         );
     }
 }

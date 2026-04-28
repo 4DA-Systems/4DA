@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 mod ace_context;
 mod affinity;
+pub(crate) mod aliases;
 mod analyzer;
 pub(crate) mod authority;
 #[cfg(test)]
@@ -20,6 +21,7 @@ mod pipeline_v2;
 mod semantic;
 #[cfg(test)]
 mod simulation;
+pub(crate) mod stemming;
 mod temporal_cluster;
 mod utils;
 #[allow(dead_code, unused_imports)]
