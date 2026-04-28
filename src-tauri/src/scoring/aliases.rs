@@ -5,7 +5,6 @@
 /// Maps canonical names to all known variants. Bidirectional: given any
 /// variant, returns all siblings in the alias group. Used to expand
 /// keyword matching so "TypeScript" matches content mentioning "ts".
-
 use std::collections::HashMap;
 use std::sync::LazyLock;
 

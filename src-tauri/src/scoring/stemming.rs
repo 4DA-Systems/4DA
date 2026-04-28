@@ -13,7 +13,10 @@ fn collapse_doubled_final(s: &str) -> String {
     if bytes.len() >= 4 {
         let last = bytes[bytes.len() - 1];
         let prev = bytes[bytes.len() - 2];
-        if last == prev && last.is_ascii_lowercase() && !matches!(last, b'a' | b'e' | b'i' | b'o' | b'u') {
+        if last == prev
+            && last.is_ascii_lowercase()
+            && !matches!(last, b'a' | b'e' | b'i' | b'o' | b'u')
+        {
             return s[..s.len() - 1].to_string();
         }
     }
@@ -62,9 +65,7 @@ pub(crate) fn stems_equiv(stem_a: &str, stem_b: &str) -> bool {
     } else {
         (stem_b, stem_a)
     };
-    longer.len() == shorter.len() + 1
-        && longer.ends_with('e')
-        && longer.starts_with(shorter)
+    longer.len() == shorter.len() + 1 && longer.ends_with('e') && longer.starts_with(shorter)
 }
 
 /// Suffix rules: (suffix_to_strip, replacement).
@@ -107,10 +108,10 @@ const SUFFIX_RULES: &[(&str, &str)] = &[
     ("ation", "ate"),
     // -ting → -t (testing → test, routing → rout... too aggressive for "routing")
     // Instead be selective:
-    ("sting", "st"),    // testing → test
-    ("lding", "ld"),    // building → build
-    ("nding", "nd"),    // binding → bind
-    ("ding", "d"),      // loading → load (careful: "coding" → "cod" if base < 3, guarded)
+    ("sting", "st"), // testing → test
+    ("lding", "ld"), // building → build
+    ("nding", "nd"), // binding → bind
+    ("ding", "d"),   // loading → load (careful: "coding" → "cod" if base < 3, guarded)
     // -ness → ""
     ("ness", ""),
     // -ment → ""

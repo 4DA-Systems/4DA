@@ -130,6 +130,35 @@ export function BriefingReadyState() {
   );
 }
 
+/** Stack-aware hint nudging users toward AI provider setup */
+function KeywordModeHint({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation();
+  const tech = useAppStore(s => s.discoveredContext.tech);
+  const interests = useAppStore(s => s.userContext?.interests ?? []);
+
+  const relevantTech = tech.filter(item => item.confidence >= 0.5);
+  const techCount = relevantTech.length;
+  const topTech = relevantTech.slice(0, 3).map(item => item.name);
+
+  const hint = techCount > 0
+    ? t('briefing.keywordHintWithStack', {
+        techList: topTech.join(', '),
+        more: techCount > 3 ? ` +${techCount - 3} more ` : ' ',
+      })
+    : interests.length > 0
+    ? t('briefing.keywordHintWithInterests', { count: interests.length })
+    : t('briefing.configureAiHint');
+
+  return (
+    <button
+      onClick={onClick}
+      className="text-xs text-amber-400/80 hover:text-amber-300 transition-colors mt-4 px-3 py-1.5 bg-amber-500/5 rounded-lg border border-amber-500/10 hover:border-amber-500/20"
+    >
+      {hint}
+    </button>
+  );
+}
+
 /** No analysis yet — "Analyze Now" CTA */
 export function BriefingNoDataState() {
   const { t } = useTranslation();
@@ -158,12 +187,7 @@ export function BriefingNoDataState() {
           {t('briefing.orPress')} <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
         </p>
         {embeddingMode === 'keyword-only' && (
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-xs text-amber-400/80 hover:text-amber-300 transition-colors mt-4 px-3 py-1.5 bg-amber-500/5 rounded-lg border border-amber-500/10 hover:border-amber-500/20"
-          >
-            {t('briefing.configureAiHint', 'Keyword matching active — add an AI provider in Settings for semantic understanding')}
-          </button>
+          <KeywordModeHint onClick={() => setShowSettings(true)} />
         )}
       </div>
     </div>

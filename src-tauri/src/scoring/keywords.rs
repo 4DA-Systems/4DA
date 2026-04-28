@@ -64,7 +64,9 @@ pub(crate) fn best_interest_specificity_weight(
             }
             // Fast path: direct match (word-boundary for short terms)
             if term.len() <= 2 {
-                if has_word_boundary_match(&title_lower, term) || has_word_boundary_match(&text_lower, term) {
+                if has_word_boundary_match(&title_lower, term)
+                    || has_word_boundary_match(&text_lower, term)
+                {
                     return true;
                 }
             } else if title_lower.contains(term) || text_lower.contains(term) {
@@ -132,20 +134,58 @@ const SHORT_TECH_KEYWORDS: &[&str] = &[
 /// Alias terms that are common English words and need word-boundary matching
 /// to avoid false positives (e.g., "express delivery" matching Express.js interest).
 const AMBIGUOUS_ALIASES: &[&str] = &[
-    "next", "solid", "fly", "echo", "fiber", "gin", "spring", "express",
-    "compose", "helm", "rest", "elastic", "container", "phoenix",
+    "next",
+    "solid",
+    "fly",
+    "echo",
+    "fiber",
+    "gin",
+    "spring",
+    "express",
+    "compose",
+    "helm",
+    "rest",
+    "elastic",
+    "container",
+    "phoenix",
 ];
 
 /// Negation patterns that indicate a term is mentioned in a negative context.
 /// Returns true if the term appears near a negation phrase in the text.
 fn is_negated_in_context(term: &str, text: &str) -> bool {
     const NEGATION_PREFIXES: &[&str] = &[
-        "not ", "no ", "don't ", "doesn't ", "didn't ", "won't ", "isn't ", "aren't ",
-        "without ", "never ", "avoid ", "stop using ", "alternative to ", "instead of ",
-        "replace ", "replacing ", "moved away from ", "moving away from ", "migrating from ",
-        "leaving ", "dropped ", "dropping ", "removed ", "removing ",
-        "don't use ", "doesn't use ", "didn't use ", "won't use ",
-        "not using ", "stopped using ", "quit ", "quitting ",
+        "not ",
+        "no ",
+        "don't ",
+        "doesn't ",
+        "didn't ",
+        "won't ",
+        "isn't ",
+        "aren't ",
+        "without ",
+        "never ",
+        "avoid ",
+        "stop using ",
+        "alternative to ",
+        "instead of ",
+        "replace ",
+        "replacing ",
+        "moved away from ",
+        "moving away from ",
+        "migrating from ",
+        "leaving ",
+        "dropped ",
+        "dropping ",
+        "removed ",
+        "removing ",
+        "don't use ",
+        "doesn't use ",
+        "didn't use ",
+        "won't use ",
+        "not using ",
+        "stopped using ",
+        "quit ",
+        "quitting ",
     ];
 
     let text_lower = text.to_lowercase();
@@ -165,9 +205,17 @@ fn is_negated_in_context(term: &str, text: &str) -> bool {
 fn count_word_occurrences(term: &str, text: &str) -> usize {
     let mut count = 0;
     for (i, _) in text.match_indices(term) {
-        let before_ok = i == 0 || !text.as_bytes().get(i.wrapping_sub(1)).map_or(false, |b| b.is_ascii_alphanumeric());
+        let before_ok = i == 0
+            || !text
+                .as_bytes()
+                .get(i.wrapping_sub(1))
+                .map_or(false, |b| b.is_ascii_alphanumeric());
         let after_pos = i + term.len();
-        let after_ok = after_pos >= text.len() || !text.as_bytes().get(after_pos).map_or(false, |b| b.is_ascii_alphanumeric());
+        let after_ok = after_pos >= text.len()
+            || !text
+                .as_bytes()
+                .get(after_pos)
+                .map_or(false, |b| b.is_ascii_alphanumeric());
         if before_ok && after_ok {
             count += 1;
         }
@@ -220,6 +268,23 @@ pub(crate) fn compute_keyword_interest_score(
             continue;
         }
 
+        // Multi-word phrase check: exact phrase match is the strongest keyword signal
+        if terms.len() > 1 {
+            let phrase = &interest_lower;
+            let in_title = title_lower.contains(phrase.as_str());
+            let in_content = !in_title && text_lower.contains(phrase.as_str());
+            if in_title || in_content {
+                let mut phrase_score = if in_title { 0.95 } else { 0.80 };
+                let density = term_density_multiplier(phrase, &text_lower);
+                phrase_score = (phrase_score * density).min(1.0);
+                if is_negated_in_context(phrase, &text_lower) {
+                    phrase_score *= 0.5;
+                }
+                max_score = max_score.max(phrase_score * interest.weight);
+                continue;
+            }
+        }
+
         let mut hits = 0.0_f32;
         let mut counted_terms = 0_usize;
         for term in &terms {
@@ -253,10 +318,11 @@ pub(crate) fn compute_keyword_interest_score(
                     (0.55, Some(*term))
                 } else {
                     // Alias expansion — find which alias actually matched
-                    let alias_match: Option<(&str, bool)> = aliases::get_aliases(term)
-                        .and_then(|group| {
+                    let alias_match: Option<(&str, bool)> =
+                        aliases::get_aliases(term).and_then(|group| {
                             for alias in group.iter() {
-                                let needs_boundary = alias.len() <= 2 || AMBIGUOUS_ALIASES.contains(alias);
+                                let needs_boundary =
+                                    alias.len() <= 2 || AMBIGUOUS_ALIASES.contains(alias);
                                 let in_title = if needs_boundary {
                                     has_word_boundary_match(&title_lower, alias)
                                 } else {
@@ -283,13 +349,16 @@ pub(crate) fn compute_keyword_interest_score(
                         // Stemmed match (no effective term for density/negation)
                         let term_stem = stemming::stem(term);
                         if term_stem.len() >= 3 {
-                            let title_stem_hit = title_lower
-                                .split(|c: char| !c.is_alphanumeric())
-                                .any(|w| w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem));
+                            let title_stem_hit =
+                                title_lower.split(|c: char| !c.is_alphanumeric()).any(|w| {
+                                    w.len() >= 3
+                                        && stemming::stems_equiv(&stemming::stem(w), &term_stem)
+                                });
                             let content_stem_hit = !title_stem_hit
-                                && text_lower
-                                    .split(|c: char| !c.is_alphanumeric())
-                                    .any(|w| w.len() >= 3 && stemming::stems_equiv(&stemming::stem(w), &term_stem));
+                                && text_lower.split(|c: char| !c.is_alphanumeric()).any(|w| {
+                                    w.len() >= 3
+                                        && stemming::stems_equiv(&stemming::stem(w), &term_stem)
+                                });
 
                             if title_stem_hit {
                                 (0.65, None)
@@ -495,8 +564,7 @@ mod tests {
             embedding: None,
         }];
         // "typescript" in title should match "ts" interest via alias
-        let score =
-            compute_keyword_interest_score("Advanced TypeScript patterns", "", &interests);
+        let score = compute_keyword_interest_score("Advanced TypeScript patterns", "", &interests);
         assert!(
             score > 0.0,
             "Reverse alias match should produce positive score, got {}",
@@ -533,27 +601,45 @@ mod tests {
             "rust is great. rust performance. rust safety. rust ecosystem.",
         );
         assert!(dense > 1.0, "Dense content should get bonus, got {}", dense);
-        assert!(dense <= 1.5, "Density bonus should be capped at 1.5, got {}", dense);
+        assert!(
+            dense <= 1.5,
+            "Density bonus should be capped at 1.5, got {}",
+            dense
+        );
     }
 
     #[test]
     fn test_negation_detection() {
         assert!(is_negated_in_context("react", "we don't use react anymore"));
-        assert!(is_negated_in_context("kubernetes", "alternative to kubernetes for small teams"));
-        assert!(is_negated_in_context("vue", "moving away from vue to react"));
-        assert!(!is_negated_in_context("rust", "learning rust for systems programming"));
-        assert!(!is_negated_in_context("python", "python data science tutorial"));
+        assert!(is_negated_in_context(
+            "kubernetes",
+            "alternative to kubernetes for small teams"
+        ));
+        assert!(is_negated_in_context(
+            "vue",
+            "moving away from vue to react"
+        ));
+        assert!(!is_negated_in_context(
+            "rust",
+            "learning rust for systems programming"
+        ));
+        assert!(!is_negated_in_context(
+            "python",
+            "python data science tutorial"
+        ));
     }
 
     #[test]
     fn test_negated_term_reduces_score() {
-        let make = |topic: &str| vec![context_engine::Interest {
-            id: Some(1),
-            topic: topic.to_string(),
-            weight: 1.0,
-            source: context_engine::InterestSource::Explicit,
-            embedding: None,
-        }];
+        let make = |topic: &str| {
+            vec![context_engine::Interest {
+                id: Some(1),
+                topic: topic.to_string(),
+                weight: 1.0,
+                source: context_engine::InterestSource::Explicit,
+                embedding: None,
+            }]
+        };
 
         let positive_score = compute_keyword_interest_score(
             "Getting started with React",
@@ -568,19 +654,22 @@ mod tests {
         assert!(
             negated_score < positive_score,
             "Negated context should score lower: positive={}, negated={}",
-            positive_score, negated_score,
+            positive_score,
+            negated_score,
         );
     }
 
     #[test]
     fn test_dense_content_scores_higher() {
-        let make = |topic: &str| vec![context_engine::Interest {
-            id: Some(1),
-            topic: topic.to_string(),
-            weight: 1.0,
-            source: context_engine::InterestSource::Explicit,
-            embedding: None,
-        }];
+        let make = |topic: &str| {
+            vec![context_engine::Interest {
+                id: Some(1),
+                topic: topic.to_string(),
+                weight: 1.0,
+                source: context_engine::InterestSource::Explicit,
+                embedding: None,
+            }]
+        };
 
         let sparse = compute_keyword_interest_score(
             "Various tools for developers",
@@ -595,7 +684,39 @@ mod tests {
         assert!(
             dense > sparse,
             "Dense content should score higher: dense={}, sparse={}",
-            dense, sparse,
+            dense,
+            sparse,
+        );
+    }
+
+    #[test]
+    fn test_multi_word_phrase_match() {
+        let make = |topic: &str| {
+            vec![context_engine::Interest {
+                id: Some(1),
+                topic: topic.to_string(),
+                weight: 1.0,
+                source: context_engine::InterestSource::Explicit,
+                embedding: None,
+            }]
+        };
+
+        // Exact phrase match should score higher than scattered words
+        let phrase_score = compute_keyword_interest_score(
+            "Introduction to machine learning",
+            "A comprehensive guide to getting started with AI",
+            &make("machine learning"),
+        );
+        let scattered_score = compute_keyword_interest_score(
+            "The factory machine needs repair",
+            "Our team is learning new protocols for operating industrial equipment in the facility",
+            &make("machine learning"),
+        );
+        assert!(
+            phrase_score > scattered_score,
+            "Phrase match should beat scattered words: phrase={}, scattered={}",
+            phrase_score,
+            scattered_score,
         );
     }
 
@@ -613,7 +734,11 @@ mod tests {
             "R is widely used in data science",
             &interests,
         );
-        assert!(score > 0.0, "Single-char interest 'R' should match, got {}", score);
+        assert!(
+            score > 0.0,
+            "Single-char interest 'R' should match, got {}",
+            score
+        );
     }
 
     #[test]
@@ -649,7 +774,11 @@ mod tests {
             "Next is great for server rendering",
             &interests,
         );
-        assert!(score > 0.0, "Ambiguous alias 'next' should match with word boundary, got {}", score);
+        assert!(
+            score > 0.0,
+            "Ambiguous alias 'next' should match with word boundary, got {}",
+            score
+        );
     }
 
     #[test]
@@ -669,8 +798,14 @@ mod tests {
             embedding: None,
         }];
         let low_score = compute_keyword_interest_score("Learning Rust", "rust guide", &low_weight);
-        let full_score = compute_keyword_interest_score("Learning Rust", "rust guide", &full_weight);
-        assert!(low_score < full_score, "Lower weight should produce lower score: low={}, full={}", low_score, full_score);
+        let full_score =
+            compute_keyword_interest_score("Learning Rust", "rust guide", &full_weight);
+        assert!(
+            low_score < full_score,
+            "Lower weight should produce lower score: low={}, full={}",
+            low_score,
+            full_score
+        );
     }
 
     #[test]
@@ -683,6 +818,10 @@ mod tests {
             embedding: None,
         }];
         let title_only = compute_keyword_interest_score("Learning Rust basics", "", &interests);
-        assert!(title_only > 0.0, "Should match on title even with empty content, got {}", title_only);
+        assert!(
+            title_only > 0.0,
+            "Should match on title even with empty content, got {}",
+            title_only
+        );
     }
 }
