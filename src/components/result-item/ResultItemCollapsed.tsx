@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useMemo } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
@@ -7,6 +7,7 @@ import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { formatLocalDateTime } from '../../utils/format-date';
 import { useTranslatedContent } from '../ContentTranslationProvider';
+import { cmd } from '../../lib/commands';
 
 interface ResultItemCollapsedProps {
   item: SourceRelevance;
@@ -41,6 +42,21 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
   }, [item.score_breakdown, t]);
+
+  const recordTitleClick = useCallback(() => {
+    const topics = item.title.toLowerCase().split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+    cmd('ace_record_interaction', {
+      item_id: item.id,
+      action_type: 'click',
+      action_data: JSON.stringify({
+        type: 'click',
+        dwell_time_seconds: 0,
+        pattern: 'engaged',
+      }),
+      item_topics: topics,
+      item_source: item.source_type || 'unknown',
+    }).catch(() => {});
+  }, [item.id, item.title, item.source_type]);
 
   return (
     <div className="w-full px-4 py-2.5">
@@ -81,7 +97,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); recordTitleClick(); }}
               aria-label={`${displayTitle} (opens in new tab)`}
               className={`text-sm truncate block hover:underline decoration-gray-600 ${
                 item.relevant ? 'text-text-primary' : 'text-text-secondary'
