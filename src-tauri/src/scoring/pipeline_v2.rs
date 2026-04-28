@@ -767,6 +767,14 @@ fn compute_quality_composite(
         input.content,
         input.source_type,
     );
+    // Thin-content penalty: items with negligible body text have less signal
+    // to validate their relevance. Title-only items (SO list endpoint, sparse RSS)
+    // get a mild discount so they don't score identically to fully-articled content.
+    let content_dna_mult = if input.content.len() < 30 {
+        content_dna_mult * 0.85
+    } else {
+        content_dna_mult
+    };
 
     // Novelty
     let novelty = crate::novelty::compute_novelty(
@@ -1082,10 +1090,12 @@ fn apply_gate_effect(
         scoring_config::DOMAIN_GATE_OFF_DOMAIN_MULT
     };
 
-    // Score ceiling applied LAST — domain boost cannot push above gate ceiling
+    // Score ceiling applied LAST — domain boost cannot push above gate ceiling.
+    // Hard cap at 0.95: no item should display 100% — that implies perfect
+    // certainty which no heuristic pipeline can guarantee.
     (gated * domain_gate_mult)
         .min(score_ceiling)
-        .clamp(0.0, 1.0)
+        .clamp(0.0, 0.95)
 }
 
 // ============================================================================

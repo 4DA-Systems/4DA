@@ -370,6 +370,11 @@ pub(crate) fn score_item(
         input.content,
         input.source_type,
     );
+    let content_dna_mult = if input.content.len() < 30 {
+        content_dna_mult * 0.85
+    } else {
+        content_dna_mult
+    };
 
     // Novelty: penalize introductory content for known tech, boost releases
     let novelty = crate::novelty::compute_novelty(
@@ -627,7 +632,7 @@ pub(crate) fn score_item(
     } else {
         scoring_config::DOMAIN_GATE_OFF_DOMAIN_MULT
     };
-    let combined_score = (combined_score * domain_gate_mult).clamp(0.0, 1.0);
+    let combined_score = (combined_score * domain_gate_mult).clamp(0.0, 0.95);
 
     // Title information floor: ultra-short titles are fundamentally low-information.
     // "where to start", "Event listeners", "a question" — regardless of keyword matches,
