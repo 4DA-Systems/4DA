@@ -876,7 +876,7 @@ Paranın bir kısmını al. Ciddi olarak. Erken kazanımlar psikolojik olarak ö
 - **Teknik olmayan görevler için sanal asistan: $500-800/ay.** Bu aşamada yapabileceğin en yüksek ROI'li işe alım. Uzaktan bir VA (Filipinler, Latin Amerika) ayda 10-15 saat için: e-posta tasnifi, fatura takibi, planlama, veri girişi, sosyal medya paylaşımı, temel müşteri desteği ön taraması. Ayda 10-15 saat kazanırsın. Efektif ücretinle o saatler ayda $500-3,000 değerinde.
 - **Profesyonel e-posta ve faturalama altyapısı:** "Faturaları elle gönder"den otomatik faturalamaya geç (Stripe Billing, Lemon Squeezy). Maliyet: $0-50/ay. Zaman tasarrufu: 3-5 saat/ay.
 - **Ürünlerin için ücretli tasarım şablonu:** $49-199 tek seferlik. İlk izlenim önemlidir. Profesyonel bir landing sayfası, acele yapılmış birinden 2-3 kat daha iyi dönüştürür.
-- **7 STREETS modülünün tümü 4DA içinde ücretsiz.** Tam playbook'u henüz çalışmadıysan, şimdi tam zamanı. $2,000/ay ile uygulayabildiğini kanıtladın. Kalan modüller işe yarayanı hızlandırır. Hesap verebilirlik ve bu aşamadaki diğer geliştiricilerden vaka çalışmaları için Community ($29/ay) üyeliğini düşün.
+- **7 STREETS modülünün tümü 4DA içinde ücretsiz.** Tam playbook'u henüz çalışmadıysan, şimdi tam zamanı. $2,000/ay ile uygulayabildiğini kanıtladın. Kalan modüller işe yarayanı hızlandırır.
 
 **Cebine: $800-1,000/ay**
 
@@ -1487,18 +1487,6 @@ Ekonomik egemenlik şu anlama gelir:
 Bu zaman alır. 12 aylık tutarlı uygulamadan sonra $10K/ay kazanan geliştiricinin, tek bir şanslı ürün lansmanından $10K kazanan geliştiriciden çok daha değerli bir şeyi var. İlk geliştiricinin sistemi var. İkincinin piyango bileti var.
 
 Sistemler piyango biletlerini yener. Her zaman. Her zaman diliminde.
-
-### Topluluk
-
-STREETS Community üyeleri ($29/ay veya $249/yıl) geliştiricilerin paylaştığı özel topluluğa erişir:
-
-- **Aylık gelir raporları:** Gerçek rakamlar, gerçek akışlar, gerçek zorluklar.
-- **Akış lansmanları:** Ne inşa ettiler, nasıl fiyatlandırdılar, ne oldu.
-- **Sonlandırma kararları:** Neyi kapattılar ve neden. Bunlar en değerli paylaşımlardan bazıları.
-- **Kazanımlar:** Kazanılan ilk dolar. İlk $1K ayı. İlk $10K ayı. Bunlar önemli.
-- **Başarısızlıklar:** Çöken ürünler. Kaybolan müşteriler. Kayan algoritmalar. Bunlar daha da önemli.
-
-100 geliştiricinin aynı anda STREETS uygulamasından, herhangi bir kurs, kitap veya podcast'ten — bu dahil — daha hızlı öğrenirsin.
 
 ### Yıllık Güncelleme
 

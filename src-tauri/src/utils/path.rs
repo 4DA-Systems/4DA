@@ -37,7 +37,8 @@ pub(crate) fn sanitize_path(path: &str) -> String {
 /// Extract just the project directory name from a full filesystem path.
 /// "D:\4DA" → "4DA", "/home/user/projects/myapp" → "myapp".
 /// Returns the last path segment, or the original string if no separator found.
-pub(crate) fn project_display_name(path: &str) -> &str {
+#[cfg(test)]
+fn project_display_name(path: &str) -> &str {
     let normalized = path.trim_end_matches(['/', '\\']);
     normalized
         .rsplit(['/', '\\'])

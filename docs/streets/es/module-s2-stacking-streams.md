@@ -875,7 +875,7 @@ Ahora si hablamos. $2,000/mes significa que tus flujos estan generando ingresos 
 - **Asistente virtual para tareas no tecnicas: $500-800/mes.** Esta es la contratacion con mayor ROI que puedes hacer en esta etapa. Un VA remoto (Filipinas, America Latina) por 10-15 horas/mes maneja: triaje de email, seguimiento de facturas, programacion, entrada de datos, publicacion en redes sociales, primer filtro de soporte al cliente. Ahorras 10-15 horas/mes. A tu tarifa efectiva, esas horas valen $500-3,000/mes.
 - **Infraestructura profesional de email y facturacion:** Migra de "enviar facturas manualmente" a facturacion automatizada (Stripe Billing, Lemon Squeezy). Costo: $0-50/mes. Tiempo ahorrado: 3-5 horas/mes.
 - **Un template de diseno de pago para tus productos:** $49-199 unica vez. Las primeras impresiones importan. Una landing page profesional convierte 2-3x mejor que una improvisada.
-- **Los 7 modulos de STREETS son gratis dentro de 4DA.** Si aun no has trabajado todo el playbook, ahora es el momento. A $2,000/mes, has demostrado que puedes ejecutar. Los modulos restantes aceleran lo que esta funcionando. Considera unirte a la Comunidad ($29/mes) para rendicion de cuentas y casos de estudio de otros desarrolladores en esta etapa.
+- **Los 7 modulos de STREETS son gratis dentro de 4DA.** Si aun no has trabajado todo el playbook, ahora es el momento. A $2,000/mes, has demostrado que puedes ejecutar. Los modulos restantes aceleran lo que esta funcionando.
 
 **Tu bolsillo: $800-1,000/mes**
 
@@ -1485,18 +1485,6 @@ Soberania economica significa:
 Esto toma tiempo. El desarrollador que gana $10K/mes despues de 12 meses de ejecucion consistente tiene algo mucho mas valioso que el desarrollador que gana $10K de un solo lanzamiento de producto con suerte. El primer desarrollador tiene un sistema. El segundo tiene un boleto de loteria.
 
 Los sistemas le ganan a los boletos de loteria. Cada vez. En cada horizonte de tiempo.
-
-### La Comunidad
-
-Los miembros de la Comunidad STREETS ($29/mes o $249/ano) tienen acceso a la comunidad privada donde los desarrolladores comparten:
-
-- **Reportes de ingresos mensuales:** Numeros reales, flujos reales, desafios reales.
-- **Lanzamientos de flujos:** Que construyeron, que precio pusieron, que paso.
-- **Decisiones de eliminacion:** Que cerraron y por que. Estos son algunos de los posts mas valiosos.
-- **Victorias:** Primer dolar ganado. Primer mes de $1K. Primer mes de $10K. Esto importa.
-- **Fracasos:** Productos que fallaron. Clientes que desaparecieron. Algoritmos que cambiaron. Esto importa mas.
-
-Aprendes mas rapido de 100 desarrolladores ejecutando STREETS simultaneamente que de cualquier curso, libro o podcast — incluyendo este.
 
 ### La Actualizacion Anual
 
