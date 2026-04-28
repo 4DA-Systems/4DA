@@ -179,7 +179,9 @@ impl SourceItem {
         // arXiv/crates.io: "categories" — map taxonomy codes to topic vocabulary
         if let Some(cats) = meta.get("categories") {
             let cat_strs: Vec<String> = if let Some(arr) = cats.as_array() {
-                arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
             } else if let Some(s) = cats.as_str() {
                 s.split_whitespace().map(String::from).collect()
             } else {

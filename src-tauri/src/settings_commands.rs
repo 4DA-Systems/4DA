@@ -153,8 +153,12 @@ pub async fn set_llm_provider(
     } else {
         match crate::settings::keystore::store_secret("llm_api_key", &api_key) {
             Ok(true) => info!(target: "4da::settings", "API key stored in platform keychain"),
-            Ok(false) => warn!(target: "4da::settings", "Keychain unavailable — API key will persist in settings.json (plaintext fallback)"),
-            Err(e) => warn!(target: "4da::settings", error = %e, "Keychain write error — API key will persist in settings.json"),
+            Ok(false) => {
+                warn!(target: "4da::settings", "Keychain unavailable — API key will persist in settings.json (plaintext fallback)")
+            }
+            Err(e) => {
+                warn!(target: "4da::settings", error = %e, "Keychain write error — API key will persist in settings.json")
+            }
         }
         api_key
     };
