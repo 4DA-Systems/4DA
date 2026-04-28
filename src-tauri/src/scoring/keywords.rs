@@ -258,7 +258,8 @@ pub(crate) fn compute_keyword_interest_score(
     }
 
     let title_lower = title.to_lowercase();
-    let text_lower = format!("{} {}", title_lower, content.to_lowercase());
+    let content_lower = content.to_lowercase();
+    let text_lower = format!("{} {}", title_lower, content_lower);
     let mut max_score: f32 = 0.0;
 
     for interest in interests {
@@ -375,6 +376,16 @@ pub(crate) fn compute_keyword_interest_score(
             };
 
             let mut term_hit = base_hit;
+
+            // First-paragraph boost: content matches in the first 200 chars
+            // are stronger signals — the article is likely ABOUT this topic
+            if term_hit > 0.0 && term_hit < 0.80 && content_lower.len() >= 3 {
+                let effective = search_term.unwrap_or(term);
+                let end = content_lower.len().min(200);
+                if content_lower[..end].contains(effective) {
+                    term_hit = (term_hit + 0.10).min(0.80);
+                }
+            }
 
             // Density bonus: only for direct/alias matches where we know the search term
             if term_hit > 0.0 {
@@ -686,6 +697,37 @@ mod tests {
             "Dense content should score higher: dense={}, sparse={}",
             dense,
             sparse,
+        );
+    }
+
+    #[test]
+    fn test_first_paragraph_boost() {
+        let make = |topic: &str| {
+            vec![context_engine::Interest {
+                id: Some(1),
+                topic: topic.to_string(),
+                weight: 1.0,
+                source: context_engine::InterestSource::Explicit,
+                embedding: None,
+            }]
+        };
+
+        // Term appearing early in content should score higher than buried deep
+        let early = compute_keyword_interest_score(
+            "Developer tools roundup",
+            "Rust is gaining traction in systems programming. Various teams are adopting it for performance-critical services.",
+            &make("rust"),
+        );
+        let late = compute_keyword_interest_score(
+            "Developer tools roundup",
+            "Many languages compete for developer attention. Teams evaluate options based on performance, safety, and ecosystem maturity. Among the newer contenders gaining traction in systems work beyond the first two hundred characters of content is rust which some teams now use.",
+            &make("rust"),
+        );
+        assert!(
+            early > late,
+            "Early content match should score higher: early={}, late={}",
+            early,
+            late,
         );
     }
 
