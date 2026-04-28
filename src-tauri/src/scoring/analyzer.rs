@@ -145,6 +145,11 @@ pub(crate) async fn score_items_full(
     scoring::topic_dedup_results(&mut results);
     scoring::temporal_cluster_results(&mut results);
 
+    // Per-source score normalization: blend raw score with source-relative
+    // percentile so high-volume sources don't crowd out niche sources
+    crate::source_tiers::normalize_scores_by_source(&mut results);
+    scoring::sort_results(&mut results); // Re-sort after normalization
+
     // Serendipity Engine: inject anti-bubble items
     {
         let settings = crate::get_settings_manager().lock();
