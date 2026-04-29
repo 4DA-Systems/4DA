@@ -1275,7 +1275,7 @@ BANNED:
                     .chars()
                     .all(|c| c.is_ascii_digit() || c == ',' || c == ' ')
             {
-                synthesis.replace_range(start_bracket..start_bracket + end_bracket + 1, "");
+                synthesis.replace_range(start_bracket..=start_bracket + end_bracket, "");
                 continue;
             }
         }
