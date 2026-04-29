@@ -176,7 +176,10 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
         } else {
             0.3
         };
-        let confidence = dep_match * 0.4 + corroboration * 0.3 + severity * 0.3;
+        // Weighted confidence: dep relevance matters most (50%), corroboration
+        // from multiple sources adds credibility (30%), keyword-inferred
+        // severity is least reliable (20%).
+        let confidence = dep_match * 0.5 + corroboration * 0.3 + severity * 0.2;
 
         chains.push(SignalChain {
             id: chain_id,
@@ -213,7 +216,11 @@ fn has_dependency_match(conn: &rusqlite::Connection, topic: &str) -> f64 {
         |row| row.get::<_, i64>(0),
     );
     match result {
-        Ok(count) if count > 0 => 1.0,
+        // Graduated match: single project = moderate confidence,
+        // multiple projects using the same dep = higher confidence.
+        Ok(count) if count >= 3 => 0.95,
+        Ok(count) if count >= 2 => 0.80,
+        Ok(count) if count >= 1 => 0.60,
         _ => 0.0,
     }
 }

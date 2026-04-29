@@ -762,6 +762,7 @@ pub(crate) fn score_item(
         is_version_affected: None,
         dependency_path: None,
         affected_project_count: None,
+        negative_stack_prior: 1.0,
     };
 
     // Optional signal classification — four gates (all general, tech-stack-agnostic):

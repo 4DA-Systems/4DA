@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 62;
+        const TARGET_VERSION: i64 = 63;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2287,6 +2287,55 @@ impl Database {
                             )?;
                             info!(target: "4da::db", "Added tags column to source_items for source-fair scoring");
                         }
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 63: Local OSV advisory mirror for Tier 1 verified intelligence
+            if current_version < 63 {
+                Self::run_versioned_migration(
+                    &conn,
+                    62,
+                    63,
+                    "Phase 63: local OSV advisory mirror",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS osv_advisories (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                advisory_id TEXT NOT NULL,
+                                summary TEXT NOT NULL,
+                                details TEXT,
+                                package_name TEXT NOT NULL,
+                                ecosystem TEXT NOT NULL,
+                                affected_ranges TEXT,
+                                fixed_versions TEXT,
+                                severity_type TEXT,
+                                cvss_score REAL,
+                                source_url TEXT,
+                                published_at TEXT,
+                                modified_at TEXT,
+                                synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                UNIQUE(advisory_id, package_name, ecosystem)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_osv_advisories_package
+                                ON osv_advisories(package_name, ecosystem);
+                            CREATE INDEX IF NOT EXISTS idx_osv_advisories_advisory
+                                ON osv_advisories(advisory_id);
+                            CREATE INDEX IF NOT EXISTS idx_osv_advisories_cvss
+                                ON osv_advisories(cvss_score DESC);
+
+                            CREATE TABLE IF NOT EXISTS osv_sync_status (
+                                ecosystem TEXT PRIMARY KEY,
+                                last_synced_at TEXT NOT NULL,
+                                advisory_count INTEGER NOT NULL DEFAULT 0,
+                                error TEXT
+                            );",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created osv_advisories + osv_sync_status tables (Tier 1 intelligence)"
+                        );
                         Ok(())
                     },
                 )?;

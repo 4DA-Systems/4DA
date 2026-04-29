@@ -260,6 +260,7 @@ mod tests {
             is_version_affected: None,
             dependency_path: None,
             affected_project_count: None,
+            negative_stack_prior: 1.0,
         }
     }
 

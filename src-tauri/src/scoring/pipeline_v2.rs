@@ -666,6 +666,7 @@ fn compute_quality_composite(
     f32,
     f32,
     f32,
+    f32,
 ) {
     // Freshness: topic-aware when autophagy half-lives are available
     let freshness = if options.apply_freshness {
@@ -826,7 +827,8 @@ fn compute_quality_composite(
     // Negative stack prior: Bayesian suppression for technologies user doesn't use.
     // UNDAMPENED — full suppressive force (0.15 for competing-absent, 0.30 for anti-topics).
     let negative_stack_prior =
-        crate::stacks::negative_stack::lookup_prior(&ctx.ace_ctx.negative_stack, &raw.topics);
+        crate::stacks::negative_stack::lookup_prior(&ctx.ace_ctx.negative_stack, &raw.topics)
+            as f32;
 
     // NOTE: ecosystem_shift_mult, stack_competing_mult, and content_analysis_mult are
     // still computed above for the return tuple (used by logging/diagnostics) but are
@@ -911,6 +913,7 @@ fn compute_quality_composite(
         stack_competing_mult,
         sophistication_mult,
         content_analysis_mult,
+        negative_stack_prior,
     )
 }
 
@@ -1377,6 +1380,7 @@ pub(crate) fn score_item(
         stack_competing_mult,
         _sophistication_mult,
         content_analysis_mult,
+        negative_stack_prior,
     ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db);
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
@@ -1729,6 +1733,7 @@ pub(crate) fn score_item(
         is_version_affected,
         dependency_path: dep_path.clone(),
         affected_project_count: Some(sec_affected_project_count),
+        negative_stack_prior,
     };
 
     // ── STREETS revenue engine mapping ────────────────────────────────
