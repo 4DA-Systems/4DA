@@ -17,8 +17,14 @@ const SignalRow = memo(function SignalRow({
   const { t } = useTranslation();
   const cite = item.evidence[0];
   const numericId = extractItemId(item.id);
-  const freshness = cite && cite.freshness_days > 0
-    ? `${Math.round(cite.freshness_days)}d ago` : 'today';
+  const freshness = (() => {
+    if (!cite || cite.freshness_days <= 0) return t('preemption.freshness.today');
+    const d = Math.round(cite.freshness_days);
+    if (d === 1) return t('preemption.freshness.yesterday');
+    if (d < 7) return t('preemption.freshness.daysAgo', { count: d });
+    if (d < 30) return t('preemption.freshness.weeksAgo', { count: Math.floor(d / 7) });
+    return t('preemption.freshness.monthsAgo', { count: Math.floor(d / 30) });
+  })();
 
   return (
     <div className="px-4 py-2.5 hover:bg-bg-tertiary/30 transition-colors group">
@@ -109,7 +115,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
           <span className="text-[10px] text-text-muted shrink-0 truncate max-w-[120px]" title={dep.projects.join(', ')}>
             {dep.projects.length <= 2
               ? dep.projects.map(p => p.split('/').pop() ?? p).join(', ')
-              : `${dep.projects.length} projects`}
+              : t('blindspots.projects.count', { count: dep.projects.length })}
           </span>
         )}
         {dep.signals.length > 0 && (
@@ -202,7 +208,7 @@ export const EmergingSignals = memo(function EmergingSignals({
 }) {
   const { t } = useTranslation();
   return (
-    <section className="mb-4" aria-label="Emerging">
+    <section className="mb-4" aria-label={t('blindspots.emerging.title')}>
       <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(59, 130, 246, 0.2)' }}>
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <div className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
