@@ -202,19 +202,21 @@ pub(crate) async fn filter_batch(
     let mut delib_count: usize = 0;
 
     for item in items {
-        // Critical and High urgency bypass deliberation entirely
-        if item.urgency == Urgency::Critical || item.urgency == Urgency::High {
-            bypass_count += 1;
-            passed.push(item);
-            continue;
-        }
+        // Critical/High items get deliberation for explanation quality but
+        // can never be suppressed — the LLM improves their explanation
+        // without questioning whether to surface them.
+        let must_surface = item.urgency == Urgency::Critical
+            || item.urgency == Urgency::High
+            || item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified;
 
         delib_count += 1;
+        if must_surface {
+            bypass_count += 1;
+        }
 
         match deliberate(&item, user_context).await {
             Ok(Some(verdict)) => {
-                if verdict.should_surface {
-                    // Update the item with grounded explanation and adjusted confidence
+                if verdict.should_surface || must_surface {
                     let mut updated = item;
                     updated.explanation = verdict.grounded_explanation;
                     updated.confidence =
@@ -235,7 +237,6 @@ pub(crate) async fn filter_batch(
                 passed.push(item);
             }
             Err(e) => {
-                // Unexpected error -- log and pass through
                 warn!(
                     target: "4da::adversarial",
                     item_id = %item.id,

@@ -7,4 +7,9 @@ import type { SuggestedAction } from "./SuggestedAction";
 /**
  * A single preemption alert combining evidence from multiple intelligence sources.
  */
-export type PreemptionAlert = { id: string, alert_type: PreemptionType, title: string, explanation: string, evidence: Array<AlertEvidence>, affected_projects: Array<string>, affected_dependencies: Array<string>, urgency: AlertUrgency, confidence: number, predicted_window: string | null, suggested_actions: Array<SuggestedAction>, created_at: string, };
+export type PreemptionAlert = { id: string, alert_type: PreemptionType, title: string, explanation: string, evidence: Array<AlertEvidence>, affected_projects: Array<string>, affected_dependencies: Array<string>, urgency: AlertUrgency, confidence: number, predicted_window: string | null, suggested_actions: Array<SuggestedAction>, created_at: string, 
+/**
+ * True when this alert is backed by a deterministic OSV advisory match
+ * with version verification. Drives Confidence::osv_verified provenance.
+ */
+osv_verified: boolean, };

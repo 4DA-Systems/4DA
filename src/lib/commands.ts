@@ -480,6 +480,11 @@ interface CommandMap {
   get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
 
+  // -- OSV Local Mirror (Tier 1 verified intelligence) --
+  osv_sync_now: { params: Record<string, never>; result: { ecosystems_synced: string[]; advisories_stored: number; advisories_matched: number; duration_ms: number; errors: string[] } };
+  osv_get_matches: { params: Record<string, never>; result: { advisory_id: string; summary: string; details: string | null; package_name: string; ecosystem: string; installed_version: string | null; fixed_version: string | null; severity_type: string | null; cvss_score: number | null; source_url: string | null; is_version_confirmed: boolean; project_paths: string[]; published_at: string | null }[] };
+  osv_get_sync_status: { params: Record<string, never>; result: { ecosystem: string; last_synced_at: string | null; advisory_count: number; error: string | null }[] };
+
   // -- Trust Ledger --
   get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
   record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string }; result: null };

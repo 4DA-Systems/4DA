@@ -639,6 +639,14 @@ fn find_missed_signals(
         signal.dep_name = dep;
     }
 
+    // When we have dependency context, remove items with no specific dep
+    // match — if we can't explain why it matters, don't show it. When no
+    // deps are available (cold start), pass everything through rather than
+    // showing an empty tab.
+    if !direct_deps.is_empty() {
+        signals.retain(|s| !s.why_relevant.is_empty());
+    }
+
     // Deduplicate missed signals by normalized title similarity.
     // The same CVE or topic can appear from multiple sources (HN, Reddit, RSS)
     // — without dedup the same item shows 10+ times in the blind spot report.
@@ -1067,7 +1075,7 @@ fn dedup_missed_signals(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
 /// so callers can associate a signal with its coverage-gap dependency.
 fn compute_why_relevant(
     title: &str,
-    score: f32,
+    _score: f32,
     direct_deps: &[DepCoverage],
 ) -> (String, Option<String>) {
     let title_lower = title.to_lowercase();
@@ -1122,17 +1130,10 @@ fn compute_why_relevant(
         return (text, Some(first_dep));
     }
 
-    // No specific match — fall back to generic text keyed to score tier.
-    // These strings are DELIBERATELY general: we didn't find a specific
-    // match, so we don't claim one.
-    let text = if score >= 0.85 {
-        "High-relevance item matching your topic affinities".to_string()
-    } else if score >= 0.7 {
-        "Moderately relevant based on your scoring profile".to_string()
-    } else {
-        "Borderline-relevant — worth a glance if you have time".to_string()
-    };
-    (text, None)
+    // No specific dep match found — return empty explanation so
+    // downstream can filter or request LLM-generated reasoning.
+    // Never claim relevance we can't substantiate with evidence.
+    (String::new(), None)
 }
 
 /// Check whether `text` contains `term` at a word boundary.
@@ -1444,7 +1445,12 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         kind: EvidenceKind::Gap,
         title,
         explanation,
-        confidence: Confidence::heuristic(0.7),
+        confidence: Confidence::heuristic(match d.risk_level.as_str() {
+            "critical" => 0.65,
+            "high" => 0.55,
+            "medium" => 0.40,
+            _ => 0.30,
+        }),
         urgency: risk_level_to_urgency(&d.risk_level),
         reversibility: None,
         evidence: vec![citation],
@@ -1524,7 +1530,11 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
         kind: EvidenceKind::Gap,
         title,
         explanation,
-        confidence: Confidence::heuristic(0.6),
+        confidence: Confidence::heuristic(if t.missed_signal_count >= 5 {
+            0.55
+        } else {
+            0.35
+        }),
         urgency,
         reversibility: None,
         evidence: vec![citation],
@@ -1631,7 +1641,7 @@ fn recommendation_to_evidence_item(r: &BlindSpotRecommendation, idx: usize) -> E
         kind: EvidenceKind::Alert,
         title,
         explanation: r.reason.clone(),
-        confidence: Confidence::heuristic(0.55),
+        confidence: Confidence::heuristic(0.35),
         urgency: priority_to_urgency(&r.priority),
         reversibility: None,
         evidence: vec![citation],
@@ -2126,22 +2136,17 @@ mod tests {
     }
 
     #[test]
-    fn fix6_why_relevant_falls_back_when_no_match() {
+    fn fix6_why_relevant_returns_empty_when_no_match() {
         let deps = vec![DepCoverage {
             package_name: "react".to_string(),
             ecosystem: "javascript".to_string(),
             projects: vec![],
         }];
-        // Title doesn't mention react
+        // Title doesn't mention react — no evidence to claim relevance
         let (text, dep) = compute_why_relevant("Postgres new extension released", 0.9, &deps);
         assert!(
-            !text.contains("react"),
-            "must not claim a match that isn't there: {text}"
-        );
-        // Fallback text is deliberately generic
-        assert!(
-            text.contains("scoring") || text.contains("relevance") || text.contains("topic"),
-            "fallback should be honestly generic: {text}"
+            text.is_empty(),
+            "must return empty string when no dep match — never claim unsubstantiated relevance: {text}"
         );
         assert_eq!(dep, None, "dep_name must be None when no match");
     }
