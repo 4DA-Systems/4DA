@@ -172,7 +172,7 @@ pub fn classify_subject_domain(subject: &str) -> String {
         return "package-manager".to_string();
     }
     // API / data-layer
-    if matches!(s.as_str(), "graphql" | "trpc" | "drizzle" | "prisma") {
+    if matches!(s.as_str(), "graphql" | "trpc") {
         return "data-layer".to_string();
     }
     // Styling
