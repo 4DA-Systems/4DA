@@ -149,30 +149,30 @@ const PreemptionView = memo(function PreemptionView() {
               {feed.critical_count > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                  {feed.critical_count} critical
+                  {feed.critical_count} {t('preemption.urgency.critical').toLowerCase()}
                 </span>
               )}
               {feed.high_count > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-orange-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                  {feed.high_count} high
+                  {feed.high_count} {t('preemption.urgency.high').toLowerCase()}
                 </span>
               )}
             </div>
             <span className="ms-auto text-xs text-text-muted tabular-nums">
-              {feed.total} {feed.total === 1 ? 'alert' : 'alerts'}
+              {t('preemption.alert', { count: feed.total })}
             </span>
           </div>
 
           {lastDismissed !== null && (
             <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 animate-in fade-in">
-              <span className="text-xs text-amber-400">Item dismissed</span>
+              <span className="text-xs text-amber-400">{t('preemption.dismissed')}</span>
               <button
                 type="button"
                 onClick={handleUndo}
                 className="text-xs font-medium text-amber-400 hover:text-white underline-offset-2 hover:underline transition-colors"
               >
-                Undo
+                {t('preemption.action.undo')}
               </button>
             </div>
           )}
@@ -180,23 +180,23 @@ const PreemptionView = memo(function PreemptionView() {
           <PreemptionTierSection
             dotColor="#EF4444"
             borderColor="rgba(239, 68, 68, 0.2)"
-            title="Your Stack"
-            subtitle={`${stackItems.length} affecting your dependencies`}
+            title={t('preemption.tier.stack')}
+            subtitle={t('preemption.tier.stackSubtitle', { count: stackItems.length })}
             items={stackItems}
             surfacedRef={surfacedRef}
             onDismiss={handleDismiss}
-            emptyText="No direct dependency alerts right now"
+            emptyText={t('preemption.tier.stackEmpty')}
           />
 
           <PreemptionTierSection
             dotColor="#F59E0B"
             borderColor="rgba(245, 158, 11, 0.15)"
-            title="Your Ecosystem"
-            subtitle={`${ecosystemItems.length} ecosystem signals`}
+            title={t('preemption.tier.ecosystem')}
+            subtitle={t('preemption.tier.ecosystemSubtitle', { count: ecosystemItems.length })}
             items={ecosystemItems}
             surfacedRef={surfacedRef}
             onDismiss={handleDismiss}
-            emptyText="No ecosystem signals right now"
+            emptyText={t('preemption.tier.ecosystemEmpty')}
           />
         </>
       )}

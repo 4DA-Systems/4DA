@@ -181,10 +181,13 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const problemCount = stackDeps.length + ecosystemDeps.length;
 
   const scoreContext = problemCount === 0
-    ? 'Your stack coverage is excellent.'
-    : `${stackDeps.length > 0 ? `${stackDeps.length} uncovered ${stackDeps.length === 1 ? 'dependency' : 'dependencies'}` : ''}${
-        stackDeps.length > 0 && ecosystemDeps.length > 0 ? ', ' : ''
-      }${ecosystemDeps.length > 0 ? `${ecosystemDeps.length} drifting` : ''} across your ${depRows.length} tracked dependencies.`;
+    ? t('blindspots.scoreContext.excellent')
+    : t('blindspots.scoreContext.summary', {
+        uncoveredText: stackDeps.length > 0 ? t('blindspots.tier.stackSubtitle', { count: stackDeps.length }) : '',
+        separator: stackDeps.length > 0 && ecosystemDeps.length > 0 ? ', ' : '',
+        driftingText: ecosystemDeps.length > 0 ? t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length }) : '',
+        total: depRows.length,
+      });
 
   const hasContent = stackDeps.length > 0 || ecosystemDeps.length > 0 || unmatchedSignals.length > 0;
 
@@ -206,26 +209,26 @@ const BlindSpotsView = memo(function BlindSpotsView() {
             <TierSection
               dotColor="#EF4444"
               borderColor="rgba(239, 68, 68, 0.2)"
-              title="Your Stack"
-              subtitle={`${stackDeps.length} uncovered ${stackDeps.length === 1 ? 'dependency' : 'dependencies'}`}
-              badgeText="Needs attention"
+              title={t('blindspots.tier.stack')}
+              subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
+              badgeText={t('blindspots.tier.needsAttention')}
               badgeColor="#EF4444"
               depRows={stackDeps}
               onDismissSignal={handleDismiss}
-              emptyText="All dependencies have signal coverage"
+              emptyText={t('blindspots.tier.stackEmpty')}
             />
           )}
           {(ecosystemDeps.length > 0 || problemCount === 0) && (
             <TierSection
               dotColor="#F59E0B"
               borderColor="rgba(245, 158, 11, 0.15)"
-              title="Your Ecosystem"
-              subtitle={`${ecosystemDeps.length} drifting ${ecosystemDeps.length === 1 ? 'topic' : 'topics'}`}
-              badgeText="Drifting"
+              title={t('blindspots.tier.ecosystem')}
+              subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length })}
+              badgeText={t('blindspots.tier.drifting')}
               badgeColor="#F59E0B"
               depRows={ecosystemDeps}
               onDismissSignal={handleDismiss}
-              emptyText="No ecosystem drift detected"
+              emptyText={t('blindspots.tier.ecosystemEmpty')}
             />
           )}
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
