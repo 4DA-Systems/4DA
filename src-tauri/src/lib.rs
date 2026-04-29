@@ -261,6 +261,7 @@ pub(crate) mod language_detect;
 mod llm;
 pub(crate) mod llm_capability;
 mod llm_judge;
+mod llm_judgments;
 mod llm_stream;
 mod local_audit;
 mod log_retention;
