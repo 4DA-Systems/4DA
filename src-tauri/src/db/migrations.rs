@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 63;
+        const TARGET_VERSION: i64 = 64;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2335,6 +2335,41 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Created osv_advisories + osv_sync_status tables (Tier 1 intelligence)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 64: LLM judgment storage for Tier 2 intelligence
+            if current_version < 64 {
+                Self::run_versioned_migration(
+                    &conn,
+                    63,
+                    64,
+                    "Phase 64: LLM judgment storage for Tier 2 intelligence",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS llm_judgments (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                source_item_id INTEGER NOT NULL,
+                                relevance_score REAL NOT NULL,
+                                explanation TEXT NOT NULL,
+                                actions TEXT,
+                                confidence REAL NOT NULL,
+                                model TEXT NOT NULL,
+                                prompt_version TEXT NOT NULL DEFAULT 'v1',
+                                judged_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                UNIQUE(source_item_id, prompt_version)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_llm_judgments_item
+                                ON llm_judgments(source_item_id);
+                            CREATE INDEX IF NOT EXISTS idx_llm_judgments_relevance
+                                ON llm_judgments(relevance_score DESC);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created llm_judgments table (Tier 2 intelligence)"
                         );
                         Ok(())
                     },
