@@ -10,35 +10,35 @@ import { recordTrustEvent } from '../../lib/trust-feedback';
 
 export const URGENCY_CONFIG: Record<
   Urgency,
-  { color: string; bg: string; border: string; dot: string; label: string }
+  { color: string; bg: string; border: string; dot: string; labelKey: string }
 > = {
   critical: {
     color: 'text-red-400',
     bg: 'bg-red-500/[0.06]',
     border: 'border-red-500/25',
     dot: 'bg-red-400',
-    label: 'Critical',
+    labelKey: 'preemption.urgency.critical',
   },
   high: {
     color: 'text-orange-400',
     bg: 'bg-orange-500/[0.05]',
     border: 'border-orange-500/25',
     dot: 'bg-orange-400',
-    label: 'High',
+    labelKey: 'preemption.urgency.high',
   },
   medium: {
     color: 'text-yellow-400',
     bg: 'bg-yellow-500/[0.04]',
     border: 'border-yellow-500/20',
     dot: 'bg-yellow-400',
-    label: 'Medium',
+    labelKey: 'preemption.urgency.medium',
   },
   watch: {
     color: 'text-blue-400',
     bg: 'bg-blue-500/[0.04]',
     border: 'border-blue-500/20',
     dot: 'bg-blue-400',
-    label: 'Watch',
+    labelKey: 'preemption.urgency.watch',
   },
 };
 
@@ -47,13 +47,13 @@ export const URGENCY_ORDER: Urgency[] = ['critical', 'high', 'medium', 'watch'];
 const EVIDENCE_COLLAPSE_THRESHOLD = 2;
 const EXPLANATION_MAX_LENGTH = 280;
 
-function formatFreshness(days: number): string {
+function formatFreshness(days: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const d = Math.round(days);
-  if (d <= 0) return 'today';
-  if (d === 1) return 'yesterday';
-  if (d < 7) return `${d}d ago`;
-  if (d < 30) return `${Math.floor(d / 7)}w ago`;
-  return `${Math.floor(d / 30)}mo ago`;
+  if (d <= 0) return t('preemption.freshness.today');
+  if (d === 1) return t('preemption.freshness.yesterday');
+  if (d < 7) return t('preemption.freshness.daysAgo', { count: d });
+  if (d < 30) return t('preemption.freshness.weeksAgo', { count: Math.floor(d / 7) });
+  return t('preemption.freshness.monthsAgo', { count: Math.floor(d / 30) });
 }
 
 function truncateAt(text: string, limit: number): string {
@@ -135,7 +135,7 @@ const EvidenceList = memo(function EvidenceList({
               </span>
             )}
             <span className="shrink-0 text-[10px] text-text-muted tabular-nums">
-              {formatFreshness(e.freshness_days)}
+              {formatFreshness(e.freshness_days, t)}
             </span>
           </li>
         ))}
@@ -147,8 +147,8 @@ const EvidenceList = memo(function EvidenceList({
           className="mt-2 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
         >
           {expanded
-            ? t('preemption.evidence.collapse', 'Show less')
-            : `Show ${filtered.length - EVIDENCE_COLLAPSE_THRESHOLD} more`}
+            ? t('preemption.evidence.showLess')
+            : t('preemption.evidence.showMore', { count: filtered.length - EVIDENCE_COLLAPSE_THRESHOLD })}
         </button>
       )}
     </div>
@@ -255,7 +255,7 @@ export const ItemCard = memo(function ItemCard({
             className={`shrink-0 inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded ${cfg.color} bg-black/20 border ${cfg.border}`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-            {cfg.label}
+            {t(cfg.labelKey)}
           </span>
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-white leading-snug">
             {item.title}

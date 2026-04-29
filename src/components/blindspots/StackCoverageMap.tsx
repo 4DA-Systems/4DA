@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { ArticleReader } from '../ArticleReader';
@@ -13,6 +14,7 @@ const SignalRow = memo(function SignalRow({
   item: EvidenceItem;
   onDismiss?: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const cite = item.evidence[0];
   const numericId = extractItemId(item.id);
   const freshness = cite && cite.freshness_days > 0
@@ -56,7 +58,7 @@ const SignalRow = memo(function SignalRow({
           <button
             onClick={() => onDismiss(item.id)}
             className="text-xs text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-red-500/10"
-            title="Not relevant"
+            title={t('blindspots.signal.notRelevant')}
           >
             ✕
           </button>
@@ -72,6 +74,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
   dep: DepRow;
   onDismissSignal: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const cfg = STATUS_CONFIG[dep.status];
   const hasContent = dep.signals.length > 0 || dep.gap !== null;
@@ -111,11 +114,11 @@ const DepCoverageRow = memo(function DepCoverageRow({
         )}
         {dep.signals.length > 0 && (
           <span className="text-[10px] text-text-muted shrink-0">
-            {dep.signals.length} signal{dep.signals.length === 1 ? '' : 's'}
+            {t('blindspots.signal.count', { count: dep.signals.length })}
           </span>
         )}
         <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${cfg.color}`}>
-          {cfg.label}
+          {t(cfg.labelKey)}
         </span>
       </button>
       {expanded && hasContent && (
@@ -132,7 +135,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
               ))}
               {dep.signals.length > MAX_SIGNALS_PER_DEP && (
                 <div className="px-4 py-2 text-[11px] text-text-muted">
-                  +{dep.signals.length - MAX_SIGNALS_PER_DEP} more signal{dep.signals.length - MAX_SIGNALS_PER_DEP === 1 ? '' : 's'}
+                  {t('blindspots.signal.more', { count: dep.signals.length - MAX_SIGNALS_PER_DEP })}
                 </div>
               )}
             </div>
@@ -197,16 +200,17 @@ export const EmergingSignals = memo(function EmergingSignals({
   items: EvidenceItem[];
   onDismiss: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="mb-4" aria-label="Emerging">
       <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(59, 130, 246, 0.2)' }}>
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <div className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
-          <h3 className="text-sm font-medium text-white flex-1">Emerging</h3>
+          <h3 className="text-sm font-medium text-white flex-1">{t('blindspots.emerging.title')}</h3>
           <span className="text-xs text-[#8A8A8A]">
-            {items.length} {items.length === 1 ? 'signal' : 'signals'} in your neighborhood
+            {t('blindspots.emerging.subtitle', { count: items.length })}
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0 text-blue-400">Trending</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0 text-blue-400">{t('blindspots.emerging.trending')}</span>
         </div>
         {items.length > 0 ? (
           <div className="divide-y divide-border/50">
@@ -214,7 +218,7 @@ export const EmergingSignals = memo(function EmergingSignals({
           </div>
         ) : (
           <div className="px-4 py-4">
-            <p className="text-xs text-[#8A8A8A]">No emerging signals detected</p>
+            <p className="text-xs text-[#8A8A8A]">{t('blindspots.emerging.empty')}</p>
           </div>
         )}
       </div>
@@ -228,6 +232,7 @@ export const CoveredSection = memo(function CoveredSection({
   depRows: DepRow[];
   onDismissSignal: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [showCovered, setShowCovered] = useState(false);
 
   if (depRows.length === 0) return null;
@@ -240,10 +245,10 @@ export const CoveredSection = memo(function CoveredSection({
       >
         <div className="w-2 h-2 rounded-full bg-green-400" />
         <h3 className="text-sm font-medium text-white flex-1 text-left">
-          Well Covered ({depRows.length})
+          {t('blindspots.covered.title')} ({depRows.length})
         </h3>
         <span className="text-[10px] text-green-400">
-          {showCovered ? 'Hide' : 'Show'}
+          {showCovered ? t('blindspots.covered.hide') : t('blindspots.covered.show')}
         </span>
       </button>
       {showCovered && (
