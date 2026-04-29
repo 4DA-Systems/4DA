@@ -11,12 +11,7 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
     id: "nextjs_fullstack",
     name: "Next.js Fullstack",
     core_tech: &["nextjs", "react", "vercel", "typescript"],
-    companions: &[
-        "tailwindcss",
-        "trpc",
-        "zod",
-        "turborepo",
-    ],
+    companions: &["tailwindcss", "trpc", "zod", "turborepo"],
     competing: &["remix", "astro", "sveltekit", "nuxt", "angular"],
     pain_points: &[
         PainPoint {

@@ -929,7 +929,13 @@ fn build_first_briefing_context() -> Option<String> {
         Ok(engine) => engine
             .get_static_identity()
             .ok()
-            .map(|id| id.interests.iter().take(3).map(|i| i.topic.clone()).collect())
+            .map(|id| {
+                id.interests
+                    .iter()
+                    .take(3)
+                    .map(|i| i.topic.clone())
+                    .collect()
+            })
             .unwrap_or_default(),
         Err(_) => vec![],
     };
@@ -946,7 +952,10 @@ fn build_first_briefing_context() -> Option<String> {
         parts.push(format!("interest in {}", interest_names.join(", ")));
     }
 
-    Some(format!("Based on {}, here's what matters today.", parts.join(" and ")))
+    Some(format!(
+        "Based on {}, here's what matters today.",
+        parts.join(" and ")
+    ))
 }
 
 // ============================================================================
