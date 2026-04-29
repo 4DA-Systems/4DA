@@ -413,6 +413,7 @@
   "preemption.freshness.monthsAgo": "{{count}}个月前",
   "preemption.evidence.showMore": "显示更多 {{count}} 条",
   "preemption.evidence.showLess": "收起",
+  "preemption.confidence.provenance": "置信度来源：{{provenance}}{{sampleSize}}",
   "results.title": "相关性结果",
   "results.new": "{{count}} 条新增",
   "results.itemsRelevant": "{{items}} 项中 {{relevant}} 项相关",
@@ -2697,6 +2698,8 @@
   "blindspots.status.covered": "已覆盖",
   "blindspots.scoreContext.excellent": "你的技术栈覆盖率非常优秀。",
   "blindspots.scoreContext.summary": "在你追踪的 {{total}} 个依赖中，{{uncoveredText}}{{separator}}{{driftingText}}。",
+  "blindspots.projects.count_one": "{{count}} 个项目",
+  "blindspots.projects.count_other": "{{count}} 个项目",
   "settings.llm.title": "AI 提供商",
   "settings": {
     "locale": {

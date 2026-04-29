@@ -413,6 +413,7 @@
   "preemption.freshness.monthsAgo": "{{count}}ay önce",
   "preemption.evidence.showMore": "{{count}} tane daha göster",
   "preemption.evidence.showLess": "Daha az göster",
+  "preemption.confidence.provenance": "Güven kaynağı: {{provenance}}{{sampleSize}}",
   "results.title": "İlgililik Sonuçları",
   "results.new": "{{count}} yeni",
   "results.itemsRelevant": "{{items}} öğe, {{relevant}} ilgili",
@@ -2697,6 +2698,8 @@
   "blindspots.status.covered": "Kapsanmış",
   "blindspots.scoreContext.excellent": "Stack kapsamınız mükemmel.",
   "blindspots.scoreContext.summary": "{{total}} takip edilen bağımlılığınızda {{uncoveredText}}{{separator}}{{driftingText}}.",
+  "blindspots.projects.count_one": "{{count}} proje",
+  "blindspots.projects.count_other": "{{count}} proje",
   "settings.llm.title": "AI Sağlayıcı",
   "analysis": {
     "sourceError": "{{source}}: {{error}}"

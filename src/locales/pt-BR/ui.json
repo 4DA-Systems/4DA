@@ -413,6 +413,7 @@
   "preemption.freshness.monthsAgo": "{{count}}m atrás",
   "preemption.evidence.showMore": "Mostrar mais {{count}}",
   "preemption.evidence.showLess": "Mostrar menos",
+  "preemption.confidence.provenance": "Proveniência da confiança: {{provenance}}{{sampleSize}}",
   "results.title": "Resultados de relevância",
   "results.new": "{{count}} novos",
   "results.itemsRelevant": "{{items}} itens, {{relevant}} relevantes",
@@ -2697,6 +2698,8 @@
   "blindspots.status.covered": "Coberto",
   "blindspots.scoreContext.excellent": "A cobertura do seu stack é excelente.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} entre suas {{total}} dependências rastreadas.",
+  "blindspots.projects.count_one": "{{count}} projeto",
+  "blindspots.projects.count_other": "{{count}} projetos",
   "settings.llm.title": "Provedor de IA",
   "analysis": {
     "sourceError": "{{source}}: {{error}}"

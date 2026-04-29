@@ -413,6 +413,7 @@
   "preemption.freshness.monthsAgo": "{{count}}개월 전",
   "preemption.evidence.showMore": "{{count}}개 더 보기",
   "preemption.evidence.showLess": "접기",
+  "preemption.confidence.provenance": "신뢰도 출처: {{provenance}}{{sampleSize}}",
   "results.title": "신호 분석",
   "results.new": "{{count}}개 새 항목",
   "results.itemsRelevant": "{{items}}개 중 {{relevant}}개 관련",
@@ -2697,6 +2698,8 @@
   "blindspots.status.covered": "커버됨",
   "blindspots.scoreContext.excellent": "스택 커버리지가 우수합니다.",
   "blindspots.scoreContext.summary": "추적 중인 {{total}}개 의존성에서 {{uncoveredText}}{{separator}}{{driftingText}}.",
+  "blindspots.projects.count_one": "{{count}}개 프로젝트",
+  "blindspots.projects.count_other": "{{count}}개 프로젝트",
   "settings.llm.title": "AI 제공자",
   "analysis": {
     "sourceError": "{{source}}: {{error}}"
