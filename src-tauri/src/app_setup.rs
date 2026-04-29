@@ -91,6 +91,32 @@ fn acquire_instance_and_detect_crash_loop() {
 static LOG_FILE_GUARD: once_cell::sync::OnceCell<tracing_appender::non_blocking::WorkerGuard> =
     once_cell::sync::OnceCell::new();
 
+/// Install a Windows console control handler so Ctrl+C and console-close
+/// events trigger `mark_clean_shutdown()` before the process exits. Without
+/// this, `TerminateProcess` leaves the `.running` marker behind and the next
+/// launch falsely detects a crash.
+#[cfg(windows)]
+fn install_console_ctrl_handler() {
+    #[allow(unsafe_code)]
+    unsafe extern "system" fn handler(ctrl_type: u32) -> i32 {
+        const CTRL_C_EVENT: u32 = 0;
+        const CTRL_CLOSE_EVENT: u32 = 2;
+        if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_CLOSE_EVENT {
+            crate::startup_watchdog::mark_clean_shutdown();
+        }
+        0 // FALSE — let the default handler terminate the process
+    }
+    #[allow(unsafe_code)]
+    unsafe {
+        windows_sys::Win32::System::Console::SetConsoleCtrlHandler(Some(handler), 1);
+    }
+}
+
+#[cfg(not(windows))]
+fn install_console_ctrl_handler() {
+    // Unix: Tauri's signal handlers are sufficient.
+}
+
 /// Pre-Tauri initialization: logging, threshold, database, context engine, source registry.
 ///
 /// Must be called before `tauri::Builder` is constructed.
@@ -146,6 +172,12 @@ pub(crate) fn initialize_pre_tauri() {
     // This records the startup clock used by phase budget enforcement and
     // inspects crash-trail markers from the previous session.
     crate::startup_watchdog::begin_startup_watch();
+
+    // Register a console handler so Ctrl+C (and console close) triggers
+    // clean shutdown markers. Without this, `TerminateProcess` or CTRL_C_EVENT
+    // on Windows kills the process before Tauri's `RunEvent::Exit` fires,
+    // leaving `.running` behind and poisoning the crash-loop detector.
+    install_console_ctrl_handler();
 
     // Pre-Tauri correctness gates: single-instance lock + crash-loop detection.
     // Both are infallible-from-caller's-perspective (AlreadyRunning exits the
