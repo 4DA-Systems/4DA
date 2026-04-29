@@ -108,14 +108,8 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
     // Systems languages
     ("go", &["rust", "java", "csharp"]),
     // State management (React ecosystem)
-    (
-        "redux",
-        &["zustand", "jotai", "mobx", "recoil", "valtio"],
-    ),
-    (
-        "zustand",
-        &["redux", "jotai", "mobx", "recoil", "valtio"],
-    ),
+    ("redux", &["zustand", "jotai", "mobx", "recoil", "valtio"]),
+    ("zustand", &["redux", "jotai", "mobx", "recoil", "valtio"]),
     ("jotai", &["redux", "zustand", "mobx", "recoil"]),
     ("mobx", &["redux", "zustand", "jotai", "recoil"]),
     // Testing frameworks
@@ -128,14 +122,8 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
         "github-actions",
         &["gitlab-ci", "circleci", "jenkins", "travis"],
     ),
-    (
-        "gitlab-ci",
-        &["github-actions", "circleci", "jenkins"],
-    ),
-    (
-        "jenkins",
-        &["github-actions", "gitlab-ci", "circleci"],
-    ),
+    ("gitlab-ci", &["github-actions", "circleci", "jenkins"]),
+    ("jenkins", &["github-actions", "gitlab-ci", "circleci"]),
     // Package managers
     ("pnpm", &["npm", "yarn"]),
     ("yarn", &["npm", "pnpm"]),
