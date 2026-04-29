@@ -413,6 +413,7 @@
   "preemption.freshness.monthsAgo": "{{count}}महीने पहले",
   "preemption.evidence.showMore": "{{count}} और दिखाएं",
   "preemption.evidence.showLess": "कम दिखाएं",
+  "preemption.confidence.provenance": "विश्वास स्रोत: {{provenance}}{{sampleSize}}",
   "results.title": "सिग्नल विश्लेषण",
   "results.new": "{{count}} नए",
   "results.itemsRelevant": "{{items}} आइटम, {{relevant}} प्रासंगिक",
@@ -2697,6 +2698,8 @@
   "blindspots.status.covered": "कवर किया गया",
   "blindspots.scoreContext.excellent": "आपके स्टैक की कवरेज उत्कृष्ट है।",
   "blindspots.scoreContext.summary": "आपकी {{total}} ट्रैक की गई निर्भरताओं में {{uncoveredText}}{{separator}}{{driftingText}}।",
+  "blindspots.projects.count_one": "{{count}} प्रोजेक्ट",
+  "blindspots.projects.count_other": "{{count}} प्रोजेक्ट",
   "settings.llm.title": "AI प्रदाता",
   "analysis": {
     "sourceError": "{{source}}: {{error}}"
