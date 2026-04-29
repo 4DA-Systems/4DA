@@ -190,6 +190,15 @@ impl Confidence {
             sample_size: None,
         }
     }
+
+    /// Constructor for OSV-verified confidence (deterministic version-range match).
+    pub fn osv_verified(value: f32) -> Self {
+        Self {
+            value,
+            provenance: ConfidenceProvenance::OsvVerified,
+            sample_size: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, TS, PartialEq, Eq)]
@@ -204,6 +213,8 @@ pub enum ConfidenceProvenance {
     Calibrated,
     /// LLM judgment from AWE.calibrate.
     LlmAssessed,
+    /// Deterministic version-range match from local OSV advisory mirror.
+    OsvVerified,
 }
 
 // ============================================================================

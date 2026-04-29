@@ -12,6 +12,7 @@ mod dependencies;
 pub(crate) mod encryption;
 mod history;
 pub(crate) mod migrations;
+mod osv_advisories;
 mod sources;
 #[cfg(test)]
 mod stress_tests;

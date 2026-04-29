@@ -193,6 +193,12 @@ pub struct ScoreBreakdown {
     /// How many of the user's scanned projects are affected
     #[serde(default)]
     pub affected_project_count: Option<u32>,
+    /// Negative stack suppression multiplier (0.15-1.0). Values below 1.0
+    /// mean the item matched a competing technology or anti-topic. Exposed
+    /// for debugging — verify the negative stack is actually penalising
+    /// off-stack content.
+    #[serde(default = "default_quality_mult")]
+    pub negative_stack_prior: f32,
 }
 
 /// Describes why pipeline and advisor(s) disagreed about an item.

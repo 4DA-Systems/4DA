@@ -83,6 +83,10 @@ pub struct PreemptionAlert {
     pub predicted_window: Option<String>,
     pub suggested_actions: Vec<SuggestedAction>,
     pub created_at: String,
+    /// True when this alert is backed by a deterministic OSV advisory match
+    /// with version verification. Drives Confidence::osv_verified provenance.
+    #[serde(default)]
+    pub osv_verified: bool,
 }
 
 /// The full preemption feed with summary counts.
@@ -98,6 +102,133 @@ pub struct PreemptionFeed {
 // ============================================================================
 // Implementation
 // ============================================================================
+
+fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Failed to get database for OSV matches");
+            return Vec::new();
+        }
+    };
+
+    let matches = match crate::osv::matching::get_matched_advisories(db) {
+        Ok(m) => m,
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Failed to get OSV matched advisories");
+            return Vec::new();
+        }
+    };
+
+    matches
+        .iter()
+        .map(|m| {
+            let urgency = match m.cvss_score {
+                Some(s) if s >= 9.0 => AlertUrgency::Critical,
+                Some(s) if s >= 7.0 => AlertUrgency::High,
+                Some(s) if s >= 4.0 => AlertUrgency::Medium,
+                _ => AlertUrgency::Watch,
+            };
+
+            let confidence = if m.is_version_confirmed { 0.95 } else { 0.65 };
+
+            let version_info = match (&m.installed_version, &m.fixed_version) {
+                (Some(installed), Some(fixed)) => {
+                    format!("Installed version {installed} is affected. Update to >= {fixed}.")
+                }
+                (Some(installed), None) => {
+                    format!("Installed version {installed} is affected. No fix available yet.")
+                }
+                (None, Some(fixed)) => {
+                    format!("Version unconfirmed. Fix available in >= {fixed}.")
+                }
+                (None, None) => {
+                    "Version range unconfirmed — check the advisory for details.".to_string()
+                }
+            };
+
+            let cvss_display = m
+                .cvss_score
+                .map(|s| format!(" (CVSS {s:.1})"))
+                .unwrap_or_default();
+
+            let explanation = format!(
+                "{id}{cvss} affects {pkg} in {projects}. {version}",
+                id = m.advisory_id,
+                cvss = cvss_display,
+                pkg = m.package_name,
+                projects = if m.project_paths.is_empty() {
+                    "your projects".to_string()
+                } else {
+                    m.project_paths
+                        .iter()
+                        .filter_map(|p| {
+                            std::path::Path::new(p).file_name().and_then(|n| n.to_str())
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                },
+                version = version_info,
+            );
+
+            let action_label = match (&m.installed_version, &m.fixed_version) {
+                (Some(installed), Some(fixed)) => {
+                    format!(
+                        "Update {} from {} to >= {}",
+                        m.package_name, installed, fixed
+                    )
+                }
+                _ => format!("Review {} advisory", m.advisory_id),
+            };
+
+            let evidence = vec![AlertEvidence {
+                source: "osv".to_string(),
+                title: m.summary.clone(),
+                url: m.source_url.clone(),
+                freshness_days: m
+                    .published_at
+                    .as_deref()
+                    .map(|ts| freshness_from_timestamp(ts))
+                    .unwrap_or(0.0),
+                relevance_score: 1.0,
+            }];
+
+            let suggested_actions = vec![
+                SuggestedAction {
+                    action_type: "investigate".to_string(),
+                    label: action_label,
+                    description: format!(
+                        "Review {} and update {} if your version is affected.",
+                        m.advisory_id, m.package_name
+                    ),
+                },
+                SuggestedAction {
+                    action_type: "dismiss".to_string(),
+                    label: "Not affected".to_string(),
+                    description:
+                        "Dismiss if you've confirmed your version is outside the affected range."
+                            .to_string(),
+                },
+            ];
+
+            PreemptionAlert {
+                id: format!("osv-{}-{}", m.advisory_id, m.package_name),
+                alert_type: PreemptionType::SecurityAdvisory,
+                title: truncate(&m.summary, 120),
+                explanation,
+                evidence,
+                affected_projects: m.project_paths.clone(),
+                affected_dependencies: vec![m.package_name.clone()],
+                urgency,
+                confidence,
+                predicted_window: None,
+                suggested_actions,
+                created_at: chrono::Utc::now().to_rfc3339(),
+                osv_verified: true,
+            }
+        })
+        .collect()
+}
 
 /// Generate the preemption feed by combining all intelligence sources.
 ///
@@ -117,6 +248,9 @@ pub struct PreemptionFeed {
 pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     let conn = crate::open_db_connection()?;
     let mut alerts = Vec::new();
+
+    // ─── 0. Tier 1: OSV verified advisories (deterministic, highest trust) ──
+    alerts.extend(osv_matches_to_alerts());
 
     // ─── 1. Signal chain predictions (single call, bounded LIMIT 200) ────
     match crate::signal_chains::detect_chains(&conn) {
@@ -471,17 +605,15 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         let suggested_actions = vec![
             SuggestedAction {
                 action_type: "investigate".to_string(),
-                label: format!("Review {package_name} update"),
+                label: format!("Check {package_name} advisory"),
                 description: format!(
-                    "Check the advisory and determine if {project_name} needs a dependency update."
+                    "Verify whether your installed version of {package_name} in {project_name} is in the affected range."
                 ),
             },
             SuggestedAction {
                 action_type: "dismiss".to_string(),
-                label: "Not relevant".to_string(),
-                description: format!(
-                    "Dismiss if {package_name} is not in the vulnerable version range."
-                ),
+                label: "Not affected".to_string(),
+                description: "Dismiss if your version is outside the affected range.".to_string(),
             },
         ];
 
@@ -489,16 +621,22 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             id: uuid::Uuid::new_v4().to_string(),
             alert_type,
             title: truncate(&title, 120),
-            explanation: format!("Affects {} in {}", package_name, project_name),
+            explanation: format!(
+                "Advisory mentions {package_name}, a direct dependency in {project_name}. \
+                 Version impact unverified — check the source for affected ranges."
+            ),
             evidence,
             affected_projects: vec![project_path],
             affected_dependencies: vec![package_name],
             urgency,
-            // Dynamic confidence: scales with how many projects are affected
-            confidence: 0.70,
+            // Honest confidence: title-keyword match with no version verification
+            // is low-confidence intelligence. Will be upgraded to 0.85+ once OSV
+            // version matching is implemented.
+            confidence: 0.45,
             predicted_window: None,
             suggested_actions,
             created_at: chrono::Utc::now().to_rfc3339(),
+            osv_verified: false,
         });
     }
 
@@ -531,9 +669,11 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
                             existing.evidence.push(ev.clone());
                         }
                     }
-                    // Recalculate confidence based on affected project count
+                    // Multi-project corroboration: slightly higher confidence
+                    // when multiple independent projects confirm the dep match,
+                    // but still honest — no version verification yet.
                     let proj_count = existing.affected_projects.len() as f32;
-                    existing.confidence = (0.70 + proj_count * 0.05).min(0.95);
+                    existing.confidence = (0.45 + proj_count * 0.03).min(0.60);
                 } else {
                     cve_groups.insert(id, alert);
                 }
@@ -544,12 +684,11 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         }
     }
 
-    // Recalculate confidence for all CVE-grouped alerts
     let mut alerts: Vec<PreemptionAlert> = cve_groups
         .into_values()
         .map(|mut a| {
             let proj_count = a.affected_projects.len() as f32;
-            a.confidence = (0.70 + proj_count * 0.05).min(0.95);
+            a.confidence = (0.45 + proj_count * 0.03).min(0.60);
             a
         })
         .collect();
@@ -697,6 +836,7 @@ fn chain_to_alert(
         predicted_window,
         suggested_actions,
         created_at: chrono::Utc::now().to_rfc3339(),
+        osv_verified: false,
     }
 }
 
@@ -902,7 +1042,11 @@ impl PreemptionAlert {
             explanation: self.explanation.clone(),
             // Preemption uses a bare f32 confidence; provenance is
             // heuristic until AWE spine is wired in Phase 9.
-            confidence: Confidence::heuristic(self.confidence.clamp(0.0, 1.0)),
+            confidence: if self.osv_verified {
+                Confidence::osv_verified(self.confidence.clamp(0.0, 1.0))
+            } else {
+                Confidence::heuristic(self.confidence.clamp(0.0, 1.0))
+            },
             urgency: alert_urgency_to_canonical(&self.urgency),
             // Reversibility is not computed by preemption — leave None.
             reversibility: None,
@@ -1314,6 +1458,7 @@ mod tests {
                 description: "Review the advisory for affected versions.".to_string(),
             }],
             created_at: "2026-04-17 09:30:00".to_string(),
+            osv_verified: false,
         }
     }
 

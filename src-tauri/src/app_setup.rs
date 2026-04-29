@@ -711,6 +711,50 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // Background OSV advisory sync — keeps the local mirror fresh.
+    // Only runs if deps exist and last sync > 6 hours ago (or never synced).
+    tauri::async_runtime::spawn(async {
+        let db = match crate::get_database() {
+            Ok(db) => db,
+            Err(_) => return,
+        };
+        let deps = db.get_all_user_dependencies().unwrap_or_default();
+        if deps.is_empty() {
+            return;
+        }
+        // Skip if synced recently (within 6 hours)
+        let statuses = db.get_osv_sync_statuses().unwrap_or_default();
+        let recently_synced = statuses.iter().any(|s| {
+            s.last_synced_at
+                .as_deref()
+                .and_then(|ts| chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S").ok())
+                .map(|dt| {
+                    let now = chrono::Utc::now().naive_utc();
+                    now.signed_duration_since(dt).num_hours() < 6
+                })
+                .unwrap_or(false)
+        });
+        if recently_synced {
+            info!(target: "4da::osv", "OSV mirror synced recently — skipping startup sync");
+            return;
+        }
+        info!(target: "4da::osv", deps = deps.len(), "Starting background OSV sync");
+        match crate::osv::sync::sync(&db).await {
+            Ok(result) => {
+                info!(
+                    target: "4da::osv",
+                    stored = result.advisories_stored,
+                    matched = result.advisories_matched,
+                    duration_ms = result.duration_ms,
+                    "Background OSV sync complete"
+                );
+            }
+            Err(e) => {
+                warn!(target: "4da::osv", error = %e, "Background OSV sync failed (will retry next launch)");
+            }
+        }
+    });
+
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");

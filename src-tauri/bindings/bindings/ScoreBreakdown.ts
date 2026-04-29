@@ -170,4 +170,11 @@ dependency_path: string | null,
 /**
  * How many of the user's scanned projects are affected
  */
-affected_project_count: number | null, };
+affected_project_count: number | null, 
+/**
+ * Negative stack suppression multiplier (0.15-1.0). Values below 1.0
+ * mean the item matched a competing technology or anti-topic. Exposed
+ * for debugging — verify the negative stack is actually penalising
+ * off-stack content.
+ */
+negative_stack_prior: number, };

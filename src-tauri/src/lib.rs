@@ -274,6 +274,7 @@ mod natural_language_search;
 mod notification_window;
 mod novelty;
 mod ollama;
+mod osv;
 mod plugin_commands;
 pub mod plugins;
 mod preemption;
@@ -1085,6 +1086,10 @@ pub fn run() {
             dependency_commands::resolve_dependency_alert,
             dependency_commands::check_dependency_upgrades,
             dependency_commands::get_license_overview,
+            // OSV Mirror (Tier 1 Intelligence)
+            osv::osv_sync_now,
+            osv::osv_get_matches,
+            osv::osv_get_sync_status,
             // Accuracy Tracking (Phase 4.1)
             accuracy::get_accuracy_report,
             accuracy::get_intelligence_report,
