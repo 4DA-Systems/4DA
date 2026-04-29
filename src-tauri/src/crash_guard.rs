@@ -8,6 +8,7 @@
 //! This module installs a panic hook that clears API keys, encryption keys,
 //! and other secrets BEFORE the default handler writes the dump.
 
+use crate::settings::types::SensitiveString;
 use std::sync::Once;
 
 static INSTALL_ONCE: Once = Once::new();
@@ -45,7 +46,7 @@ fn zeroize_sensitive_memory() {
 
         // X (Twitter) API key — replace with default, dropping the old
         // SensitiveString which zeroizes its contents on drop.
-        settings.x_api_key = Default::default();
+        settings.x_api_key = SensitiveString::default();
 
         // License key
         settings.license.license_key.zeroize();
