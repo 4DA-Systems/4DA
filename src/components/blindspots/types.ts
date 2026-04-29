@@ -13,10 +13,10 @@ export interface DepRow {
   projects: string[];
 }
 
-export const STATUS_CONFIG: Record<DepStatus, { label: string; color: string; dot: string }> = {
-  blind_spot: { label: 'Blind Spot', color: 'text-red-400', dot: 'bg-red-400' },
-  falling_behind: { label: 'Drifting', color: 'text-yellow-400', dot: 'bg-yellow-400' },
-  well_covered: { label: 'Covered', color: 'text-green-400', dot: 'bg-green-400' },
+export const STATUS_CONFIG: Record<DepStatus, { labelKey: string; color: string; dot: string }> = {
+  blind_spot: { labelKey: 'blindspots.status.blindSpot', color: 'text-red-400', dot: 'bg-red-400' },
+  falling_behind: { labelKey: 'blindspots.status.drifting', color: 'text-yellow-400', dot: 'bg-yellow-400' },
+  well_covered: { labelKey: 'blindspots.status.covered', color: 'text-green-400', dot: 'bg-green-400' },
 };
 
 export const URGENCY_COLORS: Record<Urgency, string> = {
