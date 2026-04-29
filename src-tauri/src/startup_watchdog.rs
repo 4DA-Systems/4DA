@@ -371,7 +371,22 @@ pub fn check_crash_loop(data_dir: &Path, prev_crashed: bool) -> CrashLoopStatus 
         debug!(target: "4da::watchdog", error = %e, "Crash-loop check: could not write history");
     }
 
-    let status = classify_crash_loop(&history, now);
+    let mut status = classify_crash_loop(&history, now);
+
+    // In debug builds, Cargo watch kills and restarts the process routinely.
+    // These are not real crashes — cap at Warning so safe mode never activates
+    // in dev and the crash-loop-critical frontend banner never fires.
+    #[cfg(debug_assertions)]
+    if matches!(status, CrashLoopStatus::Critical(n) if n > 0) {
+        if let CrashLoopStatus::Critical(n) = status {
+            info!(
+                target: "4da::watchdog",
+                crashes = n,
+                "Dev-mode: downgrading Critical to Warning (dev restarts are not real crashes)"
+            );
+            status = CrashLoopStatus::Warning(n);
+        }
+    }
 
     match status {
         CrashLoopStatus::Critical(n) => {
@@ -550,11 +565,23 @@ mod tests {
         drop(f);
 
         let status = check_crash_loop(tmp.path(), /* prev_crashed */ true);
-        assert!(
-            matches!(status, CrashLoopStatus::Critical(n) if n >= 3),
-            "three crashes within 60s should be Critical, got {status:?}"
-        );
-        assert!(is_safe_mode(), "Critical must set safe-mode flag");
+        // Debug builds downgrade Critical → Warning (dev restarts aren't real crashes).
+        #[cfg(debug_assertions)]
+        {
+            assert!(
+                matches!(status, CrashLoopStatus::Warning(n) if n >= 3),
+                "three crashes within 60s should be Warning in debug (downgraded from Critical), got {status:?}"
+            );
+            assert!(!is_safe_mode(), "Debug builds must never enter safe mode");
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            assert!(
+                matches!(status, CrashLoopStatus::Critical(n) if n >= 3),
+                "three crashes within 60s should be Critical, got {status:?}"
+            );
+            assert!(is_safe_mode(), "Critical must set safe-mode flag");
+        }
 
         // Cleanup: clear safe mode so other tests aren't polluted.
         SAFE_MODE.store(false, Ordering::SeqCst);
