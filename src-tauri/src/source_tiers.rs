@@ -152,14 +152,9 @@ pub(crate) fn normalize_scores_by_source(items: &mut [crate::SourceRelevance]) {
         }
 
         // Collect (index, score) pairs to avoid borrowing items during sort
-        let mut scored: Vec<(usize, f32)> = indices
-            .iter()
-            .map(|&i| (i, items[i].top_score))
-            .collect();
-        scored.sort_by(|a, b| {
-            a.1.partial_cmp(&b.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        let mut scored: Vec<(usize, f32)> =
+            indices.iter().map(|&i| (i, items[i].top_score)).collect();
+        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         let n = scored.len() as f32;
         for (rank, &(idx, raw)) in scored.iter().enumerate() {
@@ -291,7 +286,9 @@ mod tests {
 
     #[test]
     fn authority_multipliers_ordered() {
-        assert!(SourceTier::Core.authority_multiplier() > SourceTier::Ecosystem.authority_multiplier());
+        assert!(
+            SourceTier::Core.authority_multiplier() > SourceTier::Ecosystem.authority_multiplier()
+        );
         assert!(
             SourceTier::Ecosystem.authority_multiplier()
                 > SourceTier::Peripheral.authority_multiplier()
@@ -301,9 +298,16 @@ mod tests {
     #[test]
     fn authority_multipliers_close_to_one() {
         // Multipliers should be small adjustments, not dramatic swings
-        for tier in &[SourceTier::Core, SourceTier::Ecosystem, SourceTier::Peripheral] {
+        for tier in &[
+            SourceTier::Core,
+            SourceTier::Ecosystem,
+            SourceTier::Peripheral,
+        ] {
             let m = tier.authority_multiplier();
-            assert!(m >= 0.90 && m <= 1.10, "Multiplier {m} out of range for {tier:?}");
+            assert!(
+                m >= 0.90 && m <= 1.10,
+                "Multiplier {m} out of range for {tier:?}"
+            );
         }
     }
 }
