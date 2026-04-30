@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::error::Result;
+use crate::scoring_config;
 use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
@@ -404,18 +405,21 @@ fn classify_phase(link_count: usize, acceleration: f64, intervals: &[f64]) -> Ch
         intervals.iter().sum::<f64>() / intervals.len() as f64
     };
 
-    // Escalating: intervals shrinking significantly (acceleration < -2 hours/step)
-    if acceleration < -2.0 && link_count >= 3 {
+    if acceleration < scoring_config::SIGNAL_CHAIN_PHASE_ESCALATING_ACCELERATION as f64
+        && link_count >= scoring_config::SIGNAL_CHAIN_PHASE_ESCALATING_MIN_LINKS as usize
+    {
         return ChainPhase::Escalating;
     }
 
-    // Peak: many signals with small intervals
-    if link_count >= 4 && avg_interval < 24.0 {
+    if link_count >= scoring_config::SIGNAL_CHAIN_PHASE_PEAK_MIN_LINKS as usize
+        && avg_interval < scoring_config::SIGNAL_CHAIN_PHASE_PEAK_MAX_INTERVAL as f64
+    {
         return ChainPhase::Peak;
     }
 
-    // Resolving: intervals growing (acceleration > 4 hours/step) or very old last signal
-    if acceleration > 4.0 && link_count >= 3 {
+    if acceleration > scoring_config::SIGNAL_CHAIN_PHASE_RESOLVING_ACCELERATION as f64
+        && link_count >= scoring_config::SIGNAL_CHAIN_PHASE_RESOLVING_MIN_LINKS as usize
+    {
         return ChainPhase::Resolving;
     }
 
@@ -431,8 +435,10 @@ fn predict_next_interval(intervals: &[f64], acceleration: f64) -> Option<f64> {
     let last = *intervals.last()?;
     let predicted = last + acceleration;
 
-    // Clamp to reasonable range (1 hour to 7 days)
-    Some(predicted.clamp(1.0, 168.0))
+    Some(predicted.clamp(
+        scoring_config::SIGNAL_CHAIN_PREDICTION_MIN_HOURS as f64,
+        scoring_config::SIGNAL_CHAIN_PREDICTION_MAX_HOURS as f64,
+    ))
 }
 
 /// Compute prediction confidence based on data quality

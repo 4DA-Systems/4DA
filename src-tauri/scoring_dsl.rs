@@ -87,6 +87,7 @@ enum AstNode {
     IntentBoost { entries: Vec<Param> },
     DomainGate { entries: Vec<Param> },
     DependencyBoost { entries: Vec<Param> },
+    GenericSection { name: String, entries: Vec<Param> },
 }
 
 // ============================================================================
@@ -539,9 +540,11 @@ impl Parser {
                             Err(mut e) => errors.append(&mut e),
                         },
                         other => {
-                            errors.push(format!("line {}: unknown section '{}'", self.current_line(), other));
-                            // Try to skip to next section by finding the matching }
-                            self.skip_to_closing_brace();
+                            let section_name = other.to_string();
+                            match self.parse_named_params_section(&section_name) {
+                                Ok(params) => nodes.push(AstNode::GenericSection { name: section_name, entries: params }),
+                                Err(mut e) => errors.append(&mut e),
+                            }
                         }
                     }
                 }
@@ -1043,7 +1046,8 @@ fn validate(nodes: &[AstNode]) -> Vec<ValidationError> {
             AstNode::Dampening { entries } |
             AstNode::IntentBoost { entries } |
             AstNode::DomainGate { entries } |
-            AstNode::DependencyBoost { entries } => {
+            AstNode::DependencyBoost { entries } |
+            AstNode::GenericSection { entries, .. } => {
                 validate_param_ranges(entries, &mut errors);
             }
 
@@ -1356,6 +1360,19 @@ fn generate(nodes: &[AstNode]) -> String {
                 out.push_str("// === Dependency Boost ===\n");
                 for param in entries {
                     let const_name = format!("DEPENDENCY_BOOST_{}", to_screaming_snake(&param.name));
+                    out.push_str(&format!(
+                        "pub const {}: f32 = {};\n",
+                        const_name, format_f32(param.value)
+                    ));
+                }
+                out.push('\n');
+            }
+
+            AstNode::GenericSection { name, entries } => {
+                let prefix = to_screaming_snake(name);
+                out.push_str(&format!("// === {} ===\n", name));
+                for param in entries {
+                    let const_name = format!("{}_{}", prefix, to_screaming_snake(&param.name));
                     out.push_str(&format!(
                         "pub const {}: f32 = {};\n",
                         const_name, format_f32(param.value)

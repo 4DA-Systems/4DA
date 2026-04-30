@@ -21,6 +21,7 @@ use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
 };
+use crate::scoring_config;
 
 // ============================================================================
 // Report-level cache (5-minute TTL)
@@ -512,11 +513,18 @@ fn find_uncovered_deps(
 
 /// Classify risk level based on coverage gap severity.
 fn classify_dep_risk(days_since: u32, unseen_signals: u32, project_count: usize) -> String {
-    if days_since > 60 && project_count > 2 {
+    if days_since > scoring_config::BLIND_SPOT_RISK_CRITICAL_DAYS as u32
+        && project_count > scoring_config::BLIND_SPOT_RISK_CRITICAL_PROJECTS as usize
+    {
         "critical".to_string()
-    } else if days_since > 30 || (unseen_signals > 5 && project_count > 1) {
+    } else if days_since > scoring_config::BLIND_SPOT_RISK_HIGH_DAYS as u32
+        || (unseen_signals > scoring_config::BLIND_SPOT_RISK_HIGH_UNSEEN_SIGNALS as u32
+            && project_count > scoring_config::BLIND_SPOT_RISK_HIGH_PROJECTS as usize)
+    {
         "high".to_string()
-    } else if days_since > 14 || unseen_signals > 2 {
+    } else if days_since > scoring_config::BLIND_SPOT_RISK_MEDIUM_DAYS as u32
+        || unseen_signals > scoring_config::BLIND_SPOT_RISK_MEDIUM_UNSEEN_SIGNALS as u32
+    {
         "medium".to_string()
     } else {
         "low".to_string()
@@ -564,8 +572,8 @@ fn find_missed_signals(
     // Dedup window: 3 days ago through N days ago.
     // Items from the last 3 days are in the user's main feed — those are
     // not "missed," they're "not yet seen."
-    const FEED_WINDOW_DAYS: u32 = 3;
-    if days <= FEED_WINDOW_DAYS {
+    let feed_window_days = scoring_config::MISSED_SIGNAL_FEED_WINDOW_DAYS as u32;
+    if days <= feed_window_days {
         return Ok(Vec::new()); // No meaningful "missed" window
     }
 
@@ -595,7 +603,7 @@ fn find_missed_signals(
          ORDER BY si.relevance_score DESC
          LIMIT 40",
         days = days,
-        feed_window = FEED_WINDOW_DAYS
+        feed_window = feed_window_days
     );
 
     let mut stmt = match conn.prepare(&sql) {
@@ -727,9 +735,9 @@ fn signal_priority_tier(signal: &MissedSignal) -> u8 {
 /// content, even when relevance scores are similar. Also caps older non-urgent
 /// content so the panel stays focused on recent-enough material.
 fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
-    const FINAL_LIMIT: usize = 15;
-    const OLD_BLOG_CAP: usize = 3;
-    const OLD_DAYS_THRESHOLD: i64 = 10;
+    let final_limit = scoring_config::MISSED_SIGNAL_FINAL_LIMIT as usize;
+    let old_blog_cap = scoring_config::MISSED_SIGNAL_OLD_BLOG_CAP as usize;
+    let old_days_threshold = scoring_config::MISSED_SIGNAL_OLD_DAYS_THRESHOLD as i64;
 
     fn age_days(created_at: &str) -> i64 {
         chrono::DateTime::parse_from_rfc3339(created_at)
@@ -754,17 +762,17 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
         })
     });
 
-    // Cap Tier 1 (generic blog) items older than OLD_DAYS_THRESHOLD to OLD_BLOG_CAP.
-    let mut kept = Vec::with_capacity(FINAL_LIMIT);
+    // Cap Tier 1 (generic blog) items older than old_days_threshold to old_blog_cap.
+    let mut kept = Vec::with_capacity(final_limit);
     let mut old_tier1_count = 0;
     for s in signals {
-        if kept.len() >= FINAL_LIMIT {
+        if kept.len() >= final_limit {
             break;
         }
         let tier = signal_priority_tier(&s);
         let age = age_days(&s.created_at);
-        if tier == 1 && age > OLD_DAYS_THRESHOLD {
-            if old_tier1_count >= OLD_BLOG_CAP {
+        if tier == 1 && age > old_days_threshold {
+            if old_tier1_count >= old_blog_cap {
                 continue;
             }
             old_tier1_count += 1;
@@ -1351,12 +1359,12 @@ fn calculate_blind_spot_score(
         let avg = sum / missed.len() as f32;
         // Boost by log-scale count: more missed items bumps the pressure,
         // but the returns diminish fast so it can't dominate.
-        let count_boost = ((missed.len() as f32).ln_1p() / 4.0).min(1.0);
-        (avg * 0.7 + count_boost * 0.3).min(1.0)
+        let count_boost = ((missed.len() as f32).ln_1p() / scoring_config::MISSED_SIGNAL_LOG_DIVISOR).min(1.0);
+        (avg * scoring_config::MISSED_SIGNAL_AVG_WEIGHT + count_boost * scoring_config::MISSED_SIGNAL_COUNT_BOOST_WEIGHT).min(1.0)
     };
 
     // ─── Final weighted blend ─────────────────────────────────────────
-    let score = (uncovered_pressure * 55.0) + (stale_pressure * 25.0) + (missed_pressure * 20.0);
+    let score = (uncovered_pressure * scoring_config::BLIND_SPOT_HEALTH_UNCOVERED_WEIGHT) + (stale_pressure * scoring_config::BLIND_SPOT_HEALTH_STALE_WEIGHT) + (missed_pressure * scoring_config::BLIND_SPOT_HEALTH_MISSED_WEIGHT);
 
     // Clamp defensively (should already be in range given the component caps).
     score.clamp(0.0, 100.0)

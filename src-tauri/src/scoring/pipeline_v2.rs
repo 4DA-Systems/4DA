@@ -155,21 +155,6 @@ fn check_version_affected(
 // - Dampening reduced (penalty 0.65→0.72, boost 0.55→0.65) in pipeline.scoring
 //   to preserve more signal through the quality composite (~3.2% less automatic
 //   compression per multiplier).
-const V2_GATE: [(f32, f32); 6] = [
-    (0.25, 0.20), // 0 signals — heavy penalty (unchanged)
-    (0.45, 0.28), // 1 signal — below threshold (unchanged)
-    (1.00, 0.72), // 2 signals — raised from 0.65 to let strong matches breathe
-    (1.10, 0.88), // 3 signals — raised from 0.85
-    (1.20, 1.00), // 4 signals — strong confirmation (unchanged)
-    (1.25, 1.00), // 5 signals — full confidence (unchanged)
-];
-
-const BOOST_CAP_MIN: f32 = -0.15;
-const BOOST_CAP_MAX: f32 = 0.45;
-/// Maximum gate ceiling bonus for strong signals (creates mid-band spread).
-/// Strong 2-signal items can reach 0.72 + 0.12 = 0.84 vs weak at 0.72.
-/// Only applies at 2+ signals — 0-1 signal ceilings are intentionally hard.
-const STRENGTH_BONUS_MAX: f32 = 0.12;
 
 // ============================================================================
 // KNN-specific calibration
@@ -240,11 +225,11 @@ fn compute_signal_strength_bonus(
     if ace_confirmed {
         if semantic_boost >= scoring_config::SEMANTIC_THRESHOLD {
             // Normalize semantic excess (practical range 0.18-0.50)
-            let excess = (semantic_boost - scoring_config::SEMANTIC_THRESHOLD) / 0.32;
+            let excess = (semantic_boost - scoring_config::SEMANTIC_THRESHOLD) / scoring_config::SIGNAL_NORMALIZATION_SEMANTIC_RANGE;
             strengths.push(excess.clamp(0.0, 1.0));
         } else {
-            // stack_pain_match is binary — use flat 0.4
-            strengths.push(0.4);
+            // stack_pain_match is binary — use flat strength
+            strengths.push(scoring_config::SIGNAL_NORMALIZATION_STACK_PAIN_STRENGTH);
         }
     }
 
@@ -254,10 +239,10 @@ fn compute_signal_strength_bonus(
     {
         // Affinity-driven strength (affinity range 1.15-1.70)
         if affinity_mult >= scoring_config::AFFINITY_THRESHOLD {
-            let excess = (affinity_mult - scoring_config::AFFINITY_THRESHOLD) / 0.55;
+            let excess = (affinity_mult - scoring_config::AFFINITY_THRESHOLD) / scoring_config::SIGNAL_NORMALIZATION_AFFINITY_RANGE;
             strengths.push(excess.clamp(0.0, 1.0));
         } else {
-            strengths.push(0.4); // Feedback is less granular
+            strengths.push(scoring_config::SIGNAL_NORMALIZATION_FEEDBACK_STRENGTH); // Feedback is less granular
         }
     }
 
@@ -273,7 +258,7 @@ fn compute_signal_strength_bonus(
     }
 
     let avg_strength = strengths.iter().sum::<f32>() / strengths.len() as f32;
-    avg_strength * STRENGTH_BONUS_MAX
+    avg_strength * scoring_config::BOOST_CLAMP_STRENGTH_BONUS_MAX
 }
 
 // ============================================================================
@@ -726,15 +711,14 @@ fn compute_quality_composite(
     // Blend learned source quality with autophagy engagement rate (if available)
     let source_quality_mult =
         if let Some(&engagement_rate) = ctx.source_autopsies.get(input.source_type) {
-            let autophagy_factor = if engagement_rate < 0.10 {
-                0.85 // Very low engagement -> mild penalty
-            } else if engagement_rate > 0.50 {
-                1.10 // High engagement -> mild boost
+            let autophagy_factor = if engagement_rate < scoring_config::SOURCE_ENGAGEMENT_LOW_THRESHOLD {
+                scoring_config::SOURCE_ENGAGEMENT_LOW_PENALTY
+            } else if engagement_rate > scoring_config::SOURCE_ENGAGEMENT_HIGH_THRESHOLD {
+                scoring_config::SOURCE_ENGAGEMENT_HIGH_BOOST
             } else {
-                1.0 // Average engagement -> neutral
+                1.0
             };
-            // Blend 50/50 with learned preference
-            (learned_source_mult * 0.5 + autophagy_factor * 0.5).clamp(0.80, 1.20)
+            (learned_source_mult * scoring_config::SOURCE_ENGAGEMENT_BLEND_LEARNED_WEIGHT + autophagy_factor * scoring_config::SOURCE_ENGAGEMENT_BLEND_AUTOPHAGY_WEIGHT).clamp(scoring_config::SOURCE_ENGAGEMENT_BLEND_MIN, scoring_config::SOURCE_ENGAGEMENT_BLEND_MAX)
         } else {
             learned_source_mult
         };
@@ -743,9 +727,9 @@ fn compute_quality_composite(
     let anti_mult = 1.0 - raw.anti_penalty;
 
     // Domain quality penalty (NOT dampened — preserves full penalty strength)
-    let domain_quality_mult = if raw.domain_relevance >= 0.85 {
+    let domain_quality_mult = if raw.domain_relevance >= scoring_config::DOMAIN_QUALITY_HIGH_THRESHOLD {
         1.0
-    } else if raw.domain_relevance >= 0.50 {
+    } else if raw.domain_relevance >= scoring_config::DOMAIN_QUALITY_MID_THRESHOLD {
         1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance) * 0.5
     } else {
         1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance)
@@ -889,13 +873,12 @@ fn compute_quality_composite(
     let all_transitive =
         !raw.matched_deps.is_empty() && raw.matched_deps.iter().all(|d| !d.is_direct);
     let quality_score =
-        if novelty.is_security && raw.dep_match_score < 0.20 && !raw.matched_deps.is_empty() {
-            quality_score * 0.60
+        if novelty.is_security && raw.dep_match_score < scoring_config::SECURITY_DEP_VALIDATION_DEP_CONFIDENCE_THRESHOLD && !raw.matched_deps.is_empty() {
+            quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
         } else if novelty.is_security && raw.matched_deps.is_empty() {
-            quality_score * 0.35
+            quality_score * scoring_config::SECURITY_DEP_VALIDATION_NO_MATCH_PENALTY
         } else if novelty.is_security && all_transitive {
-            // Strong match but all deps are transitive — not urgent
-            quality_score * 0.60
+            quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
         } else {
             quality_score
         };
@@ -1044,7 +1027,7 @@ fn compute_boosts(
         - archetype_penalty
         + raw.taste_boost;
 
-    let total_capped = total_raw.clamp(BOOST_CAP_MIN, BOOST_CAP_MAX);
+    let total_capped = total_raw.clamp(scoring_config::BOOST_CLAMP_MIN, scoring_config::BOOST_CLAMP_MAX);
 
     let total_dampened = if total_capped < 0.0 {
         total_capped * scoring_config::DAMPENING_PENALTY_STRENGTH
@@ -1078,7 +1061,7 @@ fn apply_gate_effect(
     strength_bonus: f32,
 ) -> f32 {
     let idx = (signal_count as usize).min(5);
-    let (conf_mult, base_ceiling) = V2_GATE[idx];
+    let (conf_mult, base_ceiling) = scoring_config::CONFIRMATION_GATE[idx];
     // Adjust ceiling based on signal strength — strong signals get higher ceiling.
     // This creates sub-ranking within gate tiers: strong 2-signal items at ~0.73
     // are clearly differentiated from weak 2-signal items capped at 0.65.
@@ -1103,7 +1086,7 @@ fn apply_gate_effect(
     // certainty which no heuristic pipeline can guarantee.
     (gated * domain_gate_mult)
         .min(score_ceiling)
-        .clamp(0.0, 0.95)
+        .clamp(0.0, scoring_config::FINAL_CEILING_ABSOLUTE_MAX)
 }
 
 // ============================================================================
@@ -1420,7 +1403,7 @@ pub(crate) fn score_item(
 
     // ── Phase 7: Gate effect ──────────────────────────────────────────
     let conf_idx = (signal_count as usize).min(5);
-    let confirmation_mult = V2_GATE[conf_idx].0;
+    let confirmation_mult = scoring_config::CONFIRMATION_GATE[conf_idx].0;
     let gated_score = apply_gate_effect(
         boosted_score,
         signal_count,
@@ -1444,12 +1427,12 @@ pub(crate) fn score_item(
     let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
     let has_strong_dep_match =
-        raw.dep_match_score >= 0.15 && raw.matched_deps.iter().any(|d| !d.is_dev);
+        raw.dep_match_score >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD && raw.matched_deps.iter().any(|d| !d.is_dev);
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // If critical fast-path, boost score to ensure it passes the gate
-    let combined_score = if critical_fast_path && combined_score < 0.50 {
-        combined_score.max(0.50) // Floor at 0.50 for security items matching deps
+    let combined_score = if critical_fast_path && combined_score < scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR {
+        combined_score.max(scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR) // Floor for security items matching deps
     } else {
         combined_score
     };
