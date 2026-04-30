@@ -67,4 +67,4 @@ contributors list below.
 
 | Name | GitHub Handle | Date |
 |------|---------------|------|
-| 4DA Systems | @runyourempire | 2025-01-01 |
+| 4DA Systems Pty Ltd | @runyourempire | 2025-01-01 |
