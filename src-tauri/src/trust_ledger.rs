@@ -602,6 +602,8 @@ pub async fn record_intelligence_feedback(
     source_type: Option<String>,
     topic: Option<String>,
     notes: Option<String>,
+    dismiss_reason: Option<String>,
+    dismiss_category: Option<String>,
 ) -> std::result::Result<(), String> {
     let event_type = match event_type.as_str() {
         "acted_on" => TrustEventType::ActedOn,
@@ -612,8 +614,8 @@ pub async fn record_intelligence_feedback(
         _ => TrustEventType::Surfaced,
     };
     record_trust_event(TrustEvent {
-        event_type,
-        signal_id,
+        event_type: event_type.clone(),
+        signal_id: signal_id.clone(),
         alert_id,
         source_type,
         topic,
@@ -621,7 +623,27 @@ pub async fn record_intelligence_feedback(
         confidence_at_surface: None,
         notes,
     })
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    // If this is a dismiss with structured feedback, also record on the interaction
+    if matches!(event_type, TrustEventType::Dismissed) {
+        if let (Some(ref reason), Some(ref category)) = (&dismiss_reason, &dismiss_category) {
+            if let Ok(engine) = crate::get_context_engine() {
+                if let Some(ref sid) = signal_id {
+                    if let Ok(item_id) = sid.parse::<i64>() {
+                        let _ = engine.record_interaction(
+                            item_id,
+                            crate::context_engine::InteractionType::Dismiss,
+                            Some(reason),
+                            Some(category),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

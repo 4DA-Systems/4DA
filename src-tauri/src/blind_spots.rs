@@ -1445,11 +1445,17 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         kind: EvidenceKind::Gap,
         title,
         explanation,
-        confidence: Confidence::heuristic(match d.risk_level.as_str() {
-            "critical" => 0.65,
-            "high" => 0.55,
-            "medium" => 0.40,
-            _ => 0.30,
+        confidence: Confidence::heuristic({
+            let base = match d.risk_level.as_str() {
+                "critical" => 0.50,
+                "high" => 0.40,
+                "medium" => 0.30,
+                _ => 0.20,
+            };
+            // Scale up based on evidence strength: more projects + more unseen signals = higher confidence
+            let project_boost = (d.projects_using.len() as f32 * 0.05).min(0.15);
+            let signal_boost = (d.available_signal_count as f32 * 0.02).min(0.15);
+            (base + project_boost + signal_boost).min(0.80)
         }),
         urgency: risk_level_to_urgency(&d.risk_level),
         reversibility: None,
@@ -1530,10 +1536,10 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
         kind: EvidenceKind::Gap,
         title,
         explanation,
-        confidence: Confidence::heuristic(if t.missed_signal_count >= 5 {
-            0.55
-        } else {
-            0.35
+        confidence: Confidence::heuristic({
+            let signal_factor = (t.missed_signal_count as f32 * 0.06).min(0.35);
+            let staleness_factor = (t.last_engagement_days as f32 / 60.0).min(0.25);
+            (0.20 + signal_factor + staleness_factor).min(0.70)
         }),
         urgency,
         reversibility: None,

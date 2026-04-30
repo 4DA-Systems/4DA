@@ -657,6 +657,8 @@ pub async fn record_interaction(
     app: AppHandle,
     source_item_id: i64,
     action: String,
+    dismiss_reason: Option<String>,
+    dismiss_category: Option<String>,
 ) -> Result<serde_json::Value> {
     let engine = get_context_engine()?;
 
@@ -669,7 +671,12 @@ pub async fn record_interaction(
     };
 
     engine
-        .record_interaction(source_item_id, action_type)
+        .record_interaction(
+            source_item_id,
+            action_type,
+            dismiss_reason.as_deref(),
+            dismiss_category.as_deref(),
+        )
         .map_err(|e| format!("Failed to record interaction: {e}"))?;
 
     debug!(target: "4da::context", action = %action, item_id = source_item_id, "Recorded interaction");
@@ -714,7 +721,7 @@ pub async fn snooze_item(source_item_id: i64, days: u32) -> Result<serde_json::V
     .map_err(|e| format!("Failed to snooze item: {e}"))?;
 
     if let Ok(engine) = get_context_engine() {
-        let _ = engine.record_interaction(source_item_id, InteractionType::Ignore);
+        let _ = engine.record_interaction(source_item_id, InteractionType::Ignore, None, None);
     }
 
     debug!(target: "4da::context", item_id = source_item_id, days = days, "Snoozed item");
