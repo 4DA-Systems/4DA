@@ -441,6 +441,8 @@ impl ContextEngine {
         &self,
         source_item_id: i64,
         action: InteractionType,
+        dismiss_reason: Option<&str>,
+        dismiss_category: Option<&str>,
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         let action_str = match action {
@@ -451,8 +453,8 @@ impl ContextEngine {
         };
 
         conn.execute(
-            "INSERT INTO interactions (source_item_id, item_id, action, action_type, signal_strength) VALUES (?1, ?1, ?2, ?2, 0.5)",
-            params![source_item_id, action_str],
+            "INSERT INTO interactions (source_item_id, item_id, action, action_type, signal_strength, dismiss_reason, dismiss_category) VALUES (?1, ?1, ?2, ?2, 0.5, ?3, ?4)",
+            params![source_item_id, action_str, dismiss_reason, dismiss_category],
         )?;
         Ok(())
     }

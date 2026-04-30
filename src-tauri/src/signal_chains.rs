@@ -218,9 +218,10 @@ fn has_dependency_match(conn: &rusqlite::Connection, topic: &str) -> f64 {
     match result {
         // Graduated match: single project = moderate confidence,
         // multiple projects using the same dep = higher confidence.
-        Ok(count) if count >= 3 => 0.95,
-        Ok(count) if count >= 2 => 0.80,
-        Ok(count) if count >= 1 => 0.60,
+        Ok(count) if count >= 1 => {
+            // Graduate: each project adds confidence, diminishing returns
+            (0.50 + (count as f64 * 0.12).min(0.40)).min(0.90)
+        }
         _ => 0.0,
     }
 }
@@ -454,7 +455,7 @@ fn compute_confidence(link_count: usize, intervals: &[f64]) -> f64 {
         0.3
     };
 
-    (data_confidence * 0.6 + regularity * 0.4).min(0.95)
+    (data_confidence * 0.6 + regularity * 0.4).min(0.85)
 }
 
 /// Build a human-readable forecast
