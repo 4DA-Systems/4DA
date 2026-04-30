@@ -79,4 +79,23 @@ describe('ItemCard', () => {
     render(<ItemCard item={makeItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
     expect(screen.getByText('github')).toBeDefined();
   });
+
+  it('renders VERIFIED badge for osv_verified provenance', () => {
+    const item = makeItem({ confidence: { value: 0.95, provenance: 'osv_verified', sample_size: null } });
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.getByText('preemption.badge.verified')).toBeDefined();
+  });
+
+  it('renders AI badge for llm_assessed provenance', () => {
+    const item = makeItem({ confidence: { value: 0.7, provenance: 'llm_assessed', sample_size: 5 } });
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.getByText('preemption.badge.ai')).toBeDefined();
+  });
+
+  it('does not render tier badge for heuristic provenance', () => {
+    const item = makeItem({ confidence: { value: 0.5, provenance: 'heuristic', sample_size: null } });
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.queryByText('preemption.badge.verified')).toBeNull();
+    expect(screen.queryByText('preemption.badge.ai')).toBeNull();
+  });
 });

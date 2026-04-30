@@ -142,8 +142,10 @@ fn load_items_for_judgment(db: &Database, ids: &[i64]) -> Result<Vec<ItemForJudg
         crate::error::FourDaError::Internal(format!("Failed to prepare query: {e}"))
     })?;
 
-    let params: Vec<&dyn rusqlite::types::ToSql> =
-        ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+    let params: Vec<&dyn rusqlite::types::ToSql> = ids
+        .iter()
+        .map(|id| id as &dyn rusqlite::types::ToSql)
+        .collect();
     let rows = stmt
         .query_map(params.as_slice(), |row| {
             Ok(ItemForJudgment {
@@ -154,9 +156,7 @@ fn load_items_for_judgment(db: &Database, ids: &[i64]) -> Result<Vec<ItemForJudg
                 relevance_score: row.get(4)?,
             })
         })
-        .map_err(|e| {
-            crate::error::FourDaError::Internal(format!("Failed to query items: {e}"))
-        })?;
+        .map_err(|e| crate::error::FourDaError::Internal(format!("Failed to query items: {e}")))?;
 
     let mut items = Vec::new();
     for row in rows {

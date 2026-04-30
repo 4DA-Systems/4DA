@@ -47,6 +47,28 @@ export const URGENCY_ORDER: Urgency[] = ['critical', 'high', 'medium', 'watch'];
 const EVIDENCE_COLLAPSE_THRESHOLD = 2;
 const EXPLANATION_MAX_LENGTH = 280;
 
+export function getTierStyle(provenance: string): {
+  badge: string | null;
+  badgeClass: string;
+  borderClass: string;
+} {
+  if (provenance === 'osv_verified') {
+    return {
+      badge: 'preemption.badge.verified',
+      badgeClass: 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20',
+      borderClass: 'border-l-2 border-l-emerald-500/60',
+    };
+  }
+  if (provenance === 'llm_assessed') {
+    return {
+      badge: 'preemption.badge.ai',
+      badgeClass: 'text-blue-400 bg-blue-500/10 border border-blue-500/20',
+      borderClass: 'border-l-2 border-l-blue-500/40',
+    };
+  }
+  return { badge: null, badgeClass: '', borderClass: '' };
+}
+
 function formatFreshness(days: number, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const d = Math.round(days);
   if (d <= 0) return t('preemption.freshness.today');
@@ -228,6 +250,7 @@ export const ItemCard = memo(function ItemCard({
   const { t } = useTranslation();
   const [explanationExpanded, setExplanationExpanded] = useState(false);
   const cfg = URGENCY_CONFIG[item.urgency] ?? URGENCY_CONFIG.watch;
+  const tier = getTierStyle(item.confidence.provenance);
   const sourceType = kindAsSourceType(item);
 
   useEffect(() => {
@@ -248,7 +271,7 @@ export const ItemCard = memo(function ItemCard({
     : item.explanation;
 
   return (
-    <article className={`rounded-lg border ${cfg.border} ${cfg.bg} overflow-hidden`}>
+    <article className={`rounded-lg border ${cfg.border} ${cfg.bg} overflow-hidden ${tier.borderClass}`}>
       <header className="px-4 pt-4 pb-3">
         <div className="flex items-start gap-3">
           <span
@@ -257,6 +280,11 @@ export const ItemCard = memo(function ItemCard({
             <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
             {t(cfg.labelKey)}
           </span>
+          {tier.badge && (
+            <span className={`shrink-0 inline-flex items-center text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${tier.badgeClass}`}>
+              {t(tier.badge)}
+            </span>
+          )}
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-white leading-snug">
             {item.title}
           </h3>
