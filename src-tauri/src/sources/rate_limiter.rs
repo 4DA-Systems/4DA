@@ -70,7 +70,7 @@ impl RateLimiter {
 
     /// Acquire a global request permit. Returns a guard that releases on drop.
     /// This limits total concurrent HTTP requests across all sources to
-    /// [`MAX_CONCURRENT_REQUESTS`] (15), preventing network saturation when
+    /// [`MAX_CONCURRENT_REQUESTS`] (6), preventing network saturation when
     /// many sources fetch in parallel.
     pub async fn acquire_global_permit(&self) -> tokio::sync::OwnedSemaphorePermit {
         self.global_permits

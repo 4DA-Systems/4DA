@@ -636,7 +636,7 @@ pub(crate) async fn fetch_all_sources_deep(
     let deep_tracker = AdapterFailureTracker::new();
 
     // Limit concurrent source fetches to avoid triggering AV heuristics
-    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(3));
 
     let fetch_futures: Vec<_> = enabled_sources
         .iter()
