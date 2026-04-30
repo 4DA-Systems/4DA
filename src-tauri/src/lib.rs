@@ -252,6 +252,7 @@ mod indexed_documents_commands;
 mod integrity;
 mod intelligence_core;
 mod intelligence_history;
+mod intelligence_metrics;
 mod intelligence_packs;
 mod ipc_guard;
 mod ipc_rate_limit;
@@ -1091,6 +1092,8 @@ pub fn run() {
             osv::osv_sync_now,
             osv::osv_get_matches,
             osv::osv_get_sync_status,
+            // Intelligence Metrics (Phase 9)
+            intelligence_metrics::get_intelligence_metrics,
             // Accuracy Tracking (Phase 4.1)
             accuracy::get_accuracy_report,
             accuracy::get_intelligence_report,

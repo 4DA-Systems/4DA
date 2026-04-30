@@ -485,6 +485,9 @@ interface CommandMap {
   osv_get_matches: { params: Record<string, never>; result: { advisory_id: string; summary: string; details: string | null; package_name: string; ecosystem: string; installed_version: string | null; fixed_version: string | null; severity_type: string | null; cvss_score: number | null; source_url: string | null; is_version_confirmed: boolean; project_paths: string[]; published_at: string | null }[] };
   osv_get_sync_status: { params: Record<string, never>; result: { ecosystem: string; last_synced_at: string | null; advisory_count: number; error: string | null }[] };
 
+  // -- Intelligence Metrics --
+  get_intelligence_metrics: { params: { days?: number }; result: { verified: { surfaced: number; dismissed: number; acted_on: number; dismiss_rate: number; engagement_rate: number }; ai_assessed: { surfaced: number; dismissed: number; acted_on: number; dismiss_rate: number; engagement_rate: number }; developing: { surfaced: number; dismissed: number; acted_on: number; dismiss_rate: number; engagement_rate: number }; feedback_distribution: { category: string; count: number }[]; prompt_versions_active: string[] } };
+
   // -- Trust Ledger --
   get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
   record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string }; result: null };
