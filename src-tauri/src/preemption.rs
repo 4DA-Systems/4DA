@@ -942,17 +942,30 @@ fn chain_to_alert(
     ];
 
     PreemptionAlert {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: format!("chain-{}", uuid::Uuid::new_v4()),
         alert_type,
         title: if let Some(first_link) = chain.links.first() {
             truncate(&first_link.title, 120)
         } else {
             truncate(&chain.chain_name, 120)
         },
-        explanation: if prediction.forecast.is_empty() {
-            format!("{} — {}", chain.chain_name, chain.suggested_action)
-        } else {
-            truncate(&prediction.forecast, 200)
+        explanation: {
+            let source_count = chain.links.len();
+            let first_ts = chain.links.first().map(|l| &l.timestamp);
+            let last_ts = chain.links.last().map(|l| &l.timestamp);
+            let days_span = match (first_ts, last_ts) {
+                (Some(first), Some(last)) => {
+                    let first_f = freshness_from_timestamp(first);
+                    let last_f = freshness_from_timestamp(last);
+                    ((first_f - last_f).abs().ceil() as u32).max(1)
+                }
+                _ => 1,
+            };
+            format!(
+                "{source_count} sources discussing {} over {days_span} day{}. No advisory issued.",
+                chain.chain_name,
+                if days_span == 1 { "" } else { "s" }
+            )
         },
         evidence,
         affected_projects: vec![],

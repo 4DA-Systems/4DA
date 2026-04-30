@@ -96,11 +96,7 @@ impl Database {
 
     /// Get source item IDs that have no judgment yet and scored above a threshold.
     /// Only considers items from the last 7 days.
-    pub fn get_unjudged_item_ids(
-        &self,
-        min_score: f64,
-        limit: usize,
-    ) -> SqliteResult<Vec<i64>> {
+    pub fn get_unjudged_item_ids(&self, min_score: f64, limit: usize) -> SqliteResult<Vec<i64>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT si.id FROM source_items si
@@ -119,6 +115,48 @@ impl Database {
     pub fn get_judgment_count(&self) -> SqliteResult<i64> {
         let conn = self.conn.lock();
         conn.query_row("SELECT COUNT(*) FROM llm_judgments", [], |row| row.get(0))
+    }
+
+    /// Get dismiss category patterns over the last N days.
+    /// Returns `(category, count)` pairs sorted by count descending.
+    pub fn get_dismiss_patterns(&self, days: i64) -> SqliteResult<Vec<(String, i64)>> {
+        let conn = self.conn.lock();
+        let days_param = format!("-{days} days");
+        let mut stmt = conn.prepare(
+            "SELECT dismiss_category, COUNT(*) as cnt
+             FROM interactions
+             WHERE action_type = 'dismiss'
+               AND dismiss_category IS NOT NULL
+               AND timestamp >= datetime('now', ?1)
+             GROUP BY dismiss_category
+             ORDER BY cnt DESC",
+        )?;
+        let rows = stmt.query_map(params![days_param], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        rows.collect()
+    }
+
+    /// Get per-source dismiss rate over the last N days.
+    /// Only includes sources with >= 5 interactions. Returns `(source_type, dismiss_rate)`.
+    pub fn get_source_dismiss_rate(&self, days: i64) -> SqliteResult<Vec<(String, f64)>> {
+        let conn = self.conn.lock();
+        let days_param = format!("-{days} days");
+        let mut stmt = conn.prepare(
+            "SELECT si.source_type,
+                    CAST(SUM(CASE WHEN i.action_type = 'dismiss' THEN 1 ELSE 0 END) AS REAL)
+                    / MAX(COUNT(*), 1) as dismiss_rate
+             FROM interactions i
+             JOIN source_items si ON i.source_item_id = si.id
+             WHERE i.timestamp >= datetime('now', ?1)
+             GROUP BY si.source_type
+             HAVING COUNT(*) >= 5
+             ORDER BY dismiss_rate DESC",
+        )?;
+        let rows = stmt.query_map(params![days_param], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?))
+        })?;
+        rows.collect()
     }
 }
 
