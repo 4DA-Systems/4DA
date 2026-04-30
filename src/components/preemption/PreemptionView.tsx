@@ -46,11 +46,6 @@ function removeDismissal(id: string) {
   } catch { /* non-fatal */ }
 }
 
-function isStackAlert(item: EvidenceItem): boolean {
-  return item.affected_deps.length > 0
-    && (item.urgency === 'critical' || item.urgency === 'high');
-}
-
 const PreemptionView = memo(function PreemptionView() {
   const { t } = useTranslation();
   const isColdStart = useColdStartGate();
@@ -92,7 +87,7 @@ const PreemptionView = memo(function PreemptionView() {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
 
-  const { stackItems, ecosystemItems } = useMemo(() => {
+  const { verifiedItems, assessedItems, developingItems } = useMemo(() => {
     const visible = (feed?.items ?? [])
       .filter(item => !dismissedIds.has(item.id))
       .slice()
@@ -100,19 +95,22 @@ const PreemptionView = memo(function PreemptionView() {
         (a, b) => URGENCY_ORDER.indexOf(a.urgency) - URGENCY_ORDER.indexOf(b.urgency),
       );
 
-    const stack: EvidenceItem[] = [];
-    const ecosystem: EvidenceItem[] = [];
+    const verified: EvidenceItem[] = [];
+    const assessed: EvidenceItem[] = [];
+    const developing: EvidenceItem[] = [];
     for (const item of visible) {
-      if (isStackAlert(item)) {
-        stack.push(item);
+      if (item.confidence.provenance === 'osv_verified') {
+        verified.push(item);
+      } else if (item.confidence.provenance === 'llm_assessed') {
+        assessed.push(item);
       } else {
-        ecosystem.push(item);
+        developing.push(item);
       }
     }
-    return { stackItems: stack, ecosystemItems: ecosystem };
+    return { verifiedItems: verified, assessedItems: assessed, developingItems: developing };
   }, [feed, dismissedIds]);
 
-  const totalVisible = stackItems.length + ecosystemItems.length;
+  const totalVisible = verifiedItems.length + assessedItems.length + developingItems.length;
 
   return (
     <div className="space-y-5" role="tabpanel" id="view-panel-preemption">
@@ -135,10 +133,11 @@ const PreemptionView = memo(function PreemptionView() {
 
       {feed && totalVisible === 0 && !isColdStart && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="w-12 h-12 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-3">
-            <span className="text-green-400 text-lg">&#x2713;</span>
+          <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
+            <span className="text-emerald-400 text-lg">&#x2713;</span>
           </div>
-          <p className="text-sm text-text-secondary">{t('preemption.empty')}</p>
+          <p className="text-sm font-medium text-white mb-1">{t('preemption.empty.title')}</p>
+          <p className="text-xs text-text-muted">{t('preemption.empty.subtitle')}</p>
         </div>
       )}
 
@@ -146,6 +145,12 @@ const PreemptionView = memo(function PreemptionView() {
         <>
           <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-bg-secondary border border-border">
             <div className="flex items-center gap-3 text-xs">
+              {verifiedItems.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  {verifiedItems.length} {t('preemption.badge.verified').toLowerCase()}
+                </span>
+              )}
               {feed.critical_count > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -178,26 +183,41 @@ const PreemptionView = memo(function PreemptionView() {
           )}
 
           <PreemptionTierSection
-            dotColor="#EF4444"
-            borderColor="rgba(239, 68, 68, 0.2)"
-            title={t('preemption.tier.stack')}
-            subtitle={t('preemption.tier.stackSubtitle', { count: stackItems.length })}
-            items={stackItems}
+            dotColor="#22C55E"
+            borderColor="rgba(34, 197, 94, 0.2)"
+            title={t('preemption.tier.verified')}
+            subtitle={t('preemption.tier.verifiedSubtitle', { count: verifiedItems.length })}
+            items={verifiedItems}
             surfacedRef={surfacedRef}
             onDismiss={handleDismiss}
-            emptyText={t('preemption.tier.stackEmpty')}
+            emptyText={t('preemption.tier.verifiedEmpty')}
           />
 
-          <PreemptionTierSection
-            dotColor="#F59E0B"
-            borderColor="rgba(245, 158, 11, 0.15)"
-            title={t('preemption.tier.ecosystem')}
-            subtitle={t('preemption.tier.ecosystemSubtitle', { count: ecosystemItems.length })}
-            items={ecosystemItems}
-            surfacedRef={surfacedRef}
-            onDismiss={handleDismiss}
-            emptyText={t('preemption.tier.ecosystemEmpty')}
-          />
+          {assessedItems.length > 0 && (
+            <PreemptionTierSection
+              dotColor="#3B82F6"
+              borderColor="rgba(59, 130, 246, 0.2)"
+              title={t('preemption.tier.assessed')}
+              subtitle={t('preemption.tier.assessedSubtitle', { count: assessedItems.length })}
+              items={assessedItems}
+              surfacedRef={surfacedRef}
+              onDismiss={handleDismiss}
+              emptyText={t('preemption.tier.assessedEmpty')}
+            />
+          )}
+
+          {developingItems.length > 0 && (
+            <PreemptionTierSection
+              dotColor="#8A8A8A"
+              borderColor="rgba(138, 138, 138, 0.15)"
+              title={t('preemption.tier.developing')}
+              subtitle={t('preemption.tier.developingSubtitle', { count: developingItems.length })}
+              items={developingItems}
+              surfacedRef={surfacedRef}
+              onDismiss={handleDismiss}
+              emptyText={t('preemption.tier.developingEmpty')}
+            />
+          )}
         </>
       )}
     </div>
