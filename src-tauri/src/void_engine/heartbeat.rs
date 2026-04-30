@@ -106,7 +106,11 @@ pub struct SignalSummary {
 /// Last emitted signal, used for deduplication.
 static LAST_VOID_SIGNAL: parking_lot::Mutex<Option<VoidSignal>> = parking_lot::Mutex::new(None);
 
-/// Emit a void signal to the frontend, but only if it meaningfully changed.
+/// Last emission timestamp, used to throttle void-signal events (min 1s interval).
+static LAST_EMIT_TIME: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+/// Emit a void signal to the frontend, but only if it meaningfully changed
+/// and at least 1 second has elapsed since the last emission.
 pub fn emit_if_changed(app: &AppHandle, new_signal: VoidSignal) {
     let mut last = LAST_VOID_SIGNAL.lock();
     let should_emit = match &*last {
@@ -114,11 +118,20 @@ pub fn emit_if_changed(app: &AppHandle, new_signal: VoidSignal) {
         None => true,
     };
     if should_emit {
-        debug!(target: "4da::void", pulse = new_signal.pulse, heat = new_signal.heat,
-               burst = new_signal.burst, staleness = new_signal.staleness,
-               items = new_signal.item_count, "Emitting void signal");
-        if let Err(e) = app.emit("void-signal", &new_signal) {
-            tracing::warn!("Failed to emit 'void-signal': {e}");
+        // Enforce minimum 1-second interval between emissions to avoid event flooding
+        if let Ok(mut last_time) = LAST_EMIT_TIME.lock() {
+            if let Some(t) = *last_time {
+                if t.elapsed() < std::time::Duration::from_secs(1) {
+                    return;
+                }
+            }
+            debug!(target: "4da::void", pulse = new_signal.pulse, heat = new_signal.heat,
+                   burst = new_signal.burst, staleness = new_signal.staleness,
+                   items = new_signal.item_count, "Emitting void signal");
+            if let Err(e) = app.emit("void-signal", &new_signal) {
+                tracing::warn!("Failed to emit 'void-signal': {e}");
+            }
+            *last_time = Some(std::time::Instant::now());
         }
         *last = Some(new_signal);
     }

@@ -54,7 +54,7 @@ export function useVoidSignals() {
     let cancelled = false;
     const setup = async () => {
       const unlisten = await listen<VoidSignal>('void-signal', (event) => {
-        if (!cancelled) {
+        if (!cancelled && event.payload) {
           targetRef.current = event.payload;
         }
       });
@@ -82,7 +82,8 @@ export function useVoidSignals() {
 
       const target = targetRef.current;
       const current = currentRef.current;
-      const speed = 0.08; // Smooth interpolation speed
+      if (!target || !current) return;
+      const speed = 0.08;
 
       const next: VoidSignal = {
         pulse: lerp(current.pulse, target.pulse, speed),

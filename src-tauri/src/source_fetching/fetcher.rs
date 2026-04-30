@@ -635,7 +635,9 @@ pub(crate) async fn fetch_all_sources_deep(
     let rl = rate_limiter();
     let deep_tracker = AdapterFailureTracker::new();
 
-    // Launch all fetches in parallel — tier determines deep vs standard
+    // Limit concurrent source fetches to avoid triggering AV heuristics
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+
     let fetch_futures: Vec<_> = enabled_sources
         .iter()
         .map(|source| {
@@ -645,7 +647,9 @@ pub(crate) async fn fetch_all_sources_deep(
             let use_deep = tier.deep_fetch();
             let tracker = &deep_tracker;
             let rl = &rl;
+            let sem = semaphore.clone();
             async move {
+                let _permit = sem.acquire().await.expect("semaphore closed");
                 rl.wait_for_rate_limit(st).await;
                 let result = if use_deep {
                     fetch_with_retry(name, tracker, || {
