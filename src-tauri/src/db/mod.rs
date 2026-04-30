@@ -11,8 +11,8 @@ mod concurrency_tests;
 mod dependencies;
 pub(crate) mod encryption;
 mod history;
+pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
-mod llm_judgments;
 mod osv_advisories;
 mod sources;
 #[cfg(test)]
