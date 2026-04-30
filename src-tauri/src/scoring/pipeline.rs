@@ -650,7 +650,7 @@ pub(crate) fn score_item(
 
     // Language mismatch cap: foreign content cannot exceed 0.05 (well below 0.35 threshold)
     let combined_score = if lang_mismatch {
-        combined_score.min(0.05)
+        combined_score.min(scoring_config::LANGUAGE_MISMATCH_PENALTY_CAP)
     } else {
         combined_score
     };
@@ -797,7 +797,7 @@ pub(crate) fn score_item(
                     if !matched_deps.is_empty() {
                         let has_strong_dep = matched_deps
                             .iter()
-                            .any(|d| !d.is_dev && d.confidence >= 0.40);
+                            .any(|d| !d.is_dev && d.confidence >= scoring_config::SECURITY_DEP_VALIDATION_STRONG_DEP_THRESHOLD);
                         if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                             c.priority = signals::SignalPriority::Critical;
                             let best_dep = matched_deps

@@ -13,6 +13,7 @@ use tracing::warn;
 use ts_rs::TS;
 
 use crate::error::Result;
+use crate::scoring_config;
 use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
@@ -298,9 +299,9 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
         }
 
         // Tier 2 never assigns Critical — that's reserved for deterministic OSV matches
-        let urgency = if j.relevance_score >= 0.85 {
+        let urgency = if j.relevance_score >= scoring_config::PREEMPTION_URGENCY_HIGH_THRESHOLD as f64 {
             AlertUrgency::High
-        } else if j.relevance_score >= 0.65 {
+        } else if j.relevance_score >= scoring_config::PREEMPTION_URGENCY_MEDIUM_THRESHOLD as f64 {
             AlertUrgency::Medium
         } else {
             AlertUrgency::Watch
@@ -758,7 +759,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             // Honest confidence: title-keyword match with no version verification
             // is low-confidence intelligence. Will be upgraded to 0.85+ once OSV
             // version matching is implemented.
-            confidence: 0.45,
+            confidence: scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE,
             predicted_window: None,
             suggested_actions,
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -799,7 +800,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
                     // when multiple independent projects confirm the dep match,
                     // but still honest — no version verification yet.
                     let proj_count = existing.affected_projects.len() as f32;
-                    existing.confidence = (0.45 + proj_count * 0.03).min(0.60);
+                    existing.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST).min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
                 } else {
                     cve_groups.insert(id, alert);
                 }
@@ -814,7 +815,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         .into_values()
         .map(|mut a| {
             let proj_count = a.affected_projects.len() as f32;
-            a.confidence = (0.45 + proj_count * 0.03).min(0.60);
+            a.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST).min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
             a
         })
         .collect();
