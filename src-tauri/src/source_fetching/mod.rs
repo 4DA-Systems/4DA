@@ -12,6 +12,7 @@ pub(crate) use fetcher::{fetch_all_sources, fetch_all_sources_deep};
 pub(crate) use processor::fill_cache_background;
 
 use crate::get_settings_manager;
+use crate::sources::rate_limiter::rate_limiter;
 use crate::sources::{SourceError, SourceItem, SourceResult};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -135,6 +136,7 @@ where
     let mut last_error: Option<SourceError> = None;
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
+        let _global_permit = rate_limiter().acquire_global_permit().await;
         // 15s per-attempt timeout: one hung HTTP connection must not stall all sources
         let attempt_result =
             tokio::time::timeout(std::time::Duration::from_secs(15), fetch_fn()).await;

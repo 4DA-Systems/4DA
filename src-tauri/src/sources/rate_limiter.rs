@@ -50,7 +50,7 @@ fn source_interval(source: &str) -> Duration {
 /// Maximum concurrent HTTP requests across all sources.
 /// Prevents overwhelming the network or hitting OS file-descriptor limits
 /// when 100+ sources are fetching simultaneously.
-const MAX_CONCURRENT_REQUESTS: usize = 15;
+const MAX_CONCURRENT_REQUESTS: usize = 6;
 
 /// Centralized rate limiter that tracks per-source request timing
 /// and enforces a global concurrency cap via semaphore.

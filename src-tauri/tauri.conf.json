@@ -94,7 +94,8 @@
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
         "headerImage": null,
-        "sidebarImage": null
+        "sidebarImage": null,
+        "installerHooks": "./windows/hooks.nsh"
       }
     },
     "publisher": "4DA Systems Pty Ltd",
