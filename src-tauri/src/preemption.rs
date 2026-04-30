@@ -230,6 +230,129 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
         .collect()
 }
 
+/// Tier 2: Convert LLM-judged high-relevance items into preemption alerts.
+///
+/// Queries stored LLM judgments for security/breaking-change items and converts
+/// them into `PreemptionAlert`s with LLM-calibrated confidence. These sit between
+/// OSV-verified (Tier 1) and keyword-heuristic (Tier 3) in trust ranking.
+fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(_) => return Vec::new(),
+    };
+
+    let judgments = match db.get_relevant_judgments(0.50, 50) {
+        Ok(j) => j,
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Failed to get LLM judgments");
+            return Vec::new();
+        }
+    };
+
+    if judgments.is_empty() {
+        return Vec::new();
+    }
+
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut alerts = Vec::new();
+
+    for j in &judgments {
+        // Load the source item to get title/url/source_type
+        let item = match conn.query_row(
+            "SELECT title, url, source_type, created_at FROM source_items WHERE id = ?1",
+            rusqlite::params![j.source_item_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            },
+        ) {
+            Ok(item) => item,
+            Err(_) => continue,
+        };
+        let (title, url, source_type, created_at) = item;
+
+        // Only include security-relevant items in preemption
+        let title_lower = title.to_lowercase();
+        let is_security = title_lower.contains("cve")
+            || title_lower.contains("ghsa")
+            || title_lower.contains("vulnerab")
+            || title_lower.contains("security")
+            || title_lower.contains("advisory")
+            || title_lower.contains("exploit");
+        let is_breaking = title_lower.contains("breaking")
+            || title_lower.contains("deprecat")
+            || title_lower.contains("end of life")
+            || title_lower.contains("end-of-life")
+            || title_lower.contains("migration guide");
+
+        if !is_security && !is_breaking {
+            continue;
+        }
+
+        // Tier 2 never assigns Critical — that's reserved for deterministic OSV matches
+        let urgency = if j.relevance_score >= 0.85 {
+            AlertUrgency::High
+        } else if j.relevance_score >= 0.65 {
+            AlertUrgency::Medium
+        } else {
+            AlertUrgency::Watch
+        };
+
+        let alert_type = if is_security {
+            PreemptionType::SecurityAdvisory
+        } else {
+            PreemptionType::BreakingChange
+        };
+
+        let evidence = vec![AlertEvidence {
+            source: source_type,
+            title: title.clone(),
+            url,
+            freshness_days: freshness_from_timestamp(&created_at),
+            relevance_score: j.relevance_score as f32,
+        }];
+
+        let suggested_actions = vec![
+            SuggestedAction {
+                action_type: "investigate".to_string(),
+                label: format!("Review: {}", truncate(&title, 60)),
+                description: j.explanation.clone(),
+            },
+            SuggestedAction {
+                action_type: "dismiss".to_string(),
+                label: "Not relevant".to_string(),
+                description: "Dismiss if this doesn't affect your projects.".to_string(),
+            },
+        ];
+
+        alerts.push(PreemptionAlert {
+            id: format!("llm-{}", j.source_item_id),
+            alert_type,
+            title: truncate(&title, 120),
+            explanation: j.explanation.clone(),
+            evidence,
+            affected_projects: vec![],
+            affected_dependencies: vec![],
+            urgency,
+            confidence: j.confidence as f32,
+            predicted_window: None,
+            suggested_actions,
+            created_at: j.judged_at.clone(),
+            osv_verified: false,
+        });
+    }
+
+    alerts
+}
+
 /// Generate the preemption feed by combining all intelligence sources.
 ///
 /// PERFORMANCE: On a 239MB DB with 141 projects × 2497 deps, the naive
@@ -251,6 +374,9 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
 
     // ─── 0. Tier 1: OSV verified advisories (deterministic, highest trust) ──
     alerts.extend(osv_matches_to_alerts());
+
+    // ─── 0.5. Tier 2: LLM-assessed security items (pre-computed judgments) ──
+    alerts.extend(llm_judged_to_alerts());
 
     // ─── 1. Signal chain predictions (single call, bounded LIMIT 200) ────
     match crate::signal_chains::detect_chains(&conn) {
@@ -1044,6 +1170,8 @@ impl PreemptionAlert {
             // heuristic until AWE spine is wired in Phase 9.
             confidence: if self.osv_verified {
                 Confidence::osv_verified(self.confidence.clamp(0.0, 1.0))
+            } else if self.id.starts_with("llm-") {
+                Confidence::llm_assessed(self.confidence.clamp(0.0, 1.0))
             } else {
                 Confidence::heuristic(self.confidence.clamp(0.0, 1.0))
             },

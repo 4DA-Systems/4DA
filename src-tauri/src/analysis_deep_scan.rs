@@ -484,6 +484,16 @@ pub(crate) async fn run_deep_initial_scan_impl(app: &AppHandle) -> Result<Vec<So
         tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
     }
 
+    // Tier 2: queue unjudged items for LLM evaluation (non-blocking)
+    if let Ok(db) = crate::get_database() {
+        let db = db.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = crate::llm_judgments::evaluate_pending_items(&db).await {
+                tracing::warn!(target: "4da::llm_judgments", error = %e, "Post-scan LLM judgment failed");
+            }
+        });
+    }
+
     Ok(results)
 }
 
@@ -867,6 +877,16 @@ pub(crate) async fn run_multi_source_analysis_impl(
         excluded_count,
     ) {
         tracing::warn!(target: "4da::analysis", error = %e, "Failed to record scoring stats");
+    }
+
+    // Tier 2: queue unjudged items for LLM evaluation (non-blocking)
+    if let Ok(db) = crate::get_database() {
+        let db = db.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = crate::llm_judgments::evaluate_pending_items(&db).await {
+                tracing::warn!(target: "4da::llm_judgments", error = %e, "Post-scan LLM judgment failed");
+            }
+        });
     }
 
     Ok(results)
