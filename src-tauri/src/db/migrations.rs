@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 64;
+        const TARGET_VERSION: i64 = 65;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2371,6 +2371,57 @@ impl Database {
                             target: "4da::db",
                             "Created llm_judgments table (Tier 2 intelligence)"
                         );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 65: structured dismiss feedback for compound intelligence
+            if current_version < 65 {
+                Self::run_versioned_migration(
+                    &conn,
+                    64,
+                    65,
+                    "Phase 65: structured dismiss feedback for compound intelligence",
+                    |c| {
+                        // The `interactions` table lives in the ACE database, not the
+                        // main DB. On a fresh install the ACE DB may not have been
+                        // initialized yet, so check the table exists before ALTER.
+                        let table_exists = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='interactions'",
+                                [],
+                                |row| row.get::<_, i64>(0),
+                            )
+                            .unwrap_or(0)
+                            > 0;
+
+                        if table_exists {
+                            let has_dismiss_reason = c
+                                .query_row(
+                                    "SELECT COUNT(*) FROM pragma_table_info('interactions') WHERE name = 'dismiss_reason'",
+                                    [],
+                                    |row| row.get::<_, i64>(0),
+                                )
+                                .unwrap_or(0)
+                                > 0;
+
+                            if !has_dismiss_reason {
+                                c.execute_batch(
+                                    "ALTER TABLE interactions ADD COLUMN dismiss_reason TEXT;
+                                     ALTER TABLE interactions ADD COLUMN dismiss_category TEXT;",
+                                )?;
+                            }
+                            info!(
+                                target: "4da::db",
+                                "Added dismiss_reason + dismiss_category to interactions (compound intelligence loop)"
+                            );
+                        } else {
+                            info!(
+                                target: "4da::db",
+                                "Skipped dismiss columns — interactions table not yet created (ACE DB)"
+                            );
+                        }
                         Ok(())
                     },
                 )?;
