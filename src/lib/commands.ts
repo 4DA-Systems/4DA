@@ -100,6 +100,7 @@ interface TrustSummary {
   dismissed: number;
   false_positives: number;
   precision: number;
+  has_precision_data: boolean;
   action_conversion_rate: number;
   preemption_wins: number;
   avg_lead_time_hours: number | null;

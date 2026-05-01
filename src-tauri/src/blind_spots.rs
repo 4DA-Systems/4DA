@@ -117,14 +117,21 @@ pub struct BlindSpotRecommendation {
 //
 // NOTE on column naming: `user_dependencies` has `package_name` and `ecosystem`.
 // Earlier versions of this file used `name`/`dep_type` which don't exist in the
-// schema — the query silently failed and this function returned an empty Vec,
-// which cascaded into the "Blind Spot Index = 100" bug (no deps → empty
-// uncovered → score driven entirely by the missed-signals tally).
+// schema ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the query silently failed and this function returned an empty Vec,
+// which cascaded into the "Blind Spot Index = 100" bug (no deps ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ empty
+// uncovered ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ score driven entirely by the missed-signals tally).
 #[derive(Debug, Clone)]
 struct DepCoverage {
     package_name: String,
     ecosystem: String,
     projects: Vec<String>,
+}
+
+#[derive(Debug, Default)]
+struct DepSignalCoverage {
+    available: u32,
+    interacted: u32,
+    days_since_last_signal: Option<u32>,
 }
 
 // ============================================================================
@@ -166,7 +173,7 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
     Ok(report)
 }
 
-/// Inner implementation — always runs fresh queries.
+/// Inner implementation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â always runs fresh queries.
 fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     let conn = crate::open_db_connection()?;
     let threshold_days = blind_spot_threshold_days();
@@ -184,7 +191,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     let uncovered = find_uncovered_deps(&conn, &deps, threshold_days)?;
 
     // 5. Find stale topics from attention blind spots.
-    // Only include topics with actual missed signals — a topic with
+    // Only include topics with actual missed signals ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â a topic with
     // 0 missed signals means coverage is healthy, not that there's a
     // gap. Showing "Stale topic: rust (0 signals missed)" erodes trust
     // by flagging something the user can't act on.
@@ -225,7 +232,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
 /// Uses `project_dependencies` (not `user_dependencies`) because:
 ///   1. `project_dependencies` is the canonical per-project dep list the ACE
 ///      scanner populates on every scan.
-///   2. It already has `package_name`, `is_direct`, `is_dev`, `language` —
+///   2. It already has `package_name`, `is_direct`, `is_dev`, `language` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
 ///      everything we need for risk classification.
 ///   3. `user_dependencies` is a user-curated watchlist that may be empty.
 ///
@@ -234,7 +241,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
 /// entries on a typical 4DA developer machine and are dominated by packages
 /// the user never directly cares about.
 ///
-/// Skips dev-only deps — they're not runtime risk surface for blind spots.
+/// Skips dev-only deps ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â they're not runtime risk surface for blind spots.
 fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverage>> {
     // One query: aggregate projects per unique (package_name, language) pair,
     // filtering to direct runtime deps only.
@@ -276,12 +283,18 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
         })
     })?;
 
-    let result: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+    let mut result: Vec<DepCoverage> = rows.filter_map(|r| r.ok()).collect();
+    result.sort_by(|a, b| {
+        b.projects
+            .len()
+            .cmp(&a.projects.len())
+            .then_with(|| a.package_name.cmp(&b.package_name))
+    });
 
     if result.is_empty() {
         warn!(
             target: "4da::blind_spots",
-            "get_dependency_coverage returned 0 direct deps — user has no direct project deps scanned"
+            "get_dependency_coverage returned 0 direct deps ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â user has no direct project deps scanned"
         );
     }
 
@@ -295,16 +308,16 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
 /// Performance notes:
 /// - Capped at `MAX_DEPS_TO_PROCESS` unique direct deps (default 50). The user's
 ///   most-used deps come first via sort order, so the cap is rarely reached.
-/// - Short dep names (< 4 chars) are skipped — too generic for reliable LIKE
+/// - Short dep names (< 4 chars) are skipped ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â too generic for reliable LIKE
 ///   matching ("go", "c", "r" would match everything).
 /// - **Batched query**: all three metrics (available_count, interacted_count,
 ///   days_since_last) are computed in a single SQL query via a temp table +
-///   LEFT JOIN. This replaces the previous N+1 pattern (3 queries × 50 deps
-///   = 150 sequential queries → 2-3 queries total).
+///   LEFT JOIN. This replaces the previous N+1 pattern (3 queries ÃƒÆ’Ã¢â‚¬â€ 50 deps
+///   = 150 sequential queries ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 2-3 queries total).
 ///
 /// Schema correction (was a bug): `interactions` has `timestamp` NOT
 /// `created_at`. The previous query silently errored via `.unwrap_or(999)`,
-/// causing every dep to register `days_since = 999` → critical risk → score
+/// causing every dep to register `days_since = 999` ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ critical risk ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ score
 /// pinned to 100.
 fn find_uncovered_deps(
     conn: &rusqlite::Connection,
@@ -314,19 +327,26 @@ fn find_uncovered_deps(
     const MAX_DEPS_TO_PROCESS: usize = 50;
     const MIN_DEP_NAME_LEN: usize = 4;
 
-    // Filter and cap the dep list before touching the DB.
-    let eligible_deps: Vec<&DepCoverage> = deps
+    // Filter, rank, and cap the dep list before touching the DB.
+    let mut ranked_deps: Vec<&DepCoverage> = deps
         .iter()
         .filter(|d| d.package_name.len() >= MIN_DEP_NAME_LEN)
         .filter(|d| !is_builtin_module(&d.package_name))
-        .take(MAX_DEPS_TO_PROCESS)
         .collect();
+    ranked_deps.sort_by(|a, b| {
+        b.projects
+            .len()
+            .cmp(&a.projects.len())
+            .then_with(|| a.package_name.cmp(&b.package_name))
+    });
+    let eligible_deps: Vec<&DepCoverage> =
+        ranked_deps.into_iter().take(MAX_DEPS_TO_PROCESS).collect();
 
     if eligible_deps.is_empty() {
         return Ok(Vec::new());
     }
 
-    // ── Step 1: Create temp table with dep names ────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Step 1: Create temp table with dep names ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     // Using a temp table avoids SQLite's lack of VALUES-as-CTE support and
     // keeps parameter binding straightforward.
     if let Err(e) =
@@ -343,7 +363,7 @@ fn find_uncovered_deps(
     let _ = conn.execute("DELETE FROM _blind_spot_deps", []);
 
     // Batch-insert dep names. Using a single prepared statement with
-    // repeated execution is fast for ≤50 rows.
+    // repeated execution is fast for ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â¤50 rows.
     {
         let mut insert_stmt = match conn.prepare("INSERT INTO _blind_spot_deps (name) VALUES (?1)")
         {
@@ -368,7 +388,7 @@ fn find_uncovered_deps(
         }
     }
 
-    // ── Step 2: Single batched query for all three metrics ──────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Step 2: Single batched query for all three metrics ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     //
     // For each dep name in _blind_spot_deps:
     //   - available: COUNT of source_items whose title LIKE '%dep_name%'
@@ -383,115 +403,193 @@ fn find_uncovered_deps(
     // exact semantics of the original per-dep queries.
     let window = format!("-{threshold_days} days");
 
-    let batch_sql = "
+    let recent_sql = "
         SELECT
-            d.name,
-            COALESCE(w.available, 0) AS available,
-            COALESCE(w.interacted, 0) AS interacted,
-            COALESCE(ds.days_since, 999) AS days_since
-        FROM _blind_spot_deps d
-        LEFT JOIN (
-            SELECT
-                bd.name AS dep_name,
-                COUNT(*) AS available,
-                COUNT(DISTINCT CASE WHEN i.item_id IS NOT NULL THEN si.id END) AS interacted
-            FROM _blind_spot_deps bd
-            JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
-            LEFT JOIN interactions i ON i.item_id = si.id
-            WHERE si.created_at >= datetime('now', ?1)
-              AND (si.content_type IS NULL
-                   OR si.content_type NOT IN ('show_and_tell','tutorial','question',
-                                              'help_request','hiring','clickbait'))
-            GROUP BY bd.name
-        ) w ON w.dep_name = d.name
-        LEFT JOIN (
-            SELECT
-                bd2.name AS dep_name,
-                CAST(julianday('now') - julianday(MAX(i2.timestamp)) AS INTEGER) AS days_since
-            FROM _blind_spot_deps bd2
-            JOIN source_items si2 ON si2.title LIKE '%' || bd2.name || '%'
-            JOIN interactions i2 ON i2.item_id = si2.id
-            GROUP BY bd2.name
-        ) ds ON ds.dep_name = d.name
+            bd.name,
+            si.title,
+            si.source_type,
+            si.content_type,
+            CASE
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM interactions i
+                    WHERE i.item_id = si.id OR i.source_item_id = si.id
+                ) THEN 1
+                ELSE 0
+            END AS interacted
+        FROM _blind_spot_deps bd
+        JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
+        WHERE si.created_at >= datetime('now', ?1)
+          AND LOWER(si.source_type) != 'stackoverflow'
+          AND (si.content_type IS NULL
+               OR si.content_type NOT IN ('show_and_tell','tutorial','question',
+                                          'help_request','hiring','clickbait'))
+    ";
+    let history_sql = "
+        SELECT
+            bd.name,
+            si.title,
+            si.source_type,
+            si.content_type,
+            CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since
+        FROM _blind_spot_deps bd
+        JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
+        JOIN interactions i ON i.item_id = si.id OR i.source_item_id = si.id
+        WHERE LOWER(si.source_type) != 'stackoverflow'
+        GROUP BY bd.name, si.id, si.title, si.source_type, si.content_type
     ";
 
-    let mut stmt = match conn.prepare(batch_sql) {
-        Ok(s) => s,
-        Err(e) => {
-            warn!(
-                target: "4da::blind_spots",
-                "Failed to prepare batched dep coverage query: {e}"
-            );
-            let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-            return Ok(Vec::new());
-        }
-    };
-
-    // Build a lookup from dep name → (ecosystem, projects) for result assembly.
     let dep_lookup: std::collections::HashMap<&str, &DepCoverage> = eligible_deps
         .iter()
         .map(|d| (d.package_name.as_str(), *d))
         .collect();
+    let mut coverage: std::collections::HashMap<String, DepSignalCoverage> = eligible_deps
+        .iter()
+        .map(|dep| (dep.package_name.clone(), DepSignalCoverage::default()))
+        .collect();
 
-    let rows = match stmt.query_map(params![window], |row| {
-        Ok((
-            row.get::<_, String>(0)?, // name
-            row.get::<_, u32>(1)?,    // available
-            row.get::<_, u32>(2)?,    // interacted
-            row.get::<_, u32>(3)?,    // days_since
-        ))
-    }) {
-        Ok(r) => r,
-        Err(e) => {
-            warn!(
-                target: "4da::blind_spots",
-                "Failed to execute batched dep coverage query: {e}"
-            );
-            let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-            return Ok(Vec::new());
-        }
-    };
-
-    let mut uncovered = Vec::new();
-
-    for row_result in rows {
-        let (name, available, interacted, days_since) = match row_result {
+    {
+        let mut stmt = match conn.prepare(recent_sql) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(
+                    target: "4da::blind_spots",
+                    "Failed to prepare recent blind-spot dep query: {e}"
+                );
+                let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+                return Ok(Vec::new());
+            }
+        };
+        let rows = match stmt.query_map(params![window], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+            ))
+        }) {
             Ok(r) => r,
             Err(e) => {
                 warn!(
                     target: "4da::blind_spots",
-                    "Failed to read batched dep row: {e}"
+                    "Failed to execute recent blind-spot dep query: {e}"
                 );
-                continue;
+                let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+                return Ok(Vec::new());
             }
         };
 
-        // Same filtering logic as the original per-dep loop:
+        for row_result in rows {
+            let (name, title, source_type, content_type, interacted) = match row_result {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(
+                        target: "4da::blind_spots",
+                        "Failed to read recent blind-spot dep row: {e}"
+                    );
+                    continue;
+                }
+            };
+            let dep_lower = name.to_lowercase();
+            let title_lower = title.to_lowercase();
+            if !is_actionable_blind_spot_match(
+                &dep_lower,
+                &title_lower,
+                &source_type,
+                content_type.as_deref(),
+            ) {
+                continue;
+            }
+            let entry = coverage.entry(name).or_default();
+            entry.available += 1;
+            if interacted > 0 {
+                entry.interacted += 1;
+            }
+        }
+    }
 
-        // No available signals → not a blind spot.
-        if available == 0 {
+    {
+        let mut stmt = match conn.prepare(history_sql) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(
+                    target: "4da::blind_spots",
+                    "Failed to prepare history blind-spot dep query: {e}"
+                );
+                let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+                return Ok(Vec::new());
+            }
+        };
+        let rows = match stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, u32>(4)?,
+            ))
+        }) {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(
+                    target: "4da::blind_spots",
+                    "Failed to execute history blind-spot dep query: {e}"
+                );
+                let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
+                return Ok(Vec::new());
+            }
+        };
+
+        for row_result in rows {
+            let (name, title, source_type, content_type, days_since) = match row_result {
+                Ok(r) => r,
+                Err(e) => {
+                    warn!(
+                        target: "4da::blind_spots",
+                        "Failed to read history blind-spot dep row: {e}"
+                    );
+                    continue;
+                }
+            };
+            let dep_lower = name.to_lowercase();
+            let title_lower = title.to_lowercase();
+            if !is_actionable_blind_spot_match(
+                &dep_lower,
+                &title_lower,
+                &source_type,
+                content_type.as_deref(),
+            ) {
+                continue;
+            }
+            let entry = coverage.entry(name).or_default();
+            entry.days_since_last_signal = Some(match entry.days_since_last_signal {
+                Some(existing) => existing.min(days_since),
+                None => days_since,
+            });
+        }
+    }
+
+    let mut uncovered = Vec::new();
+    for dep in &eligible_deps {
+        let Some(metrics) = coverage.get(&dep.package_name) else {
+            continue;
+        };
+        if metrics.available == 0 {
             continue;
         }
-
-        // Recently interacted → not a blind spot.
-        if days_since < 14 && interacted > 0 {
+        let days_since = metrics.days_since_last_signal.unwrap_or(999);
+        if days_since < 14 && metrics.interacted > 0 {
             continue;
         }
-
-        let not_seen = available.saturating_sub(interacted);
-
-        // Interacted recently AND no new unseen signals → nothing to surface.
+        let not_seen = metrics.available.saturating_sub(metrics.interacted);
         if not_seen == 0 && days_since < 30 {
             continue;
         }
-
-        let dep_info = match dep_lookup.get(name.as_str()) {
-            Some(d) => *d,
-            None => continue,
+        let Some(dep_info) = dep_lookup.get(dep.package_name.as_str()) else {
+            continue;
         };
-
         let risk_level = classify_dep_risk(days_since, not_seen, dep_info.projects.len());
-
         uncovered.push(UncoveredDep {
             name: dep_info.package_name.clone(),
             dep_type: dep_info.ecosystem.clone(),
@@ -502,10 +600,8 @@ fn find_uncovered_deps(
         });
     }
 
-    // ── Step 3: Cleanup temp table ──────────────────────────────────────
     let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
 
-    // Sort by risk: critical first, then by days since last signal.
     uncovered.sort_by(|a, b| {
         risk_ord(&a.risk_level)
             .cmp(&risk_ord(&b.risk_level))
@@ -516,7 +612,7 @@ fn find_uncovered_deps(
 }
 
 /// Common runtime built-in modules that generate false blind spots.
-/// These are language standard library modules, not installable packages —
+/// These are language standard library modules, not installable packages ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
 /// LIKE matching their names against source_items catches unrelated content
 /// (e.g. "crypto" matches cryptocurrency articles).
 fn is_builtin_module(name: &str) -> bool {
@@ -536,6 +632,21 @@ fn is_builtin_module(name: &str) -> bool {
         // Rust std modules
         | "alloc" | "core" | "proc_macro"
     )
+}
+
+fn is_actionable_blind_spot_match(
+    dep_lower: &str,
+    title_lower: &str,
+    source_type: &str,
+    content_type: Option<&str>,
+) -> bool {
+    if !has_word_boundary_match(title_lower, dep_lower) {
+        return false;
+    }
+    if !crate::preemption::SUPPRESSED_GENERIC_NAMES.contains(&dep_lower) {
+        return true;
+    }
+    crate::preemption::is_authoritative_generic_dep_match(source_type, content_type)
 }
 
 /// Classify risk level based on coverage gap severity.
@@ -568,7 +679,7 @@ fn risk_ord(risk: &str) -> u8 {
     }
 }
 
-/// Find TRULY missed signals — high-relevance items the user hasn't seen,
+/// Find TRULY missed signals ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â high-relevance items the user hasn't seen,
 /// excluding anything currently in their main feed window.
 ///
 /// Key design decisions:
@@ -579,7 +690,7 @@ fn risk_ord(risk: &str) -> u8 {
 ///    only if it's old enough to no longer appear in the main feed.
 ///
 /// 2. **Impression filter**: exclude items that have an `impression` event in
-///    `user_events` — the frontend records an impression when an item is
+///    `user_events` ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the frontend records an impression when an item is
 ///    rendered on screen. An item with an impression has technically been
 ///    seen even if the user didn't click.
 ///
@@ -597,7 +708,7 @@ fn find_missed_signals(
     direct_deps: &[DepCoverage],
 ) -> Result<Vec<MissedSignal>> {
     // Dedup window: 3 days ago through N days ago.
-    // Items from the last 3 days are in the user's main feed — those are
+    // Items from the last 3 days are in the user's main feed ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â those are
     // not "missed," they're "not yet seen."
     let feed_window_days = scoring_config::MISSED_SIGNAL_FEED_WINDOW_DAYS as u32;
     if days <= feed_window_days {
@@ -611,7 +722,7 @@ fn find_missed_signals(
     // classification already computed at ingestion by content_dna. Items with
     // NULL content_type (legacy rows) pass through and get title-based fallback.
     //
-    // Cross-lens dedup: exclude security_advisory and breaking_change items —
+    // Cross-lens dedup: exclude security_advisory and breaking_change items ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
     // those already route to Preemption via OSV (Tier 1), LLM judgment (Tier 2),
     // or direct-dep keyword matching (Tier 3.5). Showing the same item in both
     // tabs with different urgencies (Preemption caps at High, Blind Spots maps
@@ -696,7 +807,7 @@ fn find_missed_signals(
     }
 
     // When we have dependency context, remove items with no specific dep
-    // match — if we can't explain why it matters, don't show it. When no
+    // match ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â if we can't explain why it matters, don't show it. When no
     // deps are available (cold start), pass everything through rather than
     // showing an empty tab.
     if !direct_deps.is_empty() {
@@ -705,7 +816,7 @@ fn find_missed_signals(
 
     // Deduplicate missed signals by normalized title similarity.
     // The same CVE or topic can appear from multiple sources (HN, Reddit, RSS)
-    // — without dedup the same item shows 10+ times in the blind spot report.
+    // ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â without dedup the same item shows 10+ times in the blind spot report.
     let signals = dedup_missed_signals(signals);
 
     // Apply negative stack filtering at query time. This catches items that were
@@ -757,7 +868,7 @@ fn is_preemption_territory(title: &str) -> bool {
 }
 
 /// Map stored content_type to a priority tier.
-/// Returns None if content_type is absent (legacy item — fall back to title).
+/// Returns None if content_type is absent (legacy item ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â fall back to title).
 fn content_type_tier(ct: Option<&str>) -> Option<u8> {
     match ct {
         Some("security_advisory") => Some(4),
@@ -862,7 +973,7 @@ fn rank_by_missed_priority(mut signals: Vec<MissedSignal>) -> Vec<MissedSignal> 
 }
 
 /// Cap per-dep diversity: at most `max_per_dep` signals per matched dep name.
-/// Signals with no dep_name are capped at 2 total — they passed on score alone
+/// Signals with no dep_name are capped at 2 total ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â they passed on score alone
 /// and shouldn't dominate over dep-matched items.
 fn cap_per_dep(signals: Vec<MissedSignal>, max_per_dep: usize) -> Vec<MissedSignal> {
     use std::collections::HashMap;
@@ -887,8 +998,8 @@ fn cap_per_dep(signals: Vec<MissedSignal>, max_per_dep: usize) -> Vec<MissedSign
 
 /// Filter missed signals using two-layer stack awareness.
 ///
-/// Layer 1: Negative stack (competing-absent) — suppresses Vue for React users, etc.
-/// Layer 2: Dependency-absence — for each technology-like topic extracted from the
+/// Layer 1: Negative stack (competing-absent) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â suppresses Vue for React users, etc.
+/// Layer 2: Dependency-absence ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â for each technology-like topic extracted from the
 ///          title, checks whether the user has it as a direct dep. Items where ALL
 ///          recognized technology topics are absent from user deps get filtered.
 ///
@@ -900,7 +1011,7 @@ fn filter_by_negative_stack(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
     // Load user's direct runtime deps
     let user_deps = match load_user_direct_deps() {
         Some(deps) if !deps.is_empty() => deps,
-        _ => return signals, // No dep data → can't filter
+        _ => return signals, // No dep data ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ can't filter
     };
 
     // Also build competing-tech negative stack for Layer 1
@@ -1031,7 +1142,7 @@ fn filter_by_negative_stack(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
                 .collect();
 
             if tech_topics.is_empty() {
-                // No technology-specific topics detected — keep the item
+                // No technology-specific topics detected ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep the item
                 // (it's about generic concepts like "performance", "testing", etc.)
                 return true;
             }
@@ -1039,7 +1150,7 @@ fn filter_by_negative_stack(signals: Vec<MissedSignal>) -> Vec<MissedSignal> {
             // Check if ANY tech topic is in user's deps
             let has_user_dep = tech_topics.iter().any(|topic| {
                 user_deps.contains(topic.as_str())
-                    // Also check common aliases: "next" → "next", "nextjs" → "next"
+                    // Also check common aliases: "next" ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ "next", "nextjs" ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ "next"
                     || user_deps.contains(&topic.replace("js", ""))
                     || user_deps.contains(&format!("@types/{topic}"))
             });
@@ -1166,7 +1277,7 @@ fn compute_why_relevant(
 ) -> (String, Option<String>) {
     let title_lower = title.to_lowercase();
 
-    // Dep names that are common English words — they produce false matches
+    // Dep names that are common English words ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â they produce false matches
     // against nearly every article title ("open source", "next steps", etc.)
     const GENERIC_DEP_NAMES: &[&str] = &[
         "open", "next", "node", "vite", "test", "core", "path", "sync", "once", "glob", "rand",
@@ -1199,10 +1310,13 @@ fn compute_why_relevant(
 
     // Roundup detection: if the title mentions 5+ distinct technology
     // keywords (comma-separated lists, newsletter digests), it's a roundup
-    // — don't assign it to a single dep. The is_low_quality_signal filter
+    // ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â don't assign it to a single dep. The is_low_quality_signal filter
     // catches "This Week In React" etc., but titles like "React, Vue,
     // Angular, Svelte, Solid comparison" also need handling.
-    let comma_segments = title.split(',').count() + title.split('·').count();
+    let comma_segments = title
+        .chars()
+        .filter(|c| *c == ',' || u32::from(*c) == 0x00B7)
+        .count();
     if matched.len() >= 2 && comma_segments >= 5 {
         return (
             "Roundup article mentioning multiple technologies".to_string(),
@@ -1216,7 +1330,7 @@ fn compute_why_relevant(
         return (text, Some(first_dep));
     }
 
-    // No specific dep match found — return empty explanation so
+    // No specific dep match found ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â return empty explanation so
     // downstream can filter or request LLM-generated reasoning.
     // Never claim relevance we can't substantiate with evidence.
     (String::new(), None)
@@ -1343,7 +1457,7 @@ fn generate_recommendations(
                 gap_names.join(", ")
             ),
             reason: format!(
-                "{} dependencies have critical/high knowledge gaps — you may be missing important updates",
+                "{} dependencies have critical/high knowledge gaps ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â you may be missing important updates",
                 severe_gaps.len()
             ),
             priority: "medium".to_string(),
@@ -1366,7 +1480,9 @@ fn generate_recommendations(
     // Positive reinforcement if few blind spots
     if uncovered.is_empty() && stale.is_empty() {
         recs.push(BlindSpotRecommendation {
-            action: "Your signal coverage looks solid — keep monitoring for shifts".to_string(),
+            action:
+                "Your signal coverage looks solid ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â keep monitoring for shifts"
+                    .to_string(),
             reason: "No critical blind spots detected in your current stack".to_string(),
             priority: "low".to_string(),
         });
@@ -1384,7 +1500,7 @@ fn generate_recommendations(
 ///
 /// Each component is independently normalized to [0, 1] before blending.
 /// The weighted blend guarantees the raw score is in [0, 100] without ever
-/// needing a `.min(100.0)` cap — the previous implementation was additive
+/// needing a `.min(100.0)` cap ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the previous implementation was additive
 /// and unbounded, causing the score to trivially saturate at 100 for any
 /// non-trivial stack (which is how we got the "Blind Spot Index = 100"
 /// screenshot bug).
@@ -1403,13 +1519,13 @@ fn calculate_blind_spot_score(
     // to be meaningful. A 4-dep stack with 1 uncovered = 25% pressure,
     // which maps to a score that implies comprehensive analysis when
     // we've barely sampled the user's real stack. Return -1.0 as sentinel
-    // for "not enough data" — the frontend interprets this as "building
+    // for "not enough data" ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the frontend interprets this as "building
     // your coverage picture" instead of showing a misleading number.
     if total_direct_deps < 10 {
         return -1.0;
     }
 
-    // ─── 1. Uncovered pressure (0-1) ──────────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 1. Uncovered pressure (0-1) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     // Severity-weighted fraction of the user's direct stack that's uncovered.
     let uncovered_weighted: f32 = uncovered
         .iter()
@@ -1427,8 +1543,8 @@ fn calculate_blind_spot_score(
     let denom = (total_direct_deps.max(5)) as f32;
     let uncovered_pressure = (uncovered_weighted / denom).min(1.0);
 
-    // ─── 2. Stale-topic pressure (0-1) ────────────────────────────────
-    // Diminishing returns: 1 stale topic = 0.25, 5 stale topics = 0.75, 10+ ≈ 1.0.
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 2. Stale-topic pressure (0-1) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+    // Diminishing returns: 1 stale topic = 0.25, 5 stale topics = 0.75, 10+ ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  1.0.
     // Uses a soft asymptote so one stale topic is noticeable but not alarming.
     let stale_pressure = if stale.is_empty() {
         0.0
@@ -1437,7 +1553,7 @@ fn calculate_blind_spot_score(
         (n / (n + 3.0)).min(1.0)
     };
 
-    // ─── 3. Missed-signal pressure (0-1) ──────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ 3. Missed-signal pressure (0-1) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
     // Averaged relevance of the top missed signals. A single 0.9-relevance
     // missed item contributes more than five 0.5-relevance items.
     let missed_pressure = if missed.is_empty() {
@@ -1448,19 +1564,24 @@ fn calculate_blind_spot_score(
         let avg = sum / missed.len() as f32;
         // Boost by log-scale count: more missed items bumps the pressure,
         // but the returns diminish fast so it can't dominate.
-        let count_boost = ((missed.len() as f32).ln_1p() / scoring_config::MISSED_SIGNAL_LOG_DIVISOR).min(1.0);
-        (avg * scoring_config::MISSED_SIGNAL_AVG_WEIGHT + count_boost * scoring_config::MISSED_SIGNAL_COUNT_BOOST_WEIGHT).min(1.0)
+        let count_boost =
+            ((missed.len() as f32).ln_1p() / scoring_config::MISSED_SIGNAL_LOG_DIVISOR).min(1.0);
+        (avg * scoring_config::MISSED_SIGNAL_AVG_WEIGHT
+            + count_boost * scoring_config::MISSED_SIGNAL_COUNT_BOOST_WEIGHT)
+            .min(1.0)
     };
 
-    // ─── Final weighted blend ─────────────────────────────────────────
-    let score = (uncovered_pressure * scoring_config::BLIND_SPOT_HEALTH_UNCOVERED_WEIGHT) + (stale_pressure * scoring_config::BLIND_SPOT_HEALTH_STALE_WEIGHT) + (missed_pressure * scoring_config::BLIND_SPOT_HEALTH_MISSED_WEIGHT);
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Final weighted blend ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+    let score = (uncovered_pressure * scoring_config::BLIND_SPOT_HEALTH_UNCOVERED_WEIGHT)
+        + (stale_pressure * scoring_config::BLIND_SPOT_HEALTH_STALE_WEIGHT)
+        + (missed_pressure * scoring_config::BLIND_SPOT_HEALTH_MISSED_WEIGHT);
 
     // Clamp defensively (should already be in range given the component caps).
     score.clamp(0.0, 100.0)
 }
 
 // ============================================================================
-// EvidenceItem conversion (Intelligence Reconciliation — Phase 4)
+// EvidenceItem conversion (Intelligence Reconciliation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Phase 4)
 // ============================================================================
 //
 // Blind Spots historically produced four parallel shapes (UncoveredDep,
@@ -1486,7 +1607,7 @@ fn priority_to_urgency(priority: &str) -> Urgency {
 }
 
 fn truncate_title(s: &str) -> String {
-    // Schema: ≤ 120 chars, no trailing period.
+    // Schema: ÃƒÂ¢Ã¢â‚¬Â°Ã‚Â¤ 120 chars, no trailing period.
     s.trim_end_matches('.').chars().take(120).collect()
 }
 
@@ -1501,7 +1622,7 @@ fn now_millis() -> i64 {
 
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     let title = truncate_title(&format!(
-        "{} — {} unseen signal{}",
+        "{} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â {} unseen signal{}",
         d.name,
         d.available_signal_count,
         if d.available_signal_count == 1 {
@@ -1580,14 +1701,14 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
 fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
     let title = if t.missed_signal_count > 0 {
         truncate_title(&format!(
-            "{} — {} signal{} you haven't seen",
+            "{} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â {} signal{} you haven't seen",
             t.topic,
             t.missed_signal_count,
             if t.missed_signal_count == 1 { "" } else { "s" }
         ))
     } else {
         truncate_title(&format!(
-            "{} — {} dep{}, no recent engagement",
+            "{} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â {} dep{}, no recent engagement",
             t.topic,
             t.active_deps_in_topic,
             if t.active_deps_in_topic == 1 { "" } else { "s" }
@@ -1734,7 +1855,7 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
 
 fn recommendation_to_evidence_item(r: &BlindSpotRecommendation, idx: usize) -> EvidenceItem {
     let title = truncate_title(&r.action);
-    // Recommendations are actionable alerts in canonical form — actions are
+    // Recommendations are actionable alerts in canonical form ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â actions are
     // not items, but "do this to close a gap" is classic Alert kind.
     let citation = EvidenceCitation {
         source: "blind-spot-analyzer".to_string(),
@@ -1805,12 +1926,18 @@ pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
     EvidenceFeed::from_items_with_score(validated, report.overall_score)
 }
 
+fn build_feed_with_existing_score(items: Vec<EvidenceItem>, score: Option<f32>) -> EvidenceFeed {
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.score = score;
+    feed
+}
+
 // ============================================================================
 // Tier 2: LLM-Judged Blind Spot Items
 // ============================================================================
 
 /// Pull LLM-judged items from `llm_judgments` that belong in the Blind Spots
-/// lens: topics, ecosystems, tech trends — everything EXCEPT security (which
+/// lens: topics, ecosystems, tech trends ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â everything EXCEPT security (which
 /// routes to Preemption). Skips items the user has already interacted with.
 fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
     let db = match crate::get_database() {
@@ -1894,7 +2021,7 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
             suggested_actions: vec![EvidenceAction {
                 action_id: "investigate".to_string(),
                 label: "Investigate".to_string(),
-                description: "Review this signal — the LLM flagged it as relevant to your stack."
+                description: "Review this signal ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the LLM flagged it as relevant to your stack."
                     .to_string(),
             }],
             precedents: Vec::new(),
@@ -1925,11 +2052,11 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     // Tier 2: inject LLM-judged blind spot items (missed signals the user hasn't seen)
     feed.items.extend(llm_judged_blind_spot_items());
 
-    Ok(feed)
+    Ok(build_feed_with_existing_score(feed.items, feed.score))
 }
 
 // ============================================================================
-// Tests — use REAL schema definitions from migrations to catch column drift
+// Tests ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â use REAL schema definitions from migrations to catch column drift
 // ============================================================================
 
 #[cfg(test)]
@@ -1938,7 +2065,7 @@ mod tests {
     use rusqlite::{params, Connection};
 
     /// Create an in-memory DB with the EXACT schema from migrations.rs.
-    /// This is the single source of truth for what the real DB looks like —
+    /// This is the single source of truth for what the real DB looks like ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
     /// if migrations.rs changes a column name, these tests will catch the drift.
     fn setup_test_db() -> Connection {
         let conn = Connection::open_in_memory().expect("in-memory db");
@@ -2048,7 +2175,24 @@ mod tests {
         conn.last_insert_rowid()
     }
 
-    // ─── Fix 1: column names (package_name / ecosystem) ──────────────────
+    fn insert_source_item_with_meta(
+        conn: &Connection,
+        title: &str,
+        source_type: &str,
+        content_type: Option<&str>,
+        score: f32,
+        days_ago: i64,
+    ) -> i64 {
+        conn.execute(
+            "INSERT INTO source_items (title, source_type, content, relevance_score, created_at, content_type)
+             VALUES (?1, ?2, 'content', ?3, datetime('now', ?4), ?5)",
+            params![title, source_type, score, format!("-{} days", days_ago), content_type],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Fix 1: column names (package_name / ecosystem) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn fix1_get_dependency_coverage_uses_correct_columns() {
@@ -2056,8 +2200,8 @@ mod tests {
         insert_project_dep(&conn, "/proj/a", "react", "javascript", true, false);
         insert_project_dep(&conn, "/proj/a", "typescript", "javascript", true, false);
         insert_project_dep(&conn, "/proj/b", "react", "javascript", true, false);
-        insert_project_dep(&conn, "/proj/a", "jest", "javascript", true, true); // dev — should be excluded
-        insert_project_dep(&conn, "/proj/a", "lodash", "javascript", false, false); // transitive — should be excluded
+        insert_project_dep(&conn, "/proj/a", "jest", "javascript", true, true); // dev ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â should be excluded
+        insert_project_dep(&conn, "/proj/a", "lodash", "javascript", false, false); // transitive ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â should be excluded
 
         let deps = get_dependency_coverage(&conn).expect("coverage query");
 
@@ -2072,7 +2216,7 @@ mod tests {
             "transitive dep must be excluded"
         );
 
-        // react appears in 2 projects — project list must aggregate
+        // react appears in 2 projects ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â project list must aggregate
         let react = deps.iter().find(|d| d.package_name == "react").unwrap();
         assert_eq!(react.projects.len(), 2, "react used in 2 projects");
     }
@@ -2085,14 +2229,14 @@ mod tests {
         assert_eq!(deps.len(), 0);
     }
 
-    // ─── Fix 2: timestamp column (not created_at) ────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Fix 2: timestamp column (not created_at) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn fix2_find_uncovered_deps_uses_timestamp_column() {
         // Regression test for Bug 3: find_uncovered_deps referenced
         // `i.created_at` but the real column is `i.timestamp`. The SQL
         // silently errored and the `.unwrap_or(999)` caught it, making
-        // every dep look like "999 days since last interaction" → critical.
+        // every dep look like "999 days since last interaction" ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ critical.
         //
         // This test proves the query works against the REAL schema AND
         // that the days_since value reflects the actual timestamp.
@@ -2100,7 +2244,7 @@ mod tests {
         let conn = setup_test_db();
         insert_project_dep(&conn, "/proj/a", "myframework", "javascript", true, false);
 
-        // 3 recent source items — all unread
+        // 3 recent source items ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â all unread
         for i in 0..3 {
             insert_source_item(&conn, &format!("myframework release {i}"), 0.8, 2);
         }
@@ -2156,7 +2300,7 @@ mod tests {
         );
     }
 
-    // ─── Fix 3: LIMIT and short-name filter ──────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Fix 3: LIMIT and short-name filter ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn fix3_find_uncovered_deps_caps_at_max() {
@@ -2220,6 +2364,58 @@ mod tests {
     }
 
     #[test]
+    fn generic_dep_mentions_require_authoritative_signal() {
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "upload_image path traversal discussion",
+            "hackernews",
+            None,
+            0.9,
+            2,
+        );
+
+        let deps = vec![DepCoverage {
+            package_name: "image".to_string(),
+            ecosystem: "rust".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        assert_eq!(
+            uncovered.len(),
+            0,
+            "generic dep mentions should be ignored without authoritative metadata"
+        );
+    }
+
+    #[test]
+    fn authoritative_generic_dep_mentions_still_surface() {
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "CVE-2026-9999 in image crate",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            2,
+        );
+
+        let deps = vec![DepCoverage {
+            package_name: "image".to_string(),
+            ecosystem: "rust".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        assert_eq!(
+            uncovered.len(),
+            1,
+            "authoritative metadata should allow real generic-package advisories through"
+        );
+    }
+
+    #[test]
     fn builtin_module_detection() {
         assert!(is_builtin_module("crypto"));
         assert!(is_builtin_module("Crypto"));
@@ -2231,13 +2427,15 @@ mod tests {
         assert!(!is_builtin_module("serde"));
     }
 
-    // ─── Cross-lens dedup (P0) ──────────────────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Cross-lens dedup (P0) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn preemption_territory_detects_security_keywords() {
         assert!(is_preemption_territory("CVE-2026-12345: React DOM XSS"));
         assert!(is_preemption_territory("Critical vulnerability in Deno"));
-        assert!(is_preemption_territory("GHSA-xxxx: npm supply chain attack"));
+        assert!(is_preemption_territory(
+            "GHSA-xxxx: npm supply chain attack"
+        ));
         assert!(is_preemption_territory("security advisory for lodash"));
         assert!(is_preemption_territory("Zero-day exploit found in Chrome"));
         assert!(is_preemption_territory("Breaking change in React 20"));
@@ -2248,19 +2446,24 @@ mod tests {
 
     #[test]
     fn preemption_territory_allows_non_security() {
-        assert!(!is_preemption_territory("React 20 performance improvements"));
+        assert!(!is_preemption_territory(
+            "React 20 performance improvements"
+        ));
         assert!(!is_preemption_territory("How to use Deno with Fresh"));
         assert!(!is_preemption_territory("New features in TypeScript 6.0"));
         assert!(!is_preemption_territory("Building CLI tools with Rust"));
         assert!(!is_preemption_territory("Tauri 3.0 release notes"));
     }
 
-    // ─── Evidence threshold (P1) ─────────────────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Evidence threshold (P1) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn score_returns_sentinel_when_few_deps() {
         let score = calculate_blind_spot_score(&[], &[], &[], 5);
-        assert!(score < 0.0, "fewer than 10 deps should return -1.0 sentinel");
+        assert!(
+            score < 0.0,
+            "fewer than 10 deps should return -1.0 sentinel"
+        );
     }
 
     #[test]
@@ -2269,7 +2472,7 @@ mod tests {
         assert!(score >= 0.0, "15 deps should compute a real score");
     }
 
-    // ─── Fix 4: score normalization ──────────────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Fix 4: score normalization ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn fix4_score_never_pinned_to_100_for_normal_stack() {
@@ -2309,9 +2512,9 @@ mod tests {
             .collect();
 
         // total_direct_deps = 100 means 20 uncovered mediums = 20*0.4 = 8 weighted,
-        // divided by max(100, 5) = 100 → uncovered_pressure = 0.08
-        // stale: 3 topics → 3 / (3+3) = 0.5
-        // missed: avg 0.7, count_boost ≈ 0.6, → 0.7*0.7 + 0.6*0.3 = 0.67
+        // divided by max(100, 5) = 100 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ uncovered_pressure = 0.08
+        // stale: 3 topics ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 3 / (3+3) = 0.5
+        // missed: avg 0.7, count_boost ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  0.6, ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 0.7*0.7 + 0.6*0.3 = 0.67
         // score = 0.08*55 + 0.5*25 + 0.67*20 = 4.4 + 12.5 + 13.4 = 30.3
         let score = calculate_blind_spot_score(&uncovered, &stale, &missed, 100);
         assert!(
@@ -2341,18 +2544,18 @@ mod tests {
             available_signal_count: 5,
             risk_level: "critical".to_string(),
         }];
-        // total_direct_deps = 1 → floor to 5 → 1.0/5 = 0.2 uncovered_pressure
+        // total_direct_deps = 1 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ floor to 5 ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ 1.0/5 = 0.2 uncovered_pressure
         // Score = 0.2 * 55 = 11.0
         let score = calculate_blind_spot_score(&uncovered, &[], &[], 1);
         assert!(score < 20.0, "small stack with 1 critical: {score}");
     }
 
-    // ─── Fix 5: missed_signals dedup (feed window) ──────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Fix 5: missed_signals dedup (feed window) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn fix5_find_missed_signals_excludes_feed_window() {
         let conn = setup_test_db();
-        // Recent item (within feed window) — should NOT be surfaced as missed
+        // Recent item (within feed window) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â should NOT be surfaced as missed
         insert_source_item(&conn, "very recent thing", 0.9, 1);
         // Old enough to be "missed" (outside the 3-day feed window)
         insert_source_item(&conn, "older missed thing", 0.9, 7);
@@ -2372,7 +2575,7 @@ mod tests {
     fn fix5_find_missed_signals_excludes_impressions() {
         let conn = setup_test_db();
         let item_id = insert_source_item(&conn, "seen article", 0.9, 5);
-        // Record an impression — the user DID see this item
+        // Record an impression ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â the user DID see this item
         conn.execute(
             "INSERT INTO user_events (event_type, metadata) VALUES ('impression', ?1)",
             params![format!("{{\"item_id\":{item_id}}}")],
@@ -2392,7 +2595,7 @@ mod tests {
         );
     }
 
-    // ─── Fix 6: real why_relevant ───────────────────────────────────────
+    // ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Fix 6: real why_relevant ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
 
     #[test]
     fn fix6_why_relevant_detects_dep_mentions() {
@@ -2420,11 +2623,11 @@ mod tests {
             ecosystem: "javascript".to_string(),
             projects: vec![],
         }];
-        // Title doesn't mention react — no evidence to claim relevance
+        // Title doesn't mention react ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â no evidence to claim relevance
         let (text, dep) = compute_why_relevant("Postgres new extension released", 0.9, &deps);
         assert!(
             text.is_empty(),
-            "must return empty string when no dep match — never claim unsubstantiated relevance: {text}"
+            "must return empty string when no dep match ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never claim unsubstantiated relevance: {text}"
         );
         assert_eq!(dep, None, "dep_name must be None when no match");
     }
@@ -2439,7 +2642,7 @@ mod tests {
     }
 
     // ========================================================================
-    // EvidenceItem conversion tests (Intelligence Reconciliation — Phase 4)
+    // EvidenceItem conversion tests (Intelligence Reconciliation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â Phase 4)
     // ========================================================================
 
     fn uncov_sample() -> UncoveredDep {
@@ -2510,7 +2713,7 @@ mod tests {
     fn stale_topic_maps_to_gap_kind() {
         let item = stale_topic_to_evidence_item(&stale_sample());
         assert_eq!(item.kind, crate::evidence::EvidenceKind::Gap);
-        // 30 days + 7 missed → Medium urgency
+        // 30 days + 7 missed ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Medium urgency
         assert_eq!(item.urgency, crate::evidence::Urgency::Medium);
         assert!(crate::evidence::validate_item(&item).is_ok());
     }
@@ -2556,6 +2759,27 @@ mod tests {
         let feed = blind_spot_report_to_feed(&report);
         assert_eq!(feed.total, 0);
         assert_eq!(feed.score, Some(0.0));
+    }
+
+    #[test]
+    fn negative_coverage_score_survives_feed_boundary() {
+        let mut report = report_sample();
+        report.overall_score = -1.0;
+        let feed = blind_spot_report_to_feed(&report);
+        assert_eq!(feed.score, Some(-1.0));
+    }
+
+    #[test]
+    fn rebuild_feed_preserves_score_and_recounts_items() {
+        let items = vec![
+            uncovered_dep_to_evidence_item(&uncov_sample()),
+            recommendation_to_evidence_item(&rec_sample(), 0),
+        ];
+        let feed = build_feed_with_existing_score(items, Some(-1.0));
+        assert_eq!(feed.score, Some(-1.0));
+        assert_eq!(feed.total, 2);
+        assert_eq!(feed.critical_count, 1);
+        assert_eq!(feed.high_count, 1);
     }
 
     #[test]

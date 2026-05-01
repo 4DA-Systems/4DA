@@ -13,11 +13,11 @@ use tracing::warn;
 use ts_rs::TS;
 
 use crate::error::Result;
-use crate::scoring_config;
 use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
 };
+use crate::scoring_config;
 use crate::signal_chains::ChainResolution;
 
 // ============================================================================
@@ -100,9 +100,138 @@ pub struct PreemptionFeed {
     pub high_count: usize,
 }
 
+#[derive(Debug, Clone)]
+struct DirectRuntimeDep {
+    package_name: String,
+    project_path: String,
+}
+
 // ============================================================================
 // Implementation
 // ============================================================================
+
+pub(crate) fn is_authoritative_generic_dep_match(
+    source_type: &str,
+    content_type: Option<&str>,
+) -> bool {
+    let source_lower = source_type.to_ascii_lowercase();
+    if matches!(
+        source_lower.as_str(),
+        "osv" | "cve" | "rustsec" | "github" | "github_advisory"
+    ) {
+        return true;
+    }
+    matches!(
+        content_type.map(str::to_ascii_lowercase).as_deref(),
+        Some("security_advisory") | Some("breaking_change") | Some("release_notes")
+    )
+}
+
+fn title_indicates_not_affected(text_lower: &str) -> bool {
+    [
+        "not affected",
+        "users protected",
+        "already protected",
+        "protected by default",
+        "already mitigated",
+        "outside the affected range",
+    ]
+    .iter()
+    .any(|marker| text_lower.contains(marker))
+}
+
+fn has_conditional_scope_language(text_lower: &str) -> bool {
+    [
+        "may be scoped",
+        "might be scoped",
+        "only affects",
+        "specific to",
+        "needs verification",
+        "deployment context",
+    ]
+    .iter()
+    .any(|marker| text_lower.contains(marker))
+}
+
+fn find_unmet_platform_scope(text_lower: &str, user_context_lower: &str) -> Option<&'static str> {
+    let markers = [
+        ("deno", "deno deploy"),
+        ("vercel", "vercel"),
+        ("netlify", "netlify"),
+        ("cloudflare", "cloudflare workers"),
+        ("bun", "bun"),
+        ("electron", "electron"),
+        ("edge", "edge runtime"),
+    ];
+    for (context_key, marker) in markers {
+        if text_lower.contains(marker) && !user_context_lower.contains(context_key) {
+            return Some(context_key);
+        }
+    }
+    None
+}
+
+fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRuntimeDep>> {
+    let direct_filter = if has_is_direct_column(conn) {
+        "AND is_direct = 1"
+    } else {
+        ""
+    };
+    let relevance_filter = if has_project_relevance_column(conn) {
+        "AND project_relevance >= 0.15"
+    } else {
+        ""
+    };
+    let sql = format!(
+        "SELECT package_name, project_path
+         FROM project_dependencies
+         WHERE is_dev = 0
+           {direct_filter}
+           {relevance_filter}"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], |row| {
+        Ok(DirectRuntimeDep {
+            package_name: row.get(0)?,
+            project_path: row.get(1)?,
+        })
+    })?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(Into::into)
+}
+
+fn matched_direct_runtime_deps(
+    deps: &[DirectRuntimeDep],
+    title_lower: &str,
+    source_type: &str,
+    content_type: Option<&str>,
+) -> Vec<DirectRuntimeDep> {
+    deps.iter()
+        .filter(|dep| dep.package_name.len() >= 5)
+        .filter_map(|dep| {
+            let pkg_lower = dep.package_name.to_lowercase();
+            if !has_word_boundary_match(title_lower, &pkg_lower) {
+                return None;
+            }
+            if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str())
+                && !is_authoritative_generic_dep_match(source_type, content_type)
+            {
+                return None;
+            }
+            Some(dep.clone())
+        })
+        .collect()
+}
+
+fn collapse_direct_dep_targets(matches: &[DirectRuntimeDep]) -> (Vec<String>, Vec<String>) {
+    let mut deps = std::collections::BTreeSet::new();
+    let mut projects = std::collections::BTreeSet::new();
+    for item in matches {
+        deps.insert(item.package_name.clone());
+        projects.insert(item.project_path.clone());
+    }
+    (projects.into_iter().collect(), deps.into_iter().collect())
+}
 
 fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
     let db = match crate::get_database() {
@@ -258,13 +387,21 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
+    let direct_runtime_deps = match load_direct_runtime_deps(&conn) {
+        Ok(deps) => deps,
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Failed to load direct runtime deps");
+            return Vec::new();
+        }
+    };
+    let user_context_lower = crate::adversarial::build_user_context_summary().to_lowercase();
 
     let mut alerts = Vec::new();
 
     for j in &judgments {
         // Load the source item to get title/url/source_type
         let item = match conn.query_row(
-            "SELECT title, url, source_type, created_at FROM source_items WHERE id = ?1",
+            "SELECT title, url, source_type, created_at, content_type FROM source_items WHERE id = ?1",
             rusqlite::params![j.source_item_id],
             |row| {
                 Ok((
@@ -272,16 +409,19 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             },
         ) {
             Ok(item) => item,
             Err(_) => continue,
         };
-        let (title, url, source_type, created_at) = item;
+        let (title, url, source_type, created_at, content_type) = item;
 
         // Only include security-relevant items in preemption
         let title_lower = title.to_lowercase();
+        let explanation_lower = j.explanation.to_lowercase();
+        let combined_lower = format!("{title_lower}\n{explanation_lower}");
         let is_security = title_lower.contains("cve")
             || title_lower.contains("ghsa")
             || title_lower.contains("vulnerab")
@@ -299,9 +439,27 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
         }
 
         // Tier 2 never assigns Critical — that's reserved for deterministic OSV matches
-        let urgency = if j.relevance_score >= scoring_config::PREEMPTION_URGENCY_HIGH_THRESHOLD as f64 {
-            AlertUrgency::High
-        } else if j.relevance_score >= scoring_config::PREEMPTION_URGENCY_MEDIUM_THRESHOLD as f64 {
+        if title_indicates_not_affected(&combined_lower) {
+            continue;
+        }
+        if find_unmet_platform_scope(&combined_lower, &user_context_lower).is_some() {
+            continue;
+        }
+        let matched = matched_direct_runtime_deps(
+            &direct_runtime_deps,
+            &title_lower,
+            &source_type,
+            content_type.as_deref(),
+        );
+        if matched.is_empty() {
+            continue;
+        }
+        let (affected_projects, affected_dependencies) = collapse_direct_dep_targets(&matched);
+
+        let urgency = if !has_conditional_scope_language(&combined_lower)
+            && j.relevance_score >= scoring_config::PREEMPTION_URGENCY_HIGH_THRESHOLD as f64
+            && j.confidence >= 0.70
+        {
             AlertUrgency::Medium
         } else {
             AlertUrgency::Watch
@@ -340,8 +498,8 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             title: truncate(&title, 120),
             explanation: j.explanation.clone(),
             evidence,
-            affected_projects: vec![],
-            affected_dependencies: vec![],
+            affected_projects,
+            affected_dependencies,
             urgency,
             confidence: j.confidence as f32,
             predicted_window: None,
@@ -611,6 +769,12 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
     // ("conf", "cors", "http", "core") that would match too broadly.
     // Dev deps always excluded -- test/lint tools aren't runtime attack surface.
     // LIMIT 100 provides headroom for post-filter dedup to yield ~20 unique alerts.
+    let content_type_select = if has_content_type {
+        "si.content_type"
+    } else {
+        "NULL AS content_type"
+    };
+    let user_context_lower = crate::adversarial::build_user_context_summary().to_lowercase();
     let sql = format!(
         "SELECT pd.project_path,
                pd.package_name,
@@ -618,7 +782,8 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
                si.title,
                si.url,
                si.created_at,
-               si.source_type
+               si.source_type,
+               {content_type_select}
         FROM project_dependencies pd
         INNER JOIN source_items si
             ON LENGTH(pd.package_name) >= 5
@@ -642,6 +807,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             row.get::<_, Option<String>>(4)?, // url
             row.get::<_, String>(5)?,         // created_at
             row.get::<_, String>(6)?,         // source_type
+            row.get::<_, Option<String>>(7)?, // content_type
         ))
     })?;
 
@@ -654,14 +820,22 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
     let mut raw_alerts = Vec::new();
 
     for row_result in rows {
-        let (project_path, package_name, _ecosystem, title, url, created_at, source_type) =
-            match row_result {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(target: "4da::preemption", error = %e, "Row read failed");
-                    continue;
-                }
-            };
+        let (
+            project_path,
+            package_name,
+            _ecosystem,
+            title,
+            url,
+            created_at,
+            source_type,
+            content_type,
+        ) = match row_result {
+            Ok(r) => r,
+            Err(e) => {
+                warn!(target: "4da::preemption", error = %e, "Row read failed");
+                continue;
+            }
+        };
 
         // Word-boundary post-filter: the SQL used substring LIKE which produces
         // false positives. Verify the dep name is actually a word in the title.
@@ -671,9 +845,15 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             continue;
         }
 
-        // Generic-name suppression: skip deps whose names are common English
-        // words that collide with security terminology. See list above.
-        if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str()) {
+        if title_indicates_not_affected(&title_lower) {
+            continue;
+        }
+        if find_unmet_platform_scope(&title_lower, &user_context_lower).is_some() {
+            continue;
+        }
+        if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str())
+            && !is_authoritative_generic_dep_match(&source_type, content_type.as_deref())
+        {
             continue;
         }
 
@@ -800,7 +980,9 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
                     // when multiple independent projects confirm the dep match,
                     // but still honest — no version verification yet.
                     let proj_count = existing.affected_projects.len() as f32;
-                    existing.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST).min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
+                    existing.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE
+                        + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST)
+                        .min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
                 } else {
                     cve_groups.insert(id, alert);
                 }
@@ -815,7 +997,9 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         .into_values()
         .map(|mut a| {
             let proj_count = a.affected_projects.len() as f32;
-            a.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST).min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
+            a.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE
+                + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST)
+                .min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
             a
         })
         .collect();
@@ -1180,8 +1364,7 @@ impl PreemptionAlert {
             kind,
             title,
             explanation: self.explanation.clone(),
-            // Preemption uses a bare f32 confidence; provenance is
-            // heuristic until AWE spine is wired in Phase 9.
+            // Preemption uses a bare f32 confidence; provenance is heuristic.
             confidence: if self.osv_verified {
                 Confidence::osv_verified(self.confidence.clamp(0.0, 1.0))
             } else if self.id.starts_with("llm-") {
@@ -1236,8 +1419,6 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
             }
         })
         .collect();
-    // Phase 9 — AWE spine enrichment removed (AWE v2 is a standalone repo).
-
     // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
     // validation. Critical/High items bypass; Medium/Watch get deliberated.
     // Gracefully degrades when LLM is unavailable (items pass through unchanged).
@@ -1306,6 +1487,61 @@ mod tests {
             params![title],
         )
         .unwrap();
+    }
+
+    fn insert_item_with_meta(
+        conn: &Connection,
+        title: &str,
+        source_type: &str,
+        content_type: Option<&str>,
+    ) {
+        conn.execute(
+            "INSERT INTO source_items (title, source_type, content, created_at, content_type)
+             VALUES (?1, ?2, '', datetime('now', '-5 days'), ?3)",
+            params![title, source_type, content_type],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn fast_path_skips_mitigated_advisory_titles() {
+        let conn = setup_test_db();
+        insert_dep(&conn, "/proj/a", "react", true, false);
+        insert_item_with_meta(
+            &conn,
+            "React / Next.js Denial-of-Service Vulnerability: Deno Deploy users protected",
+            "github",
+            Some("security_advisory"),
+        );
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+        assert_eq!(
+            alerts.len(),
+            0,
+            "mitigated/not-affected titles should not escalate into preemption alerts"
+        );
+    }
+
+    #[test]
+    fn authoritative_generic_dep_match_is_allowed() {
+        let conn = setup_test_db();
+        insert_dep(&conn, "/proj/a", "image", true, false);
+        insert_item_with_meta(
+            &conn,
+            "CVE-2026-4444 affects image crate",
+            "osv",
+            Some("security_advisory"),
+        );
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+        assert_eq!(
+            alerts.len(),
+            1,
+            "authoritative metadata should allow real advisories for generic package names"
+        );
+        assert!(alerts[0]
+            .affected_dependencies
+            .contains(&"image".to_string()));
     }
 
     fn insert_dep_with_relevance(

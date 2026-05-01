@@ -28,9 +28,7 @@ pub struct EvidenceItem {
     /// One-line summary. ≤ 120 chars. No trailing period.
     pub title: String,
 
-    /// Full explanation. Produced by AWE.articulate after Phase 9; may be
-    /// empty during transition phases but never after the AWE spine is
-    /// wired.
+    /// Full explanation. May be empty during early transition phases.
     pub explanation: String,
 
     /// Calibrated confidence with provenance.
@@ -180,7 +178,7 @@ impl Confidence {
         }
     }
 
-    /// Constructor for LLM-assessed confidence (AWE.calibrate output).
+    /// Constructor for LLM-assessed confidence.
     /// Doctrine-bound scaffolding — see the impl-block note above.
     #[allow(dead_code)]
     pub fn llm_assessed(value: f32) -> Self {
@@ -211,7 +209,7 @@ pub enum ConfidenceProvenance {
     Heuristic,
     /// Bayesian posterior with ≥ 10 feedback samples.
     Calibrated,
-    /// LLM judgment from AWE.calibrate.
+    /// LLM judgment.
     LlmAssessed,
     /// Deterministic version-range match from local OSV advisory mirror.
     OsvVerified,
@@ -383,7 +381,11 @@ impl EvidenceFeed {
     /// Build a feed from items with a lens-specific 0–100 aggregate score.
     pub fn from_items_with_score(items: Vec<EvidenceItem>, score: f32) -> Self {
         let mut feed = Self::from_items(items);
-        feed.score = Some(score.clamp(0.0, 100.0));
+        feed.score = Some(if score < 0.0 {
+            score
+        } else {
+            score.clamp(0.0, 100.0)
+        });
         feed
     }
 }
