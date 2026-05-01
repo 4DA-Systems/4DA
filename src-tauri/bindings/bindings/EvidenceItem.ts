@@ -25,8 +25,7 @@ kind: EvidenceKind,
  */
 title: string, 
 /**
- * Full explanation. Produced by the intelligence pipeline; may be
- * empty during transition phases.
+ * Full explanation. May be empty during early transition phases.
  */
 explanation: string, 
 /**
