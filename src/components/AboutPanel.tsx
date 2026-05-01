@@ -5,7 +5,7 @@ import { useAppStore } from '../store';
 import { LogoMarkSVG } from './geometry/LogoMarkSVG';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
-const ConfigDiagnostics = lazy(() => import('./enterprise/ConfigDiagnostics').then(m => ({ default: m.ConfigDiagnostics })));
+const PrivacySection = lazy(() => import('./settings/PrivacySection').then(m => ({ default: m.PrivacySection })));
 
 export function AboutPanel() {
   const { t } = useTranslation();
@@ -29,12 +29,10 @@ export function AboutPanel() {
         </Suspense>
       </div>
 
-      {/* System Diagnostics */}
-      <div className="bg-bg-tertiary/30 border border-border/50 rounded-xl p-4">
-        <Suspense fallback={null}>
-          <ConfigDiagnostics />
-        </Suspense>
-      </div>
+      {/* Privacy */}
+      <Suspense fallback={null}>
+        <PrivacySection />
+      </Suspense>
 
       {/* Version + Copyright */}
       <div className="text-center pt-2 border-t border-border/50">

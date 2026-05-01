@@ -3,9 +3,7 @@ import { memo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { AIProviderSection } from './AIProviderSection';
-import { ModelTierIndicator } from './ModelTierIndicator';
 import { LicenseSection } from './LicenseSection';
-import { ProValuePanel } from '../ProValuePanel';
 
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
@@ -45,15 +43,12 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
   const [saveState, setSaveState] = useState<ButtonState>('idle');
   const [testState, setTestState] = useState<ButtonState>('idle');
   const [inlineStatus, setInlineStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [tierRefreshKey, setTierRefreshKey] = useState(0);
-
   const handleSave = useCallback(async () => {
     setSaveState('loading');
     setInlineStatus(null);
     try {
       await saveSettings();
       setSaveState('success');
-      setTierRefreshKey(k => k + 1);
       setInlineStatus({ type: 'success', message: t('settings.ai.settingsSaved') });
       setTimeout(() => { setSaveState('idle'); setInlineStatus(null); }, 3000);
     } catch {
@@ -90,10 +85,6 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
             modelRegistry={modelRegistry}
             onRefreshRegistry={onRefreshRegistry}
           />
-        </PanelErrorBoundary>
-
-        <PanelErrorBoundary name="Model Tier">
-          <ModelTierIndicator refreshKey={tierRefreshKey} />
         </PanelErrorBoundary>
 
         {/* Inline status feedback — always visible near the buttons */}
@@ -147,10 +138,6 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
 
         <PanelErrorBoundary name="License">
           <LicenseSection onStatus={setSettingsStatus} />
-        </PanelErrorBoundary>
-
-        <PanelErrorBoundary name="Signal Value">
-          <ProValuePanel />
         </PanelErrorBoundary>
       </div>
     </div>

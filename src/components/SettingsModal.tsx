@@ -56,7 +56,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   // Data selectors — streamlined (removed ~20 unused selectors)
   const {
     settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels, modelRegistry,
-    monitoring, monitoringInterval, notificationThreshold,
+    monitoring, monitoringInterval,
     scanDirectories, newScanDir, isScanning, discoveredContext,
   } = useAppStore(
     useShallow((s) => ({
@@ -68,7 +68,6 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
       modelRegistry: s.modelRegistry,
       monitoring: s.monitoring,
       monitoringInterval: s.monitoringInterval,
-      notificationThreshold: s.notificationThreshold,
       scanDirectories: s.scanDirectories,
       newScanDir: s.newScanDir,
       isScanning: s.isScanning,
@@ -84,10 +83,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const checkOllamaStatus = useAppStore(s => s.checkOllamaStatus);
   const refreshModelRegistry = useAppStore(s => s.refreshModelRegistry);
   const setMonitoringInterval = useAppStore(s => s.setMonitoringInterval);
-  const setNotificationThreshold = useAppStore(s => s.setNotificationThreshold);
   const toggleMonitoring = useAppStore(s => s.toggleMonitoring);
   const updateMonitoringInterval = useAppStore(s => s.updateMonitoringInterval);
-  const testNotification = useAppStore(s => s.testNotification);
   const setNewScanDir = useAppStore(s => s.setNewScanDir);
   const runAutoDiscovery = useAppStore(s => s.runAutoDiscovery);
   const runFullScan = useAppStore(s => s.runFullScan);
@@ -148,11 +145,6 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     try { const msg = await updateMonitoringInterval(); setSettingsStatus(msg); setTimeout(() => setSettingsStatus(''), 2000); }
     catch (error) { setSettingsStatus(`Error: ${translateError(error)}`); }
   };
-  const handleTestNotification = async () => {
-    try { const msg = await testNotification(); setSettingsStatus(msg); setTimeout(() => setSettingsStatus(''), 2000); }
-    catch (error) { setSettingsStatus(`Notification error: ${translateError(error)}`); }
-  };
-
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
       <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl max-h-[calc(100vh-4rem)] overflow-y-auto shadow-2xl">
@@ -195,12 +187,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               monitoring={monitoring}
               monitoringInterval={monitoringInterval}
               setMonitoringInterval={setMonitoringInterval}
-              notificationThreshold={notificationThreshold}
-              setNotificationThreshold={setNotificationThreshold}
               onToggleMonitoring={handleToggleMonitoring}
               onUpdateInterval={handleUpdateMonitoringInterval}
-              onTestNotification={handleTestNotification}
-              setSettingsStatus={setSettingsStatus}
             />
             </div>
           )}

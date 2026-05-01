@@ -8,11 +8,8 @@ interface MonitoringSectionProps {
   monitoring: MonitoringStatus | null;
   monitoringInterval: number;
   setMonitoringInterval: (val: number) => void;
-  notificationThreshold: string;
-  onSetNotificationThreshold: (threshold: string) => void;
   onToggle: () => void;
   onUpdateInterval: () => void;
-  onTestNotification: () => void;
 }
 
 function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
@@ -42,7 +39,7 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
         }`}
       >
         <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+          className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
             enabled ? 'translate-x-5' : 'translate-x-0.5'
           }`}
         />
@@ -97,7 +94,7 @@ function LaunchAtStartupToggle() {
         }`}
       >
         <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+          className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
             enabled ? 'translate-x-5' : 'translate-x-0.5'
           }`}
         />
@@ -172,7 +169,7 @@ function MorningBriefingSection() {
           }`}
         >
           <span
-            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+            className={`absolute left-0 top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
               enabled ? 'translate-x-5' : 'translate-x-0.5'
             }`}
           />
@@ -209,11 +206,8 @@ export function MonitoringSection({
   monitoring,
   monitoringInterval,
   setMonitoringInterval,
-  notificationThreshold,
-  onSetNotificationThreshold,
   onToggle,
   onUpdateInterval,
-  onTestNotification,
 }: MonitoringSectionProps) {
   const { t } = useTranslation();
   return (
@@ -282,21 +276,6 @@ export function MonitoringSection({
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-text-secondary">{t('settings.monitoring.notifications')}</label>
-            <select
-              value={notificationThreshold}
-              onChange={(e) => onSetNotificationThreshold(e.target.value)}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none appearance-none cursor-pointer"
-              style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'12\' fill=\'%23666\' viewBox=\'0 0 16 16\'%3E%3Cpath d=\'M8 11L3 6h10z\'/%3E%3C/svg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.75rem center', paddingRight: '2rem' }}
-            >
-              <option value="critical_only">{t('settings.monitoring.criticalOnly', 'Critical only')}</option>
-              <option value="high_and_above">{t('settings.monitoring.highAndAbove', 'High and above')}</option>
-              <option value="all">{t('settings.monitoring.allItems')}</option>
-            </select>
-            <p className="text-xs text-text-muted mt-1">Critical = security advisories, High = important signals</p>
-          </div>
-
           {/* Behavior */}
           <div className="border-t border-border/50 pt-3" />
           <MorningBriefingSection />
@@ -304,24 +283,6 @@ export function MonitoringSection({
           <CloseToTrayToggle initialValue={monitoring.close_to_tray} />
           <LaunchAtStartupToggle />
 
-          {/* Status — only show when monitoring has actually run */}
-          {monitoring.total_checks > 0 && (
-            <>
-              <div className="border-t border-border/50 pt-3" />
-              <div className="flex items-center justify-between text-xs text-text-muted px-1">
-                {monitoring.last_check_ago && (
-                  <span>{t('settings.monitoring.lastCheck', { time: monitoring.last_check_ago })}</span>
-                )}
-              </div>
-            </>
-          )}
-
-          <button
-            onClick={onTestNotification}
-            className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border text-text-secondary rounded-lg hover:text-white hover:border-orange-500/30 transition-all"
-          >
-            {t('settings.monitoring.testNotification')}
-          </button>
         </div>
       ) : (
         <div className="text-xs text-text-muted">{t('settings.monitoring.loading')}</div>
