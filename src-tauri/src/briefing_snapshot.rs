@@ -272,6 +272,7 @@ mod tests {
                     signal_priority: None,
                     description: None,
                     matched_deps: vec![],
+                    content_type: None,
                 })
                 .collect(),
             total_relevant: items,

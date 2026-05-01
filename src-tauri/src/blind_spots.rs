@@ -148,6 +148,35 @@ fn blind_spot_threshold_days() -> u32 {
     }
 }
 
+/// Check if the user has < 7 days of engagement history.
+/// Returns true if no interactions exist or the oldest is < 7 days old.
+/// Used for cold-start suppression (doctrine rule 6).
+fn is_cold_start(conn: &rusqlite::Connection) -> Result<bool> {
+    let result: Option<String> = conn
+        .query_row(
+            "SELECT MIN(timestamp) FROM interactions",
+            [],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+
+    match result {
+        None => Ok(true),
+        Some(ts) => {
+            let oldest = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S")
+                .or_else(|_| {
+                    chrono::DateTime::parse_from_rfc3339(&ts).map(|dt| dt.naive_utc())
+                })
+                .map_err(|e| {
+                    format!("Failed to parse oldest interaction timestamp: {}", e)
+                })?;
+            let age = chrono::Utc::now().naive_utc() - oldest;
+            Ok(age.num_days() < 7)
+        }
+    }
+}
+
 /// Generate a comprehensive blind spot report.
 ///
 /// Results are cached for 5 minutes to avoid redundant computation on
@@ -176,6 +205,22 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
 /// Inner implementation ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â always runs fresh queries.
 fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     let conn = crate::open_db_connection()?;
+
+    // Cold-start suppression (doctrine rule 6): blind spots require 7+ days
+    // of engagement data to be meaningful. Showing blind spots on day 1
+    // guarantees false signals — the system hasn't observed enough to know
+    // what the user is missing.
+    if is_cold_start(&conn)? {
+        return Ok(BlindSpotReport {
+            overall_score: 0.0,
+            uncovered_dependencies: vec![],
+            stale_topics: vec![],
+            missed_signals: vec![],
+            recommendations: vec![],
+            generated_at: chrono::Utc::now().to_rfc3339(),
+        });
+    }
+
     let threshold_days = blind_spot_threshold_days();
 
     // 1. Get attention report (30-day window)

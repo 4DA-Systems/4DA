@@ -249,3 +249,12 @@ signal_chain_prediction {
     min_hours: 1.0              # [0.5, 6.0]
     max_hours: 168.0            # [48.0, 336.0]
 }
+
+# Commodity content ceiling — hard cap for low-sophistication commodity content.
+# Applied in Phase 8 after all boosts. Prevents basic tutorials, help requests,
+# and simple questions from reaching the briefing regardless of dep/keyword match.
+commodity_ceiling {
+    tutorial:     0.28    # [0.15, 0.40]
+    help_request: 0.22    # [0.10, 0.30]
+    question:     0.30    # [0.20, 0.40]
+}

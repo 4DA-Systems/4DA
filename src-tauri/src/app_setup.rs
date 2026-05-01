@@ -1379,6 +1379,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         signal_priority: r.signal_priority.clone(),
                         description: r.signal_action.clone(),
                         matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                        content_type: r.score_breakdown.as_ref().and_then(|b| b.content_type.clone()),
                     })
                     .collect();
                 if !items.is_empty() {

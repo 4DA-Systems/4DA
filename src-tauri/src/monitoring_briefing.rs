@@ -48,6 +48,9 @@ pub struct BriefingItem {
     /// Matched dependency names (why this matters to the user)
     #[serde(default)]
     pub matched_deps: Vec<String>,
+    /// Content DNA classification (tutorial, security_advisory, etc.)
+    #[serde(default)]
+    pub content_type: Option<String>,
 }
 
 /// A topic the user hasn't seen intelligence about recently
@@ -187,6 +190,40 @@ pub(crate) fn build_enriched_briefing(
     // dominating the entire briefing.
     let items: Vec<BriefingItem> = apply_diversity_slots(sorted, 8);
 
+    // Minimum quality gate: the briefing only fires when it has genuinely
+    // valuable content. Prevents weak single-item briefings from eroding trust.
+    // Commodity content (Tutorial, HelpRequest, Question below 0.45) doesn't
+    // count toward the quality minimum.
+    let quality_item_count = items
+        .iter()
+        .filter(|i| i.score >= BRIEFING_SCORE_FLOOR && !is_low_quality_commodity(i))
+        .count();
+    let has_high_value_single = items
+        .iter()
+        .any(|i| i.score >= 0.65 && !is_low_quality_commodity(i));
+    if quality_item_count < 2 && !has_high_value_single {
+        // Not enough quality content to justify a briefing. Return empty so the
+        // caller skips notification. Preemption alerts and escalating chains are
+        // added later in check_morning_briefing and bypass this gate via the
+        // cross-surface check there.
+        return BriefingNotification {
+            title: format!(
+                "4DA Intelligence Briefing — {}",
+                now.format("%d %b %Y")
+            ),
+            items: vec![],
+            total_relevant: 0,
+            ongoing_topics: vec![],
+            knowledge_gaps: vec![],
+            escalating_chains: vec![],
+            synthesis: None,
+            preemption_alerts: vec![],
+            blind_spot_score: None,
+            labels: Some(build_briefing_labels(lang)),
+            personalization_context: None,
+        };
+    }
+
     // Novelty detection: filter items seen in last 3 days, track ongoing topics.
     // If novelty filter removes ALL items, keep the top 3 as "still relevant"
     // rather than showing an empty briefing — a repeat signal beats "nothing new."
@@ -238,7 +275,8 @@ pub(crate) fn build_enriched_briefing(
     // Collect blind spot score
     let blind_spot_score = crate::blind_spots::generate_blind_spot_report()
         .ok()
-        .map(|r| r.overall_score);
+        .map(|r| r.overall_score)
+        .filter(|&score| score > 0.0);
 
     // Build translated labels
     let labels = build_briefing_labels(lang);
@@ -273,6 +311,19 @@ pub(crate) fn build_enriched_briefing(
 /// This prevents a single dominant source type (e.g. security advisories)
 /// from consuming all briefing slots.
 ///
+/// Check if a briefing item is low-quality commodity content.
+/// Commodity = Tutorial/HelpRequest/Question with score below 0.45.
+/// These items don't count toward the minimum quality gate.
+fn is_low_quality_commodity(item: &BriefingItem) -> bool {
+    if item.score >= 0.45 {
+        return false;
+    }
+    matches!(
+        item.content_type.as_deref(),
+        Some("tutorial") | Some("help_request") | Some("question")
+    )
+}
+
 /// Items are assumed to be pre-sorted by priority then score descending.
 /// The final output preserves priority ordering: diversity picks are
 /// re-sorted by the same priority-then-score comparator.
@@ -456,6 +507,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                     signal_priority: r.signal_priority.clone(),
                     description: r.signal_action.clone(),
                     matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                    content_type: r.score_breakdown.as_ref().and_then(|b| b.content_type.clone()),
                 })
                 .collect()
         } else {
@@ -484,6 +536,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                             signal_priority: None,
                             description: None,
                             matched_deps: vec![],
+                            content_type: None,
                         })
                         .collect()
                 })
@@ -1418,6 +1471,7 @@ mod tests {
             signal_priority: Some("alert".to_string()),
             description: Some("Review Rust 2026 changes".to_string()),
             matched_deps: vec!["rust".to_string()],
+            content_type: None,
         };
         assert_eq!(item.title, "Rust 2026 Edition announced");
         assert_eq!(item.source_type, "hackernews");
@@ -1443,6 +1497,7 @@ mod tests {
                     signal_priority: Some("critical".to_string()),
                     description: Some("Patch tokio immediately".to_string()),
                     matched_deps: vec!["tokio".to_string()],
+                    content_type: None,
                 },
                 BriefingItem {
                     title: "Tauri 3.0 beta released".to_string(),
@@ -1454,6 +1509,7 @@ mod tests {
                     signal_priority: Some("advisory".to_string()),
                     description: None,
                     matched_deps: vec![],
+                    content_type: None,
                 },
             ],
             total_relevant: 2,
@@ -1560,6 +1616,7 @@ mod tests {
             signal_priority: None,
             description: None,
             matched_deps: vec![],
+            content_type: None,
         }
     }
 
