@@ -13,6 +13,8 @@ use semver::Version;
 use super::types::{MatchedAdvisory, Range};
 
 /// Get all advisories that match the user's installed dependencies.
+/// Merges deps from both `user_dependencies` (user-curated) and
+/// `project_dependencies` (ACE-scanned) to ensure coverage.
 /// Version matching is attempted for SEMVER ranges; conservative (assume affected)
 /// fallback for non-semver or unparseable versions.
 pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
@@ -20,9 +22,26 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         .get_all_osv_advisories()
         .map_err(|e| FourDaError::Internal(format!("Failed to read OSV advisories: {e}")))?;
 
-    let deps = db
+    let mut deps = db
         .get_all_user_dependencies()
-        .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
+        .map_err(|e| FourDaError::Internal(format!("Failed to read user dependencies: {e}")))?;
+
+    let scanned = db
+        .get_all_scanned_dependencies()
+        .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
+
+    // Merge scanned deps, deduped by (package_name, project_path, ecosystem)
+    let mut seen_deps: std::collections::HashSet<(String, String, String)> =
+        deps.iter()
+            .map(|d| (d.package_name.to_lowercase(), d.project_path.clone(), normalize_ecosystem(&d.ecosystem).to_string()))
+            .collect();
+
+    for dep in scanned {
+        let key = (dep.package_name.to_lowercase(), dep.project_path.clone(), normalize_ecosystem(&dep.ecosystem).to_string());
+        if seen_deps.insert(key) {
+            deps.push(dep);
+        }
+    }
 
     if advisories.is_empty() || deps.is_empty() {
         return Ok(Vec::new());
