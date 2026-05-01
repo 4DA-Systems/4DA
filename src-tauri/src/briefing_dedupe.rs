@@ -139,6 +139,7 @@ mod tests {
             signal_priority: None,
             description: None,
             matched_deps: vec![],
+            content_type: None,
         }
     }
 

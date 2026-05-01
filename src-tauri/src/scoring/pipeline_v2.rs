@@ -652,6 +652,7 @@ fn compute_quality_composite(
     f32,
     f32,
     f32,
+    f32,
 ) {
     // Freshness: topic-aware when autophagy half-lives are available
     let freshness = if options.apply_freshness {
@@ -793,6 +794,7 @@ fn compute_quality_composite(
         &ctx.domain_profile,
     );
     let sophistication_mult = sophistication.multiplier;
+    let sophistication_raw = sophistication.title_complexity * 0.6 + sophistication.content_depth * 0.4;
 
     // Content analysis multiplier (from cached LLM pre-analysis, if available)
     let content_analysis_mult = {
@@ -897,6 +899,7 @@ fn compute_quality_composite(
         sophistication_mult,
         content_analysis_mult,
         negative_stack_prior,
+        sophistication_raw,
     )
 }
 
@@ -1090,16 +1093,78 @@ fn apply_gate_effect(
 }
 
 // ============================================================================
-// Phase 8: Apply final adjustments — short title cap only
+// Phase 8: Apply final adjustments — short title cap + commodity ceiling
 // ============================================================================
 
-fn apply_final_adjustments(score: f32, title: &str) -> f32 {
+fn apply_final_adjustments(
+    score: f32,
+    title: &str,
+    content_type: &crate::content_dna::ContentType,
+    sophistication_raw: f32,
+) -> f32 {
     let meaningful_words = title.split_whitespace().filter(|w| w.len() >= 2).count();
-    if meaningful_words < 3 {
+    let score = if meaningful_words < 3 {
         score.min(scoring_config::QUALITY_FLOOR_SHORT_TITLE_CAP)
     } else {
         score
+    };
+
+    // Commodity content ceiling: hard cap on low-sophistication commodity content.
+    // Applied AFTER all boosts and gate effects — no amount of dep_boost or
+    // bootstrap doubling can push a basic "how to" tutorial into the briefing.
+    apply_commodity_ceiling(score, title, content_type, sophistication_raw)
+}
+
+/// Hard ceiling for commodity content types with low sophistication.
+///
+/// Exemptions (any bypasses the ceiling):
+/// - CVE/GHSA pattern in title
+/// - Version conflict language with version number
+/// - Content type overridden to SecurityAdvisory or BreakingChange (already excluded)
+/// - Sophistication >= 0.30 (has advanced terms, version specificity, or abstract framing)
+fn apply_commodity_ceiling(
+    score: f32,
+    title: &str,
+    content_type: &crate::content_dna::ContentType,
+    sophistication_raw: f32,
+) -> f32 {
+    use crate::content_dna::ContentType;
+
+    // Only applies to commodity types
+    let ceiling = match content_type {
+        ContentType::Tutorial => scoring_config::COMMODITY_CEILING_TUTORIAL,
+        ContentType::HelpRequest => scoring_config::COMMODITY_CEILING_HELP_REQUEST,
+        ContentType::Question => scoring_config::COMMODITY_CEILING_QUESTION,
+        _ => return score,
+    };
+
+    // Sophistication above threshold = not commodity
+    if sophistication_raw >= 0.30 {
+        return score;
     }
+
+    // Security/version exemptions
+    let title_lower = title.to_lowercase();
+    if has_security_pattern(&title_lower) || has_version_conflict(&title_lower) {
+        return score;
+    }
+
+    score.min(ceiling)
+}
+
+fn has_security_pattern(title_lower: &str) -> bool {
+    title_lower.contains("cve-")
+        || title_lower.contains("ghsa-")
+        || title_lower.contains("security advisory")
+        || title_lower.contains("vulnerability")
+}
+
+fn has_version_conflict(title_lower: &str) -> bool {
+    let conflict_terms = ["breaks", "incompatible", "deprecated", "breaking change", "migration"];
+    let has_conflict = conflict_terms.iter().any(|t| title_lower.contains(t));
+    let has_version = title_lower.chars().any(|c| c.is_ascii_digit())
+        && (title_lower.contains('v') || title_lower.contains('.'));
+    has_conflict && has_version
 }
 
 // ============================================================================
@@ -1364,6 +1429,7 @@ pub(crate) fn score_item(
         _sophistication_mult,
         content_analysis_mult,
         negative_stack_prior,
+        sophistication_raw,
     ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db);
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
@@ -1413,7 +1479,7 @@ pub(crate) fn score_item(
     );
 
     // ── Phase 8: Final adjustments ────────────────────────────────────
-    let combined_score = apply_final_adjustments(gated_score, input.title);
+    let combined_score = apply_final_adjustments(gated_score, input.title, &content_type, sophistication_raw);
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual

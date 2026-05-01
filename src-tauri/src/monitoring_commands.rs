@@ -490,6 +490,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
                     "Patch SQLite immediately — your projects depend on it".to_string(),
                 ),
                 matched_deps: vec!["sqlite".to_string(), "rusqlite".to_string()],
+                content_type: Some("security_advisory".to_string()),
             },
             BriefingItem {
                 title: "Tauri 3.0 drops macOS 11 support — migration guide".to_string(),
@@ -501,6 +502,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
                 signal_priority: Some("alert".to_string()),
                 description: Some("Review migration guide before upgrading".to_string()),
                 matched_deps: vec!["tauri".to_string()],
+                content_type: Some("release_note".to_string()),
             },
             BriefingItem {
                 title: "Show HN: Rust testing framework 10x faster than cargo test".to_string(),
@@ -512,6 +514,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
                 signal_priority: Some("advisory".to_string()),
                 description: Some("Evaluate for your Rust workflow".to_string()),
                 matched_deps: vec![],
+                content_type: Some("show_and_tell".to_string()),
             },
         ],
         total_relevant: 3,

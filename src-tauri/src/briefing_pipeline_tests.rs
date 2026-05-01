@@ -44,6 +44,7 @@ fn mk(title: &str, source: &str, score: f32) -> BriefingItem {
         signal_priority: None,
         description: None,
         matched_deps: vec![],
+        content_type: None,
     }
 }
 
