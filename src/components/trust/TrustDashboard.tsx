@@ -118,7 +118,7 @@ export const TrustDashboard = memo(function TrustDashboard() {
     ? (s.avg_lead_time_hours / 24).toFixed(1)
     : null;
 
-  const hasEnoughData = s.total_surfaced >= 10;
+  const hasEnoughData = s.total_surfaced >= 10 && s.has_precision_data;
 
   return (
     <div className="p-5 space-y-4">
@@ -136,8 +136,8 @@ export const TrustDashboard = memo(function TrustDashboard() {
       <div className="grid grid-cols-4 gap-3">
         <MetricCard
           label={t('trust.precision')}
-          value={`${precisionPct}%`}
-          color={precisionColor(precisionPct)}
+          value={s.has_precision_data ? `${precisionPct}%` : '--'}
+          color={s.has_precision_data ? precisionColor(precisionPct) : 'text-text-muted'}
         />
         <MetricCard
           label={t('trust.actionRate')}

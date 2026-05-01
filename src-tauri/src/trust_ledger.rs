@@ -5,7 +5,7 @@
 //! Trust Ledger for 4DA
 //!
 //! Records and measures intelligence quality: precision, preemption lead time,
-//! false positive rates, and action conversion. Makes the invisible visible —
+//! false positive rates, and action conversion. Makes the invisible visible â€”
 //! proves 4DA is getting smarter over time.
 
 use serde::{Deserialize, Serialize};
@@ -65,8 +65,9 @@ pub struct TrustSummary {
     pub acted_on: u32,
     pub dismissed: u32,
     pub false_positives: u32,
-    /// Precision score: 0.0–1.0 (TP / (TP + FP))
+    /// Precision score: 0.0â€“1.0 (TP / (TP + FP))
     pub precision: f32,
+    pub has_precision_data: bool,
     pub action_conversion_rate: f32,
     pub preemption_wins: u32,
     pub avg_lead_time_hours: Option<f32>,
@@ -74,11 +75,11 @@ pub struct TrustSummary {
     pub trend: String,
 }
 
-/// Preemption win — record of a case where 4DA caught something before it became urgent.
+/// Preemption win â€” record of a case where 4DA caught something before it became urgent.
 /// Populated by the background validator (Phase 2 plan, scheduled task runs weekly)
 /// that checks whether past preemption alerts were later validated by reality
 /// (e.g. a CVE we warned about was published, a breaking change actually shipped).
-#[allow(dead_code)] // Scheduled validator lands in Phase 2.4 — struct already wired to DB schema
+#[allow(dead_code)] // Scheduled validator lands in Phase 2.4 â€” struct already wired to DB schema
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PreemptionWin {
@@ -215,10 +216,11 @@ pub fn get_trust_summary(days: u32) -> Result<TrustSummary> {
         .unwrap_or(0);
 
     let true_positives = acted_on + validated;
-    let precision = if true_positives + false_positives > 0 {
+    let has_precision_data = true_positives + false_positives > 0;
+    let precision = if has_precision_data {
         true_positives as f32 / (true_positives + false_positives) as f32
     } else {
-        1.0 // No data yet — assume perfect until proven otherwise
+        0.0
     };
 
     let action_rate = if total_surfaced > 0 {
@@ -236,6 +238,7 @@ pub fn get_trust_summary(days: u32) -> Result<TrustSummary> {
         dismissed,
         false_positives,
         precision,
+        has_precision_data,
         action_conversion_rate: action_rate,
         preemption_wins,
         avg_lead_time_hours: avg_lead_time,
@@ -302,7 +305,7 @@ fn compute_trend(conn: &rusqlite::Connection, days: u32) -> Result<String> {
         )
         .unwrap_or(0);
 
-    // No previous data — default to stable
+    // No previous data â€” default to stable
     if prev_tp + prev_fp == 0 {
         return Ok("stable".to_string());
     }
@@ -403,7 +406,7 @@ pub fn compute_and_store_weekly_precision() -> Result<()> {
         let precision = if true_positives + false_positives > 0 {
             true_positives as f32 / (true_positives + false_positives) as f32
         } else {
-            -1.0 // No data — use sentinel value
+            -1.0 // No data â€” use sentinel value
         };
 
         let action_rate = if total > 0 {
@@ -561,7 +564,7 @@ pub fn analyze_false_positives(days: u32) -> Result<FalsePositiveAnalysis> {
     for s in &by_source {
         if s.fp_rate > 0.3 && s.total > 5 {
             recommendations.push(format!(
-                "Source '{}' has {:.0}% FP rate — consider downweighting",
+                "Source '{}' has {:.0}% FP rate â€” consider downweighting",
                 s.source_type,
                 s.fp_rate * 100.0
             ));
@@ -570,7 +573,7 @@ pub fn analyze_false_positives(days: u32) -> Result<FalsePositiveAnalysis> {
     for t in &by_topic {
         if t.fp_rate > 0.3 && t.total > 5 {
             recommendations.push(format!(
-                "Topic '{}' has {:.0}% FP rate — consider raising relevance threshold",
+                "Topic '{}' has {:.0}% FP rate â€” consider raising relevance threshold",
                 t.topic,
                 t.fp_rate * 100.0
             ));
