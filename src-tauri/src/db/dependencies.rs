@@ -155,6 +155,43 @@ impl Database {
             .collect())
     }
 
+    /// Get all ACE-scanned dependencies from `project_dependencies`.
+    /// Returns them as `StoredDependency` for compatibility with OSV matching.
+    /// Maps `language` → `ecosystem` and `last_scanned` → `detected_at`/`last_seen_at`.
+    pub fn get_all_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, package_name, version, language, is_dev, is_direct, last_scanned
+             FROM project_dependencies
+             ORDER BY language, package_name",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(StoredDependency {
+                id: row.get(0)?,
+                project_path: row.get(1)?,
+                package_name: row.get(2)?,
+                version: row.get(3)?,
+                ecosystem: row.get::<_, String>(4)?,
+                is_dev: row.get::<_, bool>(5)?,
+                is_direct: row.get::<_, bool>(6)?,
+                detected_at: row.get::<_, String>(7)?,
+                last_seen_at: row.get::<_, String>(7)?,
+                license: None,
+            })
+        })?;
+
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in scanned dependencies: {e}");
+                    None
+                }
+            })
+            .collect())
+    }
+
     /// Get packages that appear in multiple projects (cross-project insight).
     pub fn get_cross_project_packages(&self) -> SqliteResult<Vec<CrossProjectPackage>> {
         let conn = self.conn.lock();

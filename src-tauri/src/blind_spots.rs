@@ -318,6 +318,7 @@ fn find_uncovered_deps(
     let eligible_deps: Vec<&DepCoverage> = deps
         .iter()
         .filter(|d| d.package_name.len() >= MIN_DEP_NAME_LEN)
+        .filter(|d| !is_builtin_module(&d.package_name))
         .take(MAX_DEPS_TO_PROCESS)
         .collect();
 
@@ -398,6 +399,9 @@ fn find_uncovered_deps(
             JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
             LEFT JOIN interactions i ON i.item_id = si.id
             WHERE si.created_at >= datetime('now', ?1)
+              AND (si.content_type IS NULL
+                   OR si.content_type NOT IN ('show_and_tell','tutorial','question',
+                                              'help_request','hiring','clickbait'))
             GROUP BY bd.name
         ) w ON w.dep_name = d.name
         LEFT JOIN (
@@ -511,6 +515,29 @@ fn find_uncovered_deps(
     Ok(uncovered)
 }
 
+/// Common runtime built-in modules that generate false blind spots.
+/// These are language standard library modules, not installable packages —
+/// LIKE matching their names against source_items catches unrelated content
+/// (e.g. "crypto" matches cryptocurrency articles).
+fn is_builtin_module(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "crypto" | "http" | "https" | "path" | "stream" | "events"
+        | "buffer" | "util" | "assert" | "child_process" | "cluster"
+        | "dgram" | "domain" | "module" | "perf_hooks" | "process"
+        | "querystring" | "readline" | "repl" | "string_decoder"
+        | "timers" | "tty" | "v8" | "vm" | "worker_threads" | "zlib"
+        | "async_hooks" | "console" | "inspector" | "trace_events"
+        | "wasi" | "diagnostics_channel"
+        // Python built-ins
+        | "json" | "logging" | "typing" | "collections" | "functools"
+        | "itertools" | "pathlib" | "asyncio" | "socket" | "threading"
+        | "multiprocessing" | "unittest" | "hashlib" | "hmac"
+        // Rust std modules
+        | "alloc" | "core" | "proc_macro"
+    )
+}
+
 /// Classify risk level based on coverage gap severity.
 fn classify_dep_risk(days_since: u32, unseen_signals: u32, project_count: usize) -> String {
     if days_since > scoring_config::BLIND_SPOT_RISK_CRITICAL_DAYS as u32
@@ -583,23 +610,33 @@ fn find_missed_signals(
     // content_type filtering: drop noise categories at the DB level using the
     // classification already computed at ingestion by content_dna. Items with
     // NULL content_type (legacy rows) pass through and get title-based fallback.
+    //
+    // Cross-lens dedup: exclude security_advisory and breaking_change items —
+    // those already route to Preemption via OSV (Tier 1), LLM judgment (Tier 2),
+    // or direct-dep keyword matching (Tier 3.5). Showing the same item in both
+    // tabs with different urgencies (Preemption caps at High, Blind Spots maps
+    // keywords to Critical) is a correctness failure, not a feature.
+    //
+    // Title-keyword fallback for legacy items (NULL content_type): exclude items
+    // whose titles contain security terminology that Preemption already captures.
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.content_type
          FROM source_items si
          LEFT JOIN interactions i ON i.item_id = si.id
-         LEFT JOIN user_events ue ON (
-             ue.event_type = 'impression'
-             AND ue.metadata LIKE '%\"item_id\":' || si.id || '%'
-         )
          WHERE si.relevance_score > 0.5
            AND si.created_at >= datetime('now', '-{days} days')
            AND si.created_at < datetime('now', '-{feed_window} days')
            AND i.item_id IS NULL
-           AND ue.id IS NULL
+           AND NOT EXISTS (
+               SELECT 1 FROM user_events ue
+               WHERE ue.event_type = 'impression'
+               AND CAST(json_extract(ue.metadata, '$.item_id') AS INTEGER) = si.id
+           )
            AND (si.content_type IS NULL
                 OR si.content_type NOT IN ('show_and_tell','tutorial','question',
-                                           'help_request','hiring','clickbait'))
+                                           'help_request','hiring','clickbait',
+                                           'security_advisory','breaking_change'))
          ORDER BY si.relevance_score DESC
          LIMIT 40",
         days = days,
@@ -640,6 +677,17 @@ fn find_missed_signals(
         s.content_type.is_some() || !crate::knowledge_decay::is_low_quality_signal(&s.title)
     });
 
+    // Cross-lens dedup for legacy items (NULL content_type): exclude items
+    // whose titles contain security/breaking-change keywords that Preemption
+    // already handles. Without this, the same CVE/vulnerability article
+    // appears in both tabs with contradictory urgency levels.
+    signals.retain(|s| {
+        if s.content_type.is_some() {
+            return true; // Already filtered at SQL level
+        }
+        !is_preemption_territory(&s.title)
+    });
+
     // Populate `why_relevant` and `dep_name` by looking for dep mentions in titles.
     for signal in &mut signals {
         let (why, dep) = compute_why_relevant(&signal.title, signal.relevance_score, direct_deps);
@@ -676,6 +724,36 @@ fn find_missed_signals(
     let signals = cap_per_dep(signals, 3);
 
     Ok(signals)
+}
+
+/// Returns true if a title's keywords indicate the item belongs in Preemption,
+/// not Blind Spots. Mirrors the security/breaking-change keywords used by
+/// `preemption::fetch_direct_dep_security_alerts` SQL LIKE clauses.
+fn is_preemption_territory(title: &str) -> bool {
+    let t = title.to_lowercase();
+    t.contains("cve-")
+        || t.contains("cve ")
+        || t.contains("ghsa-")
+        || t.contains("vulnerab")
+        || t.contains("security advisory")
+        || t.contains("security patch")
+        || t.contains("security update")
+        || t.contains("security flaw")
+        || t.contains("security issue")
+        || t.contains("security bug")
+        || t.contains("remote code execution")
+        || t.contains("zero-day")
+        || t.contains("zeroday")
+        || t.contains("0day")
+        || t.contains("supply chain attack")
+        || t.contains("malware")
+        || t.contains("backdoor")
+        || t.contains("breaking change")
+        || t.contains("deprecat")
+        || t.contains("end of life")
+        || t.contains("end-of-life")
+        || t.contains("drops support")
+        || t.contains("migration guide")
 }
 
 /// Map stored content_type to a priority tier.
@@ -1320,6 +1398,17 @@ fn calculate_blind_spot_score(
     missed: &[MissedSignal],
     total_direct_deps: usize,
 ) -> f32 {
+    // Insufficient evidence guard: with fewer than 10 tracked deps, the
+    // uncovered-dep pressure (55% of the score) has too few data points
+    // to be meaningful. A 4-dep stack with 1 uncovered = 25% pressure,
+    // which maps to a score that implies comprehensive analysis when
+    // we've barely sampled the user's real stack. Return -1.0 as sentinel
+    // for "not enough data" — the frontend interprets this as "building
+    // your coverage picture" instead of showing a misleading number.
+    if total_direct_deps < 10 {
+        return -1.0;
+    }
+
     // ─── 1. Uncovered pressure (0-1) ──────────────────────────────────
     // Severity-weighted fraction of the user's direct stack that's uncovered.
     let uncovered_weighted: f32 = uncovered
@@ -1421,8 +1510,13 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
             "s"
         }
     ));
+    let time_phrase = if d.days_since_last_signal >= 365 {
+        "over a year".to_string()
+    } else {
+        format!("{} days", d.days_since_last_signal)
+    };
     let explanation = format!(
-        "{} signal{} about {} appeared but you haven't engaged with {} content in {} days.",
+        "{} signal{} about {} appeared but you haven't engaged with {} content in {}.",
         d.available_signal_count,
         if d.available_signal_count == 1 {
             ""
@@ -1431,7 +1525,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         },
         d.name,
         d.name,
-        d.days_since_last_signal,
+        time_phrase,
     );
 
     // Synthesize at least one inferred citation so the schema's
@@ -1753,15 +1847,7 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
             None => continue, // source item deleted or missing
         };
 
-        // Filter out security items — those belong in Preemption, not Blind Spots
-        let lower_title = title_raw.to_lowercase();
-        let is_security = lower_title.contains("cve")
-            || lower_title.contains("vulnerability")
-            || lower_title.contains("security advisory")
-            || lower_title.contains("exploit")
-            || source_type == "osv"
-            || source_type == "cve";
-        if is_security {
+        if is_preemption_territory(&title_raw) || source_type == "osv" || source_type == "cve" {
             continue;
         }
 
@@ -1831,18 +1917,13 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
 /// `generate_blind_spot_report` still produces the legacy struct (shared
 /// with telemetry code paths) and converts at the boundary.
 #[tauri::command]
-pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
+pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_blind_spots").map_err(|e| e.to_string())?;
     let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
     let mut feed = blind_spot_report_to_feed(&report);
 
     // Tier 2: inject LLM-judged blind spot items (missed signals the user hasn't seen)
     feed.items.extend(llm_judged_blind_spot_items());
-
-    // TitanCA-inspired adversarial deliberation — signal/noise validation.
-    // Critical/High bypass; Medium/Watch get deliberated. Fail-open on LLM unavailable.
-    let user_context = crate::adversarial::build_user_context_summary();
-    feed.items = crate::adversarial::filter_batch(feed.items, &user_context).await;
 
     Ok(feed)
 }
@@ -2117,6 +2198,75 @@ mod tests {
             0,
             "short dep names must be skipped to avoid LIKE noise"
         );
+    }
+
+    #[test]
+    fn builtin_modules_filtered_from_blind_spots() {
+        let conn = setup_test_db();
+        insert_source_item(&conn, "new crypto mining attack vector", 0.9, 2);
+
+        let deps = vec![DepCoverage {
+            package_name: "crypto".to_string(),
+            ecosystem: "javascript".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        assert_eq!(
+            uncovered.len(),
+            0,
+            "built-in modules like 'crypto' must be filtered to avoid false blind spots"
+        );
+    }
+
+    #[test]
+    fn builtin_module_detection() {
+        assert!(is_builtin_module("crypto"));
+        assert!(is_builtin_module("Crypto"));
+        assert!(is_builtin_module("http"));
+        assert!(is_builtin_module("json"));
+        assert!(!is_builtin_module("express"));
+        assert!(!is_builtin_module("react"));
+        assert!(!is_builtin_module("tokio"));
+        assert!(!is_builtin_module("serde"));
+    }
+
+    // ─── Cross-lens dedup (P0) ──────────────────────────────────────────
+
+    #[test]
+    fn preemption_territory_detects_security_keywords() {
+        assert!(is_preemption_territory("CVE-2026-12345: React DOM XSS"));
+        assert!(is_preemption_territory("Critical vulnerability in Deno"));
+        assert!(is_preemption_territory("GHSA-xxxx: npm supply chain attack"));
+        assert!(is_preemption_territory("security advisory for lodash"));
+        assert!(is_preemption_territory("Zero-day exploit found in Chrome"));
+        assert!(is_preemption_territory("Breaking change in React 20"));
+        assert!(is_preemption_territory("Node.js 18 reaches end of life"));
+        assert!(is_preemption_territory("Migration guide for Vite 7"));
+        assert!(is_preemption_territory("Malware found in npm package"));
+    }
+
+    #[test]
+    fn preemption_territory_allows_non_security() {
+        assert!(!is_preemption_territory("React 20 performance improvements"));
+        assert!(!is_preemption_territory("How to use Deno with Fresh"));
+        assert!(!is_preemption_territory("New features in TypeScript 6.0"));
+        assert!(!is_preemption_territory("Building CLI tools with Rust"));
+        assert!(!is_preemption_territory("Tauri 3.0 release notes"));
+    }
+
+    // ─── Evidence threshold (P1) ─────────────────────────────────────────
+
+    #[test]
+    fn score_returns_sentinel_when_few_deps() {
+        let score = calculate_blind_spot_score(&[], &[], &[], 5);
+        assert!(score < 0.0, "fewer than 10 deps should return -1.0 sentinel");
+    }
+
+    #[test]
+    fn score_computes_normally_with_sufficient_deps() {
+        let score = calculate_blind_spot_score(&[], &[], &[], 15);
+        assert!(score >= 0.0, "15 deps should compute a real score");
     }
 
     // ─── Fix 4: score normalization ──────────────────────────────────────

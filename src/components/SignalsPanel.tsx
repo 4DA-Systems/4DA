@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../types';
 import { useLicense } from '../hooks/use-license';
 import { SignalUpgradeCTA } from './SignalUpgradeCTA';
+import { getSourceLabel } from '../config/sources';
 
 // ============================================================================
 // Types
@@ -359,6 +360,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
   const [showTriggers, setShowTriggers] = useState(false);
   const config = (SIGNAL_CONFIG[signal.signal_type] ?? SIGNAL_CONFIG['tech_trend'])!;
   const priority = (PRIORITY_CONFIG[signal.signal_priority] ?? PRIORITY_CONFIG['watch'])!;
+  const sourceLabel = getSourceLabel(signal.source_type);
 
   return (
     <div
@@ -406,7 +408,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
             <span className="text-[10px] text-text-muted">
               {t('signals.match', { score: Math.round(signal.top_score * 100) })}
             </span>
-            <span className="text-[10px] text-text-muted">{signal.source_type}</span>
+            <span className="text-[10px] text-text-muted">{sourceLabel}</span>
             {signal.signal_triggers.length > 0 && (
               <button
                 onClick={() => setShowTriggers(!showTriggers)}
@@ -422,7 +424,7 @@ const SignalRow = ({ signal }: { signal: SignalItem }) => {
           {/* Similar items grouped */}
           {signal.similar_count > 0 && (
             <div className="mt-1.5 text-[10px] text-text-muted">
-              +{t('signals.similar', { count: signal.similar_count })}{signal.similar_titles.length > 0 && (
+              {t('signals.similar', { count: signal.similar_count })}{signal.similar_titles.length > 0 && (
                 <span className="text-text-muted"> ({signal.similar_titles.slice(0, 2).join(', ')}{signal.similar_titles.length > 2 ? '...' : ''})</span>
               )}
             </div>

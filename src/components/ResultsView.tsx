@@ -248,7 +248,7 @@ export function ResultsView({
                   className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-muted rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-all"
                   title="Dismiss all items below 30% relevance"
                 >
-                  x &lt;30%
+                  Hide low-signal
                 </button>
                 <button
                   onClick={() => saveAllAbove(0.6)}
@@ -256,7 +256,7 @@ export function ResultsView({
                   className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-muted rounded-lg hover:bg-green-500/10 hover:text-green-400 transition-all"
                   title="Save all items above 60% relevance"
                 >
-                  + &gt;60%
+                  Save strong matches
                 </button>
               </div>
             </div>
