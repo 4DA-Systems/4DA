@@ -4,8 +4,8 @@
 
 //! Evidence — the canonical intelligence type for 4DA.
 //!
-//! Five parallel intelligence systems (AWE, Preemption, Blind Spots, Knowledge
-//! Decay, Signal Chains) historically shipped five parallel type systems. Each
+//! Five parallel intelligence systems (Preemption, Blind Spots, Knowledge
+//! Decay, Signal Chains, Evidence) historically shipped five parallel type systems. Each
 //! duplicated the same fields with different names, had a different confidence
 //! scale, and hand-wrote its own "why this matters" text. Consumers could not
 //! compare, deduplicate, or route items across systems.
@@ -29,8 +29,8 @@ mod tests;
 
 // These are published for consumption by Phases 3-5 (where existing
 // Preemption / BlindSpots / KnowledgeDecay / SignalChains producers will
-// implement `EvidenceMaterializer`) and Phase 9 (AWE spine wiring). The
-// unused-warnings are intentional while those phases are pending.
+// implement `EvidenceMaterializer`). The unused-warnings are intentional
+// while those phases are pending.
 #[allow(unused_imports)]
 pub use materializer::{EvidenceMaterializer, MaterializeContext};
 #[allow(unused_imports)]

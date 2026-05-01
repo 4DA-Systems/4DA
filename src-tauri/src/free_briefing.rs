@@ -210,9 +210,6 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         gaps
     };
 
-    // AWE v1 removed — wisdom signals will come from AWE v2 standalone binary
-    let wisdom_signals: Vec<serde_json::Value> = vec![];
-
     // GAME: track briefing generation
     if let Ok(db) = crate::get_database() {
         for a in crate::achievement_engine::increment_counter(db, "briefings", 1) {
@@ -228,7 +225,6 @@ pub async fn generate_free_briefing(app: tauri::AppHandle) -> Result<serde_json:
         "source_summary": source_counts,
         "signal_priorities": signal_priorities,
         "knowledge_gaps": knowledge_gaps,
-        "wisdom_signals": wisdom_signals,
         "total_items": items.len(),
         "generated_at": chrono::Utc::now().to_rfc3339(),
     }))

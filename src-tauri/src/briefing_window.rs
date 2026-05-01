@@ -6,7 +6,7 @@
 //!
 //! A dedicated webview (separate from the signal notification window) that displays
 //! the daily morning briefing with enriched data: synthesized intelligence,
-//! knowledge gaps, signal priorities, and AWE wisdom signals.
+//! knowledge gaps, and signal priorities.
 //!
 //! The briefing window is:
 //! - 560×780 logical pixels, positioned bottom-right above the taskbar
@@ -302,7 +302,7 @@ pub async fn briefing_open_url(url: String) -> crate::error::Result<()> {
 /// Manually trigger the morning briefing for testing.
 ///
 /// Bypasses the once-per-day and time-window checks. Uses the full enrichment
-/// pipeline (quality gate, dedupe, knowledge gaps, chains, AWE wisdom,
+/// pipeline (quality gate, dedupe, knowledge gaps, chains,
 /// preemption alerts, blind spot score) and spawns async LLM synthesis —
 /// identical output to the scheduled path.
 #[tauri::command]
@@ -372,7 +372,6 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
     let total = briefing.items.len();
     let gaps = briefing.knowledge_gaps.len();
     let chains = briefing.escalating_chains.len();
-    let wisdom = briefing.wisdom_signals.len();
     let preemption = briefing.preemption_alerts.len();
 
     // Show briefing window + OS notification
@@ -400,14 +399,13 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         items = total,
         gaps = gaps,
         chains = chains,
-        wisdom = wisdom,
         preemption = preemption,
         "Manual briefing triggered (full enrichment)"
     );
 
     Ok(format!(
-        "Briefing triggered: {} items, {} gaps, {} chains, {} wisdom, {} preemption",
-        total, gaps, chains, wisdom, preemption
+        "Briefing triggered: {} items, {} gaps, {} chains, {} preemption",
+        total, gaps, chains, preemption
     ))
 }
 

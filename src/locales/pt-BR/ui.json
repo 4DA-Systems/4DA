@@ -180,65 +180,6 @@
   "autophagy.noCycles": "Nenhum ciclo de autofagia ainda. Executa diariamente durante a limpeza.",
   "autophagy.recentCycles": "Ciclos recentes",
   "autophagy.title": "Como o 4DA aprende",
-  "awe": {
-    "decisions": "Decisões",
-    "principles": "Princípios",
-    "feedbackRate": "Feedback",
-    "pendingCount": "{{count}} pendentes",
-    "validatedPrinciples": "Princípios Validados",
-    "showMore": "+{{count}} mais",
-    "showLess": "Mostrar menos",
-    "momentum": {
-      "title": "Trajetória de Sabedoria",
-      "decisionsTracked": "Decisões",
-      "principlesEarned": "Princípios",
-      "coverageLabel": "Cobertura",
-      "earnedPrinciples": "Princípios Conquistados",
-      "evidenceCount": "{{count}} evidência",
-      "daysAgo": "{{count}}d",
-      "loading": "Carregando trajetória de sabedoria...",
-      "offline": "O mecanismo de sabedoria (AWE) ainda não está conectado. Seu papel: transmutar suas decisões e seus resultados em princípios calibrados que orientam o 4DA.",
-      "offlineHint": "Consulte a Aba de Sabedoria para configuração.",
-      "wellHighlights": "Formando inteligência",
-      "wellHighlightsHint": "Os padrões de confiança mais alta atualmente no Poço de Sabedoria.",
-      "pendingTitle": "Aguardando feedback de resultado",
-      "pendingMore": "+{{count}} mais na Aba de Sabedoria",
-      "intelligenceProfile": "Perfil de inteligência",
-      "itemsMonitored": "itens monitorados",
-      "sourcesActive": "fontes produzindo",
-      "yourActions": "suas ações",
-      "phase": {
-        "cold_start": "Início Frio",
-        "accumulating": "Acumulando",
-        "compounding": "Compondo",
-        "mature": "Maduro"
-      }
-    },
-    "playbook": {
-      "title": "Ressonância de Sabedoria",
-      "mastery": "Estimativa de domínio"
-    },
-    "profile": {
-      "title": "DNA de Sabedoria",
-      "decisionVelocity": "Decisões",
-      "principlesFormed": "Princípios",
-      "coverage": "Cobertura"
-    },
-    "console": {
-      "transmutation": "Transmutação",
-      "wisdomWell": "Poço de Sabedoria",
-      "calibration": "Calibração",
-      "feedbackQueue": "Fila de Feedback",
-      "totalDecisions": "Total de Decisões",
-      "totalPrinciples": "Princípios",
-      "feedbackGiven": "Feedback Fornecido",
-      "coverageRate": "Cobertura",
-      "healthStatus": "Saúde",
-      "confirm": "Confirmar",
-      "refute": "Refutar",
-      "unavailable": "AWE não está disponível"
-    }
-  },
   "badge.llm": "LLM",
   "badge.off": "OFF",
   "badge.on": "ON",

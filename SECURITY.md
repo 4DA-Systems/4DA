@@ -92,7 +92,7 @@ With your permission, we will acknowledge your contribution in the release notes
 These are architectural properties, not claims of invulnerability.
 
 - **BYOK (Bring Your Own Key).** API keys are stored in the platform keychain (see "Credential storage" above for the keychain-unavailable fallback) and are only transmitted to the providers the user has explicitly configured. 4DA Systems never receives or stores user API keys.
-- **Local-first, direct-to-provider.** 4DA has no server-side database, no user accounts, and no 4DA-operated analytics, tracking, or backend storage. Your indexed content, scores, decisions, and AWE wisdom stay in a SQLite database on your machine. The only outbound traffic is:
+- **Local-first, direct-to-provider.** 4DA has no server-side database, no user accounts, and no 4DA-operated analytics, tracking, or backend storage. Your indexed content, scores, and decisions stay in a SQLite database on your machine. The only outbound traffic is:
   - **Source adapters** fetching public content (Hacker News, GitHub, Reddit, arxiv, CVE/OSV feeds, etc. — all documented in [`NETWORK.md`](NETWORK.md)).
   - **BYOK LLM providers** you have explicitly configured (Anthropic, OpenAI, or localhost Ollama).
   - **License validation** (Keygen) if you have activated a paid license.

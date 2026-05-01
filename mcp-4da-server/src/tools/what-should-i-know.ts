@@ -5,17 +5,13 @@
  * Pre-task intelligence briefing for AI coding agents. Synthesizes:
  * - Live vulnerability data + actionable signals
  * - Decision windows (time-bounded opportunities)
- * - AWE wisdom (validated principles, anti-patterns)
  * - Ecosystem news (HN headlines relevant to tech stack)
  *
  * Filters everything for relevance to the described task and involved files.
  */
 
-import { execSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import type { FourDADatabase } from "../db.js";
 import { executeGetActionableSignals } from "./get-actionable-signals.js";
-import { findAweBinary } from "./decision-memory.js";
 import { getLiveIntelligence } from "../live-singleton.js";
 
 // ============================================================================
@@ -177,60 +173,6 @@ function getOpenDecisionWindows(db: FourDADatabase): WindowRow[] {
 }
 
 // ============================================================================
-// AWE Wisdom Engine
-// ============================================================================
-
-/**
- * Retrieve AWE Wisdom Engine status and validated principles.
- * Uses the AWE CLI binary — no direct database access, no new dependencies.
- */
-function getAweWisdom(): string | null {
-  try {
-    const aweBin = findAweBinary();
-    if (!aweBin) return null;
-
-    const configPath = process.platform === "win32"
-      ? `${process.env.APPDATA || ""}\\awe\\config.toml`
-      : `${process.env.HOME || ""}/.config/awe/config.toml`;
-
-    if (!existsSync(configPath)) return null;
-
-    let section = "AWE WISDOM ENGINE\n";
-
-    try {
-      const statusOutput = execSync(`"${aweBin}" status`, {
-        timeout: 5000,
-        encoding: "utf-8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
-      if (statusOutput) section += statusOutput.trim() + "\n";
-    } catch {
-      // status command failed — continue without it
-    }
-
-    try {
-      const recallOutput = execSync(
-        `"${aweBin}" recall "software engineering decisions" --domain software-engineering --max 5`,
-        {
-          timeout: 5000,
-          encoding: "utf-8",
-          stdio: ["ignore", "pipe", "ignore"],
-        },
-      );
-      if (recallOutput && recallOutput.trim().length > 0) {
-        section += recallOutput.trim() + "\n";
-      }
-    } catch {
-      // recall command failed — continue without it
-    }
-
-    return section.length > "AWE WISDOM ENGINE\n".length ? section : null;
-  } catch {
-    return null;
-  }
-}
-
-// ============================================================================
 // Execute
 // ============================================================================
 
@@ -313,22 +255,8 @@ export function executeWhatShouldIKnow(
     // Windows unavailable — non-fatal
   }
 
-  // ── 3. Relevant Wisdom (AWE + decisions) ──────────────────────────────
-  let relevantWisdom: WisdomEntry[] = [];
-
-  // AWE Wisdom Engine (validated principles, decision stats)
-  try {
-    const aweWisdom = getAweWisdom();
-    if (aweWisdom) {
-      relevantWisdom.push({
-        type: "awe_wisdom",
-        subject: "AWE Wisdom Engine",
-        detail: aweWisdom,
-      });
-    }
-  } catch {
-    // AWE unavailable — non-fatal
-  }
+  // ── 3. Relevant Wisdom (decisions) ─────────────────────────────────────
+  const relevantWisdom: WisdomEntry[] = [];
 
   // ── 4. Ecosystem News (HN headlines relevant to tech stack) ───────────
   let ecosystemNews: EcosystemNewsItem[] = [];

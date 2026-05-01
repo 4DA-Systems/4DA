@@ -3095,65 +3095,6 @@
   "wisdom": {
     "perspective": "Perspective"
   },
-  "awe": {
-    "decisions": "Décisions",
-    "principles": "Principes",
-    "feedbackRate": "Retour",
-    "pendingCount": "{{count}} en attente",
-    "validatedPrinciples": "Principes validés",
-    "showMore": "+{{count}} plus",
-    "showLess": "Afficher moins",
-    "momentum": {
-      "title": "Trajectoire de sagesse",
-      "decisionsTracked": "Décisions",
-      "principlesEarned": "Principes",
-      "coverageLabel": "Couverture",
-      "earnedPrinciples": "Principes gagnés",
-      "evidenceCount": "{{count}} preuves",
-      "daysAgo": "{{count}}j",
-      "loading": "Chargement de la trajectoire de sagesse...",
-      "offline": "Le moteur de sagesse (AWE) n'est pas encore connecté. Son rôle : transmuter vos décisions et leurs résultats en principes calibrés qui orientent 4DA.",
-      "offlineHint": "Consultez l'onglet Sagesse pour la configuration.",
-      "wellHighlights": "Formation de l'intelligence",
-      "wellHighlightsHint": "Les modèles de plus haute confiance actuellement dans le Puits de Sagesse.",
-      "pendingTitle": "En attente de retour de résultat",
-      "pendingMore": "+{{count}} plus dans l'onglet Sagesse",
-      "intelligenceProfile": "Profil d'intelligence",
-      "itemsMonitored": "éléments surveillés",
-      "sourcesActive": "sources produisant",
-      "yourActions": "vos actions",
-      "phase": {
-        "cold_start": "Démarrage à froid",
-        "accumulating": "Accumulation",
-        "compounding": "Composition",
-        "mature": "Mature"
-      }
-    },
-    "playbook": {
-      "title": "Résonance de Sagesse",
-      "mastery": "Estimation de maîtrise"
-    },
-    "profile": {
-      "title": "ADN de Sagesse",
-      "decisionVelocity": "Décisions",
-      "principlesFormed": "Principes",
-      "coverage": "Couverture"
-    },
-    "console": {
-      "transmutation": "Transmutation",
-      "wisdomWell": "Puits de Sagesse",
-      "calibration": "Calibrage",
-      "feedbackQueue": "File de Rétroaction",
-      "totalDecisions": "Décisions totales",
-      "totalPrinciples": "Principes",
-      "feedbackGiven": "Rétroaction donnée",
-      "coverageRate": "Couverture",
-      "healthStatus": "Santé",
-      "confirm": "Confirmer",
-      "refute": "Réfuter",
-      "unavailable": "AWE n'est pas disponible"
-    }
-  },
   "console": {
     "tab_trust": "Confiance",
     "tabDesc_trust": "Qualité de l'intelligence et preuve de préemption"

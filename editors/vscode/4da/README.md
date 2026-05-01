@@ -45,7 +45,7 @@ Security and dependency alerts appear as squiggles directly on your import state
 
 ## Requirements
 
-**Recommended**: Install [4DA Desktop](https://4da.ai) for full intelligence with 12+ content sources, PASIFA relevance scoring, and the AWE wisdom engine.
+**Recommended**: Install [4DA Desktop](https://4da.ai) for full intelligence with 12+ content sources and PASIFA relevance scoring.
 
 **Standalone**: The extension works without 4DA Desktop installed. If the MCP server is not available, it runs in degraded mode -- no errors, just no signal data until connected.
 

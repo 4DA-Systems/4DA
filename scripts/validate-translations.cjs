@@ -20,7 +20,7 @@ const NAMESPACES = ['ui', 'errors', 'streets', 'coach', 'signals'];
 
 // Terms that are legitimately the same across languages
 const BRAND_TERMS = new Set([
-  '4DA', 'Signal', 'STREETS', 'PASIFA', 'ACE', 'AWE', 'API', 'CLI', 'MCP',
+  '4DA', 'Signal', 'STREETS', 'PASIFA', 'ACE', 'API', 'CLI', 'MCP',
   'RSS', 'CVE', 'SSO', 'SCIM', 'DNA', 'Feed', 'Radar', 'Ollama', 'Tauri',
   'SQLite', 'GitHub', 'Enterprise', 'Team', 'Playbook', 'Hacker News',
   'Reddit', 'arXiv', 'OpenAI', 'Anthropic', 'Claude', 'Developer DNA',

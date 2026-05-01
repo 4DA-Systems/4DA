@@ -2932,30 +2932,6 @@
     "securityAlertDetail": "{{signal}}",
     "windowExpiring": "{{title}}"
   },
-  "awe": {
-    "loading": "正在加载智慧图谱...",
-    "decisions": "决策",
-    "principles": "原则",
-    "feedbackRate": "反馈",
-    "pendingCount": "{{count}} 待处理",
-    "validatedPrinciples": "已验证原则",
-    "showMore": "+{{count}} 更多",
-    "showLess": "显示较少",
-    "earlyStage": "AWE 还在学习中。在 5+ 个决策并获得反馈后，原则才会出现。",
-    "pendingNudge": "{{count}} 个决策等待结果反馈",
-    "momentum": {
-      "title": "智慧轨迹",
-      "decisionsTracked": "决策",
-      "principlesEarned": "原则",
-      "coverageLabel": "覆盖范围",
-      "pendingCta": "{{count}} 个决策等待反馈",
-      "earnedPrinciples": "已获得原则",
-      "evidenceCount": "{{count}} 条证据",
-      "daysAgo": "{{count}}d",
-      "loading": "正在加载智慧轨迹...",
-      "offline": "智慧引擎 (AWE) 尚未连接。其作用：将您的决策及其结果转化为指导 4DA 的校准原则。"
-    }
-  },
   "trust": {
     "empty": "尚无智能数据。使用 4DA 数天后可查看质量指标。",
     "explanation": {

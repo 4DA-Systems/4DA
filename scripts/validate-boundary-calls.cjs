@@ -8,14 +8,13 @@
  * Patterns detected:
  *
  *   1. std::process::Command::new(...).output()  — CLI subprocess without
- *      a nearby status.success() check or stderr scan. The classic silent
- *      failure from the AWE `--stages receive` bug.
+ *      a nearby status.success() check or stderr scan.
  *
  *   2. Hook/script setting `*Pending = true` without a corresponding
  *      `scanned*` dedup set. The idempotency amnesia pattern that made
  *      the immune-scan warning re-fire every session.
  *
- *   3. Raw Command::new("awe" | "ollama" | "git") outside known wrapper
+ *   3. Raw Command::new("ollama" | "git") outside known wrapper
  *      modules — once src-tauri/src/external/ is fully wired, these are
  *      forbidden. Currently WARN only until migration is complete.
  *
@@ -69,8 +68,6 @@ const VERIFICATION_PATTERNS = [
   /Unknown stage/i, // bug-1 regression test assertion
   /stderr.*contains|stderr.*to_string|String::from_utf8.*stderr/,
   /\bmatch\s+.*\.output/, // match expression immediately consuming output
-  /run_awe_with_timeout/, // known-safe helper
-  /AweClient::/, // known-safe typed wrapper (once landed)
 ];
 
 /**
@@ -93,7 +90,7 @@ const SKIP_PATTERNS = [
  *
  * Currently WARN only. Once migration is complete, promote to ERROR.
  */
-const WRAPPED_BINARIES = new Set(["awe", "ollama"]);
+const WRAPPED_BINARIES = new Set(["ollama"]);
 
 // ---------------------------------------------------------------------------
 // File walker
@@ -153,10 +150,9 @@ function checkUnverifiedCommandNew(rustFiles) {
       // so we can match against WRAPPED_BINARIES.
       let binary = m[1] || "";
       binary = binary.replace(/^&/, "").replace(/^"/, "").replace(/"$/, "");
-      // Path variables (e.g. &awe_path, path) become the variable name;
+      // Path variables (e.g. &path) become the variable name;
       // we can't statically resolve them, but the name hints at the binary.
       const binaryLower = binary.toLowerCase();
-      const looksLikeAwe = /awe/.test(binaryLower);
       const looksLikeOllama = /ollama/.test(binaryLower);
 
       // Look ahead for a verification pattern within the next N lines.
@@ -179,11 +175,9 @@ function checkUnverifiedCommandNew(rustFiles) {
       if (!isVerified) {
         let severity = "info";
         let reason = "Command::new without nearby verification pattern";
-        if (looksLikeAwe || looksLikeOllama) {
+        if (looksLikeOllama) {
           severity = "warn";
-          reason = `Raw Command::new for ${
-            looksLikeAwe ? "awe" : "ollama"
-          } — should use src-tauri/src/external/ typed wrapper (Layer 1)`;
+          reason = `Raw Command::new for ollama — should use src-tauri/src/external/ typed wrapper (Layer 1)`;
         }
         violations.push({
           check: "unverified_command_new",

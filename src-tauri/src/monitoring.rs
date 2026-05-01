@@ -960,8 +960,6 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     });
                 }
 
-                // AWE v1 daily jobs removed — AWE v2 is a standalone repo.
-                // When AWE v2 is ready, it will integrate via MCP tools.
             }
 
             // Suns: tick all enabled suns

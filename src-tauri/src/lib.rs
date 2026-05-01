@@ -739,7 +739,6 @@ pub fn run() {
             briefing_window::trigger_morning_briefing,
             // Briefing snapshot — Sovereign Cold Boot instant-paint
             briefing_snapshot::get_briefing_snapshot,
-            // AWE commands removed — AWE being rebuilt from scratch in separate repo
             // ACE (frontend-used subset)
             ace_commands::ace_get_detected_tech,
             ace_commands::ace_get_active_topics,

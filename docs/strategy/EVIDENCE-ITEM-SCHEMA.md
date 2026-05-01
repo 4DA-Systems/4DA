@@ -7,7 +7,7 @@
 
 ## Why one type
 
-Five parallel intelligence systems shipped five parallel type systems (`PreemptionAlert`, `UncoveredDep`, `MissedSignal`, `KnowledgeGap`, `SignalChainWithPrediction`, AWE's internal `Decision`). Each duplicates the same fields with different names. Each has a different confidence scale. Each hand-writes its own "why this matters" text. Consumers cannot compare, deduplicate, or route items across systems.
+Five parallel intelligence systems shipped five parallel type systems (`PreemptionAlert`, `UncoveredDep`, `MissedSignal`, `KnowledgeGap`, `SignalChainWithPrediction`). Each duplicates the same fields with different names. Each has a different confidence scale. Each hand-writes its own "why this matters" text. Consumers cannot compare, deduplicate, or route items across systems.
 
 `EvidenceItem` is the single type every lens consumes. Producers differ in how they materialize it. Consumers differ in which `kind` they render. Everything else is shared.
 
@@ -30,7 +30,7 @@ pub struct EvidenceItem {
     /// One-line summary. ≤ 120 chars. No trailing period.
     pub title: String,
 
-    /// Full explanation. Produced by AWE.articulate — not hand-written by the materializer.
+    /// Full explanation. Produced by the judgment pipeline — not hand-written by the materializer.
     /// May be empty during transition phases; must be non-empty after Phase 9 wiring.
     pub explanation: String,
 
@@ -165,7 +165,7 @@ pub enum ConfidenceProvenance {
     Heuristic,
     /// Bayesian posterior with ≥10 feedback samples. sample_size required.
     Calibrated,
-    /// LLM judgment from AWE.calibrate stage.
+    /// LLM judgment from calibration stage.
     LlmAssessed,
 }
 ```
@@ -289,7 +289,7 @@ Every `EvidenceItem` surfaced anywhere passes these checks (runtime-validated in
 | Field | Rule |
 |-------|------|
 | `title` | Non-empty, ≤ 120 chars, no trailing period |
-| `explanation` | Non-empty after Phase 9 (AWE spine wired); may be empty earlier |
+| `explanation` | Non-empty after Phase 9 (judgment spine wired); may be empty earlier |
 | `confidence.value` | 0.0 ≤ value ≤ 1.0 |
 | `confidence.provenance` | If Calibrated, `sample_size` required and ≥ 10 |
 | `reversibility` | If present, 0.0 ≤ x ≤ 1.0 |
@@ -312,7 +312,6 @@ Existing types map to `EvidenceItem` as follows (reference for Phases 3–5):
 | `MissedSignal` | `MissedSignal` | title, evidence = [{title, url, source_type, freshness}], relevance_note = why_relevant |
 | `KnowledgeGap` | `Gap` | title from dependency, urgency from gap_severity, evidence from missed_items |
 | `SignalChainWithPrediction` | `Chain` | title from chain_name, explanation from prediction.forecast |
-| AWE `Decision` | `Decision` | precedents from synthesis, reversibility from consequence stage |
 
 During Phase 3–5 transition, each materializer returns `EvidenceItem` directly. The legacy UI consumers (`PreemptionView`, `BlindSpotsView`) are refactored to consume `EvidenceItem` before their source types are deleted.
 

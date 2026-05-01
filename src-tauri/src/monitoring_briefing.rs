@@ -67,14 +67,6 @@ pub struct ChainSummary {
     pub confidence: f64,
 }
 
-/// AWE wisdom signal — a validated principle or anti-pattern from the Wisdom Graph
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WisdomSignal {
-    pub text: String,
-    pub confidence: f32,
-    pub signal_type: String, // "principle" or "anti-pattern"
-}
-
 /// A preemption alert included in the morning briefing (critical/high only).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefingPreemptionAlert {
@@ -88,7 +80,6 @@ pub struct BriefingPreemptionAlert {
 pub struct BriefingLabels {
     pub header: String,
     pub escalating: String,
-    pub wisdom: String,
     pub signals: String,
     pub blind_spots: String,
     pub tracking: String,
@@ -116,16 +107,9 @@ pub struct BriefingNotification {
     /// Signal chains in escalating or peak phase — top-level briefing section
     #[serde(default)]
     pub escalating_chains: Vec<ChainSummary>,
-    /// AWE wisdom signals — validated principles and anti-patterns from the Wisdom Graph
-    #[serde(default)]
-    pub wisdom_signals: Vec<WisdomSignal>,
     /// LLM-synthesized intelligence narrative (populated async after initial delivery)
     #[serde(default)]
     pub synthesis: Option<String>,
-    /// Behavioral wisdom — personalized insight from 4DA's behavioral data
-    /// Reserved for future enrichment
-    #[serde(default)]
-    pub wisdom_synthesis: Option<String>,
     /// Preemption alerts — critical/high urgency items from the preemption engine
     #[serde(default)]
     pub preemption_alerts: Vec<BriefingPreemptionAlert>,
@@ -148,7 +132,7 @@ pub struct BriefingNotification {
 /// Build an enriched briefing from raw items.
 ///
 /// Applies the full quality pipeline: quality gate → dedupe → cap → novelty →
-/// knowledge gaps → escalating chains → AWE wisdom → preemption alerts →
+/// knowledge gaps → escalating chains → preemption alerts →
 /// blind spot score. Called by both the scheduled briefing and manual trigger.
 ///
 /// When `skip_novelty` is true (manual trigger), the novelty filter is skipped
@@ -229,9 +213,6 @@ pub(crate) fn build_enriched_briefing(
     // Detect escalating signal chains for top-level briefing section
     let escalating_chains = detect_escalating_chains();
 
-    // Recall AWE wisdom signals — validated principles and anti-patterns
-    let wisdom_signals = recall_awe_wisdom();
-
     // Collect preemption alerts for briefing (critical + high only, max 3)
     let preemption_alerts = match crate::preemption::get_preemption_feed() {
         Ok(feed) => feed
@@ -273,9 +254,7 @@ pub(crate) fn build_enriched_briefing(
         ongoing_topics,
         knowledge_gaps,
         escalating_chains,
-        wisdom_signals,
         synthesis: None,
-        wisdom_synthesis: None,
         preemption_alerts,
         blind_spot_score,
         labels: Some(labels),
@@ -556,7 +535,6 @@ pub fn build_briefing_labels(lang: &str) -> BriefingLabels {
     BriefingLabels {
         header: tr("ui:briefing.header", "INTELLIGENCE BRIEFING"),
         escalating: tr("ui:briefing.escalating", "ESCALATING"),
-        wisdom: tr("ui:briefing.wisdom", "WISDOM"),
         signals: tr("ui:briefing.signals", "SOURCES"),
         blind_spots: tr("ui:briefing.blind_spots", "BLIND SPOTS"),
         tracking: tr("ui:briefing.tracking", "Tracking:"),
@@ -618,7 +596,6 @@ pub fn send_morning_briefing_notification<R: Runtime>(
         items = briefing.total_relevant,
         gaps = briefing.knowledge_gaps.len(),
         chains = briefing.escalating_chains.len(),
-        wisdom = briefing.wisdom_signals.len(),
         "Intelligence briefing delivered (desktop widget + OS notification)"
     );
 }
@@ -671,18 +648,6 @@ fn build_notification_summary(briefing: &BriefingNotification) -> String {
         let n = briefing.knowledge_gaps.len();
         parts.push(format!("{n} blind spot{}", if n != 1 { "s" } else { "" }));
     }
-    let principles = briefing
-        .wisdom_signals
-        .iter()
-        .filter(|s| s.signal_type == "principle")
-        .count();
-    if principles > 0 {
-        parts.push(format!(
-            "{principles} wisdom signal{}",
-            if principles != 1 { "s" } else { "" }
-        ));
-    }
-
     if parts.is_empty() {
         return "No new signals since last check.".to_string();
     }
@@ -865,28 +830,6 @@ fn detect_escalating_chains() -> Vec<ChainSummary> {
             vec![]
         }
     }
-}
-
-// ============================================================================
-// AWE Wisdom Recall
-// ============================================================================
-
-/// Recall AWE wisdom signals relevant to the morning briefing.
-///
-/// Fetches validated principles and anti-patterns from the Wisdom Graph.
-/// These provide decision context from accumulated project experience.
-///
-/// **First production use of the `external::awe::AweClient` typed wrapper.**
-/// Migrated from raw `Command::new("awe")` on 2026-04-14 as part of the
-/// Silent-Failure Defense Layer 1 rollout. See
-/// `docs/strategy/SILENT-FAILURE-DEFENSE.md` for the architecture and
-/// `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` for the
-/// bugs this wrapper defends against by construction.
-fn recall_awe_wisdom() -> Vec<WisdomSignal> {
-    // AWE v1 integration removed — AWE v2 is a standalone repo.
-    // This stub preserves the briefing pipeline shape; AWE v2 will
-    // re-populate wisdom signals via its own MCP tools.
-    vec![]
 }
 
 // ============================================================================
@@ -1151,25 +1094,6 @@ pub(crate) async fn synthesize_morning_briefing(
         format!("\nBlind spots:\n{g}\n")
     };
 
-    let wisdom_text = if briefing.wisdom_signals.is_empty() {
-        String::new()
-    } else {
-        let w = briefing
-            .wisdom_signals
-            .iter()
-            .map(|w| {
-                let label = if w.signal_type == "anti-pattern" {
-                    "AVOID"
-                } else {
-                    "PRINCIPLE"
-                };
-                format!("- [{}] ({:.0}%) {}", label, w.confidence * 100.0, w.text)
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!("\nAWE Wisdom:\n{w}\n")
-    };
-
     let system_prompt = r#"You are an intelligence analyst writing a morning brief for a developer's desktop widget.
 
 YOUR JOB: synthesize, don't summarize. Find the 1-2 strongest threads across all signals, explain WHY they matter together, and state what to do. The signal list below handles individual items -- your job is the "so what?" that a senior dev can't see by scanning titles.
@@ -1239,7 +1163,7 @@ BANNED:
 
     let user_prompt = format!(
         "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\n\
-         {count} signals:\n{items}\n{chains}{gaps}{wisdom}\n\
+         {count} signals:\n{items}\n{chains}{gaps}\n\
          Synthesize my morning intelligence briefing.",
         tech = tech_summary,
         topics = topics_summary,
@@ -1247,7 +1171,6 @@ BANNED:
         items = items_text,
         chains = chains_text,
         gaps = gaps_text,
-        wisdom = wisdom_text,
     );
 
     let llm_client = crate::llm::LLMClient::new(llm_settings);
@@ -1546,13 +1469,7 @@ mod tests {
                 action: "Review tokio security patches".to_string(),
                 confidence: 0.85,
             }],
-            wisdom_signals: vec![WisdomSignal {
-                text: "Always test migration paths before releasing".to_string(),
-                confidence: 0.85,
-                signal_type: "principle".to_string(),
-            }],
             synthesis: None,
-            wisdom_synthesis: None,
             preemption_alerts: vec![],
             blind_spot_score: None,
             labels: None,
@@ -1565,9 +1482,6 @@ mod tests {
         assert_eq!(briefing.knowledge_gaps[0].days_since_last, 7);
         assert_eq!(briefing.escalating_chains.len(), 1);
         assert_eq!(briefing.escalating_chains[0].phase, "escalating");
-        assert_eq!(briefing.wisdom_signals.len(), 1);
-        assert_eq!(briefing.wisdom_signals[0].signal_type, "principle");
-        assert!(briefing.wisdom_signals[0].confidence > 0.8);
     }
 
     #[test]

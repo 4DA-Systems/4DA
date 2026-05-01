@@ -13,9 +13,9 @@
 
 Over one week of pre-launch hardening, three distinct bug reports were filed against 4DA. They looked unrelated on the surface:
 
-1. **AWE transmute was returning empty results** — root cause: `--stages receive` was rejected by the CLI as "Unknown stage", but the calling code never checked the exit status or scanned stderr for error strings. The transmute had been silently failing **for months**. Wisdom graph never received user feedback (97/106 entries came from nightly git scan, 0 from interactions).
+1. **An external CLI tool was returning empty results** — root cause: a CLI flag was rejected as "Unknown stage", but the calling code never checked the exit status or scanned stderr for error strings. The call had been silently failing **for months**.
 
-2. **An AWE command was uncallable from the frontend** — root cause: `run_awe_autonomous_now` had `#[tauri::command]` attribute but was missing from `generate_handler!` in `lib.rs`. Frontend `invoke()` returned "command not found" at runtime only when a user actually tried to use the feature.
+2. **A command was uncallable from the frontend** — root cause: a handler had `#[tauri::command]` attribute but was missing from `generate_handler!` in `lib.rs`. Frontend `invoke()` returned "command not found" at runtime only when a user actually tried to use the feature.
 
 3. **The "immune scan pending" warning wouldn't go away** — root cause: the session-end hook detected "recent bug-fix commit in git log" and set the flag **every session**, with no memory of which commits had already been scanned. Clearing the flag was cosmetic.
 
@@ -74,9 +74,9 @@ Ground-truth from a 2026-04-12 audit. Counts are approximate and may drift sligh
 
 | | Current state |
 |---|---|
-| Sites | ~50 `Command::new` sites. Breakdown: AWE CLI: 29 sites in `awe_commands.rs` + `awe_autonomous.rs` + `awe_source_mining.rs` + `context_commands.rs` + `monitoring_briefing.rs`. git: 1 site (`ace/git.rs`). System tools (powershell, codesign, ldconfig, lspci, reg, fc-list, ps, xdotool, where/which, npm, cargo): ~15 sites. Node/Python (plugins/loader): 3 sites. |
-| Current defense | ✅ Two regression tests in `awe_commands.rs` run the real `awe.exe` binary (from commit `81a41b3c`). ✅ New code in `awe_autonomous.rs` / `awe_source_mining.rs` uses the antibody pattern from day one. ❌ No typed wrapper enforcing contract verification at the type level. ❌ No clippy lint preventing raw `Command::new("awe"...)` calls outside a defense module. |
-| Silent-failure risks | **This is the class that introduced the silent-failure family to 4DA.** AWE CLI contract drift. Unchecked stderr. Client-generated IDs not matched against server-assigned IDs. Missing exit-code checks. |
+| Sites | ~20 `Command::new` sites. Breakdown: git: 1 site (`ace/git.rs`). System tools (powershell, codesign, ldconfig, lspci, reg, fc-list, ps, xdotool, where/which, npm, cargo): ~15 sites. Node/Python (plugins/loader): 3 sites. |
+| Current defense | ❌ No typed wrapper enforcing contract verification at the type level. ❌ No clippy lint preventing raw `Command::new(...)` calls outside a defense module. |
+| Silent-failure risks | **This is the class that introduced the silent-failure family to 4DA.** CLI contract drift. Unchecked stderr. Client-generated IDs not matched against server-assigned IDs. Missing exit-code checks. |
 | Risk rating | **HIGH** |
 
 ### Class 3 — Rust ↔ HTTP APIs
@@ -143,12 +143,12 @@ Defense in depth. The goal: any silent failure must escape **all five layers** t
 
 **Mechanisms:**
 
-- **Typed external-tool wrappers** — `src-tauri/src/external/` with `AweClient`, `OllamaClient`, `GitClient`. Each method returns `Result<TypedOutput, TypedError>`. You cannot obtain a `TypedOutput` without passing all contract checks. The compiler enforces verification.
+- **Typed external-tool wrappers** — `src-tauri/src/external/` with `OllamaClient`, `GitClient`. Each method returns `Result<TypedOutput, TypedError>`. You cannot obtain a `TypedOutput` without passing all contract checks. The compiler enforces verification.
 - **Forbid raw `Command::new` for known external tools** — clippy `disallowed-methods` lint (if per-argument matching ever lands) OR custom pattern check in `validate-boundary-calls.cjs`.
 - **Typed HTTP response deserialization** — prefer typed structs over `serde_json::Value`. Only 1 untyped site in the codebase currently; keep it that way.
 - **`deny_unknown_fields` on settings structs** — catches field-rename drift.
 
-**First iteration shipping in this commit:** `src-tauri/src/external/mod.rs` + `src-tauri/src/external/awe.rs` skeleton. Methods defined, call-site migration deferred to a follow-up.
+**First iteration shipping in this commit:** `src-tauri/src/external/mod.rs` skeleton. Methods defined, call-site migration deferred to a follow-up.
 
 ### Layer 2 — Pre-commit contract validators (commit time)
 
@@ -169,7 +169,7 @@ Defense in depth. The goal: any silent failure must escape **all five layers** t
 
 **Mechanisms:**
 
-- **Real-binary integration tests** — `src-tauri/tests/integration/test_awe_cli.rs` exists in skeleton form (2 regression tests from `81a41b3c`); expand to cover every `AweClient` method. Similar for Ollama.
+- **Real-binary integration tests** — expand to cover every external client method. Similar for Ollama.
 - **Full migration chain test** — `test_sqlite_migration_chain.rs` that runs all 54+ migrations in sequence against a fresh temp DB, asserts none panic or roll back.
 - **Anti-mocking rule** — any external-integration module with a mocked unit test MUST also have a real-binary integration test. Enforced via code review.
 
@@ -182,7 +182,6 @@ Defense in depth. The goal: any silent failure must escape **all five layers** t
 **Mechanisms:**
 
 - **`src-tauri/src/smoke_test.rs`** — new module. On first launch of each cold boot, spawns a background task that exercises every critical boundary with a tiny probe:
-  - AWE CLI: `awe version` (validates binary exists and runs, <100ms)
   - Ollama: `GET /api/version` (already in `check_ollama_version`)
   - SQLite: `SELECT sqlite_version()` + `PRAGMA quick_check`
   - Filesystem: write+read+delete a `.smoke-test-probe` file
@@ -220,38 +219,30 @@ Ranked by `(silent-failure coverage × 1/effort)`. Items higher in the list have
 
 **Cost:** ~4 hours of implementation, 0 runtime cost.
 
-### Priority 2 (shipping in this commit, skeleton) — `external::awe::AweClient`
-
-**What:** Typed wrapper for every AWE CLI call. Methods are `transmute`, `feedback`, `history`, `seed`, `wisdom`, `version`, `retriage`, `calibration`, etc. Each method internally: (a) spawns the process with full args, (b) checks exit code, (c) scans stderr for known error strings, (d) parses stdout into a typed result. Returns `Result<TypedOutput, AweError>`.
-
-**Why second:** Layer 1 architectural fix. Prevents the pattern by construction. Once call sites migrate, raw `Command::new("awe")` outside `external/` can be banned via `validate-boundary-calls.cjs`.
-
-**Cost (skeleton):** ~4 hours. **Cost (full migration):** ~2 days once T-WAR-ROOM's app_handle threading is stable.
-
-### Priority 3 (backlog) — `external::ollama::OllamaClient`
+### Priority 2 (backlog) — `external::ollama::OllamaClient`
 
 Same pattern for Ollama HTTP calls. Small number of call sites, but critical because Ollama is the embedding + chat backbone. ~1 day.
 
-### Priority 4 (backlog) — `validate-schema-drift.cjs`
+### Priority 3 (backlog) — `validate-schema-drift.cjs`
 
 Diff test-schema `CREATE TABLE` strings against production migration strings. The `is_direct` bug this week was exactly this. ~4 hours.
 
-### Priority 5 (backlog) — `src-tauri/src/smoke_test.rs`
+### Priority 4 (backlog) — `src-tauri/src/smoke_test.rs`
 
 Cold-boot self-test. Catches user-environment drift. ~1 day. Reuses `startup_health` infrastructure.
 
-### Priority 6 (backlog) — Integration tests for every external tool
+### Priority 5 (backlog) — Integration tests for every external tool
 
-Real-binary tests for every `AweClient` / `OllamaClient` method. Anti-mocking enforcement. ~2 days setup + ongoing maintenance.
+Real-binary tests for every `OllamaClient` method. Anti-mocking enforcement. ~2 days setup + ongoing maintenance.
 
-### Priority 7 (backlog, post-launch) — Production telemetry aggregation + anomaly alarms
+### Priority 6 (backlog, post-launch) — Production telemetry aggregation + anomaly alarms
 
 Layer 5. Extends existing `telemetry.rs`. ~2 days.
 
-### Priority 8 (ongoing) — Code review discipline
+### Priority 7 (ongoing) — Code review discipline
 
 Anti-patterns to reject in review:
-- New `Command::new("awe"|"ollama"|"git"...)` outside `src-tauri/src/external/`
+- New `Command::new("ollama"|"git"...)` outside `src-tauri/src/external/`
 - `.json::<serde_json::Value>` in HTTP deserialization (prefer typed struct)
 - `.unwrap_or(default)` on `Result` types (prefer typed error propagation)
 - Hook scripts setting `*Pending = true` without matching `scanned*` set
@@ -298,7 +289,7 @@ Use typed errors, at minimum log the error. If a default is genuinely correct, d
 
 ### Anti-goal 3 — Over-abstraction that hides boundaries
 
-A generic `execute(cmd: &str) -> String` helper that takes any command string and returns any output hides the boundary, making per-boundary verification impossible. **Keep each external boundary visible and explicit.** `AweClient::transmute(...)` is better than `generic_cli("awe", &["transmute", ...])`.
+A generic `execute(cmd: &str) -> String` helper that takes any command string and returns any output hides the boundary, making per-boundary verification impossible. **Keep each external boundary visible and explicit.** `OllamaClient::embed(...)` is better than `generic_cli("ollama", &["embed", ...])`.
 
 ### Anti-goal 4 — Exclusive reliance on unit tests with mocks
 
@@ -314,7 +305,7 @@ Tests catch regressions, not silent failures. Silent failures bypass tests becau
 
 ### Anti-goal 7 — Perfect-is-enemy-of-good
 
-Don't block launch on 100% boundary coverage. Ship Layers 1+2+3 for high-risk boundaries (AWE, Ollama, SQLite migrations). Skip low-risk ones until post-launch. Protection is additive.
+Don't block launch on 100% boundary coverage. Ship Layers 1+2+3 for high-risk boundaries (Ollama, SQLite migrations). Skip low-risk ones until post-launch. Protection is additive.
 
 ---
 
@@ -324,14 +315,14 @@ What ships in THIS commit:
 
 1. **This strategy document** — canonical source of truth for the architecture.
 2. **`scripts/validate-boundary-calls.cjs`** — Priority 1 validator. Flags unverified `Command::new` sites and hook flag-without-dedup patterns. Ready to wire into `.husky/pre-commit` in a follow-up.
-3. **`src-tauri/src/external/mod.rs` + `src-tauri/src/external/awe.rs`** — skeleton for the typed AWE wrapper. Defines `AweClient`, `AweError`, method signatures, and the internal `invoke` helper that performs exit-code + stderr checks. **Not yet wired** to call sites — migration is a follow-up.
+3. **`src-tauri/src/external/mod.rs`** — skeleton for typed external wrappers. Defines method signatures and the internal `invoke` helper that performs exit-code + stderr checks. **Not yet wired** to call sites — migration is a follow-up.
 4. **`.claude/TERMINALS.md`** — active claim for T-SILENT-FAILURE-DEFENSE during this commit, moved to historical record on completion.
 
 What comes in follow-up commits:
 
 5. **Run `validate-boundary-calls.cjs` against current HEAD**, collect the backlog of violations, file as issues, fix in batches.
 6. **Wire `validate-boundary-calls.cjs` into `.husky/pre-commit`** once the backlog is down to a manageable count.
-7. **Migrate `awe_commands.rs` / `context_commands.rs` / `awe_autonomous.rs` / `awe_source_mining.rs` / `monitoring_briefing.rs` call sites** from raw `Command::new("awe"...)` to `AweClient::*`. After migration, `validate-boundary-calls.cjs` can ban raw AWE invocations outside `external/`.
+7. **Migrate remaining raw `Command::new(...)` call sites** to typed wrappers. After migration, `validate-boundary-calls.cjs` can ban raw invocations outside `external/`.
 8. **`external::ollama::OllamaClient`** — same pattern for Ollama.
 9. **`src-tauri/src/smoke_test.rs`** — Layer 4 cold-boot self-test.
 10. **`validate-schema-drift.cjs`** — test-schema vs production-migration diff.
@@ -344,7 +335,6 @@ What comes in follow-up commits:
 A one-shot audit against HEAD (2026-04-12) surfaced these real counts:
 
 **Rust ↔ CLI boundary (Class 2):** ~50 `Command::new` sites total.
-- AWE: 29 sites across 5 files (biggest single risk; fix via `AweClient` wrapper)
 - git: 1 site (`ace/git.rs`)
 - System tools (powershell, codesign, ldconfig, lspci, reg, fc-list, ps, xdotool, where, which, npm, cargo, fc-list): ~15 sites scattered across `startup_health.rs`, `diagnostics.rs`, `integrity.rs`, `local_audit.rs`, `lib.rs`, `free_briefing.rs`, `settings/helpers.rs`, `desktop_pin.rs`, `plugins/loader.rs`
 - Node/Python sidecar plugins: 3 sites in `plugins/loader.rs`
@@ -373,13 +363,13 @@ This architecture doesn't cover every failure mode. Specifically, it doesn't cat
 1. **User-environment drift** — graphics driver update breaks WebGPU. Layer 4 smoke test catches some; Layer 5 telemetry catches more; neither is bulletproof.
 2. **Semantic drift** — an API still works but means something subtly different (e.g., Ollama tokenizer change → embedding drift). Defense is out of scope for mechanical boundary checks; requires periodic content-quality audits.
 3. **Data poisoning** — upstream data sources containing intentionally misleading content. Defense is domain-specific (sanitization, ranking, trust scoring).
-4. **LLM hallucination** — model confidently generates wrong output. Defense is out of scope for boundary checking; requires AWE's consequence-modeling layer.
+4. **LLM hallucination** — model confidently generates wrong output. Defense is out of scope for boundary checking; requires consequence-modeling at the application layer.
 
-The architecture is for **mechanical silent failures** — broken integrations, unverified contracts, drift between side A's local success and side B's actual outcome. Semantic and data-quality failures are a separate class, handled by different systems (AWE, PASIFA scoring, content moderation).
+The architecture is for **mechanical silent failures** — broken integrations, unverified contracts, drift between side A's local success and side B's actual outcome. Semantic and data-quality failures are a separate class, handled by different systems (PASIFA scoring, content moderation).
 
 ## Why this matters specifically for 4DA
 
-4DA is an **intelligence system that depends on correctness to be trusted.** If the AWE pattern-match returns garbage because the CLI silently failed, the user has no way to know the intelligence is compromised. They see "AWE gave me a weird answer" and blame the model. The feedback loop is broken. Compound intelligence cannot compound when the input signal is silently contaminated.
+4DA is an **intelligence system that depends on correctness to be trusted.** If an external tool returns garbage because the CLI silently failed, the user has no way to know the intelligence is compromised. The feedback loop is broken. Compound intelligence cannot compound when the input signal is silently contaminated.
 
 Every silent failure in 4DA isn't just a bug — it's a **trust erosion event.** Users relying on proactive intelligence need to trust that when 4DA says "here's what matters," the underlying pipelines actually ran correctly. Silent failures are structurally incompatible with the product promise.
 
@@ -392,7 +382,7 @@ The five bugs I found this week were harmless only because I happened to look. A
 4DA is "bulletproof against silent failures" when:
 
 1. ✅ Every boundary in the taxonomy (Parts 1-2) has at least Layer 2 + Layer 3 coverage (validator + integration test)
-2. ✅ Every HIGH-risk boundary (AWE, Ollama, SQLite migrations, filesystem writes, hook state) has all 5 layers
+2. ✅ Every HIGH-risk boundary (Ollama, SQLite migrations, filesystem writes, hook state) has all 5 layers
 3. ✅ New bug-fix commits automatically spawn antibodies AND trigger audit passes for the same class across the codebase
 4. ✅ Production telemetry surfaces any anomaly before the user hits it in a feature
 5. ✅ Pre-commit validators catch 95%+ of new instances before they land
@@ -401,13 +391,13 @@ The five bugs I found this week were harmless only because I happened to look. A
 
 A new silent failure at that point would need to escape all five layers simultaneously. That's rare, and when it happens, Layer 5 (production telemetry) catches it before it spreads.
 
-**Current state: ~Layer 2 coverage on IPC (validate-commands.cjs), ~Layer 3 coverage on AWE CLI (2 regression tests), 0 coverage on other classes.** This commit adds Layer 1 skeleton + Layer 2 validator for the CLI class. Full coverage is a ~2-week pre-launch sprint.
+**Current state: ~Layer 2 coverage on IPC (validate-commands.cjs), 0 coverage on other classes.** This commit adds Layer 1 skeleton + Layer 2 validator for the CLI class. Full coverage is a ~2-week pre-launch sprint.
 
 ---
 
 ## Cross-references
 
-- `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` — Bug 1 + Bug 2 (the AWE CLI instances)
+- `.claude/wisdom/antibodies/2026-04-12-silent-cli-failures.md` — Bug 1 + Bug 2 (the external CLI instances)
 - `.claude/wisdom/antibodies/2026-04-12-ghost-ipc-and-idempotency-amnesia.md` — Bug 3 + Bug 4 (ghost IPC + hook idempotency)
 - `docs/strategy/PRELAUNCH-HARDENING.md` — related pre-launch risk mitigations
 - `.ai/FAILURE_MODES.md` — should be updated with a "Silent Failure Family" section cross-referencing this document (follow-up action item)

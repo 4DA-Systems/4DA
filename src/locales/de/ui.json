@@ -3076,65 +3076,6 @@
   "scoreDrawer": {
     "neutral": "Neutral"
   },
-  "awe": {
-    "decisions": "Entscheidungen",
-    "principles": "Prinzipien",
-    "feedbackRate": "Feedback",
-    "pendingCount": "{{count}} ausstehend",
-    "validatedPrinciples": "Validierte Prinzipien",
-    "showMore": "+{{count}} weitere",
-    "showLess": "Weniger anzeigen",
-    "momentum": {
-      "title": "Weisheitsverlauf",
-      "decisionsTracked": "Entscheidungen",
-      "principlesEarned": "Prinzipien",
-      "coverageLabel": "Abdeckung",
-      "earnedPrinciples": "Verdiente Prinzipien",
-      "evidenceCount": "{{count}} Belege",
-      "daysAgo": "{{count}}T",
-      "loading": "Weisheitsverlauf wird geladen...",
-      "offline": "Die Weisheits-Engine (AWE) ist noch nicht verbunden. Ihre Aufgabe: Ihre Entscheidungen und deren Ergebnisse in kalibrierte Prinzipien umwandeln, die 4DA lenken.",
-      "offlineHint": "Siehe die Weisheits-Registerkarte für die Einrichtung.",
-      "wellHighlights": "Intelligenz wird entwickelt",
-      "wellHighlightsHint": "Die derzeit im Weisheitsbrunnen mit der höchsten Konfidenz vorliegenden Muster.",
-      "pendingTitle": "Warten auf Ergebnis-Feedback",
-      "pendingMore": "+{{count}} weitere in der Weisheits-Registerkarte",
-      "intelligenceProfile": "Intelligenzbewertung",
-      "itemsMonitored": "überwachte Elemente",
-      "sourcesActive": "Quellen, die produzieren",
-      "yourActions": "deine Aktionen",
-      "phase": {
-        "cold_start": "Kaltstart",
-        "accumulating": "Ansammlung",
-        "compounding": "Verstärkung",
-        "mature": "Ausgereift"
-      }
-    },
-    "playbook": {
-      "title": "Weisheitsresonanz",
-      "mastery": "Beherrschungsschätzung"
-    },
-    "profile": {
-      "title": "Weisheits-DNA",
-      "decisionVelocity": "Entscheidungen",
-      "principlesFormed": "Grundsätze",
-      "coverage": "Abdeckung"
-    },
-    "console": {
-      "transmutation": "Transmutation",
-      "wisdomWell": "Wissensbrunnen",
-      "calibration": "Kalibrierung",
-      "feedbackQueue": "Feedback-Warteschlange",
-      "totalDecisions": "Gesamtentscheidungen",
-      "totalPrinciples": "Grundsätze",
-      "feedbackGiven": "Feedback gegeben",
-      "coverageRate": "Abdeckung",
-      "healthStatus": "Gesundheit",
-      "confirm": "Bestätigen",
-      "refute": "Widerlegen",
-      "unavailable": "AWE ist nicht verfügbar"
-    }
-  },
   "console": {
     "tab_trust": "Vertrauen",
     "tabDesc_trust": "Intelligenzqualität und Präventionsnachweis"

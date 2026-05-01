@@ -178,65 +178,6 @@
   "autophagy.noCycles": "अभी तक कोई ऑटोफ़ेजी चक्र नहीं। दैनिक क्लीनअप के दौरान चलता है।",
   "autophagy.recentCycles": "हाल के चक्र",
   "autophagy.title": "4DA कैसे सीखता है",
-  "awe": {
-    "decisions": "निर्णय",
-    "principles": "सिद्धांत",
-    "feedbackRate": "प्रतिक्रिया",
-    "pendingCount": "{{count}} लंबित",
-    "validatedPrinciples": "सत्यापित सिद्धांत",
-    "showMore": "+{{count}} और",
-    "showLess": "कम दिखाएं",
-    "momentum": {
-      "title": "बुद्धिमता प्रक्षेपवक्र",
-      "decisionsTracked": "निर्णय",
-      "principlesEarned": "सिद्धांत",
-      "coverageLabel": "कवरेज",
-      "earnedPrinciples": "अर्जित सिद्धांत",
-      "evidenceCount": "{{count}} साक्ष्य",
-      "daysAgo": "{{count}}d",
-      "loading": "बुद्धिमता प्रक्षेपवक्र लोड हो रहा है...",
-      "offline": "बुद्धिमता इंजन (AWE) अभी तक जुड़ा नहीं है। इसकी भूमिका: आपके निर्णयों और उनके परिणामों को अंशांकित सिद्धांतों में रूपांतरित करना जो 4DA को निर्देशित करते हैं।",
-      "offlineHint": "सेटअप के लिए Wisdom टैब देखें।",
-      "wellHighlights": "बुद्धिमता का निर्माण",
-      "wellHighlightsHint": "Wisdom Well में वर्तमान में उच्चतम-आत्मविश्वास पैटर्न।",
-      "pendingTitle": "परिणाम प्रतिक्रिया की प्रतीक्षा में",
-      "pendingMore": "+{{count}} और Wisdom टैब में",
-      "intelligenceProfile": "बुद्धिमता प्रोफ़ाइल",
-      "itemsMonitored": "आइटम निगरानी की गई",
-      "sourcesActive": "स्रोत उत्पादन कर रहे हैं",
-      "yourActions": "आपकी क्रियाएं",
-      "phase": {
-        "cold_start": "कोल्ड स्टार्ट",
-        "accumulating": "जमा हो रहा है",
-        "compounding": "संयोजन",
-        "mature": "परिपक्व"
-      }
-    },
-    "playbook": {
-      "title": "ज्ञान अनुनाद",
-      "mastery": "दक्षता अनुमान"
-    },
-    "profile": {
-      "title": "ज्ञान डीएनए",
-      "decisionVelocity": "निर्णय",
-      "principlesFormed": "सिद्धांत",
-      "coverage": "कवरेज"
-    },
-    "console": {
-      "transmutation": "परिवर्तन",
-      "wisdomWell": "ज्ञान कुआं",
-      "calibration": "अंशांकन",
-      "feedbackQueue": "प्रतिक्रिया कतार",
-      "totalDecisions": "कुल निर्णय",
-      "totalPrinciples": "सिद्धांत",
-      "feedbackGiven": "प्रतिक्रिया दी गई",
-      "coverageRate": "कवरेज",
-      "healthStatus": "स्वास्थ्य",
-      "confirm": "पुष्टि करें",
-      "refute": "खंडन करें",
-      "unavailable": "AWE उपलब्ध नहीं है"
-    }
-  },
   "badge.llm": "LLM",
   "badge.off": "बंद",
   "badge.on": "चालू",

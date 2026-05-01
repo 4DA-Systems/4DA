@@ -38,7 +38,7 @@ use crate::types::{AdvisorSignal, DisagreementKind};
 /// Maximum total adjustment advisors can make to the pipeline score.
 /// A single advisor's |normalized - pipeline| can exceed this, but the
 /// FINAL adjustment applied is clamped here. This is the single most
-/// load-bearing constant in the mesh — loosen only with awe_transmute.
+/// load-bearing constant in the mesh — loosen only with an ADR.
 pub const ADVISOR_ADJUSTMENT_CAP: f32 = 0.15;
 
 /// |pipeline - advisor_normalized| above this flags a disagreement for
@@ -288,7 +288,7 @@ mod tests {
     fn adjustment_cap_constant_matches_design_doc() {
         // Guard: if this constant changes, the design doc must be updated
         // in lockstep. Bumping the cap loosens advisor power and is a
-        // high-stakes architectural decision — route through awe_transmute.
+        // high-stakes architectural decision — requires an ADR.
         assert!((ADVISOR_ADJUSTMENT_CAP - 0.15).abs() < 1e-6);
     }
 

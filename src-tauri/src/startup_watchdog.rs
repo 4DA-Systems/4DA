@@ -277,7 +277,7 @@ fn data_dir() -> Option<PathBuf> {
 /// - `Warning(count)`: several recent crashes (3+ in the last 5 minutes) —
 ///   emit a banner to the frontend but keep normal init.
 /// - `Critical(count)`: aggressive crash burst (3+ in the last 60 seconds) —
-///   enter safe mode: skip background fetches, AWE, scheduler, etc.
+///   enter safe mode: skip background fetches, scheduler, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CrashLoopStatus {
     Normal,
@@ -301,14 +301,14 @@ const CRASH_CRITICAL_WINDOW_SECS: u64 = 60;
 const CRASH_LOOP_THRESHOLD: u32 = 3;
 
 /// Global flag: when Critical, the rest of the code should short-circuit
-/// background tasks, AWE calls, and the monitoring scheduler.
+/// background tasks and the monitoring scheduler.
 static SAFE_MODE: AtomicBool = AtomicBool::new(false);
 
 /// Returns `true` if the current boot has been flagged as safe mode by
 /// `check_crash_loop`. Callers that do heavy or network work should
 /// bail out when this is true.
 ///
-/// Wired into consumers in a follow-up wave (scheduler, AWE sync, background
+/// Wired into consumers in a follow-up wave (scheduler, background
 /// fetchers). Allowed dead for now because the primary enforcement is via
 /// the frontend `startup-crash-loop-critical` event.
 #[allow(dead_code)]

@@ -233,7 +233,6 @@ pub async fn index_project_readmes() -> Result<String> {
     }
 }
 
-// AWE v1 integration removed — AWE v2 is a standalone repo.
 
 /// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects).
 /// Only called at runtime on Linux (WSL); on other platforms it's used only in tests.

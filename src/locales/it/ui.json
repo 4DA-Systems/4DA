@@ -3083,65 +3083,6 @@
     "llm": "LLM: {{tier}}",
     "cpu": "CPU: {{model}}"
   },
-  "awe": {
-    "decisions": "Decisioni",
-    "principles": "Principi",
-    "feedbackRate": "Feedback",
-    "pendingCount": "{{count}} in sospeso",
-    "validatedPrinciples": "Principi Convalidati",
-    "showMore": "+{{count}} altri",
-    "showLess": "Mostra meno",
-    "momentum": {
-      "title": "Traiettoria della Saggezza",
-      "decisionsTracked": "Decisioni",
-      "principlesEarned": "Principi",
-      "coverageLabel": "Copertura",
-      "earnedPrinciples": "Principi Guadagnati",
-      "evidenceCount": "{{count}} prove",
-      "daysAgo": "{{count}}g",
-      "loading": "Caricamento traiettoria della saggezza...",
-      "offline": "Il motore di saggezza (AWE) non è ancora connesso. Il suo ruolo: trasformare le tue decisioni e i loro risultati in principi calibrati che guidano 4DA.",
-      "offlineHint": "Vedi la Scheda Saggezza per la configurazione.",
-      "wellHighlights": "Formazione dell'intelligence",
-      "wellHighlightsHint": "I pattern con la massima confidenza attualmente nel Pozzo della Saggezza.",
-      "pendingTitle": "In attesa di feedback sui risultati",
-      "pendingMore": "+{{count}} altri nella Scheda Saggezza",
-      "intelligenceProfile": "Profilo di intelligenza",
-      "itemsMonitored": "elementi monitorati",
-      "sourcesActive": "fonti che producono",
-      "yourActions": "le tue azioni",
-      "phase": {
-        "cold_start": "Avvio a freddo",
-        "accumulating": "Accumulo",
-        "compounding": "Composizione",
-        "mature": "Maturo"
-      }
-    },
-    "playbook": {
-      "title": "Risonanza della Saggezza",
-      "mastery": "Stima di padronanza"
-    },
-    "profile": {
-      "title": "DNA della Saggezza",
-      "decisionVelocity": "Decisioni",
-      "principlesFormed": "Principi",
-      "coverage": "Copertura"
-    },
-    "console": {
-      "transmutation": "Trasmutazione",
-      "wisdomWell": "Pozzo di Saggezza",
-      "calibration": "Calibrazione",
-      "feedbackQueue": "Coda di Feedback",
-      "totalDecisions": "Decisioni Totali",
-      "totalPrinciples": "Principi",
-      "feedbackGiven": "Feedback Fornito",
-      "coverageRate": "Copertura",
-      "healthStatus": "Salute",
-      "confirm": "Conferma",
-      "refute": "Confuta",
-      "unavailable": "AWE non è disponibile"
-    }
-  },
   "console": {
     "tab_trust": "Fiducia",
     "tabDesc_trust": "Qualità dell'intelligenza e prova di prevenzione"

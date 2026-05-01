@@ -41,7 +41,7 @@ pub enum ValidationError {
     PrecedentSimilarityOutOfRange(f32),
     #[error("id is empty")]
     IdEmpty,
-    #[error("explanation required after AWE spine wired (Phase 9+)")]
+    #[error("explanation required (Phase 9+)")]
     #[allow(dead_code)] // Gated on a future phase flag; checker wired in Phase 9.
     ExplanationRequired,
     #[error("explanation lacks grounded reasoning (no causal connectors found)")]

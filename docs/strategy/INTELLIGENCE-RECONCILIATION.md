@@ -2,35 +2,34 @@
 
 **Status:** Approved 2026-04-16. This is THE plan. No v1.x follow-up architecture discussions on this system.
 **Owner:** Lead development (Claude + founder)
-**Supersedes:** Any prior ad-hoc treatment of Momentum, AWE UI exposure, Preemption/Blindspots integration.
+**Supersedes:** Any prior ad-hoc treatment of Momentum, Preemption/Blindspots integration.
 
 ---
 
 ## Problem statement
 
-4DA has five overlapping intelligence systems — AWE, Preemption, Blind Spots, Knowledge Decay, Signal Chains — each with its own backend, type system, confidence scale, UI, and tab. They all answer variations of one question (*"what from the signal firehose matters to this user right now?"*) and they do not know about each other.
+4DA has four overlapping intelligence systems — Preemption, Blind Spots, Knowledge Decay, Signal Chains — each with its own backend, type system, confidence scale, UI, and tab. They all answer variations of one question (*"what from the signal firehose matters to this user right now?"*) and they do not know about each other.
 
 Symptoms observed pre-launch:
 - The Momentum tab has become a dashboard of vanity and empty states.
 - The same concept (e.g. "react") surfaces as a knowledge gap, an uncovered dep, a preemption alert, a signal chain, and a potential decision — five surfaces, one truth.
-- AWE presents as a user feature (with a "Run wisdom" button, a "Decisions tracked" counter, and a "Wisdom Trajectory" panel) but has no natural trigger surface, no input conversion layer, no output rendering, no feedback wiring, and no cold-start strategy. It is effectively a dev-tool in a user costume.
 - Knowledge gaps trigger on zero-day-stale deps. Active-work topic extraction returns escaped regex fragments. Multiple metrics divide by zero and display 100%. Users see the app looking busy and broken simultaneously.
 
 ## Target architecture
 
-**One Intelligence Core. AWE is its judgment spine. Preemption / Blind Spots / Decay / Chains are lenses onto the Core's output. Not independent systems.**
+**One Intelligence Core. Preemption / Blind Spots / Decay / Chains are lenses onto the Core's output. Not independent systems.**
 
 ```
                      ┌────────────────────────────────┐
                      │       INTELLIGENCE CORE         │
 INPUT PLANE          │                                 │      OUTPUT PLANE
 ─────────────        │  ┌──────────────────────────┐  │      ─────────────
-ACE (projects/       │  │   AWE Judgment Spine     │  │      Evidence Items
-  dependencies)  ──► │  │   (7-stage pipeline)     │  │  ──► (canonical shape)
+ACE (projects/       │  │  Evidence Materializer   │  │      Evidence Items
+  dependencies)  ──► │  │                          │  │  ──► (canonical shape)
 User feedback    ──► │  └──────────────────────────┘  │
-Ingested items   ──► │  ┌──────────────────────────┐  │
-Git history      ──► │  │  Evidence Materializer   │  │
-Curated corpus   ──► │  └──────────────────────────┘  │
+Ingested items   ──► │                                 │
+Git history      ──► │                                 │
+Curated corpus   ──► │                                 │
                      └────────────────────────────────┘
                                     │
                                     ▼
@@ -42,11 +41,6 @@ Curated corpus   ──► │  └───────────────
 
 - All intelligence emits one canonical type: `EvidenceItem` (see `EVIDENCE-ITEM-SCHEMA.md`).
 - All lenses consume `EvidenceItem`, differing only in which slice they surface and how they present.
-- AWE never has its own dashboard. AWE's presence in the UI is felt as *better reasoning on every item*, plus four sanctioned user surfaces:
-  1. **Confession Box** — global `⌘.` shortcut, opens a single-input modal for ad-hoc decisions.
-  2. **Decision Brief** — the canonical AWE output card (one scrollable card, five fixed sections).
-  3. **Commitment Contract** — the refutation-condition follow-up prompt on accepted decisions.
-  4. **Retrospective Card** — weekly retrospectives surfaced in the Evidence lens.
 
 ## Tab rationalization — 12 → 5
 
@@ -54,7 +48,7 @@ Main nav:
 - **Briefing** (today's signal)
 - **Preemption** (forward-looking alerts)
 - **Blind Spots** (coverage gaps)
-- **Evidence** (compound proof + AWE surfaces) — replaces Momentum
+- **Evidence** (compound proof) — replaces Momentum
 - **Results** (raw feed / search)
 
 Sidebar (contextual, not main nav):
@@ -70,11 +64,6 @@ Advanced toggle (hidden by default):
 ### Frontend — delete
 
 - `src/components/Momentum.tsx` and all of `src/components/momentum/*`
-- `src/components/awe/MomentumWisdomTrajectory.tsx`
-- `src/components/awe/BriefingWisdomSignal.tsx`
-- `src/components/awe/PlaybookWisdomResonance.tsx`
-- `src/components/awe/ProfileWisdomDna.tsx`
-- `src/components/awe/momentum-wisdom-helpers.tsx`
 - `src/components/CompoundAdvantageScore.tsx` (vanity)
 - `src/components/IntelligenceProfileCard.tsx` (vanity)
 - `src/components/CategoryChapterView.tsx` (merged into Results)
@@ -88,14 +77,14 @@ Advanced toggle (hidden by default):
 
 ### Types — collapse into canonical
 
-- `PreemptionAlert` + `AlertEvidence` + `UncoveredDep` + `MissedSignal` + `KnowledgeGap` + AWE's `Decision` → **one** `EvidenceItem`
+- `PreemptionAlert` + `AlertEvidence` + `UncoveredDep` + `MissedSignal` + `KnowledgeGap` → **one** `EvidenceItem`
 - `AlertUrgency` + `GapSeverity` + `risk_level` + `priority` → **one** `Urgency`
-- Five separate `explanation` strings → **one** field populated by AWE.articulate
+- Five separate `explanation` strings → **one** field
 - Five separate confidence representations → **one** `Confidence` with provenance
 
 ### i18n — retire
 
-All keys matching `momentum.*`, `awe.momentum.*`, `intelligence_profile.*`, `compound_advantage.*`.
+All keys matching `momentum.*`, `intelligence_profile.*`, `compound_advantage.*`.
 
 ## Ship phases (each has a binding done-when)
 
@@ -107,11 +96,11 @@ All keys matching `momentum.*`, `awe.momentum.*`, `intelligence_profile.*`, `com
 | **3** | Collapse Preemption to `EvidenceItem` | Preemption tab visually identical, backed by shared types | DONE |
 | **4** | Collapse Blind Spots to `EvidenceItem` | Same for Blind Spots | DONE |
 | **5** | Collapse Knowledge Decay + Signal Chains | No UI references these types directly | DONE |
-| **6** | Context Bridge — AWE's DeveloperContext expanded 5→17 fields | Transmutations carry full user situation | DONE |
+| **6** | Context Bridge — DeveloperContext expanded 5→17 fields | Context carries full user situation | DONE |
 | **7** | Cold Start Layer 1 — Git history miner | Fresh install has ≥20 seeded decisions from git | DONE |
-| **8** | Cold Start Layer 2 — Curated 200-decision corpus | `awe transmute` returns ≥3 precedents for common queries on fresh install | DONE |
-| **9** | AWE Judgment Spine wiring | Every `EvidenceItem` has AWE-generated explanation + calibrated confidence + precedents | DONE |
-| **10** | The Confession Box + Decision Brief | `⌘.` from any tab returns a useful brief in <5s | CODE COMPLETE (disabled pending AWE binary deployment) |
+| **8** | Cold Start Layer 2 — Curated 200-decision corpus | Returns ≥3 precedents for common queries on fresh install | DONE |
+| **9** | Judgment Spine wiring | Every `EvidenceItem` has generated explanation + calibrated confidence + precedents | DONE |
+| **10** | The Confession Box + Decision Brief | `⌘.` from any tab returns a useful brief in <5s | CODE COMPLETE |
 | **11** | Commitment Contract + Refutation Monitor | Accepted decision + refutation signal → Refutation card in Evidence | DONE |
 | **12** | Evidence tab (replaces Momentum slot) | Three sections render real data, no empty-state pseudo-gauges | DONE |
 | **13** | Pre-launch hardening | 7-day founder soak with zero "this isn't right" reports | BLOCKED (requires founder dogfood) |
@@ -125,7 +114,7 @@ Canonical form at `.claude/rules/intelligence-doctrine.md`. Summary:
 2. No new tabs without written justification against the 5-tab reconciliation.
 3. No vanity metrics.
 4. No backend command without a lens.
-5. No AWE UI panels outside the four sanctioned surfaces.
+5. No standalone wisdom UI panels.
 6. Cold-start is non-negotiable — features ship silent until data arrives.
 7. Materializer trait is the only entry point for intelligence data.
 8. Dead code is deleted (no commented sections, no `// TODO: reinstate`).

@@ -12,7 +12,6 @@ Every piece of content is scored against your actual codebase using PASIFA, a 5-
 - **AI briefings** — daily and weekly intelligence summaries generated locally via your own API key
 - **STREETS Playbook** — 7 modules for developer growth, included free
 - **14 languages** — Arabic, Chinese, English, French, German, Hindi, Italian, Japanese, Korean, Portuguese (BR), Russian, Spanish, Turkish. Content translation, cross-lingual search, native briefings.
-- **AWE (Artificial Wisdom Engine)** — calibrated judgment layer that learns from your decision outcomes
 
 ## Download
 

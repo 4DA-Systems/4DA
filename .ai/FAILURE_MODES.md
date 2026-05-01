@@ -134,13 +134,6 @@ Living document of fragile areas, previous regressions, and "never again" lesson
 
 ---
 
-### AWE sidecar shipping an unpinned HEAD
-**Symptom.** Two 4DA releases built 24 hours apart ship different AWE binaries because `git clone --depth 1 ...awe.git` pulled different HEADs. A compromise of the AWE repo silently propagates.
-
-**Guards in place (2026-04-19 Wave 5).** Release workflow now clones AWE at a specific tag (currently `v0.3.0`). Must be bumped deliberately per 4DA release as part of the release checklist.
-
----
-
 ## Document hygiene
 
 ### Planning doc accidentally tracked at repo root

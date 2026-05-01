@@ -25,9 +25,8 @@ kind: EvidenceKind,
  */
 title: string, 
 /**
- * Full explanation. Produced by AWE.articulate after Phase 9; may be
- * empty during transition phases but never after the AWE spine is
- * wired.
+ * Full explanation. Produced by the intelligence pipeline; may be
+ * empty during transition phases.
  */
 explanation: string, 
 /**

@@ -6,10 +6,6 @@
  * Decisions persist and inform signal classification, tech radar, and agent context.
  */
 
-import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir, platform } from "node:os";
-import { join } from "node:path";
 import type { FourDADatabase } from "../db.js";
 
 // ============================================================================
@@ -224,36 +220,6 @@ export function executeDecisionMemory(
         params.confidence ?? 0.8
       );
 
-      // Bridge to AWE Wisdom Graph: forward decision for wisdom tracking.
-      // Non-blocking — AWE sync is best-effort, doesn't affect 4DA recording.
-      try {
-        const aweBin = findAweBinary();
-        if (aweBin) {
-          // Sanitize inputs before passing to external process
-          const safeSubject = (params.subject || "").slice(0, 500).replace(/\0/g, '');
-          const safeDecision = (params.decision || "").slice(0, 2000).replace(/\0/g, '');
-          const query = `${safeSubject}: ${safeDecision}`;
-          const domain = mapDecisionTypeToDomain(params.decision_type || "tech_choice");
-          // AWE bridge: persist decisions to Wisdom Graph for compounding
-          // Context file auto-assembled by AWE MCP server's buildContextFile()
-          const contextFile = process.platform === "win32"
-            ? `${process.env.APPDATA || ""}\\awe\\identity.json`
-            : `${process.env.HOME || ""}/.local/share/awe/identity.json`;
-          const contextArgs = existsSync(contextFile) ? ["--context_file", contextFile] : [];
-          const child = execFile(aweBin, [
-            "transmute", query,
-            "--domain", domain,
-            "--json",
-            ...contextArgs,
-          ], { timeout: 30_000 }, () => {
-            // Callback required — ignore result (fire-and-forget)
-          });
-          child.unref();
-        }
-      } catch {
-        // AWE bridge is optional
-      }
-
       return {
         success: true,
         id: result.lastInsertRowid,
@@ -418,52 +384,4 @@ export function executeDecisionMemory(
     default:
       return { error: `Unknown action: ${params.action}` };
   }
-}
-
-// ============================================================================
-// AWE Bridge Helpers
-// ============================================================================
-
-/** Map 4DA decision types to AWE domains. */
-function mapDecisionTypeToDomain(type: string): string {
-  switch (type) {
-    case "architecture":
-    case "pattern":
-      return "software-engineering";
-    case "dependency":
-      return "software-engineering";
-    case "workflow":
-      return "workflow";
-    default:
-      return "software-engineering";
-  }
-}
-
-/** Find AWE binary — checks env var, platform defaults, then PATH fallback. */
-export function findAweBinary(): string | null {
-  // 1. Explicit env var takes priority
-  const envPath = process.env.FOURDA_AWE_PATH || process.env.AWE_BIN;
-  if (envPath && existsSync(envPath)) return envPath;
-
-  // 2. Platform-specific default install locations
-  const home = homedir();
-  const os = platform();
-  const candidates: string[] = [];
-
-  if (os === "win32") {
-    const appData = process.env.APPDATA || join(home, "AppData", "Roaming");
-    candidates.push(join(appData, "awe", "awe.exe"));
-  } else if (os === "darwin") {
-    candidates.push(join(home, "Library", "Application Support", "awe", "awe"));
-  } else {
-    // Linux and other Unix
-    candidates.push(join(home, ".local", "share", "awe", "awe"));
-  }
-
-  for (const p of candidates) {
-    if (existsSync(p)) return p;
-  }
-
-  // 3. Fall back to bare command name (relies on PATH)
-  return "awe";
 }

@@ -181,65 +181,6 @@
   "autophagy.noCycles": "Henüz otofaji döngüsü yok. Günlük temizlik sırasında çalışır.",
   "autophagy.recentCycles": "Son Döngüler",
   "autophagy.title": "4DA Nasıl Öğrenir",
-  "awe": {
-    "decisions": "Kararlar",
-    "principles": "İlkeler",
-    "feedbackRate": "Geri Bildirim",
-    "pendingCount": "{{count}} beklemede",
-    "validatedPrinciples": "Doğrulanmış İlkeler",
-    "showMore": "+{{count}} daha fazla",
-    "showLess": "Daha az göster",
-    "momentum": {
-      "title": "Bilgelik Yörüngesi",
-      "decisionsTracked": "Kararlar",
-      "principlesEarned": "İlkeler",
-      "coverageLabel": "Kapsam",
-      "earnedPrinciples": "Kazanılan İlkeler",
-      "evidenceCount": "{{count}} kanıt",
-      "daysAgo": "{{count}}g",
-      "loading": "Bilgelik yörüngesi yükleniyor...",
-      "offline": "Bilgelik motoru (AWE) henüz bağlanmadı. Rolü: kararlarınızı ve sonuçlarını 4DA'yı yönlendiren kalibre edilmiş ilkelere dönüştürmek.",
-      "offlineHint": "Kurulum için Bilgelik Sekmesine bakın.",
-      "wellHighlights": "Zeka Oluşturuluyor",
-      "wellHighlightsHint": "Şu anda Wisdom Well'de en yüksek güven düzeyine sahip desenler.",
-      "pendingTitle": "Sonuç Geri Bildirimi Bekleniyor",
-      "pendingMore": "+{{count}} daha fazla Wisdom Sekmesinde",
-      "intelligenceProfile": "Zeka profili",
-      "itemsMonitored": "izlenen öğeler",
-      "sourcesActive": "üreten kaynaklar",
-      "yourActions": "sizin eylemleriniz",
-      "phase": {
-        "cold_start": "Soğuk Başlangıç",
-        "accumulating": "Biriktirilme",
-        "compounding": "Bileşik",
-        "mature": "Olgun"
-      }
-    },
-    "playbook": {
-      "title": "Wisdom Resonance",
-      "mastery": "Ustalık tahmini"
-    },
-    "profile": {
-      "title": "Wisdom DNA",
-      "decisionVelocity": "Kararlar",
-      "principlesFormed": "İlkeler",
-      "coverage": "Kapsam"
-    },
-    "console": {
-      "transmutation": "Transmutasyon",
-      "wisdomWell": "Wisdom Well",
-      "calibration": "Kalibrasyon",
-      "feedbackQueue": "Geri Bildirim Sırası",
-      "totalDecisions": "Toplam Kararlar",
-      "totalPrinciples": "İlkeler",
-      "feedbackGiven": "Verilen Geri Bildirim",
-      "coverageRate": "Kapsam",
-      "healthStatus": "Sağlık",
-      "confirm": "Onayla",
-      "refute": "Çürüt",
-      "unavailable": "AWE kullanılamıyor"
-    }
-  },
   "badge.llm": "LLM",
   "badge.off": "KAPALI",
   "badge.on": "AÇIK",

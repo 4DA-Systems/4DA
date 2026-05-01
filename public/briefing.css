@@ -223,7 +223,6 @@ html, body {
 
 .section-label--urgent { color: var(--accent-red); }
 .section-label--critical { color: var(--accent-red); }
-.section-label--wisdom { color: var(--accent-gold); }
 .section-label--caution { color: var(--accent-amber); }
 
 /* ====================== Preemption Alerts ====================== */
@@ -325,78 +324,6 @@ html, body {
   font-size: 11px;
   color: var(--text-secondary);
   padding: 2px 10px 6px 24px;
-}
-
-/* ====================== AWE Wisdom ====================== */
-
-.wisdom-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.wisdom-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(212, 175, 55, 0.03);
-}
-
-.wisdom-row:hover {
-  background: rgba(212, 175, 55, 0.06);
-}
-
-.wisdom-type-badge {
-  font-family: var(--font-mono);
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 1px 5px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.wisdom-principle .wisdom-type-badge {
-  color: var(--accent-gold);
-  background: rgba(212, 175, 55, 0.12);
-}
-
-.wisdom-anti-pattern .wisdom-type-badge {
-  color: var(--accent-amber);
-  background: rgba(245, 158, 11, 0.12);
-}
-
-.wisdom-text {
-  font-size: 12px;
-  font-style: italic;
-  color: var(--text-secondary);
-  line-height: 1.45;
-}
-
-/* ====================== Wisdom Synthesis ====================== */
-
-.wisdom-synthesis-section {
-  margin-bottom: 6px;
-  padding: 8px 12px;
-  background: rgba(212, 175, 55, 0.03);
-  border-radius: 8px;
-  border-left: 2px solid rgba(212, 175, 55, 0.2);
-}
-
-.wisdom-synthesis-text {
-  font-size: 12px;
-  font-style: italic;
-  line-height: 1.5;
-  color: var(--accent-gold);
-  opacity: 0.85;
-  max-height: 60px;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
 }
 
 /* ====================== Source Items ====================== */

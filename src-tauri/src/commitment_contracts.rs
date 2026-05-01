@@ -12,7 +12,7 @@
 //! When a match fires, the contract is flipped to `triggered` status
 //! and a `Refutation` `EvidenceItem` surfaces in the Evidence lens.
 //!
-//! This is AWE holding itself accountable to the user — the
+//! This is 4DA holding itself accountable to the user — the
 //! philosophical signature of the product.
 
 use rusqlite::params;

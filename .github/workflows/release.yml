@@ -119,38 +119,6 @@ jobs:
             https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
           ls -lh src-tauri/models/
 
-      - name: Build AWE sidecar
-        shell: bash
-        run: |
-          # Clone and build the AWE (Artificial Wisdom Engine) binary.
-          # AWE is placed next to the Tauri executable so find_awe_binary()
-          # resolves it via sibling-of-exe (Priority 2).
-          #
-          # SUPPLY-CHAIN PIN: the AWE sidecar is pinned by commit SHA. The
-          # AWE repo (runyourempire/awe) has no tags at time of pinning, so
-          # a SHA is the only stable anchor — tags are trivially movable by
-          # upstream and branches float with every push. Do NOT change this
-          # to a floating branch (main/master) — that undoes the pin and
-          # lets upstream compromises reach 4DA release artifacts.
-          #
-          # Pinned commit: f803c15befba6fbcd4d9cb1f12f33365a8087244 (main HEAD
-          # as of 2026-04-19). Bump this per 4DA release after auditing the
-          # AWE changelog + any new deps it pulls in.
-          AWE_PINNED_SHA="f803c15befba6fbcd4d9cb1f12f33365a8087244"
-          git clone --filter=blob:none --no-checkout https://github.com/runyourempire/awe.git "$RUNNER_TEMP/awe"
-          cd "$RUNNER_TEMP/awe"
-          git fetch --depth 1 origin "$AWE_PINNED_SHA"
-          git checkout "$AWE_PINNED_SHA"
-          cargo build --release -p awe-cli --target ${{ matrix.target }}
-          # Copy to where Tauri will bundle it (next to fourda binary)
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            AWE_BIN="target/${{ matrix.target }}/release/awe.exe"
-          else
-            AWE_BIN="target/${{ matrix.target }}/release/awe"
-          fi
-          # Store path for post-build copy into bundle
-          echo "AWE_SIDECAR=$RUNNER_TEMP/awe/$AWE_BIN" >> $GITHUB_ENV
-
       - name: Supply chain policy check
         shell: bash
         run: |
@@ -212,19 +180,6 @@ jobs:
           # endpoint in tauri.conf.json (releases/latest/download/latest.json)
           # depends on this file existing on every release.
           includeUpdaterJson: true
-
-      - name: Place AWE sidecar in bundle
-        shell: bash
-        run: |
-          # Copy AWE binary next to the Tauri desktop executable.
-          # On packaged installs, find_awe_binary() resolves it as exe sibling.
-          RELEASE_DIR="src-tauri/target/${{ matrix.target }}/release"
-          if [[ -f "$AWE_SIDECAR" ]]; then
-            cp "$AWE_SIDECAR" "$RELEASE_DIR/"
-            echo "AWE sidecar placed at: $RELEASE_DIR/$(basename $AWE_SIDECAR)"
-          else
-            echo "::warning::AWE sidecar not found at $AWE_SIDECAR — AWE features will be unavailable"
-          fi
 
       - name: Verify macOS code signature (macOS only)
         if: runner.os == 'macOS'

@@ -15,9 +15,8 @@
 //! Docker, PostgreSQL); everything else is "pending" so we don't
 //! ship false claims about how a decision worked out.
 //!
-//! This module does not write to the AWE graph directly — it hands
-//! out `SeededDecision`s and lets the seeder (next phase) merge them
-//! with git-mined personal priors before the AWE import.
+//! This module hands out `SeededDecision`s and lets the seeder merge
+//! them with git-mined personal priors.
 
 use serde::{Deserialize, Serialize};
 
@@ -90,8 +89,8 @@ pub fn corpus_stats() -> CorpusStats {
             crate::evidence::PrecedentOutcome::Pending => counts.pending += 1,
         }
         // Domain bucketing: first-word-of-subject gives us a coarse
-        // grouping. A proper taxonomy lands in Phase 9 when AWE's
-        // synthesis layer needs domain affinity signals.
+        // grouping. A proper taxonomy lands when the synthesis layer
+        // needs domain affinity signals.
         let domain = classify_subject_domain(&d.subject);
         domains.insert(domain);
     }

@@ -5,15 +5,14 @@
 //! Git Decision Miner — Intelligence Reconciliation Phase 7 (Cold Start Layer 1).
 //!
 //! Scans the user's local git repositories for decision-shaped commits
-//! and emits `SeededDecision`s that can be loaded into AWE's Wisdom
-//! Graph to give Day-0 transmutations meaningful personal priors.
+//! and emits `SeededDecision`s that give the intelligence pipeline
+//! meaningful personal priors from Day 0.
 //!
-//! **Why this matters:** AWE-the-engine's value proposition is that
-//! judgment compounds with every decision and outcome fed to it. A
-//! fresh install with zero decisions is judgment-dead — every
-//! transmutation returns boilerplate. But every developer who has
-//! shipped anything has *already made* dozens of decisions; they're
-//! just sitting in git history. This miner recovers them.
+//! **Why this matters:** Intelligence compounds with every decision and
+//! outcome fed to it. A fresh install with zero decisions produces
+//! generic output. But every developer who has shipped anything has
+//! *already made* dozens of decisions; they're just sitting in git
+//! history. This miner recovers them.
 //!
 //! **Detection strategy:**
 //! Commit messages are scanned for decision verbs (adopt, migrate,
@@ -49,8 +48,8 @@ use crate::evidence::PrecedentOutcome;
 // Types
 // ============================================================================
 
-/// A decision recovered from git history, ready to seed AWE's Wisdom
-/// Graph. Serializable as JSONL for `awe seed --from-jsonl`.
+/// A decision recovered from git history, ready to seed the intelligence
+/// pipeline. Serializable as JSONL.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SeededDecision {
     /// One-line decision statement in the user's past tense.
@@ -456,8 +455,7 @@ pub fn mine_many(
 
 /// Run the miner against ACE's currently-tracked project paths.
 /// Returns a JSON summary with counts. Decisions are serialized to a
-/// JSONL file at `<temp>/awe_git_seeded.jsonl` which a later phase will
-/// feed to AWE's seed importer.
+/// JSONL file at `<temp>/4da_git_seeded.jsonl` for later import.
 #[tauri::command]
 pub async fn mine_git_decisions() -> std::result::Result<String, String> {
     // Discover tracked repos via the user's configured context_dirs.
@@ -471,7 +469,7 @@ pub async fn mine_git_decisions() -> std::result::Result<String, String> {
     let (decisions, summary) = mine_many(&repos, REPO_CAP, MAX_COMMITS);
 
     // Write JSONL to temp for the seeder to pick up.
-    let out_path = std::env::temp_dir().join("awe_git_seeded.jsonl");
+    let out_path = std::env::temp_dir().join("4da_git_seeded.jsonl");
     let mut lines: Vec<String> = Vec::with_capacity(decisions.len());
     for d in &decisions {
         if let Ok(s) = serde_json::to_string(d) {

@@ -345,7 +345,7 @@ pub(crate) fn initialize_pre_tauri() {
 ///   sqlite-vec verify, scheduler hydration, briefing snapshot fetch
 /// - **Phase 1** (essential services, target <2s): scheduler start,
 ///   immediate briefing trigger, ACE initialization
-/// - **Phase 2** (background warmup, no budget): AWE sync, model registry,
+/// - **Phase 2** (background warmup, no budget): model registry,
 ///   re-embedding, CVE refresh — all fire-and-forget
 ///
 /// Each phase logs `phase=N elapsed_ms=X` so you can grep for them in cold-boot
@@ -591,7 +591,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Intelligence Reconciliation Phase 13 — Auto-seed on first launch.
     // Runs the git decision miner against configured context_dirs to populate
-    // AWE's Wisdom Graph with personal priors. Non-blocking, best-effort.
+    // the decision corpus with personal priors. Non-blocking, best-effort.
     // The curated corpus (Phase 8) is already compiled into the binary and
     // available via load_corpus() without a startup step.
     tauri::async_runtime::spawn(async {
@@ -609,7 +609,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 confirmed = summary.confirmed,
                 "Git decision miner: auto-seed complete"
             );
-            let jsonl_path = std::env::temp_dir().join("awe_git_seeded.jsonl");
+            let jsonl_path = std::env::temp_dir().join("4da_git_seeded.jsonl");
             let lines: Vec<String> = decisions
                 .iter()
                 .filter_map(|d| serde_json::to_string(d).ok())
@@ -929,7 +929,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // wait up to a minute for their morning briefing on cold boot / autostart.
     // Fire an immediate check 3 seconds after startup (gives the briefing
     // window time to pre-warm its JS listener). This runs the same logic as
-    // the scheduler tick: check → notify → synthesize → AWE daily jobs.
+    // the scheduler tick: check → notify → synthesize.
     {
         let briefing_handle = app_handle.clone();
         let briefing_state = get_monitoring_state().clone();
@@ -1391,9 +1391,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         ongoing_topics: vec![],
                         knowledge_gaps: vec![],
                         escalating_chains: vec![],
-                        wisdom_signals: vec![],
                         synthesis: None,
-                        wisdom_synthesis: None,
                         preemption_alerts: vec![],
                         blind_spot_score: None,
                         labels: None,

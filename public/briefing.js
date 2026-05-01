@@ -25,8 +25,6 @@ var briefingDate = document.getElementById('briefing-date');
 var itemsList = document.getElementById('items-list');
 var chainsSection = document.getElementById('chains-section');
 var chainsList = document.getElementById('chains-list');
-var wisdomSection = document.getElementById('wisdom-section');
-var wisdomList = document.getElementById('wisdom-list');
 var personalizationSection = document.getElementById('personalization-section');
 var personalizationText = document.getElementById('personalization-text');
 var synthesisSection = document.getElementById('synthesis-section');
@@ -36,8 +34,6 @@ var preemptionList = document.getElementById('preemption-list');
 var gapsSection = document.getElementById('gaps-section');
 var gapsList = document.getElementById('gaps-list');
 var blindSpotScore = document.getElementById('blind-spot-score');
-var wisdomSynthesisSection = document.getElementById('wisdom-synthesis-section');
-var wisdomSynthesisText = document.getElementById('wisdom-synthesis-text');
 var ongoingSection = document.getElementById('ongoing-section');
 var ongoingLine = document.getElementById('ongoing-line');
 var dismissBtn = document.getElementById('dismiss-btn');
@@ -154,23 +150,6 @@ function buildItemHtml(item) {
     + '</div>';
 }
 
-function buildWisdomHtml(signals) {
-  var html = '';
-  for (var i = 0; i < signals.length; i++) {
-    var signal = signals[i];
-    var text = escapeHtml(signal.text || '');
-    var isAntiPattern = signal.signal_type === 'anti-pattern';
-    var typeClass = isAntiPattern ? 'wisdom-anti-pattern' : 'wisdom-principle';
-    var typeLabel = isAntiPattern ? 'AVOID' : 'VALIDATED';
-
-    html += '<div class="wisdom-row ' + typeClass + '">'
-      + '<span class="wisdom-type-badge">' + typeLabel + '</span>'
-      + '<span class="wisdom-text">' + text + '</span>'
-      + '</div>';
-  }
-  return html;
-}
-
 function buildGapsHtml(gaps) {
   var html = '';
   for (var i = 0; i < gaps.length; i++) {
@@ -230,7 +209,6 @@ function renderBriefing(data) {
       'label-header': data.labels.header,
       'label-preemption': data.labels.preemption,
       'label-escalating': data.labels.escalating,
-      'label-wisdom': data.labels.wisdom,
       'label-signals': data.labels.signals,
       'label-blindspots': data.labels.blind_spots
     };
@@ -272,22 +250,6 @@ function renderBriefing(data) {
     chainsList.innerHTML = buildChainsHtml(data.escalating_chains);
   } else {
     chainsSection.style.display = 'none';
-  }
-
-  // AWE Wisdom signals
-  if (data.wisdom_signals && data.wisdom_signals.length > 0) {
-    wisdomSection.style.display = '';
-    wisdomList.innerHTML = buildWisdomHtml(data.wisdom_signals);
-  } else {
-    wisdomSection.style.display = 'none';
-  }
-
-  // AWE behavioral wisdom synthesis
-  if (data.wisdom_synthesis) {
-    wisdomSynthesisSection.style.display = '';
-    wisdomSynthesisText.textContent = data.wisdom_synthesis;
-  } else {
-    wisdomSynthesisSection.style.display = 'none';
   }
 
   // Signal items — compact list, no scores
@@ -440,14 +402,6 @@ async function init() {
       if (event.payload && !isAbstention(event.payload) && synthesisSection && synthesisText) {
         synthesisSection.style.display = '';
         synthesisText.textContent = cleanSynthesis(event.payload);
-      }
-    });
-
-    // AWE wisdom synthesis arrives async
-    await listen('awe-wisdom-synthesis', function (event) {
-      if (event.payload && event.payload.wisdom && wisdomSynthesisSection && wisdomSynthesisText) {
-        wisdomSynthesisSection.style.display = '';
-        wisdomSynthesisText.textContent = event.payload.wisdom;
       }
     });
 

@@ -53,7 +53,7 @@ Before the pivot, here's what actually exists. Read this first; don't design aga
 |---|---|---|---|
 | LLM judge (rerank) | `llm_judge.rs`, `analysis_rerank.rs:261` | 50/50 blend with pipeline | Strip the blend; make advisory |
 | Prompt injection surface | `llm_judge.rs:57-75` | Unescaped source content | **Security bug — fix now** |
-| Morning Brief synthesis | `awe_synthesis.rs::synthesize_daily_wisdom` | Prose validated by noun extraction | Per-model calibration |
+| Morning Brief synthesis | `briefing_synthesis.rs::synthesize_daily` | Prose validated by noun extraction | Per-model calibration |
 | Briefing groundedness | `briefing_groundedness.rs` | Term extraction assumes one model's prose style | Per-model validator thresholds |
 | Translation pipeline | `translation_pipeline.rs` | JSON/Markdown roundtrip | Schema validation layer |
 | Search synthesis | `search_synthesis.rs` | `[N]` citation markers | Validation + graceful degradation |
@@ -65,7 +65,7 @@ Before the pivot, here's what actually exists. Read this first; don't design aga
 
 ### 1.3 — What's completely safe
 
-AWE, Crucible (separate product, integrated via Signal Terminal), ACE, Tech Radar, Free Briefing. Pivot does not break them.
+Crucible (separate product, integrated via Signal Terminal), ACE, Tech Radar, Free Briefing. Pivot does not break them.
 
 ### 1.4 — Existing provenance
 
@@ -340,7 +340,7 @@ CREATE TABLE shadow_runs (
 
 **Demotion:** A certified model that drifts above divergence threshold over 20 consecutive runs is automatically demoted back to shadow. UI notifies user.
 
-**AWE integration:** Shadow arena outcomes feed `awe_feedback`. AWE learns which models are reliable for which domains, compounding across sessions.
+**Feedback integration:** Shadow arena outcomes feed into the compound learning substrate, informing which models are reliable for which domains across sessions.
 
 ### Layer 7 — Compound Substrate
 
@@ -493,7 +493,7 @@ Token + cost caps (already present in settings) remain authoritative. Shadow run
 - `shadow_runs` table + logger
 - Parallel execution harness
 - Promotion/demotion criteria encoded
-- AWE feedback bridge
+- Feedback bridge
 
 ### 5.7 — Phase 7: Receipts UI + Disagreement badges (1 session, 1 week)
 - "Why this score?" panel reads provenance
@@ -511,39 +511,33 @@ Token + cost caps (already present in settings) remain authoritative. Shadow run
 
 ## 6 — Integration with Existing Systems
 
-### 6.1 — AWE
-
-**Safe.** AWE is subprocess-integrated via typed wrapper (`external/awe.rs`). No LLM output format assumptions leak into 4DA. AWE's internal LLM is its own concern.
-
-**Upgrade opportunity:** Shadow arena outcomes become AWE feedback (Phase 6). AWE learns which models the user's 4DA has found reliable. Compounding.
-
-### 6.2 — Morning Brief
+### 6.1 — Morning Brief
 
 **Needs calibration.** `briefing_groundedness.rs` extracts noun phrases assuming one model's prose style. Phase 5 introduces per-model groundedness thresholds derived from the calibration battery. Same validator logic, per-model tuned.
 
 **Free Briefing fallback** (`free_briefing.rs`) is already safe — template-based. No change.
 
-### 6.3 — Translation pipeline
+### 6.2 — Translation pipeline
 
 **Phase 4 work.** `translation_pipeline.rs` becomes a `SummarizeRequest` with a `translation` variant, runs through `IntelligenceCore::summarize`, benefits from schema validation (JSON roundtrip enforced).
 
-### 6.4 — Search synthesis
+### 6.3 — Search synthesis
 
 **Phase 4 work.** Citation markers `[N]` become a validated output schema. Models that don't produce them in correct format fall back to pipeline-only results display.
 
-### 6.5 — Content personalization
+### 6.4 — Content personalization
 
 **Phase 4 work.** 2-3 sentence length contract becomes a token-budget parameter on `SummarizeRequest`. Schema validation enforces.
 
-### 6.6 — Digest commands
+### 6.5 — Digest commands
 
 **Phase 1 + 4.** Anomaly context injection is the same bug class as the judge injection — fixed in Phase 1. Prompt structure becomes a versioned prompt in Phase 4.
 
-### 6.7 — MCP synthesis tools
+### 6.6 — MCP synthesis tools
 
 **Phase 4.** Task-complexity routing becomes capability-declared. Tool calls `IntelligenceCore::{task}` with a task-type; providers advertise support.
 
-### 6.8 — Crucible (sibling product at D:\crucible)
+### 6.7 — Crucible (sibling product at D:\crucible)
 
 **Not affected by this pivot. Opportunity post-launch.**
 
@@ -655,7 +649,7 @@ Receipts + disagreement flags + advisor selection could bloat the settings surfa
 - [ ] Phase 6 — Shadow arena
 - [ ] Phase 7 — Receipts UI + disagreement badges
 
-**Ship only after all pre-launch phases land + integration tests + AWE transmute re-evaluates the final design.**
+**Ship only after all pre-launch phases land + integration tests.**
 
 ---
 
@@ -666,9 +660,8 @@ Receipts + disagreement flags + advisor selection could bloat the settings surfa
 - `src-tauri/src/analysis_rerank.rs` — current 50/50 blend (to be replaced)
 - `src-tauri/src/embeddings.rs` — embedding dispatch, 384-dim truncation
 - `src-tauri/src/llm.rs` — current LLMClient, to be refactored into trait impls
-- `src-tauri/src/awe_synthesis.rs` — Morning Brief synthesis (Phase 5 calibration)
+- `src-tauri/src/briefing_synthesis.rs` — Morning Brief synthesis (Phase 5 calibration)
 - `src-tauri/src/briefing_groundedness.rs` — per-model calibration target
-- `src-tauri/src/external/awe.rs` — AWE subprocess wrapper (safe)
 - `.ai/WISDOM.md` — operating system for 4DA development
 - `.ai/INVARIANTS.md` — system-level invariants (update when Phase 3 ships)
 - `docs/strategy/TEAM-RELAY-ARCHITECTURE.md` — relay sync scope (Phase 6 decision point)

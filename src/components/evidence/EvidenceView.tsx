@@ -10,7 +10,6 @@
  *   2. Intelligence Pulse — noise rejection, accuracy, learning narratives
  *   3. What 4DA Learned — topic affinities + anti-topics from real feedback
  *
- * Zero AWE dependency. Every data source verified on FREE tier.
  */
 
 import { memo, useEffect, useState, useCallback } from 'react';
