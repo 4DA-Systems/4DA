@@ -2,9 +2,9 @@
 
 export type TrustSummary = { period_days: number, total_surfaced: number, acted_on: number, dismissed: number, false_positives: number, 
 /**
- * Precision score: 0.0–1.0 (TP / (TP + FP))
+ * Precision score: 0.0â€“1.0 (TP / (TP + FP))
  */
-precision: number, action_conversion_rate: number, preemption_wins: number, avg_lead_time_hours: number | null, 
+precision: number, has_precision_data: boolean, action_conversion_rate: number, preemption_wins: number, avg_lead_time_hours: number | null, 
 /**
  * One of: "improving", "stable", "declining"
  */
