@@ -106,6 +106,22 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
 
+                // Background content enrichment for ambiguous-zone items.
+                // Fetches page body for title-only items scoring 0.20–0.55,
+                // so the next analysis cycle can re-score with richer signal.
+                tokio::spawn(async move {
+                    if let Ok(db) = crate::get_database() {
+                        let count = crate::content_enrichment::enrich_ambiguous_items(db).await;
+                        if count > 0 {
+                            tracing::info!(
+                                target: "4da::enrichment",
+                                enriched = count,
+                                "Post-analysis enrichment complete"
+                            );
+                        }
+                    }
+                });
+
                 // Record intelligence snapshot for growth tracking
                 if let Ok(conn) = open_db_connection() {
                     let total = results.len() as f64;

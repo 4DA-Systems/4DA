@@ -273,6 +273,8 @@ mod tests {
                     description: None,
                     matched_deps: vec![],
                     content_type: None,
+                    corroboration_count: 0,
+                    alt_sources: vec![],
                 })
                 .collect(),
             total_relevant: items,

@@ -142,6 +142,8 @@ interface BriefingSnapshotItem {
   signal_priority?: string | null;
   description?: string | null;
   matched_deps?: string[];
+  corroboration_count?: number;
+  alt_sources?: Array<{ source_type: string; url?: string | null; title: string }>;
 }
 
 interface BriefingSnapshotPayload {

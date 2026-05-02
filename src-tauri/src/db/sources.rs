@@ -333,6 +333,50 @@ impl Database {
         Ok(())
     }
 
+    /// Get items eligible for background content enrichment.
+    ///
+    /// Returns `(id, url)` pairs for items with empty/short content that scored
+    /// in the ambiguous zone (0.20–0.55) within the last 3 days.
+    pub fn get_enrichment_candidates(&self, limit: usize) -> SqliteResult<Vec<(i64, String)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, url FROM source_items
+             WHERE (content = '' OR LENGTH(content) < 100)
+               AND url IS NOT NULL AND url != ''
+               AND created_at > datetime('now', '-3 days')
+               AND relevance_score BETWEEN 0.20 AND 0.55
+             ORDER BY relevance_score DESC
+             LIMIT ?1",
+        )?;
+
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        rows.collect()
+    }
+
+    /// Update an item with enriched content fetched from its URL.
+    ///
+    /// Sets `embedding_status = 'pending'` so the embedding pipeline picks it up
+    /// for re-embedding with the richer content on the next cycle.
+    pub fn update_enriched_content(
+        &self,
+        id: i64,
+        content: &str,
+        content_hash: &str,
+        embed_text: &str,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE source_items
+             SET content = ?1, content_hash = ?2, embed_text = ?3, embedding_status = 'pending'
+             WHERE id = ?4",
+            params![content, content_hash, embed_text, id],
+        )?;
+        Ok(())
+    }
+
     /// Check if a source item exists (for incremental updates)
     pub fn source_item_exists(&self, source_type: &str, source_id: &str) -> SqliteResult<bool> {
         let conn = self.conn.lock();
@@ -384,6 +428,43 @@ impl Database {
             Some(Err(e)) => Err(e),
             None => Ok(None),
         }
+    }
+
+    /// Load embeddings for a set of item IDs. Used by topic clustering to
+    /// compute cosine similarity without loading full item content.
+    /// Returns (id, title, source_type, embedding, content_type) tuples.
+    pub fn get_embeddings_for_ids(
+        &self,
+        ids: &[i64],
+    ) -> SqliteResult<Vec<(i64, String, String, Vec<f32>, Option<String>)>> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.conn.lock();
+        let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT id, title, source_type, embedding, content_type \
+             FROM source_items WHERE id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> =
+            ids.iter().map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>).collect();
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt.query_map(param_refs.as_slice(), |row| {
+            let embedding_blob: Vec<u8> = row.get(3)?;
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                blob_to_embedding(&embedding_blob),
+                row.get::<_, Option<String>>(4).unwrap_or(None),
+            ))
+        })?;
+
+        rows.collect()
     }
 
     /// Update last_seen timestamp for an existing item

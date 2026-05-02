@@ -330,6 +330,8 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                     description: r.signal_action.clone(),
                     matched_deps: r.signal_triggers.clone().unwrap_or_default(),
                     content_type: r.score_breakdown.as_ref().and_then(|b| b.content_type.clone()),
+                    corroboration_count: 0,
+                    alt_sources: vec![],
                 })
                 .collect()
         } else if let Ok(db) = crate::get_database() {
@@ -355,6 +357,8 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                         description: None,
                         matched_deps: vec![],
                         content_type: None,
+                        corroboration_count: 0,
+                        alt_sources: vec![],
                     })
                     .collect()
             })

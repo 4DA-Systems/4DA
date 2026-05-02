@@ -51,6 +51,12 @@ pub struct BriefingItem {
     /// Content DNA classification (tutorial, security_advisory, etc.)
     #[serde(default)]
     pub content_type: Option<String>,
+    /// Number of distinct sources corroborating this item (from topic clustering)
+    #[serde(default)]
+    pub corroboration_count: usize,
+    /// Alternative sources that reported the same topic (cluster members)
+    #[serde(default)]
+    pub alt_sources: Vec<crate::topic_clustering::AltSource>,
 }
 
 /// A topic the user hasn't seen intelligence about recently
@@ -190,8 +196,34 @@ pub(crate) fn build_enriched_briefing(
     // dominating the entire briefing.
     let items: Vec<BriefingItem> = apply_diversity_slots(sorted, 8);
 
+    // Pre-load cross-surface intelligence BEFORE the quality gate so that
+    // preemption alerts and escalating chains can bypass it. A critical
+    // security alert should trigger the briefing even if scored items are weak.
+    let escalating_chains = detect_escalating_chains();
+    let preemption_alerts: Vec<BriefingPreemptionAlert> =
+        match crate::preemption::get_preemption_feed() {
+            Ok(feed) => feed
+                .alerts
+                .iter()
+                .filter(|a| {
+                    matches!(
+                        a.urgency,
+                        crate::preemption::AlertUrgency::Critical
+                            | crate::preemption::AlertUrgency::High
+                    )
+                })
+                .take(3)
+                .map(|a| BriefingPreemptionAlert {
+                    title: a.title.clone(),
+                    urgency: format!("{:?}", a.urgency).to_lowercase(),
+                    explanation: a.explanation.clone(),
+                })
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+
     // Minimum quality gate: the briefing only fires when it has genuinely
-    // valuable content. Prevents weak single-item briefings from eroding trust.
+    // valuable content OR cross-surface intelligence (preemption, chains).
     // Commodity content (Tutorial, HelpRequest, Question below 0.45) doesn't
     // count toward the quality minimum.
     let quality_item_count = items
@@ -201,11 +233,8 @@ pub(crate) fn build_enriched_briefing(
     let has_high_value_single = items
         .iter()
         .any(|i| i.score >= 0.65 && !is_low_quality_commodity(i));
-    if quality_item_count < 2 && !has_high_value_single {
-        // Not enough quality content to justify a briefing. Return empty so the
-        // caller skips notification. Preemption alerts and escalating chains are
-        // added later in check_morning_briefing and bypass this gate via the
-        // cross-surface check there.
+    let has_cross_surface = !preemption_alerts.is_empty() || !escalating_chains.is_empty();
+    if quality_item_count < 2 && !has_high_value_single && !has_cross_surface {
         return BriefingNotification {
             title: format!(
                 "4DA Intelligence Briefing — {}",
@@ -242,35 +271,19 @@ pub(crate) fn build_enriched_briefing(
         }
     };
 
+    // Topic clustering for corroboration detection.
+    // Load embeddings from the DB for the briefing items, then cluster by
+    // cosine similarity. Multi-source clusters get a corroboration bonus
+    // and alt_sources metadata for the UI badge.
+    let mut items = items;
+    apply_topic_clustering(&mut items);
+
     let total_relevant = items.len();
 
     // Detect knowledge gaps: declared tech with no recent signals
     let knowledge_gaps = detect_knowledge_gaps();
 
-    // Detect escalating signal chains for top-level briefing section
-    let escalating_chains = detect_escalating_chains();
-
-    // Collect preemption alerts for briefing (critical + high only, max 3)
-    let preemption_alerts = match crate::preemption::get_preemption_feed() {
-        Ok(feed) => feed
-            .alerts
-            .iter()
-            .filter(|a| {
-                matches!(
-                    a.urgency,
-                    crate::preemption::AlertUrgency::Critical
-                        | crate::preemption::AlertUrgency::High
-                )
-            })
-            .take(3)
-            .map(|a| BriefingPreemptionAlert {
-                title: a.title.clone(),
-                urgency: format!("{:?}", a.urgency).to_lowercase(),
-                explanation: a.explanation.clone(),
-            })
-            .collect(),
-        Err(_) => Vec::new(),
-    };
+    // escalating_chains and preemption_alerts already loaded before quality gate
 
     // Collect blind spot score
     let blind_spot_score = crate::blind_spots::generate_blind_spot_report()
@@ -322,6 +335,102 @@ fn is_low_quality_commodity(item: &BriefingItem) -> bool {
         item.content_type.as_deref(),
         Some("tutorial") | Some("help_request") | Some("question")
     )
+}
+
+/// Apply topic clustering to briefing items for corroboration detection.
+///
+/// Loads embeddings from the DB for each item that has an `item_id`, runs
+/// the clustering algorithm, then applies corroboration bonuses and populates
+/// `alt_sources` / `corroboration_count` on lead items. Best-effort: if the
+/// DB is unavailable or items lack embeddings, the items pass through unchanged.
+fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
+    // Collect item IDs for DB lookup
+    let ids: Vec<i64> = items
+        .iter()
+        .filter_map(|item| item.item_id)
+        .collect();
+
+    if ids.is_empty() {
+        return;
+    }
+
+    // Load embeddings from the DB
+    let embedding_data = match crate::get_database() {
+        Ok(db) => match db.get_embeddings_for_ids(&ids) {
+            Ok(data) => data,
+            Err(e) => {
+                tracing::debug!(
+                    target: "4da::clustering",
+                    error = %e,
+                    "Failed to load embeddings for clustering — skipping"
+                );
+                return;
+            }
+        },
+        Err(_) => return,
+    };
+
+    if embedding_data.is_empty() {
+        return;
+    }
+
+    // Build cluster candidates by joining briefing items with their embeddings
+    let embedding_map: std::collections::HashMap<i64, (Vec<f32>, Option<String>)> = embedding_data
+        .into_iter()
+        .map(|(id, _title, _source, emb, ct)| (id, (emb, ct)))
+        .collect();
+
+    let candidates: Vec<crate::topic_clustering::ClusterCandidate> = items
+        .iter()
+        .filter_map(|item| {
+            let id = item.item_id?;
+            let (embedding, content_type) = embedding_map.get(&id)?.clone();
+            Some(crate::topic_clustering::ClusterCandidate {
+                id,
+                score: item.score,
+                source_type: item.source_type.clone(),
+                embedding,
+                title: item.title.clone(),
+                content_type,
+            })
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    let clusters = crate::topic_clustering::cluster_items(&candidates);
+    let bonuses = crate::topic_clustering::compute_corroboration_bonuses(&clusters);
+
+    // Apply corroboration bonuses and set metadata on lead items
+    for item in items.iter_mut() {
+        let Some(id) = item.item_id else { continue };
+
+        // Apply score bonus
+        if let Some(&bonus) = bonuses.get(&id) {
+            item.score = (item.score + bonus).min(0.95);
+        }
+
+        // Set corroboration metadata on lead items
+        for cluster in &clusters {
+            if cluster.lead_item_id == id && cluster.source_count > 1 {
+                item.corroboration_count = cluster.source_count;
+                for &member_id in &cluster.member_ids {
+                    if member_id != cluster.lead_item_id {
+                        if let Some(member) = candidates.iter().find(|c| c.id == member_id) {
+                            item.alt_sources.push(crate::topic_clustering::AltSource {
+                                source_type: member.source_type.clone(),
+                                url: None,
+                                title: member.title.clone(),
+                            });
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
 }
 
 /// Items are assumed to be pre-sorted by priority then score descending.
@@ -508,6 +617,8 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                     description: r.signal_action.clone(),
                     matched_deps: r.signal_triggers.clone().unwrap_or_default(),
                     content_type: r.score_breakdown.as_ref().and_then(|b| b.content_type.clone()),
+                    corroboration_count: 0,
+                    alt_sources: vec![],
                 })
                 .collect()
         } else {
@@ -537,6 +648,8 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                             description: None,
                             matched_deps: vec![],
                             content_type: None,
+                            corroboration_count: 0,
+                            alt_sources: vec![],
                         })
                         .collect()
                 })
@@ -1472,6 +1585,8 @@ mod tests {
             description: Some("Review Rust 2026 changes".to_string()),
             matched_deps: vec!["rust".to_string()],
             content_type: None,
+            corroboration_count: 0,
+            alt_sources: vec![],
         };
         assert_eq!(item.title, "Rust 2026 Edition announced");
         assert_eq!(item.source_type, "hackernews");
@@ -1498,6 +1613,8 @@ mod tests {
                     description: Some("Patch tokio immediately".to_string()),
                     matched_deps: vec!["tokio".to_string()],
                     content_type: None,
+                    corroboration_count: 0,
+                    alt_sources: vec![],
                 },
                 BriefingItem {
                     title: "Tauri 3.0 beta released".to_string(),
@@ -1510,6 +1627,8 @@ mod tests {
                     description: None,
                     matched_deps: vec![],
                     content_type: None,
+                    corroboration_count: 0,
+                    alt_sources: vec![],
                 },
             ],
             total_relevant: 2,
@@ -1617,6 +1736,8 @@ mod tests {
             description: None,
             matched_deps: vec![],
             content_type: None,
+            corroboration_count: 0,
+            alt_sources: vec![],
         }
     }
 

@@ -141,9 +141,15 @@ function buildItemHtml(item) {
     }
   }
 
+  var corrobHtml = '';
+  if (item.corroboration_count && item.corroboration_count > 1) {
+    corrobHtml = '<span class="corrob-badge">' + item.corroboration_count + ' sources</span>';
+  }
+
   return '<div class="briefing-item" data-item-id="' + itemId + '" data-url="' + escapeHtml(url) + '">'
     + '<div class="item-row">'
     + '<span class="item-source-badge">' + source + '</span>'
+    + corrobHtml
     + '<span class="item-title">' + title + '</span>'
     + '</div>'
     + (depsHtml ? '<div class="item-deps">' + depsHtml + '</div>' : '')
