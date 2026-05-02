@@ -159,7 +159,81 @@ fn infer_senior_audience(detected_tech_count: usize, domain_profile: &DomainProf
     let dependency_count = domain_profile.dependency_names.len();
     let all_tech_count = domain_profile.all_tech.len();
 
-    detected_tech_count > 15 && dependency_count > 50 && all_tech_count > 15
+    // Original threshold: proven-senior (lots of deps and tech)
+    if detected_tech_count > 15 && dependency_count > 50 && all_tech_count > 15 {
+        return true;
+    }
+
+    // Bootstrapping-senior: multiple distinct tech families detected.
+    // Multi-stack developers are experienced regardless of dep count.
+    if detected_tech_count >= 5 {
+        let distinct_families = count_tech_families(&domain_profile.all_tech);
+        if distinct_families >= 3 {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Count distinct technology families present in the user's detected tech.
+/// Maps individual technologies to high-level families.
+/// 3+ families = multi-stack developer (experienced).
+fn count_tech_families(all_tech: &std::collections::HashSet<String>) -> usize {
+    let mut families = std::collections::HashSet::new();
+
+    for tech in all_tech {
+        let tech_lower = tech.to_lowercase();
+        let family = match tech_lower.as_str() {
+            // Frontend
+            "react" | "vue" | "angular" | "svelte" | "next" | "nuxt"
+            | "nextjs" | "next.js" | "gatsby" | "remix" | "solid"
+            | "preact" | "lit" | "astro" | "vite" | "webpack"
+            | "tailwind" | "tailwindcss" | "css" | "sass" | "html" => Some("frontend"),
+
+            // Backend
+            "express" | "django" | "flask" | "rails" | "spring"
+            | "actix" | "axum" | "rocket" | "fastapi" | "gin"
+            | "echo" | "fiber" | "koa" | "nest" | "nestjs"
+            | "hono" | "node" | "nodejs" | "deno" | "bun" => Some("backend"),
+
+            // Systems
+            "rust" | "go" | "golang" | "c" | "cpp" | "c++"
+            | "zig" | "assembly" | "wasm" | "webassembly"
+            | "tauri" | "electron" => Some("systems"),
+
+            // Data
+            "postgresql" | "postgres" | "mysql" | "sqlite" | "mongodb"
+            | "redis" | "elasticsearch" | "cassandra" | "dynamodb"
+            | "supabase" | "firebase" | "prisma" | "drizzle"
+            | "sqlalchemy" | "diesel" | "sea-orm" => Some("data"),
+
+            // DevOps
+            "docker" | "kubernetes" | "k8s" | "terraform" | "ansible"
+            | "github-actions" | "gitlab-ci" | "jenkins" | "circleci"
+            | "nginx" | "caddy" | "traefik" | "aws" | "gcp" | "azure" => Some("devops"),
+
+            // Mobile
+            "swift" | "kotlin" | "react-native" | "flutter" | "dart"
+            | "ios" | "android" | "expo" | "capacitor" => Some("mobile"),
+
+            // Languages (counted only if not already covered by framework families)
+            "typescript" | "javascript" => Some("frontend"),
+            "python" => Some("backend"),
+            "java" => Some("backend"),
+            "ruby" => Some("backend"),
+            "php" => Some("backend"),
+            "elixir" | "erlang" => Some("backend"),
+
+            _ => None,
+        };
+
+        if let Some(f) = family {
+            families.insert(f);
+        }
+    }
+
+    families.len()
 }
 
 // --- Helpers ------------------------------------------------------------------
@@ -476,6 +550,7 @@ const WALKTHROUGH_MARKERS: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     const SENIOR_TECH_COUNT: usize = 25;
     const JUNIOR_TECH_COUNT: usize = 2;
@@ -598,5 +673,68 @@ mod tests {
             "Tutorial penalized for senior, got {}",
             result.multiplier
         );
+    }
+
+    #[test]
+    fn bootstrapping_senior_multi_stack() {
+        let profile = DomainProfile {
+            all_tech: HashSet::from([
+                "react".to_string(),
+                "express".to_string(),
+                "rust".to_string(),
+                "sqlite".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            ..Default::default()
+        };
+        // 4 families: frontend, backend, systems, data
+        assert!(infer_senior_audience(5, &profile));
+    }
+
+    #[test]
+    fn single_family_not_senior() {
+        let profile = DomainProfile {
+            all_tech: HashSet::from([
+                "react".to_string(),
+                "typescript".to_string(),
+                "next".to_string(),
+                "tailwind".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            ..Default::default()
+        };
+        // All frontend = 1 family
+        assert!(!infer_senior_audience(5, &profile));
+    }
+
+    #[test]
+    fn three_families_is_senior() {
+        let profile = DomainProfile {
+            all_tech: HashSet::from([
+                "python".to_string(),
+                "django".to_string(),
+                "postgresql".to_string(),
+                "docker".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            ..Default::default()
+        };
+        // backend, data, devops = 3 families
+        assert!(infer_senior_audience(5, &profile));
+    }
+
+    #[test]
+    fn too_few_detected_tech_not_senior() {
+        let profile = DomainProfile {
+            all_tech: HashSet::from([
+                "react".to_string(),
+                "rust".to_string(),
+                "sqlite".to_string(),
+            ]),
+            dependency_names: HashSet::new(),
+            ..Default::default()
+        };
+        // 3 families but only 3 detected_tech (< 5 minimum)
+        assert!(!infer_senior_audience(3, &profile));
     }
 }

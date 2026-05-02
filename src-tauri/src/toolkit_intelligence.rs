@@ -168,6 +168,7 @@ pub async fn toolkit_score_sandbox(
         created_at: None,
         detected_lang: "en",
         source_tags: &[],
+        tags_json: None,
     };
 
     let options = crate::scoring::ScoringOptions {

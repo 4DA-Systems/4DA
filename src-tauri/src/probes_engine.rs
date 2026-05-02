@@ -289,6 +289,7 @@ pub(crate) fn run_probe_calibration(
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         };
         let result = score_item(&input, ctx, db, &opts, None);
         total += 1;
@@ -396,6 +397,7 @@ pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) 
         created_at: None,
         detected_lang: "en",
         source_tags: &[],
+        tags_json: None,
     };
 
     let result = score_item(&input, ctx, db, &opts, None);

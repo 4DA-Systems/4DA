@@ -258,3 +258,12 @@ commodity_ceiling {
     help_request: 0.22    # [0.10, 0.30]
     question:     0.30    # [0.20, 0.40]
 }
+
+# Community quality signal thresholds — extracted from source metadata
+# (SO score, HN points, Reddit upvotes). Applied as multiplier in Phase 5.
+community_signal {
+    low_threshold: 0.30    # [0.10, 0.50]
+    low_penalty: 0.85      # [0.70, 0.95]
+    high_threshold: 0.70   # [0.50, 0.90]
+    high_boost: 1.05       # [1.00, 1.15]
+}

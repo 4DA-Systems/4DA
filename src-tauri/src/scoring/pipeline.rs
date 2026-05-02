@@ -107,6 +107,9 @@ pub(crate) struct ScoringInput<'a> {
     /// Enables source-fair topic extraction by providing structured signal
     /// alongside text-based extraction.
     pub source_tags: &'a [String],
+    /// Raw JSON metadata from source (contains community signals like score, points).
+    /// Used for community quality signal extraction in Phase 5.
+    pub tags_json: Option<&'a str>,
 }
 
 /// Options controlling which scoring stages are applied
