@@ -624,12 +624,62 @@ fn compute_relevance(
 }
 
 // ============================================================================
+// Community quality signal extraction
+// ============================================================================
+
+/// Extract community quality signal from source metadata.
+/// Returns 0.0-1.0 where higher = more community validation.
+/// Fresh items (< 6 hours) get neutral (0.50) -- the community hasn't voted yet.
+/// Items without metadata get neutral (0.50).
+fn extract_community_signal(source_type: &str, tags_json: Option<&str>, age_hours: f64) -> f32 {
+    if age_hours < 6.0 {
+        return 0.50;
+    }
+
+    let tags: serde_json::Value = tags_json
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(serde_json::Value::Null);
+
+    match source_type {
+        "stackoverflow" => {
+            let score = tags.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
+            match score {
+                s if s >= 50 => 0.90,
+                s if s >= 20 => 0.75,
+                s if s >= 5 => 0.50,
+                _ => 0.20,
+            }
+        }
+        "hackernews" => {
+            let points = tags.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
+            match points {
+                p if p >= 100 => 0.90,
+                p if p >= 30 => 0.70,
+                p if p >= 10 => 0.50,
+                _ => 0.30,
+            }
+        }
+        "reddit" => {
+            let score = tags.get("score").and_then(|v| v.as_i64()).unwrap_or(0);
+            match score {
+                s if s >= 100 => 0.85,
+                s if s >= 20 => 0.65,
+                s if s >= 5 => 0.50,
+                _ => 0.30,
+            }
+        }
+        _ => 0.50,
+    }
+}
+
+// ============================================================================
 // Phase 5: Compute quality composite — ALL multipliers in one pass
 // ============================================================================
 
 /// Returns (quality_score, freshness, source_quality_boost, competing_mult, content_quality_mult,
 ///          content_dna_mult, content_type, novelty_mult, ecosystem_shift_mult, stack_competing_mult,
-///          sophistication_mult, content_analysis_mult)
+///          sophistication_mult, content_analysis_mult, negative_stack_prior, sophistication_raw,
+///          community_signal)
 #[allow(clippy::type_complexity)]
 fn compute_quality_composite(
     relevance_score: f32,
@@ -646,6 +696,7 @@ fn compute_quality_composite(
     f32,
     f32,
     crate::content_dna::ContentType,
+    f32,
     f32,
     f32,
     f32,
@@ -827,6 +878,23 @@ fn compute_quality_composite(
     let tier = crate::source_tiers::SourceTier::default_for_source(input.source_type);
     let tier_authority_mult = tier.authority_multiplier();
 
+    // Community quality signal: SO score, HN points, Reddit upvotes
+    let age_hours_for_community = input.created_at.map_or(0.0, |ts| {
+        (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
+    });
+    let community_signal = extract_community_signal(
+        input.source_type,
+        input.tags_json,
+        age_hours_for_community,
+    );
+    let community_mult = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
+        scoring_config::COMMUNITY_SIGNAL_LOW_PENALTY
+    } else if community_signal >= scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD {
+        scoring_config::COMMUNITY_SIGNAL_HIGH_BOOST
+    } else {
+        1.0
+    };
+
     // Full-strength multipliers — no dampening. Each multiplier expresses its
     // complete signal. The confirmation gate (Phase 7) prevents score inflation;
     // what changes is the FLOOR — bad items drop further, good items stay at ceiling.
@@ -841,7 +909,8 @@ fn compute_quality_composite(
         * anti_mult
         * domain_quality_mult
         * negative_stack_prior
-        * tier_authority_mult;
+        * tier_authority_mult
+        * community_mult;
 
     let quality_score = (relevance_score * composite).clamp(0.0, 1.0);
 
@@ -900,6 +969,7 @@ fn compute_quality_composite(
         content_analysis_mult,
         negative_stack_prior,
         sophistication_raw,
+        community_signal,
     )
 }
 
@@ -1101,6 +1171,7 @@ fn apply_final_adjustments(
     title: &str,
     content_type: &crate::content_dna::ContentType,
     sophistication_raw: f32,
+    community_signal: f32,
 ) -> f32 {
     let meaningful_words = title.split_whitespace().filter(|w| w.len() >= 2).count();
     let score = if meaningful_words < 3 {
@@ -1112,7 +1183,7 @@ fn apply_final_adjustments(
     // Commodity content ceiling: hard cap on low-sophistication commodity content.
     // Applied AFTER all boosts and gate effects — no amount of dep_boost or
     // bootstrap doubling can push a basic "how to" tutorial into the briefing.
-    apply_commodity_ceiling(score, title, content_type, sophistication_raw)
+    apply_commodity_ceiling(score, title, content_type, sophistication_raw, community_signal)
 }
 
 /// Hard ceiling for commodity content types with low sophistication.
@@ -1122,11 +1193,13 @@ fn apply_final_adjustments(
 /// - Version conflict language with version number
 /// - Content type overridden to SecurityAdvisory or BreakingChange (already excluded)
 /// - Sophistication >= 0.30 (has advanced terms, version specificity, or abstract framing)
+/// - High community validation (community_signal >= high_threshold)
 fn apply_commodity_ceiling(
     score: f32,
     title: &str,
     content_type: &crate::content_dna::ContentType,
     sophistication_raw: f32,
+    community_signal: f32,
 ) -> f32 {
     use crate::content_dna::ContentType;
 
@@ -1137,6 +1210,11 @@ fn apply_commodity_ceiling(
         ContentType::Question => scoring_config::COMMODITY_CEILING_QUESTION,
         _ => return score,
     };
+
+    // High community validation bypasses ceiling — the crowd validated this content
+    if community_signal >= scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD {
+        return score;
+    }
 
     // Sophistication above threshold = not commodity
     if sophistication_raw >= 0.30 {
@@ -1430,6 +1508,7 @@ pub(crate) fn score_item(
         content_analysis_mult,
         negative_stack_prior,
         sophistication_raw,
+        community_signal,
     ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db);
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
@@ -1479,7 +1558,7 @@ pub(crate) fn score_item(
     );
 
     // ── Phase 8: Final adjustments ────────────────────────────────────
-    let combined_score = apply_final_adjustments(gated_score, input.title, &content_type, sophistication_raw);
+    let combined_score = apply_final_adjustments(gated_score, input.title, &content_type, sophistication_raw, community_signal);
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
@@ -1922,6 +2001,7 @@ mod tests {
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "desc text.");
@@ -1940,6 +2020,7 @@ mod tests {
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "summary.");
@@ -1957,6 +2038,7 @@ mod tests {
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         };
         // Non-security source content is passed through verbatim
         let cleaned = dep_match_content_for(&input);

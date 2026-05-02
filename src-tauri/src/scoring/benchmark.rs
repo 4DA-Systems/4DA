@@ -45,6 +45,7 @@ pub(super) fn bench_input<'a>(
         created_at: None,
         detected_lang: "en",
         source_tags: &[],
+        tags_json: None,
     }
 }
 

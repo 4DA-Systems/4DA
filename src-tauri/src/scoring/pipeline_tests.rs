@@ -22,6 +22,7 @@ mod tests {
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         }
     }
 
@@ -775,6 +776,7 @@ mod tests {
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         };
 
         let normal_input = ScoringInput {
@@ -787,6 +789,7 @@ mod tests {
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
+            tags_json: None,
         };
 
         let long_result = score_item(&long_input, &ctx, &db, &options, None);
@@ -911,6 +914,7 @@ mod tests {
             created_at: None,
             detected_lang: mismatched_lang,
             source_tags: &[],
+            tags_json: None,
         };
         let options = ScoringOptions {
             apply_freshness: false,
