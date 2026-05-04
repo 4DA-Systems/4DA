@@ -38,7 +38,8 @@ pub struct FeedbackBucket {
     pub count: i64,
 }
 
-pub(crate) fn tier_from_alert_id(alert_id: &str) -> &'static str {
+#[cfg(test)]
+fn tier_from_alert_id(alert_id: &str) -> &'static str {
     if alert_id.starts_with("osv-") {
         "verified"
     } else if alert_id.starts_with("llm-") {
