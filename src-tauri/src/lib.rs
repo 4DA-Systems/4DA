@@ -916,6 +916,7 @@ pub fn run() {
             templates::get_template_content,
             // Diagnostics
             commands::get_diagnostics,
+            commands::get_scoring_history,
             startup_health::get_startup_health,
             startup_health::get_diagnostic_report,
             // Capability Health (Graceful Degradation Framework)

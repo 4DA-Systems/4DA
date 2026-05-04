@@ -10,6 +10,18 @@ use crate::error::Result;
 // Types
 // ============================================================================
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScoringEvent {
+    pub cycle_ts: String,
+    pub total_scored: i64,
+    pub total_relevant: i64,
+    pub avg_score: f64,
+    pub max_score: f64,
+    pub gate_rejections: i64,
+    pub commodity_caps: i64,
+    pub briefing_items: i64,
+}
+
 /// Item for digest purposes
 #[derive(Debug, Clone)]
 pub struct DigestSourceItem {
@@ -194,6 +206,28 @@ impl Database {
             ],
         )?;
         Ok(())
+    }
+
+    pub fn get_recent_scoring_events(&self, limit: usize) -> SqliteResult<Vec<ScoringEvent>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT cycle_ts, total_scored, total_relevant, avg_score, max_score,
+                    gate_rejections, commodity_caps, briefing_items
+             FROM scoring_events ORDER BY id DESC LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok(ScoringEvent {
+                cycle_ts: row.get(0)?,
+                total_scored: row.get(1)?,
+                total_relevant: row.get(2)?,
+                avg_score: row.get(3)?,
+                max_score: row.get(4)?,
+                gate_rejections: row.get(5)?,
+                commodity_caps: row.get(6)?,
+                briefing_items: row.get(7)?,
+            })
+        })?;
+        rows.collect()
     }
 
     // ========================================================================
