@@ -24,16 +24,15 @@ jobs:
         with:
           clean: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v4
-        with:
-          version: 9
-
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
           node-version: '22'
-          cache: 'pnpm'
+
+      - name: Enable corepack + pnpm
+        run: |
+          corepack enable pnpm
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -98,16 +97,15 @@ jobs:
         with:
           clean: false
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v4
-        with:
-          version: 9
-
       - name: Setup Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
         with:
           node-version: '22'
-          cache: 'pnpm'
+
+      - name: Enable corepack + pnpm
+        run: |
+          corepack enable pnpm
+          pnpm --version
 
       - name: Install dependencies
         working-directory: mcp-4da-server
