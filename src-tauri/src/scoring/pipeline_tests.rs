@@ -1030,7 +1030,10 @@ mod tests {
         let result = score_item_v2(&input, &ctx, &db, &options);
 
         // Verify content type was classified as tutorial
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
         assert_eq!(
             bd.content_type.as_deref(),
             Some("tutorial"),
@@ -1095,7 +1098,10 @@ mod tests {
 
         let result = score_item_v2(&input, &ctx, &db, &options);
 
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
         assert_eq!(
             bd.content_type.as_deref(),
             Some("help_request"),
@@ -1144,7 +1150,8 @@ mod tests {
             id: 3,
             title: "How to implement lock-free allocator with zero-copy in Rust v1.78",
             url: Some("https://example.com/advanced-tutorial"),
-            content: "lock-free concurrent allocator zero-copy memory ordering atomic futex rust unsafe",
+            content:
+                "lock-free concurrent allocator zero-copy memory ordering atomic futex rust unsafe",
             source_type: "hackernews",
             embedding: &interest_embedding,
             created_at: None,
@@ -1160,7 +1167,10 @@ mod tests {
 
         let result = score_item_v2(&input, &ctx, &db, &options);
 
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
         assert_eq!(
             bd.content_type.as_deref(),
             Some("tutorial"),
@@ -1247,7 +1257,10 @@ mod tests {
 
         let result = score_item_v2(&input, &ctx, &db, &options);
 
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
         let content_type = bd.content_type.as_deref().unwrap_or("unknown");
 
         // Whether classified as SecurityAdvisory or Tutorial, the CVE pattern
@@ -1256,7 +1269,9 @@ mod tests {
         // Tutorial with CVE is exempt by the security pattern check.
         // Either way, the score should not be capped at 0.28.
         assert!(
-            content_type == "security_advisory" || result.top_score > 0.28 || result.top_score == 0.0,
+            content_type == "security_advisory"
+                || result.top_score > 0.28
+                || result.top_score == 0.0,
             "CVE-containing content should bypass commodity ceiling: content_type={}, score={}",
             content_type,
             result.top_score
@@ -1300,7 +1315,10 @@ mod tests {
         };
 
         let result = score_item_v2(&input, &ctx, &db, &options);
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
 
         assert!(
             bd.freshness_mult > 1.0,
@@ -1344,7 +1362,10 @@ mod tests {
         };
 
         let result = score_item_v2(&input, &ctx, &db, &options);
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
 
         // At 70h (< 72h boundary), the tier maps to 1.00.
         // Allow small variance from potential peak-hours adjustment (+0.03 max).
@@ -1383,7 +1404,10 @@ mod tests {
         };
 
         let result = score_item_v2(&input, &ctx, &db, &options);
-        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let bd = result
+            .score_breakdown
+            .as_ref()
+            .expect("should have breakdown");
 
         assert!(
             bd.freshness_mult < 1.0,
