@@ -43,7 +43,7 @@ Yes. Three ways:
 
 ## What if 4DA shuts down?
 
-The app keeps working. There is no server to turn off. Your data is on your machine. The source code is public. The license converts to fully open-source (Apache 2.0) after two years. You lose nothing.
+The app keeps working. There is no server to turn off. Your data is on your machine. The source code is public. The license converts to fully open-source (Apache 2.0) after three years. You lose nothing.
 
 ## What about the free version?
 

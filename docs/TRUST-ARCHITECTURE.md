@@ -56,7 +56,7 @@ The application is a Tauri 2.0 desktop binary. Rust backend, React frontend, SQL
 
 ### Layer 5: Transparency
 
-The complete source code is available under the FSL-1.1-Apache-2.0 license. Anyone can read, audit, and build the application from source. The license converts to fully open Apache-2.0 after two years, ensuring the code can never be locked away. We do not operate a "source-available but you can't actually build it" model -- the repository includes pinned dependencies (`Cargo.lock`, `pnpm-lock.yaml`) and build instructions.
+The complete source code is available under the FSL-1.1-Apache-2.0 license. Anyone can read, audit, and build the application from source. The license converts to fully open Apache-2.0 after three years, ensuring the code can never be locked away. We do not operate a "source-available but you can't actually build it" model -- the repository includes pinned dependencies (`Cargo.lock`, `pnpm-lock.yaml`) and build instructions.
 
 ### Layer 6: Track Record
 
@@ -139,7 +139,7 @@ Platform-specific signing provides an additional layer:
 
 ### f) The source code is auditable
 
-**Mechanism:** The application is published under the FSL-1.1-Apache-2.0 license. This is a source-available license that permits reading, building, auditing, modifying, and redistributing the code for any non-competing purpose. After two years, the license automatically converts to Apache-2.0 with no restrictions beyond standard open-source terms.
+**Mechanism:** The application is published under the FSL-1.1-Apache-2.0 license. This is a source-available license that permits reading, building, auditing, modifying, and redistributing the code for any non-competing purpose. After three years, the license automatically converts to Apache-2.0 with no restrictions beyond standard open-source terms.
 
 **Verify:** The LICENSE file is in the repository root. The complete build toolchain is documented. Dependencies are pinned. You can clone the repository and build the application yourself.
 

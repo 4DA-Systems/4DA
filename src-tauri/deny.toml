@@ -115,7 +115,7 @@ ignore = [
 # ============================================================================
 #
 # 4DA is licensed under FSL-1.1-Apache-2.0 (source-available, converts to
-# Apache-2.0 after 2 years). We allow permissive open-source licenses and
+# Apache-2.0 after 3 years). We allow permissive open-source licenses and
 # carefully review any copyleft dependencies.
 # ============================================================================
 [licenses]

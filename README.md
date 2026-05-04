@@ -336,7 +336,7 @@ Source: [`src-tauri/src/scoring/benchmark.rs`](src-tauri/src/scoring/benchmark.r
 
 ## License
 
-[FSL-1.1-Apache-2.0](LICENSE) — source available. Free to use, inspect, and modify for any purpose except building a competing product. Every release converts to Apache 2.0 two years after publication — after that, no restrictions at all.
+[FSL-1.1-Apache-2.0](LICENSE) — source available. Free to use, inspect, and modify for any purpose except building a competing product. Every release converts to Apache 2.0 three years after publication — after that, no restrictions at all.
 
 ---
 

@@ -76,7 +76,7 @@ The MCP server is MIT and stays free. The companion desktop app (4DA) has paid t
 
 ### Q: "Why not open source the desktop app?"
 
-It's source-available under FSL-1.1-Apache-2.0. You can read, modify, and run it. The only restriction is you can't build a competing product. Converts to full Apache 2.0 after two years. The MCP server has no such restriction — plain MIT.
+It's source-available under FSL-1.1-Apache-2.0. You can read, modify, and run it. The only restriction is you can't build a competing product. Converts to full Apache 2.0 after three years. The MCP server has no such restriction — plain MIT.
 
 ### Q: "Isn't MCP a fad?"
 

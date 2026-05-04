@@ -1427,7 +1427,7 @@ Lisansın hendekini belirler. Dikkatli seç.
 |--------|-------------------|------------------|-------|
 | **MIT** | Herkes her şeyi yapabilir. Fork'la, sat, seninle rekabet et. | Premium özellikler / barındırılan sürüm, kendi başına yapmanın buna değmeyeceği kadar çekici olmalı. | Express.js, React |
 | **AGPLv3** | Ağ üzerinden kullanan herkes değişikliklerini açık kaynak yapmalı. Şirketler bundan nefret eder — bunun yerine ticari lisans için ödeme yaparlar. | Çift lisans: açık kaynak için AGPL, AGPL istemeyen şirketler için ticari lisans. | MongoDB (başlangıçta), Grafana |
-| **FSL (Functional Source License)** | 2 yıl boyunca kaynak görünür ama açık kaynak değil. 2 yıl sonra Apache 2.0'a dönüşür. Kritik büyüme aşamanda doğrudan rakipleri engeller. | Pazar pozisyonunu oluştururken doğrudan rekabet engellenir. Ek gelir için premium özellikler. | 4DA, Sentry |
+| **FSL (Functional Source License)** | 2-3 yıl boyunca kaynak görünür ama açık kaynak değil. Bu süre sonunda Apache 2.0'a dönüşür. Kritik büyüme aşamanda doğrudan rakipleri engeller. | Pazar pozisyonunu oluştururken doğrudan rekabet engellenir. Ek gelir için premium özellikler. | 4DA, Sentry |
 | **BUSL (Business Source License)** | FSL'e benzer. Belirli bir süre boyunca rakipler tarafından üretim kullanımını kısıtlar. | FSL ile aynı. | HashiCorp (Terraform, Vault) |
 
 **Solo geliştiriciler için tavsiye:** FSL veya AGPL.

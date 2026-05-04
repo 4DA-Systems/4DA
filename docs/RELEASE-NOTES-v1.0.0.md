@@ -102,7 +102,7 @@ See [BUILD-FROM-SOURCE.md](https://github.com/runyourempire/4DA/blob/main/docs/B
 
 ## License
 
-FSL-1.1-Apache-2.0 — source-available, converts to Apache 2.0 after two years.
+FSL-1.1-Apache-2.0 — source-available, converts to Apache 2.0 after three years.
 
 ---
 

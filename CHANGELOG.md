@@ -62,7 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - 11MB installer (Windows NSIS)
 - Auto-updater with Minisign signature verification
 - Standalone CLI binary (`4da`) for terminal workflows
-- FSL-1.1-Apache-2.0 license (converts to Apache 2.0 after 2 years)
+- FSL-1.1-Apache-2.0 license (converts to Apache 2.0 after 3 years)
 
 ### Known Limitations
 - Ollama required for local AI features (optional — keyword-only mode available without it)

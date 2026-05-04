@@ -1,6 +1,6 @@
 # Module R: Revenue Engines
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Playbook**
 *Weeks 5-8 | 8 Lessons | Deliverable: Your First Revenue Engine + Plan for Engine #2*
 
 > "Build systems that generate income, not just code that ships features."
@@ -9,7 +9,7 @@
 
 You've got the infrastructure (Module S). You've got something competitors can't easily copy (Module T). Now it's time to turn all of that into money.
 
-This is the longest module in the course because it's the one that matters most. Eight revenue engines. Eight different ways to turn your skills, hardware, and time into income. Each one is a complete playbook with real code, real pricing, real platforms, and real math.
+This is the longest module in the playbook because it's the one that matters most. Eight revenue engines. Eight different ways to turn your skills, hardware, and time into income. Each one is a complete playbook with real code, real pricing, real platforms, and real math.
 
 {@ insight engine_ranking @}
 
@@ -792,7 +792,7 @@ These businesses know automation exists. They've heard of Zapier. But they can't
 
 That's where you come in. You charge $500-$5,000 to build a custom automation that saves them 10-40 hours per week. At even $20/hour for that employee's time, you're saving them $800-$3,200 per month. Your one-time $2,500 fee pays for itself in one month.
 
-This is one of the easiest sells in the entire course.
+This is one of the easiest sells in the entire playbook.
 
 ### The Privacy Selling Point
 
@@ -1046,7 +1046,7 @@ Use a free template from Avodocs.com or Bonsai as your starting point, then add 
 
 An API product wraps some capability — usually your local LLM with custom processing — behind a clean HTTP endpoint that other developers pay to use. You handle the infrastructure, the model, and the domain expertise. They get a simple API call.
 
-This is the most scalable engine in this course for developers who are comfortable with backend work. Once it's built, every new customer adds revenue with minimal additional cost.
+This is the most scalable engine in this playbook for developers who are comfortable with backend work. Once it's built, every new customer adds revenue with minimal additional cost.
 
 {? if profile.gpu.exists ?}
 With your {= profile.gpu.model | fallback("GPU") =}, you can run the inference layer locally during development and for your first customers, keeping costs at zero until you need to scale.
@@ -1427,7 +1427,7 @@ Your license determines your moat. Choose carefully.
 |---------|--------------|------------------|---------|
 | **MIT** | Anyone can do anything. Fork it, sell it, compete with you. | Premium features / hosted version must be compelling enough that DIY isn't worth it. | Express.js, React |
 | **AGPLv3** | Anyone using it over a network must open-source their modifications. Companies hate this — they'll pay for a commercial license instead. | Dual license: AGPL for open source, commercial license for companies that don't want AGPL. | MongoDB (originally), Grafana |
-| **FSL (Functional Source License)** | Source-visible but not open source for 2 years. After 2 years, converts to Apache 2.0. Prevents direct competitors during your critical growth phase. | Direct competition blocked while you build market position. Premium features for additional revenue. | 4DA, Sentry |
+| **FSL (Functional Source License)** | Source-visible but not open source for 2–3 years. After that period, converts to Apache 2.0. Prevents direct competitors during your critical growth phase. | Direct competition blocked while you build market position. Premium features for additional revenue. | 4DA, Sentry |
 | **BUSL (Business Source License)** | Similar to FSL. Restricts production use by competitors for a specified period. | Same as FSL. | HashiCorp (Terraform, Vault) |
 
 **Recommended for solo developers:** FSL or AGPL.

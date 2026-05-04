@@ -1427,7 +1427,7 @@ Tu licencia determina tu foso. Elige cuidadosamente.
 |----------|--------------|------------------------|---------|
 | **MIT** | Cualquiera puede hacer cualquier cosa. Forkearlo, venderlo, competir contigo. | Las funciones premium / version alojada deben ser lo suficientemente atractivas para que no valga la pena hacerlo tu mismo. | Express.js, React |
 | **AGPLv3** | Cualquiera que la use por red debe hacer open source de sus modificaciones. Las empresas odian esto — pagaran por una licencia comercial. | Licencia dual: AGPL para open source, licencia comercial para empresas que no quieren AGPL. | MongoDB (originalmente), Grafana |
-| **FSL (Functional Source License)** | Codigo visible pero no open source por 2 anos. Despues de 2 anos, se convierte en Apache 2.0. Previene competidores directos durante tu fase critica de crecimiento. | Competencia directa bloqueada mientras construyes posicion de mercado. Funciones premium para ingresos adicionales. | 4DA, Sentry |
+| **FSL (Functional Source License)** | Codigo visible pero no open source por 2-3 anos. Despues de ese periodo, se convierte en Apache 2.0. Previene competidores directos durante tu fase critica de crecimiento. | Competencia directa bloqueada mientras construyes posicion de mercado. Funciones premium para ingresos adicionales. | 4DA, Sentry |
 | **BUSL (Business Source License)** | Similar a FSL. Restringe el uso en produccion por competidores durante un periodo especificado. | Igual que FSL. | HashiCorp (Terraform, Vault) |
 
 **Recomendado para desarrolladores solitarios:** FSL o AGPL.
