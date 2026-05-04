@@ -869,7 +869,7 @@ pub fn run() {
             // Stack Health Engine
             stack_health::get_stack_health,
             stack_health::get_missed_intelligence,
-            // Playbook (STREETS Course)
+            // Playbook (STREETS Playbook)
             playbook_commands::get_playbook_modules,
             playbook_commands::get_playbook_content,
             playbook_commands::get_playbook_progress,

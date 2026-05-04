@@ -1,7 +1,7 @@
 {
   "name": "@4da/mcp-streets-server",
   "version": "1.0.0",
-  "description": "MCP server for STREETS Developer Income Course — course content, project analysis, and progress tracking",
+  "description": "MCP server for STREETS Developer Income Playbook — playbook content, project analysis, and progress tracking",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -22,7 +22,7 @@
     "model-context-protocol",
     "streets",
     "developer-income",
-    "course",
+    "playbook",
     "revenue-engines",
     "claude-code"
   ],

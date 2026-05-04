@@ -1,25 +1,27 @@
 # License
 
-Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
+Copyright (c) 2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
-## Personal Use License
+## STREETS Playbook License
 
-This course material is licensed for **personal use only** by the individual who purchased it.
+The STREETS Playbook is provided **free of charge** as part of the 4DA ecosystem.
 
 ### You MAY:
 - Read and study the material
 - Follow the exercises and build the projects described
 - Keep a personal copy for reference
 - Use the templates for your own business planning
+- Share individual modules with attribution to 4DA Systems
 
 ### You MAY NOT:
-- Share, redistribute, or resell the course content
-- Post the content publicly (blogs, forums, social media)
-- Use the content to create competing courses or products
+- Sell or redistribute the playbook as a standalone product
+- Use the content to create competing playbooks or courses
 - Remove or modify copyright notices
+- Claim authorship of the material
 
-### Module S Exception
-Module S (Sovereign Setup) is provided as a **free preview** and may be shared freely with attribution.
+## Attribution
+
+When sharing, credit: "STREETS Developer Income Playbook by 4DA Systems (4da.ai)"
 
 ## Warranty Disclaimer
 

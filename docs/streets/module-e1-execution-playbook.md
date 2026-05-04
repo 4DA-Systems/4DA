@@ -1,6 +1,6 @@
 # Module E: Execution Playbook
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Playbook**
 *Weeks 9-10 | 6 Lessons | Deliverable: Your First Product, Live and Accepting Payments*
 
 > "From idea to deployed in 48 hours. No overthinking."

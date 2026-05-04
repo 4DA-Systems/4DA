@@ -14,7 +14,7 @@ import type { MarkCompleteParams, MarkCompleteResult } from "../types.js";
  */
 export const markCompleteTool = {
   name: "mark_complete",
-  description: `Mark a STREETS course lesson as complete. Progress is stored locally in a SQLite database.
+  description: `Mark a STREETS Playbook lesson as complete. Progress is stored locally in a SQLite database.
 
 Lesson indices are 0-based within each module. For example, Module S has 6 lessons (indices 0-5), Module R has 8 lessons (indices 0-7).
 

@@ -1,8 +1,8 @@
-# STREETS: Developer Income Course
+# STREETS: Developer Income Playbook
 
-**7 modules. 14 weeks. Build income streams from your developer skills.**
+**7 modules. Build income streams from your developer skills.**
 
-STREETS is a structured, hands-on course that transforms your existing technical skills into revenue-generating systems. No fluff, no motivation speeches — just code, tools, and real math.
+STREETS is a structured, hands-on playbook that transforms your existing technical skills into revenue-generating systems. No fluff, no motivation speeches — just code, tools, and real math.
 
 ## The Framework
 
@@ -26,7 +26,7 @@ STREETS is a structured, hands-on course that transforms your existing technical
 
 ## Templates
 
-The `templates/` directory contains three worksheet templates you'll fill out during the course:
+The `templates/` directory contains three worksheet templates you'll fill out during the playbook:
 
 - **Sovereign Stack Document** — Your complete business infrastructure audit (Module S output)
 - **Moat Map** — Visual map of your competitive advantages (Module T output)
@@ -45,7 +45,7 @@ The `templates/` directory contains three worksheet templates you'll fill out du
 
 ## License
 
-This course content is proprietary. See LICENSE.md for terms.
+Free and included with 4DA. See LICENSE.md for terms.
 
 ---
 

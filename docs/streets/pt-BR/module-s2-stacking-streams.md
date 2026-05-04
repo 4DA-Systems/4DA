@@ -1,6 +1,6 @@
 # Modulo S: Stacking Streams
 
-**STREETS Developer Income Course — Modulo Gratuito (Todos os 7 Modulos Gratuitos dentro do 4DA)**
+**STREETS Developer Income Playbook**
 *Semanas 14-16 | 6 Licoes | Entregavel: Seu Stream Stack (Plano de Renda de 12 Meses)*
 
 > "Um stream e um bico. Tres streams sao um negocio. Cinco streams sao liberdade."
@@ -1544,7 +1544,7 @@ O sistema esta construido. O playbook esta completo. O resto e execucao.
 
 *Seu rig. Suas regras. Seu revenue.*
 
-**STREETS Developer Income Course — Completo.**
+**STREETS Developer Income Playbook — Completo.**
 *Do Module S (Sovereign Setup) ao Module S (Stacking Streams)*
 *16 semanas. 7 modulos. 42 licoes. Um playbook.*
 

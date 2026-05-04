@@ -1,6 +1,6 @@
 # Module S: Stacking Streams
 
-**STREETS Developer Income Course — Free Module (All 7 Modules Free Inside 4DA)**
+**STREETS Developer Income Playbook**
 *Weeks 14-16 | 6 Lessons | Deliverable: Your Stream Stack (12-Month Income Plan)*
 
 > "One stream is a side hustle. Three streams is a business. Five streams is freedom."
@@ -1002,7 +1002,7 @@ Read this section now. Not in April. Now.
 
 ### The Deliverable
 
-This is it. The final exercise in the entire STREETS course. Everything you've built — infrastructure, moats, revenue engines, execution discipline, intelligence, automation — converges into a single document: your Stream Stack.
+This is it. The final exercise in the entire STREETS Playbook. Everything you've built — infrastructure, moats, revenue engines, execution discipline, intelligence, automation — converges into a single document: your Stream Stack.
 
 The Stream Stack is not a business plan for investors. It's an operating plan for you. It tells you exactly what to work on this month, what to measure, what to kill, and what to grow. It's the document you open every Monday morning to decide how to spend your limited hours.
 
@@ -1451,7 +1451,7 @@ Here's what the full STREETS journey built:
 
 ### What a STREETS Graduate Looks Like
 
-A developer who has completed this course and executed on it for 12 months has:
+A developer who has completed this playbook and executed on it for 12 months has:
 
 **Sovereign infrastructure running 24/7.** A local compute stack that runs inference, processes data, and serves customers without depending on any single cloud provider. The rig isn't a consumer product anymore. It's a revenue-generating asset.
 
@@ -1542,7 +1542,7 @@ The system is built. The playbook is complete. The rest is execution.
 
 *Your rig. Your rules. Your revenue.*
 
-**STREETS Developer Income Course — Complete.**
+**STREETS Developer Income Playbook — Complete.**
 *Module S (Sovereign Setup) through Module S (Stacking Streams)*
 *16 weeks. 7 modules. 42 lessons. One playbook.*
 

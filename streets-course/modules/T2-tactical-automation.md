@@ -1,6 +1,6 @@
 # Module T: Tactical Automation
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Playbook**
 *Weeks 12-13 | 6 Lessons | Deliverable: One Automated Pipeline Generating Value*
 
 > "LLMs, agents, MCP, and cron jobs as force multipliers."
@@ -22,7 +22,7 @@ By the end of these two weeks, you will have:
 - A human-in-the-loop framework so automation doesn't destroy your reputation
 - One complete, deployed pipeline that generates value without your active involvement
 
-This is the most code-heavy module in the course. At least half of what follows is runnable code. Copy it, adapt it, deploy it.
+This is the most code-heavy module in the playbook. At least half of what follows is runnable code. Copy it, adapt it, deploy it.
 
 Let's automate.
 

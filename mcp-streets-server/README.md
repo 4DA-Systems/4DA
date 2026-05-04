@@ -1,10 +1,10 @@
 # STREETS MCP Server
 
-MCP server for the **STREETS Developer Income Course**. Provides 9 tools for accessing course content, analyzing projects for revenue engine fit, and tracking lesson progress.
+MCP server for the **STREETS Developer Income Playbook**. Provides 9 tools for accessing playbook content, analyzing projects for revenue engine fit, and tracking lesson progress.
 
-STREETS is a 7-module course that teaches developers how to build income streams using their existing skills, hardware, and software:
+STREETS is a 7-module playbook that teaches developers how to build income streams using their existing skills, hardware, and software:
 
-- **S** — Sovereign Setup (free)
+- **S** — Sovereign Setup
 - **T** — Technical Moats
 - **R** — Revenue Engines
 - **E1** — Execution Playbook

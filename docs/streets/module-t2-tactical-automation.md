@@ -1,6 +1,6 @@
 # Module T: Tactical Automation
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Playbook**
 *Weeks 12-13 | 6 Lessons | Deliverable: One Automated Pipeline Generating Value*
 
 > "LLMs, agents, MCP, and cron jobs as force multipliers."
@@ -28,7 +28,7 @@ By the end of these two weeks, you will have:
 Your primary stack is {= stack.primary | fallback("your primary stack") =}, so the automation examples ahead will be most directly applicable when adapted to that ecosystem. Most examples use Python for portability, but the patterns translate to any language.
 {? endif ?}
 
-This is the most code-heavy module in the course. At least half of what follows is runnable code. Copy it, adapt it, deploy it.
+This is the most code-heavy module in the playbook. At least half of what follows is runnable code. Copy it, adapt it, deploy it.
 
 Let's automate.
 

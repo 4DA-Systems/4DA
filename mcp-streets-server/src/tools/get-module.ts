@@ -13,11 +13,11 @@ import type { GetModuleParams, ModuleContent } from "../types.js";
  */
 export const getModuleTool = {
   name: "get_module",
-  description: `Retrieve a STREETS course module by ID. Returns the module title, description, all lessons (title + full content), and whether it's a free module.
+  description: `Retrieve a STREETS Playbook module by ID. Returns the module title, description, all lessons (title + full content), and whether it's a free module.
 
 Module IDs: S (Sovereign Setup), T (Technical Moats), R (Revenue Engines), E1 (Execution Playbook), E2 (Evolving Edge), T2 (Tactical Automation), S2 (Stacking Streams).
 
-Module S is the free introductory module. All others are paid.`,
+All modules are free.`,
   inputSchema: {
     type: "object" as const,
     properties: {

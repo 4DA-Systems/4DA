@@ -3,8 +3,8 @@
 /**
  * STREETS MCP Server
  *
- * MCP server for the STREETS Developer Income Course. Provides tools for
- * accessing course content, analyzing projects for revenue engine fit,
+ * MCP server for the STREETS Developer Income Playbook. Provides tools for
+ * accessing playbook content, analyzing projects for revenue engine fit,
  * and tracking lesson progress.
  *
  * 9 Tools:

@@ -14,7 +14,7 @@ import type { NextStepResult } from "../types.js";
  */
 export const getNextStepTool = {
   name: "get_next_step",
-  description: `Get a recommendation for what to work on next in the STREETS course.
+  description: `Get a recommendation for what to work on next in the STREETS Playbook.
 
 Walks through modules in order (S -> T -> R -> E1 -> E2 -> T2 -> S2) and finds the first incomplete lesson. Returns the module ID, lesson index, reason, and context about surrounding progress.
 

@@ -1,6 +1,6 @@
 # Module S: Stacking Streams
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Playbook**
 *Weeks 14-16 | 6 Lessons | Deliverable: Your Stream Stack (12-Month Income Plan)*
 
 > "One stream is a side hustle. Three streams is a business. Five streams is freedom."
@@ -827,7 +827,7 @@ Now we're talking. $2,000/month means your streams are generating real, repeatab
 - **Virtual assistant for non-technical tasks: $500-800/month.** This is the highest-ROI hire you can make at this stage. An offshore VA (Philippines, Latin America) for 10-15 hours/month handles: email triage, invoice follow-ups, scheduling, data entry, social media posting, basic customer support first-pass. You save 10-15 hours/month. At your effective rate, those hours are worth $500-3,000/month.
 - **Professional email and billing infrastructure:** Migrate from "send invoices manually" to automated billing (Stripe Billing, Lemon Squeezy). Cost: $0-50/month. Time saved: 3-5 hours/month.
 - **A paid design template for your products:** $49-199 one-time. First impressions matter. A professional landing page converts 2-3x better than a hacked-together one.
-- **$149 for STREETS Core if you haven't already.** Yes, it's meta to recommend the course inside the course. But at $2,000/month, you've proven you can execute. The full course accelerates what's working.
+- **$149 for STREETS Core if you haven't already.** Yes, it's meta to recommend the playbook inside the playbook. But at $2,000/month, you've proven you can execute. The full playbook accelerates what's working.
 
 **Your pocket: $800-1,000/month**
 
@@ -940,7 +940,7 @@ Read this section now. Not in April. Now.
 
 ### The Deliverable
 
-This is it. The final exercise in the entire STREETS course. Everything you've built — infrastructure, moats, revenue engines, execution discipline, intelligence, automation — converges into a single document: your Stream Stack.
+This is it. The final exercise in the entire STREETS Playbook. Everything you've built — infrastructure, moats, revenue engines, execution discipline, intelligence, automation — converges into a single document: your Stream Stack.
 
 The Stream Stack is not a business plan for investors. It's an operating plan for you. It tells you exactly what to work on this month, what to measure, what to kill, and what to grow. It's the document you open every Monday morning to decide how to spend your limited hours.
 
@@ -1385,7 +1385,7 @@ Here's what the full STREETS journey built:
 
 ### What a STREETS Graduate Looks Like
 
-A developer who has completed this course and executed on it for 12 months has:
+A developer who has completed this playbook and executed on it for 12 months has:
 
 **Sovereign infrastructure running 24/7.** A local compute stack that runs inference, processes data, and serves customers without depending on any single cloud provider. The rig isn't a consumer product anymore. It's a revenue-generating asset.
 
@@ -1484,7 +1484,7 @@ The system is built. The playbook is complete. The rest is execution.
 
 *Your rig. Your rules. Your revenue.*
 
-**STREETS Developer Income Course — Complete.**
+**STREETS Developer Income Playbook — Complete.**
 *Module S (Sovereign Setup) through Module S (Stacking Streams)*
 *16 weeks. 7 modules. 42 lessons. One playbook.*
 

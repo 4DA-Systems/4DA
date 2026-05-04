@@ -1,6 +1,6 @@
 # Module E: Evolving Edge
 
-**STREETS Developer Income Course — Paid Module (2026 Edition)**
+**STREETS Developer Income Playbook (2026 Edition)**
 *Week 11 | 6 Lessons | Deliverable: Your 2026 Opportunity Radar*
 
 > "This module updates every January. What worked last year may not work this year."
@@ -476,7 +476,7 @@ Includes:
 
 **The unit economics are exceptional:** Because the processing happens on the user's machine, your hosting costs are near zero. A traditional SaaS at $29/month might spend $5-10 per user on infrastructure. A local-first SaaS at $29/month spends $0.10 per user on a license server and update distribution. Your margins are 95%+ instead of 60-70%.
 
-**Real example:** 4DA (the product this course is part of) is a Tauri desktop app that runs local AI inference, local database, and local file processing. Infrastructure cost per user: effectively zero. The Pro tier at $12/month is almost entirely margin.
+**Real example:** 4DA (the product this playbook is part of) is a Tauri desktop app that runs local AI inference, local database, and local file processing. Infrastructure cost per user: effectively zero. The Pro tier at $12/month is almost entirely margin.
 
 **Start This Week:**
 
@@ -1643,7 +1643,7 @@ Specifically, you have:
 
 This module will be rewritten in January 2027. The seven opportunities will change. Some will be upgraded (if they're still hot). Some will be marked "window closing." New ones will be added. The timing framework will be recalibrated. The predictions will be audited against reality.
 
-If you bought STREETS Core, you get the updated Evolving Edge module every year at no additional cost. This is not a course you complete and shelve — it's a system you maintain.
+If you're using STREETS, you get the updated Evolving Edge module every year at no additional cost. This is not a playbook you complete and shelve — it's a system you maintain.
 
 ### What Comes Next: Module T2 — Tactical Automation
 

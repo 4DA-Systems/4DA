@@ -1507,7 +1507,7 @@ What makes YOUR skill combination unusual? (This becomes your moat in Module T)
 3. [e.g., "Technical writing / documentation"]
 
 ### What I'm Building Toward
-(Based on the full STREETS framework — fill this in as you progress through the course)
+(Based on the full STREETS framework — fill this in as you progress through the playbook)
 1. [Revenue Engine 1 — from Module R]
 2. [Revenue Engine 2 — from Module R]
 3. [Revenue Engine 3 — from Module R]

@@ -1,6 +1,6 @@
 # Module T: Technical Moats
 
-**STREETS Developer Income Course — Paid Module**
+**STREETS Developer Income Playbook**
 *Weeks 3-4 | 6 Lessons | Deliverable: Your Moat Map*
 
 > "Skills that can't be commoditized. Niches that can't be competed away."
@@ -288,7 +288,7 @@ Consider this scenario: a developer builds a service that takes data from Shopif
 
 **The 2026 speed advantage:**
 
-You're reading this course in 2026. You have access to Claude Code, Cursor, local LLMs, and a Sovereign Stack that you configured in Module S. Combined with your deep expertise, you can ship work at a pace that would have been impossible 18 months ago.
+You're reading this playbook in 2026. You have access to Claude Code, Cursor, local LLMs, and a Sovereign Stack that you configured in Module S. Combined with your deep expertise, you can ship work at a pace that would have been impossible 18 months ago.
 
 {? if profile.gpu.exists ?}
 Your {= profile.gpu.model | fallback("GPU") =} with {= profile.gpu.vram | fallback("dedicated") =} VRAM gives you a hardware speed advantage — local inference means you're not waiting on API rate limits or paying per-token costs during rapid iteration cycles.

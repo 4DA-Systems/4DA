@@ -1,6 +1,6 @@
 # Module S: Sovereign Setup
 
-**STREETS Developer Income Course — Free Module**
+**STREETS Developer Income Playbook**
 *Weeks 1-2 | 6 Lessons | Deliverable: Your Sovereign Stack Document*
 
 > "Your rig is your business infrastructure. Configure it like one."
@@ -57,7 +57,7 @@ sysctl -n hw.ncpu
 
 **What matters for income:**
 - Core count determines how many concurrent tasks your rig can handle. Running a local LLM while simultaneously processing a batch job requires real parallelism.
-- For most revenue engines in this course, any modern 8+ core CPU from the last 5 years is sufficient.
+- For most revenue engines in this playbook, any modern 8+ core CPU from the last 5 years is sufficient.
 - If you're running local LLMs on CPU only (no GPU), you want 16+ cores. A Ryzen 7 5800X or Intel i7-12700 is the practical floor.
 
 #### RAM
@@ -142,7 +142,7 @@ speedtest-cli --simple
 - Upload speed: This is the bottleneck most people ignore. If you're serving anything (APIs, processed results, deliverables), upload matters.
   - 10 Mbps: Adequate for async delivery (processed files, batch results).
   - 50+ Mbps: Required if you're running any kind of local API endpoint that external services hit.
-  - 100+ Mbps: Comfortable for everything in this course.
+  - 100+ Mbps: Comfortable for everything in this playbook.
 - Latency: Under 50ms to major cloud providers. Run `ping api.openai.com` and `ping api.anthropic.com` to check.
 
 #### Uptime
@@ -155,7 +155,7 @@ Ask yourself:
 - Is your internet connection stable enough for automated workflows?
 - Can you SSH into your machine remotely if something breaks?
 
-If you can't run 24/7, that's fine — many income streams in this course are async batch jobs you trigger manually. But the ones that generate truly passive income require uptime.
+If you can't run 24/7, that's fine — many income streams in this playbook are async batch jobs you trigger manually. But the ones that generate truly passive income require uptime.
 
 **Quick uptime setup (if you want it):**
 
@@ -223,7 +223,7 @@ US average electricity is about $0.12/kWh. Check your actual rate — it varies 
 
 ### Minimum Specs by Revenue Engine Type
 
-Here's a preview of where we're headed in the full STREETS course. For now, just check where your rig lands:
+Here's a preview of where we're headed in the full STREETS Playbook. For now, just check where your rig lands:
 
 | Revenue Engine | CPU | RAM | GPU | Storage | Network |
 |---------------|-----|-----|-----|---------|---------|
@@ -249,7 +249,7 @@ You should now have written down:
 
 Keep these numbers. You'll plug them into your Sovereign Stack Document in Lesson 6.
 
-*In the full STREETS course, Module R (Revenue Engines) gives you specific, step-by-step playbooks for each engine type listed above — including the exact code to build and deploy them.*
+*In the full STREETS Playbook, Module R (Revenue Engines) gives you specific, step-by-step playbooks for each engine type listed above — including the exact code to build and deploy them.*
 
 ---
 
@@ -637,7 +637,7 @@ You should now have:
 - [ ] Benchmark numbers: tokens/second for each model on your rig
 - [ ] Ollama bound to localhost only
 
-*In the full STREETS course, Module T (Technical Moats) shows you how to build proprietary model configurations, fine-tuned pipelines, and custom toolchains that competitors can't easily replicate. Module R (Revenue Engines) gives you the exact services to build on top of this stack.*
+*In the full STREETS Playbook, Module T (Technical Moats) shows you how to build proprietary model configurations, fine-tuned pipelines, and custom toolchains that competitors can't easily replicate. Module R (Revenue Engines) gives you the exact services to build on top of this stack.*
 
 ---
 
@@ -772,7 +772,7 @@ You should now understand:
 - [ ] How privacy-first services command 5-10x premium pricing
 - [ ] How to separate income work from employer work
 
-*In the full STREETS course, Module E (Evolving Edge) teaches you how to track regulatory changes and position yourself ahead of new compliance requirements before your competitors even know they exist.*
+*In the full STREETS Playbook, Module E (Evolving Edge) teaches you how to track regulatory changes and position yourself ahead of new compliance requirements before your competitors even know they exist.*
 
 ---
 
@@ -989,7 +989,7 @@ You should now have (or have a plan for):
 - [ ] Separate business bank account (or application submitted)
 - [ ] Tax strategy: 30% set-aside + quarterly payment schedule
 
-*In the full STREETS course, Module E (Execution Playbook) includes financial modeling templates that automatically calculate your tax obligations, project profitability, and break-even points for each revenue engine.*
+*In the full STREETS Playbook, Module E (Execution Playbook) includes financial modeling templates that automatically calculate your tax obligations, project profitability, and break-even points for each revenue engine.*
 
 ---
 
@@ -1211,7 +1211,7 @@ You should now have:
 - [ ] ROI targets: 3x within 90 days
 - [ ] A clear rule: increase budget only after proving ROI
 
-*In the full STREETS course, Module E (Execution Playbook) includes a financial dashboard template that tracks your spend, revenue, and ROI per revenue engine in real-time — so you always know which streams are profitable and which need adjustment.*
+*In the full STREETS Playbook, Module E (Execution Playbook) includes a financial dashboard template that tracks your spend, revenue, and ROI per revenue engine in real-time — so you always know which streams are profitable and which need adjustment.*
 
 ---
 
@@ -1221,7 +1221,7 @@ You should now have:
 
 ### The Deliverable
 
-This is the most important thing you'll create in Module S. Your Sovereign Stack Document is a single reference that captures everything about your income-generating infrastructure. You'll reference it throughout the rest of the STREETS course, update it as your setup evolves, and use it to make clear-headed decisions about what to build and what to skip.
+This is the most important thing you'll create in Module S. Your Sovereign Stack Document is a single reference that captures everything about your income-generating infrastructure. You'll reference it throughout the rest of the STREETS Playbook, update it as your setup evolves, and use it to make clear-headed decisions about what to build and what to skip.
 
 Create a new file. Markdown, Google Doc, Notion page, plain text — whatever you'll actually maintain. Use the template below, filling in every field with the numbers and decisions from Lessons 1-5.
 
@@ -1375,7 +1375,7 @@ What makes YOUR skill combination unusual? (This becomes your moat in Module T)
 3. [e.g., "Technical writing / documentation"]
 
 ### What I'm Building Toward
-(Based on the full STREETS framework — fill this in as you progress through the course)
+(Based on the full STREETS framework — fill this in as you progress through the playbook)
 1. [Revenue Engine 1 — from Module R]
 2. [Revenue Engine 2 — from Module R]
 3. [Revenue Engine 3 — from Module R]

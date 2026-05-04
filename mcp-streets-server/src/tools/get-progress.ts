@@ -14,9 +14,9 @@ import type { ProgressReport } from "../types.js";
  */
 export const getProgressTool = {
   name: "get_progress",
-  description: `Get the current completion progress across all STREETS course modules.
+  description: `Get the current completion progress across all STREETS Playbook modules.
 
-Returns per-module completion (completed lessons, total lessons, percentage) and overall course percentage. Progress is stored locally in a SQLite database.`,
+Returns per-module completion (completed lessons, total lessons, percentage) and overall playbook percentage. Progress is stored locally in a SQLite database.`,
   inputSchema: {
     type: "object" as const,
     properties: {},
