@@ -742,6 +742,15 @@ pub(crate) async fn get_diagnostics() -> Result<crate::diagnostics::DiagnosticsS
     Ok(crate::diagnostics::collect_diagnostics(db, &db_path))
 }
 
+#[tauri::command]
+pub(crate) async fn get_scoring_history(
+    limit: Option<usize>,
+) -> Result<Vec<crate::db::ScoringEvent>> {
+    let db = get_database()?;
+    db.get_recent_scoring_events(limit.unwrap_or(10))
+        .map_err(|e| crate::error::FourDaError::Internal(format!("scoring history: {e}")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

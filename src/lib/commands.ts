@@ -213,6 +213,7 @@ interface CommandMap {
   index_project_readmes: { params: Record<string, never>; result: string };
   export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
+  get_scoring_history: { params: { limit?: number }; result: ScoringEvent[] };
 
   // -- Settings & Configuration --
   get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; crash_reporting_opt_in: boolean; activity_tracking_opt_in: boolean } };
@@ -1508,6 +1509,17 @@ interface ScoringStats {
   last_run_rejection_rate: number | null;
 }
 
+interface ScoringEvent {
+  cycle_ts: string;
+  total_scored: number;
+  total_relevant: number;
+  avg_score: number;
+  max_score: number;
+  gate_rejections: number;
+  commodity_caps: number;
+  briefing_items: number;
+}
+
 interface DiagnosticsSnapshot {
   memory_bytes: number;
   db_size_bytes: number;
@@ -2116,6 +2128,7 @@ export type {
   EnvSnapshot,
   ScanSummary,
   ScoringStats,
+  ScoringEvent,
   DiagnosticsSnapshot,
   ComposedStackSummary,
   IntelligencePulseData,
