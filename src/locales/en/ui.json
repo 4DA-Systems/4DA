@@ -1953,6 +1953,8 @@
   "score.ace": "recent work",
   "score.aceTooltip": "Boosted because this matches your recent work",
   "score.signals": "{{count}}/{{total}} signals",
+  "score.signalConcordance": "{{count}}/{{total}}",
+  "score.deps": "{{count}} deps",
   "score.affinity": "affinity",
   "score.penalty": "penalty",
   "score.fresh": "fresh",
