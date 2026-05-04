@@ -67,7 +67,7 @@ pub(crate) fn generate_relevance_explanation(
         })
         .filter(|t| !used_topics.contains(t))
         .collect();
-    if !detected_only_hits.is_empty() && declared_hits.is_empty() {
+    if !detected_only_hits.is_empty() {
         let names: Vec<String> = detected_only_hits
             .iter()
             .copied()

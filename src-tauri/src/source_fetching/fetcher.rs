@@ -652,8 +652,7 @@ pub(crate) async fn fetch_all_sources_deep(
                 let _permit = sem.acquire().await.expect("semaphore closed");
                 // Stagger source launches with random jitter to avoid burst
                 // connection patterns that trigger AV behavioral heuristics
-                let jitter =
-                    std::time::Duration::from_millis(200 + (rand::random::<u64>() % 600));
+                let jitter = std::time::Duration::from_millis(200 + (rand::random::<u64>() % 600));
                 tokio::time::sleep(jitter).await;
                 rl.wait_for_rate_limit(st).await;
                 let result = if use_deep {

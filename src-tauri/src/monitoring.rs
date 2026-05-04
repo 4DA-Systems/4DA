@@ -959,7 +959,6 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         }
                     });
                 }
-
             }
 
             // Suns: tick all enabled suns

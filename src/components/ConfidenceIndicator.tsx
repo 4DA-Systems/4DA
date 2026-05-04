@@ -3,10 +3,41 @@ import { useTranslation } from 'react-i18next';
 
 interface ConfidenceIndicatorProps {
   confidence?: number;
+  signalCount?: number;
+  confirmedSignals?: string[];
 }
 
-export const ConfidenceIndicator = ({ confidence }: ConfidenceIndicatorProps) => {
+export const ConfidenceIndicator = ({
+  confidence,
+  signalCount,
+  confirmedSignals,
+}: ConfidenceIndicatorProps) => {
   const { t } = useTranslation();
+
+  if (signalCount != null) {
+    const className =
+      signalCount >= 4
+        ? 'confidence-high'
+        : signalCount >= 2
+          ? 'confidence-medium'
+          : 'confidence-low';
+    const tooltip = confirmedSignals?.length
+      ? confirmedSignals.join(', ')
+      : undefined;
+    return (
+      <span
+        className={`confidence-indicator ${className} text-xs text-text-muted ms-1 opacity-70`}
+        title={tooltip}
+      >
+        {t('score.signalConcordance', {
+          count: signalCount,
+          total: 5,
+          defaultValue: `${signalCount}/5`,
+        })}
+      </span>
+    );
+  }
+
   if (!confidence) return null;
 
   const formatConfidence = (conf: number) => {

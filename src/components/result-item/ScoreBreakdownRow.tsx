@@ -13,12 +13,13 @@ interface ScoreBreakdownRowProps {
 
 export function ScoreBreakdownRow({ item, isNew, isTopPick, isHighConfidence }: ScoreBreakdownRowProps) {
   const { t } = useTranslation();
-  const signalCount = item.score_breakdown?.signal_count ?? 0;
-  const fallbackSignalLabel = `${signalCount}/5 signals`;
-
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
-      <ConfidenceIndicator confidence={item.confidence} />
+      <ConfidenceIndicator
+        confidence={item.confidence}
+        signalCount={item.score_breakdown?.signal_count}
+        confirmedSignals={item.score_breakdown?.confirmed_signals}
+      />
       {isNew && (
         <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded font-medium animate-pulse">
           {t('score.new', 'New')}
@@ -54,20 +55,9 @@ export function ScoreBreakdownRow({ item, isNew, isTopPick, isHighConfidence }: 
               {t('score.ace', 'recent work')} +{Math.round(item.score_breakdown.ace_boost * 100)}%
             </span>
           )}
-          {item.score_breakdown.signal_count != null && (
-            <span
-              className={`${
-                (item.score_breakdown.signal_count ?? 0) >= 2
-                  ? 'text-green-400/80'
-                  : 'text-text-muted'
-              }`}
-              title={item.score_breakdown.confirmed_signals?.join(', ') || 'none'}
-            >
-              {t('score.signals', {
-                count: item.score_breakdown.signal_count,
-                total: 5,
-                defaultValue: fallbackSignalLabel,
-              })}
+          {item.score_breakdown.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
+            <span className="text-violet-400/80" title={item.score_breakdown.matched_deps.join(', ')}>
+              {t('score.deps', { count: item.score_breakdown.matched_deps.length, defaultValue: `${item.score_breakdown.matched_deps.length} deps` })}
             </span>
           )}
           {item.score_breakdown.affinity_mult > 1.05 && (

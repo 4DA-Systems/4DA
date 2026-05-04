@@ -10,11 +10,11 @@ use std::collections::HashMap;
 use tracing::info;
 
 use crate::error::Result;
-use crate::scoring_config;
 use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
 };
+use crate::scoring_config;
 
 // ============================================================================
 // Types

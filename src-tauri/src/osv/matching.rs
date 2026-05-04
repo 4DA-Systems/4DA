@@ -31,13 +31,23 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
 
     // Merge scanned deps, deduped by (package_name, project_path, ecosystem)
-    let mut seen_deps: std::collections::HashSet<(String, String, String)> =
-        deps.iter()
-            .map(|d| (d.package_name.to_lowercase(), d.project_path.clone(), normalize_ecosystem(&d.ecosystem).to_string()))
-            .collect();
+    let mut seen_deps: std::collections::HashSet<(String, String, String)> = deps
+        .iter()
+        .map(|d| {
+            (
+                d.package_name.to_lowercase(),
+                d.project_path.clone(),
+                normalize_ecosystem(&d.ecosystem).to_string(),
+            )
+        })
+        .collect();
 
     for dep in scanned {
-        let key = (dep.package_name.to_lowercase(), dep.project_path.clone(), normalize_ecosystem(&dep.ecosystem).to_string());
+        let key = (
+            dep.package_name.to_lowercase(),
+            dep.project_path.clone(),
+            normalize_ecosystem(&dep.ecosystem).to_string(),
+        );
         if seen_deps.insert(key) {
             deps.push(dep);
         }

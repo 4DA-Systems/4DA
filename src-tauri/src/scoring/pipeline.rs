@@ -798,9 +798,11 @@ pub(crate) fn score_item(
                     // Breaking change + newer version → High
                     // The 0.40 threshold requires the full package name OR 2+ subterms.
                     if !matched_deps.is_empty() {
-                        let has_strong_dep = matched_deps
-                            .iter()
-                            .any(|d| !d.is_dev && d.confidence >= scoring_config::SECURITY_DEP_VALIDATION_STRONG_DEP_THRESHOLD);
+                        let has_strong_dep = matched_deps.iter().any(|d| {
+                            !d.is_dev
+                                && d.confidence
+                                    >= scoring_config::SECURITY_DEP_VALIDATION_STRONG_DEP_THRESHOLD
+                        });
                         if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
                             c.priority = signals::SignalPriority::Critical;
                             let best_dep = matched_deps

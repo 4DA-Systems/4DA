@@ -153,11 +153,9 @@ fn blind_spot_threshold_days() -> u32 {
 /// Used for cold-start suppression (doctrine rule 6).
 fn is_cold_start(conn: &rusqlite::Connection) -> Result<bool> {
     let result: Option<String> = conn
-        .query_row(
-            "SELECT MIN(timestamp) FROM interactions",
-            [],
-            |row| row.get(0),
-        )
+        .query_row("SELECT MIN(timestamp) FROM interactions", [], |row| {
+            row.get(0)
+        })
         .ok()
         .flatten();
 
@@ -165,12 +163,8 @@ fn is_cold_start(conn: &rusqlite::Connection) -> Result<bool> {
         None => Ok(true),
         Some(ts) => {
             let oldest = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S")
-                .or_else(|_| {
-                    chrono::DateTime::parse_from_rfc3339(&ts).map(|dt| dt.naive_utc())
-                })
-                .map_err(|e| {
-                    format!("Failed to parse oldest interaction timestamp: {}", e)
-                })?;
+                .or_else(|_| chrono::DateTime::parse_from_rfc3339(&ts).map(|dt| dt.naive_utc()))
+                .map_err(|e| format!("Failed to parse oldest interaction timestamp: {}", e))?;
             let age = chrono::Utc::now().naive_utc() - oldest;
             Ok(age.num_days() < 7)
         }

@@ -61,7 +61,6 @@ describe('ScoreBreakdownRow', () => {
     expect(screen.getByText('context 66%')).toBeInTheDocument();
     expect(screen.getByText('interest 7%')).toBeInTheDocument();
     expect(screen.getByText('recent work +15%')).toBeInTheDocument();
-    expect(screen.getByText('3/5 signals')).toBeInTheDocument();
     expect(screen.getByText('affinity x1.2')).toBeInTheDocument();
     expect(screen.getByText('penalty x0.8')).toBeInTheDocument();
     expect(screen.getByText('fresh +10%')).toBeInTheDocument();

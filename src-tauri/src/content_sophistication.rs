@@ -186,36 +186,32 @@ fn count_tech_families(all_tech: &std::collections::HashSet<String>) -> usize {
         let tech_lower = tech.to_lowercase();
         let family = match tech_lower.as_str() {
             // Frontend
-            "react" | "vue" | "angular" | "svelte" | "next" | "nuxt"
-            | "nextjs" | "next.js" | "gatsby" | "remix" | "solid"
-            | "preact" | "lit" | "astro" | "vite" | "webpack"
+            "react" | "vue" | "angular" | "svelte" | "next" | "nuxt" | "nextjs" | "next.js"
+            | "gatsby" | "remix" | "solid" | "preact" | "lit" | "astro" | "vite" | "webpack"
             | "tailwind" | "tailwindcss" | "css" | "sass" | "html" => Some("frontend"),
 
             // Backend
-            "express" | "django" | "flask" | "rails" | "spring"
-            | "actix" | "axum" | "rocket" | "fastapi" | "gin"
-            | "echo" | "fiber" | "koa" | "nest" | "nestjs"
-            | "hono" | "node" | "nodejs" | "deno" | "bun" => Some("backend"),
+            "express" | "django" | "flask" | "rails" | "spring" | "actix" | "axum" | "rocket"
+            | "fastapi" | "gin" | "echo" | "fiber" | "koa" | "nest" | "nestjs" | "hono"
+            | "node" | "nodejs" | "deno" | "bun" => Some("backend"),
 
             // Systems
-            "rust" | "go" | "golang" | "c" | "cpp" | "c++"
-            | "zig" | "assembly" | "wasm" | "webassembly"
-            | "tauri" | "electron" => Some("systems"),
+            "rust" | "go" | "golang" | "c" | "cpp" | "c++" | "zig" | "assembly" | "wasm"
+            | "webassembly" | "tauri" | "electron" => Some("systems"),
 
             // Data
-            "postgresql" | "postgres" | "mysql" | "sqlite" | "mongodb"
-            | "redis" | "elasticsearch" | "cassandra" | "dynamodb"
-            | "supabase" | "firebase" | "prisma" | "drizzle"
-            | "sqlalchemy" | "diesel" | "sea-orm" => Some("data"),
+            "postgresql" | "postgres" | "mysql" | "sqlite" | "mongodb" | "redis"
+            | "elasticsearch" | "cassandra" | "dynamodb" | "supabase" | "firebase" | "prisma"
+            | "drizzle" | "sqlalchemy" | "diesel" | "sea-orm" => Some("data"),
 
             // DevOps
-            "docker" | "kubernetes" | "k8s" | "terraform" | "ansible"
-            | "github-actions" | "gitlab-ci" | "jenkins" | "circleci"
-            | "nginx" | "caddy" | "traefik" | "aws" | "gcp" | "azure" => Some("devops"),
+            "docker" | "kubernetes" | "k8s" | "terraform" | "ansible" | "github-actions"
+            | "gitlab-ci" | "jenkins" | "circleci" | "nginx" | "caddy" | "traefik" | "aws"
+            | "gcp" | "azure" => Some("devops"),
 
             // Mobile
-            "swift" | "kotlin" | "react-native" | "flutter" | "dart"
-            | "ios" | "android" | "expo" | "capacitor" => Some("mobile"),
+            "swift" | "kotlin" | "react-native" | "flutter" | "dart" | "ios" | "android"
+            | "expo" | "capacitor" => Some("mobile"),
 
             // Languages (counted only if not already covered by framework families)
             "typescript" | "javascript" => Some("frontend"),

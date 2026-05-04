@@ -28,7 +28,31 @@ describe('ConfidenceIndicator', () => {
 
   it('calculates margin of error correctly', () => {
     render(<ConfidenceIndicator confidence={0.85} />);
-    // 1 - 0.85 = 0.15 = 15%
     expect(screen.getByText(/±15%/)).toBeInTheDocument();
+  });
+
+  it('shows signal concordance when signalCount provided', () => {
+    render(<ConfidenceIndicator signalCount={3} confirmedSignals={['context', 'interest', 'dependency']} />);
+    const indicator = screen.getByText(/signalConcordance/);
+    expect(indicator).toHaveClass('confidence-medium');
+    expect(indicator).toHaveAttribute('title', 'context, interest, dependency');
+  });
+
+  it('shows high concordance for 4+ signals', () => {
+    render(<ConfidenceIndicator signalCount={4} confirmedSignals={['context', 'interest', 'ace', 'dependency']} />);
+    const indicator = screen.getByText(/signalConcordance/);
+    expect(indicator).toHaveClass('confidence-high');
+  });
+
+  it('shows low concordance for 0-1 signals', () => {
+    render(<ConfidenceIndicator signalCount={1} confirmedSignals={['interest']} />);
+    const indicator = screen.getByText(/signalConcordance/);
+    expect(indicator).toHaveClass('confidence-low');
+  });
+
+  it('prefers signal concordance over confidence number', () => {
+    render(<ConfidenceIndicator confidence={0.9} signalCount={2} confirmedSignals={['context', 'interest']} />);
+    expect(screen.getByText(/signalConcordance/)).toBeInTheDocument();
+    expect(screen.queryByText(/±/)).toBeNull();
   });
 });

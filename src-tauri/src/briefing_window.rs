@@ -329,7 +329,10 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                     signal_priority: r.signal_priority.clone(),
                     description: r.signal_action.clone(),
                     matched_deps: r.signal_triggers.clone().unwrap_or_default(),
-                    content_type: r.score_breakdown.as_ref().and_then(|b| b.content_type.clone()),
+                    content_type: r
+                        .score_breakdown
+                        .as_ref()
+                        .and_then(|b| b.content_type.clone()),
                     corroboration_count: 0,
                     alt_sources: vec![],
                 })

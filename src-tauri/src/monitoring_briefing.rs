@@ -236,10 +236,7 @@ pub(crate) fn build_enriched_briefing(
     let has_cross_surface = !preemption_alerts.is_empty() || !escalating_chains.is_empty();
     if quality_item_count < 2 && !has_high_value_single && !has_cross_surface {
         return BriefingNotification {
-            title: format!(
-                "4DA Intelligence Briefing — {}",
-                now.format("%d %b %Y")
-            ),
+            title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
             items: vec![],
             total_relevant: 0,
             ongoing_topics: vec![],
@@ -345,10 +342,7 @@ fn is_low_quality_commodity(item: &BriefingItem) -> bool {
 /// DB is unavailable or items lack embeddings, the items pass through unchanged.
 fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
     // Collect item IDs for DB lookup
-    let ids: Vec<i64> = items
-        .iter()
-        .filter_map(|item| item.item_id)
-        .collect();
+    let ids: Vec<i64> = items.iter().filter_map(|item| item.item_id).collect();
 
     if ids.is_empty() {
         return;
@@ -616,7 +610,10 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                     signal_priority: r.signal_priority.clone(),
                     description: r.signal_action.clone(),
                     matched_deps: r.signal_triggers.clone().unwrap_or_default(),
-                    content_type: r.score_breakdown.as_ref().and_then(|b| b.content_type.clone()),
+                    content_type: r
+                        .score_breakdown
+                        .as_ref()
+                        .and_then(|b| b.content_type.clone()),
                     corroboration_count: 0,
                     alt_sources: vec![],
                 })

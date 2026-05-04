@@ -42,30 +42,25 @@ feature-depth = 1
 #
 # Policy: Every known vulnerability is a hard deny unless we have explicitly
 # reviewed it, documented the risk, and confirmed no fix exists. Unmaintained
-# crates get warnings (not denials) because many stable crates simply don't
-# need active development.
+# crates get warnings only for workspace deps — transitive unmaintained crates
+# (GTK3 bindings, etc.) are ignored since they're maintained by upstream OS
+# vendors and will resolve when Tauri migrates to gtk4.
+#
+# cargo-deny 0.19+ format: vulnerability/notice removed (always errors).
+# unmaintained/unsound use scope values: all|workspace|transitive|none.
 # ============================================================================
 [advisories]
-# DENY any crate with a known security vulnerability in the RustSec database.
-vulnerability = "deny"
+# Only error on unmaintained crates that are direct workspace dependencies.
+# Transitive unmaintained crates (GTK3 -sys bindings) are reviewed quarterly.
+unmaintained = "workspace"
 
-# WARN on unmaintained crates. We prefer warnings here because many crates
-# (e.g., system bindings, mature algorithms) are feature-complete and don't
-# need active commits. Each warning is reviewed during quarterly audits.
-unmaintained = "warn"
-
-# WARN on crates whose RustSec advisory indicates "unsound" usage.
-# These are reviewed case-by-case; some are theoretical with no practical
-# exploit path for our usage patterns.
-unsound = "warn"
+# Only error on unsound crates in the workspace. Transitive unsound reports
+# are reviewed case-by-case during audits.
+unsound = "workspace"
 
 # DENY yanked crate versions. A yanked version means the author explicitly
 # revoked it — we must not depend on revoked code.
 yanked = "deny"
-
-# WARN on crates with open "notice" advisories. These are informational
-# and don't indicate a vulnerability, but we want visibility.
-notice = "warn"
 
 # Explicitly allowed advisories — each must have a justification.
 ignore = [
@@ -88,26 +83,8 @@ ignore = [
     # Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
     # Internal ref: Cargo.toml comment on `rsa` dependency
     # -----------------------------------------------------------------------
-    "RUSTSEC-2023-0071",
-
-    # -----------------------------------------------------------------------
-    # RUSTSEC-2024-0416 — atk-sys (unmaintained)
-    #
-    # The `atk-sys` crate is unmaintained. It enters our tree as a transitive
-    # dependency on Linux only: webkit2gtk -> wry -> tauri.
-    #
-    # Risk assessment:
-    #   - We do not call atk-sys directly; it is a -sys FFI binding to the
-    #     system ATK accessibility library.
-    #   - The actual security surface is the system-installed libatk, which
-    #     is maintained by GNOME and patched via OS updates.
-    #   - The Rust -sys crate is a thin binding layer with no logic.
-    #   - Tauri upstream is aware; replacement will come via their gtk4 migration.
-    #   - Not compiled on Windows or macOS (our primary targets).
-    #
-    # Monitoring: https://rustsec.org/advisories/RUSTSEC-2024-0416
-    # -----------------------------------------------------------------------
-    "RUSTSEC-2024-0416",
+    { id = "RUSTSEC-2023-0071", reason = "enterprise-only, signature verification not decryption, no fix upstream" },
+    { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
 ]
 
 # ============================================================================
@@ -119,9 +96,6 @@ ignore = [
 # carefully review any copyleft dependencies.
 # ============================================================================
 [licenses]
-# Deny any crate whose license we haven't explicitly approved.
-unlicensed = "deny"
-
 # Confidence threshold for license detection. SPDX expressions below this
 # confidence level will be flagged for manual review.
 confidence-threshold = 0.8
@@ -138,7 +112,8 @@ allow = [
     "Zlib",
     "BSL-1.0",          # Boost Software License
 
-    # --- Public domain / dedication ---
+    # --- Zero-obligation / public domain ---
+    "0BSD",
     "CC0-1.0",
     "Unlicense",
 
@@ -155,6 +130,9 @@ allow = [
 
     # --- OpenSSL (some transitive deps carry this) ---
     "OpenSSL",
+
+    # --- Data license (webpki-roots Mozilla CA bundle) ---
+    "CDLA-Permissive-2.0",
 ]
 
 # Copyleft licenses that require careful handling. LGPL is used by some GTK
@@ -164,8 +142,14 @@ allow = [
 exceptions = [
     # ring uses a custom license that is ISC-style but includes OpenSSL heritage.
     # It is well-established as permissive in the Rust ecosystem.
-    { allow = ["ring"], name = "ring", version = "*" },
+    { allow = ["ISC", "MIT", "OpenSSL"], crate = "ring" },
+
 ]
+
+# Our workspace crates use FSL-1.1-Apache-2.0 (non-SPDX). Exempt them from
+# third-party license compliance checks.
+[licenses.private]
+ignore = true
 
 # `ring` uses a non-standard license file that combines ISC, MIT, and OpenSSL
 # heritage text. cargo-deny cannot auto-detect it, so we clarify it manually.
@@ -173,7 +157,7 @@ exceptions = [
 # with a hash mismatch after updating ring, regenerate with:
 #   cargo deny --manifest-path Cargo.toml list -f json | jq '.[] | select(.name == "ring")'
 [[licenses.clarify]]
-name = "ring"
+crate = "ring"
 expression = "MIT AND ISC AND OpenSSL"
 license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
@@ -193,7 +177,9 @@ multiple-versions = "warn"
 
 # DENY wildcard version requirements (e.g., `version = "*"`). Every dependency
 # must have a bounded version to prevent accidental major-version bumps.
+# Path dependencies (workspace crates) are exempt — they're local, not registry.
 wildcards = "deny"
+allow-wildcard-paths = true
 
 # Allow specific well-known duplicates that are unavoidable in the current
 # ecosystem. This suppresses noise from the multiple-versions warning.
@@ -224,7 +210,7 @@ deny = [
     # introduces a large C dependency with a long CVE history. Reqwest and
     # tokio-tungstenite are configured with rustls features specifically to
     # avoid this.
-    { crate = "openssl-sys", reason = "Use rustls — OpenSSL introduces C dependency with CVE history", wrappers = ["ring"] },
+    { crate = "openssl-sys", reason = "Use rustls — OpenSSL introduces C dependency with CVE history" },
     { crate = "openssl", reason = "Use rustls — all TLS must go through rustls" },
 
     # `native-tls` wraps platform TLS (SChannel/SecureTransport/OpenSSL).

@@ -233,7 +233,6 @@ pub async fn index_project_readmes() -> Result<String> {
     }
 }
 
-
 /// Convert Windows path to WSL path if needed (e.g., D:\projects -> /mnt/d/projects).
 /// Only called at runtime on Linux (WSL); on other platforms it's used only in tests.
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
