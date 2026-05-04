@@ -29,9 +29,9 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Enable corepack + pnpm
+      - name: Install pnpm
         run: |
-          corepack enable pnpm
+          npm install -g pnpm@9.15.0
           pnpm --version
 
       - name: Install dependencies
@@ -102,9 +102,9 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Enable corepack + pnpm
+      - name: Install pnpm
         run: |
-          corepack enable pnpm
+          npm install -g pnpm@9.15.0
           pnpm --version
 
       - name: Install dependencies
