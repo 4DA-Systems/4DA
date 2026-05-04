@@ -6,4 +6,9 @@ ignore = [
     # atk@0.18.2 (RUSTSEC-2024-0413) — GTK3 bindings unmaintained, Linux only.
     # Will be resolved when Tauri migrates to GTK4. Not exploitable.
     "RUSTSEC-2024-0413",
+
+    # rsa@0.9.x (RUSTSEC-2023-0071) — Marvin Attack timing sidechannel, no fix upstream.
+    # Only compiled under `enterprise` feature for JWT RS256 verification (not decryption).
+    # Full risk assessment in deny.toml. Monitoring: https://rustsec.org/advisories/RUSTSEC-2023-0071
+    "RUSTSEC-2023-0071",
 ]

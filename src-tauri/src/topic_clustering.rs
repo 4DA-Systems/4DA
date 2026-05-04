@@ -25,9 +25,19 @@ use tracing::info;
 use crate::utils::cosine_similarity;
 
 /// Cosine similarity threshold for clustering items as the same topic.
-/// 0.80 is conservative — catches "React 19 released" from HN + Reddit
-/// without merging "React 19 released" with "Vue 4 released".
-const CLUSTER_SIMILARITY_THRESHOLD: f32 = 0.80;
+/// 0.77 balances recall — catches paraphrases like "React 19 released" vs
+/// "React 19.0.1 now available" — without merging unrelated topics.
+const CLUSTER_SIMILARITY_THRESHOLD: f32 = 0.77;
+
+/// Cosine threshold used when lexical overlap confirms relatedness.
+/// Lower than the main threshold because high word overlap is strong
+/// evidence items discuss the same topic (e.g. version variations).
+const CLUSTER_LEXICAL_FALLBACK_THRESHOLD: f32 = 0.73;
+
+/// Minimum Jaccard word overlap to activate the lexical fallback.
+/// 0.60 catches "React 19 released" vs "React 19.0.1 released" but
+/// not "React 19 released" vs "Vue 4 announced".
+const LEXICAL_OVERLAP_MIN: f32 = 0.60;
 
 /// Minimum score for an item to be considered for clustering.
 /// Items below this are clear noise — don't waste cycles on them.
@@ -77,7 +87,10 @@ pub struct AltSource {
 
 /// Cluster items by embedding similarity.
 ///
-/// Items with cosine similarity > 0.80 are considered the same topic.
+/// Items with cosine similarity > 0.77 are considered the same topic.
+/// A lexical fallback also clusters items with cosine > 0.73 when their
+/// titles share >60% word overlap (Jaccard), catching version variations
+/// that embeddings handle poorly (e.g. "v19" vs "v19.0.1").
 /// Only clusters items scoring >= 0.20 (don't waste time on clear noise).
 /// Uses a simple greedy single-pass algorithm: for each unassigned item,
 /// find all unassigned items similar to it and form a cluster.
@@ -117,7 +130,10 @@ pub(crate) fn cluster_items(candidates: &[ClusterCandidate]) -> Vec<TopicCluster
             }
 
             let sim = cosine_similarity(&item.embedding, &other.embedding);
-            if sim > CLUSTER_SIMILARITY_THRESHOLD {
+            let should_cluster = sim > CLUSTER_SIMILARITY_THRESHOLD
+                || (sim > CLUSTER_LEXICAL_FALLBACK_THRESHOLD
+                    && title_word_overlap(&item.title, &other.title) > LEXICAL_OVERLAP_MIN);
+            if should_cluster {
                 cluster_members.push(other.id);
                 cluster_sources.insert(other.source_type.clone());
                 assigned.insert(other.id);
@@ -159,6 +175,59 @@ pub(crate) fn cluster_items(candidates: &[ClusterCandidate]) -> Vec<TopicCluster
     }
 
     clusters
+}
+
+/// Compute Jaccard similarity of word sets from two titles.
+///
+/// Lowercases both, splits on whitespace, normalizes version-like tokens
+/// (e.g. "19.0.1" -> "19"), strips common stopwords, and returns
+/// |intersection| / |union| as f32. Used as a fallback signal when
+/// cosine similarity is just below threshold — high lexical overlap
+/// confirms the items discuss the same topic (version variations, etc.).
+fn title_word_overlap(a: &str, b: &str) -> f32 {
+    const STOPWORDS: &[&str] = &[
+        "a", "an", "the", "in", "of", "for", "to", "and", "is", "new",
+    ];
+
+    let normalize_word = |w: &str| -> String {
+        // Strip version suffixes: "19.0.1" -> "19", "v3.2" -> "v3"
+        if w.chars()
+            .next()
+            .map_or(false, |c| c.is_ascii_digit() || c == 'v')
+        {
+            if let Some(dot_pos) = w.find('.') {
+                return w[..dot_pos].to_string();
+            }
+        }
+        w.to_string()
+    };
+
+    let lower_a = a.to_lowercase();
+    let lower_b = b.to_lowercase();
+
+    let set_a: HashSet<String> = lower_a
+        .split_whitespace()
+        .filter(|w| !STOPWORDS.contains(w))
+        .map(|w| normalize_word(w))
+        .collect();
+    let set_b: HashSet<String> = lower_b
+        .split_whitespace()
+        .filter(|w| !STOPWORDS.contains(w))
+        .map(|w| normalize_word(w))
+        .collect();
+
+    if set_a.is_empty() && set_b.is_empty() {
+        return 0.0;
+    }
+
+    let intersection = set_a.intersection(&set_b).count();
+    let union = set_a.union(&set_b).count();
+
+    if union == 0 {
+        return 0.0;
+    }
+
+    intersection as f32 / union as f32
 }
 
 /// Detect if items in a cluster have conflicting sentiment/content types.
@@ -264,7 +333,11 @@ mod tests {
         ];
 
         let clusters = cluster_items(&candidates);
-        assert_eq!(clusters.len(), 1, "identical embeddings should form one cluster");
+        assert_eq!(
+            clusters.len(),
+            1,
+            "identical embeddings should form one cluster"
+        );
         assert_eq!(clusters[0].member_ids.len(), 2);
         assert_eq!(clusters[0].source_count, 2);
         assert_eq!(clusters[0].lead_item_id, 1); // higher score leads
@@ -279,7 +352,11 @@ mod tests {
         ];
 
         let clusters = cluster_items(&candidates);
-        assert_eq!(clusters.len(), 2, "orthogonal embeddings should form separate clusters");
+        assert_eq!(
+            clusters.len(),
+            2,
+            "orthogonal embeddings should form separate clusters"
+        );
         assert!(clusters.iter().all(|c| c.member_ids.len() == 1));
     }
 
@@ -329,7 +406,10 @@ mod tests {
         );
 
         let bonuses = compute_corroboration_bonuses(&clusters);
-        assert!(bonuses.is_empty(), "no bonus entries for single-source clusters");
+        assert!(
+            bonuses.is_empty(),
+            "no bonus entries for single-source clusters"
+        );
     }
 
     #[test]
@@ -371,7 +451,10 @@ mod tests {
         ];
 
         let clusters = cluster_items(&candidates);
-        assert!(clusters.is_empty(), "items below score floor should not cluster");
+        assert!(
+            clusters.is_empty(),
+            "items below score floor should not cluster"
+        );
     }
 
     #[test]
@@ -382,7 +465,10 @@ mod tests {
         ];
 
         let clusters = cluster_items(&candidates);
-        assert!(clusters.is_empty(), "empty/zero embeddings should be excluded");
+        assert!(
+            clusters.is_empty(),
+            "empty/zero embeddings should be excluded"
+        );
     }
 
     #[test]
@@ -435,5 +521,38 @@ mod tests {
     fn test_compute_corroboration_bonuses_empty() {
         let bonuses = compute_corroboration_bonuses(&[]);
         assert!(bonuses.is_empty());
+    }
+
+    #[test]
+    fn test_title_word_overlap_version_variation() {
+        // Same topic, minor version difference — should exceed 0.60
+        let overlap = title_word_overlap("React 19 released", "React 19.0.1 released");
+        assert!(
+            overlap > LEXICAL_OVERLAP_MIN,
+            "version variations should have >0.60 overlap, got {overlap}"
+        );
+    }
+
+    #[test]
+    fn test_title_word_overlap_different_topics() {
+        // Completely different topics — should be below 0.60
+        let overlap = title_word_overlap("React 19 released", "Vue 4 announced");
+        assert!(
+            overlap < LEXICAL_OVERLAP_MIN,
+            "different topics should have <0.60 overlap, got {overlap}"
+        );
+    }
+
+    #[test]
+    fn test_title_word_overlap_reworded_same_topic() {
+        // Same topic reworded — should exceed 0.60
+        let overlap = title_word_overlap(
+            "New security vulnerability in OpenSSL",
+            "OpenSSL security vulnerability discovered",
+        );
+        assert!(
+            overlap > LEXICAL_OVERLAP_MIN,
+            "reworded same topic should have >0.60 overlap, got {overlap}"
+        );
     }
 }

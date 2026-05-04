@@ -32,6 +32,14 @@ const MAX_ENRICHMENT_CANDIDATES: usize = 20;
 /// Minimum extracted text length to accept as enrichment (chars).
 const MIN_ENRICHED_LENGTH: usize = 100;
 
+/// Maximum enrichment attempts per item before giving up permanently.
+#[allow(dead_code)] // Used by DB query logic after migration lands
+const MAX_ENRICHMENT_ATTEMPTS: i32 = 2;
+
+/// Minimum hours between enrichment retry attempts.
+#[allow(dead_code)] // Used by DB query logic after migration lands
+const RETRY_DELAY_HOURS: i64 = 24;
+
 // ============================================================================
 // Public API
 // ============================================================================
@@ -42,6 +50,8 @@ const MIN_ENRICHED_LENGTH: usize = 100;
 /// fire-and-forget background task after scoring completes — errors are logged
 /// and swallowed, never bubbled to the caller.
 pub(crate) async fn enrich_ambiguous_items(db: &Database) -> usize {
+    // Candidates include: items never attempted + items that failed but are eligible
+    // for retry (attempts < MAX, last attempt > RETRY_DELAY_HOURS ago).
     let candidates = match db.get_enrichment_candidates(MAX_ENRICHMENT_CANDIDATES) {
         Ok(c) => c,
         Err(e) => {
@@ -78,15 +88,12 @@ pub(crate) async fn enrich_ambiguous_items(db: &Database) -> usize {
         }));
     }
 
+    let total_attempted = handles.len();
     let mut enriched_count = 0usize;
     for handle in handles {
         if let Ok(Some((id, content))) = handle.await {
             // Fetch the title so we can compute embed_text and content_hash
-            let title = db
-                .get_item_title(id)
-                .ok()
-                .flatten()
-                .unwrap_or_default();
+            let title = db.get_item_title(id).ok().flatten().unwrap_or_default();
 
             let content_hash = crate::db::hash_content_parts(&[&title, &content]);
             let embed_text = format!("{}\n\n{}", title, content);
@@ -104,12 +111,23 @@ pub(crate) async fn enrich_ambiguous_items(db: &Database) -> usize {
         }
     }
 
-    if enriched_count > 0 {
+    if total_attempted > 0 {
+        let success_rate = enriched_count as f32 / total_attempted as f32;
         tracing::info!(
             target: "4da::enrichment",
             enriched = enriched_count,
+            attempted = total_attempted,
+            success_rate = format!("{:.0}%", success_rate * 100.0),
             "Background enrichment cycle complete"
         );
+
+        if success_rate < 0.30 && total_attempted >= 5 {
+            tracing::warn!(
+                target: "4da::enrichment",
+                success_rate = format!("{:.0}%", success_rate * 100.0),
+                "Enrichment success rate critically low — check network or domain blocklist"
+            );
+        }
     }
 
     enriched_count
@@ -248,14 +266,8 @@ mod tests {
             text.contains("main article content"),
             "Should contain article body"
         );
-        assert!(
-            !text.contains("Navigation stuff"),
-            "Should not contain nav"
-        );
-        assert!(
-            !text.contains("Footer stuff"),
-            "Should not contain footer"
-        );
+        assert!(!text.contains("Navigation stuff"), "Should not contain nav");
+        assert!(!text.contains("Footer stuff"), "Should not contain footer");
     }
 
     #[test]

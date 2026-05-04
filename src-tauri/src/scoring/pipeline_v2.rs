@@ -225,7 +225,8 @@ fn compute_signal_strength_bonus(
     if ace_confirmed {
         if semantic_boost >= scoring_config::SEMANTIC_THRESHOLD {
             // Normalize semantic excess (practical range 0.18-0.50)
-            let excess = (semantic_boost - scoring_config::SEMANTIC_THRESHOLD) / scoring_config::SIGNAL_NORMALIZATION_SEMANTIC_RANGE;
+            let excess = (semantic_boost - scoring_config::SEMANTIC_THRESHOLD)
+                / scoring_config::SIGNAL_NORMALIZATION_SEMANTIC_RANGE;
             strengths.push(excess.clamp(0.0, 1.0));
         } else {
             // stack_pain_match is binary — use flat strength
@@ -239,10 +240,12 @@ fn compute_signal_strength_bonus(
     {
         // Affinity-driven strength (affinity range 1.15-1.70)
         if affinity_mult >= scoring_config::AFFINITY_THRESHOLD {
-            let excess = (affinity_mult - scoring_config::AFFINITY_THRESHOLD) / scoring_config::SIGNAL_NORMALIZATION_AFFINITY_RANGE;
+            let excess = (affinity_mult - scoring_config::AFFINITY_THRESHOLD)
+                / scoring_config::SIGNAL_NORMALIZATION_AFFINITY_RANGE;
             strengths.push(excess.clamp(0.0, 1.0));
         } else {
-            strengths.push(scoring_config::SIGNAL_NORMALIZATION_FEEDBACK_STRENGTH); // Feedback is less granular
+            strengths.push(scoring_config::SIGNAL_NORMALIZATION_FEEDBACK_STRENGTH);
+            // Feedback is less granular
         }
     }
 
@@ -763,14 +766,20 @@ fn compute_quality_composite(
     // Blend learned source quality with autophagy engagement rate (if available)
     let source_quality_mult =
         if let Some(&engagement_rate) = ctx.source_autopsies.get(input.source_type) {
-            let autophagy_factor = if engagement_rate < scoring_config::SOURCE_ENGAGEMENT_LOW_THRESHOLD {
-                scoring_config::SOURCE_ENGAGEMENT_LOW_PENALTY
-            } else if engagement_rate > scoring_config::SOURCE_ENGAGEMENT_HIGH_THRESHOLD {
-                scoring_config::SOURCE_ENGAGEMENT_HIGH_BOOST
-            } else {
-                1.0
-            };
-            (learned_source_mult * scoring_config::SOURCE_ENGAGEMENT_BLEND_LEARNED_WEIGHT + autophagy_factor * scoring_config::SOURCE_ENGAGEMENT_BLEND_AUTOPHAGY_WEIGHT).clamp(scoring_config::SOURCE_ENGAGEMENT_BLEND_MIN, scoring_config::SOURCE_ENGAGEMENT_BLEND_MAX)
+            let autophagy_factor =
+                if engagement_rate < scoring_config::SOURCE_ENGAGEMENT_LOW_THRESHOLD {
+                    scoring_config::SOURCE_ENGAGEMENT_LOW_PENALTY
+                } else if engagement_rate > scoring_config::SOURCE_ENGAGEMENT_HIGH_THRESHOLD {
+                    scoring_config::SOURCE_ENGAGEMENT_HIGH_BOOST
+                } else {
+                    1.0
+                };
+            (learned_source_mult * scoring_config::SOURCE_ENGAGEMENT_BLEND_LEARNED_WEIGHT
+                + autophagy_factor * scoring_config::SOURCE_ENGAGEMENT_BLEND_AUTOPHAGY_WEIGHT)
+                .clamp(
+                    scoring_config::SOURCE_ENGAGEMENT_BLEND_MIN,
+                    scoring_config::SOURCE_ENGAGEMENT_BLEND_MAX,
+                )
         } else {
             learned_source_mult
         };
@@ -779,13 +788,14 @@ fn compute_quality_composite(
     let anti_mult = 1.0 - raw.anti_penalty;
 
     // Domain quality penalty (NOT dampened — preserves full penalty strength)
-    let domain_quality_mult = if raw.domain_relevance >= scoring_config::DOMAIN_QUALITY_HIGH_THRESHOLD {
-        1.0
-    } else if raw.domain_relevance >= scoring_config::DOMAIN_QUALITY_MID_THRESHOLD {
-        1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance) * 0.5
-    } else {
-        1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance)
-    };
+    let domain_quality_mult =
+        if raw.domain_relevance >= scoring_config::DOMAIN_QUALITY_HIGH_THRESHOLD {
+            1.0
+        } else if raw.domain_relevance >= scoring_config::DOMAIN_QUALITY_MID_THRESHOLD {
+            1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance) * 0.5
+        } else {
+            1.0 - scoring_config::OFF_DOMAIN_PENALTY * (1.0 - raw.domain_relevance)
+        };
 
     // Competing tech penalty
     let competing_mult = crate::competing_tech::compute_competing_penalty(
@@ -845,7 +855,8 @@ fn compute_quality_composite(
         &ctx.domain_profile,
     );
     let sophistication_mult = sophistication.multiplier;
-    let sophistication_raw = sophistication.title_complexity * 0.6 + sophistication.content_depth * 0.4;
+    let sophistication_raw =
+        sophistication.title_complexity * 0.6 + sophistication.content_depth * 0.4;
 
     // Content analysis multiplier (from cached LLM pre-analysis, if available)
     let content_analysis_mult = {
@@ -882,11 +893,8 @@ fn compute_quality_composite(
     let age_hours_for_community = input.created_at.map_or(0.0, |ts| {
         (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
     });
-    let community_signal = extract_community_signal(
-        input.source_type,
-        input.tags_json,
-        age_hours_for_community,
-    );
+    let community_signal =
+        extract_community_signal(input.source_type, input.tags_json, age_hours_for_community);
     let community_mult = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
         scoring_config::COMMUNITY_SIGNAL_LOW_PENALTY
     } else if community_signal >= scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD {
@@ -943,16 +951,18 @@ fn compute_quality_composite(
     // sources are governed by the same gate automatically.
     let all_transitive =
         !raw.matched_deps.is_empty() && raw.matched_deps.iter().all(|d| !d.is_direct);
-    let quality_score =
-        if novelty.is_security && raw.dep_match_score < scoring_config::SECURITY_DEP_VALIDATION_DEP_CONFIDENCE_THRESHOLD && !raw.matched_deps.is_empty() {
-            quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
-        } else if novelty.is_security && raw.matched_deps.is_empty() {
-            quality_score * scoring_config::SECURITY_DEP_VALIDATION_NO_MATCH_PENALTY
-        } else if novelty.is_security && all_transitive {
-            quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
-        } else {
-            quality_score
-        };
+    let quality_score = if novelty.is_security
+        && raw.dep_match_score < scoring_config::SECURITY_DEP_VALIDATION_DEP_CONFIDENCE_THRESHOLD
+        && !raw.matched_deps.is_empty()
+    {
+        quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
+    } else if novelty.is_security && raw.matched_deps.is_empty() {
+        quality_score * scoring_config::SECURITY_DEP_VALIDATION_NO_MATCH_PENALTY
+    } else if novelty.is_security && all_transitive {
+        quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
+    } else {
+        quality_score
+    };
 
     (
         quality_score,
@@ -1100,7 +1110,10 @@ fn compute_boosts(
         - archetype_penalty
         + raw.taste_boost;
 
-    let total_capped = total_raw.clamp(scoring_config::BOOST_CLAMP_MIN, scoring_config::BOOST_CLAMP_MAX);
+    let total_capped = total_raw.clamp(
+        scoring_config::BOOST_CLAMP_MIN,
+        scoring_config::BOOST_CLAMP_MAX,
+    );
 
     let total_dampened = if total_capped < 0.0 {
         total_capped * scoring_config::DAMPENING_PENALTY_STRENGTH
@@ -1183,7 +1196,13 @@ fn apply_final_adjustments(
     // Commodity content ceiling: hard cap on low-sophistication commodity content.
     // Applied AFTER all boosts and gate effects — no amount of dep_boost or
     // bootstrap doubling can push a basic "how to" tutorial into the briefing.
-    apply_commodity_ceiling(score, title, content_type, sophistication_raw, community_signal)
+    apply_commodity_ceiling(
+        score,
+        title,
+        content_type,
+        sophistication_raw,
+        community_signal,
+    )
 }
 
 /// Hard ceiling for commodity content types with low sophistication.
@@ -1192,7 +1211,7 @@ fn apply_final_adjustments(
 /// - CVE/GHSA pattern in title
 /// - Version conflict language with version number
 /// - Content type overridden to SecurityAdvisory or BreakingChange (already excluded)
-/// - Sophistication >= 0.30 (has advanced terms, version specificity, or abstract framing)
+/// - Sophistication >= 0.35 (has advanced terms, version specificity, or abstract framing)
 /// - High community validation (community_signal >= high_threshold)
 fn apply_commodity_ceiling(
     score: f32,
@@ -1217,7 +1236,7 @@ fn apply_commodity_ceiling(
     }
 
     // Sophistication above threshold = not commodity
-    if sophistication_raw >= 0.30 {
+    if sophistication_raw >= 0.35 {
         return score;
     }
 
@@ -1238,7 +1257,13 @@ fn has_security_pattern(title_lower: &str) -> bool {
 }
 
 fn has_version_conflict(title_lower: &str) -> bool {
-    let conflict_terms = ["breaks", "incompatible", "deprecated", "breaking change", "migration"];
+    let conflict_terms = [
+        "breaks",
+        "incompatible",
+        "deprecated",
+        "breaking change",
+        "migration",
+    ];
     let has_conflict = conflict_terms.iter().any(|t| title_lower.contains(t));
     let has_version = title_lower.chars().any(|c| c.is_ascii_digit())
         && (title_lower.contains('v') || title_lower.contains('.'));
@@ -1558,7 +1583,13 @@ pub(crate) fn score_item(
     );
 
     // ── Phase 8: Final adjustments ────────────────────────────────────
-    let combined_score = apply_final_adjustments(gated_score, input.title, &content_type, sophistication_raw, community_signal);
+    let combined_score = apply_final_adjustments(
+        gated_score,
+        input.title,
+        &content_type,
+        sophistication_raw,
+        community_signal,
+    );
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
@@ -1571,16 +1602,18 @@ pub(crate) fn score_item(
     // floor and surface CVEs that have nothing to do with the user's stack.
     let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
-    let has_strong_dep_match =
-        raw.dep_match_score >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD && raw.matched_deps.iter().any(|d| !d.is_dev);
+    let has_strong_dep_match = raw.dep_match_score
+        >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
+        && raw.matched_deps.iter().any(|d| !d.is_dev);
     let critical_fast_path = (is_security || is_breaking) && has_strong_dep_match;
 
     // If critical fast-path, boost score to ensure it passes the gate
-    let combined_score = if critical_fast_path && combined_score < scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR {
-        combined_score.max(scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR) // Floor for security items matching deps
-    } else {
-        combined_score
-    };
+    let combined_score =
+        if critical_fast_path && combined_score < scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR {
+            combined_score.max(scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR) // Floor for security items matching deps
+        } else {
+            combined_score
+        };
 
     // ── Relevance determination ───────────────────────────────────────
     let bootstrap_mode = ctx.feedback_interaction_count < 10;

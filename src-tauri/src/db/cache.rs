@@ -168,6 +168,34 @@ impl Database {
         Ok(count)
     }
 
+    /// Record a scoring cycle event for audit trail and recalibration backtesting.
+    pub fn record_scoring_event(
+        &self,
+        total_scored: usize,
+        total_relevant: usize,
+        avg_score: f32,
+        max_score: f32,
+        gate_rejections: usize,
+        commodity_caps: usize,
+        briefing_items: usize,
+    ) -> SqliteResult<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO scoring_events (total_scored, total_relevant, avg_score, max_score, gate_rejections, commodity_caps, briefing_items)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                total_scored as i64,
+                total_relevant as i64,
+                avg_score as f64,
+                max_score as f64,
+                gate_rejections as i64,
+                commodity_caps as i64,
+                briefing_items as i64,
+            ],
+        )?;
+        Ok(())
+    }
+
     // ========================================================================
     // Void Position Cache Operations
     // ========================================================================

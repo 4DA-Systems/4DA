@@ -85,6 +85,27 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                             tracing::warn!(target: "4da::scoring", error = %e, "Failed to persist relevance scores");
                         }
                     }
+
+                    // Scoring event log — audit trail for debugging + recalibration
+                    let total_scored = results.len();
+                    let relevant_items: Vec<&SourceRelevance> =
+                        results.iter().filter(|r| r.relevant).collect();
+                    let scores: Vec<f32> = results.iter().map(|r| r.top_score).collect();
+                    let avg_score = if scores.is_empty() {
+                        0.0
+                    } else {
+                        scores.iter().sum::<f32>() / scores.len() as f32
+                    };
+                    let max_score = scores.iter().copied().fold(0.0f32, f32::max);
+                    let _ = db.record_scoring_event(
+                        total_scored,
+                        relevant_items.len(),
+                        avg_score,
+                        max_score,
+                        0, // gate_rejections — TODO: pipe from pipeline stats
+                        0, // commodity_caps — TODO: pipe from pipeline stats
+                        0, // briefing_items — filled on briefing build
+                    );
                 }
 
                 if let Err(e) = app.emit("analysis-complete", &results) {

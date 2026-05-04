@@ -170,7 +170,7 @@ final_ceiling {
 # Security/breaking change fast-path floor
 critical_fastpath {
     score_floor: 0.50           # [0.40, 0.70]
-    dep_match_threshold: 0.15   # [0.10, 0.30]
+    dep_match_threshold: 0.25   # [0.15, 0.40]
 }
 
 # Foreign language suppression

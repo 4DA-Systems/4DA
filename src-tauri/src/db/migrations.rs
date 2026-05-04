@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 65;
+        const TARGET_VERSION: i64 = 66;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2422,6 +2422,38 @@ impl Database {
                                 "Skipped dismiss columns — interactions table not yet created (ACE DB)"
                             );
                         }
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 66: Scoring event log for debugging + recalibration backtesting
+            if current_version < 66 {
+                Self::run_versioned_migration(
+                    &conn,
+                    65,
+                    66,
+                    "Phase 66: scoring event log for audit trail + recalibration",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS scoring_events (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                cycle_ts TEXT NOT NULL DEFAULT (datetime('now')),
+                                total_scored INTEGER NOT NULL,
+                                total_relevant INTEGER NOT NULL,
+                                avg_score REAL NOT NULL,
+                                max_score REAL NOT NULL,
+                                gate_rejections INTEGER NOT NULL DEFAULT 0,
+                                commodity_caps INTEGER NOT NULL DEFAULT 0,
+                                enrichment_promotions INTEGER NOT NULL DEFAULT 0,
+                                briefing_items INTEGER NOT NULL DEFAULT 0
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_scoring_events_ts ON scoring_events(cycle_ts);"
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created scoring_events table for audit trail"
+                        );
                         Ok(())
                     },
                 )?;
