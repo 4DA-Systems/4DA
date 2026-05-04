@@ -191,9 +191,14 @@ jobs:
           Remove-Item test-output.txt -ErrorAction SilentlyContinue
 
   # ── Cross-platform validation (GitHub-hosted runners) ──
+  # NOTE: continue-on-error because victauri-plugin is a local path dependency
+  # (../../runyourempire/victauri/) that only exists on the self-hosted runner.
+  # These jobs are informational until victauri-plugin 0.1.1 is published to
+  # crates.io and the dep switches from path to registry.
   rust-macos:
     name: Rust (macOS)
     needs: frontend
+    continue-on-error: true
     runs-on: macos-latest
     defaults:
       run:
@@ -226,6 +231,7 @@ jobs:
   rust-linux:
     name: Rust (Linux)
     needs: frontend
+    continue-on-error: true
     runs-on: ubuntu-22.04
     defaults:
       run:
