@@ -958,4 +958,442 @@ mod tests {
             .collect();
         assert_eq!(filtered, vec!["react", "typescript"]);
     }
+
+    // ========================================================================
+    // Commodity Ceiling Tests (V2 pipeline — apply_commodity_ceiling)
+    //
+    // The commodity ceiling hard-caps scores for Tutorial/HelpRequest/Question
+    // content types when sophistication is low (< 0.35) and no exemptions apply.
+    // DSL constants: Tutorial=0.28, HelpRequest=0.22, Question=0.30.
+    // These tests use the V2 dispatcher (crate::scoring::score_item).
+    // ========================================================================
+
+    /// Helper: call through the V2 dispatcher instead of the V1 pipeline directly.
+    fn score_item_v2(
+        input: &ScoringInput,
+        ctx: &crate::scoring::ScoringContext,
+        db: &crate::db::Database,
+        options: &ScoringOptions,
+    ) -> crate::SourceRelevance {
+        crate::scoring::score_item(input, ctx, db, options, None)
+    }
+
+    /// A low-sophistication tutorial ("How to install Python for beginners")
+    /// must be capped at the COMMODITY_CEILING_TUTORIAL (0.28).
+    /// We give it strong interest + ACE signals so it would score well above
+    /// 0.28 without the ceiling.
+    #[test]
+    fn test_commodity_ceiling_caps_tutorial() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![crate::context_engine::Interest {
+            id: Some(1),
+            topic: "python".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: crate::context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("python".to_string());
+        ace_ctx.topic_confidence.insert("python".to_string(), 0.9);
+
+        let mut feedback_boosts = std::collections::HashMap::new();
+        feedback_boosts.insert("python".to_string(), 0.50);
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .feedback_boosts(feedback_boosts)
+            .build();
+
+        // "How to" prefix triggers Tutorial classification.
+        // "for beginners" triggers beginner counter-indicator, keeping sophistication low.
+        let input = ScoringInput {
+            id: 1,
+            title: "How to install Python for beginners",
+            url: Some("https://example.com/tutorial"),
+            content: "install python pip setup",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+
+        // Verify content type was classified as tutorial
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        assert_eq!(
+            bd.content_type.as_deref(),
+            Some("tutorial"),
+            "Expected tutorial classification, got {:?}",
+            bd.content_type
+        );
+
+        // The commodity ceiling should cap the final score at 0.28
+        assert!(
+            result.top_score <= 0.28,
+            "Low-sophistication tutorial should be capped at commodity ceiling 0.28, got {}",
+            result.top_score
+        );
+    }
+
+    /// A low-sophistication help request ("error when running npm install help!")
+    /// must be capped at COMMODITY_CEILING_HELP_REQUEST (0.22).
+    #[test]
+    fn test_commodity_ceiling_caps_help_request() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![crate::context_engine::Interest {
+            id: Some(1),
+            topic: "npm".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: crate::context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("npm".to_string());
+        ace_ctx.topic_confidence.insert("npm".to_string(), 0.9);
+
+        let mut feedback_boosts = std::collections::HashMap::new();
+        feedback_boosts.insert("npm".to_string(), 0.50);
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .feedback_boosts(feedback_boosts)
+            .build();
+
+        // "error when" + trailing "help!" triggers HelpRequest classification.
+        // Short, generic content keeps sophistication low.
+        let input = ScoringInput {
+            id: 2,
+            title: "error when running npm install help!",
+            url: Some("https://example.com/help"),
+            content: "npm install error node modules",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        assert_eq!(
+            bd.content_type.as_deref(),
+            Some("help_request"),
+            "Expected help_request classification, got {:?}",
+            bd.content_type
+        );
+
+        assert!(
+            result.top_score <= 0.22,
+            "Low-sophistication help request should be capped at commodity ceiling 0.22, got {}",
+            result.top_score
+        );
+    }
+
+    /// A tutorial with high sophistication (advanced terms, version specificity)
+    /// should bypass the commodity ceiling because sophistication >= 0.35.
+    #[test]
+    fn test_commodity_ceiling_bypassed_by_high_sophistication() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![crate::context_engine::Interest {
+            id: Some(1),
+            topic: "rust".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: crate::context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("rust".to_string());
+        ace_ctx.topic_confidence.insert("rust".to_string(), 0.9);
+
+        let mut feedback_boosts = std::collections::HashMap::new();
+        feedback_boosts.insert("rust".to_string(), 0.50);
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .feedback_boosts(feedback_boosts)
+            .build();
+
+        // "How to" prefix → Tutorial classification.
+        // But advanced terms ("lock-free", "allocator", "zero-copy") and version
+        // specificity push sophistication well above 0.35, exempting from ceiling.
+        let input = ScoringInput {
+            id: 3,
+            title: "How to implement lock-free allocator with zero-copy in Rust v1.78",
+            url: Some("https://example.com/advanced-tutorial"),
+            content: "lock-free concurrent allocator zero-copy memory ordering atomic futex rust unsafe",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        assert_eq!(
+            bd.content_type.as_deref(),
+            Some("tutorial"),
+            "Expected tutorial classification, got {:?}",
+            bd.content_type
+        );
+
+        // High sophistication → ceiling bypassed → score should exceed 0.28
+        // (might still be low due to other factors, but should not be capped at exactly 0.28)
+        // We compare against the low-sophistication tutorial to verify the ceiling was NOT applied.
+        let low_soph_input = ScoringInput {
+            id: 4,
+            title: "How to install Python for beginners",
+            url: Some("https://example.com/basic-tutorial"),
+            content: "install python pip setup",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+
+        let low_result = score_item_v2(&low_soph_input, &ctx, &db, &options);
+
+        // The high-sophistication tutorial should score higher than the capped one
+        assert!(
+            result.top_score > low_result.top_score,
+            "High-sophistication tutorial ({}) should score above capped low-sophistication tutorial ({})",
+            result.top_score,
+            low_result.top_score
+        );
+    }
+
+    /// A tutorial title containing "CVE-" should bypass the commodity ceiling
+    /// regardless of sophistication level (security exemption).
+    #[test]
+    fn test_commodity_ceiling_bypassed_by_cve_pattern() {
+        let db = test_db();
+        let interest_embedding = vec![0.5_f32; 384];
+        let interests = vec![crate::context_engine::Interest {
+            id: Some(1),
+            topic: "security".to_string(),
+            weight: 1.0,
+            embedding: Some(interest_embedding.clone()),
+            source: crate::context_engine::InterestSource::Explicit,
+        }];
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics.push("security".to_string());
+        ace_ctx.topic_confidence.insert("security".to_string(), 0.9);
+
+        let mut feedback_boosts = std::collections::HashMap::new();
+        feedback_boosts.insert("security".to_string(), 0.50);
+
+        let ctx = crate::scoring::ScoringContext::builder()
+            .interest_count(1)
+            .interests(interests)
+            .ace_ctx(ace_ctx)
+            .feedback_boosts(feedback_boosts)
+            .build();
+
+        // "How to" prefix → Tutorial classification, but "CVE-2024-1234"
+        // triggers the security exemption in apply_commodity_ceiling.
+        // Note: the content_dna classifier checks security patterns BEFORE
+        // tutorial patterns, so a CVE title may classify as SecurityAdvisory.
+        // We test that the ceiling is bypassed either way.
+        let input = ScoringInput {
+            id: 5,
+            title: "How to patch CVE-2024-1234 in your Node.js app",
+            url: Some("https://example.com/cve-tutorial"),
+            content: "cve security patch node.js vulnerability",
+            source_type: "hackernews",
+            embedding: &interest_embedding,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+        let content_type = bd.content_type.as_deref().unwrap_or("unknown");
+
+        // Whether classified as SecurityAdvisory or Tutorial, the CVE pattern
+        // means the commodity ceiling should NOT apply. SecurityAdvisory is
+        // exempt by content type (not Tutorial/HelpRequest/Question).
+        // Tutorial with CVE is exempt by the security pattern check.
+        // Either way, the score should not be capped at 0.28.
+        assert!(
+            content_type == "security_advisory" || result.top_score > 0.28 || result.top_score == 0.0,
+            "CVE-containing content should bypass commodity ceiling: content_type={}, score={}",
+            content_type,
+            result.top_score
+        );
+    }
+
+    // ========================================================================
+    // Freshness Multiplier Tests
+    //
+    // The freshness tiers from the DSL apply a multiplier based on content age:
+    //   3h→1.10, 12h→1.08, 24h→1.05, 72h→1.00, 168h→0.92, 720h→0.85, _→0.80
+    // These tests verify freshness_mult in the ScoreBreakdown when
+    // apply_freshness is enabled and created_at is provided.
+    // ========================================================================
+
+    /// An item created 1 hour ago should get a freshness boost (mult > 1.0).
+    /// The 3h tier gives 1.10, so anything under 3h old should get ~1.10.
+    #[test]
+    fn test_freshness_mult_recent_item_boosted() {
+        let db = test_db();
+        let ctx = empty_scoring_context();
+        let embedding = vec![0.1_f32; 384];
+        let one_hour_ago = chrono::Utc::now() - chrono::Duration::hours(1);
+
+        let input = ScoringInput {
+            id: 10,
+            title: "Some recent technical article about systems design",
+            url: Some("https://example.com/fresh"),
+            content: "systems design architecture patterns",
+            source_type: "hackernews",
+            embedding: &embedding,
+            created_at: Some(&one_hour_ago),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+
+        assert!(
+            bd.freshness_mult > 1.0,
+            "Item created 1 hour ago should have freshness_mult > 1.0 (boost), got {}",
+            bd.freshness_mult
+        );
+        assert!(
+            bd.freshness_mult <= 1.15,
+            "Freshness boost should not exceed ~1.10 + peak_hours bonus, got {}",
+            bd.freshness_mult
+        );
+    }
+
+    /// An item created ~70 hours ago (just under the 72h tier boundary) should
+    /// get a neutral freshness multiplier (~1.0). The DSL tier `< 72h` maps to 1.00.
+    /// Note: the generated code uses strict `<`, so an item at exactly 72h falls
+    /// into the next tier (< 168h → 0.92). We use 70h to land squarely in the 1.00 tier.
+    #[test]
+    fn test_freshness_mult_72h_tier_neutral() {
+        let db = test_db();
+        let ctx = empty_scoring_context();
+        let embedding = vec![0.1_f32; 384];
+        let just_under_72h = chrono::Utc::now() - chrono::Duration::hours(70);
+
+        let input = ScoringInput {
+            id: 11,
+            title: "Technical article from three days ago about databases",
+            url: Some("https://example.com/three-days"),
+            content: "database indexing query optimization",
+            source_type: "hackernews",
+            embedding: &embedding,
+            created_at: Some(&just_under_72h),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+
+        // At 70h (< 72h boundary), the tier maps to 1.00.
+        // Allow small variance from potential peak-hours adjustment (+0.03 max).
+        assert!(
+            (bd.freshness_mult - 1.0).abs() < 0.05,
+            "Item created 70 hours ago should have freshness_mult ~= 1.0 (72h tier), got {}",
+            bd.freshness_mult
+        );
+    }
+
+    /// An item created 30 days ago (720 hours) should have a decayed freshness
+    /// multiplier (< 1.0). The 720h tier maps to 0.85.
+    #[test]
+    fn test_freshness_mult_old_item_decayed() {
+        let db = test_db();
+        let ctx = empty_scoring_context();
+        let embedding = vec![0.1_f32; 384];
+        let thirty_days_ago = chrono::Utc::now() - chrono::Duration::hours(720);
+
+        let input = ScoringInput {
+            id: 12,
+            title: "Month-old article about compiler optimizations",
+            url: Some("https://example.com/old"),
+            content: "compiler optimization llvm codegen",
+            source_type: "hackernews",
+            embedding: &embedding,
+            created_at: Some(&thirty_days_ago),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+        };
+        let options = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+
+        let result = score_item_v2(&input, &ctx, &db, &options);
+        let bd = result.score_breakdown.as_ref().expect("should have breakdown");
+
+        assert!(
+            bd.freshness_mult < 1.0,
+            "Item created 720 hours ago should have freshness_mult < 1.0 (decay), got {}",
+            bd.freshness_mult
+        );
+        assert!(
+            bd.freshness_mult >= 0.75,
+            "Freshness decay at 720h should be ~0.85, not below 0.75, got {}",
+            bd.freshness_mult
+        );
+    }
 }

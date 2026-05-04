@@ -875,8 +875,7 @@ fn compute_quality_composite(
     // Negative stack prior: Bayesian suppression for technologies user doesn't use.
     // UNDAMPENED — full suppressive force (0.15 for competing-absent, 0.30 for anti-topics).
     let negative_stack_prior =
-        crate::stacks::negative_stack::lookup_prior(&ctx.ace_ctx.negative_stack, &raw.topics)
-            as f32;
+        crate::stacks::negative_stack::lookup_prior(&ctx.ace_ctx.negative_stack, &raw.topics);
 
     // NOTE: ecosystem_shift_mult, stack_competing_mult, and content_analysis_mult are
     // still computed above for the return tuple (used by logging/diagnostics) but are
