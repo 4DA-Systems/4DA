@@ -125,6 +125,7 @@ fn validate_persona(
                 detected_lang: "en",
                 source_tags: &[],
                 tags_json: None,
+                feed_origin: None,
             };
             let result = scoring::score_item(&input, ctx, db, &options, None);
             (

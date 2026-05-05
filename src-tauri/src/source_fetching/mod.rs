@@ -474,26 +474,14 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
     }
 }
 
-/// Load default RSS feeds if user hasn't configured any
+/// Load default RSS feeds from the curated feed registry.
+/// All curated feeds are enabled by default — users opt out via disabled_curated_feeds.
 pub(crate) fn load_default_rss_feeds() -> Vec<String> {
-    vec![
-        "https://blog.rust-lang.org/feed.xml".to_string(),
-        "https://go.dev/blog/feed.atom".to_string(),
-        "https://deno.com/feed".to_string(),
-        "https://bun.sh/blog/rss.xml".to_string(),
-        "https://changelog.com/news/feed".to_string(),
-        "https://www.ietf.org/blog/feed/".to_string(),
-        "https://www.w3.org/blog/news/feed/".to_string(),
-        "https://engineering.fb.com/feed/".to_string(),
-        "https://netflixtechblog.com/feed".to_string(),
-        "https://github.blog/feed/".to_string(),
-        "https://blog.cloudflare.com/rss".to_string(),
-        "https://martinfowler.com/feed.atom".to_string(),
-        "https://simonwillison.net/atom/everything/".to_string(),
-        "https://jvns.ca/atom.xml".to_string(),
-        "https://danluu.com/atom.xml".to_string(),
-        "https://arstechnica.com/feed/".to_string(),
-    ]
+    crate::curated_feeds::get_curated_registry()
+        .all_feeds()
+        .iter()
+        .map(|f| f.url.clone())
+        .collect()
 }
 
 // ============================================================================

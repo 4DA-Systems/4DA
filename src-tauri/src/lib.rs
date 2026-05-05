@@ -186,6 +186,7 @@ mod content_analysis;
 mod content_commands;
 mod content_dna;
 mod content_enrichment;
+pub(crate) mod curated_feeds;
 mod content_quality;
 mod content_sophistication;
 mod context_commands;
