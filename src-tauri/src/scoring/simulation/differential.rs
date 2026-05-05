@@ -534,6 +534,7 @@ fn source_type_does_not_affect_core_score_determinism() {
             detected_lang: "en",
             source_tags: &[],
             tags_json: None,
+            feed_origin: None,
         };
         score_item(&input, &ctx, &db, &opts, None)
     };
@@ -550,6 +551,7 @@ fn source_type_does_not_affect_core_score_determinism() {
             detected_lang: "en",
             source_tags: &[],
             tags_json: None,
+            feed_origin: None,
         };
         score_item(&input, &ctx, &db, &opts, None)
     };

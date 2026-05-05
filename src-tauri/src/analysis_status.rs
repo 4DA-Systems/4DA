@@ -425,6 +425,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
                     detected_lang: &item.detected_lang,
                     source_tags: &[],
                     tags_json: item.tags.as_deref(),
+                    feed_origin: item.feed_origin.as_deref(),
                 },
                 &scoring_ctx,
                 db,

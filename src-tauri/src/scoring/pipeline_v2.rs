@@ -889,9 +889,33 @@ fn compute_quality_composite(
     //   - stack_competing_mult: redundant with competing_mult + negative_stack_prior
     //   - content_analysis_mult: falls back to 1.0 on cache miss, expensive
 
-    // Source tier authority: slight scoring adjustment by source classification
-    let tier = crate::source_tiers::SourceTier::default_for_source(input.source_type);
+    // Source tier authority: slight scoring adjustment by source classification.
+    // Curated feeds override both tier and content_dna_mult from their manifest.
+    let curated_manifest = input
+        .feed_origin
+        .and_then(|url| crate::curated_feeds::get_curated_registry().get_by_url(url));
+
+    let tier = if let Some(manifest) = curated_manifest {
+        manifest.resolved_tier()
+    } else {
+        crate::source_tiers::SourceTier::default_for_source(input.source_type)
+    };
     let tier_authority_mult = tier.authority_multiplier();
+
+    // Curated feeds: override content_dna_mult with manifest-declared content type
+    // (only if the manifest specifies a type AND the regex classifier didn't already
+    // detect something more specific like SecurityAdvisory or BreakingChange).
+    let content_dna_mult = if let Some(manifest) = curated_manifest {
+        let manifest_mult = manifest.content_multiplier();
+        // Keep the regex-detected type if it's higher priority (security/breaking)
+        if content_dna_mult >= 1.25 {
+            content_dna_mult
+        } else {
+            manifest_mult.max(content_dna_mult)
+        }
+    } else {
+        content_dna_mult
+    };
 
     // Community quality signal: SO score, HN points, Reddit upvotes
     let age_hours_for_community = input.created_at.map_or(0.0, |ts| {
@@ -2039,6 +2063,7 @@ mod tests {
             detected_lang: "en",
             source_tags: &[],
             tags_json: None,
+            feed_origin: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "desc text.");
@@ -2058,6 +2083,7 @@ mod tests {
             detected_lang: "en",
             source_tags: &[],
             tags_json: None,
+            feed_origin: None,
         };
         let cleaned = dep_match_content_for(&input);
         assert_eq!(cleaned, "summary.");
@@ -2076,6 +2102,7 @@ mod tests {
             detected_lang: "en",
             source_tags: &[],
             tags_json: None,
+            feed_origin: None,
         };
         // Non-security source content is passed through verbatim
         let cleaned = dep_match_content_for(&input);

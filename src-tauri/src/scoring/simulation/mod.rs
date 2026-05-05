@@ -78,6 +78,7 @@ pub(super) fn sim_input<'a>(
         detected_lang: "en",
         source_tags: &[],
         tags_json: None,
+        feed_origin: None,
     }
 }
 

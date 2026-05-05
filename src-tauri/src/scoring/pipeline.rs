@@ -110,6 +110,9 @@ pub(crate) struct ScoringInput<'a> {
     /// Raw JSON metadata from source (contains community signals like score, points).
     /// Used for community quality signal extraction in Phase 5.
     pub tags_json: Option<&'a str>,
+    /// Per-feed provenance (RSS feed URL, YouTube channel ID, etc.).
+    /// Used by curated feed registry to override tier and content type.
+    pub feed_origin: Option<&'a str>,
 }
 
 /// Options controlling which scoring stages are applied
