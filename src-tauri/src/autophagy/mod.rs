@@ -32,6 +32,7 @@ pub(crate) use archetype::{archetype_penalty_for_item, load_archetype_penalties}
 pub(crate) use calibration::load_calibration_deltas;
 pub(crate) use calibration::store_calibrations;
 pub(crate) use calibration_analysis::bridge_accuracy_feedback;
+pub(crate) use source_autopsy::load_feed_autopsies;
 pub(crate) use source_autopsy::load_source_autopsies;
 pub(crate) use topic_decay::load_topic_decay_profiles;
 

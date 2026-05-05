@@ -107,6 +107,8 @@ pub(crate) struct ScoringContext {
     pub topic_half_lives: HashMap<String, f32>,
     /// Per-source engagement rates from autophagy analysis: source_type -> rate (0.0-1.0)
     pub source_autopsies: HashMap<String, f32>,
+    /// Per-feed engagement rates from autophagy: feed_url -> rate (0.0-1.0)
+    pub feed_autopsies: HashMap<String, f32>,
     /// Anti-pattern penalties from autophagy bias detection: source_type -> penalty (-0.15 to +0.20)
     pub anti_pattern_penalties: HashMap<String, f32>,
     /// Dismissal archetype penalties from TitanCA-inspired learning: archetype_id -> penalty (0.0-0.25)

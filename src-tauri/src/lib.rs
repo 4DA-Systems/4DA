@@ -620,7 +620,8 @@ pub fn run() {
     // Pre-Tauri initialization (logging, threshold, DB, context, registry)
     app_setup::initialize_pre_tauri();
 
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus the existing window when a second instance is launched
             if let Some(window) = app.get_webview_window("main") {
@@ -630,8 +631,14 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_deep_link::init());
+
+    #[cfg(not(debug_assertions))]
+    {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    builder
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -783,6 +790,11 @@ pub fn run() {
             source_config::set_disabled_default_youtube_channels,
             source_config::get_disabled_default_twitter_handles,
             source_config::set_disabled_default_twitter_handles,
+            // Curated feed browser
+            source_config::get_curated_feeds,
+            source_config::get_curated_feeds_by_domain,
+            source_config::get_suggested_curated_feeds,
+            source_config::toggle_curated_feed,
             // Source validation & immediate fetch
             source_config::validate_rss_feed,
             source_config::validate_youtube_channel,

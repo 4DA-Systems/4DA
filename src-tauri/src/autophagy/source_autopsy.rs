@@ -100,6 +100,95 @@ pub(crate) fn analyze_sources(conn: &Connection, max_age_days: i64) -> Vec<super
     autopsies
 }
 
+/// Analyze per-feed engagement quality for curated feeds.
+///
+/// Groups by `feed_origin` (the feed URL) rather than `source_type`, giving
+/// granular signal on which specific feeds deliver content users engage with.
+/// Only produces autopsies for feeds with at least 5 items (minimum signal).
+pub(crate) fn analyze_feeds(conn: &Connection, max_age_days: i64) -> Vec<super::SourceAutopsy> {
+    let age_param = format!("-{max_age_days} days");
+
+    let mut item_stmt = match conn.prepare(
+        "SELECT feed_origin, COUNT(*) AS total
+         FROM source_items
+         WHERE last_seen >= datetime('now', ?1)
+           AND feed_origin IS NOT NULL AND feed_origin != ''
+         GROUP BY feed_origin
+         HAVING COUNT(*) >= 5",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(target: "4da::autophagy", error = %e, "Feed autopsy item query failed");
+            return vec![];
+        }
+    };
+
+    let mut feed_totals: HashMap<String, i64> = HashMap::new();
+    if let Ok(rows) = item_stmt.query_map(params![age_param], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    }) {
+        for row in rows.flatten() {
+            feed_totals.insert(row.0, row.1);
+        }
+    }
+
+    if feed_totals.is_empty() {
+        debug!(target: "4da::autophagy", "No feed-level data for autopsy");
+        return vec![];
+    }
+
+    let mut engaged_stmt = match conn.prepare(
+        "SELECT si.feed_origin, COUNT(DISTINCT si.id) AS engaged
+         FROM source_items si
+         JOIN feedback f ON f.source_item_id = si.id
+         WHERE f.relevant = 1
+           AND si.last_seen >= datetime('now', ?1)
+           AND si.feed_origin IS NOT NULL AND si.feed_origin != ''
+         GROUP BY si.feed_origin",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(target: "4da::autophagy", error = %e, "Feed autopsy engagement query failed");
+            return vec![];
+        }
+    };
+
+    let mut feed_engaged: HashMap<String, i64> = HashMap::new();
+    if let Ok(rows) = engaged_stmt.query_map(params![age_param], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+    }) {
+        for row in rows.flatten() {
+            feed_engaged.insert(row.0, row.1);
+        }
+    }
+
+    let mut autopsies = Vec::new();
+    for (feed_url, total) in &feed_totals {
+        let engaged = feed_engaged.get(feed_url).copied().unwrap_or(0);
+        let engagement_rate = if *total > 0 {
+            engaged as f32 / *total as f32
+        } else {
+            0.0
+        };
+
+        autopsies.push(super::SourceAutopsy {
+            source_type: "rss".to_string(),
+            topic: feed_url.clone(),
+            items_surfaced: *total,
+            items_engaged: engaged,
+            engagement_rate,
+        });
+    }
+
+    info!(
+        target: "4da::autophagy",
+        feeds = autopsies.len(),
+        "Feed-level autopsy complete"
+    );
+
+    autopsies
+}
+
 /// Store source autopsies to `digested_intelligence`, superseding previous entries.
 /// Uses a transaction to batch all writes for performance.
 pub(crate) fn store_source_autopsies(
@@ -187,6 +276,89 @@ pub fn load_source_autopsies(conn: &Connection) -> HashMap<String, f32> {
     }
 
     result
+}
+
+/// Load per-feed engagement rates from stored feed autopsies.
+/// Returns map of feed_url -> engagement_rate (0.0-1.0).
+///
+/// Used by the scoring pipeline to boost/penalize items from feeds that
+/// consistently deliver (or fail to deliver) content the user engages with.
+pub fn load_feed_autopsies(conn: &Connection) -> HashMap<String, f32> {
+    let mut result = HashMap::new();
+
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT subject, data FROM digested_intelligence
+         WHERE digest_type = 'feed_autopsy' AND superseded_by IS NULL",
+    ) else {
+        return result;
+    };
+
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return result;
+    };
+
+    for row in rows.flatten() {
+        let (_subject, data) = row;
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&data) {
+            if let (Some(url), Some(rate)) = (
+                parsed.get("feed_url").and_then(|v| v.as_str()),
+                parsed.get("engagement_rate").and_then(|v| v.as_f64()),
+            ) {
+                result.insert(url.to_string(), rate as f32);
+            }
+        }
+    }
+
+    result
+}
+
+/// Store feed-level autopsies with their own digest_type for clean separation.
+pub(crate) fn store_feed_autopsies(
+    conn: &Connection,
+    autopsies: &[super::SourceAutopsy],
+) -> Result<()> {
+    let tx = conn
+        .unchecked_transaction()
+        .context("Failed to begin transaction for feed autopsies")?;
+
+    for autopsy in autopsies {
+        let data = serde_json::to_string(&serde_json::json!({
+            "feed_url": autopsy.topic,
+            "items_surfaced": autopsy.items_surfaced,
+            "items_engaged": autopsy.items_engaged,
+            "engagement_rate": autopsy.engagement_rate,
+        }))?;
+
+        let subject = format!("feed:{}", autopsy.topic);
+
+        tx.execute(
+            "INSERT INTO digested_intelligence (digest_type, subject, data, confidence, sample_size)
+             VALUES ('feed_autopsy', ?1, ?2, ?3, ?4)",
+            params![
+                subject,
+                data,
+                (autopsy.items_surfaced as f32 / 20.0).min(1.0),
+                autopsy.items_surfaced,
+            ],
+        )
+        .with_context(|| format!("Failed to insert feed autopsy for {subject}"))?;
+
+        let new_id = tx.last_insert_rowid();
+
+        tx.execute(
+            "UPDATE digested_intelligence
+             SET superseded_by = ?1
+             WHERE digest_type = 'feed_autopsy' AND subject = ?2 AND superseded_by IS NULL AND id != ?1",
+            params![new_id, subject],
+        )
+        .with_context(|| format!("Failed to supersede feed autopsy for {subject}"))?;
+    }
+
+    tx.commit().context("Failed to commit feed autopsies")?;
+    debug!(target: "4da::autophagy", count = autopsies.len(), "Stored feed autopsies");
+    Ok(())
 }
 
 // ============================================================================
