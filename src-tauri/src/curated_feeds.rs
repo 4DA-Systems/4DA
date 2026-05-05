@@ -155,11 +155,7 @@ mod tests {
         let registry = get_curated_registry();
         let mut seen = std::collections::HashSet::new();
         for feed in registry.all_feeds() {
-            assert!(
-                seen.insert(&feed.url),
-                "Duplicate feed URL: {}",
-                feed.url
-            );
+            assert!(seen.insert(&feed.url), "Duplicate feed URL: {}", feed.url);
         }
     }
 
@@ -168,11 +164,7 @@ mod tests {
         let registry = get_curated_registry();
         let mut seen = std::collections::HashSet::new();
         for feed in registry.all_feeds() {
-            assert!(
-                seen.insert(&feed.id),
-                "Duplicate feed ID: {}",
-                feed.id
-            );
+            assert!(seen.insert(&feed.id), "Duplicate feed ID: {}", feed.id);
         }
     }
 
