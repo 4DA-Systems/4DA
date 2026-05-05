@@ -45,6 +45,28 @@ pub fn shared_client() -> reqwest::Client {
     crate::http_client::HTTP_CLIENT.clone()
 }
 
+/// Extract text content from an XML tag, handling attributes and CDATA sections.
+///
+/// Shared across all XML-parsing source adapters (RSS, YouTube, arXiv,
+/// Product Hunt, fallback). Handles tags with attributes (e.g. `<title type="html">`)
+/// and unwraps `<![CDATA[...]]>` sections.
+pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
+    let open_tag = format!("<{tag}");
+    let close_tag = format!("</{tag}>");
+
+    let start_pos = xml.find(&open_tag)?;
+    let content_start = xml[start_pos..].find('>')? + start_pos + 1;
+    let end_pos = xml[content_start..].find(&close_tag)? + content_start;
+
+    let content = xml[content_start..end_pos].trim();
+
+    if content.starts_with("<![CDATA[") && content.ends_with("]]>") {
+        Some(content[9..content.len() - 3].to_string())
+    } else {
+        Some(content.to_string())
+    }
+}
+
 // ============================================================================
 // Scalability limits — guards for 100+ source configurations
 // ============================================================================

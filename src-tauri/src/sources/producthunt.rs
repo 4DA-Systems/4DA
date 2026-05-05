@@ -103,23 +103,9 @@ impl ProductHuntSource {
 // Helper Functions
 // ============================================================================
 
-/// Extract content from XML tag
-pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-    let start_tag = format!("<{tag}>");
-    let end_tag = format!("</{tag}>");
-
-    let start = xml.find(&start_tag)? + start_tag.len();
-    let end = xml[start..].find(&end_tag)?;
-
-    let content = xml[start..start + end].trim();
-
-    // Handle CDATA sections
-    if content.starts_with("<![CDATA[") && content.ends_with("]]>") {
-        Some(content[9..content.len() - 3].to_string())
-    } else {
-        Some(content.to_string())
-    }
-}
+// Re-export the shared XML tag extractor so existing callers (including tests)
+// can still reference `producthunt::extract_tag`.
+pub(crate) use super::extract_tag;
 
 /// Extract upvotes from description text
 pub(crate) fn extract_upvotes(description: &str) -> Option<i32> {

@@ -80,19 +80,19 @@ impl ArxivSource {
             let entry_xml = &entry_block[..entry_end];
 
             // Extract fields with simple string parsing
-            let id = Self::extract_tag(entry_xml, "id").unwrap_or_default();
-            let title = Self::extract_tag(entry_xml, "title")
+            let id = super::extract_tag(entry_xml, "id").unwrap_or_default();
+            let title = super::extract_tag(entry_xml, "title")
                 .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
                 .unwrap_or_default();
-            let summary = Self::extract_tag(entry_xml, "summary")
+            let summary = super::extract_tag(entry_xml, "summary")
                 .map(|s| s.split_whitespace().collect::<Vec<_>>().join(" "))
                 .unwrap_or_default();
-            let published = Self::extract_tag(entry_xml, "published").unwrap_or_default();
+            let published = super::extract_tag(entry_xml, "published").unwrap_or_default();
 
             // Extract authors
             let mut authors = Vec::new();
             for author_block in entry_xml.split("<author>").skip(1) {
-                if let Some(name) = Self::extract_tag(author_block, "name") {
+                if let Some(name) = super::extract_tag(author_block, "name") {
                     authors.push(name);
                 }
             }
@@ -137,17 +137,6 @@ impl ArxivSource {
         }
 
         entries
-    }
-
-    fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-        let open_tag = format!("<{tag}");
-        let close_tag = format!("</{tag}>");
-
-        let start_pos = xml.find(&open_tag)?;
-        let content_start = xml[start_pos..].find('>')? + start_pos + 1;
-        let end_pos = xml[content_start..].find(&close_tag)? + content_start;
-
-        Some(xml[content_start..end_pos].to_string())
     }
 
     /// Extract arXiv ID from full URL
