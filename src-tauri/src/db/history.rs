@@ -293,7 +293,7 @@ impl Database {
     ) -> SqliteResult<()> {
         // Sanitize output_preview to prevent secret leakage in stored logs
         let sanitized_output = output_preview.map(|s| {
-            let truncated = if s.len() > 500 { &s[..500] } else { s };
+            let truncated = if s.len() > 500 { &s[..s.floor_char_boundary(500)] } else { s };
             crate::llm::sanitize_api_error(truncated)
         });
 

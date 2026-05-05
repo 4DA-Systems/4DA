@@ -230,7 +230,7 @@ async fn embed_texts_openai(texts: &[String], api_key: &str) -> Result<Vec<Vec<f
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
         let truncated = if body_text.len() > 200 {
-            format!("{}...", &body_text[..200])
+            format!("{}...", &body_text[..body_text.floor_char_boundary(200)])
         } else {
             body_text
         };

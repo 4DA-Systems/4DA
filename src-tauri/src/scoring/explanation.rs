@@ -197,7 +197,7 @@ pub(crate) fn extract_short_phrase(matched_text: &str) -> String {
     let phrase = clean
         .find(['.', '\n'])
         .filter(|&pos| pos > 10)
-        .map_or(&clean[..clean.len().min(80)], |pos| &clean[..pos])
+        .map_or(&clean[..clean.floor_char_boundary(clean.len().min(80))], |pos| &clean[..pos])
         .trim();
     if phrase.len() < 10 {
         String::new()

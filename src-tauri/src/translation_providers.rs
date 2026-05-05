@@ -22,7 +22,7 @@ fn translation_client() -> Result<reqwest::Client> {
 /// Truncate error body to prevent leaking sensitive API response data.
 fn safe_error_body(body: &str) -> &str {
     if body.len() > 200 {
-        &body[..200]
+        &body[..body.floor_char_boundary(200)]
     } else {
         body
     }

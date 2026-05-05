@@ -452,8 +452,13 @@ fn extract_signals(
                 let window: usize = 80;
                 // Find each occurrence and check for context nearby
                 for (idx, _) in body_lower.match_indices(&full) {
-                    let start = idx.saturating_sub(window);
-                    let end = (idx + full.len() + window).min(body_lower.len());
+                    // Use floor/ceil_char_boundary to avoid panicking on
+                    // multi-byte UTF-8 content (e.g. accented researcher
+                    // names in CVE descriptions).
+                    let start = body_lower.floor_char_boundary(idx.saturating_sub(window));
+                    let end = body_lower.ceil_char_boundary(
+                        (idx + full.len() + window).min(body_lower.len()),
+                    );
                     let slice = &body_lower[start..end];
                     if CONTEXT_WORDS.iter().any(|w| slice.contains(w)) {
                         return true;

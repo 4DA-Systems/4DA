@@ -192,7 +192,7 @@ fn is_negated_in_context(term: &str, text: &str) -> bool {
     let term_lower = term.to_lowercase();
 
     for (idx, _) in text_lower.match_indices(&term_lower) {
-        let before_start = idx.saturating_sub(30);
+        let before_start = text_lower.floor_char_boundary(idx.saturating_sub(30));
         let before = &text_lower[before_start..idx];
         if NEGATION_PREFIXES.iter().any(|neg| before.ends_with(neg)) {
             return true;
@@ -381,7 +381,7 @@ pub(crate) fn compute_keyword_interest_score(
             // are stronger signals — the article is likely ABOUT this topic
             if term_hit > 0.0 && term_hit < 0.80 && content_lower.len() >= 3 {
                 let effective = search_term.unwrap_or(term);
-                let end = content_lower.len().min(200);
+                let end = content_lower.floor_char_boundary(content_lower.len().min(200));
                 if content_lower[..end].contains(effective) {
                     term_hit = (term_hit + 0.10).min(0.80);
                 }

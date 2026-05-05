@@ -355,7 +355,7 @@ fn parse_code_blocks(content: &str, module_id: &str, lesson_idx: usize) -> Vec<P
 
                     // Build a short description from the command
                     let description = if command_text.len() > 60 {
-                        format!("{}...", &command_text[..57])
+                        format!("{}...", &command_text[..command_text.floor_char_boundary(57)])
                     } else {
                         command_text.clone()
                     };

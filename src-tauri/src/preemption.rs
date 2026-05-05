@@ -1235,7 +1235,7 @@ fn truncate(s: &str, max_len: usize) -> String {
             .char_indices()
             .nth(max_len.saturating_sub(3))
             .map(|(i, _)| i)
-            .unwrap_or(max_len.saturating_sub(3));
+            .unwrap_or_else(|| s.floor_char_boundary(max_len.saturating_sub(3)));
         format!("{}...", &s[..end])
     }
 }

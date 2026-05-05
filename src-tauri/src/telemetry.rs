@@ -356,7 +356,7 @@ pub fn record_error(
 ) -> Result<()> {
     // Truncate message to 1000 chars to prevent bloat from stack traces
     let msg = if message.len() > 1000 {
-        &message[..1000]
+        &message[..message.floor_char_boundary(1000)]
     } else {
         message
     };

@@ -42,6 +42,7 @@ export function useVoidSignals() {
   useEffect(() => {
     cmd('get_void_signal')
       .then((s) => {
+        if (!s) return;
         targetRef.current = s;
         currentRef.current = s;
         setSignal(s);

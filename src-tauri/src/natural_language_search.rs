@@ -442,7 +442,7 @@ fn execute_text_search(
                 let created_at: Option<String> = row.get(5)?;
 
                 let preview = if content.len() > 200 {
-                    format!("{}...", &content[..200])
+                    format!("{}...", &content[..content.floor_char_boundary(200)])
                 } else {
                     content
                 };
@@ -513,7 +513,7 @@ async fn execute_vector_search(parsed: &ParsedQuery, limit: usize) -> Result<Vec
             let relevance = (1.0 - distance).clamp(0.0, 1.0);
 
             let preview = if content.len() > 200 {
-                format!("{}...", &content[..200])
+                format!("{}...", &content[..content.floor_char_boundary(200)])
             } else {
                 content
             };

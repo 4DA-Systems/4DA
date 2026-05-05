@@ -113,7 +113,7 @@ fn gather_result_context(
         let source_type: String = row.get(3)?;
         let url: Option<String> = row.get(4)?;
         let preview = if content.len() > 300 {
-            format!("{}...", &content[..300])
+            format!("{}...", &content[..content.floor_char_boundary(300)])
         } else {
             content
         };

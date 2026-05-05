@@ -326,7 +326,7 @@ impl QueryExecutor {
                     }
 
                     let preview = if content.len() > 200 {
-                        format!("{}...", &content[..200])
+                        format!("{}...", &content[..content.floor_char_boundary(200)])
                     } else {
                         content.clone()
                     };
