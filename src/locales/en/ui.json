@@ -2757,7 +2757,7 @@
   "blindspots.missed": "Missed Intelligence",
   "blindspots.missed.relevance": "relevance: {{score}}",
   "blindspots.recommendations": "Recommendations",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "No coverage gaps detected in your tracked dependencies.",
   "blindspots.loading": "Analyzing your coverage...",
   "blindspots.tier.stack": "Your Stack",
   "blindspots.tier.stackSubtitle_one": "{{count}} uncovered dependency",

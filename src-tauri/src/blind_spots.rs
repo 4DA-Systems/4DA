@@ -206,7 +206,11 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     // what the user is missing.
     if is_cold_start(&conn)? {
         return Ok(BlindSpotReport {
-            overall_score: 0.0,
+            // -1.0 sentinel means "not enough data to compute" — the frontend
+            // renders a "building" state instead of a misleading "0/100 Good".
+            // Previously this was 0.0, which the UI interpreted as "perfect
+            // coverage" even on day 1 with zero interactions.
+            overall_score: -1.0,
             uncovered_dependencies: vec![],
             stale_topics: vec![],
             missed_signals: vec![],

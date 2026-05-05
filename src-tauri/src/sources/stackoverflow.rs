@@ -185,7 +185,7 @@ impl Source for StackOverflowSource {
     fn manifest(&self) -> super::SourceManifest {
         super::SourceManifest {
             category: super::SourceCategory::Community,
-            default_content_type: "discussion",
+            default_content_type: "question",
             default_multiplier: 1.0,
             label: "SO",
             color_hint: "orange",
