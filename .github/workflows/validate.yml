@@ -62,7 +62,10 @@ jobs:
         # Catches the Vite dep-reshuffle class of failures (see CLAUDE.md
         # "Vite dep updates + running fourda.exe" gotcha). Cheap and
         # identifies module-resolution regressions before they reach prod.
-        run: pnpm run validate:vite-smoke
+        # Kill fourda.exe first — self-hosted runner may have it holding port 4444.
+        run: |
+          taskkill /F /IM fourda.exe 2>$null; $true
+          pnpm run validate:vite-smoke
 
       - name: Run tests and verify count floor
         run: |
