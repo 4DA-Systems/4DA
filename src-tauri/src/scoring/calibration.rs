@@ -79,6 +79,20 @@ pub(crate) const BROAD_INTEREST_TERMS: &[&str] = &[
     "developer",
     "startup",
     "saas",
+    "testing",
+    "framework",
+    "performance",
+    "api",
+    "database",
+    "automation",
+    "monitoring",
+    "infrastructure",
+    "containers",
+    "microservices",
+    "serverless",
+    "tutorial",
+    "best practices",
+    "tooling",
 ];
 
 /// Specificity weight for embedding-based interest matching.
@@ -111,6 +125,32 @@ mod tests {
         assert_eq!(embedding_specificity_weight("Tauri"), 1.0);
         assert_eq!(embedding_specificity_weight("rust"), 1.0);
         assert_eq!(embedding_specificity_weight("sqlite-vss"), 1.0);
+    }
+
+    #[test]
+    fn test_broad_terms_include_expanded_set() {
+        for term in &[
+            "testing",
+            "framework",
+            "performance",
+            "api",
+            "database",
+            "automation",
+            "monitoring",
+            "infrastructure",
+            "containers",
+            "microservices",
+            "serverless",
+            "tutorial",
+            "best practices",
+            "tooling",
+        ] {
+            assert_eq!(
+                embedding_specificity_weight(term),
+                0.40,
+                "'{term}' should be classified as broad"
+            );
+        }
     }
 
     // ====================================================================

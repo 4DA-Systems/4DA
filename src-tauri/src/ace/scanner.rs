@@ -671,6 +671,135 @@ impl ProjectScanner {
 
         packages
     }
+
+    /// Parse a pnpm-lock.yaml (v5/v6/v9) and return (package_name, version) pairs.
+    /// Uses focused line-by-line parsing (no YAML crate needed) since the `packages:`
+    /// section has a predictable structure: top-level keys at 2-space indent.
+    ///
+    /// v5/v6 keys: `  /@scope/pkg/1.2.3:` or `  /pkg/1.2.3:`
+    /// v9 keys:    `  @scope/pkg@1.2.3:` or `  pkg@1.2.3:`
+    /// Some entries have a nested `version:` field instead of version-in-key.
+    pub(crate) fn parse_pnpm_lock_yaml(content: &str) -> Vec<(String, String)> {
+        let mut packages = Vec::new();
+        let mut in_packages = false;
+        let mut pending_name: Option<String> = None;
+
+        for line in content.lines() {
+            if line.starts_with("packages:") {
+                in_packages = true;
+                continue;
+            }
+            if !in_packages {
+                continue;
+            }
+            // A new top-level key (no indent) ends the packages section
+            if !line.is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
+                break;
+            }
+
+            let trimmed = line.trim();
+
+            // Top-level package key: exactly 2 spaces (or 1 tab) of indentation + ends with ':'
+            let is_package_key = (line.starts_with("  ") && !line.starts_with("    "))
+                || (line.starts_with('\t') && !line.starts_with("\t\t"));
+
+            if is_package_key && trimmed.ends_with(':') {
+                pending_name = None;
+                let key = trimmed.trim_end_matches(':');
+                // Strip optional YAML quoting
+                let key = key.trim_matches('\'').trim_matches('"');
+                if let Some((name, ver)) = parse_pnpm_package_key(key) {
+                    packages.push((name, ver));
+                } else {
+                    // Version might be in a nested `version:` field
+                    let name = key.trim_start_matches('/');
+                    if !name.is_empty() {
+                        pending_name = Some(name.to_string());
+                    }
+                }
+            } else if let Some(ref name) = pending_name {
+                if let Some(rest) = trimmed.strip_prefix("version:") {
+                    let ver = rest.trim().trim_matches('\'').trim_matches('"');
+                    // Strip pnpm peer-dep suffixes like `1.2.3(react@18.2.0)`
+                    let ver = ver.split('(').next().unwrap_or(ver).trim();
+                    if !ver.is_empty() {
+                        packages.push((name.clone(), ver.to_string()));
+                    }
+                    pending_name = None;
+                }
+            }
+        }
+
+        packages
+    }
+
+    /// Parse a yarn.lock (v1 classic) and return (package_name, version) pairs.
+    /// Keys look like `"lodash@^4.17.20":` and resolved version appears as `version "4.17.21"`.
+    pub(crate) fn parse_yarn_lock(content: &str) -> Vec<(String, String)> {
+        let mut packages = Vec::new();
+        let mut current_name: Option<String> = None;
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+
+            if !trimmed.starts_with('#')
+                && !trimmed.is_empty()
+                && !line.starts_with(' ')
+                && !line.starts_with('\t')
+            {
+                // Top-level key line like `"lodash@^4.17.20":` or `lodash@^4.17.20:`
+                let clean = trimmed.trim_end_matches(':').replace('"', "");
+                // Take the first specifier (before any comma) and extract the package name
+                if let Some(spec) = clean.split(',').next() {
+                    let spec = spec.trim();
+                    // Split at last '@' that isn't at position 0 (scoped packages start with @)
+                    if let Some(at_pos) = spec.rfind('@').filter(|&p| p > 0) {
+                        current_name = Some(spec[..at_pos].to_string());
+                    }
+                }
+            } else if let Some(ref name) = current_name {
+                if let Some(rest) = trimmed.strip_prefix("version ") {
+                    let version = rest.trim_matches('"').to_string();
+                    if !version.is_empty() {
+                        packages.push((name.clone(), version));
+                    }
+                    current_name = None;
+                }
+            }
+        }
+
+        packages
+    }
+}
+
+/// Parse pnpm package key formats:
+/// - v9: `@scope/pkg@1.2.3` or `pkg@1.2.3`
+/// - v5/v6: `/@scope/pkg/1.2.3` or `/pkg/1.2.3`
+fn parse_pnpm_package_key(key: &str) -> Option<(String, String)> {
+    // v5/v6: starts with `/`, segments separated by `/`
+    if let Some(rest) = key.strip_prefix('/') {
+        let parts: Vec<&str> = rest.splitn(3, '/').collect();
+        return match parts.len() {
+            // /pkg/1.2.3
+            2 => Some((parts[0].to_string(), parts[1].to_string())),
+            // /@scope/pkg/1.2.3
+            3 if parts[0].starts_with('@') => {
+                let name = format!("{}/{}", parts[0], parts[1]);
+                Some((name, parts[2].to_string()))
+            }
+            _ => None,
+        };
+    }
+
+    // v9: `pkg@1.2.3` or `@scope/pkg@1.2.3`
+    // Find the last `@` that isn't the scope prefix
+    let at_pos = key.rfind('@').filter(|&p| p > 0)?;
+    let name = &key[..at_pos];
+    let version = &key[at_pos + 1..];
+    if name.is_empty() || version.is_empty() {
+        return None;
+    }
+    Some((name.to_string(), version.to_string()))
 }
 
 impl Default for ProjectScanner {
@@ -1431,5 +1560,132 @@ serde = "1.0"
                 "pattern '{pattern}' should get low relevance, got {score}"
             );
         }
+    }
+
+    // ─── pnpm-lock.yaml parsing ────────────────────────────────────
+
+    #[test]
+    fn test_parse_pnpm_lock_v9() {
+        let content = "\
+lockfileVersion: '9.0'
+
+packages:
+
+  lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+
+  '@babel/core@7.24.0':
+    resolution: {integrity: sha512-def}
+
+  vite@5.2.0:
+    resolution: {integrity: sha512-ghi}
+";
+        let packages = ProjectScanner::parse_pnpm_lock_yaml(content);
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "lodash" && v == "4.17.21"),
+            "should parse lodash, got: {packages:?}"
+        );
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "@babel/core" && v == "7.24.0"),
+            "should parse scoped package, got: {packages:?}"
+        );
+        assert!(
+            packages.iter().any(|(n, v)| n == "vite" && v == "5.2.0"),
+            "should parse vite, got: {packages:?}"
+        );
+    }
+
+    #[test]
+    fn test_parse_pnpm_lock_v5() {
+        let content = "\
+lockfileVersion: 5.4
+
+packages:
+
+  /lodash/4.17.21:
+    resolution: {integrity: sha512-abc}
+
+  /@types/node/20.11.0:
+    resolution: {integrity: sha512-def}
+";
+        let packages = ProjectScanner::parse_pnpm_lock_yaml(content);
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "lodash" && v == "4.17.21"),
+            "should parse v5 lodash, got: {packages:?}"
+        );
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "@types/node" && v == "20.11.0"),
+            "should parse v5 scoped package, got: {packages:?}"
+        );
+    }
+
+    #[test]
+    fn test_parse_pnpm_lock_empty() {
+        let content = "lockfileVersion: '9.0'\n\nimporters: {}\n";
+        let packages = ProjectScanner::parse_pnpm_lock_yaml(content);
+        assert!(packages.is_empty());
+    }
+
+    #[test]
+    fn test_parse_pnpm_lock_version_with_peer_suffix() {
+        let content = "\
+lockfileVersion: '9.0'
+
+packages:
+
+  react-dom@18.2.0:
+    version: 18.2.0(react@18.2.0)
+";
+        let packages = ProjectScanner::parse_pnpm_lock_yaml(content);
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "react-dom" && v == "18.2.0"),
+            "should strip peer suffix, got: {packages:?}"
+        );
+    }
+
+    // ─── yarn.lock parsing ─────────────────────────────────────────
+
+    #[test]
+    fn test_parse_yarn_lock() {
+        let content = r#"# yarn lockance v1
+
+lodash@^4.17.20:
+  version "4.17.21"
+  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz"
+
+"@babel/core@^7.24.0":
+  version "7.24.0"
+  resolved "https://registry.yarnpkg.com/@babel/core/-/core-7.24.0.tgz"
+"#;
+        let packages = ProjectScanner::parse_yarn_lock(content);
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "lodash" && v == "4.17.21"),
+            "should parse lodash, got: {packages:?}"
+        );
+        assert!(
+            packages
+                .iter()
+                .any(|(n, v)| n == "@babel/core" && v == "7.24.0"),
+            "should parse scoped package, got: {packages:?}"
+        );
+    }
+
+    #[test]
+    fn test_parse_yarn_lock_empty() {
+        let content = "# yarn lockfile v1\n\n";
+        let packages = ProjectScanner::parse_yarn_lock(content);
+        assert!(packages.is_empty());
     }
 }

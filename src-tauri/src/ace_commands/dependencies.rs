@@ -54,6 +54,8 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
 
             lockfile_count += process_cargo_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_package_lock(db, &scanner, &dir, &project_path);
+            lockfile_count += process_pnpm_lock(db, &scanner, &dir, &project_path);
+            lockfile_count += process_yarn_lock(db, &scanner, &dir, &project_path);
 
             // Recurse into subdirectories (skip common non-project dirs)
             if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -171,27 +173,7 @@ fn process_package_lock(
         return 0;
     };
 
-    let direct_deps: Vec<String> =
-        if let Ok(pkg_content) = std::fs::read_to_string(dir.join("package.json")) {
-            let mut signal = crate::ace::scanner::ProjectSignal {
-                manifest_type: crate::ace::scanner::ManifestType::PackageJson,
-                manifest_path: dir.join("package.json"),
-                project_name: None,
-                languages: vec!["javascript".to_string()],
-                frameworks: Vec::new(),
-                dependencies: Vec::new(),
-                dev_dependencies: Vec::new(),
-                detected_at: String::new(),
-                project_license: None,
-                project_relevance: 1.0, // lockfile processing uses default; relevance applied at manifest scan
-            };
-            scanner.parse_package_json(&pkg_content, &mut signal);
-            let mut all = signal.dependencies;
-            all.extend(signal.dev_dependencies);
-            all
-        } else {
-            Vec::new()
-        };
+    let direct_deps = read_package_json_deps(scanner, dir);
 
     let mut count = 0u32;
     let packages = crate::ace::scanner::ProjectScanner::parse_package_lock_json(&content);
@@ -219,4 +201,121 @@ fn process_package_lock(
         }
     }
     count
+}
+
+/// Process a pnpm-lock.yaml file, storing transitive deps and updating direct dep versions.
+fn process_pnpm_lock(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+    project_path: &str,
+) -> u32 {
+    let pnpm_lock = dir.join("pnpm-lock.yaml");
+    if !pnpm_lock.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&pnpm_lock) else {
+        return 0;
+    };
+
+    let direct_deps = read_package_json_deps(scanner, dir);
+
+    let mut count = 0u32;
+    let packages = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_yaml(&content);
+    for (name, version) in &packages {
+        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+            db.store_transitive_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "javascript",
+                false,
+            )
+            .ok();
+            count += 1;
+        } else {
+            db.store_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "javascript",
+                false,
+                None,
+            )
+            .ok();
+        }
+    }
+    count
+}
+
+/// Process a yarn.lock file, storing transitive deps and updating direct dep versions.
+fn process_yarn_lock(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+    project_path: &str,
+) -> u32 {
+    let yarn_lock = dir.join("yarn.lock");
+    if !yarn_lock.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&yarn_lock) else {
+        return 0;
+    };
+
+    let direct_deps = read_package_json_deps(scanner, dir);
+
+    let mut count = 0u32;
+    let packages = crate::ace::scanner::ProjectScanner::parse_yarn_lock(&content);
+    for (name, version) in &packages {
+        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+            db.store_transitive_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "javascript",
+                false,
+            )
+            .ok();
+            count += 1;
+        } else {
+            db.store_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "javascript",
+                false,
+                None,
+            )
+            .ok();
+        }
+    }
+    count
+}
+
+/// Shared: read direct deps from package.json for lockfile processing.
+fn read_package_json_deps(
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+) -> Vec<String> {
+    if let Ok(pkg_content) = std::fs::read_to_string(dir.join("package.json")) {
+        let mut signal = crate::ace::scanner::ProjectSignal {
+            manifest_type: crate::ace::scanner::ManifestType::PackageJson,
+            manifest_path: dir.join("package.json"),
+            project_name: None,
+            languages: vec!["javascript".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+        scanner.parse_package_json(&pkg_content, &mut signal);
+        let mut all = signal.dependencies;
+        all.extend(signal.dev_dependencies);
+        all
+    } else {
+        Vec::new()
+    }
 }

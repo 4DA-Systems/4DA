@@ -12,6 +12,21 @@ use tracing::debug;
 use crate::error::{Result, ResultExt};
 
 // ============================================================================
+// Path Canonicalization
+// ============================================================================
+
+/// Normalize a project path for consistent DB storage on Windows.
+/// Lowercases the drive letter and path segments so `Documents` and `documents`
+/// resolve to the same UNIQUE key. Uses forward slashes for uniformity.
+fn canonicalize_project_path(path: &str) -> String {
+    if cfg!(windows) {
+        path.replace('\\', "/").to_lowercase()
+    } else {
+        path.replace('\\', "/").to_string()
+    }
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -68,12 +83,13 @@ pub fn upsert_dependency(
     language: &str,
     project_relevance: f32,
 ) -> Result<()> {
+    let canonical_path = canonicalize_project_path(project_path);
     conn.execute(
         "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance, last_scanned)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
          ON CONFLICT(project_path, package_name)
          DO UPDATE SET version = ?4, is_dev = ?5, is_direct = MAX(project_dependencies.is_direct, ?6), project_relevance = ?8, last_scanned = datetime('now')",
-        params![project_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance],
+        params![canonical_path, manifest_type, package_name, version, is_dev as i32, is_direct as i32, language, project_relevance],
     )
     .context("Failed to upsert dependency")?;
     Ok(())
@@ -84,6 +100,7 @@ pub fn get_project_dependencies(
     conn: &rusqlite::Connection,
     project_path: &str,
 ) -> Result<Vec<ProjectDependency>> {
+    let canonical = canonicalize_project_path(project_path);
     let mut stmt = conn
         .prepare(
             "SELECT id, project_path, manifest_type, package_name, version, is_dev, is_direct, language, last_scanned
@@ -94,7 +111,7 @@ pub fn get_project_dependencies(
         ?;
 
     let results: Vec<ProjectDependency> = stmt
-        .query_map(params![project_path], map_project_dependency_row)?
+        .query_map(params![canonical], map_project_dependency_row)?
         .filter_map(|r| match r {
             Ok(v) => Some(v),
             Err(e) => {
@@ -505,5 +522,34 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].id, id);
         assert_eq!(events[0].source_item_id, None);
+    }
+
+    #[test]
+    fn test_canonicalize_windows_paths() {
+        let result = canonicalize_project_path(r"D:\Users\Admin\Documents\my-project");
+        if cfg!(windows) {
+            assert_eq!(result, "d:/users/admin/documents/my-project");
+        } else {
+            assert_eq!(result, "D:/Users/Admin/Documents/my-project");
+        }
+    }
+
+    #[test]
+    fn test_canonicalize_merges_case_variants() {
+        let a = canonicalize_project_path(r"C:\Users\Dev\Documents\kairos-mvp");
+        let b = canonicalize_project_path(r"C:\Users\Dev\documents\kairos-mvp");
+        if cfg!(windows) {
+            assert_eq!(a, b, "Case variants should canonicalize to the same key");
+        }
+    }
+
+    #[test]
+    fn test_canonicalize_forward_slashes() {
+        let result = canonicalize_project_path("C:/Users/Dev/project");
+        if cfg!(windows) {
+            assert_eq!(result, "c:/users/dev/project");
+        } else {
+            assert_eq!(result, "C:/Users/Dev/project");
+        }
     }
 }

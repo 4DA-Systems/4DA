@@ -1026,6 +1026,22 @@ fn compute_quality_composite(
         quality_score
     };
 
+    // Community signal gate for user-generated content sources.
+    // Low-community-signal items from UGC platforms (dev.to, medium, hashnode,
+    // reddit, stackoverflow) get hard-capped — prevents generic blog posts and
+    // zero-upvote questions from riding keyword matches into the briefing.
+    // Authoritative sources (CVE, RustSec, GitHub, crates.io, npm, PyPI) are exempt.
+    let quality_score = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
+        match input.source_type {
+            "devto" | "medium" | "hashnode" | "reddit" | "stackoverflow" | "lobsters" => {
+                quality_score.min(0.50)
+            }
+            _ => quality_score,
+        }
+    } else {
+        quality_score
+    };
+
     (
         quality_score,
         freshness,
