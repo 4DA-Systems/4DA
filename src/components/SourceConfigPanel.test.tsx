@@ -64,6 +64,14 @@ describe('SourceConfigPanel', () => {
           return Promise.resolve({ success: true, items_added: 10 });
         case 'fetch_single_youtube_channel':
           return Promise.resolve({ success: true, items_added: 5 });
+        case 'get_curated_feeds':
+          return Promise.resolve({ feeds: [], total: 0, domains: [] });
+        case 'get_curated_feeds_by_domain':
+          return Promise.resolve({ feeds: [], count: 0, domain: '' });
+        case 'get_suggested_curated_feeds':
+          return Promise.resolve({ feeds: [], count: 0, matched_domains: [], detected_languages: [] });
+        case 'toggle_curated_feed':
+          return Promise.resolve({ success: true, url: '', enabled: true });
         default:
           return Promise.resolve({});
       }

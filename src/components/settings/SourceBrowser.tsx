@@ -43,8 +43,8 @@ export function SourceBrowser() {
     cmd('get_curated_feeds')
       .then((res) => {
         if (cancelled) return;
-        setFeeds(res.feeds);
-        setDomains(res.domains);
+        setFeeds(res?.feeds ?? []);
+        setDomains(res?.domains ?? []);
         setLoading(false);
       })
       .catch(() => {
@@ -59,13 +59,13 @@ export function SourceBrowser() {
     try {
       if (domain === 'all') {
         const res = await cmd('get_curated_feeds');
-        setFeeds(res.feeds);
+        setFeeds(res?.feeds ?? []);
       } else if (domain === 'suggested') {
         const res = await cmd('get_suggested_curated_feeds');
-        setFeeds(res.feeds);
+        setFeeds(res?.feeds ?? []);
       } else {
         const res = await cmd('get_curated_feeds_by_domain', { domain });
-        setFeeds(res.feeds);
+        setFeeds(res?.feeds ?? []);
       }
     } catch { /* keep existing feeds on error */ }
     setLoading(false);
