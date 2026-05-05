@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DefaultSourceList } from './settings/DefaultSourceList';
 import { FeedHealthDot } from './settings/FeedHealthDot';
+import { SourceBrowser } from './settings/SourceBrowser';
 import { SourcePreview } from './settings/SourcePreview';
 import { ValidationFeedback } from './settings/ValidationFeedback';
 import { useSourceConfig } from './settings/useSourceConfig';
@@ -292,6 +293,9 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
               </button>
             </div>
           </div>
+
+          {/* Curated Source Library */}
+          <SourceBrowser />
         </div>
       )}
     </div>
