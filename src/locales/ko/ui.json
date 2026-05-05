@@ -204,7 +204,7 @@
   "blindspots.emerging.subtitle_other": "근처에 {{count}}개의 시그널",
   "blindspots.emerging.title": "신흥",
   "blindspots.emerging.trending": "트렌딩",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "추적 중인 의존성에서 커버리지 격차가 감지되지 않았습니다.",
   "blindspots.error.subtitle": "블라인드 스팟 스캔이 실패했지만, 주요 분석 결과는 계속 이용할 수 있습니다.",
   "blindspots.error.timeout": "블라인드 스팟 스캔이 시간 초과되었습니다. 시스템이 유휴 상태이거나 현재 분석이 안정된 후 다시 시도하세요.",
   "blindspots.error.title": "커버리지 스캔 불가",
