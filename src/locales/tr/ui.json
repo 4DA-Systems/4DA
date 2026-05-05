@@ -207,7 +207,7 @@
   "blindspots.emerging.subtitle_other": "Çevrenizde {{count}} sinyal",
   "blindspots.emerging.title": "Yükselen",
   "blindspots.emerging.trending": "Trend",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "Takip edilen bağımlılıklarınızda kapsam boşluğu tespit edilmedi.",
   "blindspots.error.subtitle": "Kör nokta taraması başarısız oldu, ancak ana analiz sonuçlarınız hâlâ kullanılabilir.",
   "blindspots.error.timeout": "Kör nokta taraması çok uzun sürdü. Sistem boştayken veya mevcut analiz dengelendikten sonra tekrar deneyin.",
   "blindspots.error.title": "Kapsam taraması kullanılamıyor",

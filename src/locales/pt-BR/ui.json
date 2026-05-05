@@ -206,7 +206,7 @@
   "blindspots.emerging.subtitle_other": "{{count}} sinais na sua vizinhança",
   "blindspots.emerging.title": "Emergente",
   "blindspots.emerging.trending": "Em alta",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "Nenhuma lacuna de cobertura detectada nas suas dependências rastreadas.",
   "blindspots.error.subtitle": "A varredura de pontos cegos falhou, mas seus resultados principais de análise continuam disponíveis.",
   "blindspots.error.timeout": "A varredura de pontos cegos demorou demais. Tente novamente quando o sistema estiver ocioso ou após a análise atual se estabilizar.",
   "blindspots.error.title": "Varredura de cobertura indisponível",

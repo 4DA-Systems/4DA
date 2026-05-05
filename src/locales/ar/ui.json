@@ -220,7 +220,7 @@
   "blindspots.emerging.subtitle_other": "{{count}} إشارات في محيطك",
   "blindspots.emerging.title": "ناشئ",
   "blindspots.emerging.trending": "رائج",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "لم يتم اكتشاف أي فجوات تغطية في التبعيات المتتبعة.",
   "blindspots.error.subtitle": "فشل فحص النقاط العمياء، لكن نتائج التحليل الرئيسية لا تزال متاحة.",
   "blindspots.error.timeout": "استغرق فحص النقاط العمياء وقتًا طويلاً. أعد المحاولة عندما يكون النظام خاملاً أو بعد استقرار التحليل الحالي.",
   "blindspots.error.title": "فحص التغطية غير متاح",

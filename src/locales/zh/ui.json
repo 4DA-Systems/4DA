@@ -2758,7 +2758,7 @@
   "blindspots.missed": "Missed Intelligence",
   "blindspots.missed.relevance": "relevance: {{score}}",
   "blindspots.recommendations": "Recommendations",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "在您跟踪的依赖项中未检测到覆盖盲区。",
   "blindspots.loading": "Analyzing your coverage...",
   "blindspots.tier.stack": "你的技术栈",
   "blindspots.tier.stackSubtitle_one": "{{count}} 个未覆盖依赖",

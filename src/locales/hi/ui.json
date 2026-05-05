@@ -204,7 +204,7 @@
   "blindspots.emerging.subtitle_other": "आपके आसपास {{count}} सिग्नल",
   "blindspots.emerging.title": "उभरता हुआ",
   "blindspots.emerging.trending": "ट्रेंडिंग",
-  "blindspots.empty": "No blind spots detected. Your stack coverage is excellent.",
+  "blindspots.empty": "आपकी ट्रैक की गई निर्भरताओं में कोई कवरेज अंतराल नहीं पाया गया।",
   "blindspots.error.subtitle": "ब्लाइंड-स्पॉट स्कैन विफल रहा, लेकिन आपके मुख्य विश्लेषण परिणाम उपलब्ध हैं।",
   "blindspots.error.timeout": "ब्लाइंड-स्पॉट स्कैन में बहुत समय लगा। सिस्टम निष्क्रिय होने पर या वर्तमान विश्लेषण स्थिर होने के बाद पुनः प्रयास करें।",
   "blindspots.error.title": "कवरेज स्कैन उपलब्ध नहीं",
