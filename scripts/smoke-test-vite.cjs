@@ -24,11 +24,13 @@ const path = require('node:path');
 const PORT = 4444;
 const DEV_HOST = `http://localhost:${PORT}`;
 const STARTUP_TIMEOUT_MS = 30000;
-const REQUEST_TIMEOUT_MS = 10000;
+const REQUEST_TIMEOUT_MS = 20000;
 
-// Critical modules that MUST resolve on a cold start
+// Critical modules that MUST resolve on a cold start.
+// main.tsx is last because it imports the entire app tree — requesting lighter
+// modules first gives Vite's dep optimizer time to finish pre-bundling before
+// the heavy entry point is fetched (avoids 10s timeout on CI cold cache).
 const CRITICAL_ROUTES = [
-  '/src/main.tsx',
   '/src/App.tsx',
   '/src/store/index.ts',
   '/src/lib/commands.ts',
@@ -41,6 +43,7 @@ const CRITICAL_ROUTES = [
   '/src/components/IntelligenceConsole.tsx',
   '/src/components/BriefingView.tsx',
   '/src/components/DecisionMemory.tsx',
+  '/src/main.tsx',
 ];
 
 function log(msg) { console.log(`[smoke] ${msg}`); }
@@ -124,7 +127,13 @@ async function main() {
     process.exit(1);
   }
 
-  log('Server ready. Requesting critical routes...');
+  log('Server ready. Warming up dep optimizer...');
+  // Fetch index.html to trigger Vite's dependency pre-bundling before we
+  // request individual modules — prevents timeout on heavy entry points.
+  try { await httpGet(`${DEV_HOST}/?t=${Date.now()}`); } catch { /* ok */ }
+  await new Promise((r) => setTimeout(r, 2000));
+
+  log('Requesting critical routes...');
   const failures = [];
 
   for (const route of CRITICAL_ROUTES) {
