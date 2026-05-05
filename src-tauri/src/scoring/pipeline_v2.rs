@@ -456,9 +456,8 @@ fn extract_signals(
                     // multi-byte UTF-8 content (e.g. accented researcher
                     // names in CVE descriptions).
                     let start = body_lower.floor_char_boundary(idx.saturating_sub(window));
-                    let end = body_lower.ceil_char_boundary(
-                        (idx + full.len() + window).min(body_lower.len()),
-                    );
+                    let end = body_lower
+                        .ceil_char_boundary((idx + full.len() + window).min(body_lower.len()));
                     let slice = &body_lower[start..end];
                     if CONTEXT_WORDS.iter().any(|w| slice.contains(w)) {
                         return true;
