@@ -149,24 +149,35 @@ fn blind_spot_threshold_days() -> u32 {
 }
 
 /// Check if the user has < 7 days of engagement history.
-/// Returns true if no interactions exist or the oldest is < 7 days old.
+/// Returns true only if BOTH interactions AND source_items are too young.
 /// Used for cold-start suppression (doctrine rule 6).
+///
+/// Previously only checked `interactions`, but users who've been running 4DA
+/// for days without explicit feedback still have rich source_items and
+/// project_dependencies data — enough for meaningful blind spot analysis.
 fn is_cold_start(conn: &rusqlite::Connection) -> Result<bool> {
-    let result: Option<String> = conn
-        .query_row("SELECT MIN(timestamp) FROM interactions", [], |row| {
-            row.get(0)
-        })
-        .ok()
-        .flatten();
+    // Check interactions table first (explicit engagement)
+    let interaction_age = oldest_record_age_days(conn, "SELECT MIN(timestamp) FROM interactions");
 
+    // Also check source_items (passive data collection)
+    let source_age = oldest_record_age_days(conn, "SELECT MIN(created_at) FROM source_items");
+
+    // Not cold-start if EITHER data source has 7+ days of history
+    let max_age = interaction_age.max(source_age);
+    Ok(max_age < 7)
+}
+
+fn oldest_record_age_days(conn: &rusqlite::Connection, sql: &str) -> i64 {
+    let result: Option<String> = conn.query_row(sql, [], |row| row.get(0)).ok().flatten();
     match result {
-        None => Ok(true),
+        None => 0,
         Some(ts) => {
-            let oldest = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S")
-                .or_else(|_| chrono::DateTime::parse_from_rfc3339(&ts).map(|dt| dt.naive_utc()))
-                .map_err(|e| format!("Failed to parse oldest interaction timestamp: {}", e))?;
-            let age = chrono::Utc::now().naive_utc() - oldest;
-            Ok(age.num_days() < 7)
+            let parsed = chrono::NaiveDateTime::parse_from_str(&ts, "%Y-%m-%d %H:%M:%S")
+                .or_else(|_| chrono::DateTime::parse_from_rfc3339(&ts).map(|dt| dt.naive_utc()));
+            match parsed {
+                Ok(oldest) => (chrono::Utc::now().naive_utc() - oldest).num_days(),
+                Err(_) => 0,
+            }
         }
     }
 }
