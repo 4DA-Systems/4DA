@@ -788,6 +788,23 @@ fn compute_quality_composite(
             learned_source_mult
         };
 
+    // Per-feed engagement correction (granular: overrides source-type-level when available)
+    let source_quality_mult = if let Some(feed_url) = input.feed_origin {
+        if let Some(&feed_rate) = ctx.feed_autopsies.get(feed_url) {
+            if feed_rate < scoring_config::SOURCE_ENGAGEMENT_LOW_THRESHOLD {
+                source_quality_mult * scoring_config::SOURCE_ENGAGEMENT_LOW_PENALTY
+            } else if feed_rate > scoring_config::SOURCE_ENGAGEMENT_HIGH_THRESHOLD {
+                source_quality_mult * scoring_config::SOURCE_ENGAGEMENT_HIGH_BOOST
+            } else {
+                source_quality_mult
+            }
+        } else {
+            source_quality_mult
+        }
+    } else {
+        source_quality_mult
+    };
+
     // Anti-topic multiplier
     let anti_mult = 1.0 - raw.anti_penalty;
 

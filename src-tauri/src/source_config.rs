@@ -429,6 +429,179 @@ pub async fn set_disabled_default_twitter_handles(
 }
 
 // ============================================================================
+// Curated Feed Library Commands
+// ============================================================================
+
+/// Get the full curated feed catalog with metadata for the Source Browser UI.
+/// Returns all feeds grouped by domain, with enabled/disabled status.
+#[tauri::command]
+pub async fn get_curated_feeds() -> Result<serde_json::Value> {
+    let registry = crate::curated_feeds::get_curated_registry();
+    let settings = get_settings_manager().lock();
+    let disabled = settings.get_disabled_default_rss_feeds();
+    drop(settings);
+
+    let feeds: Vec<serde_json::Value> = registry
+        .all_feeds()
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "id": f.id,
+                "name": f.name,
+                "url": f.url,
+                "homepage": f.homepage,
+                "description": f.description,
+                "domains": f.domains,
+                "content_type": f.content_type,
+                "tier": f.tier,
+                "editorial_model": f.editorial_model,
+                "expected_frequency_days": f.expected_frequency_days,
+                "color_hint": f.color_hint,
+                "enabled": !disabled.contains(&f.url),
+            })
+        })
+        .collect();
+
+    let domains = registry.all_domains();
+
+    Ok(serde_json::json!({
+        "feeds": feeds,
+        "total": feeds.len(),
+        "domains": domains,
+    }))
+}
+
+/// Get curated feeds filtered by domain, with enabled/disabled status.
+#[tauri::command]
+pub async fn get_curated_feeds_by_domain(domain: String) -> Result<serde_json::Value> {
+    let registry = crate::curated_feeds::get_curated_registry();
+    let settings = get_settings_manager().lock();
+    let disabled = settings.get_disabled_default_rss_feeds();
+    drop(settings);
+
+    let feeds: Vec<serde_json::Value> = registry
+        .feeds_for_domain(&domain)
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "id": f.id,
+                "name": f.name,
+                "url": f.url,
+                "homepage": f.homepage,
+                "description": f.description,
+                "domains": f.domains,
+                "content_type": f.content_type,
+                "tier": f.tier,
+                "editorial_model": f.editorial_model,
+                "expected_frequency_days": f.expected_frequency_days,
+                "color_hint": f.color_hint,
+                "enabled": !disabled.contains(&f.url),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "feeds": feeds,
+        "count": feeds.len(),
+        "domain": domain,
+    }))
+}
+
+/// Get curated feeds suggested for the user based on ACE-detected stack.
+/// Matches feed domains against detected languages and project types.
+#[tauri::command]
+pub async fn get_suggested_curated_feeds() -> Result<serde_json::Value> {
+    let registry = crate::curated_feeds::get_curated_registry();
+    let settings = get_settings_manager().lock();
+    let disabled = settings.get_disabled_default_rss_feeds();
+    drop(settings);
+
+    // Map ACE-detected languages to feed domain tags
+    let detected_languages = crate::state::get_ace_detected_languages();
+    let mut relevant_domains: Vec<&str> = Vec::new();
+
+    for lang in &detected_languages {
+        match lang.to_lowercase().as_str() {
+            "rust" => relevant_domains.push("rust"),
+            "typescript" | "javascript" => {
+                relevant_domains.push("typescript");
+                relevant_domains.push("javascript");
+                relevant_domains.push("web-platform");
+            }
+            "python" => relevant_domains.push("python"),
+            "go" => relevant_domains.push("go"),
+            _ => {}
+        }
+    }
+
+    // Security and open-source are always relevant
+    relevant_domains.push("security");
+    relevant_domains.push("open-source");
+    relevant_domains.dedup();
+
+    let suggested: Vec<serde_json::Value> = registry
+        .all_feeds()
+        .iter()
+        .filter(|f| {
+            f.domains
+                .iter()
+                .any(|d| relevant_domains.contains(&d.as_str()))
+        })
+        .map(|f| {
+            serde_json::json!({
+                "id": f.id,
+                "name": f.name,
+                "url": f.url,
+                "homepage": f.homepage,
+                "description": f.description,
+                "domains": f.domains,
+                "content_type": f.content_type,
+                "tier": f.tier,
+                "editorial_model": f.editorial_model,
+                "color_hint": f.color_hint,
+                "enabled": !disabled.contains(&f.url),
+            })
+        })
+        .collect();
+
+    Ok(serde_json::json!({
+        "feeds": suggested,
+        "count": suggested.len(),
+        "matched_domains": relevant_domains,
+        "detected_languages": detected_languages,
+    }))
+}
+
+/// Toggle a curated feed on or off by its URL.
+/// Disabling adds the URL to disabled_default_rss_feeds.
+/// Enabling removes it from that list.
+#[tauri::command]
+pub async fn toggle_curated_feed(url: String, enabled: bool) -> Result<serde_json::Value> {
+    // Verify it's actually a curated feed
+    if !crate::curated_feeds::is_curated_feed(&url) {
+        return Err("URL is not a curated feed".into());
+    }
+
+    let mut settings = get_settings_manager().lock();
+    let mut disabled = settings.get_disabled_default_rss_feeds();
+
+    if enabled {
+        disabled.retain(|f| f != &url);
+    } else if !disabled.contains(&url) {
+        disabled.push(url.clone());
+    }
+
+    settings.set_disabled_default_rss_feeds(disabled)?;
+    info!(target: "4da::curated", url = %url, enabled = enabled, "Toggled curated feed");
+
+    Ok(serde_json::json!({
+        "success": true,
+        "url": url,
+        "enabled": enabled,
+    }))
+}
+
+// ============================================================================
 // Feed Validation Commands
 // ============================================================================
 

@@ -149,6 +149,14 @@ pub(crate) fn run_autophagy_cycle_with_ace(
         }
     }
 
+    // Per-feed engagement autopsies (curated feed granularity)
+    let feed_autopsies = super::source_autopsy::analyze_feeds(conn, max_age_days);
+    if !feed_autopsies.is_empty() {
+        if let Err(e) = super::source_autopsy::store_feed_autopsies(conn, &feed_autopsies) {
+            warn!(target: "4da::autophagy", error = %e, "Failed to store feed autopsies");
+        }
+    }
+
     // Store anti-patterns
     let anti_patterns_detected = anti_patterns.len() as i64;
     if !anti_patterns.is_empty() {

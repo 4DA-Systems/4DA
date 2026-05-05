@@ -186,6 +186,22 @@ export interface YouTubeChannelValidation {
   message?: string;
 }
 
+/** Curated feed manifest entry from the built-in catalog. */
+export interface CuratedFeedInfo {
+  id: string;
+  name: string;
+  url: string;
+  homepage: string;
+  description: string;
+  domains: string[];
+  content_type: string;
+  tier: string;
+  editorial_model: string;
+  expected_frequency_days?: number;
+  color_hint: string;
+  enabled: boolean;
+}
+
 /** Per-feed health status from the circuit breaker. */
 export interface FeedHealth {
   feed_origin: string;
@@ -540,6 +556,10 @@ interface CommandMap {
   set_disabled_default_youtube_channels: { params: { channels: string[] }; result: { success: boolean } };
   get_disabled_default_twitter_handles: { params: Record<string, never>; result: { disabled: string[] } };
   set_disabled_default_twitter_handles: { params: { handles: string[] }; result: { success: boolean } };
+  get_curated_feeds: { params: Record<string, never>; result: { feeds: CuratedFeedInfo[]; total: number; domains: string[] } };
+  get_curated_feeds_by_domain: { params: { domain: string }; result: { feeds: CuratedFeedInfo[]; count: number; domain: string } };
+  get_suggested_curated_feeds: { params: Record<string, never>; result: { feeds: CuratedFeedInfo[]; count: number; matched_domains: string[]; detected_languages: string[] } };
+  toggle_curated_feed: { params: { url: string; enabled: boolean }; result: { success: boolean; url: string; enabled: boolean } };
   get_sources: { params: Record<string, never>; result: SourceInfo[] };
   validate_rss_feed: { params: { url: string }; result: RssFeedValidation };
   validate_youtube_channel: { params: { channelId: string }; result: YouTubeChannelValidation };

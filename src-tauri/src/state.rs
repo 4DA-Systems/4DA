@@ -435,6 +435,23 @@ pub(crate) fn get_ace_engine_mut() -> Result<parking_lot::RwLockWriteGuard<'stat
     Ok(engine.write())
 }
 
+/// Get detected languages from ACE engine for curated feed suggestions.
+/// Returns empty vec if ACE is not initialized or has no data.
+pub(crate) fn get_ace_detected_languages() -> Vec<String> {
+    let engine = match get_ace_engine() {
+        Ok(e) => e,
+        Err(_) => return vec![],
+    };
+    match engine.get_detected_tech() {
+        Ok(techs) => techs
+            .into_iter()
+            .filter(|t| matches!(t.category, crate::ace::TechCategory::Language))
+            .map(|t| t.name)
+            .collect(),
+        Err(_) => vec![],
+    }
+}
+
 // ============================================================================
 // Global Source Registry (Lazy Initialized)
 // ============================================================================
