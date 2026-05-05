@@ -175,24 +175,9 @@ pub(crate) struct VideoEntry {
     pub(crate) star_rating: f64,
 }
 
-/// Extract content between XML tags: <tag>content</tag>
-pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-    let open_tag = format!("<{tag}");
-    let close_tag = format!("</{tag}>");
-
-    let start_pos = xml.find(&open_tag)?;
-    let content_start = xml[start_pos..].find('>')? + start_pos + 1;
-    let end_pos = xml[content_start..].find(&close_tag)? + content_start;
-
-    let content = xml[content_start..end_pos].trim();
-
-    // Handle CDATA
-    if content.starts_with("<![CDATA[") && content.ends_with("]]>") {
-        Some(content[9..content.len() - 3].to_string())
-    } else {
-        Some(content.to_string())
-    }
-}
+// Re-export the shared XML tag extractor so existing callers (including tests)
+// can still reference `youtube::extract_tag`.
+pub(crate) use super::extract_tag;
 
 /// Extract an attribute value from a self-closing tag: <tag attr="value" />
 pub(crate) fn extract_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {

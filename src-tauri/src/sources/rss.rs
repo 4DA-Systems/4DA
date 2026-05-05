@@ -214,23 +214,10 @@ impl RssSource {
         entries
     }
 
-    /// Extract content from XML tag
+    /// Extract content from XML tag.
+    /// Delegates to the shared `sources::extract_tag` implementation.
     pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
-        let open_tag = format!("<{tag}");
-        let close_tag = format!("</{tag}>");
-
-        let start_pos = xml.find(&open_tag)?;
-        let content_start = xml[start_pos..].find('>')? + start_pos + 1;
-        let end_pos = xml[content_start..].find(&close_tag)? + content_start;
-
-        let content = xml[content_start..end_pos].trim();
-
-        // Handle CDATA sections
-        if content.starts_with("<![CDATA[") && content.ends_with("]]>") {
-            Some(content[9..content.len() - 3].to_string())
-        } else {
-            Some(content.to_string())
-        }
+        super::extract_tag(xml, tag)
     }
 
     /// Extract guid element (RSS)

@@ -328,23 +328,11 @@ fn parse_rss_generic(body: &str, source_type: &str) -> Result<Vec<SourceItem>, S
 
 /// Extract text content between XML tags.
 ///
-/// Handles CDATA sections. Returns `None` if the tag is not found or empty.
+/// Delegates to the shared `sources::extract_tag` and adds an empty-check:
+/// returns `None` when the extracted content is blank (the shared version
+/// returns `Some("")` in that case).
 fn extract_tag(block: &str, tag: &str) -> Option<String> {
-    let open = format!("<{tag}");
-    let close = format!("</{tag}>");
-    let start = block.find(&open)?;
-    let content_start = block[start..].find('>')? + start + 1;
-    let end = block[content_start..].find(&close)? + content_start;
-    let text = &block[content_start..end];
-    // Strip CDATA if present
-    let text = text.strip_prefix("<![CDATA[").unwrap_or(text);
-    let text = text.strip_suffix("]]>").unwrap_or(text);
-    let trimmed = text.trim().to_string();
-    if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed)
-    }
+    super::extract_tag(block, tag).filter(|s| !s.trim().is_empty())
 }
 
 /// Extract an attribute value from a self-closing tag (e.g., `<link href="..."/>`).
