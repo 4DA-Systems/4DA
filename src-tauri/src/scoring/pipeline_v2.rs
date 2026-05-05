@@ -933,6 +933,24 @@ fn compute_quality_composite(
         content_dna_mult
     };
 
+    // SecurityAdvisory conditional multiplier: the full 1.30 content_dna boost
+    // is only justified when the advisory actually affects the user's dependencies.
+    // Without dep confirmation, the boost inflates scores for irrelevant CVEs.
+    let content_dna_mult = if content_type == crate::content_dna::ContentType::SecurityAdvisory {
+        if raw.dep_match_score == 0.0 {
+            // No dependency matched — neutralize the boost, don't penalize
+            content_dna_mult.min(1.00)
+        } else if raw.dep_match_score <= 0.40 {
+            // Weak match — partial boost
+            content_dna_mult.min(1.10)
+        } else {
+            // Strong dep match — full boost justified
+            content_dna_mult
+        }
+    } else {
+        content_dna_mult
+    };
+
     // Community quality signal: SO score, HN points, Reddit upvotes
     let age_hours_for_community = input.created_at.map_or(0.0, |ts| {
         (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0

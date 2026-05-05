@@ -182,16 +182,18 @@ const PreemptionView = memo(function PreemptionView() {
             </div>
           )}
 
-          <PreemptionTierSection
-            dotColor="#22C55E"
-            borderColor="rgba(34, 197, 94, 0.2)"
-            title={t('preemption.tier.verified')}
-            subtitle={t('preemption.tier.verifiedSubtitle', { count: verifiedItems.length })}
-            items={verifiedItems}
-            surfacedRef={surfacedRef}
-            onDismiss={handleDismiss}
-            emptyText={t('preemption.tier.verifiedEmpty')}
-          />
+          {verifiedItems.length > 0 && (
+            <PreemptionTierSection
+              dotColor="#22C55E"
+              borderColor="rgba(34, 197, 94, 0.2)"
+              title={t('preemption.tier.verified')}
+              subtitle={t('preemption.tier.verifiedSubtitle', { count: verifiedItems.length })}
+              items={verifiedItems}
+              surfacedRef={surfacedRef}
+              onDismiss={handleDismiss}
+              emptyText={t('preemption.tier.verifiedEmpty')}
+            />
+          )}
 
           {assessedItems.length > 0 && (
             <PreemptionTierSection

@@ -81,10 +81,10 @@ pub(crate) fn calculate_accuracy(
 }
 
 /// Estimate time saved based on noise rejected.
-/// Assumes average developer spends ~30 seconds evaluating each piece of content.
-/// If 4DA rejects 2000 items, that's ~1000 minutes = ~16.7 hours saved.
+/// Assumes average developer spends ~8 seconds evaluating each piece of content.
+/// If 4DA rejects 2000 items, that's ~267 minutes = ~4.4 hours saved.
 pub(crate) fn estimate_time_saved(noise_rejected: u32) -> f32 {
-    let seconds_per_item = 30.0_f32;
+    let seconds_per_item = 8.0_f32;
     let total_seconds = noise_rejected as f32 * seconds_per_item;
     (total_seconds / 3600.0 * 10.0).round() / 10.0 // Round to 1 decimal
 }
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn test_time_saved_estimate() {
         let hours = estimate_time_saved(2400);
-        assert!((hours - 20.0).abs() < 0.1); // 2400 * 30s = 72000s = 20h
+        assert!((hours - 5.3).abs() < 0.1); // 2400 * 8s = 19200s = 5.3h
     }
 
     #[test]

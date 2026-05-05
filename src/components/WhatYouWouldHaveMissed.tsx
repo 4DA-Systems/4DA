@@ -31,17 +31,25 @@ const SIGNAL_PRIORITY_ORDER = [
 ];
 
 function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
-  // Find the item that would have been hardest to discover manually
-  // Priority: security alerts > breaking changes > dep updates > high-dep-match items
+  // For security items, require dependency confirmation — an irrelevant CVE as hero card destroys trust
   for (const priority of SIGNAL_PRIORITY_ORDER) {
+    const isSecurityType = priority === 'security_alert' || priority === 'breaking_change';
     const match = results.find(
-      r => r.score_breakdown?.content_type === priority
-        || r.signal_type === priority
+      r => (r.score_breakdown?.content_type === priority || r.signal_type === priority)
+        && (!isSecurityType || (r.score_breakdown?.dep_match_score ?? 0) > 0.2)
     );
     if (match) return match;
   }
 
-  // Fallback: highest dependency match score (most "personal" result)
+  // Fallback: security items without dep match (still better than nothing)
+  for (const priority of SIGNAL_PRIORITY_ORDER) {
+    const match = results.find(
+      r => r.score_breakdown?.content_type === priority || r.signal_type === priority
+    );
+    if (match) return match;
+  }
+
+  // Fallback: highest dependency match score
   const withDeps = results.filter(r => (r.score_breakdown?.dep_match_score ?? 0) > 0.2);
   if (withDeps.length > 0) {
     return withDeps.sort((a, b) =>
@@ -56,8 +64,8 @@ function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | nul
 }
 
 function formatTimeSaved(totalScanned: number): string {
-  // Average 30 seconds per article to scan/evaluate manually
-  const minutes = Math.round((totalScanned * 30) / 60);
+  // Average 8 seconds per article to scan/evaluate manually
+  const minutes = Math.round((totalScanned * 8) / 60);
   if (minutes < 60) return `${minutes} min`;
   const hours = (minutes / 60).toFixed(1);
   return `${hours} hr`;

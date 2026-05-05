@@ -38,6 +38,39 @@ pub(crate) struct ACEContext {
     pub negative_stack: crate::stacks::negative_stack::NegativeStackContext,
 }
 
+/// Structural labels that don't represent real user interests — they describe
+/// code organization (directories, CI stages, commit prefixes) rather than
+/// technologies the user cares about. Filtering these prevents the scoring
+/// pipeline from boosting generic infrastructure content.
+const STRUCTURAL_LABELS: &[&str] = &[
+    "api",
+    "backend",
+    "frontend",
+    "db",
+    "database",
+    "test",
+    "tests",
+    "testing",
+    "ui",
+    "config",
+    "build",
+    "deploy",
+    "ci",
+    "cd",
+    "docs",
+    "documentation",
+    "refactor",
+    "fix",
+    "feature",
+    "chore",
+    "security",
+    "update",
+    "upgrade",
+    "migration",
+    "setup",
+    "init",
+];
+
 /// Fetch ACE-discovered context for relevance scoring
 /// PASIFA: Now captures full context including confidence scores
 pub(crate) fn get_ace_context() -> ACEContext {
@@ -55,6 +88,9 @@ pub(crate) fn get_ace_context() -> ACEContext {
     if let Ok(topics) = ace.get_active_topics() {
         for t in topics.iter().filter(|t| t.weight >= 0.55) {
             let topic_lower = t.topic.to_lowercase();
+            if STRUCTURAL_LABELS.contains(&topic_lower.as_str()) {
+                continue;
+            }
             ctx.active_topics.push(topic_lower.clone());
             let conf = if t.confidence.is_finite() && t.confidence >= 0.0 && t.confidence <= 1.0 {
                 t.confidence
@@ -153,6 +189,9 @@ pub(crate) fn get_ace_context() -> ACEContext {
     // previous same-day session gets moderate, yesterday gets low.
     if let Ok(work_topics) = ace.get_session_aware_work_topics() {
         for (topic, weight) in work_topics {
+            if STRUCTURAL_LABELS.contains(&topic.as_str()) {
+                continue;
+            }
             if !ctx.active_topics.contains(&topic) {
                 ctx.active_topics.push(topic.clone());
             }

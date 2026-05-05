@@ -509,8 +509,15 @@ pub(crate) fn match_dependencies(
 
             // Title match (highest value)
             if has_word_boundary_match(&title_lower, term) {
-                if is_ambiguous {
-                    // Ambiguous term in title: only count if language context nearby
+                // Check if this is a compound-prefix match (e.g. "i18next" inside "i18next-http-middleware")
+                let is_compound_prefix = title_lower.match_indices(term).any(|(pos, _)| {
+                    let after = pos + term.len();
+                    after < title_lower.len() && title_lower.as_bytes()[after] == b'-'
+                });
+                if is_compound_prefix {
+                    // Different package — minimal confidence
+                    confidence += 0.10;
+                } else if is_ambiguous {
                     if has_language_context_nearby(&title_lower, 0, title_lower.len()) {
                         confidence += 0.4;
                     }

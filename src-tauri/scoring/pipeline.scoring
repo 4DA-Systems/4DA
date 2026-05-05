@@ -180,8 +180,8 @@ language_mismatch {
 
 # Security dependency validation multipliers
 security_dep_validation {
-    no_match_penalty: 0.35      # [0.20, 0.50]
-    weak_match_penalty: 0.60    # [0.40, 0.80]
+    no_match_penalty: 0.35      # [0.10, 0.50]
+    weak_match_penalty: 0.45    # [0.40, 0.80]
     dep_confidence_threshold: 0.20  # [0.10, 0.40]
     strong_dep_threshold: 0.40  # [0.30, 0.60]
 }
@@ -229,9 +229,9 @@ preemption_urgency {
 
 # Preemption confidence calibration (title-keyword match, no version check)
 preemption_confidence {
-    title_match_base: 0.45      # [0.30, 0.60]
+    title_match_base: 0.35      # [0.30, 0.60]
     per_project_boost: 0.03     # [0.01, 0.10]
-    max_confidence: 0.60        # [0.50, 0.80]
+    max_confidence: 0.50        # [0.50, 0.80]
 }
 
 # Signal chain phase detection thresholds
@@ -265,5 +265,5 @@ community_signal {
     low_threshold: 0.30    # [0.10, 0.50]
     low_penalty: 0.85      # [0.70, 0.95]
     high_threshold: 0.70   # [0.50, 0.90]
-    high_boost: 1.05       # [1.00, 1.15]
+    high_boost: 1.12       # [1.00, 1.15]
 }
