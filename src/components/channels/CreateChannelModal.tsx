@@ -122,7 +122,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
         topicQuery: topics,
       });
       loadChannels();
-      cmd('auto_render_all_channels').catch((e) => console.warn('CreateChannelModal: auto-render channels failed', e));
+      cmd('auto_render_all_channels').catch(() => {});
       setTitle('');
       setDescription('');
       setTopics([]);

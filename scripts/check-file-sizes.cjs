@@ -16,14 +16,14 @@ const path = require('path');
 // ============================================================================
 
 const THRESHOLDS = {
-  ts:  { warn: 350, error: 500 },
-  tsx: { warn: 350, error: 500 },
-  rs:  { warn: 800, error: 1500 },
+  ts:  { warn: 300, error: 500 },
+  tsx: { warn: 300, error: 450 },
+  rs:  { warn: 500, error: 800 },
 };
 
 // Files that legitimately exceed thresholds — each must have a justification.
 const EXCEPTIONS = {
-  // Rust — files that structurally exceed 1500-line error threshold
+  // Rust — files that exceed 800-line error threshold (justified or tracked as DEBT)
   'src-tauri/src/db/migrations.rs':        'DB schema migrations — sequential by nature',
   'src-tauri/src/db/sources.rs':           'Source item DB layer — CRUD + batch upsert + feed_health circuit breaker (6 methods + 5 tests)',
   'src-tauri/src/settings/mod.rs':         'Settings management — serialization + validation',
@@ -38,6 +38,57 @@ const EXCEPTIONS = {
   'src-tauri/src/blind_spots.rs':                      'TEMP: slated for collapse into EvidenceItem + materializer in Intelligence Reconciliation Phase 4 (docs/strategy/INTELLIGENCE-RECONCILIATION.md). Remove this exception when phase ships.',
   'src-tauri/src/preemption.rs':                       'TEMP: grown with 50-entry suppression list + EvidenceItem conversion in Intelligence Reconciliation. Split suppression into its own module post-launch.',
   'src/components/preemption/PreemptionView.tsx':      'TEMP: grown with dismiss persistence (localStorage) + undo bar + debounce guard in Phase 13 polish. Extract dismiss logic into a hook post-launch.',
+
+  // Rust — legacy debt (exposed when guardian threshold tightened from 1500→800 to match CLAUDE.md)
+  // Each file is a candidate for splitting. Gate prevents new files from exceeding 800.
+  'src-tauri/src/scoring/simulation/corpus.rs':        'DEBT: test corpus data — 1467 lines of fixture definitions',
+  'src-tauri/src/signals.rs':                          'DEBT: signal chain detection + tests — split signal types from detection logic',
+  'src-tauri/src/scoring/pipeline_tests.rs':           'DEBT: 1435 lines of pipeline tests — consider splitting by pipeline phase',
+  'src-tauri/src/scoring/benchmark.rs':                'DEBT: scoring benchmarks + corpus — split corpus from benchmark harness',
+  'src-tauri/src/llm.rs':                              'DEBT: LLM integration — provider logic + prompt construction + response parsing',
+  'src-tauri/src/knowledge_decay.rs':                  'DEBT: knowledge decay detection + tests',
+  'src-tauri/src/data_export.rs':                      'DEBT: multi-format export (JSON/CSV/PDF) — split by format',
+  'src-tauri/src/scoring/dependencies.rs':             'DEBT: dependency scoring — extract lockfile matching from scoring logic',
+  'src-tauri/src/ace/mod.rs':                          'DEBT: ACE module root — watcher + topic + embedding orchestration',
+  'src-tauri/src/webhooks.rs':                         'DEBT: enterprise webhook system — feature-gated',
+  'src-tauri/src/ace/behavior.rs':                     'DEBT: behavior analysis — pattern detection + tests',
+  'src-tauri/src/achievement_engine.rs':               'DEBT: achievement system — feature-gated experimental',
+  'src-tauri/src/ace/watcher.rs':                      'DEBT: filesystem watcher — event handling + debounce + tests',
+  'src-tauri/src/calibration_fitter.rs':               'DEBT: curve fitting algorithm + tests',
+  'src-tauri/src/streets_commands.rs':                 'DEBT: STREETS playbook commands — 20+ Tauri handlers',
+  'src-tauri/src/developer_dna.rs':                    'DEBT: developer DNA profiling + SVG generation',
+  'src-tauri/src/monitoring.rs':                       'DEBT: background monitoring orchestration',
+  'src-tauri/src/signal_terminal.rs':                  'DEBT: signal terminal processing + tests',
+  'src-tauri/src/settings/types.rs':                   'DEBT: Settings struct (33 fields) + sub-config types + defaults',
+  'src-tauri/src/domain_profile.rs':                   'DEBT: domain profiling — extract data tables from logic',
+  'src-tauri/src/team_sync_commands.rs':               'DEBT: team sync — feature-gated, 17 commands',
+  'src-tauri/src/settings/license.rs':                 'DEBT: license validation + Keygen integration + tests',
+  'src-tauri/src/source_fetching/mod.rs':              'DEBT: source fetching orchestration — scheduler + rate limiting',
+  'src-tauri/src/startup_health.rs':                   'DEBT: startup diagnostics — Windows FFI + health checks',
+  'src-tauri/src/source_fetching/fetcher.rs':          'DEBT: fetcher implementation — retry logic + circuit breaker',
+  'src-tauri/src/signal_chains.rs':                    'DEBT: signal chain construction + tests',
+  'src-tauri/src/settings_commands_license.rs':        'DEBT: license Tauri commands — validation + trial + tier logic',
+  'src-tauri/src/source_config.rs':                    'DEBT: source configuration — 20+ source default configs',
+  'src-tauri/src/health.rs':                           'DEBT: health monitoring — system + source + DB health checks',
+  'src-tauri/src/digest.rs':                           'DEBT: digest generation — weekly/daily summary construction',
+  'src-tauri/src/scoring/pipeline.rs':                 'DEBT: V1 scoring pipeline — kept alongside V2 for validation',
+  'src-tauri/src/state.rs':                            'DEBT: app state — DB init + registry + global state management',
+  'src-tauri/src/sources/osv.rs':                      'DEBT: OSV/CVE adapter — vulnerability parsing + tests',
+  'src-tauri/src/analysis_deep_scan.rs':               'DEBT: deep analysis scan — content extraction + reranking',
+  'src-tauri/src/analysis_rerank.rs':                  'DEBT: reranking pipeline — LLM-based relevance scoring',
+  'src-tauri/src/commands.rs':                         'DEBT: misc Tauri commands — grab bag of handlers',
+  'src-tauri/src/ollama.rs':                           'DEBT: Ollama integration — model management + health checks',
+  'src-tauri/src/scoring/keywords.rs':                 'DEBT: keyword extraction + matching — data tables + logic',
+  'src-tauri/src/content_dna.rs':                      'DEBT: content DNA — type detection + sophistication scoring',
+  'src-tauri/src/enterprise_analytics_tests.rs':       'DEBT: enterprise analytics tests — feature-gated test suite',
+  'src-tauri/src/context_engine.rs':                   'DEBT: context engine — query construction + embedding',
+  'src-tauri/src/content_translation.rs':              'DEBT: content translation — multi-provider + batch + cache',
+  'src-tauri/src/briefing_groundedness.rs':            'DEBT: briefing groundedness — claim extraction + verification',
+  'src-tauri/src/ace/context.rs':                      'DEBT: ACE context builder — project graph + relevance',
+  'src-tauri/src/embeddings.rs':                       'DEBT: embedding pipeline — Ollama + batch + cache',
+  'src-tauri/src/stacks/profile_data_b.rs':            'DEBT: stack profile data tables — framework/tool definitions',
+  'src-tauri/src/decisions.rs':                        'DEBT: decision journal — CRUD + MCP integration',
+  'src-tauri/src/scoring/necessity.rs':                'DEBT: necessity scoring — information need detection',
 
   // TypeScript — type registries and complex UI
   'src/lib/commands.ts':                             'IPC command registry — all typed Tauri commands (280 with feature-gated variants)',

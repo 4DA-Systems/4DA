@@ -18,6 +18,7 @@ import { invoke } from '@tauri-apps/api/core';
 import type {
   SourceRelevance,
   ScoreBreakdown,
+  ProValueReport,
 } from '../types/analysis';
 import type { CalibrationResult, CurveFitReport, CurveStatus, TasteTestStepResult, TasteProfileSummary } from '../types/calibration';
 import type {
@@ -54,6 +55,7 @@ import type {
   DataHealth,
   MaintenanceResult,
   DecisionWindow,
+  IntelligencePulseData,
 } from '../types/autophagy';
 import type {
   PlaybookModule,
@@ -61,6 +63,7 @@ import type {
   PlaybookProgress,
 } from '../types/playbook';
 import type { ParsedCommand, CommandExecutionResult } from '../types/streets';
+import type { ChannelRender, RenderProvenance, ChannelChangelog, ChannelSourceMatch } from '../types/channels';
 import type { StackProfileSummary, StackDetection } from '../types/stacks';
 import type {
   InfrastructureDimension,
@@ -1307,13 +1310,6 @@ interface DelegationScoreEntry {
   recommendation: string;
 }
 
-interface ProValueReport {
-  total_saved_hours: number;
-  total_signals_processed: number;
-  top_discoveries: Array<{ title: string; impact: string }>;
-  period_days: number;
-}
-
 interface StreetHealthScore {
   overall: number;
   module_scores: Array<{
@@ -1581,18 +1577,6 @@ interface DelegationScoreResult {
   caveats: string[];
 }
 
-interface IntelligencePulseData {
-  items_analyzed_7d: number;
-  items_surfaced_7d: number;
-  rejection_rate: number;
-  calibration_accuracy: number;
-  top_calibrations: Array<{ topic: string; delta: number; sample_size: number; confidence: number }>;
-  source_quality: Array<{ source_type: string; items_surfaced: number; items_engaged: number; engagement_rate: number }>;
-  anti_patterns_detected: number;
-  total_cycles: number;
-  learning_narratives: string[];
-}
-
 /** @deprecated Use PersonalizedLesson from types/personalization.ts instead */
 type PersonalizedLesson = PersonalizedLessonType;
 
@@ -1664,48 +1648,6 @@ interface Channel {
   last_rendered_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface ChannelRender {
-  id: number;
-  channel_id: number;
-  version: number;
-  content_markdown: string;
-  content_hash: string;
-  source_item_ids: number[];
-  model: string | null;
-  tokens_used: number | null;
-  latency_ms: number | null;
-  rendered_at: string;
-}
-
-interface RenderProvenance {
-  render_id: number;
-  claim_index: number;
-  claim_text: string;
-  source_item_ids: number[];
-  source_titles: string[];
-  source_urls: string[];
-}
-
-interface ChannelChangelog {
-  channel_id: number;
-  from_version: number;
-  to_version: number;
-  summary: string;
-  added_lines: string[];
-  removed_lines: string[];
-  changed_at: string;
-}
-
-interface ChannelSourceMatch {
-  channel_id: number;
-  source_item_id: number;
-  title: string;
-  url: string | null;
-  source_type: string;
-  match_score: number;
-  matched_at: string;
 }
 
 interface SynthesisResponse {
@@ -2075,11 +2017,9 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'pull_ollama_model',
   'natural_language_query',
   'synthesize_search',
-  'generate_briefing',
   'generate_ai_briefing',
   'get_blind_spots',
   'get_preemption_alerts',
-  'setup_and_verify_ollama',
   'translate_content',
   'translate_content_batch',
   'translate_playbook_module',

@@ -9,7 +9,6 @@ interface PlaybookSidebarProps {
   playbookModules: PlaybookModule[];
   playbookProgress: PlaybookProgress | null;
   activeModuleId: string | null;
-  streetsTier: string;
   showTemplates: boolean;
   onModuleClick: (moduleId: string) => void;
   onShowTemplates: () => void;
@@ -19,7 +18,6 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
   playbookModules,
   playbookProgress,
   activeModuleId,
-  streetsTier: _streetsTier,
   showTemplates,
   onModuleClick,
   onShowTemplates,

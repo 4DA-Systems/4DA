@@ -155,7 +155,7 @@ const SecurityDashboard = memo(function SecurityDashboard() {
     // Extract the dependency alert id and resolve it on the backend
     const numericId = parseInt(alertId.replace('da-', ''), 10);
     if (!isNaN(numericId)) {
-      cmd('resolve_dependency_alert', { alertId: numericId }).catch((e) => console.debug('[SecurityDashboard] resolve alert:', e));
+      cmd('resolve_dependency_alert', { alertId: numericId }).catch(() => {});
     }
 
     setActiveAlerts(prev => {
