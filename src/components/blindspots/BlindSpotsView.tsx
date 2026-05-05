@@ -240,7 +240,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>
       {!hasContent && coveredDeps.length === 0 ? (
         <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
-          <p className="text-sm text-text-muted">{t('blindspots.empty')}</p>
+          <p className="text-sm text-text-muted">
+            {score < 0 ? t('blindspots.scoreContext.building') : t('blindspots.empty')}
+          </p>
         </div>
       ) : (
         <>

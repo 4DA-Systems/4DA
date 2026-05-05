@@ -2058,6 +2058,7 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'generate_briefing',
   'generate_ai_briefing',
   'get_blind_spots',
+  'get_preemption_alerts',
   'setup_and_verify_ollama',
   'translate_content',
   'translate_content_batch',
