@@ -68,9 +68,7 @@ export function AIProviderSection({
 
   // Detect env keys on mount
   useEffect(() => {
-    cmd('detect_environment').then(setEnvDetection).catch((e) => {
-      console.warn('[4DA] Environment detection failed:', e);
-    });
+    cmd('detect_environment').then(setEnvDetection).catch(() => {});
   }, []);
 
   // Debounced key validation

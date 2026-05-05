@@ -111,7 +111,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
     if (!loading && (!overview || overview.total_dependencies === 0)) {
       cmd('ace_get_scan_summary')
         .then((data) => setScanSummary(data as unknown as AceScanSummary))
-        .catch((e) => console.debug('[DependencyDashboard] scan summary:', e));
+        .catch(() => {});
     }
   }, [loading, overview]);
 

@@ -19,7 +19,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
     cmd('get_engagement_summary')
       .then(r => r as unknown as EngagementData)
       .then(setData)
-      .catch((e: unknown) => console.warn('EngagementPulse: failed to load pulse data', e));
+      .catch(() => {});
   }, []);
 
   if (!data) return null;

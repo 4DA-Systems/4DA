@@ -40,7 +40,7 @@ export function HealthBanner() {
           setIssues(result);
         }
       })
-      .catch((e) => console.debug('[HealthBanner] health check:', e));
+      .catch(() => {});
   }, []);
 
   const handleDismiss = useCallback(() => {

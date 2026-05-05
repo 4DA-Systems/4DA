@@ -33,7 +33,6 @@ export const PlaybookView = memo(function PlaybookView() {
     playbookLoading,
     playbookError,
     activeModuleId,
-    streetsTier,
     personalizedLessons,
   } = useAppStore(
     useShallow((s) => ({
@@ -43,7 +42,6 @@ export const PlaybookView = memo(function PlaybookView() {
       playbookLoading: s.playbookLoading,
       playbookError: s.playbookError,
       activeModuleId: s.activeModuleId,
-      streetsTier: s.streetsTier,
       personalizedLessons: s.personalizedLessons,
     })),
   );
@@ -185,7 +183,6 @@ export const PlaybookView = memo(function PlaybookView() {
         playbookModules={playbookModules}
         playbookProgress={playbookProgress}
         activeModuleId={activeModuleId}
-        streetsTier={streetsTier}
         showTemplates={showTemplates}
         onModuleClick={handleModuleClick}
         onShowTemplates={handleShowTemplates}

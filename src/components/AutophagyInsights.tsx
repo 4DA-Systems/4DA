@@ -142,9 +142,7 @@ export const AutophagyInsights = memo(function AutophagyInsights() {
         </div>
         <h3 className="text-sm font-medium text-white">{t('autophagy.title')}</h3>
       </div>
-      <>
-        <InsightsContent />
-      </>
+      <InsightsContent />
     </div>
   );
 });

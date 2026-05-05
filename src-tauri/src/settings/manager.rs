@@ -663,20 +663,6 @@ impl SettingsManager {
         self.save()
     }
 
-    /// Get configured Nitter instance
-    pub fn get_nitter_instance(&self) -> String {
-        self.settings
-            .nitter_instance
-            .clone()
-            .unwrap_or_else(|| "nitter.net".to_string())
-    }
-
-    /// Set Nitter instance
-    pub fn set_nitter_instance(&mut self, instance: String) -> Result<()> {
-        self.settings.nitter_instance = Some(instance);
-        self.save()
-    }
-
     /// Get X API Bearer Token
     pub fn get_x_api_key(&self) -> String {
         self.settings.x_api_key.as_str().to_string()

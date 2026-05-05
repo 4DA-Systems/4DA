@@ -203,8 +203,7 @@ function App() {
     loadLicense();
     loadTrialStatus();
     loadProValueReport();
-    // Prune stale personalization cache (non-blocking)
-    cmd('prune_personalization_cache').catch((e) => console.debug('[App] prune cache:', e));
+    cmd('prune_personalization_cache').catch(() => {});
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading

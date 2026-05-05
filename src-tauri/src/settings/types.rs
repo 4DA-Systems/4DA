@@ -760,8 +760,8 @@ pub struct Settings {
     /// Twitter handles to monitor
     #[serde(default)]
     pub twitter_handles: Vec<String>,
-    /// Nitter instance to use for Twitter RSS (deprecated, kept for compat)
-    #[serde(default)]
+    /// Nitter instance (deprecated — nitter.net is dead, kept only for deserialization compat)
+    #[serde(default, skip_serializing)]
     pub nitter_instance: Option<String>,
     /// X API Bearer Token (BYOK)
     #[serde(default)]
