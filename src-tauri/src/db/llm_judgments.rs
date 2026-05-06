@@ -116,7 +116,6 @@ impl Database {
         let conn = self.conn.lock();
         conn.query_row("SELECT COUNT(*) FROM llm_judgments", [], |row| row.get(0))
     }
-
 }
 
 // ============================================================================

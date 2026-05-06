@@ -835,7 +835,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             url,
             created_at,
             source_type,
-            _content_type,
+            content_type,
         ) = match row_result {
             Ok(r) => r,
             Err(e) => {
@@ -946,22 +946,40 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             },
         ];
 
+        // Source-classified items (content_type='security_advisory') survived
+        // 4-layer post-filtering — the source already identified this as a real
+        // advisory and our filters confirmed the dep is the actual subject.
+        let source_classified = matches!(
+            content_type.as_deref(),
+            Some("security_advisory") | Some("breaking_change")
+        );
+        let base_confidence = if source_classified {
+            scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE
+                + scoring_config::PREEMPTION_CONFIDENCE_SOURCE_CLASSIFIED_BOOST
+        } else {
+            scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE
+        };
+
         raw_alerts.push(PreemptionAlert {
             id: uuid::Uuid::new_v4().to_string(),
             alert_type,
             title: truncate(&title, 120),
-            explanation: format!(
-                "Advisory mentions {package_name}, a direct dependency in {project_name}. \
-                 Version impact unverified — check the source for affected ranges."
-            ),
+            explanation: if source_classified {
+                format!(
+                    "Security advisory affects {package_name}, a direct dependency in {project_name}. \
+                     Check the source for affected version ranges."
+                )
+            } else {
+                format!(
+                    "Advisory mentions {package_name}, a direct dependency in {project_name}. \
+                     Version impact unverified — check the source for affected ranges."
+                )
+            },
             evidence,
             affected_projects: vec![project_path],
             affected_dependencies: vec![package_name],
             urgency,
-            // Honest confidence: title-keyword match with no version verification
-            // is low-confidence intelligence. Will be upgraded to 0.85+ once OSV
-            // version matching is implemented.
-            confidence: scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE,
+            confidence: base_confidence.min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE),
             predicted_window: None,
             suggested_actions,
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -998,11 +1016,12 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
                             existing.evidence.push(ev.clone());
                         }
                     }
-                    // Multi-project corroboration: slightly higher confidence
-                    // when multiple independent projects confirm the dep match,
-                    // but still honest — no version verification yet.
+                    // Multi-project corroboration: higher confidence when multiple
+                    // independent projects confirm the dep match. Preserve the
+                    // higher base if either alert was source-classified.
                     let proj_count = existing.affected_projects.len() as f32;
-                    existing.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE
+                    let base = existing.confidence.max(alert.confidence);
+                    existing.confidence = (base
                         + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST)
                         .min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
                 } else {
@@ -1019,7 +1038,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
         .into_values()
         .map(|mut a| {
             let proj_count = a.affected_projects.len() as f32;
-            a.confidence = (scoring_config::PREEMPTION_CONFIDENCE_TITLE_MATCH_BASE
+            a.confidence = (a.confidence
                 + proj_count * scoring_config::PREEMPTION_CONFIDENCE_PER_PROJECT_BOOST)
                 .min(scoring_config::PREEMPTION_CONFIDENCE_MAX_CONFIDENCE);
             a
