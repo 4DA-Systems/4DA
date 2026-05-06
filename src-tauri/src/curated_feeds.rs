@@ -88,10 +88,6 @@ impl CuratedFeedRegistry {
         &self.all_feeds
     }
 
-    pub fn feed_count(&self) -> usize {
-        self.all_feeds.len()
-    }
-
     pub fn feeds_for_domain(&self, domain: &str) -> Vec<&CuratedFeedManifest> {
         self.all_feeds
             .iter()
