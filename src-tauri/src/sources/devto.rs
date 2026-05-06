@@ -251,12 +251,6 @@ impl Source for DevtoSource {
         info!(total = all_items.len(), "Total Dev.to items after dedup");
         Ok(all_items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Dev.to descriptions are usually sufficient summaries
-        // The full article content would require the articles/:id endpoint
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

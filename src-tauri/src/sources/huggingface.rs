@@ -272,12 +272,6 @@ impl Source for HuggingFaceSource {
         );
         Ok(all_items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Model metadata is already populated as content during fetch;
-        // no additional scraping needed for model cards.
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

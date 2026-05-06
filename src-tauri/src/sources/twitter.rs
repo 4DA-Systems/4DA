@@ -532,11 +532,6 @@ impl Source for TwitterSource {
         Ok(all_items)
     }
 
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Tweets already have their full text as content
-        Ok(item.content.clone())
-    }
-
     fn feed_errors(&self) -> Vec<(String, String)> {
         self.feed_errors
             .lock()
