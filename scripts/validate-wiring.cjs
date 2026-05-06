@@ -370,7 +370,6 @@ check('Essential Rust primitives', () => {
     'preemption.rs',
     'blind_spots.rs',
     'trust_ledger.rs',
-    'intelligence_packs.rs',
   ];
 
   const missing = [];

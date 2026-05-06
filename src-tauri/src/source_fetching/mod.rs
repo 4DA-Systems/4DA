@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Source fetching functions extracted from lib.rs
 //!
-//! Contains: fetch_all_sources, fetch_all_sources_deep, fill_cache_background,
+//! Contains: fetch_all_sources, fill_cache_background,
 //! process_source_items, settings loader helpers, and self-healing retry logic.
 
 mod fetcher;
 mod processor;
 
 // Re-export everything at the module level so `crate::source_fetching::X` paths still work
-pub(crate) use fetcher::{fetch_all_sources, fetch_all_sources_deep};
+pub(crate) use fetcher::fetch_all_sources;
 pub(crate) use processor::fill_cache_background;
 
 use crate::get_settings_manager;
