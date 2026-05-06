@@ -650,20 +650,9 @@ pub fn run() {
             context_commands::clear_context,
             context_commands::index_context,
             context_commands::index_project_readmes,
-            // Intelligence Reconciliation Phase 7 — Git decision miner.
-            git_decision_miner::mine_git_decisions,
-            // Intelligence Reconciliation Phase 8 — Curated corpus.
-            seed_corpus::get_seed_corpus_stats,
-            // Intelligence Reconciliation Phase 11 — Commitment Contracts.
-            commitment_contracts::create_commitment_contract,
-            commitment_contracts::get_commitment_contracts,
-            commitment_contracts::dismiss_commitment_contract,
-            commitment_contracts::check_refutations,
             context_commands::set_context_dirs,
             context_commands::get_context_dirs,
-            context_commands::generate_cli_briefing,
             // Analysis
-            analysis::run_deep_initial_scan,
             analysis::run_cached_analysis,
             analysis::get_analysis_status,
             analysis::get_scoring_stats,
@@ -813,7 +802,6 @@ pub fn run() {
             // Content
             commands::get_sources,
             commands::mcp_score_autopsy,
-            commands::export_results,
             // Void Engine
             void_commands::get_void_signal,
             // Intelligence panels
@@ -828,8 +816,6 @@ pub fn run() {
             project_health::get_project_health,
             developer_dna::get_developer_dna,
             developer_dna::export_developer_dna_markdown,
-            developer_dna::export_developer_dna_svg,
-            developer_dna::export_developer_dna_card,
             // Content (article reader, AI summaries, saved items)
             content_commands::get_item_content,
             content_commands::get_item_summary,
@@ -855,7 +841,6 @@ pub fn run() {
             tech_radar::get_tech_radar,
             tech_radar::get_radar_entry,
             tech_radar_commands::get_radar_entry_detail,
-            tech_radar_commands::generate_tech_narratives,
             tech_radar_commands::get_radar_snapshots,
             tech_radar_commands::get_radar_at_snapshot,
             // Agent Memory
@@ -895,11 +880,6 @@ pub fn run() {
             content_personalization::commands::get_personalization_context_summary,
             content_personalization::commands::prune_personalization_cache,
             content_personalization::commands::hydrate_lesson_with_llm,
-            // Content Integrity Verification
-            content_integrity::check_content_integrity,
-            content_integrity::audit_content_integrity,
-            // First-Run Simulation Audit
-            first_run_audit::run_first_run_simulation,
             // STREETS Command Execution
             streets_commands::parse_lesson_commands,
             streets_commands::execute_streets_command,
@@ -929,14 +909,10 @@ pub fn run() {
             templates::get_template_content,
             // Diagnostics
             commands::get_diagnostics,
-            commands::get_scoring_history,
             startup_health::get_startup_health,
-            startup_health::get_diagnostic_report,
             // Capability Health (Graceful Degradation Framework)
             capabilities::get_capability_states,
             capabilities::get_capability_summary,
-            // Scoring Validation (persona-based precision testing)
-            scoring::validation::runner::run_scoring_validation,
             // Feedback -> Autophagy bridge
             ace_commands::record_item_feedback,
             // Autophagy (intelligent content metabolism)
@@ -984,12 +960,6 @@ pub fn run() {
             natural_language_search::natural_language_query,
             // Search Synthesis — LLM briefings (Signal)
             search_synthesis::synthesize_search,
-            // Weekly Intelligence Digest (free — BYOK)
-            weekly_digest::generate_weekly_digest,
-            weekly_digest::get_latest_digest,
-            // Decision Impact Tracking (Signal)
-            decision_signals::get_decision_signals,
-            decision_signals::get_decision_health_report,
             // Standing Queries (Signal)
             standing_queries::create_standing_query,
             standing_queries::list_standing_queries,
@@ -1006,11 +976,6 @@ pub fn run() {
             // Intelligence History
             intelligence_history::get_intelligence_growth,
             intelligence_history::get_session_diff,
-            // Intelligence Packs
-            intelligence_packs::list_intelligence_packs,
-            intelligence_packs::activate_intelligence_pack,
-            intelligence_packs::deactivate_intelligence_pack,
-            intelligence_packs::suggest_intelligence_packs,
             // Community Intelligence
             community_intelligence::get_community_status,
             community_intelligence::set_community_intelligence_enabled,
@@ -1022,7 +987,6 @@ pub fn run() {
             telemetry::get_error_telemetry,
             telemetry::get_error_summary_cmd,
             telemetry::clear_error_telemetry,
-            telemetry::get_security_audit_log,
             // Team Sync (AD-023)
             team_sync_commands::get_team_sync_status,
             team_sync_commands::get_team_members,
@@ -1063,7 +1027,6 @@ pub fn run() {
             data_export::export_section,
             data_export::list_exports,
             data_export::delete_export,
-            data_export::factory_reset,
             // Enterprise: Audit Log
             audit::get_audit_log,
             audit::get_audit_summary_cmd,
@@ -1101,8 +1064,6 @@ pub fn run() {
             dependency_commands::get_project_deps,
             dependency_commands::get_dependency_alerts,
             dependency_commands::resolve_dependency_alert,
-            dependency_commands::check_dependency_upgrades,
-            dependency_commands::get_license_overview,
             // OSV Mirror (Tier 1 Intelligence)
             osv::osv_sync_now,
             osv::osv_get_matches,
@@ -1124,13 +1085,8 @@ pub fn run() {
             ai_costs::get_ai_usage_summary,
             ai_costs::get_ai_cost_estimate,
             ai_costs::get_ai_cost_recommendation,
-            // Source Plugin API (Phase 7)
-            plugin_commands::list_plugins,
-            plugin_commands::fetch_plugin_items,
-            plugin_commands::fetch_all_plugins,
             // Waitlist
             waitlist::save_waitlist_signup,
-            waitlist::get_waitlist_signups,
             // Trust Ledger (intelligence quality measurement)
             trust_ledger::get_trust_dashboard,
             trust_ledger::record_intelligence_feedback,
@@ -1139,9 +1095,6 @@ pub fn run() {
             // Alert Triage (persistent security triage actions)
             alert_triage::triage_alert,
             alert_triage::get_triage_states,
-            alert_triage::clear_expired_triage,
-            // Diagnostic log reader (persistent log files)
-            log_retention::get_recent_logs,
         ])
         .setup(app_setup::setup_app)
         .build(tauri::generate_context!())

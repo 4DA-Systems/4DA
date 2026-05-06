@@ -7,7 +7,7 @@
  *
  * Benefits:
  * - Compile-time checking of command names, parameter types, and return types
- * - IDE autocomplete for all 211 commands
+ * - IDE autocomplete for all 175 commands
  * - Single source of truth for the IPC contract
  *
  * Generated from Rust #[tauri::command] signatures + frontend usage analysis.
@@ -223,16 +223,13 @@ interface CommandMap {
   // -- Analysis & Core --
   get_analysis_status: { params: Record<string, never>; result: { running: boolean; completed: boolean; error: string | null; results: SourceRelevance[] | null; started_at: number | null; last_completed_at: string | null; near_misses: SourceRelevance[] | null } };
   run_cached_analysis: { params: Record<string, never>; result: void };
-  run_deep_initial_scan: { params: Record<string, never>; result: void };
   cancel_analysis: { params: Record<string, never>; result: void };
   get_scoring_stats: { params: Record<string, never>; result: ScoringStats };
   get_context_files: { params: Record<string, never>; result: ContextFile[] };
   clear_context: { params: Record<string, never>; result: string };
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };
-  export_results: { params: { format: string }; result: string };
   get_diagnostics: { params: Record<string, never>; result: DiagnosticsSnapshot };
-  get_scoring_history: { params: { limit?: number }; result: ScoringEvent[] };
 
   // -- Settings & Configuration --
   get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; crash_reporting_opt_in: boolean; activity_tracking_opt_in: boolean } };
@@ -314,7 +311,6 @@ interface CommandMap {
   record_item_feedback: { params: { item_id: number; relevant: boolean }; result: void };
   triage_alert: { params: { itemId: number; action: string; advisoryId: string | null; reason: string | null; expiresAt: string | null }; result: void };
   get_triage_states: { params: { itemIds: number[] }; result: Array<{ item_id: number; advisory_id: string | null; action: string; reason: string | null; resolved_at: string; expires_at: string | null }> };
-  clear_expired_triage: { params: Record<string, never>; result: number };
   ace_get_topic_affinities: { params: Record<string, never>; result: { affinities: Array<{ topic: string; positive_signals: number; negative_signals: number; affinity_score: number }>; count: number } };
   ace_get_anti_topics: { params: { min_rejections: number }; result: { anti_topics: Array<{ topic: string; rejection_count: number; last_rejected: string }>; count: number } };
   ace_get_single_affinity: { params: { topic: string }; result: { affinity: { topic: string; positive_signals: number; negative_signals: number; affinity_score: number } | null } };
@@ -350,7 +346,6 @@ interface CommandMap {
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };
   generate_ai_briefing: { params: Record<string, never>; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number } };
   generate_free_briefing: { params: Record<string, never>; result: { content: string; item_count: number; created_at: string } };
-  generate_cli_briefing: { params: Record<string, never>; result: string };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };
   get_source_quality: { params: Record<string, never>; result: SourceQualityReport[] };
   reset_source_circuit_breaker: { params: { sourceType: string }; result: string };
@@ -419,13 +414,6 @@ interface CommandMap {
   prune_personalization_cache: { params: Record<string, never>; result: { deleted: number; remaining: number; read_states: number; cache_size_bytes: number } };
   hydrate_lesson_with_llm: { params: { moduleId: string; lessonIdx: number }; result: { upgraded: number; total_blocks?: number; reason?: string } };
 
-  // -- Content Integrity --
-  check_content_integrity: { params: Record<string, never>; result: ContentIntegrityReport };
-  audit_content_integrity: { params: Record<string, never>; result: ContentIntegrityReport };
-
-  // -- First-Run Simulation Audit --
-  run_first_run_simulation: { params: Record<string, never>; result: FirstRunAuditReport };
-
   // -- STREETS Health --
   get_street_health: { params: Record<string, never>; result: StreetHealthScore };
   get_streets_suggestion: { params: Record<string, never>; result: { module_id: string; module_title: string; reason: string; match_strength: number } | null };
@@ -466,21 +454,6 @@ interface CommandMap {
   // flow via EvidenceItem with kind=Gap.
   get_knowledge_gaps: { params: Record<string, never>; result: EvidenceFeed };
 
-  // -- Git Decision Miner (Phase 7 — Cold Start Layer 1) --
-  // Scans user's configured context_dirs for decision-shaped commits.
-  // Returns a JSON string: { summary: MineSummary, jsonl_path: string }.
-  mine_git_decisions: { params: Record<string, never>; result: string };
-
-  // -- Seed Corpus (Phase 8 — Cold Start Layer 2) --
-  // Returns CorpusStats as JSON { total, by_outcome, domains_covered }.
-  get_seed_corpus_stats: { params: Record<string, never>; result: string };
-
-  // -- Commitment Contracts (Phase 11) --
-  create_commitment_contract: { params: { decisionStatement: string; refutationCondition: string; subject: string }; result: number };
-  get_commitment_contracts: { params: Record<string, never>; result: string };
-  dismiss_commitment_contract: { params: { contractId: number }; result: void };
-  check_refutations: { params: { hours: number }; result: string };
-
   // -- Signal Chains --
   // Phase 5 (2026-04-17): get_signal_chains_predicted returns canonical
   // EvidenceFeed (kind=Chain). Raw get_signal_chains still returns the
@@ -520,8 +493,6 @@ interface CommandMap {
   // -- Developer DNA --
   get_developer_dna: { params: Record<string, never>; result: DeveloperDna };
   export_developer_dna_markdown: { params: Record<string, never>; result: string };
-  export_developer_dna_svg: { params: Record<string, never>; result: string };
-  export_developer_dna_card: { params: Record<string, never>; result: string };
 
   // -- Tech Radar --
   get_tech_radar: { params: Record<string, never>; result: TechRadarData };
@@ -642,24 +613,15 @@ interface CommandMap {
 
   // -- Startup Health --
   get_startup_health: { params: Record<string, never>; result: StartupHealthIssue[] };
-  get_diagnostic_report: { params: Record<string, never>; result: DiagnosticReport };
-  get_recent_logs: { params: { lines: number }; result: string };
 
   // -- Capabilities --
   get_capability_states: { params: Record<string, never>; result: Record<string, { state: string; reason?: string; since?: string; fallback?: string; remediation?: string }> };
   get_capability_summary: { params: Record<string, never>; result: { full: number; degraded: number; unavailable: number; total: number } };
 
-  // -- Tech Narratives (LLM-synthesized) --
-  generate_tech_narratives: { params: Record<string, never>; result: { narratives: Record<string, string> } };
-
   // -- Error Telemetry --
   get_error_telemetry: { params: { limit?: number }; result: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] };
   get_error_summary_cmd: { params: Record<string, never>; result: { total_errors: number; total_occurrences: number; by_category: { category: string; unique_errors: number; total_occurrences: number }[]; top_errors: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] } };
   clear_error_telemetry: { params: { days?: number }; result: number };
-  get_security_audit_log: { params: { limit?: number; event_filter?: string }; result: { entries: { id: number; timestamp: string; event_type: string; details: string; severity: string }[]; total: number } };
-
-  // -- Scoring Validation --
-  run_scoring_validation: { params: Record<string, never>; result: { timestamp: string; personas: { persona: string; precision_at_20: number; anti_topic_leaks: number; avg_score_relevant: number; avg_score_irrelevant: number; separation: number; top_20_titles: string[]; items_scored: number }[]; overall_precision: number; worst_persona: string; best_persona: string; separation_score: number; recommendations: string[]; total_items_in_db: number } };
 
   // -- Splash Probes --
   get_context_stats: { params: Record<string, never>; result: ContextStats };
@@ -667,26 +629,12 @@ interface CommandMap {
   // -- Natural Language Search (Pro) --
   synthesize_search: { params: { queryText: string }; result: SynthesisResponse };
 
-  // -- Weekly Intelligence Digest (Pro) --
-  generate_weekly_digest: { params: Record<string, never>; result: WeeklyDigest };
-  get_latest_digest: { params: Record<string, never>; result: WeeklyDigest };
-
-  // -- Decision Impact Tracking (Pro) --
-  get_decision_signals: { params: Record<string, never>; result: DecisionSignals[] };
-  get_decision_health_report: { params: Record<string, never>; result: DecisionHealthReport[] };
-
   // -- Standing Queries (Pro) --
   create_standing_query: { params: { queryText: string }; result: number };
   list_standing_queries: { params: Record<string, never>; result: StandingQuery[] };
   delete_standing_query: { params: { id: number }; result: void };
   get_standing_query_matches: { params: { id: number; limit?: number }; result: StandingQueryMatch[] };
   get_standing_query_suggestions: { params: Record<string, never>; result: StandingQuerySuggestion[] };
-
-  // -- Intelligence Packs --
-  list_intelligence_packs: { params: Record<string, never>; result: IntelligencePack[] };
-  activate_intelligence_pack: { params: { packId: string }; result: null };
-  deactivate_intelligence_pack: { params: { packId: string }; result: null };
-  suggest_intelligence_packs: { params: Record<string, never>; result: PackSuggestion[] };
 
   // -- Intelligence History --
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
@@ -789,15 +737,12 @@ interface CommandMap {
   export_section: { params: { section: string; format: string }; result: string };
   list_exports: { params: Record<string, never>; result: ExportManifest[] };
   delete_export: { params: { exportId: string }; result: void };
-  factory_reset: { params: Record<string, never>; result: void };
 
   // -- Dependency Intelligence --
   get_dependency_overview: { params: Record<string, never>; result: DependencyOverview };
   get_project_deps: { params: { projectPath: string }; result: ProjectDepsResult };
   get_dependency_alerts: { params: Record<string, never>; result: DependencyAlertsResult };
   resolve_dependency_alert: { params: { alertId: number }; result: void };
-  check_dependency_upgrades: { params: Record<string, never>; result: { checked: number; upgrades_available: number; upgrades: Array<{ package: string; ecosystem: string; current: string; latest: string; is_major_upgrade: boolean; project: string }> } };
-  get_license_overview: { params: Record<string, never>; result: { total: number; compatible: number; caution: number; warning: number; unknown: number; issues: Array<{ package: string; license: string; status: string; reason: string }> } };
 
   // -- Accuracy Tracking (Phase 4.1) --
   get_accuracy_report: { params: { period?: string }; result: AccuracyReport };
@@ -818,14 +763,8 @@ interface CommandMap {
   get_ai_cost_estimate: { params: { provider: string; model: string; tokensIn: number; tokensOut: number }; result: AiCostEstimate };
   get_ai_cost_recommendation: { params: Record<string, never>; result: AiCostRecommendation };
 
-  // -- Source Plugin API (Phase 7) --
-  list_plugins: { params: Record<string, never>; result: PluginManifest[] };
-  fetch_plugin_items: { params: { plugin_name: string }; result: PluginItem[] };
-  fetch_all_plugins: { params: Record<string, never>; result: PluginItem[] };
-
   // -- Waitlist --
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
-  get_waitlist_signups: { params: Record<string, never>; result: Array<{ id: number; tier: string; email: string; name: string | null; team_size: string | null; company: string | null; role: string | null; source: string; signed_up_at: string }> };
 
 }
 
@@ -833,28 +772,6 @@ interface CommandMap {
 // Types referenced above but not yet in shared type files
 // (These can be moved to src/types/ as they get formalized)
 // ============================================================================
-
-/** Content integrity verification report (mirrors Rust IntegrityReport) */
-interface ContentIntegrityReport {
-  passed: boolean;
-  filtered_tech: Array<{ name: string; reason: string; source: string }>;
-  phantom_tech: Array<{ name: string; detected_confidence: number; category: string; auto_removed: boolean }>;
-  verified_stack: string[];
-  auto_corrected: number;
-  checked_at: string;
-}
-
-/** First-run simulation audit report (mirrors Rust FirstRunAuditReport) */
-interface FirstRunAuditReport {
-  passed: boolean;
-  lessons_audited: number;
-  unresolved_templates: Array<{ module_id: string; lesson_idx: number; severity: string; category: string; description: string; fragment: string }>;
-  fallback_only_fields: Array<{ module_id: string; lesson_idx: number; severity: string; category: string; description: string; fragment: string }>;
-  broken_markers: Array<{ module_id: string; lesson_idx: number; severity: string; category: string; description: string; fragment: string }>;
-  total_issues: number;
-  critical_issues: number;
-  checked_at: string;
-}
 
 /** Personalization context summary (mirrors Rust get_personalization_context_summary JSON) */
 interface PersonalizationContextSummary {
@@ -955,19 +872,6 @@ interface StartupHealthIssue {
   severity: 'warning' | 'error';
   message: string;
 }
-
-/** Diagnostic report for support/troubleshooting (mirrors Rust DiagnosticReport) */
-interface DiagnosticReport {
-  app_version: string;
-  platform: string;
-  arch: string;
-  data_dir: string;
-  db_size_bytes: number;
-  settings_exists: boolean;
-  disk_available_mb: number;
-  health_issues: StartupHealthIssue[];
-}
-
 
 /** Team sync status (mirrors Rust TeamSyncStatus) */
 interface TeamSyncStatus {
@@ -1525,17 +1429,6 @@ interface ScoringStats {
   last_run_rejection_rate: number | null;
 }
 
-interface ScoringEvent {
-  cycle_ts: string;
-  total_scored: number;
-  total_relevant: number;
-  avg_score: number;
-  max_score: number;
-  gate_rejections: number;
-  commodity_caps: number;
-  briefing_items: number;
-}
-
 interface DiagnosticsSnapshot {
   memory_bytes: number;
   db_size_bytes: number;
@@ -1657,38 +1550,6 @@ interface SynthesisResponse {
   total_sources: number;
 }
 
-interface WeeklyDigest {
-  generated_at: string;
-  period_start: string;
-  period_end: string;
-  highlights: Array<{ title: string; source_type: string; score: number }>;
-  top_topics: Array<{ topic: string; count: number }>;
-  active_signals: Array<{ chain_id: string; topic: string }>;
-  knowledge_gaps: Array<{ topic: string; gap_type: string }>;
-  stats: { items_analyzed: number; items_surfaced: number; sources_active: number };
-}
-
-interface DecisionSignals {
-  decision_id: number;
-  subject: string;
-  decision: string;
-  supporting: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string }>;
-  challenging: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string }>;
-}
-
-interface DecisionHealthReport {
-  decision_id: number;
-  subject: string;
-  decision: string;
-  created_at: string;
-  days_since: number;
-  supporting_count: number;
-  challenging_count: number;
-  volatility: number;
-  status: 'confident' | 'challenged' | 'stale' | 'needs_review';
-  latest_evidence: Array<{ item_id: number; title: string; source_type: string; url: string | null; relevance: number; reason: string; discovered_at: string }>;
-}
-
 interface StandingQuery {
   id: number;
   query_text: string;
@@ -1713,22 +1574,6 @@ interface StandingQuerySuggestion {
   reason: string;
   engagement_count: number;
   query_type: string;
-}
-
-interface IntelligencePack {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  concepts: Array<{ name: string; keywords: string[]; importance: number }>;
-  default_watches: string[];
-  active: boolean;
-  activated_at: string | null;
-}
-
-interface PackSuggestion {
-  pack_id: string;
-  reason: string;
 }
 
 interface IntelligenceGrowthData {
@@ -1935,28 +1780,6 @@ interface AiCostRecommendation {
   reason: string;
 }
 
-/** Plugin manifest — metadata about an installed source plugin (mirrors Rust PluginManifest) */
-interface PluginManifest {
-  name: string;
-  version: string;
-  description: string;
-  author: string | null;
-  binary: string;
-  poll_interval_secs: number;
-  max_items: number;
-}
-
-/** Item returned by a source plugin (mirrors Rust PluginItem) */
-interface PluginItem {
-  title: string;
-  url: string | null;
-  content: string;
-  source_type: string;
-  author: string | null;
-  published_at: string | null;
-}
-
-
 // ============================================================================
 // Typed invoke — the core wrapper
 // ============================================================================
@@ -2089,7 +1912,6 @@ export type {
   EnvSnapshot,
   ScanSummary,
   ScoringStats,
-  ScoringEvent,
   DiagnosticsSnapshot,
   ComposedStackSummary,
   IntelligencePulseData,
@@ -2103,14 +1925,9 @@ export type {
   ChannelChangelog,
   ChannelSourceMatch,
   SynthesisResponse,
-  WeeklyDigest,
-  DecisionSignals,
-  DecisionHealthReport,
   StandingQuery,
   StandingQueryMatch,
   StandingQuerySuggestion,
-  IntelligencePack,
-  PackSuggestion,
   IntelligenceGrowthData,
   CommunityStatus,
   StackHealthData,
@@ -2170,7 +1987,4 @@ export type {
   ActivitySnapshot,
   AchievementUnlocked,
   StartupHealthIssue,
-  // Source Plugin API (Phase 7)
-  PluginManifest,
-  PluginItem,
 };
