@@ -165,25 +165,6 @@ pub fn verify_content_integrity(conn: &Connection, auto_correct: bool) -> Integr
 }
 
 // ============================================================================
-// Tauri Command
-// ============================================================================
-
-/// Run content integrity verification with auto-correction.
-/// Returns a report of what was found and fixed.
-#[tauri::command]
-pub fn check_content_integrity() -> crate::error::Result<IntegrityReport> {
-    let conn = crate::open_db_connection()?;
-    Ok(verify_content_integrity(&conn, true))
-}
-
-/// Run content integrity verification without auto-correction (read-only audit).
-#[tauri::command]
-pub fn audit_content_integrity() -> crate::error::Result<IntegrityReport> {
-    let conn = crate::open_db_connection()?;
-    Ok(verify_content_integrity(&conn, false))
-}
-
-// ============================================================================
 // Database Readers
 // ============================================================================
 

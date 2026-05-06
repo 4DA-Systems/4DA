@@ -887,43 +887,6 @@ fn check_keychain_functional() {
 }
 
 // ============================================================================
-// Diagnostic Report (for support)
-// ============================================================================
-
-/// Generate a comprehensive diagnostic report for troubleshooting.
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct DiagnosticReport {
-    pub app_version: &'static str,
-    pub platform: &'static str,
-    pub arch: &'static str,
-    pub data_dir: String,
-    pub db_size_bytes: u64,
-    pub settings_exists: bool,
-    pub disk_available_mb: u64,
-    pub health_issues: Vec<HealthIssue>,
-}
-
-pub(crate) fn generate_diagnostic_report() -> DiagnosticReport {
-    let data_dir = get_data_dir();
-    let issues = run_startup_health_check();
-    let db_size = std::fs::metadata(data_dir.join("4da.db"))
-        .map(|m| m.len())
-        .unwrap_or(0);
-    let disk_available = get_available_disk_space(&data_dir);
-
-    DiagnosticReport {
-        app_version: env!("CARGO_PKG_VERSION"),
-        platform: std::env::consts::OS,
-        arch: std::env::consts::ARCH,
-        data_dir: data_dir.display().to_string(),
-        db_size_bytes: db_size,
-        settings_exists: data_dir.join("settings.json").exists(),
-        disk_available_mb: disk_available / (1024 * 1024),
-        health_issues: issues,
-    }
-}
-
-// ============================================================================
 // Tauri Command
 // ============================================================================
 
@@ -949,12 +912,6 @@ pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
     }
 
     issues
-}
-
-/// Returns a full diagnostic report for support/troubleshooting.
-#[tauri::command]
-pub(crate) fn get_diagnostic_report() -> DiagnosticReport {
-    generate_diagnostic_report()
 }
 
 // ============================================================================

@@ -228,35 +228,6 @@ pub fn should_generate_digest(conn: &rusqlite::Connection) -> bool {
     }
 }
 
-/// Get the latest generated digest (for the DigestView component).
-#[tauri::command]
-pub async fn get_latest_digest() -> Result<WeeklyDigest> {
-    // Generate a fresh digest from the last 7 days of data
-    let conn = crate::open_db_connection()?;
-
-    let now = Utc::now();
-    let week_ago = now - Duration::days(7);
-
-    let highlights = collect_top_items(&conn, 7);
-    let stats = collect_stats(&conn, 7);
-    let top_topics = collect_topics(&conn);
-
-    if highlights.is_empty() && stats.total_items_analyzed == 0 {
-        return Err("No digest data available".into());
-    }
-
-    Ok(WeeklyDigest {
-        generated_at: now.to_rfc3339(),
-        period_start: week_ago.format("%Y-%m-%d").to_string(),
-        period_end: now.format("%Y-%m-%d").to_string(),
-        highlights,
-        top_topics,
-        active_signals: Vec::new(),
-        knowledge_gaps: Vec::new(),
-        stats,
-    })
-}
-
 // ============================================================================
 // Tauri Command
 // ============================================================================

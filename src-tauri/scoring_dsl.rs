@@ -216,7 +216,6 @@ fn lex(input: &str) -> Result<Vec<SpannedToken>, Vec<String>> {
                         }
                         if i < chars.len() && chars[i] == ']' {
                             tokens.push(SpannedToken { token: Token::RBracket, line: line_num });
-                            i += 1;
                         }
                         break; // skip any trailing comment text after the range
                     }

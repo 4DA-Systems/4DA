@@ -49,11 +49,6 @@ impl OllamaState {
 // Global State
 // ============================================================================
 
-/// Duration after which a warmed model is considered stale. Ollama
-/// unloads inactive models after about 5 minutes by default; we match
-/// that threshold so our in-memory warm-state doesn't diverge.
-const WARM_STALENESS_SECS: u64 = 300; // 5 minutes
-
 static OLLAMA_STATE: Lazy<Mutex<OllamaState>> = Lazy::new(|| Mutex::new(OllamaState::new()));
 
 /// Access the global Ollama state.
@@ -178,38 +173,6 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
     }
 }
 
-/// Check if a model is warm and not stale.
-///
-/// A model is considered warm if it was successfully warmed and the last use
-/// was within 5 minutes. Stale models are automatically removed.
-///
-/// Previously gated behind `#[cfg(test)]`; promoted to `pub(crate)` in the
-/// onboarding load-time work so the deep-scan can use the staleness-aware
-/// check instead of a plain contains() — ensures Ollama model unload
-/// (which happens after ~5min idle) correctly invalidates warmup state.
-pub(crate) fn is_warm(model: &str) -> bool {
-    let mut state = OLLAMA_STATE.lock();
-
-    if !state.warmed_models.contains(model) {
-        return false;
-    }
-
-    if let Some(last) = state.last_use.get(model) {
-        if last.elapsed().as_secs() > WARM_STALENESS_SECS {
-            // Model is stale -- evict it
-            state.warmed_models.remove(model);
-            state.last_use.remove(model);
-            info!(target: "4da::ollama", model, "Model warm status expired (stale > 5 min)");
-            return false;
-        }
-        true
-    } else {
-        // No last_use recorded -- shouldn't happen, but treat as not warm
-        state.warmed_models.remove(model);
-        false
-    }
-}
-
 /// Mark a model as warm and update its last-use timestamp.
 ///
 /// Useful when the model is used for real inference (not just warming),
@@ -227,46 +190,6 @@ pub(crate) fn mark_warm(model: &str) {
 pub(crate) fn is_warming() -> bool {
     let state = OLLAMA_STATE.lock();
     state.warming.load(Ordering::SeqCst)
-}
-
-/// Wait up to `timeout` for a model to become warm. Returns `true` if
-/// the model is warm at return time, `false` if we timed out.
-///
-/// This is the "gate" used by the first-launch deep scan to pre-warm
-/// Ollama BEFORE starting embedding generation, so the first batch of
-/// embeddings doesn't hit a cold model and wait 30-60 seconds for the
-/// model to load. See `docs/strategy/ONBOARDING-LOAD-TIME.md` Part 4.1
-/// for the full architectural context.
-///
-/// **Never blocks the calling task's thread pool for long.** Uses a
-/// 100ms poll loop with tokio::time::sleep (cooperative). Yields to
-/// the runtime on every poll.
-///
-/// Returns immediately if the model is already warm. Returns `false`
-/// (without spinning) if Ollama is not the configured provider — caller
-/// can still proceed with cold-start cost.
-pub(crate) async fn wait_for_warm(model: &str, timeout: std::time::Duration) -> bool {
-    use std::time::Instant;
-    let deadline = Instant::now() + timeout;
-    // Fast path: already warm.
-    if is_warm(model) {
-        return true;
-    }
-    // Poll until warm or deadline.
-    while Instant::now() < deadline {
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        if is_warm(model) {
-            return true;
-        }
-    }
-    // Timed out. Caller proceeds with cold-start cost; not an error.
-    tracing::warn!(
-        target: "4da::ollama",
-        model,
-        timeout_ms = timeout.as_millis() as u64,
-        "wait_for_warm timed out — proceeding with potential cold-start penalty"
-    );
-    false
 }
 
 // ============================================================================
@@ -836,17 +759,6 @@ mod tests {
         assert!(8.0 >= SYNTHESIS_MIN_PARAMS_B);
         assert!(14.0 >= SYNTHESIS_MIN_PARAMS_B);
         assert!(70.0 >= SYNTHESIS_MIN_PARAMS_B);
-    }
-
-    #[test]
-    fn test_mark_warm_and_check() {
-        mark_warm("test-model-1");
-        assert!(is_warm("test-model-1"));
-    }
-
-    #[test]
-    fn test_unknown_model_not_warm() {
-        assert!(!is_warm("nonexistent-model-xyz"));
     }
 
     #[test]
