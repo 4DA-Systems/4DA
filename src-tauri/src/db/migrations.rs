@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 66;
+        const TARGET_VERSION: i64 = 67;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2453,6 +2453,44 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Created scoring_events table for audit trail"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 67 {
+                Self::run_versioned_migration(
+                    &conn,
+                    66,
+                    67,
+                    "Phase 67: canonicalize project_dependencies paths (dedup Windows casing)",
+                    |c| {
+                        // Normalize all paths to lowercase forward-slash format.
+                        // This deduplicates entries like D:\4DA vs d:/4da that accumulated
+                        // before path canonicalization was added to upsert_dependency.
+                        c.execute_batch(
+                            "UPDATE project_dependencies
+                             SET project_path = LOWER(REPLACE(project_path, '\\', '/'));",
+                        )?;
+                        // Remove exact duplicates that are now identical after normalization.
+                        // Keep the row with the lowest id (oldest).
+                        c.execute_batch(
+                            "DELETE FROM project_dependencies
+                             WHERE id NOT IN (
+                                 SELECT MIN(id)
+                                 FROM project_dependencies
+                                 GROUP BY project_path, package_name, manifest_type
+                             );",
+                        )?;
+                        let remaining: i64 =
+                            c.query_row("SELECT COUNT(*) FROM project_dependencies", [], |row| {
+                                row.get(0)
+                            })?;
+                        info!(
+                            target: "4da::db",
+                            "Canonicalized project_dependencies paths, {} rows remaining",
+                            remaining
                         );
                         Ok(())
                     },

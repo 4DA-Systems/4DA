@@ -203,8 +203,8 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
 fn matched_direct_runtime_deps(
     deps: &[DirectRuntimeDep],
     title_lower: &str,
-    source_type: &str,
-    content_type: Option<&str>,
+    _source_type: &str,
+    _content_type: Option<&str>,
 ) -> Vec<DirectRuntimeDep> {
     deps.iter()
         .filter(|dep| dep.package_name.len() >= 5)
@@ -213,9 +213,16 @@ fn matched_direct_runtime_deps(
             if !has_word_boundary_match(title_lower, &pkg_lower) {
                 return None;
             }
-            if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str())
-                && !is_authoritative_generic_dep_match(source_type, content_type)
-            {
+            // Compound-prefix: "i18next" matching "i18next-http-middleware" = different package
+            if is_compound_prefix_match(title_lower, &pkg_lower) {
+                return None;
+            }
+            // Advisory-subject: only match if the dep is the advisory's actual subject
+            if !is_advisory_subject_match(title_lower, &pkg_lower) {
+                return None;
+            }
+            // Suppress generic names regardless of source authority
+            if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str()) {
                 return None;
             }
             Some(dep.clone())
@@ -828,7 +835,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             url,
             created_at,
             source_type,
-            content_type,
+            _content_type,
         ) = match row_result {
             Ok(r) => r,
             Err(e) => {
@@ -845,15 +852,30 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             continue;
         }
 
+        // Compound-prefix detection: if the dep name appears followed by a
+        // hyphen in the title, it's a DIFFERENT compound package (e.g. "i18next"
+        // matching "i18next-http-middleware"). Skip unless the dep IS the subject.
+        if is_compound_prefix_match(&title_lower, &pkg_lower) {
+            continue;
+        }
+
+        // Advisory-subject extraction: for structured CVE/GHSA titles like
+        // "[GHSA-xxxx] PackageName has/is ..." — only match if the user's dep
+        // IS the advisory's subject package, not a word that happens to appear.
+        if !is_advisory_subject_match(&title_lower, &pkg_lower) {
+            continue;
+        }
+
         if title_indicates_not_affected(&title_lower) {
             continue;
         }
         if find_unmet_platform_scope(&title_lower, &user_context_lower).is_some() {
             continue;
         }
-        if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str())
-            && !is_authoritative_generic_dep_match(&source_type, content_type.as_deref())
-        {
+        // Generic names that collide with English words are suppressed regardless
+        // of source authority. The authoritative override was causing false positives
+        // (e.g. "image" crate matching ImageMagick CVEs, "dotenv" matching OpenClaw).
+        if SUPPRESSED_GENERIC_NAMES.contains(&pkg_lower.as_str()) {
             continue;
         }
 
@@ -1240,6 +1262,86 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
+/// Detect when a dep name is a prefix of a longer compound package name in the
+/// title. E.g. "i18next" inside "i18next-http-middleware" — the hyphen after
+/// the match means it's a DIFFERENT package, not a standalone mention.
+/// Returns true when ALL occurrences of `dep` in `text` are compound-prefixes.
+fn is_compound_prefix_match(text: &str, dep: &str) -> bool {
+    if dep.is_empty() {
+        return false;
+    }
+    let bytes = text.as_bytes();
+    let mut found_standalone = false;
+    let mut search_from = 0;
+    while let Some(pos) = text[search_from..].find(dep) {
+        let abs = search_from + pos;
+        let before_ok = abs == 0 || !bytes[abs - 1].is_ascii_alphanumeric();
+        let after = abs + dep.len();
+        let after_is_hyphen = after < bytes.len() && bytes[after] == b'-';
+        if before_ok && !after_is_hyphen {
+            found_standalone = true;
+            break;
+        }
+        search_from = abs + 1;
+    }
+    // If we never found a standalone (non-prefix) occurrence, it's compound-prefix only
+    !found_standalone && text.contains(dep)
+}
+
+/// For structured advisory titles like "[CVE-2026-XXXX] PackageName has/is ..."
+/// or "[GHSA-xxxx-yyyy] PackageName: description", extract the subject package
+/// and verify the user's dep IS that package — not just a word in the description.
+///
+/// Returns true (allow the match) when:
+///   - The title doesn't have the structured pattern (can't extract subject → allow)
+///   - The dep name IS the advisory's subject package
+/// Returns false (reject the match) when:
+///   - The title has a clear subject package that's DIFFERENT from the dep
+fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
+    // Extract text after the advisory ID prefix: "[CVE-...] " or "[GHSA-...] "
+    let subject_start = if let Some(bracket_end) = title_lower.find("] ") {
+        bracket_end + 2
+    } else {
+        return true; // No structured prefix — can't extract subject, allow match
+    };
+
+    let remainder = &title_lower[subject_start..];
+    if remainder.is_empty() {
+        return true;
+    }
+
+    // The subject package is the first word(s) before a verb like "has", "is",
+    // "allows", "could", "can", "may", "in", or a colon.
+    let subject_end_markers = [
+        " has ",
+        " is ",
+        " allows ",
+        " could ",
+        " can ",
+        " may ",
+        " in ",
+        ": ",
+        " vulnerable ",
+        " affected ",
+        " exposes ",
+    ];
+    let subject_end = subject_end_markers
+        .iter()
+        .filter_map(|m| remainder.find(m))
+        .min()
+        .unwrap_or(remainder.len().min(80));
+
+    let subject = &remainder[..subject_end];
+
+    // If the dep name appears as a word boundary in the subject, it's the target
+    if has_word_boundary_match(subject, dep) {
+        return true;
+    }
+
+    // The subject is a different package/product name. Reject the match.
+    false
+}
+
 /// Check whether `text` contains `term` at a word boundary (not embedded in a
 /// larger word). Case-sensitive — pass lowercase strings for case-insensitive
 /// matching. Accepts `.js`/`.ts`/`.rs` suffixes as valid boundaries for package
@@ -1523,7 +1625,7 @@ mod tests {
     }
 
     #[test]
-    fn authoritative_generic_dep_match_is_allowed() {
+    fn suppressed_generic_names_always_filtered() {
         let conn = setup_test_db();
         insert_dep(&conn, "/proj/a", "image", true, false);
         insert_item_with_meta(
@@ -1536,12 +1638,126 @@ mod tests {
         let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
         assert_eq!(
             alerts.len(),
-            1,
-            "authoritative metadata should allow real advisories for generic package names"
+            0,
+            "generic names (image, dotenv, etc.) are always suppressed in preemption — \
+             they produce too many false positives from unrelated advisories"
         );
-        assert!(alerts[0]
-            .affected_dependencies
-            .contains(&"image".to_string()));
+    }
+
+    // ─── Compound-prefix detection ───────────────────────────────────
+
+    #[test]
+    fn compound_prefix_rejects_i18next_in_i18next_http_middleware() {
+        assert!(is_compound_prefix_match(
+            "[cve-2026-42353] i18next-http-middleware has path traversal",
+            "i18next"
+        ));
+    }
+
+    #[test]
+    fn compound_prefix_allows_standalone_mention() {
+        assert!(!is_compound_prefix_match(
+            "critical vulnerability in i18next allows xss",
+            "i18next"
+        ));
+    }
+
+    #[test]
+    fn compound_prefix_allows_when_both_standalone_and_compound_exist() {
+        assert!(!is_compound_prefix_match(
+            "i18next-http-middleware bypasses i18next sanitization",
+            "i18next"
+        ));
+    }
+
+    // ─── Advisory-subject extraction ─────────────────────────────────
+
+    #[test]
+    fn advisory_subject_rejects_react_in_nextjs_advisory() {
+        assert!(!is_advisory_subject_match(
+            "[ghsa-h25m-26qc-wcjf] next.js http request deserialization can lead to dos when using insecure react server components",
+            "react"
+        ));
+    }
+
+    #[test]
+    fn advisory_subject_allows_direct_package_match() {
+        assert!(is_advisory_subject_match(
+            "[cve-2026-5555] react has critical xss vulnerability",
+            "react"
+        ));
+    }
+
+    #[test]
+    fn advisory_subject_rejects_imagemagick_for_image_crate() {
+        assert!(!is_advisory_subject_match(
+            "[ghsa-xxxx-yyyy] imagemagick has heap buffer overflow in image encoder",
+            "image"
+        ));
+    }
+
+    #[test]
+    fn advisory_subject_rejects_lemmy_for_image_crate() {
+        assert!(!is_advisory_subject_match(
+            "[ghsa-h6hf-9846-xwrq] lemmy has ssrf and internal image disclosure in post link metadata",
+            "image"
+        ));
+    }
+
+    #[test]
+    fn advisory_subject_allows_unstructured_titles() {
+        assert!(is_advisory_subject_match(
+            "critical vulnerability in react allows xss",
+            "react"
+        ));
+    }
+
+    #[test]
+    fn advisory_subject_allows_when_dep_is_subject() {
+        assert!(is_advisory_subject_match(
+            "[ghsa-xxxx-yyyy] dotenv could override environment variables",
+            "dotenv"
+        ));
+    }
+
+    // ─── Integration: compound-prefix + subject in fetch pipeline ────
+
+    #[test]
+    fn fetch_rejects_i18next_compound_prefix_advisory() {
+        let conn = setup_test_db();
+        insert_dep(&conn, "/proj/myapp", "i18next", true, false);
+        insert_item_with_meta(
+            &conn,
+            "[CVE-2026-42353] i18next-http-middleware has path traversal / SSRF",
+            "cve",
+            Some("security_advisory"),
+        );
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+        assert_eq!(
+            alerts.len(),
+            0,
+            "i18next should NOT match i18next-http-middleware advisory"
+        );
+    }
+
+    #[test]
+    fn fetch_rejects_react_in_nextjs_advisory() {
+        let conn = setup_test_db();
+        insert_dep(&conn, "/proj/frontend", "react", true, false);
+        insert_item_with_meta(
+            &conn,
+            "[GHSA-h25m-26qc-wcjf] Next.js HTTP request deserialization can lead to DoS when using insecure React Server Components",
+            "osv",
+            Some("security_advisory"),
+        );
+
+        let alerts = fetch_direct_dep_security_alerts(&conn).unwrap();
+        assert_eq!(
+            alerts.len(),
+            0,
+            "react should NOT match a Next.js advisory that mentions React Server Components"
+        );
     }
 
     fn insert_dep_with_relevance(
