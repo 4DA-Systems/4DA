@@ -129,22 +129,6 @@ pub async fn get_triage_states(item_ids: Vec<i64>) -> Result<Vec<TriageRecord>> 
     Ok(records)
 }
 
-/// Clear expired triage records (snoozed alerts whose snooze period has lapsed).
-/// Returns the number of records removed.
-#[tauri::command]
-pub async fn clear_expired_triage() -> Result<u64> {
-    let conn = crate::open_db_connection()?;
-    let count = conn
-        .execute(
-            "DELETE FROM alert_triage
-             WHERE expires_at IS NOT NULL
-               AND datetime(expires_at) <= datetime('now')",
-            [],
-        )
-        .context("Failed to clear expired triage records")?;
-    Ok(count as u64)
-}
-
 // ============================================================================
 // Tests
 // ============================================================================

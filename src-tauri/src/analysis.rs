@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Analysis functions extracted from lib.rs
 //!
-//! Contains: run_deep_initial_scan, run_cached_analysis, get_analysis_status,
+//! Contains: run_multi_source_analysis, run_cached_analysis, get_analysis_status,
 //! get_actionable_signals, and their implementation helpers.
 //!
 //! Implementation split across sibling modules to stay under file-size limits.
@@ -30,7 +30,6 @@ fn is_aborted() -> bool {
 
 #[path = "analysis_deep_scan.rs"]
 mod analysis_deep_scan;
-pub(crate) use analysis_deep_scan::*;
 
 #[path = "analysis_status.rs"]
 mod analysis_status;

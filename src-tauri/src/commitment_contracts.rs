@@ -52,39 +52,6 @@ pub enum ContractStatus {
 // Storage
 // ============================================================================
 
-pub fn create_contract(
-    conn: &rusqlite::Connection,
-    decision_statement: &str,
-    refutation_condition: &str,
-    subject: &str,
-) -> Result<i64> {
-    // Validate refutation condition: must extract ≥2 keywords to
-    // produce a meaningful AND-LIKE query. Single-keyword conditions
-    // (e.g. "fails") would match too broadly and cause false refutations.
-    let keywords = extract_keywords(refutation_condition);
-    if keywords.len() < 2 {
-        return Err(
-            "Refutation condition too vague — needs at least 2 specific keywords. \
-             Example: 'If build times exceed 45 seconds' (not just 'fails')."
-                .into(),
-        );
-    }
-
-    conn.execute(
-        "INSERT INTO commitment_contracts (decision_statement, refutation_condition, subject)
-         VALUES (?1, ?2, ?3)",
-        params![decision_statement, refutation_condition, subject],
-    )?;
-    let id = conn.last_insert_rowid();
-    info!(
-        target: "4da::contracts",
-        id,
-        subject,
-        "commitment contract created"
-    );
-    Ok(id)
-}
-
 pub fn list_active_contracts(conn: &rusqlite::Connection) -> Result<Vec<CommitmentContract>> {
     let mut stmt = conn.prepare(
         "SELECT id, decision_statement, refutation_condition, subject, status, created_at,
@@ -100,34 +67,6 @@ pub fn list_active_contracts(conn: &rusqlite::Connection) -> Result<Vec<Commitme
             refutation_condition: row.get(2)?,
             subject: row.get(3)?,
             status: ContractStatus::Active,
-            created_at: row.get(5)?,
-            triggered_at: row.get(6)?,
-            trigger_item_id: row.get(7)?,
-        })
-    })?;
-    Ok(rows.flatten().collect())
-}
-
-pub fn list_all_contracts(conn: &rusqlite::Connection) -> Result<Vec<CommitmentContract>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, decision_statement, refutation_condition, subject, status, created_at,
-                triggered_at, trigger_item_id
-         FROM commitment_contracts
-         ORDER BY created_at DESC",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        let status_str: String = row.get(4)?;
-        let status = match status_str.as_str() {
-            "triggered" => ContractStatus::Triggered,
-            "dismissed" => ContractStatus::Dismissed,
-            _ => ContractStatus::Active,
-        };
-        Ok(CommitmentContract {
-            id: row.get(0)?,
-            decision_statement: row.get(1)?,
-            refutation_condition: row.get(2)?,
-            subject: row.get(3)?,
-            status,
             created_at: row.get(5)?,
             triggered_at: row.get(6)?,
             trigger_item_id: row.get(7)?,
@@ -153,14 +92,6 @@ pub fn trigger_contract(
         trigger_item_id,
         "commitment contract triggered"
     );
-    Ok(())
-}
-
-pub fn dismiss_contract(conn: &rusqlite::Connection, contract_id: i64) -> Result<()> {
-    conn.execute(
-        "UPDATE commitment_contracts SET status = 'dismissed' WHERE id = ?1",
-        params![contract_id],
-    )?;
     Ok(())
 }
 
@@ -243,41 +174,6 @@ fn extract_keywords(condition: &str) -> Vec<String> {
 }
 
 // ============================================================================
-// Tauri Commands
-// ============================================================================
-
-#[tauri::command]
-pub async fn create_commitment_contract(
-    decision_statement: String,
-    refutation_condition: String,
-    subject: String,
-) -> std::result::Result<i64, String> {
-    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
-    create_contract(&conn, &decision_statement, &refutation_condition, &subject)
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn get_commitment_contracts() -> std::result::Result<String, String> {
-    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
-    let contracts = list_all_contracts(&conn).map_err(|e| e.to_string())?;
-    serde_json::to_string(&contracts).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn dismiss_commitment_contract(contract_id: i64) -> std::result::Result<(), String> {
-    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
-    dismiss_contract(&conn, contract_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn check_refutations(hours: u32) -> std::result::Result<String, String> {
-    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
-    let triggered = scan_for_refutations(&conn, hours).map_err(|e| e.to_string())?;
-    serde_json::to_string(&triggered).map_err(|e| e.to_string())
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 
@@ -311,17 +207,26 @@ mod tests {
         conn
     }
 
+    /// Insert a contract directly via SQL (test helper).
+    fn insert_contract(conn: &Connection, statement: &str, condition: &str, subject: &str) -> i64 {
+        conn.execute(
+            "INSERT INTO commitment_contracts (decision_statement, refutation_condition, subject)
+             VALUES (?1, ?2, ?3)",
+            params![statement, condition, subject],
+        )
+        .unwrap();
+        conn.last_insert_rowid()
+    }
+
     #[test]
-    fn create_and_list_contract() {
+    fn list_active_returns_active_contracts() {
         let conn = setup_db();
-        let id = create_contract(
+        insert_contract(
             &conn,
             "Adopted Turborepo",
             "If build times exceed 45 seconds",
             "turborepo",
-        )
-        .unwrap();
-        assert!(id > 0);
+        );
         let active = list_active_contracts(&conn).unwrap();
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].decision_statement, "Adopted Turborepo");
@@ -331,30 +236,46 @@ mod tests {
     #[test]
     fn trigger_contract_flips_status() {
         let conn = setup_db();
-        let id = create_contract(&conn, "test", "build times exceed 45 seconds", "").unwrap();
+        let id = insert_contract(&conn, "test", "build times exceed 45 seconds", "");
         trigger_contract(&conn, id, 42).unwrap();
-        let all = list_all_contracts(&conn).unwrap();
-        assert_eq!(all[0].status, ContractStatus::Triggered);
-        assert_eq!(all[0].trigger_item_id, Some(42));
+        // Verify via direct SQL since list_all_contracts was removed
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM commitment_contracts WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "triggered");
+        let trigger_item: i64 = conn
+            .query_row(
+                "SELECT trigger_item_id FROM commitment_contracts WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(trigger_item, 42);
     }
 
     #[test]
     fn trigger_only_affects_active() {
         let conn = setup_db();
-        let id = create_contract(&conn, "test", "build times exceed 45 seconds", "").unwrap();
-        dismiss_contract(&conn, id).unwrap();
+        let id = insert_contract(&conn, "test", "build times exceed 45 seconds", "");
+        // Dismiss via direct SQL
+        conn.execute(
+            "UPDATE commitment_contracts SET status = 'dismissed' WHERE id = ?1",
+            params![id],
+        )
+        .unwrap();
         trigger_contract(&conn, id, 42).unwrap();
-        let all = list_all_contracts(&conn).unwrap();
-        assert_eq!(all[0].status, ContractStatus::Dismissed);
-    }
-
-    #[test]
-    fn dismiss_contract_works() {
-        let conn = setup_db();
-        let id = create_contract(&conn, "test", "build times exceed 45 seconds", "").unwrap();
-        dismiss_contract(&conn, id).unwrap();
-        let active = list_active_contracts(&conn).unwrap();
-        assert!(active.is_empty());
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM commitment_contracts WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "dismissed");
     }
 
     #[test]
@@ -382,13 +303,12 @@ mod tests {
     #[test]
     fn scan_finds_matching_item() {
         let conn = setup_db();
-        create_contract(
+        insert_contract(
             &conn,
             "Adopted tokio",
             "If there is a critical CVE in tokio",
             "tokio",
-        )
-        .unwrap();
+        );
         conn.execute(
             "INSERT INTO source_items (title, content, created_at) VALUES (?1, ?2, datetime('now'))",
             params!["Critical CVE-2026-9999 in tokio 1.x", "Full advisory text mentioning tokio critical vulnerability"],
@@ -396,20 +316,25 @@ mod tests {
         .unwrap();
         let triggered = scan_for_refutations(&conn, 24).unwrap();
         assert_eq!(triggered.len(), 1);
-        let all = list_all_contracts(&conn).unwrap();
-        assert_eq!(all[0].status, ContractStatus::Triggered);
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM commitment_contracts WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "triggered");
     }
 
     #[test]
     fn scan_ignores_non_matching_items() {
         let conn = setup_db();
-        create_contract(
+        insert_contract(
             &conn,
             "Adopted tokio",
             "If there is a critical CVE in tokio",
             "tokio",
-        )
-        .unwrap();
+        );
         conn.execute(
             "INSERT INTO source_items (title, content, created_at) VALUES (?1, ?2, datetime('now'))",
             params!["React 19 released with new features", "Frontend framework update"],

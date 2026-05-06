@@ -450,42 +450,6 @@ pub fn mine_many(
 }
 
 // ============================================================================
-// Tauri Command
-// ============================================================================
-
-/// Run the miner against ACE's currently-tracked project paths.
-/// Returns a JSON summary with counts. Decisions are serialized to a
-/// JSONL file at `<temp>/4da_git_seeded.jsonl` for later import.
-#[tauri::command]
-pub async fn mine_git_decisions() -> std::result::Result<String, String> {
-    // Discover tracked repos via the user's configured context_dirs.
-    // No hard dependency on ACE — this only needs the settings manager.
-    let repos: Vec<PathBuf> = crate::get_context_dirs();
-
-    // Bounds: 5 repos × 200 commits = 1000 commits max scanned.
-    const REPO_CAP: usize = 5;
-    const MAX_COMMITS: usize = 200;
-
-    let (decisions, summary) = mine_many(&repos, REPO_CAP, MAX_COMMITS);
-
-    // Write JSONL to temp for the seeder to pick up.
-    let out_path = std::env::temp_dir().join("4da_git_seeded.jsonl");
-    let mut lines: Vec<String> = Vec::with_capacity(decisions.len());
-    for d in &decisions {
-        if let Ok(s) = serde_json::to_string(d) {
-            lines.push(s);
-        }
-    }
-    let _ = std::fs::write(&out_path, lines.join("\n"));
-
-    serde_json::to_string(&serde_json::json!({
-        "summary": summary,
-        "jsonl_path": out_path.to_string_lossy(),
-    }))
-    .map_err(|e| e.to_string())
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 

@@ -280,7 +280,6 @@ pub const SIGNAL_FEATURES: &[&str] = &[
     // Developer DNA un-gated (AD-026): free tier viral sharing of DNA cards
     // natural_language_query removed — BYOK: runs on user's API key at zero cost (AD-025)
     "get_semantic_shifts",
-    "get_decision_signals",
     "synthesize_search",
     "standing_queries",
     // Additional panels added by LICENSE-GATING-AUDIT-2026-04-15
