@@ -61,7 +61,6 @@ struct CatalogFile {
 #[derive(Debug)]
 pub struct CuratedFeedRegistry {
     by_url: HashMap<String, CuratedFeedManifest>,
-    by_id: HashMap<String, CuratedFeedManifest>,
     all_feeds: Vec<CuratedFeedManifest>,
 }
 
@@ -71,26 +70,18 @@ impl CuratedFeedRegistry {
             serde_json::from_str(CATALOG_JSON).expect("curated_feeds.json must be valid JSON");
 
         let mut by_url = HashMap::with_capacity(catalog.feeds.len());
-        let mut by_id = HashMap::with_capacity(catalog.feeds.len());
-
         for feed in &catalog.feeds {
             by_url.insert(feed.url.clone(), feed.clone());
-            by_id.insert(feed.id.clone(), feed.clone());
         }
 
         Self {
             by_url,
-            by_id,
             all_feeds: catalog.feeds,
         }
     }
 
     pub fn get_by_url(&self, url: &str) -> Option<&CuratedFeedManifest> {
         self.by_url.get(url)
-    }
-
-    pub fn get_by_id(&self, id: &str) -> Option<&CuratedFeedManifest> {
-        self.by_id.get(id)
     }
 
     pub fn all_feeds(&self) -> &[CuratedFeedManifest] {
@@ -106,10 +97,6 @@ impl CuratedFeedRegistry {
             .iter()
             .filter(|f| f.domains.iter().any(|d| d == domain))
             .collect()
-    }
-
-    pub fn all_urls(&self) -> Vec<&str> {
-        self.all_feeds.iter().map(|f| f.url.as_str()).collect()
     }
 
     pub fn all_domains(&self) -> Vec<&str> {
@@ -144,9 +131,9 @@ mod tests {
     fn registry_loads_successfully() {
         let registry = get_curated_registry();
         assert!(
-            registry.feed_count() >= 80,
+            registry.all_feeds().len() >= 80,
             "Expected at least 80 curated feeds, got {}",
-            registry.feed_count()
+            registry.all_feeds().len()
         );
     }
 
@@ -205,7 +192,10 @@ mod tests {
     #[test]
     fn lookup_by_id_works() {
         let registry = get_curated_registry();
-        let result = registry.get_by_id("cloudflare-blog");
+        let result = registry
+            .all_feeds()
+            .iter()
+            .find(|f| f.id == "cloudflare-blog");
         assert!(result.is_some());
         assert_eq!(result.unwrap().url, "https://blog.cloudflare.com/rss");
     }

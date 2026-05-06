@@ -18,21 +18,6 @@ export interface AutophagyStatus {
   total_anti_patterns: number;
 }
 
-export interface CalibrationDelta {
-  topic: string;
-  scored_avg: number;
-  engaged_avg: number;
-  delta: number;
-  sample_size: number;
-  confidence: number;
-}
-
-export interface TopicDecayProfile {
-  topic: string;
-  half_life_hours: number;
-  peak_relevance_age_hours: number;
-}
-
 export interface DecisionWindow {
   id: number;
   window_type: 'security_patch' | 'migration' | 'adoption' | 'knowledge';
