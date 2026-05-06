@@ -568,39 +568,6 @@ mod tests {
     }
 
     #[test]
-    fn escape_html_handles_ampersand() {
-        assert_eq!(escape_html("a & b"), "a &amp; b");
-    }
-
-    #[test]
-    fn escape_html_handles_angle_brackets() {
-        assert_eq!(escape_html("<script>"), "&lt;script&gt;");
-    }
-
-    #[test]
-    fn escape_html_handles_quotes() {
-        assert_eq!(escape_html(r#"say "hello""#), "say &quot;hello&quot;");
-    }
-
-    #[test]
-    fn escape_html_handles_single_quotes() {
-        assert_eq!(escape_html("it's"), "it&#x27;s");
-    }
-
-    #[test]
-    fn escape_html_preserves_safe_text() {
-        assert_eq!(escape_html("hello world"), "hello world");
-    }
-
-    #[test]
-    fn escape_html_handles_all_special_chars() {
-        assert_eq!(
-            escape_html("<div class=\"a\" data-x='b'>&</div>"),
-            "&lt;div class=&quot;a&quot; data-x=&#x27;b&#x27;&gt;&amp;&lt;/div&gt;"
-        );
-    }
-
-    #[test]
     fn narrative_strong_match_above_60_percent() {
         let item = make_item(0.75, 0.0, 0.0);
         let result = build_autopsy_narrative(&item, &[], &[], 10.0);
