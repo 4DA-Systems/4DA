@@ -99,10 +99,6 @@ vi.mock('./settings/LicenseSection', () => ({
   LicenseSection: () => <div data-testid="license-section" />,
 }));
 
-vi.mock('./ProValuePanel', () => ({
-  ProValuePanel: () => <div data-testid="pro-value-panel" />,
-}));
-
 describe('SettingsModal', () => {
   it('does not render when not mounted (parent controls visibility)', () => {
     const show = false;

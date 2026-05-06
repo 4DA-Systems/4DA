@@ -143,34 +143,6 @@ pub fn get_cached_analysis(db: &Database, hash: &str) -> Result<Option<ContentAn
     }
 }
 
-/// Store a content analysis result in the cache.
-///
-/// Uses INSERT OR REPLACE so re-analysis of the same content
-/// simply updates the row.
-#[allow(dead_code)]
-pub fn store_analysis(
-    db: &Database,
-    source_item_id: i64,
-    analysis: &ContentAnalysis,
-) -> Result<()> {
-    let conn = db.conn.lock();
-    conn.execute(
-        "INSERT OR REPLACE INTO content_analyses
-            (source_item_id, content_hash, technical_depth, novelty, audience_level, key_insight, analyzed_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        rusqlite::params![
-            source_item_id,
-            analysis.content_hash,
-            analysis.technical_depth as i64,
-            analysis.novelty as i64,
-            analysis.audience_level.to_string(),
-            analysis.key_insight,
-            analysis.analyzed_at,
-        ],
-    )?;
-    Ok(())
-}
-
 // =============================================================================
 // Tests
 // =============================================================================

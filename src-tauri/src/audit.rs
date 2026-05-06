@@ -429,26 +429,6 @@ fn csv_escape(value: &str) -> String {
 }
 
 // ============================================================================
-// Retention / Cleanup
-// ============================================================================
-
-/// Delete audit entries older than `retention_days` for a given team.
-///
-/// Returns the number of rows deleted.
-pub fn cleanup_expired_audit(
-    conn: &rusqlite::Connection,
-    team_id: &str,
-    retention_days: i32,
-) -> anyhow::Result<usize> {
-    let cutoff = format!("-{retention_days} days");
-    let deleted = conn.execute(
-        "DELETE FROM audit_log WHERE team_id = ?1 AND created_at < datetime('now', ?2)",
-        rusqlite::params![team_id, cutoff],
-    )?;
-    Ok(deleted)
-}
-
-// ============================================================================
 // Tauri Commands
 // ============================================================================
 
