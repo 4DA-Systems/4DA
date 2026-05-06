@@ -605,7 +605,7 @@ function generateIPCContracts() {
     .sort();
 
   const issueCount =
-    registeredNotTs.length + tsNotRegistered.length + definedNotRegistered.length;
+    registeredNotTs.length + tsNotRegistered.length;
 
   // Explain the definition vs registration gap if it exists
   const defGap = registered.size - rustCommands.size;
@@ -645,7 +645,7 @@ ${gapNote}
   }
 
   if (definedNotRegistered.length > 0) {
-    md += `## UNUSED: Rust #[tauri::command] but NOT Registered (${definedNotRegistered.length})\nThese functions have the command attribute but are not in generate_handler![].\n`;
+    md += `## INFO: Rust #[tauri::command] but NOT Registered (${definedNotRegistered.length})\nThese functions have the command attribute but are intentionally not in generate_handler![]. Not a contract issue.\n`;
     for (const cmd of definedNotRegistered) {
       md += `- \`${cmd}\` in \`${rustCommands.get(cmd)}\`\n`;
     }
