@@ -101,16 +101,14 @@ pub fn check_all_components(conn: &Connection) -> Result<SystemHealthReport> {
 // Individual Component Checks
 // ============================================================================
 
-/// Check scanner health: detected_projects count > 0
+/// Check scanner health: detected_tech count > 0
 fn check_scanner(conn: &Connection, now: &str) -> ComponentHealth {
     let result: std::result::Result<i64, _> =
-        conn.query_row("SELECT COUNT(*) FROM detected_projects", [], |row| {
-            row.get(0)
-        });
+        conn.query_row("SELECT COUNT(*) FROM detected_tech", [], |row| row.get(0));
 
     match result {
         Ok(count) if count > 0 => {
-            debug!(target: "4da::health", count, "Scanner healthy: projects detected");
+            debug!(target: "4da::health", count, "Scanner healthy: technologies detected");
             ComponentHealth {
                 name: "scanner".into(),
                 status: HealthStatus::Healthy,
@@ -119,12 +117,12 @@ fn check_scanner(conn: &Connection, now: &str) -> ComponentHealth {
             }
         }
         Ok(_) => {
-            debug!(target: "4da::health", "Scanner degraded: no projects detected yet");
+            debug!(target: "4da::health", "Scanner degraded: no technologies detected yet");
             ComponentHealth {
                 name: "scanner".into(),
                 status: HealthStatus::Failed,
                 last_check: now.into(),
-                error_message: Some("No projects detected".into()),
+                error_message: Some("No technologies detected".into()),
             }
         }
         Err(e) => {
@@ -527,7 +525,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             r#"
-            CREATE TABLE detected_projects (id INTEGER PRIMARY KEY, path TEXT, name TEXT, detected_at TEXT);
+            CREATE TABLE detected_tech (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, category TEXT, confidence REAL DEFAULT 0.5, source TEXT, evidence TEXT, created_at TEXT DEFAULT (datetime('now')));
             CREATE TABLE file_signals (path TEXT, timestamp TEXT, event_type TEXT, extracted_topics TEXT);
             CREATE TABLE git_signals (id INTEGER PRIMARY KEY, repo_path TEXT, timestamp TEXT, signal_type TEXT);
         "#,
@@ -540,7 +538,7 @@ mod tests {
     fn test_scanner_healthy() {
         let conn = setup_test_db();
         conn.execute(
-            "INSERT INTO detected_projects (path, name, detected_at) VALUES ('/test', 'test', datetime('now'))",
+            "INSERT INTO detected_tech (name, category, confidence, source) VALUES ('rust', 'language', 0.9, 'Cargo.toml')",
             [],
         )
         .unwrap();
@@ -620,7 +618,7 @@ mod tests {
         let conn = setup_test_db();
         // Add data to make scanner, watcher, git healthy
         conn.execute(
-            "INSERT INTO detected_projects (path, name, detected_at) VALUES ('/test', 'test', datetime('now'))",
+            "INSERT INTO detected_tech (name, category, confidence, source) VALUES ('rust', 'language', 0.9, 'Cargo.toml')",
             [],
         )
         .unwrap();
