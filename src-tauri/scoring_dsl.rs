@@ -218,6 +218,7 @@ fn lex(input: &str) -> Result<Vec<SpannedToken>, Vec<String>> {
                             tokens.push(SpannedToken { token: Token::RBracket, line: line_num });
                             i += 1;
                         }
+                        break; // skip any trailing comment text after the range
                     }
                 } else if rest_trimmed.starts_with("constraint:") {
                     // Inline constraint comment (shouldn't normally appear mid-line, but handle it)

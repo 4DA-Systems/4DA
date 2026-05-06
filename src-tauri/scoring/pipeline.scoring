@@ -162,7 +162,7 @@ source_engagement {
     blend_max: 1.20             # [1.05, 1.50]
 }
 
-# Absolute score ceiling — no heuristic pipeline can guarantee 100%
+# Absolute score ceiling - no heuristic pipeline can guarantee 100%
 final_ceiling {
     absolute_max: 0.95          # [0.90, 0.99]
 }
@@ -229,9 +229,10 @@ preemption_urgency {
 
 # Preemption confidence calibration (title-keyword match, no version check)
 preemption_confidence {
-    title_match_base: 0.35      # [0.30, 0.60]
-    per_project_boost: 0.03     # [0.01, 0.10]
-    max_confidence: 0.50        # [0.50, 0.80]
+    title_match_base: 0.35              # [0.30, 0.60]
+    source_classified_boost: 0.20       # [0.10, 0.30]
+    per_project_boost: 0.05             # [0.01, 0.10]
+    max_confidence: 0.70                # [0.50, 0.85]
 }
 
 # Signal chain phase detection thresholds
@@ -250,7 +251,7 @@ signal_chain_prediction {
     max_hours: 168.0            # [48.0, 336.0]
 }
 
-# Commodity content ceiling — hard cap for low-sophistication commodity content.
+# Commodity content ceiling - hard cap for low-sophistication commodity content.
 # Applied in Phase 8 after all boosts. Prevents basic tutorials, help requests,
 # and simple questions from reaching the briefing regardless of dep/keyword match.
 commodity_ceiling {
@@ -259,7 +260,7 @@ commodity_ceiling {
     question:     0.30    # [0.20, 0.40]
 }
 
-# Community quality signal thresholds — extracted from source metadata
+# Community quality signal thresholds - extracted from source metadata
 # (SO score, HN points, Reddit upvotes). Applied as multiplier in Phase 5.
 community_signal {
     low_threshold: 0.30    # [0.10, 0.50]

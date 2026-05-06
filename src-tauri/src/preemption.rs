@@ -88,6 +88,10 @@ pub struct PreemptionAlert {
     /// with version verification. Drives Confidence::osv_verified provenance.
     #[serde(default)]
     pub osv_verified: bool,
+    /// True when the source itself classified this as security_advisory or
+    /// breaking_change (not just keyword matching). Drives llm_assessed provenance.
+    #[serde(default)]
+    pub source_classified: bool,
 }
 
 /// The full preemption feed with summary counts.
@@ -362,6 +366,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 suggested_actions,
                 created_at: chrono::Utc::now().to_rfc3339(),
                 osv_verified: true,
+                source_classified: false,
             }
         })
         .collect()
@@ -513,6 +518,7 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             suggested_actions,
             created_at: j.judged_at.clone(),
             osv_verified: false,
+            source_classified: false,
         });
     }
 
@@ -984,6 +990,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
             suggested_actions,
             created_at: chrono::Utc::now().to_rfc3339(),
             osv_verified: false,
+            source_classified,
         });
     }
 
@@ -1016,9 +1023,7 @@ fn fetch_direct_dep_security_alerts(conn: &rusqlite::Connection) -> Result<Vec<P
                             existing.evidence.push(ev.clone());
                         }
                     }
-                    // Multi-project corroboration: higher confidence when multiple
-                    // independent projects confirm the dep match. Preserve the
-                    // higher base if either alert was source-classified.
+                    existing.source_classified |= alert.source_classified;
                     let proj_count = existing.affected_projects.len() as f32;
                     let base = existing.confidence.max(alert.confidence);
                     existing.confidence = (base
@@ -1202,6 +1207,7 @@ fn chain_to_alert(
         suggested_actions,
         created_at: chrono::Utc::now().to_rfc3339(),
         osv_verified: false,
+        source_classified: false,
     }
 }
 
@@ -1485,10 +1491,9 @@ impl PreemptionAlert {
             kind,
             title,
             explanation: self.explanation.clone(),
-            // Preemption uses a bare f32 confidence; provenance is heuristic.
             confidence: if self.osv_verified {
                 Confidence::osv_verified(self.confidence.clamp(0.0, 1.0))
-            } else if self.id.starts_with("llm-") {
+            } else if self.id.starts_with("llm-") || self.source_classified {
                 Confidence::llm_assessed(self.confidence.clamp(0.0, 1.0))
             } else {
                 Confidence::heuristic(self.confidence.clamp(0.0, 1.0))
@@ -2072,6 +2077,7 @@ mod tests {
             }],
             created_at: "2026-04-17 09:30:00".to_string(),
             osv_verified: false,
+            source_classified: false,
         }
     }
 
@@ -2185,6 +2191,17 @@ mod tests {
         assert_eq!(
             item.confidence.provenance,
             crate::evidence::ConfidenceProvenance::Heuristic
+        );
+    }
+
+    #[test]
+    fn to_evidence_item_source_classified_gets_llm_assessed_provenance() {
+        let mut alert = sample_alert();
+        alert.source_classified = true;
+        let item = alert.to_evidence_item();
+        assert_eq!(
+            item.confidence.provenance,
+            crate::evidence::ConfidenceProvenance::LlmAssessed
         );
     }
 
