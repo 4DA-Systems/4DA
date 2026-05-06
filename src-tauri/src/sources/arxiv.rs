@@ -297,12 +297,6 @@ impl Source for ArxivSource {
         self.fetch_for_categories(&categories, items_per_category * 10)
             .await
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // arXiv items already have abstracts as content - no scraping needed
-        // The abstract is the primary content for papers
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

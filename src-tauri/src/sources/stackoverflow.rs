@@ -245,11 +245,6 @@ impl Source for StackOverflowSource {
         );
         Ok(all_items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // SO items already have useful content from the API
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

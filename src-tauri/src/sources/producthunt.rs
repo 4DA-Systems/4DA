@@ -246,12 +246,6 @@ impl Source for ProductHuntSource {
 
         Ok(items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // For Product Hunt, the description from RSS is usually sufficient
-        // But we could optionally scrape the full page here
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================
