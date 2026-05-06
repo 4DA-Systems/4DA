@@ -138,12 +138,7 @@ impl CratesIoSource {
         if status == reqwest::StatusCode::NOT_FOUND {
             return Err(SourceError::Other(format!("Crate not found: {name}")));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "crates.io API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "crates.io API")?;
 
         let data: CratesIoResponse = response
             .json()
@@ -250,12 +245,7 @@ impl CratesIoSource {
                 "crates.io forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "crates.io API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "crates.io API")?;
 
         let data: CratesSearchResponse = response
             .json()

@@ -67,6 +67,21 @@ pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
     }
 }
 
+/// Check HTTP response status and return a `SourceError::Network` on failure.
+/// Replaces the duplicated `if !status.is_success()` pattern across adapters.
+pub(crate) fn check_http_status(
+    status: reqwest::StatusCode,
+    source_name: &str,
+) -> SourceResult<()> {
+    if !status.is_success() {
+        tracing::warn!(status = %status, source = source_name, "HTTP request failed");
+        return Err(SourceError::Network(format!(
+            "{source_name} error: HTTP {}", status.as_u16()
+        )));
+    }
+    Ok(())
+}
+
 // ============================================================================
 // Scalability limits — guards for 100+ source configurations
 // ============================================================================

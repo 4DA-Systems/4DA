@@ -269,12 +269,7 @@ impl OsvSource {
                 "OSV batch API forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "OSV batch API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "OSV batch API")?;
 
         let result: OsvBatchResponse = response
             .json()

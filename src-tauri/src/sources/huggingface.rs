@@ -88,12 +88,7 @@ impl HuggingFaceSource {
                 "Hugging Face forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Hugging Face API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "HuggingFace API")?;
 
         let models: Vec<HfModel> = response
             .json()

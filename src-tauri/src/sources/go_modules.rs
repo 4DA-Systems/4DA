@@ -116,12 +116,7 @@ impl Source for GoModulesSource {
                 "Go Module Index forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Go Module Index API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Go modules proxy")?;
 
         let body = response
             .text()

@@ -202,12 +202,7 @@ impl ArxivSource {
                 "arXiv forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "arXiv API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "arXiv API")?;
 
         let xml = response
             .text()

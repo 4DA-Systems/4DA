@@ -102,12 +102,7 @@ impl RedditSource {
                 "Reddit forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Reddit API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Reddit API")?;
 
         let listing: RedditListing = response
             .json()

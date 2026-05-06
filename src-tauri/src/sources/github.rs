@@ -180,13 +180,7 @@ impl Source for GitHubSource {
                 "GitHub forbidden (HTTP 403) — check API rate limits or auth".to_string(),
             ));
         }
-        if !status.is_success() {
-            warn!(status = %status, "GitHub API request failed");
-            return Err(SourceError::Network(format!(
-                "GitHub API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "GitHub API")?;
 
         let search_result: GitHubSearchResponse = response
             .json()

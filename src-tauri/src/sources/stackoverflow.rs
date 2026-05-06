@@ -104,12 +104,7 @@ impl StackOverflowSource {
                 "Stack Overflow forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Stack Overflow API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "StackOverflow API")?;
 
         let so_resp: SoResponse = response
             .json()

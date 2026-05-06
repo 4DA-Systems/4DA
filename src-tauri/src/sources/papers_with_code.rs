@@ -137,12 +137,7 @@ impl Source for PapersWithCodeSource {
                 "Papers with Code forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Papers with Code API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Papers With Code API")?;
 
         // Try HuggingFace daily_papers format first (flat array of {paper: {...}})
         // Fall back to original PwC format ({results: [...]})

@@ -186,12 +186,7 @@ impl Source for HackerNewsSource {
                 "Hacker News forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Hacker News API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Hacker News API")?;
 
         let top_ids: Vec<u64> = response
             .json()

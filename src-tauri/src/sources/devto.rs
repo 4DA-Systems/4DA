@@ -81,12 +81,7 @@ impl DevtoSource {
                 "Dev.to forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Dev.to API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Dev.to API")?;
 
         let articles: Vec<DevtoArticle> = response
             .json()

@@ -128,12 +128,7 @@ impl PypiSource {
                 "PyPI package not found: {package}"
             )));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "PyPI API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "PyPI API")?;
 
         let pkg: PypiPackageInfo = response
             .json()

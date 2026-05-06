@@ -78,12 +78,7 @@ impl LobstersSource {
                 "Lobste.rs forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Lobste.rs API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Lobste.rs API")?;
 
         let stories: Vec<LobstersStory> = response
             .json()

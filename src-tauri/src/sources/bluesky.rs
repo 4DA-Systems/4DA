@@ -148,12 +148,7 @@ impl BlueskySource {
                 "Bluesky forbidden (HTTP 403)".to_string(),
             ));
         }
-        if !status.is_success() {
-            return Err(SourceError::Network(format!(
-                "Bluesky API error: HTTP {}",
-                status.as_u16()
-            )));
-        }
+        super::check_http_status(status, "Bluesky API")?;
 
         let bsky_resp: BskySearchResponse = response
             .json()
