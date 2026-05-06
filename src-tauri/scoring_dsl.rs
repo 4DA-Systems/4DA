@@ -568,22 +568,6 @@ impl Parser {
         }
     }
 
-    fn skip_to_closing_brace(&mut self) {
-        let mut depth = 0;
-        loop {
-            match self.peek() {
-                Token::Eof => break,
-                Token::LBrace => { depth += 1; self.advance(); }
-                Token::RBrace => {
-                    self.advance();
-                    depth -= 1;
-                    if depth <= 0 { break; }
-                }
-                _ => { self.advance(); }
-            }
-        }
-    }
-
     // --- Section parsers ---
 
     fn parse_version(&mut self) -> Result<AstNode, Vec<String>> {
