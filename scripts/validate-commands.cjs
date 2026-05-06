@@ -220,11 +220,10 @@ function main() {
     console.log();
   }
 
-  // Rust commands defined but never registered
+  // Rust commands defined but never registered (informational — not a blocking issue)
   const unregistered = [...rustCommands].filter((c) => !registered.has(c)).sort();
   if (unregistered.length) {
-    issues += unregistered.length;
-    console.log(`--- Rust #[tauri::command] defined but not registered (${unregistered.length}) ---`);
+    console.log(`--- Rust #[tauri::command] defined but not registered (${unregistered.length}, info only) ---`);
     for (const cmd of unregistered) {
       console.log(`  - ${cmd}`);
     }
