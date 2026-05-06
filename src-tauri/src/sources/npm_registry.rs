@@ -275,11 +275,6 @@ impl Source for NpmRegistrySource {
         info!(total = items.len(), "Total npm registry items (deep)");
         Ok(items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Content is already populated during fetch
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

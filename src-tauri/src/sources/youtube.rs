@@ -385,11 +385,6 @@ impl Source for YouTubeSource {
         Ok(all_items)
     }
 
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // YouTube feed already includes description, no extra scraping needed
-        Ok(item.content.clone())
-    }
-
     fn feed_errors(&self) -> Vec<(String, String)> {
         self.feed_errors
             .lock()

@@ -333,10 +333,6 @@ impl Source for CveSource {
         tracing::info!(target: "4da::sources", count = all_items.len(), ecosystems = ?ecosystems, "CVE: Deep scan complete");
         Ok(all_items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

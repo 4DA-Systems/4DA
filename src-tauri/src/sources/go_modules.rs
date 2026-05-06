@@ -180,11 +180,6 @@ impl Source for GoModulesSource {
         info!(items = items.len(), "Fetched Go Module Index items");
         Ok(items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Module info is already populated from the index API
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

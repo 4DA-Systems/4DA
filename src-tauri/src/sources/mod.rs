@@ -508,10 +508,12 @@ pub trait Source: Send + Sync {
         self.fetch_items().await
     }
 
-    /// Scrape/extract content for a single item
-    ///
-    /// This is called separately from fetch_items to allow parallel scraping.
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String>;
+    /// Scrape/extract content for a single item.
+    /// Default returns the item's existing content (sufficient when the feed/API
+    /// already provides full text). Override for sources that need a second fetch.
+    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
+        Ok(item.content.clone())
+    }
 
     /// Declarative metadata — category, default content type, display hints.
     /// Override this to declare your source's identity. Default: General/Discussion.

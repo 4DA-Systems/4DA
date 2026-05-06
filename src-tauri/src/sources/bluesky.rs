@@ -285,11 +285,6 @@ impl Source for BlueskySource {
         info!(total = all_items.len(), "Total Bluesky items fetched");
         Ok(all_items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Bluesky posts already have full text from the API
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

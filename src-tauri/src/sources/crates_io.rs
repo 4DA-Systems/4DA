@@ -400,12 +400,6 @@ impl Source for CratesIoSource {
         // Deep fetch is the same as regular — we already fetch all monitored crates
         self.fetch_items().await
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // crates.io items already have full content from the API response —
-        // no scraping needed
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================

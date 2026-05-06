@@ -277,11 +277,6 @@ impl Source for PapersWithCodeSource {
         info!(items = items.len(), "Fetched Papers with Code items");
         Ok(items)
     }
-
-    async fn scrape_content(&self, item: &SourceItem) -> SourceResult<String> {
-        // Papers already have abstract content from the API
-        Ok(item.content.clone())
-    }
 }
 
 // ============================================================================
