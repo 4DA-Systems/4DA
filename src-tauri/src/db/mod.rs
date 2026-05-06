@@ -245,20 +245,6 @@ impl Database {
         self.conn.lock()
     }
 
-    /// Checkpoint the WAL file if it exceeds the size threshold.
-    /// Returns the number of WAL pages moved to the main database.
-    pub fn checkpoint_wal_if_needed(&self) -> SqliteResult<usize> {
-        let conn = self.conn.lock();
-        // Check WAL size via PRAGMA wal_checkpoint(PASSIVE) first
-        // PASSIVE won't block writers
-        let mut pages_moved: i32 = 0;
-        conn.query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| {
-            pages_moved = row.get::<_, i32>(1).unwrap_or(0);
-            Ok(())
-        })?;
-        Ok(pages_moved as usize)
-    }
-
     /// Run lightweight scheduled maintenance (safe to call frequently).
     /// - WAL checkpoint (TRUNCATE if large, else PASSIVE)
     /// - PRAGMA optimize (SQLite auto-tune)
@@ -277,34 +263,6 @@ impl Database {
         conn.execute_batch("PRAGMA optimize;")?;
         tracing::info!(target: "4da::db", "Scheduled maintenance: WAL checkpoint + optimize complete");
         Ok(())
-    }
-
-    /// Check database file size and warn if approaching limits.
-    /// 2GB max prevents unbounded growth from malicious or prolific sources.
-    pub fn check_db_size(db_path: &std::path::Path) -> u64 {
-        const MAX_DB_SIZE: u64 = 2_147_483_648; // 2 GB
-        const WARN_DB_SIZE: u64 = 1_610_612_736; // 1.5 GB
-
-        match std::fs::metadata(db_path) {
-            Ok(meta) => {
-                let size = meta.len();
-                if size > MAX_DB_SIZE {
-                    tracing::error!(
-                        target: "4da::db",
-                        size_mb = size / 1_000_000,
-                        "Database exceeds 2GB limit — cleanup recommended"
-                    );
-                } else if size > WARN_DB_SIZE {
-                    tracing::warn!(
-                        target: "4da::db",
-                        size_mb = size / 1_000_000,
-                        "Database approaching 2GB limit"
-                    );
-                }
-                size
-            }
-            Err(_) => 0,
-        }
     }
 
     /// Log a security-relevant event to the audit table.
@@ -486,48 +444,6 @@ impl Database {
         rows.collect()
     }
 
-    /// KNN search for similar source items using sqlite-vec (O(log n) instead of O(n))
-    pub fn find_similar_source_items(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-    ) -> SqliteResult<Vec<StoredSourceItem>> {
-        let conn = self.read_conn();
-        let embedding_blob = embedding_to_blob(query_embedding);
-
-        let mut stmt = conn.prepare(
-            "SELECT s.id, s.source_type, s.source_id, s.url, s.title, s.content,
-                    s.content_hash, s.embedding, s.created_at, s.last_seen, v.distance,
-                    COALESCE(s.detected_lang, 'en'), s.feed_origin, s.tags
-             FROM source_vec v
-             JOIN source_items s ON s.id = v.rowid
-             WHERE v.embedding MATCH ?1 AND k = ?2
-             ORDER BY v.distance",
-        )?;
-
-        let rows = stmt.query_map(params![embedding_blob, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(11)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(12).ok().flatten(),
-                tags: row.get(13).ok().flatten(),
-            })
-        })?;
-
-        rows.collect()
-    }
 }
 
 // ============================================================================

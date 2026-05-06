@@ -47,8 +47,6 @@ vi.mock('../settings/PersonalizationSection', () => ({ PersonalizationSection: (
 vi.mock('../settings/CommunityIntelligenceSection', () => ({ CommunityIntelligenceSection: () => <div data-testid="community-intelligence-section" /> }));
 vi.mock('../settings/LocaleSection', () => ({ LocaleSection: () => <div data-testid="locale-section" /> }));
 vi.mock('../settings/LicenseSection', () => ({ LicenseSection: () => <div data-testid="license-section" /> }));
-vi.mock('../ProValuePanel', () => ({ ProValuePanel: () => <div data-testid="pro-value-panel" /> }));
-
 describe('SettingsModal keyboard navigation', () => {
   it('calls onClose when Escape key is pressed', () => {
     const onClose = vi.fn();

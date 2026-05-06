@@ -840,16 +840,6 @@ impl Database {
         .unwrap_or(true)
     }
 
-    /// Toggle source enabled/disabled
-    pub fn toggle_source_enabled(&self, source_type: &str, enabled: bool) -> SqliteResult<()> {
-        let conn = self.conn.lock();
-        conn.execute(
-            "UPDATE sources SET enabled = ?1 WHERE source_type = ?2",
-            params![enabled as i64, source_type],
-        )?;
-        Ok(())
-    }
-
     /// Get all sources with their enabled status
     pub fn get_all_sources(&self) -> SqliteResult<Vec<SourceInfo>> {
         let conn = self.conn.lock();
