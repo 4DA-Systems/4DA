@@ -2466,22 +2466,21 @@ impl Database {
                     67,
                     "Phase 67: canonicalize project_dependencies paths (dedup Windows casing)",
                     |c| {
-                        // Normalize all paths to lowercase forward-slash format.
-                        // This deduplicates entries like D:\4DA vs d:/4da that accumulated
-                        // before path canonicalization was added to upsert_dependency.
-                        c.execute_batch(
-                            "UPDATE project_dependencies
-                             SET project_path = LOWER(REPLACE(project_path, '\\', '/'));",
-                        )?;
-                        // Remove exact duplicates that are now identical after normalization.
-                        // Keep the row with the lowest id (oldest).
+                        // Delete rows that would collide after normalization BEFORE
+                        // updating paths — the UNIQUE(project_path, package_name)
+                        // constraint rejects the UPDATE if duplicates exist.
                         c.execute_batch(
                             "DELETE FROM project_dependencies
                              WHERE id NOT IN (
                                  SELECT MIN(id)
                                  FROM project_dependencies
-                                 GROUP BY project_path, package_name, manifest_type
+                                 GROUP BY LOWER(REPLACE(project_path, '\\', '/')),
+                                          package_name
                              );",
+                        )?;
+                        c.execute_batch(
+                            "UPDATE project_dependencies
+                             SET project_path = LOWER(REPLACE(project_path, '\\', '/'));",
                         )?;
                         let remaining: i64 =
                             c.query_row("SELECT COUNT(*) FROM project_dependencies", [], |row| {
