@@ -76,7 +76,8 @@ pub(crate) fn check_http_status(
     if !status.is_success() {
         tracing::warn!(status = %status, source = source_name, "HTTP request failed");
         return Err(SourceError::Network(format!(
-            "{source_name} error: HTTP {}", status.as_u16()
+            "{source_name} error: HTTP {}",
+            status.as_u16()
         )));
     }
     Ok(())
