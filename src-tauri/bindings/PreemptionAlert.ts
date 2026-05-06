@@ -12,4 +12,9 @@ export type PreemptionAlert = { id: string, alert_type: PreemptionType, title: s
  * True when this alert is backed by a deterministic OSV advisory match
  * with version verification. Drives Confidence::osv_verified provenance.
  */
-osv_verified: boolean, };
+osv_verified: boolean, 
+/**
+ * True when the source itself classified this as security_advisory or
+ * breaking_change (not just keyword matching). Drives llm_assessed provenance.
+ */
+source_classified: boolean, };
