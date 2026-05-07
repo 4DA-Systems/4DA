@@ -2,6 +2,8 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
+/* eslint-disable i18next/no-literal-string -- technical framework documentation, not user-facing UI */
+
 const GATE_TABLE = [
   { axes: 0, mult: 0.25, ceiling: 0.20 },
   { axes: 1, mult: 0.45, ceiling: 0.28 },
