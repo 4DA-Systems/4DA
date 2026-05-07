@@ -130,14 +130,14 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
   const [exportStatus, setExportStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    loadProfile();
+    void loadProfile();
   }, [loadProfile]);
 
   const handleDimensionAction = useCallback((action: string) => {
     switch (action) {
       case 'scan_infra':
       case 'scan_stack':
-        cmd('ace_auto_discover').catch((e) => console.warn('SovereignProfile: auto-discover failed', e));
+        void cmd('ace_auto_discover').catch((e) => console.warn('SovereignProfile: auto-discover failed', e));
         break;
       case 'open_playbook':
         setActiveView('playbook');
@@ -224,14 +224,14 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
         <div className="flex items-center gap-2">
           {exportStatus && <span className="text-[10px] text-green-400">{exportStatus}</span>}
           <button
-            onClick={() => handleExport('markdown')}
+            onClick={() => void handleExport('markdown')}
             aria-label={t('profile.copyProfile')}
             className="px-2.5 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded font-medium transition-colors"
           >
             {t('profile.copyProfile')}
           </button>
           <button
-            onClick={() => handleExport('json')}
+            onClick={() => void handleExport('json')}
             aria-label={t('profile.exportJson')}
             className="px-2 py-1 text-[10px] text-text-secondary hover:text-white border border-border rounded transition-colors"
           >

@@ -48,7 +48,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   // Check AI provider configuration state when approaching the choice gate
   useEffect(() => {
     if (step === 'choice' || step === 'taste') {
-      cmd('get_settings')
+      void cmd('get_settings')
         .then((settings) => {
           const llm = settings.llm;
           const configured = llm.has_api_key || llm.provider === 'ollama';
@@ -204,7 +204,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       {/* Step content */}
       <div className="max-w-2xl w-full">
         {step === 'welcome' && (
-          <WelcomeStep isAnimating={isAnimating} onNext={nextStep} onSkip={handleSkipToContent} />
+          <WelcomeStep isAnimating={isAnimating} onNext={nextStep} onSkip={() => void handleSkipToContent()} />
         )}
 
         {step === 'taste' && (
@@ -219,7 +219,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <OnboardingChoiceGate
             isAnimating={isAnimating}
             hasProviderConfigured={hasProviderConfigured}
-            onStartUsing={handleSkipToContent}
+            onStartUsing={() => void handleSkipToContent()}
             onContinueSetup={nextStep}
           />
         )}
@@ -235,7 +235,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         {step === 'calibrate' && (
           <CalibrationStep
             isAnimating={isAnimating}
-            onComplete={handleSetupComplete}
+            onComplete={() => void handleSetupComplete()}
             onBack={prevStep}
           />
         )}

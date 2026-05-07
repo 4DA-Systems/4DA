@@ -238,7 +238,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
               className="flex-1 px-4 py-3 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-text-muted focus:outline-none focus:border-cyan-500/50 transition-colors"
             />
             <button
-              onClick={handleSearch}
+              onClick={() => void handleSearch()}
               disabled={loading || !query.trim()}
               aria-label={loading ? t('search.searching') : t('action.search')}
               className="px-5 py-3 text-sm bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 rounded-lg hover:bg-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium"
@@ -252,7 +252,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             </button>
             {isPro && result && (
               <button
-                onClick={handleWatch}
+                onClick={() => void handleWatch()}
                 disabled={watchCreated}
                 title={t('search.watchThis')}
                 aria-label={watchCreated ? t('search.watchCreated', 'Watch created') : t('search.watchThis')}

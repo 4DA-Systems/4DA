@@ -17,7 +17,7 @@ export function SystemHealthDot({ onClick }: { onClick?: () => void }) {
   const [issueCount, setIssueCount] = useState(0);
 
   useEffect(() => {
-    cmd('get_startup_health')
+    void cmd('get_startup_health')
       .then(issues => {
         if (!issues || issues.length === 0) {
           setStatus('healthy');

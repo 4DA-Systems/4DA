@@ -126,7 +126,7 @@ const SecurityDashboard = memo(function SecurityDashboard() {
 
   useEffect(() => {
     setLoading(true);
-    cmd('get_dependency_alerts')
+    void cmd('get_dependency_alerts')
       .then(result => {
         const alerts = mapDepAlertsToSecurityAlerts(
           (result as { alerts: DepAlert[] }).alerts,
@@ -155,7 +155,7 @@ const SecurityDashboard = memo(function SecurityDashboard() {
     // Extract the dependency alert id and resolve it on the backend
     const numericId = parseInt(alertId.replace('da-', ''), 10);
     if (!isNaN(numericId)) {
-      cmd('resolve_dependency_alert', { alertId: numericId }).catch(() => {});
+      void cmd('resolve_dependency_alert', { alertId: numericId }).catch(() => {});
     }
 
     setActiveAlerts(prev => {

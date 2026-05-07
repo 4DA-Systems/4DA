@@ -102,7 +102,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       }
     };
 
-    checkBackend();
+    void checkBackend();
 
     return () => {
       cancelled = true;
