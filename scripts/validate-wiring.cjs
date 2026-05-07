@@ -402,58 +402,75 @@ check('Essential Rust primitives', () => {
 // WARN rather than FAIL for unknown-table references (common with joins
 // to runtime-only or feature-gated tables).
 check('SQL schema column drift', () => {
-  const migrationsFile = path.join(SRC_TAURI, 'db', 'migrations.rs');
-  const migContent = readFileSafe(migrationsFile);
-  if (!migContent) {
-    return { ok: true, details: 'migrations.rs not found — skipped' };
+  // Schema sources: main DB migrations + ACE/ContextEngine DB schemas.
+  // The `interactions` table (and other ACE tables) are created in ace/db.rs
+  // and context_engine.rs, not in migrations.rs. Production code in
+  // blind_spots.rs, anomaly.rs, etc. queries these tables, so the validator
+  // must know their columns to avoid false positives.
+  const schemaFiles = [
+    path.join(SRC_TAURI, 'db', 'migrations.rs'),
+    path.join(SRC_TAURI, 'ace', 'db.rs'),
+    path.join(SRC_TAURI, 'context_engine.rs'),
+  ];
+
+  const allContent = schemaFiles
+    .map((f) => readFileSafe(f))
+    .filter(Boolean);
+
+  if (allContent.length === 0) {
+    return { ok: true, details: 'no schema source files found — skipped' };
   }
 
   // Parse CREATE TABLE definitions into a { tableName: Set<columnName> } map.
   // Uses a balanced-paren walker to correctly handle nested constraints
   // like `UNIQUE(col1, col2)` inside the table body.
   const schema = {};
-  const createStartRe = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(/gim;
-  let tm;
-  while ((tm = createStartRe.exec(migContent)) !== null) {
-    const table = tm[1];
-    // Find the matching close paren, respecting nested parens.
-    let depth = 1;
-    let i = tm.index + tm[0].length;
-    const body_start = i;
-    while (i < migContent.length && depth > 0) {
-      const ch = migContent[i];
-      if (ch === '(') depth++;
-      else if (ch === ')') depth--;
-      i++;
-    }
-    if (depth !== 0) continue; // unbalanced — skip
-    const body = migContent.slice(body_start, i - 1);
 
-    const cols = new Set();
-    for (const rawLine of body.split('\n')) {
-      const line = rawLine.trim().replace(/--.*$/, '');
-      if (!line) continue;
-      if (/^(PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|CONSTRAINT|INDEX)\b/i.test(line)) continue;
-      const colMatch = line.match(/^(\w+)\s+/);
-      if (colMatch) cols.add(colMatch[1].toLowerCase());
-    }
-    if (cols.size > 0) {
-      // If the table is redefined later (migration upgrade paths), union columns.
-      if (schema[table.toLowerCase()]) {
-        for (const c of cols) schema[table.toLowerCase()].add(c);
-      } else {
-        schema[table.toLowerCase()] = cols;
+  for (const content of allContent) {
+    const createStartRe = /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s*\(/gim;
+    let tm;
+    while ((tm = createStartRe.exec(content)) !== null) {
+      const table = tm[1];
+      // Find the matching close paren, respecting nested parens.
+      let depth = 1;
+      let i = tm.index + tm[0].length;
+      const body_start = i;
+      while (i < content.length && depth > 0) {
+        const ch = content[i];
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        i++;
+      }
+      if (depth !== 0) continue; // unbalanced — skip
+      const body = content.slice(body_start, i - 1);
+
+      const cols = new Set();
+      for (const rawLine of body.split('\n')) {
+        const line = rawLine.trim().replace(/--.*$/, '');
+        if (!line) continue;
+        if (/^(PRIMARY\s+KEY|FOREIGN\s+KEY|UNIQUE|CHECK|CONSTRAINT|INDEX)\b/i.test(line)) continue;
+        const colMatch = line.match(/^(\w+)\s+/);
+        if (colMatch) cols.add(colMatch[1].toLowerCase());
+      }
+      if (cols.size > 0) {
+        // If the table is redefined later (migration upgrade paths), union columns.
+        if (schema[table.toLowerCase()]) {
+          for (const c of cols) schema[table.toLowerCase()].add(c);
+        } else {
+          schema[table.toLowerCase()] = cols;
+        }
       }
     }
-  }
 
-  // Also include ALTER TABLE ADD COLUMN additions
-  const alterRe = /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/gim;
-  while ((tm = alterRe.exec(migContent)) !== null) {
-    const table = tm[1].toLowerCase();
-    const col = tm[2].toLowerCase();
-    if (!schema[table]) schema[table] = new Set();
-    schema[table].add(col);
+    // Also include ALTER TABLE ADD COLUMN additions
+    const alterRe = /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(\w+)/gim;
+    let am;
+    while ((am = alterRe.exec(content)) !== null) {
+      const table = am[1].toLowerCase();
+      const col = am[2].toLowerCase();
+      if (!schema[table]) schema[table] = new Set();
+      schema[table].add(col);
+    }
   }
 
   // Known tables from schema

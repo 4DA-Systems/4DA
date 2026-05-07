@@ -27,14 +27,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Claude Code artifacts
-.claude/sessions/
-.claude/backups/
-.claude/memory.db
-.claude/settings.local.json
-.claude/analyzer-state.json
-.claude/knowledge/
-.claude/pii-patterns.json
+# Claude Code — entire directory is private development tooling
+.claude/
 *.local.md
 
 # Playwright MCP runtime state (console logs, page snapshots)
@@ -234,6 +228,9 @@ docs/SHOW-HN-*.md
 # merch-print-ready/ — commerce prep artefacts, not source code
 # ---------------------------------------------------------------------------
 merch-print-ready/
+
+# Merchandise design source files (brand IP — not for public repo)
+site/merch-designs/
 
 # ---------------------------------------------------------------------------
 # docs/marketing/ — internal GTM playbooks: competitive research, campaigns,

@@ -7609,7 +7609,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "victauri-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "chrono",
  "schemars 1.2.0",
@@ -7621,7 +7621,7 @@ dependencies = [
 
 [[package]]
 name = "victauri-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7630,7 +7630,7 @@ dependencies = [
 
 [[package]]
 name = "victauri-plugin"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "axum",

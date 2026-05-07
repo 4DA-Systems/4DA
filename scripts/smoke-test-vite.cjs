@@ -31,7 +31,6 @@ const REQUEST_TIMEOUT_MS = 20000;
 // modules first gives Vite's dep optimizer time to finish pre-bundling before
 // the heavy entry point is fetched (avoids 10s timeout on CI cold cache).
 const CRITICAL_ROUTES = [
-  '/src/App.tsx',
   '/src/store/index.ts',
   '/src/lib/commands.ts',
   '/src/lib/trust-feedback.ts',
@@ -43,6 +42,7 @@ const CRITICAL_ROUTES = [
   '/src/components/IntelligenceConsole.tsx',
   '/src/components/BriefingView.tsx',
   '/src/components/DecisionMemory.tsx',
+  '/src/App.tsx',
   '/src/main.tsx',
 ];
 
@@ -137,22 +137,29 @@ async function main() {
   const failures = [];
 
   for (const route of CRITICAL_ROUTES) {
-    try {
-      const res = await httpGet(`${DEV_HOST}${route}`);
-      if (res.status !== 200) {
-        failures.push({ route, reason: `HTTP ${res.status}` });
-        continue;
+    const MAX_RETRIES = 3;
+    let lastErr = null;
+    let ok = false;
+    for (let attempt = 0; attempt < MAX_RETRIES && !ok; attempt++) {
+      try {
+        if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+        const res = await httpGet(`${DEV_HOST}${route}`);
+        if (res.status !== 200) {
+          lastErr = `HTTP ${res.status}`;
+          continue;
+        }
+        const moduleErr = findCannotFindModule(res.body);
+        if (moduleErr) {
+          lastErr = moduleErr;
+          continue;
+        }
+        log(`  OK ${route}`);
+        ok = true;
+      } catch (e) {
+        lastErr = e.message;
       }
-      // Also scan the body for "Cannot find module" error overlays
-      const moduleErr = findCannotFindModule(res.body);
-      if (moduleErr) {
-        failures.push({ route, reason: moduleErr });
-        continue;
-      }
-      log(`  OK ${route}`);
-    } catch (e) {
-      failures.push({ route, reason: e.message });
     }
+    if (!ok) failures.push({ route, reason: lastErr });
   }
 
   // Also scan server output for any "Cannot find module" errors surfaced

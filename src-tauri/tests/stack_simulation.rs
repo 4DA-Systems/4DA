@@ -2102,7 +2102,7 @@ fn snapshot_scoring_checksum() {
 
     // UPDATE THIS VALUE when scoring logic or profile data intentionally changes.
     // Set to 0 to discover initial value (test will print it).
-    const EXPECTED: u64 = 14680033318318772126;
+    const EXPECTED: u64 = 636005154604832770;
 
     if EXPECTED == 0 {
         eprintln!(

@@ -144,25 +144,20 @@ fn test_insert_1000_items() {
 fn test_knn_query_after_inserts() {
     let db = test_db();
 
-    // Insert items with different embeddings
+    // Seed context_chunks + context_vec via the public API
     for i in 0..50 {
         let emb = seed_embedding(&format!("knn-item-{}", i));
-        db.upsert_source_item(
-            "hackernews",
-            &format!("hn_{}", i),
-            None,
-            &format!("KNN Test Item {}", i),
-            "Content for KNN testing",
+        db.upsert_context(
+            &format!("project/file_{}.rs", i),
+            &format!("Context chunk {} for KNN testing", i),
             &emb,
         )
-        .expect("upsert");
+        .expect("upsert context");
     }
 
-    // Query with a specific embedding — should find similar items
+    // Query with the exact embedding for item 0 — should be the closest match
     let query_emb = seed_embedding("knn-item-0");
-    let results = db
-        .find_similar_source_items(&query_emb, 5)
-        .unwrap_or_default();
+    let results = db.find_similar_contexts(&query_emb, 5).expect("KNN query");
 
     // Should return at most 5 results
     assert!(
@@ -171,16 +166,16 @@ fn test_knn_query_after_inserts() {
         results.len()
     );
 
-    // Should find results (we have 50 items in the vec table)
+    // Should find results (we have 50 items in the context_vec table)
     assert!(
         !results.is_empty(),
         "KNN should find at least 1 similar item"
     );
 
-    // First result should be the exact match item
+    // First result should be the exact match
     assert_eq!(
-        results[0].source_id, "hn_0",
-        "Closest match should be hn_0 (exact embedding match)"
+        results[0].source_file, "project/file_0.rs",
+        "Closest match should be file_0.rs (exact embedding match)"
     );
 }
 

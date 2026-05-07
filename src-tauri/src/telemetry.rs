@@ -59,54 +59,6 @@ pub struct FeatureAdoption {
 }
 
 // ============================================================================
-// Schema
-// ============================================================================
-
-/// Creates the user_events and error_telemetry tables and indexes if they don't exist.
-/// Production uses db/migrations.rs (Phase 25 for user_events, Phase 33 for error_telemetry).
-/// This is for test DBs.
-#[cfg(test)]
-fn ensure_telemetry_table(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS user_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_type TEXT NOT NULL,
-            view_id TEXT,
-            metadata TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            session_id TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_user_events_type ON user_events(event_type);
-        CREATE INDEX IF NOT EXISTS idx_user_events_created ON user_events(created_at);",
-    )
-    .map_err(FourDaError::Db)?;
-    ensure_error_telemetry_table(conn)?;
-    Ok(())
-}
-
-/// Creates the error_telemetry table for test DBs.
-/// Production uses db/migrations.rs (Phase 33).
-#[cfg(test)]
-fn ensure_error_telemetry_table(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "CREATE TABLE IF NOT EXISTS error_telemetry (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            category TEXT NOT NULL,
-            message TEXT NOT NULL,
-            context TEXT,
-            count INTEGER DEFAULT 1,
-            first_seen TEXT NOT NULL,
-            last_seen TEXT NOT NULL,
-            UNIQUE(category, message)
-        );
-        CREATE INDEX IF NOT EXISTS idx_error_telemetry_category ON error_telemetry(category);
-        CREATE INDEX IF NOT EXISTS idx_error_telemetry_last_seen ON error_telemetry(last_seen);",
-    )
-    .map_err(FourDaError::Db)?;
-    Ok(())
-}
-
-// ============================================================================
 // Core Functions
 // ============================================================================
 

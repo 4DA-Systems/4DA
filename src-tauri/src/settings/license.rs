@@ -81,13 +81,6 @@ static TIER_DOWNGRADED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomi
 /// manipulation granting paid features between restarts.
 const LICENSE_REVALIDATION_INTERVAL_SECS: u64 = 21_600; // 6 hours
 
-/// Reset the re-validation timestamp to force the next check to trigger.
-/// Only available in tests.
-#[cfg(test)]
-pub(crate) fn reset_license_check_timestamp() {
-    LAST_LICENSE_CHECK.store(0, Ordering::Relaxed);
-}
-
 /// Check if the user activated within the grace period.
 fn is_within_activation_grace(license: &LicenseConfig) -> bool {
     if let Some(ref activated) = license.activated_at {
