@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+/* eslint-disable i18next/no-literal-string -- webhook API documentation, not user-facing UI */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 

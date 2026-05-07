@@ -76,6 +76,7 @@ export function HealthBanner() {
             }
           </span>
           {issues.length > 1 && (
+            // eslint-disable-next-line i18next/no-literal-string
             <span className={`text-[10px] text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`}>
               &#9660;
             </span>
@@ -86,6 +87,7 @@ export function HealthBanner() {
           className="text-text-muted hover:text-text-secondary text-xs px-1"
           aria-label={t('action.dismiss')}
         >
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           &#10005;
         </button>
       </div>
