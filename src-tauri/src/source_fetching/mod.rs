@@ -474,6 +474,44 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
     }
 }
 
+/// Load ACE-tracked packages WITH their installed versions for version-aware
+/// OSV querying. Returns (package_name, version) pairs for non-dev runtime deps.
+pub(crate) fn load_ace_packages_with_versions(ecosystem: &str) -> Vec<(String, Option<String>)> {
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+
+    let manifest_types: Vec<&str> = match ecosystem {
+        "npm" => vec!["PackageJson"],
+        "crates.io" | "rust" => vec!["CargoToml"],
+        "pypi" | "python" => vec!["PyprojectToml", "RequirementsTxt"],
+        "go" => vec!["GoMod"],
+        "maven" | "java" => vec!["PomXml", "BuildGradle"],
+        "nuget" | "csharp" => vec!["Csproj"],
+        "rubygems" | "ruby" => vec!["Gemfile"],
+        "packagist" | "php" => vec!["ComposerJson"],
+        _ => return Vec::new(),
+    };
+
+    match crate::temporal::get_all_dependencies(&conn) {
+        Ok(deps) => {
+            let mut packages: Vec<(String, Option<String>)> = deps
+                .into_iter()
+                .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
+                .map(|d| (d.package_name, d.version))
+                .collect();
+            packages.sort_by(|a, b| a.0.cmp(&b.0));
+            packages.dedup_by(|a, b| a.0 == b.0);
+            packages
+        }
+        Err(e) => {
+            tracing::debug!(target: "4da::sources", error = %e, ecosystem = ecosystem, "No ACE deps with versions available");
+            Vec::new()
+        }
+    }
+}
+
 /// Load default RSS feeds from the curated feed registry.
 /// All curated feeds are enabled by default — users opt out via disabled_curated_feeds.
 pub(crate) fn load_default_rss_feeds() -> Vec<String> {

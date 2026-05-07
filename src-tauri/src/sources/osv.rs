@@ -140,13 +140,11 @@ impl OsvSource {
     /// The OSV API requires a package name — cannot query by ecosystem alone.
     /// Uses well-known packages per ecosystem, augmented by ACE deps when available.
     async fn fetch_ecosystem_vulns(&self, ecosystem: &str) -> SourceResult<Vec<OsvVulnerability>> {
-        // Get packages to check: ACE deps when available, otherwise popular defaults
-        let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem(ecosystem);
-        let packages: Vec<String> = if !ace_packages.is_empty() {
-            // User has actual dependencies — query ONLY those, not generic popular packages
+        // Get packages to check: ACE deps with versions when available
+        let ace_packages = crate::source_fetching::load_ace_packages_with_versions(ecosystem);
+        let packages: Vec<(String, Option<String>)> = if !ace_packages.is_empty() {
             ace_packages.into_iter().take(15).collect()
         } else {
-            // No ACE data yet — use sensible defaults for this ecosystem
             let default_packages: Vec<&str> = match ecosystem {
                 "npm" => vec!["express", "react", "next", "lodash", "axios", "webpack"],
                 "crates.io" => vec!["serde", "tokio", "reqwest", "axum", "clap", "anyhow"],
@@ -164,17 +162,20 @@ impl OsvSource {
                 ],
                 _ => vec![],
             };
-            default_packages.iter().map(|s| s.to_string()).collect()
+            default_packages
+                .iter()
+                .map(|s| (s.to_string(), None))
+                .collect()
         };
 
         let mut all_vulns = Vec::new();
-        for pkg_name in &packages {
+        for (pkg_name, pkg_version) in &packages {
             let body = OsvQueryRequest {
                 package: Some(OsvPackage {
                     name: pkg_name.clone(),
                     ecosystem: ecosystem.to_string(),
                 }),
-                version: None,
+                version: pkg_version.clone(),
             };
 
             let response = match self
@@ -213,36 +214,36 @@ impl OsvSource {
 
     /// Fetch vulnerabilities across multiple ecosystems using the batch endpoint.
     async fn fetch_batch_vulns(&self, ecosystems: &[&str]) -> SourceResult<Vec<OsvVulnerability>> {
-        // Build queries with actual package names per ecosystem
+        // Build queries with actual package names + versions per ecosystem
         let mut queries = Vec::new();
         for eco in ecosystems {
-            let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem(eco);
-            let pkgs: Vec<String> = if ace_packages.is_empty() {
+            let ace_packages = crate::source_fetching::load_ace_packages_with_versions(eco);
+            let pkgs: Vec<(String, Option<String>)> = if ace_packages.is_empty() {
                 match *eco {
                     "npm" => vec!["express", "react", "lodash"]
                         .into_iter()
-                        .map(String::from)
+                        .map(|s| (String::from(s), None))
                         .collect(),
                     "crates.io" => vec!["serde", "tokio", "reqwest"]
                         .into_iter()
-                        .map(String::from)
+                        .map(|s| (String::from(s), None))
                         .collect(),
                     "PyPI" => vec!["django", "flask", "requests"]
                         .into_iter()
-                        .map(String::from)
+                        .map(|s| (String::from(s), None))
                         .collect(),
                     _ => continue,
                 }
             } else {
                 ace_packages.into_iter().take(5).collect()
             };
-            for pkg in pkgs {
+            for (pkg, version) in pkgs {
                 queries.push(OsvQueryRequest {
                     package: Some(OsvPackage {
                         name: pkg,
                         ecosystem: eco.to_string(),
                     }),
-                    version: None,
+                    version,
                 });
             }
         }

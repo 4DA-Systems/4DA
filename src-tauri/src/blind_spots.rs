@@ -691,16 +691,10 @@ fn is_builtin_module(name: &str) -> bool {
 fn is_actionable_blind_spot_match(
     dep_lower: &str,
     title_lower: &str,
-    source_type: &str,
-    content_type: Option<&str>,
+    _source_type: &str,
+    _content_type: Option<&str>,
 ) -> bool {
-    if !has_word_boundary_match(title_lower, dep_lower) {
-        return false;
-    }
-    if !crate::preemption::SUPPRESSED_GENERIC_NAMES.contains(&dep_lower) {
-        return true;
-    }
-    crate::preemption::is_authoritative_generic_dep_match(source_type, content_type)
+    has_word_boundary_match(title_lower, dep_lower)
 }
 
 /// Classify risk level based on coverage gap severity.
@@ -893,7 +887,7 @@ fn find_missed_signals(
 
 /// Returns true if a title's keywords indicate the item belongs in Preemption,
 /// not Blind Spots. Mirrors the security/breaking-change keywords used by
-/// `preemption::fetch_direct_dep_security_alerts` SQL LIKE clauses.
+/// the preemption pipeline's OSV and LLM-assessed alert paths.
 fn is_preemption_territory(title: &str) -> bool {
     let t = title.to_lowercase();
     t.contains("cve-")
@@ -2418,33 +2412,7 @@ mod tests {
     }
 
     #[test]
-    fn generic_dep_mentions_require_authoritative_signal() {
-        let conn = setup_test_db();
-        insert_source_item_with_meta(
-            &conn,
-            "upload_image path traversal discussion",
-            "hackernews",
-            None,
-            0.9,
-            2,
-        );
-
-        let deps = vec![DepCoverage {
-            package_name: "image".to_string(),
-            ecosystem: "rust".to_string(),
-            projects: vec!["/proj/a".to_string()],
-        }];
-
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
-        assert_eq!(
-            uncovered.len(),
-            0,
-            "generic dep mentions should be ignored without authoritative metadata"
-        );
-    }
-
-    #[test]
-    fn authoritative_generic_dep_mentions_still_surface() {
+    fn generic_dep_mentions_surface_with_word_boundary_match() {
         let conn = setup_test_db();
         insert_source_item_with_meta(
             &conn,
@@ -2465,7 +2433,7 @@ mod tests {
         assert_eq!(
             uncovered.len(),
             1,
-            "authoritative metadata should allow real generic-package advisories through"
+            "word-boundary matches surface regardless of source authority"
         );
     }
 
