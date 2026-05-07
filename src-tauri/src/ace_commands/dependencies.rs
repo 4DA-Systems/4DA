@@ -56,6 +56,9 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
             lockfile_count += process_package_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_pnpm_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_yarn_lock(db, &scanner, &dir, &project_path);
+            lockfile_count += process_poetry_lock(db, &scanner, &dir, &project_path);
+            lockfile_count += process_go_sum(db, &scanner, &dir, &project_path);
+            lockfile_count += process_gemfile_lock(db, &scanner, &dir, &project_path);
 
             // Recurse into subdirectories (skip common non-project dirs)
             if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -293,6 +296,135 @@ fn process_yarn_lock(
     count
 }
 
+/// Process a poetry.lock file, storing transitive deps and updating direct dep versions.
+fn process_poetry_lock(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+    project_path: &str,
+) -> u32 {
+    let poetry_lock = dir.join("poetry.lock");
+    if !poetry_lock.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&poetry_lock) else {
+        return 0;
+    };
+
+    let direct_deps = read_pyproject_deps(scanner, dir);
+
+    let mut count = 0u32;
+    let packages = crate::ace::scanner::ProjectScanner::parse_poetry_lock(&content);
+    for (name, version) in &packages {
+        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d.eq_ignore_ascii_case(name)) {
+            db.store_transitive_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "python",
+                false,
+            )
+            .ok();
+            count += 1;
+        } else {
+            db.store_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "python",
+                false,
+                None,
+            )
+            .ok();
+        }
+    }
+    count
+}
+
+/// Process a go.sum file, storing transitive deps and updating direct dep versions.
+fn process_go_sum(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+    project_path: &str,
+) -> u32 {
+    let go_sum = dir.join("go.sum");
+    if !go_sum.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&go_sum) else {
+        return 0;
+    };
+
+    let direct_deps = read_go_mod_deps(scanner, dir);
+
+    let mut count = 0u32;
+    let packages = crate::ace::scanner::ProjectScanner::parse_go_sum(&content);
+    for (name, version) in &packages {
+        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+            db.store_transitive_dependency(project_path, name, Some(version.as_str()), "go", false)
+                .ok();
+            count += 1;
+        } else {
+            db.store_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "go",
+                false,
+                None,
+            )
+            .ok();
+        }
+    }
+    count
+}
+
+/// Process a Gemfile.lock, storing transitive deps and updating direct dep versions.
+fn process_gemfile_lock(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+    project_path: &str,
+) -> u32 {
+    let gemfile_lock = dir.join("Gemfile.lock");
+    if !gemfile_lock.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&gemfile_lock) else {
+        return 0;
+    };
+
+    let direct_deps = read_gemfile_deps(dir);
+
+    let mut count = 0u32;
+    let packages = crate::ace::scanner::ProjectScanner::parse_gemfile_lock(&content);
+    for (name, version) in &packages {
+        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+            db.store_transitive_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "ruby",
+                false,
+            )
+            .ok();
+            count += 1;
+        } else {
+            db.store_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "ruby",
+                false,
+                None,
+            )
+            .ok();
+        }
+    }
+    count
+}
+
 /// Shared: read direct deps from package.json for lockfile processing.
 fn read_package_json_deps(
     scanner: &crate::ace::scanner::ProjectScanner,
@@ -318,4 +450,85 @@ fn read_package_json_deps(
     } else {
         Vec::new()
     }
+}
+
+/// Shared: read direct deps from pyproject.toml for poetry.lock processing.
+fn read_pyproject_deps(
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &PathBuf,
+) -> Vec<String> {
+    if let Ok(content) = std::fs::read_to_string(dir.join("pyproject.toml")) {
+        let mut signal = crate::ace::scanner::ProjectSignal {
+            manifest_type: crate::ace::scanner::ManifestType::PyprojectToml,
+            manifest_path: dir.join("pyproject.toml"),
+            project_name: None,
+            languages: vec!["python".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+        scanner.parse_pyproject_toml(&content, &mut signal);
+        let mut all = signal.dependencies;
+        all.extend(signal.dev_dependencies);
+        all
+    } else {
+        Vec::new()
+    }
+}
+
+/// Shared: read direct deps from go.mod for go.sum processing.
+fn read_go_mod_deps(scanner: &crate::ace::scanner::ProjectScanner, dir: &PathBuf) -> Vec<String> {
+    if let Ok(content) = std::fs::read_to_string(dir.join("go.mod")) {
+        let mut signal = crate::ace::scanner::ProjectSignal {
+            manifest_type: crate::ace::scanner::ManifestType::GoMod,
+            manifest_path: dir.join("go.mod"),
+            project_name: None,
+            languages: vec!["go".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+        scanner.parse_go_mod(&content, &mut signal);
+        let mut all = signal.dependencies;
+        all.extend(signal.dev_dependencies);
+        all
+    } else {
+        Vec::new()
+    }
+}
+
+/// Shared: read direct deps from Gemfile for Gemfile.lock processing.
+/// Gemfile uses a simple DSL — we extract gem names from `gem 'name'` lines.
+fn read_gemfile_deps(dir: &PathBuf) -> Vec<String> {
+    let Ok(content) = std::fs::read_to_string(dir.join("Gemfile")) else {
+        return Vec::new();
+    };
+    let mut deps = Vec::new();
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("gem ") {
+            // gem 'name', '~> 1.0'  or  gem "name"
+            let rest = rest.trim();
+            let quote = if rest.starts_with('\'') {
+                '\''
+            } else if rest.starts_with('"') {
+                '"'
+            } else {
+                continue;
+            };
+            if let Some(end) = rest[1..].find(quote) {
+                let name = &rest[1..1 + end];
+                if !name.is_empty() {
+                    deps.push(name.to_string());
+                }
+            }
+        }
+    }
+    deps
 }

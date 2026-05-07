@@ -488,7 +488,7 @@ impl ProjectScanner {
         }
     }
 
-    fn parse_pyproject_toml(&self, content: &str, signal: &mut ProjectSignal) {
+    pub(crate) fn parse_pyproject_toml(&self, content: &str, signal: &mut ProjectSignal) {
         // Extract project name
         if let Some(name) = extract_toml_value(content, "name") {
             signal.project_name = Some(name);
@@ -552,7 +552,7 @@ impl ProjectScanner {
         }
     }
 
-    fn parse_go_mod(&self, content: &str, signal: &mut ProjectSignal) {
+    pub(crate) fn parse_go_mod(&self, content: &str, signal: &mut ProjectSignal) {
         // Extract module name
         for line in content.lines() {
             let trimmed = line.trim();
@@ -764,6 +764,125 @@ impl ProjectScanner {
                         packages.push((name.clone(), version));
                     }
                     current_name = None;
+                }
+            }
+        }
+
+        packages
+    }
+
+    /// Parse a poetry.lock file and return (package_name, version) pairs.
+    /// Format: TOML with `[[package]]` sections containing `name` and `version` fields.
+    pub(crate) fn parse_poetry_lock(content: &str) -> Vec<(String, String)> {
+        let mut packages = Vec::new();
+        let mut current_name: Option<String> = None;
+        let mut current_version: Option<String> = None;
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed == "[[package]]" {
+                if let (Some(name), Some(version)) = (current_name.take(), current_version.take()) {
+                    packages.push((name, version));
+                }
+            } else if let Some(rest) = trimmed.strip_prefix("name = ") {
+                current_name = Some(rest.trim_matches('"').to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("version = ") {
+                current_version = Some(rest.trim_matches('"').to_string());
+            }
+        }
+        if let (Some(name), Some(version)) = (current_name, current_version) {
+            packages.push((name, version));
+        }
+
+        packages
+    }
+
+    /// Parse a go.sum file and return (module_name, version) pairs.
+    /// Format: `module version hash` per line. Each module appears twice
+    /// (once for module, once for go.mod). Deduplicates by (module, version).
+    pub(crate) fn parse_go_sum(content: &str) -> Vec<(String, String)> {
+        let mut seen = std::collections::HashSet::new();
+        let mut packages = Vec::new();
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
+            if parts.len() < 2 {
+                continue;
+            }
+            let module = parts[0];
+            let version_raw = parts[1];
+            // Strip /go.mod suffix from version
+            let version = version_raw.strip_suffix("/go.mod").unwrap_or(version_raw);
+            // Strip the "v" prefix for consistency with semver
+            let version_clean = version.trim_start_matches('v');
+            if version_clean.is_empty() {
+                continue;
+            }
+            let key = (module.to_string(), version_clean.to_string());
+            if seen.insert(key.clone()) {
+                packages.push(key);
+            }
+        }
+
+        packages
+    }
+
+    /// Parse a Gemfile.lock file and return (gem_name, version) pairs.
+    /// Format: Indentation-based. Gems listed under `GEM > specs:` section
+    /// as `    gem_name (version)` (4-space indent = direct, 6-space = transitive).
+    pub(crate) fn parse_gemfile_lock(content: &str) -> Vec<(String, String)> {
+        let mut packages = Vec::new();
+        let mut in_gem_specs = false;
+
+        for line in content.lines() {
+            // Detect "GEM" section
+            if line == "GEM" {
+                in_gem_specs = false;
+                continue;
+            }
+            // Detect "  specs:" within GEM section
+            if line == "  specs:" {
+                in_gem_specs = true;
+                continue;
+            }
+            // A non-indented line (other than GEM) ends the specs section
+            if !line.starts_with(' ') && !line.is_empty() {
+                if in_gem_specs {
+                    in_gem_specs = false;
+                }
+                continue;
+            }
+
+            if !in_gem_specs {
+                continue;
+            }
+
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            // Gem entries are at exactly 4-space indent; sub-dependency constraints
+            // are at 6+ spaces. Only parse 4-space-indented lines as actual gems.
+            let indent = line.len() - line.trim_start().len();
+            if indent != 4 {
+                continue;
+            }
+
+            // Gem lines: "    gem_name (1.2.3)" — exactly 4-space indent with parenthesized version
+            if let Some(paren_start) = trimmed.rfind('(') {
+                if let Some(paren_end) = trimmed.rfind(')') {
+                    if paren_end > paren_start {
+                        let name = trimmed[..paren_start].trim();
+                        let version = &trimmed[paren_start + 1..paren_end];
+                        if !name.is_empty() && !version.is_empty() && !name.contains(' ') {
+                            packages.push((name.to_string(), version.to_string()));
+                        }
+                    }
                 }
             }
         }
@@ -1687,5 +1806,121 @@ lodash@^4.17.20:
         let content = "# yarn lockfile v1\n\n";
         let packages = ProjectScanner::parse_yarn_lock(content);
         assert!(packages.is_empty());
+    }
+
+    // ─── poetry.lock parsing ──────────────────────────────────────
+
+    #[test]
+    fn test_parse_poetry_lock() {
+        let content = r#"
+[[package]]
+name = "requests"
+version = "2.31.0"
+description = "Python HTTP for Humans."
+
+[[package]]
+name = "urllib3"
+version = "2.1.0"
+description = "HTTP library"
+
+[[package]]
+name = "certifi"
+version = "2024.2.2"
+"#;
+        let packages = ProjectScanner::parse_poetry_lock(content);
+        assert_eq!(packages.len(), 3);
+        assert!(packages.contains(&("requests".to_string(), "2.31.0".to_string())));
+        assert!(packages.contains(&("urllib3".to_string(), "2.1.0".to_string())));
+        assert!(packages.contains(&("certifi".to_string(), "2024.2.2".to_string())));
+    }
+
+    #[test]
+    fn test_parse_poetry_lock_empty() {
+        assert!(ProjectScanner::parse_poetry_lock("").is_empty());
+    }
+
+    // ─── go.sum parsing ───────────────────────────────────────────
+
+    #[test]
+    fn test_parse_go_sum() {
+        let content = r#"golang.org/x/net v0.17.0 h1:hash123=
+golang.org/x/net v0.17.0/go.mod h1:hash456=
+golang.org/x/crypto v0.14.0 h1:hash789=
+golang.org/x/crypto v0.14.0/go.mod h1:hashabc=
+github.com/gin-gonic/gin v1.9.1 h1:hashdef=
+github.com/gin-gonic/gin v1.9.1/go.mod h1:hashghi=
+"#;
+        let packages = ProjectScanner::parse_go_sum(content);
+        assert_eq!(packages.len(), 3, "should dedup module+go.mod entries");
+        assert!(packages.contains(&("golang.org/x/net".to_string(), "0.17.0".to_string())));
+        assert!(packages.contains(&("golang.org/x/crypto".to_string(), "0.14.0".to_string())));
+        assert!(packages.contains(&("github.com/gin-gonic/gin".to_string(), "1.9.1".to_string())));
+    }
+
+    #[test]
+    fn test_parse_go_sum_empty() {
+        assert!(ProjectScanner::parse_go_sum("").is_empty());
+    }
+
+    #[test]
+    fn test_parse_go_sum_pseudo_version() {
+        let content = "golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a h1:hash=\n";
+        let packages = ProjectScanner::parse_go_sum(content);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].0, "golang.org/x/sys");
+        assert_eq!(packages[0].1, "0.0.0-20220520151302-bc2c85ada10a");
+    }
+
+    // ─── Gemfile.lock parsing ─────────────────────────────────────
+
+    #[test]
+    fn test_parse_gemfile_lock() {
+        let content = r#"GEM
+  remote: https://rubygems.org/
+  specs:
+    actioncable (7.1.3)
+      actionpack (= 7.1.3)
+    actionpack (7.1.3)
+      rack (~> 3.0)
+    rack (3.0.8)
+    rails (7.1.3)
+      actioncable (= 7.1.3)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  rails (~> 7.1)
+
+BUNDLED WITH
+   2.5.6
+"#;
+        let packages = ProjectScanner::parse_gemfile_lock(content);
+        assert_eq!(packages.len(), 4);
+        assert!(packages.contains(&("actioncable".to_string(), "7.1.3".to_string())));
+        assert!(packages.contains(&("actionpack".to_string(), "7.1.3".to_string())));
+        assert!(packages.contains(&("rack".to_string(), "3.0.8".to_string())));
+        assert!(packages.contains(&("rails".to_string(), "7.1.3".to_string())));
+    }
+
+    #[test]
+    fn test_parse_gemfile_lock_empty() {
+        assert!(ProjectScanner::parse_gemfile_lock("").is_empty());
+    }
+
+    #[test]
+    fn test_parse_gemfile_lock_skips_dependency_constraints() {
+        let content = r#"GEM
+  specs:
+    nokogiri (1.16.2)
+      racc (~> 1.4)
+    racc (1.7.3)
+"#;
+        let packages = ProjectScanner::parse_gemfile_lock(content);
+        // Both nokogiri and racc should be found (the (~> 1.4) constraint line
+        // for racc as a sub-dep should NOT be parsed as a package)
+        assert_eq!(packages.len(), 2);
+        assert!(packages.contains(&("nokogiri".to_string(), "1.16.2".to_string())));
+        assert!(packages.contains(&("racc".to_string(), "1.7.3".to_string())));
     }
 }
