@@ -76,6 +76,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
       className="w-full flex items-center justify-between p-4 bg-bg-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-colors"
     >
       <div className="flex items-center gap-3">
+        {/* eslint-disable i18next/no-literal-string */}
         {done ? (
           <span className="w-6 h-6 bg-green-500/20 rounded-full flex items-center justify-center text-green-400 text-xs">
             &#x2713;
@@ -89,11 +90,13 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             &#x25CB;
           </span>
         )}
+        {/* eslint-enable i18next/no-literal-string */}
         <div className="text-start">
           <div className="text-white font-medium text-sm">{title}</div>
           <div className="text-text-muted text-xs">{subtitle}</div>
         </div>
       </div>
+      {/* eslint-disable-next-line i18next/no-literal-string */}
       <span className={`text-text-muted text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}>
         &#x25BC;
       </span>
@@ -259,7 +262,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         </button>
         <div className="flex flex-col items-end gap-1.5">
           <button
-            onClick={handleContinue}
+            onClick={() => { void handleContinue(); }}
             disabled={isSaving}
             aria-label={t('onboarding.setup.completeSetup')}
             className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"

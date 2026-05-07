@@ -57,7 +57,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
     return (
       <div className="mb-3">
         <button
-          onClick={loadContent}
+          onClick={() => { void loadContent(); }}
           disabled={loading}
           className="text-[11px] px-2.5 py-1.5 rounded border border-border text-text-secondary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
         >
@@ -67,7 +67,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
           <div className="mt-1.5 p-2 rounded border border-red-500/30 bg-red-500/5">
             <span className="text-[10px] text-red-400">{error}</span>
             <button
-              onClick={loadContent}
+              onClick={() => { void loadContent(); }}
               className="ms-2 text-[10px] text-red-300 underline hover:text-red-200"
             >
               {t('action.retry')}
@@ -98,7 +98,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
         <div className="flex items-center gap-2">
           {url && (
             <button
-              onClick={() => window.navigator.clipboard.writeText(url)}
+              onClick={() => { void window.navigator.clipboard.writeText(url); }}
               className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
             >
               {t('saved.copyUrl')}

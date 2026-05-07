@@ -103,8 +103,8 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
         teamLoading: false,
       });
       // Refresh full status and members after joining
-      get().loadTeamStatus();
-      get().loadTeamMembers();
+      void get().loadTeamStatus();
+      void get().loadTeamMembers();
       return { ok: true };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

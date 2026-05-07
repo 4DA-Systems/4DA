@@ -74,7 +74,7 @@ export const createPlaybookSlice: StateCreator<AppStore, [], [], PlaybookSlice> 
     try {
       await cmd('mark_lesson_complete', { moduleId, lessonIdx });
       // Reload progress
-      get().loadPlaybookProgress();
+      void get().loadPlaybookProgress();
     } catch (e) {
       set({ playbookError: String(e) });
     }

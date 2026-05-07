@@ -92,10 +92,7 @@ try {
 // animation instead of waiting for the full component tree.
 try {
   const { emit } = await import('@tauri-apps/api/event');
-  const result = emit('frontend-ready');
-  if (result && typeof result.catch === 'function') {
-    void result.catch(() => { /* ignore in browser mode */ });
-  }
+  void emit('frontend-ready').catch(() => { /* ignore in browser mode */ });
 } catch {
   // Non-Tauri environment (tests, browser) — silently ignore
 }

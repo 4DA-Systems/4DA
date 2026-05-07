@@ -42,7 +42,7 @@ export function CalibrationView() {
   useEffect(() => {
     if (!hasAutoRun.current) {
       hasAutoRun.current = true;
-      runCalibration();
+      void runCalibration();
     }
   }, [runCalibration]);
 
@@ -61,13 +61,13 @@ export function CalibrationView() {
   // Listen for Ollama pull progress
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<PullProgress>('ollama-pull-progress', (event) => {
+    void listen<PullProgress>('ollama-pull-progress', (event) => {
       setPullProgress(event.payload);
       if (event.payload.done) {
         setActionInProgress(null);
         setTimeout(() => setPullProgress(null), 1500);
         // Auto re-calibrate after model pull completes
-        setTimeout(() => runCalibration(), 2000);
+        setTimeout(() => { void runCalibration(); }, 2000);
       }
     }).then(fn => { unlisten = fn; });
     return () => { unlisten?.(); };
@@ -117,7 +117,7 @@ export function CalibrationView() {
         break;
       }
       case 'install_ollama': {
-        import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://ollama.com/download'));
+        void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://ollama.com/download'));
         break;
       }
       case 'give_feedback': {
@@ -141,7 +141,7 @@ export function CalibrationView() {
           </p>
         </div>
         <button
-          onClick={runCalibration}
+          onClick={() => { void runCalibration(); }}
           disabled={loading}
           aria-label={loading ? t('calibration.running') : t('calibration.reCalibrate')}
           className={`px-5 py-2 border-none rounded-md text-[13px] font-semibold font-[Inter,sans-serif] ${
@@ -296,7 +296,7 @@ export function CalibrationView() {
                   rec={rec}
                   index={i}
                   actionInProgress={actionInProgress}
-                  onAction={handleAction}
+                  onAction={(rec) => { void handleAction(rec); }}
                 />
               ))}
             </div>
@@ -305,6 +305,7 @@ export function CalibrationView() {
           {/* Grade A achieved */}
           {result.recommendations.length === 0 && (
             <div className="bg-[#0a1a0a] border border-success rounded-lg p-5 text-center" role="status" aria-label={t('calibration.fullyCalibrated')}>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <div className="text-2xl mb-2">&#x2713;</div>
               <div className="text-sm font-semibold text-success">
                 {t('calibration.fullyCalibrated')}

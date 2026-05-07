@@ -64,7 +64,7 @@ export function ThirdPartyLicensesModal({ onClose }: Props) {
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleCopy}
+              onClick={() => { void handleCopy(); }}
               className="text-xs px-2.5 py-1 text-text-secondary bg-bg-tertiary border border-border rounded hover:bg-bg-primary transition-colors"
             >
               {copied ? t('about.copied', 'Copied') : t('about.copyToClipboard', 'Copy')}

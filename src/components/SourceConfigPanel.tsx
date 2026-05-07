@@ -78,7 +78,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
             <ValidationFeedback
               validating={s.validating}
               result={s.validationResult}
-              onTryFeed={s.tryDiscoveredFeed}
+              onTryFeed={(url: string) => { void s.tryDiscoveredFeed(url); }}
             />
             {s.rssPreviewOpen && s.rssParsed && (
               <SourcePreview
@@ -96,15 +96,17 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                   >
                     <span className="font-mono text-xs text-text-secondary truncate">
                       {feed}
-                      <FeedHealthDot health={s.feedHealthMap[feed]} onReset={() => s.resetFeedHealth(feed, 'rss')} />
+                      <FeedHealthDot health={s.feedHealthMap[feed]} onReset={() => { void s.resetFeedHealth(feed, 'rss'); }} />
                     </span>
+                    {/* eslint-disable i18next/no-literal-string */}
                     <button
-                      onClick={() => s.removeRssFeed(feed)}
+                      onClick={() => { void s.removeRssFeed(feed); }}
                       aria-label={t('sources.rss.removeFeed', 'Remove feed')}
                       className="text-text-muted hover:text-red-400 ms-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity text-xs"
                     >
                       x
                     </button>
+                    {/* eslint-enable i18next/no-literal-string */}
                   </div>
                 ))}
               </div>
@@ -114,11 +116,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
             <DefaultSourceList
               defaults={s.defaultRssFeeds}
               disabled={s.disabledDefaultRss}
-              onToggle={s.toggleDefaultRss}
+              onToggle={(item: string, enabled: boolean) => { void s.toggleDefaultRss(item, enabled); }}
               label={t('sources.defaults.rss', 'Default RSS feeds')}
               healthMap={s.feedHealthMap}
               sourceType="rss"
-              onResetHealth={s.resetFeedHealth}
+              onResetHealth={(feedOrigin: string, sourceType: string) => { void s.resetFeedHealth(feedOrigin, sourceType); }}
             />
           </div>
 
@@ -133,12 +135,12 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 type="text"
                 value={s.newYoutubeChannel}
                 onChange={(e) => s.setNewYoutubeChannel(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && s.addYoutubeChannel()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void s.addYoutubeChannel(); }}
                 placeholder="Channel ID e.g. UCsBjURrPoezykLs9EqgamOA"
                 className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
-                onClick={s.addYoutubeChannel}
+                onClick={() => { void s.addYoutubeChannel(); }}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
@@ -152,14 +154,16 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     className="inline-flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-400 text-xs rounded border border-red-500/20 group"
                   >
                     {ch.length > 20 ? ch.slice(0, 8) + '...' + ch.slice(-8) : ch}
-                    <FeedHealthDot health={s.feedHealthMap[ch]} onReset={() => s.resetFeedHealth(ch, 'youtube')} />
+                    <FeedHealthDot health={s.feedHealthMap[ch]} onReset={() => { void s.resetFeedHealth(ch, 'youtube'); }} />
+                    {/* eslint-disable i18next/no-literal-string */}
                     <button
-                      onClick={() => s.removeYoutubeChannel(ch)}
+                      onClick={() => { void s.removeYoutubeChannel(ch); }}
                       aria-label={t('sources.youtube.removeChannel', 'Remove channel')}
                       className="text-red-400/40 hover:text-red-400 transition-colors"
                     >
                       x
                     </button>
+                    {/* eslint-enable i18next/no-literal-string */}
                   </span>
                 ))}
               </div>
@@ -169,11 +173,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
             <DefaultSourceList
               defaults={s.defaultYoutubeChannels}
               disabled={s.disabledDefaultYoutube}
-              onToggle={s.toggleDefaultYoutube}
+              onToggle={(item: string, enabled: boolean) => { void s.toggleDefaultYoutube(item, enabled); }}
               label={t('sources.defaults.youtube', 'Default YouTube channels')}
               healthMap={s.feedHealthMap}
               sourceType="youtube"
-              onResetHealth={s.resetFeedHealth}
+              onResetHealth={(feedOrigin: string, sourceType: string) => { void s.resetFeedHealth(feedOrigin, sourceType); }}
             />
           </div>
 
@@ -188,12 +192,12 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 type="text"
                 value={s.newGithubLanguage}
                 onChange={(e) => s.setNewGithubLanguage(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && s.addGithubLanguage()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void s.addGithubLanguage(); }}
                 placeholder="e.g. go, java, swift"
                 className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
               />
               <button
-                onClick={s.addGithubLanguage}
+                onClick={() => { void s.addGithubLanguage(); }}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
@@ -206,13 +210,15 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                   className="inline-flex items-center gap-1 px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded border border-purple-500/20 group"
                 >
                   {lang}
+                  {/* eslint-disable i18next/no-literal-string */}
                   <button
-                    onClick={() => s.removeGithubLanguage(lang)}
+                    onClick={() => { void s.removeGithubLanguage(lang); }}
                     aria-label={t('sources.github.removeLanguage', 'Remove language')}
                     className="text-purple-400/40 hover:text-red-400 transition-colors"
                   >
                     x
                   </button>
+                  {/* eslint-enable i18next/no-literal-string */}
                 </span>
               ))}
             </div>
@@ -233,12 +239,12 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 type="text"
                 value={s.newTwitterHandle}
                 onChange={(e) => s.setNewTwitterHandle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && s.addTwitterHandle()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void s.addTwitterHandle(); }}
                 placeholder="@handle"
                 className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none"
               />
               <button
-                onClick={s.addTwitterHandle}
+                onClick={() => { void s.addTwitterHandle(); }}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {t('action.add')}
@@ -252,14 +258,16 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                     className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded border border-blue-500/20 group"
                   >
                     @{h}
-                    <FeedHealthDot health={s.feedHealthMap[h]} onReset={() => s.resetFeedHealth(h, 'twitter')} />
+                    <FeedHealthDot health={s.feedHealthMap[h]} onReset={() => { void s.resetFeedHealth(h, 'twitter'); }} />
+                    {/* eslint-disable i18next/no-literal-string */}
                     <button
-                      onClick={() => s.removeTwitterHandle(h)}
+                      onClick={() => { void s.removeTwitterHandle(h); }}
                       aria-label={t('sources.twitter.removeHandle', 'Remove handle')}
                       className="text-blue-400/40 hover:text-red-400 transition-colors"
                     >
                       x
                     </button>
+                    {/* eslint-enable i18next/no-literal-string */}
                   </span>
                 ))}
               </div>
@@ -269,11 +277,11 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
             <DefaultSourceList
               defaults={s.defaultTwitterHandles}
               disabled={s.disabledDefaultTwitter}
-              onToggle={s.toggleDefaultTwitter}
+              onToggle={(item: string, enabled: boolean) => { void s.toggleDefaultTwitter(item, enabled); }}
               label={t('sources.defaults.twitter', 'Default Twitter/X handles')}
               healthMap={s.feedHealthMap}
               sourceType="twitter"
-              onResetHealth={s.resetFeedHealth}
+              onResetHealth={(feedOrigin: string, sourceType: string) => { void s.resetFeedHealth(feedOrigin, sourceType); }}
             />
 
             {/* X API Key */}
@@ -286,7 +294,7 @@ export function SourceConfigPanel({ onStatusChange }: SourceConfigPanelProps) {
                 className="flex-1 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-cyan-500/50 focus:outline-none font-mono"
               />
               <button
-                onClick={s.saveXApiKey}
+                onClick={() => { void s.saveXApiKey(); }}
                 className="px-3 py-2 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-cyan-500/30 transition-all"
               >
                 {s.hasXApiKey ? t('sources.twitter.update') : t('action.save')}

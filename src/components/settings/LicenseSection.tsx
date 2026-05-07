@@ -28,9 +28,9 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const [lastValidated, setLastValidated] = useState<string | null>(null);
 
   useEffect(() => {
-    loadLicense();
-    loadTrialStatus();
-    cmd('get_license_tier').then((result) => {
+    void loadLicense();
+    void loadTrialStatus();
+    void cmd('get_license_tier').then((result) => {
       const validated = (result as Record<string, unknown>).last_validated_at;
       if (typeof validated === 'string') setLastValidated(validated);
     }).catch(() => {});
@@ -171,11 +171,11 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
               value={key}
               onChange={e => setKey(e.target.value)}
               placeholder="XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-V3"
-              onKeyDown={e => e.key === 'Enter' && handleActivate()}
+              onKeyDown={e => { if (e.key === 'Enter') void handleActivate(); }}
               className="flex-1 px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm text-white placeholder-gray-600 focus:outline-none focus:border-accent-gold/50 font-mono text-xs"
             />
             <button
-              onClick={handleActivate}
+              onClick={() => { void handleActivate(); }}
               disabled={licenseLoading || !key.trim()}
               className="px-4 py-2 text-sm font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
             >
@@ -213,11 +213,11 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
                   value={recoveryEmail}
                   onChange={e => setRecoveryEmail(e.target.value)}
                   placeholder={t('settings.license.recovery.placeholder')}
-                  onKeyDown={e => e.key === 'Enter' && handleRecover()}
+                  onKeyDown={e => { if (e.key === 'Enter') void handleRecover(); }}
                   className="flex-1 px-3 py-1.5 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-accent-gold/50"
                 />
                 <button
-                  onClick={handleRecover}
+                  onClick={() => { void handleRecover(); }}
                   disabled={licenseLoading || !recoveryEmail.trim()}
                   className="px-3 py-1.5 text-xs font-medium text-black bg-accent-gold rounded-lg hover:bg-[#C4A030] transition-colors disabled:opacity-50"
                 >
@@ -237,7 +237,7 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
           {/* Trial button */}
           {canStartTrial && (
             <button
-              onClick={handleStartTrial}
+              onClick={() => { void handleStartTrial(); }}
               disabled={starting}
               className="w-full px-4 py-2 text-xs font-medium text-text-secondary border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
             >

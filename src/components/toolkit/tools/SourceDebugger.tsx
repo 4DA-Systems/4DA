@@ -87,7 +87,7 @@ export default function SourceDebugger() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !loading) {
       e.preventDefault();
-      testFeed();
+      void testFeed();
     }
   };
 
@@ -108,7 +108,7 @@ export default function SourceDebugger() {
           className="flex-1 bg-bg-tertiary border border-border text-white text-sm font-mono rounded-lg px-3 py-2 outline-none focus:border-white/30 placeholder:text-text-muted transition-colors"
         />
         <button
-          onClick={testFeed}
+          onClick={() => { void testFeed(); }}
           disabled={loading || !url.trim()}
           className="flex items-center gap-2 px-5 py-2 text-sm font-medium bg-white text-bg-primary rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         >
@@ -198,6 +198,7 @@ export default function SourceDebugger() {
 
             <div className="flex items-center gap-4 ms-auto text-xs text-text-secondary font-mono shrink-0">
               <span>{t('toolkit.sourceDebugger.itemCount', { count: result.item_count })}</span>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <span>{result.fetch_duration_ms}ms</span>
             </div>
           </div>

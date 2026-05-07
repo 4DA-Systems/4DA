@@ -43,7 +43,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
         // Knowledge gaps are optional
       }
     };
-    load();
+    void load();
   }, []);
 
   const urgentCount = items.filter(
@@ -59,6 +59,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
       {items.length === 0 ? (
         <div className="px-5 py-4 flex items-center gap-3">
           <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
+            {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-text-secondary">✓</span>
           </div>
           <div>
@@ -128,6 +129,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
                       <details className="group">
                         <summary className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-text-muted hover:text-text-secondary transition-colors list-none">
                           <span className="group-open:rotate-90 transition-transform">&#9654;</span>
+                          {/* eslint-disable-next-line i18next/no-literal-string */}
                           {rest.length} more {rest.length === 1 ? 'article' : 'articles'}
                         </summary>
                         <div className="mt-1 space-y-1">

@@ -33,6 +33,7 @@ function CycleHistory({ history, t }: { history: AutophagyCycleResult[]; t: (key
 
   return (
     <div className="space-y-2">
+      {/* eslint-disable i18next/no-literal-string */}
       {history.slice(0, 5).map((cycle: AutophagyCycleResult, i: number) => (
         <div key={i} className="flex items-center justify-between text-xs">
           <div className="flex items-center gap-3">
@@ -45,6 +46,7 @@ function CycleHistory({ history, t }: { history: AutophagyCycleResult[]; t: (key
           <span className="text-text-muted tabular-nums">{cycle.duration_ms}ms</span>
         </div>
       ))}
+      {/* eslint-enable i18next/no-literal-string */}
     </div>
   );
 }
@@ -74,8 +76,8 @@ const InsightsContent = memo(function InsightsContent() {
   const loadHistory = useAppStore(s => s.loadAutophagyHistory);
 
   useEffect(() => {
-    loadStatus();
-    loadHistory(5);
+    void loadStatus();
+    void loadHistory(5);
   }, [loadStatus, loadHistory]);
 
   const stats = useMemo(() => {

@@ -90,7 +90,7 @@ export default function ScoringSandbox() {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && title.trim()) {
-        score();
+        void score();
       }
     },
     [score, title],
@@ -144,7 +144,7 @@ export default function ScoringSandbox() {
           </div>
 
           <button
-            onClick={score}
+            onClick={() => { void score(); }}
             disabled={loading || !title.trim()}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-white text-bg-primary rounded-lg hover:bg-white/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -200,6 +200,7 @@ export default function ScoringSandbox() {
               <div className="text-5xl font-bold font-mono" style={{ color }}>
                 {scorePct}
               </div>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <div className="text-xs text-text-muted mt-0.5">/ 100</div>
             </div>
             <div>

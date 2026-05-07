@@ -116,6 +116,7 @@ export function SourceBrowser() {
       <div className="bg-[#1F1F1F] rounded-lg p-4 border border-[#2A2A2A]">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-[#D4AF37]/20 rounded-lg flex items-center justify-center flex-shrink-0">
+            {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-[#D4AF37] text-sm">&#x2731;</span>
           </div>
           <div>
@@ -136,6 +137,7 @@ export function SourceBrowser() {
       {/* Header */}
       <div className="flex items-start gap-3 mb-3">
         <div className="w-8 h-8 bg-[#D4AF37]/20 rounded-lg flex items-center justify-center flex-shrink-0">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <span className="text-[#D4AF37] text-sm">&#x2731;</span>
         </div>
         <div className="flex-1 min-w-0">

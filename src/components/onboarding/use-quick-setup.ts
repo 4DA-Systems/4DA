@@ -124,7 +124,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const rawStatus = await cmd('check_ollama_status', { baseUrl: null }) as unknown as Record<string, unknown>;
         const status = normalizeOllamaStatus(rawStatus);
@@ -138,7 +138,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
           setProjectsOpen(true);
         } else if (status.running) {
           setProvider('ollama');
-          pullMissingModels(status);
+          void pullMissingModels(status);
         }
       } catch {
         setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' } as OllamaStatus);
@@ -150,7 +150,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // --- Auto-discover projects ---
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const result = await cmd('ace_auto_discover');
         if (cancelled) return;
@@ -170,7 +170,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // --- Pre-populate from taste test if calibrated ---
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const calibrated = await cmd('taste_test_is_calibrated');
         if (cancelled || !calibrated) return;
@@ -191,7 +191,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   useEffect(() => {
     if (!discoveryDone) return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const result = await cmd('ace_get_suggested_interests');
         if (cancelled) return;
@@ -335,7 +335,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     setPullingModels(false);
     setSkippedDownload(true);
     setTimeout(() => setSkippedDownload(false), 3000);
-    handleContinue();
+    void handleContinue();
   };
 
   return {

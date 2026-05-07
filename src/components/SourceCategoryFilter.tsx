@@ -108,6 +108,7 @@ export function SourceCategoryFilter({ sourceFilters, sourcesWithResults, onTogg
                   </label>
                 ))}
                 <div className="flex gap-1.5 mt-1.5 pt-1.5 border-t border-border">
+                  {/* eslint-disable i18next/no-literal-string */}
                   <button
                     onClick={() => { toggleCategory(cat, true); }}
                     className="text-[10px] text-text-muted hover:text-text-secondary px-1"
@@ -120,6 +121,7 @@ export function SourceCategoryFilter({ sourceFilters, sourcesWithResults, onTogg
                   >
                     None
                   </button>
+                  {/* eslint-enable i18next/no-literal-string */}
                 </div>
               </div>
             )}

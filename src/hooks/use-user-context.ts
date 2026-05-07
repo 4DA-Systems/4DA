@@ -26,7 +26,7 @@ export function useUserContext(_onStatusChange?: (status: string) => void) {
   const updateRole = useAppStore(s => s.updateRole);
 
   useEffect(() => {
-    loadUserContext();
+    void loadUserContext();
   }, [loadUserContext]);
 
   return {

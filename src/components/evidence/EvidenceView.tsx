@@ -124,6 +124,7 @@ const PulseSection = memo(function PulseSection({ pulse }: { pulse: PulseData | 
         <div className="space-y-1.5">
           {pulse.learning_narratives.slice(0, 3).map((narrative, i) => (
             <p key={i} className="text-xs text-text-secondary leading-relaxed flex items-start gap-2">
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <span className="text-accent-gold/50 mt-0.5 shrink-0" aria-hidden="true">&#x25C6;</span>
               <span>{narrative}</span>
             </p>

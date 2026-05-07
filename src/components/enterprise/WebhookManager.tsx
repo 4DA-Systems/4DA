@@ -27,7 +27,7 @@ export function WebhookManager() {
   const [testResult, setTestResult] = useState<{ id: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    loadWebhooks();
+    void loadWebhooks();
   }, [loadWebhooks]);
 
   const handleToggleDeliveries = useCallback(async (webhookId: string) => {
@@ -118,10 +118,10 @@ export function WebhookManager() {
             deleteConfirm={deleteConfirm === webhook.id}
             testing={testingId === webhook.id}
             testResult={testResult?.id === webhook.id ? testResult.ok : null}
-            onToggleDeliveries={() => handleToggleDeliveries(webhook.id)}
-            onTest={() => handleTest(webhook.id)}
+            onToggleDeliveries={() => { void handleToggleDeliveries(webhook.id); }}
+            onTest={() => { void handleTest(webhook.id); }}
             onDeleteRequest={() => setDeleteConfirm(webhook.id)}
-            onDeleteConfirm={() => handleDelete(webhook.id)}
+            onDeleteConfirm={() => { void handleDelete(webhook.id); }}
             onDeleteCancel={() => setDeleteConfirm(null)}
           />
         ))}
@@ -303,7 +303,7 @@ function WebhookForm({ onSubmit, onCancel }: WebhookFormProps) {
       {/* Actions */}
       <div className="flex items-center gap-2 pt-1">
         <button
-          onClick={handleSubmit}
+          onClick={() => { void handleSubmit(); }}
           disabled={!canSubmit}
           className="px-4 py-2 text-sm font-medium text-black bg-white rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >

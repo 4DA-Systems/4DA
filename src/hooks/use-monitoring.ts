@@ -16,7 +16,7 @@ export function useMonitoring() {
   const testNotification = useAppStore(s => s.testNotification);
 
   useEffect(() => {
-    loadMonitoringStatus();
+    void loadMonitoringStatus();
   }, [loadMonitoringStatus]);
 
   return {

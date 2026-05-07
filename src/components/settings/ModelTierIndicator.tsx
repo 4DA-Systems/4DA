@@ -53,7 +53,7 @@ export const ModelTierIndicator = memo(function ModelTierIndicator({ refreshKey 
     }
   }, [t]);
 
-  useEffect(() => { fetchTier(); }, [fetchTier, refreshKey]);
+  useEffect(() => { void fetchTier(); }, [fetchTier, refreshKey]);
 
   const handleProbe = useCallback(async () => {
     setProbing(true);
@@ -91,7 +91,7 @@ export const ModelTierIndicator = memo(function ModelTierIndicator({ refreshKey 
           </span>
         </div>
         <button
-          onClick={handleProbe}
+          onClick={() => { void handleProbe(); }}
           disabled={probing}
           className="text-xs text-text-muted hover:text-white px-2.5 py-1 rounded border border-border hover:border-orange-500/30 transition-all disabled:opacity-50 flex items-center gap-1.5"
         >

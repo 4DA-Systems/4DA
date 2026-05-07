@@ -70,7 +70,7 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
   // Load current locale from backend on mount
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const locale = await cmd('get_locale');
         if (cancelled || userInteracted.current) return;
@@ -104,22 +104,22 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
     if (match) {
       setLanguage(match.lang);
       setCurrency(match.currency);
-      saveLocale(code, match.lang, match.currency);
+      void saveLocale(code, match.lang, match.currency);
     } else {
-      saveLocale(code, language, currency);
+      void saveLocale(code, language, currency);
     }
   }, [language, currency, saveLocale]);
 
   const handleLanguageChange = useCallback((code: string) => {
     userInteracted.current = true;
     setLanguage(code);
-    saveLocale(country, code, currency);
+    void saveLocale(country, code, currency);
   }, [country, currency, saveLocale]);
 
   const handleCurrencyChange = useCallback((cur: string) => {
     userInteracted.current = true;
     setCurrency(cur);
-    saveLocale(country, language, cur);
+    void saveLocale(country, language, cur);
   }, [country, language, saveLocale]);
 
   if (!loaded) {

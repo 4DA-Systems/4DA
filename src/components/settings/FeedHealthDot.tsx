@@ -26,6 +26,7 @@ export function FeedHealthDot({ health, onReset }: FeedHealthDotProps) {
     return (
       <span className="inline-flex items-center gap-1 ms-1.5">
         <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" title={health.last_error ?? 'Circuit open'} />
+        {/* eslint-disable i18next/no-literal-string */}
         <span className="text-[10px] text-red-400/70">
           paused
         </span>
@@ -37,6 +38,7 @@ export function FeedHealthDot({ health, onReset }: FeedHealthDotProps) {
             reset
           </button>
         )}
+        {/* eslint-enable i18next/no-literal-string */}
       </span>
     );
   }
@@ -46,9 +48,11 @@ export function FeedHealthDot({ health, onReset }: FeedHealthDotProps) {
   return (
     <span className="inline-flex items-center gap-1 ms-1.5" title={title}>
       <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+      {/* eslint-disable i18next/no-literal-string */}
       <span className="text-[10px] text-amber-400/70">
         {health.consecutive_failures}x
       </span>
+      {/* eslint-enable i18next/no-literal-string */}
     </span>
   );
 }

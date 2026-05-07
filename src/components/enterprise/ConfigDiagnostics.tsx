@@ -150,7 +150,7 @@ export function ConfigDiagnostics() {
           </p>
         </div>
         <button
-          onClick={runDiagnostics}
+          onClick={() => { void runDiagnostics(); }}
           disabled={running}
           className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
         >
@@ -207,8 +207,10 @@ export function ConfigDiagnostics() {
       {(() => {
         const isFailing = (key: string) => checks.some(c => c.key === key && c.status !== 'pass');
         const tips: { key: string; label: string; content: React.ReactNode }[] = [
+          /* eslint-disable i18next/no-literal-string */
           { key: 'ai', label: 'No LLM:', content: <>Add an API key in Settings &gt; General &gt; AI Provider</> },
           { key: 'embeddings', label: 'No embeddings:', content: <>Install Ollama and run <code className="text-[#818CF8]">ollama pull nomic-embed-text</code></> },
+          /* eslint-enable i18next/no-literal-string */
           { key: 'relay', label: 'Relay disconnected:', content: 'Check your network and verify the relay URL in Team settings' },
           { key: 'sources', label: 'Source errors:', content: 'Check API rate limits. Circuit breakers auto-recover after 30 minutes.' },
         ];

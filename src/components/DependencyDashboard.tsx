@@ -222,7 +222,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
           alertTotal={overview.alerts.total}
           crossProjectPackages={overview.cross_project_packages}
           crossProjectTop={overview.cross_project_top}
-          onResolveAlert={handleResolveAlert}
+          onResolveAlert={(alertId) => { void handleResolveAlert(alertId); }}
         />
       </div>
     </div>

@@ -38,7 +38,7 @@ export function AdminHealthDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadHealthData();
+    void loadHealthData();
   }, []);
 
   const loadHealthData = async () => {
@@ -105,7 +105,7 @@ export function AdminHealthDashboard() {
           </p>
         </div>
         <button
-          onClick={loadHealthData}
+          onClick={() => { void loadHealthData(); }}
           className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
           aria-label="Refresh health data"
         >

@@ -170,11 +170,13 @@ export function ResultItemExpanded({
                 <div key={i} className="flex items-center gap-2">
                   <span className="font-mono text-text-primary">{dep}</span>
                   {i === 0 && item.score_breakdown?.installed_version && (
+                    // eslint-disable-next-line i18next/no-literal-string
                     <span className={`font-mono ${item.score_breakdown?.is_version_affected ? 'text-red-400' : 'text-text-muted'}`}>
                       v{item.score_breakdown.installed_version}
                     </span>
                   )}
                   {i === 0 && item.score_breakdown?.fixed_version && (
+                    // eslint-disable-next-line i18next/no-literal-string
                     <span className="text-emerald-400 font-mono">&rarr; v{item.score_breakdown.fixed_version}</span>
                   )}
                   {i === 0 && item.score_breakdown?.dependency_path && (
@@ -269,10 +271,12 @@ export function ResultItemExpanded({
           </div>
           {sorted.length > 1 && (
             <details className="group mt-1">
+              {/* eslint-disable i18next/no-literal-string */}
               <summary className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-text-muted hover:text-text-secondary transition-colors list-none">
                 <span className="group-open:rotate-90 transition-transform">&#9654;</span>
                 {sorted.length - 1} more
               </summary>
+              {/* eslint-enable i18next/no-literal-string */}
               <ul className="mt-1 space-y-1">
                 {sorted.slice(1).map((match, i) => (
                   <li key={i} className="text-xs bg-bg-primary rounded p-2 border border-border/30">

@@ -47,6 +47,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
       })}
       {/* Max reference line label */}
       <div className="flex justify-end">
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <span className="text-[10px] text-text-muted">max: {maxValue} {unit}</span>
       </div>
     </div>

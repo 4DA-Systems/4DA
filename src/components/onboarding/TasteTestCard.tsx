@@ -66,6 +66,7 @@ export const TasteTestCard = memo(function TasteTestCard({
         >
           {t('tasteTest.skip')}
         </button>
+        {/* eslint-disable i18next/no-literal-string */}
         <button
           onClick={onStrongInterest}
           aria-label={t('tasteTest.loveTitle', { title: card.title })}
@@ -74,6 +75,7 @@ export const TasteTestCard = memo(function TasteTestCard({
         >
           ★
         </button>
+        {/* eslint-enable i18next/no-literal-string */}
       </div>
     </div>
   );

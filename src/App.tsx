@@ -165,7 +165,7 @@ function App() {
   // Check Ollama status when provider changes to "ollama"
   useEffect(() => {
     if (settingsForm.provider === 'ollama') {
-      checkOllamaStatus(settingsForm.baseUrl || undefined);
+      void checkOllamaStatus(settingsForm.baseUrl || undefined);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when provider changes, not on every baseUrl keystroke
   }, [settingsForm.provider, checkOllamaStatus]);
@@ -213,12 +213,12 @@ function App() {
     setShowFramework,
     setShowComparison,
     setState,
-    startAnalysis,
+    startAnalysis: () => { void startAnalysis(); },
   });
 
   // Global keyboard shortcuts (extracted hook)
   const { focusedIndex } = useKeyboardShortcuts({
-    onAnalyze: startAnalysis,
+    onAnalyze: () => { void startAnalysis(); },
     onToggleFilters: () => setShowOnlyRelevant(!showOnlyRelevant),
     onToggleBriefing: () => setActiveView(activeView === 'briefing' ? 'results' : 'briefing'),
     onOpenSettings: () => setShowSettings(true),
@@ -251,11 +251,11 @@ function App() {
     },
     onSaveFocused: () => {
       const item = filteredResults[focusedIndex];
-      if (item) useAppStore.getState().recordInteraction(item.id, 'save', item);
+      if (item) void useAppStore.getState().recordInteraction(item.id, 'save', item);
     },
     onDismissFocused: () => {
       const item = filteredResults[focusedIndex];
-      if (item) useAppStore.getState().recordInteraction(item.id, 'dismiss', item);
+      if (item) void useAppStore.getState().recordInteraction(item.id, 'dismiss', item);
     },
     onFocusSearch: () => {
       const el = document.querySelector<HTMLInputElement>('[data-search-input]');
@@ -362,7 +362,7 @@ function App() {
           <UpdateBanner
             update={update}
             installing={installing}
-            onInstall={installUpdate}
+            onInstall={() => { void installUpdate(); }}
             onDismiss={dismissUpdate}
           />
         )}

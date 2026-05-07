@@ -29,6 +29,7 @@ export const PersonalizeNudge = memo(function PersonalizeNudge({
           {t('header.settings')}
         </button>
       </div>
+      {/* eslint-disable i18next/no-literal-string */}
       <button
         onClick={onDismiss}
         className="text-text-muted hover:text-white transition-colors flex-shrink-0 p-1"
@@ -36,6 +37,7 @@ export const PersonalizeNudge = memo(function PersonalizeNudge({
       >
         &#x2715;
       </button>
+      {/* eslint-enable i18next/no-literal-string */}
     </div>
   );
 });

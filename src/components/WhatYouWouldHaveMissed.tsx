@@ -254,11 +254,13 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                 )}
                 <p className="text-xs text-text-muted mt-1">
                   {criticalSave.explanation || criticalSave.source_type}
+                  {/* eslint-disable i18next/no-literal-string */}
                   {criticalSave.score_breakdown?.matched_deps?.length ? (
                     <span className="text-text-secondary">
                       {' '}&middot; matches: {criticalSave.score_breakdown.matched_deps.slice(0, 3).join(', ')}
                     </span>
                   ) : null}
+                  {/* eslint-enable i18next/no-literal-string */}
                 </p>
               </div>
               <div className="text-end flex-shrink-0">
@@ -268,6 +270,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                 >
                   {Math.round(criticalSave.top_score * 100)}
                 </div>
+                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <div className="text-[9px] text-text-muted">score</div>
               </div>
             </div>

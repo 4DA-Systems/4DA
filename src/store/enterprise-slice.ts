@@ -214,13 +214,13 @@ export const createEnterpriseSlice: StateCreator<AppStore, [], [], EnterpriseSli
   setAuditActionFilter: (filter: string) => {
     set({ auditActionFilter: filter });
     const { auditResourceFilter } = get();
-    get().loadAuditLog(filter, auditResourceFilter);
+    void get().loadAuditLog(filter, auditResourceFilter);
   },
 
   setAuditResourceFilter: (filter: string) => {
     set({ auditResourceFilter: filter });
     const { auditActionFilter } = get();
-    get().loadAuditLog(auditActionFilter, filter);
+    void get().loadAuditLog(auditActionFilter, filter);
   },
 
   // ========================================================================
@@ -241,7 +241,7 @@ export const createEnterpriseSlice: StateCreator<AppStore, [], [], EnterpriseSli
   registerWebhook: async (name: string, url: string, events: string[]) => {
     try {
       await cmd('register_webhook_cmd', { name, url, events });
-      get().loadWebhooks();
+      void get().loadWebhooks();
       return { ok: true };
     } catch (e) {
       console.error('Failed to register webhook:', e);
@@ -259,7 +259,7 @@ export const createEnterpriseSlice: StateCreator<AppStore, [], [], EnterpriseSli
           Object.entries(state.webhookDeliveries).filter(([k]) => k !== webhookId),
         ),
       }));
-      get().loadWebhooks();
+      void get().loadWebhooks();
     } catch (e) {
       console.error('Failed to delete webhook:', e);
     }
@@ -321,7 +321,7 @@ export const createEnterpriseSlice: StateCreator<AppStore, [], [], EnterpriseSli
   setRetentionPolicy: async (resourceType: string, retentionDays: number) => {
     try {
       await cmd('set_retention_policy_cmd', { resourceType, days: retentionDays });
-      get().loadRetentionPolicies();
+      void get().loadRetentionPolicies();
     } catch (e) {
       console.error('Failed to set retention policy:', e);
       throw e;

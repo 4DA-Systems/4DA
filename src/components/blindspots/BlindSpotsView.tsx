@@ -69,9 +69,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const loadBlindSpots = useAppStore((s) => s.loadBlindSpots);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
-  useEffect(() => { loadBlindSpots(); }, [loadBlindSpots]);
+  useEffect(() => { void loadBlindSpots(); }, [loadBlindSpots]);
 
-  const handleRetry = useCallback(() => { loadBlindSpots(); }, [loadBlindSpots]);
+  const handleRetry = useCallback(() => { void loadBlindSpots(); }, [loadBlindSpots]);
 
   const handleDismiss = useCallback((id: string) => {
     setDismissed(prev => new Set(prev).add(id));

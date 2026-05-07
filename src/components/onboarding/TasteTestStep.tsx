@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+/* eslint-disable i18next/no-literal-string */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { cmd } from '../../lib/commands';
 
@@ -102,19 +103,19 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         case 'y':
         case '1':
           e.preventDefault();
-          respond('interested');
+          void respond('interested');
           break;
         case 'ArrowLeft':
         case 'n':
         case '2':
           e.preventDefault();
-          respond('not_interested');
+          void respond('not_interested');
           break;
         case 'ArrowUp':
         case 's':
         case '3':
           e.preventDefault();
-          respond('strong_interest');
+          void respond('strong_interest');
           break;
         case 'Escape':
           e.preventDefault();
@@ -142,7 +143,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         {error && <p className="text-red-400 text-xs">{error}</p>}
         <div className="flex items-center justify-center gap-4 pt-2">
           <button
-            onClick={startTest}
+            onClick={() => { void startTest(); }}
             disabled={starting}
             className="bg-white text-black font-medium text-sm py-2.5 px-6 rounded-md hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -195,9 +196,9 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
 
         <TasteTestCard
           card={currentCard}
-          onInterested={() => respond('interested')}
-          onSkip={() => respond('not_interested')}
-          onStrongInterest={() => respond('strong_interest')}
+          onInterested={() => { void respond('interested'); }}
+          onSkip={() => { void respond('not_interested'); }}
+          onStrongInterest={() => { void respond('strong_interest'); }}
           isAnimating={cardAnimating}
         />
 

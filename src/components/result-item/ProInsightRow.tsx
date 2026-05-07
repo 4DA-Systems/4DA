@@ -91,7 +91,7 @@ function InlineTrialStart({ score }: { score: number }) {
 
   return (
     <button
-      onClick={handleStart}
+      onClick={(e) => { void handleStart(e); }}
       disabled={starting}
       className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ms-auto disabled:opacity-50"
     >

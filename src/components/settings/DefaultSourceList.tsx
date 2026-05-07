@@ -33,6 +33,7 @@ export function DefaultSourceList({
         onClick={() => setExpanded(!expanded)}
         className="flex items-center gap-1.5 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
       >
+        {/* eslint-disable i18next/no-literal-string */}
         <span
           className="inline-block transition-transform"
           style={{ transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}
@@ -43,6 +44,7 @@ export function DefaultSourceList({
         <span className="text-text-muted">
           ({activeCount}/{defaults.length} active)
         </span>
+        {/* eslint-enable i18next/no-literal-string */}
       </button>
 
       {expanded && (

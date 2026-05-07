@@ -37,9 +37,11 @@ export function ChannelChangelog({ changelog }: Props) {
           <span className="text-xs text-text-muted">{getTranslated(`cl-summary-${changelog.from_version}-${changelog.to_version}`, changelog.summary)}</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* eslint-disable i18next/no-literal-string */}
           <span className="text-[10px] text-text-muted">
             v{changelog.from_version} → v{changelog.to_version}
           </span>
+          {/* eslint-enable i18next/no-literal-string */}
           <svg
             className={`w-4 h-4 text-text-muted transition-transform ${
               expanded ? 'rotate-180' : ''

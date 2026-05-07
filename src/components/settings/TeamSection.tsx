@@ -80,13 +80,13 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
 
   // Load team data on mount
   useEffect(() => {
-    loadTeamStatus();
+    void loadTeamStatus();
   }, [loadTeamStatus]);
 
   // Load members when a team is active
   useEffect(() => {
     if (teamStatus?.team_id) {
-      loadTeamMembers();
+      void loadTeamMembers();
     }
   }, [teamStatus?.team_id, loadTeamMembers]);
 
@@ -200,7 +200,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
               </label>
               <div className="flex gap-2">
                 <button
-                  onClick={handleCreate}
+                  onClick={() => { void handleCreate(); }}
                   disabled={teamLoading || !displayName.trim() || !relayUrl.trim()}
                   className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
                 >
@@ -258,7 +258,7 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
               </label>
               <div className="flex gap-2">
                 <button
-                  onClick={handleJoin}
+                  onClick={() => { void handleJoin(); }}
                   disabled={teamLoading || !displayName.trim() || !relayUrl.trim() || !inviteCode.trim()}
                   className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
                 >
@@ -405,9 +405,11 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
           {/* Sync info footer */}
           <div className="pt-2 border-t border-border">
             <p className="text-[10px] text-text-muted">
+              {/* eslint-disable i18next/no-literal-string */}
               {t('settings.team.relay', 'Relay')}: <span className="font-mono">{relayUrl}</span>
               {' | '}
               {t('settings.team.syncInterval', 'Sync interval')}: 30s
+              {/* eslint-enable i18next/no-literal-string */}
             </p>
           </div>
         </div>

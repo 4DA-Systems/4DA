@@ -60,6 +60,7 @@ const SignalRow = memo(function SignalRow({
             </div>
           )}
         </div>
+        {/* eslint-disable i18next/no-literal-string */}
         {onDismiss && (
           <button
             onClick={() => onDismiss(item.id)}
@@ -69,6 +70,7 @@ const SignalRow = memo(function SignalRow({
             ✕
           </button>
         )}
+        {/* eslint-enable i18next/no-literal-string */}
       </div>
     </div>
   );
@@ -106,7 +108,6 @@ const DepCoverageRow = memo(function DepCoverageRow({
         }`}
       >
         {hasContent && (
-          // eslint-disable-next-line i18next/no-literal-string
           <span className={`text-[10px] transition-transform duration-150 text-text-muted ${expanded ? 'rotate-90' : ''}`}>▶</span>
         )}
         {!hasContent && <span className="w-[10px]" />}

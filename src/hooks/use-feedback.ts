@@ -17,8 +17,8 @@ export function useFeedback() {
   const recordInteraction = useAppStore(s => s.recordInteraction);
 
   useEffect(() => {
-    loadLearnedBehavior();
-    loadPersistedSavedIds();
+    void loadLearnedBehavior();
+    void loadPersistedSavedIds();
   }, [loadLearnedBehavior, loadPersistedSavedIds]);
 
   return {

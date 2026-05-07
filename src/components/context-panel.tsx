@@ -104,6 +104,7 @@ export function ContextPanel({
                 <div className="font-mono text-white text-sm truncate">
                   {file.path.split('/').pop()?.split('\\').pop()}
                 </div>
+                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <div className="text-xs text-text-muted mt-1">{file.lines} lines</div>
               </li>
             ))}

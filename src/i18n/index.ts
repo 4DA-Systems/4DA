@@ -31,7 +31,7 @@ function detectSystemLang(): string {
 }
 const systemLang = detectSystemLang();
 
-i18n
+void i18n
   .use(
     resourcesToBackend(
       (language: string, namespace: string) =>

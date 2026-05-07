@@ -15,6 +15,7 @@ export function DiffRibbon({ block }: Props) {
     <div className="border border-accent-gold/20 rounded-xl bg-bg-secondary p-4 mb-4">
       <div className="flex items-center gap-2 mb-3">
         <div className="w-1.5 h-1.5 rounded-full bg-accent-gold animate-pulse" />
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <h4 className="text-xs font-semibold text-accent-gold uppercase tracking-wider">
           Profile Changes Since Last Read
         </h4>

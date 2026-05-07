@@ -93,7 +93,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const [showHint, setShowHint] = useState(false);
   const hintRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { registerFourdaComponent('fourda-status-orb'); }, []);
+  useEffect(() => { void registerFourdaComponent('fourda-status-orb'); }, []);
 
   // Close hint on outside click
   useEffect(() => {
@@ -117,7 +117,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
     });
 
     return () => {
-      unlisten.then((fn) => fn());
+      void unlisten.then((fn) => fn());
     };
   }, [provider]);
 
@@ -143,7 +143,7 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
     <div className="relative inline-flex items-center gap-1" ref={hintRef}>
       <button
         type="button"
-        onClick={isClickable ? handleRetry : undefined}
+        onClick={isClickable ? () => { void handleRetry(); } : undefined}
         disabled={!isClickable}
         aria-label={`${t('ollama.status')}: ${label}${isClickable ? `. ${t('ollama.clickRetry')}` : ''}`}
         className={`

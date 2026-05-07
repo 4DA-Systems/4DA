@@ -37,13 +37,13 @@ export function ChannelsView() {
 
   // Load channels on mount
   useEffect(() => {
-    loadChannels();
+    void loadChannels();
   }, [loadChannels]);
 
   // Auto-select first channel if none active
   useEffect(() => {
     if (channels.length > 0 && !activeChannelId) {
-      selectChannel(channels[0]!.id);
+      void selectChannel(channels[0]!.id);
     }
   }, [channels, activeChannelId, selectChannel]);
 
@@ -53,7 +53,7 @@ export function ChannelsView() {
       <div className="flex flex-col items-center justify-center gap-3 h-64 text-center">
         <p className="text-text-secondary text-sm">{t('error.generic')}</p>
         <button
-          onClick={loadChannels}
+          onClick={() => { void loadChannels(); }}
           className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
         >
           {t('action.retry')}
@@ -120,7 +120,7 @@ export function ChannelsView() {
             key={channel.id}
             channel={channel}
             active={channel.id === activeChannelId}
-            onClick={() => selectChannel(channel.id)}
+            onClick={() => { void selectChannel(channel.id); }}
           />
         ))}
       </div>

@@ -166,7 +166,7 @@ export const ResultItem = memo(function ResultItem({
           summary={summary}
           summaryLoading={summaryLoading}
           summaryError={summaryError}
-          onGenerateSummary={generateSummary}
+          onGenerateSummary={() => { void generateSummary(); }}
         />
       )}
     </div>

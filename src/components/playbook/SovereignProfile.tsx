@@ -74,8 +74,8 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
   const [showDocument, setShowDocument] = useState(false);
 
   useEffect(() => {
-    loadProfile();
-    loadCompleteness();
+    void loadProfile();
+    void loadCompleteness();
   }, [loadProfile, loadCompleteness]);
 
   const toggleCategory = useCallback((cat: string) => {
@@ -195,11 +195,13 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
                               {fact.source_lesson}
                             </span>
                           )}
+                          {/* eslint-disable i18next/no-literal-string */}
                           {fact.source_lesson === 'manual' && (
                             <span className="text-[9px] text-text-secondary bg-bg-tertiary px-1.5 py-0.5 rounded flex-shrink-0">
                               manual
                             </span>
                           )}
+                          {/* eslint-enable i18next/no-literal-string */}
                         </div>
                       ))}
                     </div>
@@ -241,10 +243,10 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             onChange={(e) => setManualValue(e.target.value)}
             placeholder={t('playbook.sovereign.valuePlaceholder')}
             className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-secondary flex-1 focus:border-accent-gold focus:outline-none font-mono"
-            onKeyDown={(e) => e.key === 'Enter' && handleSaveFact()}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveFact(); }}
           />
           <button
-            onClick={handleSaveFact}
+            onClick={() => { void handleSaveFact(); }}
             disabled={!manualKey.trim() || !manualValue.trim()}
             className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-border hover:text-white transition-colors disabled:opacity-40"
           >
@@ -256,7 +258,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
       {/* Generate Document Button */}
       <div className="flex items-center gap-3">
         <button
-          onClick={handleGenerate}
+          onClick={() => { void handleGenerate(); }}
           className="px-4 py-2 text-xs font-medium bg-accent-gold/15 text-accent-gold border border-accent-gold/30 rounded-lg hover:bg-accent-gold/25 transition-colors"
         >
           {t('playbook.sovereign.generateStackDoc')}
@@ -275,7 +277,7 @@ export function SovereignProfile({ onGenerateDocument }: SovereignProfileProps) 
             <span className="text-xs font-medium text-white">{t('playbook.sovereign.stackDocument')}</span>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => navigator.clipboard.writeText(generatedDocument)}
+                onClick={() => { void navigator.clipboard.writeText(generatedDocument); }}
                 className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
               >
                 {t('action.copy')}

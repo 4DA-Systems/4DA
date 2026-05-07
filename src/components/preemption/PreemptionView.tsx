@@ -134,6 +134,7 @@ const PreemptionView = memo(function PreemptionView() {
       {feed && totalVisible === 0 && !isColdStart && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
+            {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-emerald-400 text-lg">&#x2713;</span>
           </div>
           <p className="text-sm font-medium text-white mb-1">{t('preemption.empty.title')}</p>

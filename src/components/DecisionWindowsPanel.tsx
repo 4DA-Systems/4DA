@@ -122,10 +122,10 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
   const closeWindow = useAppStore(s => s.closeWindow);
 
   useEffect(() => {
-    loadWindows();
+    void loadWindows();
   }, [loadWindows]);
 
-  useEffect(() => { registerFourdaComponent('fourda-decision-countdown'); }, []);
+  useEffect(() => { void registerFourdaComponent('fourda-decision-countdown'); }, []);
 
   const openWindows = useMemo(
     () => (windows ?? []).filter(w => w.status === 'open').sort((a, b) => b.urgency - a.urgency),
@@ -166,8 +166,8 @@ export const DecisionWindowsPanel = memo(function DecisionWindowsPanel() {
           <WindowCard
             key={w.id}
             window={w}
-            onAct={actOnWindow}
-            onDismiss={closeWindow}
+            onAct={(id) => { void actOnWindow(id); }}
+            onDismiss={(id) => { void closeWindow(id); }}
             index={i}
           />
         ))}

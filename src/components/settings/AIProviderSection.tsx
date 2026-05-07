@@ -78,38 +78,40 @@ export function AIProviderSection({
       setValidation({ status: 'idle', message: '', models: [] });
       return;
     }
-    debounceRef.current = setTimeout(async () => {
-      setValidation({ status: 'checking', message: 'Verifying...', models: [] });
-      try {
-        const result = await cmd('validate_api_key', {
-          provider,
-          key,
-          baseUrl: baseUrl || null,
-        });
-        if (result.valid) {
-          setValidation({
-            status: 'valid',
-            message: result.model_access.length > 0
-              ? `Key verified \u2014 access to ${result.model_access.join(', ')}`
-              : 'Key verified',
-            models: result.model_access,
+    debounceRef.current = setTimeout(() => {
+      void (async () => {
+        setValidation({ status: 'checking', message: 'Verifying...', models: [] });
+        try {
+          const result = await cmd('validate_api_key', {
+            provider,
+            key,
+            baseUrl: baseUrl || null,
           });
-        } else if (!result.format_ok) {
-          setValidation({
-            status: 'format_error',
-            message: result.error || 'Invalid key format',
-            models: [],
-          });
-        } else {
-          setValidation({
-            status: 'invalid',
-            message: result.error || 'Connection failed',
-            models: [],
-          });
+          if (result.valid) {
+            setValidation({
+              status: 'valid',
+              message: result.model_access.length > 0
+                ? `Key verified \u2014 access to ${result.model_access.join(', ')}`
+                : 'Key verified',
+              models: result.model_access,
+            });
+          } else if (!result.format_ok) {
+            setValidation({
+              status: 'format_error',
+              message: result.error || 'Invalid key format',
+              models: [],
+            });
+          } else {
+            setValidation({
+              status: 'invalid',
+              message: result.error || 'Connection failed',
+              models: [],
+            });
+          }
+        } catch {
+          setValidation({ status: 'idle', message: '', models: [] });
         }
-      } catch {
-        setValidation({ status: 'idle', message: '', models: [] });
-      }
+      })();
     }, 500);
   }, []);
 
@@ -140,11 +142,12 @@ export function AIProviderSection({
           {/* Environment key import banner */}
           {envDetection && (envDetection.has_anthropic_env || envDetection.has_openai_env) && (
             <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg space-y-2">
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <p className="text-xs text-blue-300 font-medium">Import from environment</p>
               {envDetection.has_anthropic_env && (
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-text-secondary font-mono">{envDetection.anthropic_env_preview}</span>
-                  <button onClick={() => handleImportEnv('anthropic')} disabled={importing}
+                  <button onClick={() => { void handleImportEnv('anthropic'); }} disabled={importing}
                     className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50">
                     {importing ? '...' : 'Import'}
                   </button>
@@ -153,7 +156,7 @@ export function AIProviderSection({
               {envDetection.has_openai_env && (
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-text-secondary font-mono">{envDetection.openai_env_preview}</span>
-                  <button onClick={() => handleImportEnv('openai')} disabled={importing}
+                  <button onClick={() => { void handleImportEnv('openai'); }} disabled={importing}
                     className="text-xs px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50">
                     {importing ? '...' : 'Import'}
                   </button>
@@ -255,6 +258,7 @@ export function AIProviderSection({
               />
               {/* Saved key indicator — shown when key exists in secure storage and user hasn't typed a replacement */}
               {settings?.llm.has_api_key && !settingsForm.apiKey && validation.status === 'idle' && (
+                // eslint-disable-next-line i18next/no-literal-string
                 <p className="mt-1.5 text-xs text-green-400">&#x2713; API key saved in secure storage. Leave blank to keep it.</p>
               )}
               {/* Real-time validation feedback */}
@@ -265,6 +269,7 @@ export function AIProviderSection({
                 </div>
               )}
               {validation.status === 'valid' && (
+                // eslint-disable-next-line i18next/no-literal-string
                 <p className="mt-1.5 text-xs text-green-400">&#x2713; {validation.message}</p>
               )}
               {validation.status === 'format_error' && (
@@ -273,6 +278,7 @@ export function AIProviderSection({
               {validation.status === 'invalid' && (
                 <p className="mt-1.5 text-xs text-amber-400">{validation.message}</p>
               )}
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <p className="mt-2 text-[10px] text-text-muted leading-relaxed">
                 Your API key connects directly to the provider. 4DA never stores or proxies your key remotely.
               </p>
@@ -299,9 +305,11 @@ export function AIProviderSection({
               {settingsForm.provider === 'ollama' && (
                 <div className="flex items-center gap-2 mt-2">
                   <p className="text-xs text-text-muted">
+                    {/* eslint-disable i18next/no-literal-string */}
                     {ollamaStatus?.running
                       ? <span className="text-green-400">&#x2713; {t('settings.ai.ollamaRunning', { version: ollamaStatus.version, count: ollamaModels.length })}</span>
                       : <span className="text-yellow-400">&#x25cb; {t('settings.ai.ollamaNotDetected')}</span>}
+                    {/* eslint-enable i18next/no-literal-string */}
                   </p>
                   <button
                     onClick={() => checkOllamaStatus(settingsForm.baseUrl || undefined)}

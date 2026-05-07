@@ -24,7 +24,7 @@ export function useSettings() {
   const setSettingsForm = useAppStore(s => s.setSettingsFormFull);
 
   useEffect(() => {
-    loadSettings();
+    void loadSettings();
   }, [loadSettings]);
 
   return {

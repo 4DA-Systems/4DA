@@ -188,7 +188,7 @@ export function AuditLogViewer() {
           <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)} aria-label={t('enterprise.audit.fromDate', 'From date')} className={dateCls} />
           <span className="text-[10px] text-text-muted">&ndash;</span>
           <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)} aria-label={t('enterprise.audit.toDate', 'To date')} className={dateCls} />
-          <button onClick={handleExport} className="px-3 py-1.5 text-xs font-medium text-success border border-success/30 rounded hover:bg-success/10 transition-colors">
+          <button onClick={() => { void handleExport(); }} className="px-3 py-1.5 text-xs font-medium text-success border border-success/30 rounded hover:bg-success/10 transition-colors">
             {t('enterprise.audit.exportCsv', 'Export CSV')}
           </button>
         </div>

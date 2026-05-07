@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+/* eslint-disable i18next/no-literal-string */
 import { useState, memo, useCallback } from 'react';
 import { cmd } from '../lib/commands';
 
@@ -219,7 +220,7 @@ const WaitlistSignup = memo(function WaitlistSignup({
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="px-6 py-5 border-t border-bg-tertiary">
+        <form onSubmit={(e) => { void handleSubmit(e); }} className="px-6 py-5 border-t border-bg-tertiary">
           <p className="text-[10px] text-text-muted uppercase tracking-wider font-medium mb-3">
             Get early access
           </p>

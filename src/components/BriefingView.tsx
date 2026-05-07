@@ -60,9 +60,9 @@ export const BriefingView = memo(function BriefingView() {
 
   const { isPro } = useLicense();
 
-  const handleSave = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'save', it), [recordInteraction]);
-  const handleDismiss = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'dismiss', it), [recordInteraction]);
-  const handleRecordClick = useCallback((it: SourceRelevance) => recordInteraction(it.id, 'click', it), [recordInteraction]);
+  const handleSave = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'save', it); }, [recordInteraction]);
+  const handleDismiss = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'dismiss', it); }, [recordInteraction]);
+  const handleRecordClick = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'click', it); }, [recordInteraction]);
 
   // Listen for standing query matches
   useEffect(() => {
@@ -78,13 +78,13 @@ export const BriefingView = memo(function BriefingView() {
         }
       },
     );
-    return () => { unlisten.then(fn => fn()); };
+    return () => { void unlisten.then(fn => fn()); };
   }, [addToast, t]);
 
   // Auto-generate free briefing when analysis completes
   useEffect(() => {
     if (analysisComplete && results.length > 0 && !freeBriefing && !freeBriefingLoading) {
-      generateFreeBriefing();
+      void generateFreeBriefing();
     }
   }, [analysisComplete, results.length, freeBriefing, freeBriefingLoading, generateFreeBriefing]);
 
@@ -244,7 +244,7 @@ export const BriefingView = memo(function BriefingView() {
                         <div className="min-w-0 flex-1">
                           {item.url ? (
                             <button
-                              onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => window.open(item.url!, '_blank', 'noopener,noreferrer'))}
+                              onClick={() => { void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(item.url!)).catch(() => window.open(item.url!, '_blank', 'noopener,noreferrer')); }}
                               aria-label={`${t('feedback.openLink')}: ${item.title}`}
                               className="text-xs text-white hover:text-text-secondary text-start transition-colors leading-snug"
                             >
@@ -288,7 +288,7 @@ export const BriefingView = memo(function BriefingView() {
             <div className="px-5 py-3 border-t border-border flex items-center justify-between">
               <span className="text-[10px] font-mono text-text-muted">{t('briefing.signalsAnalyzed', { count: freeBriefing.total_items })}</span>
               <button
-                onClick={generateBriefing}
+                onClick={() => { void generateBriefing(); }}
                 aria-label={t('briefing.generateAI')}
                 className="px-3 py-1.5 text-xs bg-orange-500/10 text-orange-400 border border-orange-500/20 rounded-lg hover:bg-orange-500/20 transition-all font-medium"
               >
@@ -362,7 +362,7 @@ export const BriefingView = memo(function BriefingView() {
     }
 
     if (analysisComplete && results.length > 0) return <BriefingReadyState />;
-    return <BriefingWarmupState onAnalyze={startAnalysis} />;
+    return <BriefingWarmupState onAnalyze={() => { void startAnalysis(); }} />;
   }
 
   // Main view: Intelligence Hierarchy (3 zones)
@@ -394,7 +394,7 @@ export const BriefingView = memo(function BriefingView() {
           <div className="flex flex-col items-center justify-center gap-3 text-center">
             <p className="text-text-secondary text-sm">{t('error.generic')}</p>
             <button
-              onClick={generateBriefing}
+              onClick={() => { void generateBriefing(); }}
               className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"
               aria-label="Retry generating briefing"
             >

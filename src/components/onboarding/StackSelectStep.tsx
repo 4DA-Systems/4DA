@@ -32,7 +32,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
   // Load profiles and auto-detect on mount
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const [profileList, detected] = await Promise.all([
           cmd('get_stack_profiles'),

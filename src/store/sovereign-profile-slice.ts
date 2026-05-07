@@ -73,8 +73,8 @@ export const createSovereignProfileSlice: StateCreator<AppStore, [], [], Soverei
   saveFact: async (category: string, key: string, value: string) => {
     try {
       await cmd('save_sovereign_fact', { category, key, value });
-      get().loadSovereignProfile();
-      get().loadProfileCompleteness();
+      void get().loadSovereignProfile();
+      void get().loadProfileCompleteness();
     } catch { /* non-fatal */ }
   },
 

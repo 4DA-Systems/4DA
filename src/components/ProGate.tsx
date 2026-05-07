@@ -94,7 +94,7 @@ export function ProGate({ children, feature }: ProGateProps) {
             </a>
             {canStartTrial && (
               <button
-                onClick={handleStartTrial}
+                onClick={() => { void handleStartTrial(); }}
                 disabled={starting}
                 className="px-5 py-2 text-sm font-medium text-text-secondary border border-gray-600 rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50"
               >
@@ -118,11 +118,11 @@ export function ProGate({ children, feature }: ProGateProps) {
                     value={licenseKey}
                     onChange={e => setLicenseKey(e.target.value)}
                     placeholder="4DA-xxxxx.xxxxx"
-                    onKeyDown={e => e.key === 'Enter' && handleActivate()}
+                    onKeyDown={e => { if (e.key === 'Enter') void handleActivate(); }}
                     className="flex-1 bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-text-muted focus:border-accent-gold focus:outline-none font-mono"
                   />
                   <button
-                    onClick={handleActivate}
+                    onClick={() => { void handleActivate(); }}
                     disabled={activating || !licenseKey.trim()}
                     className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:bg-border hover:text-white transition-colors disabled:opacity-50"
                   >

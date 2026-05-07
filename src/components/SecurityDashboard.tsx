@@ -210,7 +210,8 @@ const SecurityDashboard = memo(function SecurityDashboard() {
         {isEmpty ? (
           <div className="bg-success/5 rounded-lg border border-success/20 p-6 text-center">
             <div className="w-10 h-10 mx-auto mb-3 bg-success/10 rounded-full flex items-center justify-center">
-              <span className="text-success text-lg">&#x2713;</span>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+            <span className="text-success text-lg">&#x2713;</span>
             </div>
             <p className="text-sm text-success">
               {configured

@@ -10,7 +10,9 @@ interface ValidationFeedbackProps {
 /** Inline validation feedback for source addition — shows status, errors, or discovered feeds. */
 export function ValidationFeedback({ validating, result, onTryFeed }: ValidationFeedbackProps) {
   if (validating) {
-    return <div className="text-xs text-[#8A8A8A] mt-1 animate-pulse">Validating...</div>;
+    return (
+      <div className="text-xs text-[#8A8A8A] mt-1 animate-pulse">Validating...</div>
+    );
   }
 
   if (!result) return null;
@@ -20,6 +22,7 @@ export function ValidationFeedback({ validating, result, onTryFeed }: Validation
     const count = result.item_count ?? result.video_count ?? 0;
     const unit = result.video_count != null ? 'videos' : 'items';
     return (
+      // eslint-disable-next-line i18next/no-literal-string
       <div className="text-xs mt-1 text-[#22C55E]">
         Found: {label} — {count} {unit}
       </div>
@@ -31,6 +34,7 @@ export function ValidationFeedback({ validating, result, onTryFeed }: Validation
       <span>{result.message || 'Validation failed'}</span>
       {result.discovered_feeds && result.discovered_feeds.length > 0 && (
         <div className="mt-1 space-y-0.5">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <span className="text-[#8A8A8A]">Discovered feeds:</span>
           {result.discovered_feeds.map((feed) => (
             <button

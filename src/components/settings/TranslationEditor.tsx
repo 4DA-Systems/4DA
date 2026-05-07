@@ -147,7 +147,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
     } catch { /* non-critical */ }
   }, [language]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   const filteredEntries = useMemo(() => {
     return Object.entries(entries)
@@ -202,6 +202,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
     <div style={s.container}>
       {/* Header */}
       <div style={s.header}>
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <div style={s.icon}>Aa</div>
         <div>
           <h3 style={s.title}>{t('settings.translations.title')}</h3>
@@ -232,7 +233,7 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
             {ns === 'all' ? t('settings.translations.allNamespaces') : ns}
           </button>
         ))}
-        <button onClick={handleAutoTranslate} disabled={translating || pct === 100}
+        <button onClick={() => { void handleAutoTranslate(); }} disabled={translating || pct === 100}
           aria-label={translating ? t('settings.translations.translating') : t('settings.translations.autoTranslate')}
           style={{ ...s.auto, ...(translating || pct === 100 ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}>
           {translating ? t('settings.translations.translating') : t('settings.translations.autoTranslate')}
@@ -257,8 +258,8 @@ export function TranslationEditor({ language }: TranslationEditorProps) {
               {isEditing ? (
                 <>
                   {/* eslint-disable-next-line jsx-a11y/no-autofocus -- intentional: focus edit input when user clicks to edit a translation */}
-                  <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} style={s.editInput} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }} />
-                  <button onClick={handleSave} aria-label={t('settings.translations.save')}
+                  <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} style={s.editInput} autoFocus onKeyDown={(e) => { if (e.key === 'Enter') void handleSave(); if (e.key === 'Escape') handleCancel(); }} />
+                  <button onClick={() => { void handleSave(); }} aria-label={t('settings.translations.save')}
                     style={{ ...s.btn, borderColor: ACCENT.success, color: ACCENT.success }}>
                     {t('action.save')}
                   </button>

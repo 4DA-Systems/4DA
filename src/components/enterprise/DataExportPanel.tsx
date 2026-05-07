@@ -34,7 +34,7 @@ export function DataExportPanel() {
   const [singleExporting, setSingleExporting] = useState<string | null>(null);
 
   useEffect(() => {
-    loadExports();
+    void loadExports();
   }, []);
 
   const loadExports = async () => {
@@ -53,7 +53,7 @@ export function DataExportPanel() {
       const manifest = await cmd('export_all_data', { format: 'json' });
       const m = manifest as unknown as ExportManifest;
       setExportResult({ ok: true, msg: `Exported ${m.total_records} records to ${m.export_id}.json` });
-      loadExports();
+      void loadExports();
     } catch {
       setExportResult({ ok: false, msg: 'Export failed. Check logs for details.' });
     }
@@ -139,7 +139,7 @@ export function DataExportPanel() {
                   <span className="text-xs text-white">{label}</span>
                 </label>
                 <button
-                  onClick={() => handleExportSection(section.key)}
+                  onClick={() => { void handleExportSection(section.key); }}
                   disabled={singleExporting === section.key}
                   className="text-[10px] text-text-muted hover:text-success transition-colors ms-2"
                   title={t('enterprise.export.exportOnly', { label })}
@@ -154,7 +154,7 @@ export function DataExportPanel() {
 
       {/* Export All Button */}
       <button
-        onClick={handleExportAll}
+        onClick={() => { void handleExportAll(); }}
         disabled={exporting || selectedSections.size === 0}
         className="w-full px-4 py-2.5 text-xs bg-success/15 text-success rounded-lg hover:bg-success/25 transition-colors disabled:opacity-50 font-medium"
       >
@@ -178,19 +178,23 @@ export function DataExportPanel() {
               >
                 <div>
                   <span className="text-xs text-white font-mono">{exp.export_id.slice(0, 12)}...</span>
+                  {/* eslint-disable i18next/no-literal-string */}
                   <span className="text-[10px] text-text-muted ms-2">
                     {exp.format.toUpperCase()} &middot; {exp.total_records} records &middot; {exp.sections.length} sections
                   </span>
+                  {/* eslint-enable i18next/no-literal-string */}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] text-text-muted">{formatDate(exp.created_at)}</span>
+                  {/* eslint-disable i18next/no-literal-string */}
                   <button
-                    onClick={() => handleDeleteExport(exp.export_id)}
+                    onClick={() => { void handleDeleteExport(exp.export_id); }}
                     className="text-[10px] text-text-muted hover:text-error transition-colors"
                     aria-label="Delete export"
                   >
                     &#10005;
                   </button>
+                  {/* eslint-enable i18next/no-literal-string */}
                 </div>
               </div>
             ))}

@@ -74,7 +74,7 @@ export function TeamOnboardingWizard() {
 
   const handleCopyInvite = () => {
     if (inviteCode) {
-      navigator.clipboard.writeText(inviteCode);
+      void navigator.clipboard.writeText(inviteCode);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -158,7 +158,7 @@ export function TeamOnboardingWizard() {
               onChange={e => setDisplayName(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
               placeholder="e.g. Alice"
-              onKeyDown={e => e.key === 'Enter' && handleCreateTeam()}
+              onKeyDown={e => { if (e.key === 'Enter') void handleCreateTeam(); }}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -169,7 +169,7 @@ export function TeamOnboardingWizard() {
               {t('action.back', 'Back')}
             </button>
             <button
-              onClick={handleCreateTeam}
+              onClick={() => { void handleCreateTeam(); }}
               disabled={!displayName.trim() || creating}
               className="px-4 py-2 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
             >
@@ -199,7 +199,7 @@ export function TeamOnboardingWizard() {
               <option value="admin">{t('team.roles.admin', 'Admin')}</option>
             </select>
             <button
-              onClick={handleGenerateInvite}
+              onClick={() => { void handleGenerateInvite(); }}
               className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
             >
               {t('enterprise.wizard.generateInvite', 'Generate Invite Code')}

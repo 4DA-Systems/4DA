@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+/* eslint-disable i18next/no-literal-string */
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
@@ -45,7 +46,7 @@ export function SsoConfigPanel() {
   });
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   const loadData = async () => {
@@ -171,7 +172,7 @@ export function SsoConfigPanel() {
               )}
             </div>
             <button
-              onClick={handleLogout}
+              onClick={() => { void handleLogout(); }}
               className="text-[10px] text-text-muted hover:text-error transition-colors"
             >
               {t('enterprise.sso.logout', 'Sign Out')}
@@ -279,7 +280,7 @@ export function SsoConfigPanel() {
           {/* Actions */}
           <div className="flex items-center gap-2">
             <button
-              onClick={handleSave}
+              onClick={() => { void handleSave(); }}
               disabled={!form.idp_url.trim() || saving}
               className="px-3 py-1.5 text-xs bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
             >
@@ -312,7 +313,7 @@ export function SsoConfigPanel() {
                 <div className="flex items-center gap-2">
                   {!session && config.enabled && (
                     <button
-                      onClick={handleLogin}
+                      onClick={() => { void handleLogin(); }}
                       className="text-[10px] px-2.5 py-1 bg-success/15 text-success rounded hover:bg-success/25 transition-colors"
                     >
                       {t('enterprise.sso.signIn', 'Sign In with SSO')}

@@ -69,6 +69,7 @@ export function CommunityIntelligenceSection() {
         <div>
           <h3 className="text-white font-medium text-sm">
             {t('settings.community.title', 'Community Intelligence')}
+            {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="ml-2 text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded-full font-medium uppercase tracking-wider">Coming soon</span>
           </h3>
           <p className="text-text-muted text-xs">

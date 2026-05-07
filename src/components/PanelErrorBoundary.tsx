@@ -46,6 +46,7 @@ export class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, Panel
             <p className="text-xs text-text-muted mt-1">{this.state.errorMessage}</p>
           )}
           {this.props.name === 'AI Provider' && (
+            // eslint-disable-next-line i18next/no-literal-string
             <p className="text-xs text-text-muted mt-1.5">
               Check that an API key is configured in Settings &gt; General &gt; AI Provider.
             </p>

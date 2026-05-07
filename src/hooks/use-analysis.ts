@@ -91,7 +91,7 @@ export function useAnalysis(
           const { monitoring } = useAppStore.getState();
           if (monitoring && !monitoring.enabled && relevantCount > 0) {
             void cmd('set_monitoring_enabled', { enabled: true }).then(() => {
-              useAppStore.getState().loadMonitoringStatus();
+              void useAppStore.getState().loadMonitoringStatus();
             }).catch((e) => console.debug('[analysis] auto-enable monitoring:', e));
           }
         }),
@@ -137,7 +137,7 @@ export function useAnalysis(
         }),
 
         listen('start-analysis-from-tray', () => {
-          useAppStore.getState().startAnalysis();
+          void useAppStore.getState().startAnalysis();
         }),
 
         // Custom notification clicked — navigate to briefing/signals view

@@ -33,7 +33,7 @@ function CloseToTrayToggle({ initialValue }: { initialValue: boolean }) {
         <p className="text-xs text-text-muted">{t('settings.monitoring.closeToTrayDescription')}</p>
       </div>
       <button
-        onClick={toggle}
+        onClick={() => { void toggle(); }}
         className={`relative w-10 h-5 rounded-full transition-colors ${
           enabled ? 'bg-green-500/40' : 'bg-gray-600'
         }`}
@@ -88,7 +88,7 @@ function LaunchAtStartupToggle() {
         )}
       </div>
       <button
-        onClick={toggle}
+        onClick={() => { void toggle(); }}
         className={`relative w-10 h-5 rounded-full transition-colors ${
           enabled ? 'bg-green-500/40' : 'bg-gray-600'
         }`}
@@ -163,7 +163,7 @@ function MorningBriefingSection() {
           </p>
         </div>
         <button
-          onClick={toggleBriefing}
+          onClick={() => { void toggleBriefing(); }}
           className={`relative w-10 h-5 rounded-full transition-colors ${
             enabled ? 'bg-green-500/40' : 'bg-gray-600'
           }`}
@@ -184,11 +184,11 @@ function MorningBriefingSection() {
           <input
             type="time"
             value={time}
-            onChange={(e) => updateTime(e.target.value)}
+            onChange={(e) => { void updateTime(e.target.value); }}
             className="px-2 py-1 bg-bg-primary border border-border rounded text-sm text-white focus:border-orange-500 focus:outline-none"
           />
           <button
-            onClick={previewBriefing}
+            onClick={() => { void previewBriefing(); }}
             disabled={previewing}
             className="ms-auto px-3 py-1 text-xs bg-bg-primary border border-border text-text-secondary rounded hover:text-white hover:border-orange-500/30 transition-all disabled:opacity-50"
           >
@@ -267,6 +267,7 @@ export function MonitoringSection({
               className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white text-center focus:border-orange-500 focus:outline-none"
             />
             <span className="text-sm text-text-secondary">{t('settings.monitoring.minutes')}</span>
+            {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-xs text-text-muted">5 min – 24 hr</span>
             <button
               onClick={onUpdateInterval}

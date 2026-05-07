@@ -198,7 +198,7 @@ export const SovereignDeveloperProfile = memo(function SovereignDeveloperProfile
     <div className="bg-bg-secondary rounded-lg border border-red-500/30 p-6 text-center">
       <p className="text-sm text-red-400 mb-3">{t('profile.loadFailed')}</p>
       <button
-        onClick={loadProfile}
+        onClick={() => { void loadProfile(); }}
         className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
       >
         {t('action.retry')}

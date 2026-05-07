@@ -84,7 +84,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
     return (
       <div className="score-autopsy-trigger">
         <button
-          onClick={runAutopsy}
+          onClick={() => { void runAutopsy(); }}
           disabled={loading}
           aria-label={t('autopsy.title')}
           className="autopsy-button px-3 py-1.5 text-xs bg-bg-secondary text-text-primary border border-border rounded hover:bg-bg-tertiary transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
@@ -241,6 +241,7 @@ export const ScoreAutopsy: React.FC<ScoreAutopsyProps> = ({
                 {similar.title}
               </div>
               <div className="similar-score flex gap-2 items-center text-xs text-text-secondary">
+                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <span>Score: {(similar.score * 100).toFixed(0)}%</span>
                 <span
                   className={`score-diff font-semibold ${

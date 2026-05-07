@@ -29,10 +29,10 @@ export function OrgDashboard() {
   const loadCrossTeamSignals = useAppStore(s => s.loadCrossTeamSignals);
 
   useEffect(() => {
-    loadOrganization();
-    loadOrgTeams();
-    loadOrgAnalytics();
-    loadCrossTeamSignals();
+    void loadOrganization();
+    void loadOrgTeams();
+    void loadOrgAnalytics();
+    void loadCrossTeamSignals();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -79,7 +79,7 @@ export function OrgDashboard() {
           </span>
         </div>
         <button
-          onClick={() => { loadOrganization(); loadOrgTeams(); loadOrgAnalytics(); loadCrossTeamSignals(); }}
+          onClick={() => { void loadOrganization(); void loadOrgTeams(); void loadOrgAnalytics(); void loadCrossTeamSignals(); }}
           className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
           aria-label="Refresh organization data"
         >

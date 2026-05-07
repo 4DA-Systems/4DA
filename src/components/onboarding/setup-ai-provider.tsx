@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+/* eslint-disable i18next/no-literal-string */
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -83,7 +84,7 @@ export function SetupAIProvider({
                 Anthropic: {envDetection.anthropic_env_preview}
               </span>
               <button
-                onClick={() => handleImportEnvKey('anthropic')}
+                onClick={() => { void handleImportEnvKey('anthropic'); }}
                 disabled={importing}
                 className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
@@ -97,7 +98,7 @@ export function SetupAIProvider({
                 OpenAI: {envDetection.openai_env_preview}
               </span>
               <button
-                onClick={() => handleImportEnvKey('openai')}
+                onClick={() => { void handleImportEnvKey('openai'); }}
                 disabled={importing}
                 className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
@@ -153,7 +154,7 @@ export function SetupAIProvider({
               {t('onboarding.apiKeys.pullWaitMessage')}
             </p>
             <button
-              onClick={() => cmd('cancel_ollama_pull')}
+              onClick={() => { void cmd('cancel_ollama_pull'); }}
               className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
             >
               Cancel Download

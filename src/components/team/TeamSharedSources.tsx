@@ -27,7 +27,7 @@ export function TeamSharedSources() {
   const [newRecommendation, setNewRecommendation] = useState('');
 
   useEffect(() => {
-    loadSharedSources();
+    void loadSharedSources();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,10 +80,10 @@ export function TeamSharedSources() {
             onChange={e => setNewRecommendation(e.target.value)}
             placeholder={t('team.sources.whyRecommend', 'Why is this source valuable?')}
             className="w-full px-2 py-1.5 text-xs bg-bg-primary border border-border rounded text-white focus:outline-none focus:border-success/50"
-            onKeyDown={e => e.key === 'Enter' && handleShare()}
+            onKeyDown={e => { if (e.key === 'Enter') void handleShare(); }}
           />
           <button
-            onClick={handleShare}
+            onClick={() => { void handleShare(); }}
             disabled={!newRecommendation.trim()}
             className="text-[10px] px-3 py-1.5 bg-success/15 text-success rounded hover:bg-success/25 transition-colors disabled:opacity-50"
           >
@@ -119,22 +119,25 @@ export function TeamSharedSources() {
               <div className="flex items-center gap-2 shrink-0">
                 {/* Upvote */}
                 <button
-                  onClick={() => upvoteSource(source.id)}
+                  onClick={() => { void upvoteSource(source.id); }}
                   className="flex items-center gap-1 text-[10px] text-text-muted hover:text-accent-gold transition-colors"
                   aria-label={`Upvote ${source.source_type}`}
                 >
+                  {/* eslint-disable-next-line i18next/no-literal-string */}
                   <span>&#9650;</span>
                   <span>{source.upvotes}</span>
                 </button>
 
                 {/* Remove */}
+                {/* eslint-disable i18next/no-literal-string */}
                 <button
-                  onClick={() => removeSharedSource(source.id)}
+                  onClick={() => { void removeSharedSource(source.id); }}
                   className="text-[10px] text-text-muted hover:text-error transition-colors"
                   aria-label={`Remove ${source.source_type}`}
                 >
                   &#10005;
                 </button>
+                {/* eslint-enable i18next/no-literal-string */}
               </div>
             </div>
           ))}

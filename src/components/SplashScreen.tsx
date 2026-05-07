@@ -151,6 +151,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
           animation: 'pulse 2s ease-in-out infinite',
         }}>
+          {/* eslint-disable i18next/no-literal-string */}
           {!imageError ? (
             <img
               src={sunLogo}
@@ -171,6 +172,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
               ☀️
             </div>
           )}
+          {/* eslint-enable i18next/no-literal-string */}
         </div>
         {/* Spinning ring around logo */}
         <div style={{
@@ -184,6 +186,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       </div>
 
       {/* Brand Name */}
+      {/* eslint-disable i18next/no-literal-string */}
       <h1 style={{
         fontSize: '2.5rem',
         fontWeight: 600,
@@ -193,6 +196,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       }}>
         4DA
       </h1>
+      {/* eslint-enable i18next/no-literal-string */}
 
       {/* Tagline */}
       <p style={{
@@ -259,6 +263,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
           }} />
         )}
         {stage === 'ready' && !error && (
+          // eslint-disable-next-line i18next/no-literal-string
           <span style={{ color: 'var(--color-success)', fontSize: '1rem' }}>✓</span>
         )}
         {error && (

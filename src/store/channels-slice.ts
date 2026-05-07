@@ -53,8 +53,8 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
 
       // Auto-load provenance and changelog
       if (render) {
-        get().loadProvenance(render.id);
-        get().loadChangelog(id);
+        void get().loadProvenance(render.id);
+        void get().loadChangelog(id);
       }
     } catch (error) {
       set({ renderLoading: false, renderError: `${error}` });
@@ -68,12 +68,12 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
       set({ activeRender: render, renderLoading: false });
 
       // Reload channels list to update freshness badges
-      get().loadChannels();
+      void get().loadChannels();
 
       // Load provenance and changelog for new render
       if (render) {
-        get().loadProvenance(render.id);
-        get().loadChangelog(id);
+        void get().loadProvenance(render.id);
+        void get().loadChangelog(id);
       }
     } catch (error) {
       set({ renderLoading: false, renderError: `${error}` });
@@ -102,7 +102,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
     try {
       await cmd('refresh_channel_sources', { channelId });
       // Reload channels to update source counts
-      get().loadChannels();
+      void get().loadChannels();
     } catch {
       // Silently ignore
     }
@@ -110,7 +110,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
 
   createChannel: async (slug, title, description, topicQuery) => {
     await cmd('create_custom_channel', { slug, title, description, topicQuery });
-    get().loadChannels();
+    void get().loadChannels();
   },
 
   deleteChannel: async (channelId) => {
@@ -119,6 +119,6 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
     if (state.activeChannelId === channelId) {
       set({ activeChannelId: null, activeRender: null });
     }
-    get().loadChannels();
+    void get().loadChannels();
   },
 });

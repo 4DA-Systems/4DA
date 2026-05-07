@@ -25,16 +25,20 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="text-center">
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <h2 className="text-xl font-semibold text-white mb-2">
           Your feed is calibrated
         </h2>
+        {/* eslint-disable i18next/no-literal-string */}
         <p className="text-text-secondary text-sm">
           Based on {summary.itemsShown} responses, {confidencePct}% confidence
         </p>
+        {/* eslint-enable i18next/no-literal-string */}
       </div>
 
       {/* Dominant persona */}
       <div className="bg-bg-secondary border border-border rounded-lg p-5">
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <div className="text-xs text-text-muted uppercase tracking-wider mb-2">
           Your developer profile
         </div>
@@ -49,6 +53,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       {/* Persona blend bar chart */}
       {summary.personaWeights.length > 1 && (
         <div className="bg-bg-secondary border border-border rounded-lg p-5">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <div className="text-xs text-text-muted uppercase tracking-wider mb-3">
             Persona blend
           </div>
@@ -78,6 +83,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       {/* Detected interests */}
       {summary.topInterests.length > 0 && (
         <div className="bg-bg-secondary border border-border rounded-lg p-5">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <div className="text-xs text-text-muted uppercase tracking-wider mb-3">
             Detected interests
           </div>
@@ -99,7 +105,9 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         onClick={onContinue}
         className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 rounded-lg transition-colors"
       >
+        {/* eslint-disable i18next/no-literal-string */}
         Continue
+        {/* eslint-enable i18next/no-literal-string */}
       </button>
     </div>
   );

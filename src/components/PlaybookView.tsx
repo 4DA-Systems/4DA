@@ -59,15 +59,15 @@ export const PlaybookView = memo(function PlaybookView() {
 
   // Load modules, progress, and streets tier on mount
   useEffect(() => {
-    loadModules();
-    loadProgress();
-    loadStreetsTier();
+    void loadModules();
+    void loadProgress();
+    void loadStreetsTier();
   }, [loadModules, loadProgress, loadStreetsTier]);
 
   const handleModuleClick = useCallback(
     (moduleId: string) => {
       setShowTemplates(false);
-      loadContent(moduleId);
+      void loadContent(moduleId);
     },
     [loadContent],
   );
@@ -104,7 +104,7 @@ export const PlaybookView = memo(function PlaybookView() {
       const mod = progress?.modules.find((m) => m.module_id === moduleId);
       const wasComplete = mod?.completed_lessons.includes(lessonIdx) ?? false;
 
-      markComplete(moduleId, lessonIdx);
+      void markComplete(moduleId, lessonIdx);
 
       // Show learning narrative toast when completing a lesson
       if (!wasComplete) {
@@ -136,7 +136,7 @@ export const PlaybookView = memo(function PlaybookView() {
       const key = `${moduleId}:${idx}`;
       if (!personalizedLessons[key] && !requestedKeysRef.current.has(key)) {
         requestedKeysRef.current.add(key);
-        loadPersonalized(moduleId, idx);
+        void loadPersonalized(moduleId, idx);
       }
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only fire on module content change, not on personalizedLessons updates
@@ -165,7 +165,7 @@ export const PlaybookView = memo(function PlaybookView() {
     });
 
     return () => {
-      unlisten.then((fn) => fn());
+      void unlisten.then((fn) => fn());
     };
   }, []);
 
@@ -207,9 +207,9 @@ export const PlaybookView = memo(function PlaybookView() {
             {!isBrowserMode && (
               <button
                 onClick={() => {
-                  loadModules();
-                  loadProgress();
-                  loadStreetsTier();
+                  void loadModules();
+                  void loadProgress();
+                  void loadStreetsTier();
                 }}
                 aria-label={t('action.retry')}
                 className="px-3 py-1.5 text-xs bg-bg-tertiary hover:bg-white/10 rounded transition-colors text-text-secondary"

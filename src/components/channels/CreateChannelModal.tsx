@@ -272,7 +272,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
             {t('action.cancel')}
           </button>
           <button
-            onClick={handleSubmit}
+            onClick={() => { void handleSubmit(); }}
             disabled={!canSubmit}
             aria-label={submitting ? t('action.loading') : t('channels.create')}
             className="px-4 py-2 text-sm font-medium text-black bg-white rounded-lg hover:bg-white/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"

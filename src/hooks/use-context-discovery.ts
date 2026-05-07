@@ -19,7 +19,7 @@ export function useContextDiscovery(_onStatusChange?: (status: string) => void) 
   const removeScanDirectory = useAppStore(s => s.removeScanDirectory);
 
   useEffect(() => {
-    loadDiscoveredContext();
+    void loadDiscoveredContext();
   }, [loadDiscoveredContext]);
 
   return {

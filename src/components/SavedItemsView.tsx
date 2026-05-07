@@ -40,7 +40,7 @@ export function SavedItemsView() {
     }
   }, []);
 
-  useEffect(() => { loadItems(); }, [loadItems]);
+  useEffect(() => { void loadItems(); }, [loadItems]);
 
   // Request content translation for saved items
   useEffect(() => {
@@ -65,7 +65,7 @@ export function SavedItemsView() {
       addToast('success', t('saved.itemRemoved'));
     } catch (e) {
       // Revert on failure
-      loadItems();
+      void loadItems();
       addToast('error', `Failed to remove: ${translateError(e)}`);
     }
   }, [addToast, setFeedbackGivenFull, loadItems, t]);
@@ -83,7 +83,7 @@ export function SavedItemsView() {
       <div role="alert" className="bg-bg-secondary rounded-lg border border-red-500/30 p-6 text-center">
         <p className="text-sm text-red-400 mb-3">{error}</p>
         <button
-          onClick={loadItems}
+          onClick={() => { void loadItems(); }}
           aria-label={t('action.retry')}
           className="px-3 py-1.5 text-xs bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
         >
@@ -109,7 +109,7 @@ export function SavedItemsView() {
       <div className="flex items-center justify-between mb-4">
         <span className="text-xs text-text-muted">{t('saved.count', { count: items.length })}</span>
         <button
-          onClick={loadItems}
+          onClick={() => { void loadItems(); }}
           aria-label={t('action.refresh')}
           className="text-[10px] text-text-muted hover:text-text-secondary transition-colors"
         >
@@ -170,7 +170,7 @@ export function SavedItemsView() {
                         {item.url && (
                           <button
                             onClick={() => {
-                              window.navigator.clipboard.writeText(item.url!);
+                              void window.navigator.clipboard.writeText(item.url!);
                               setCopiedId(item.item_id);
                               setTimeout(() => setCopiedId(prev => prev === item.item_id ? null : prev), 2000);
                             }}
@@ -185,7 +185,7 @@ export function SavedItemsView() {
 
                     {/* Remove button */}
                     <button
-                      onClick={() => handleRemove(item.item_id)}
+                      onClick={() => { void handleRemove(item.item_id); }}
                       aria-label={`${t('saved.remove')} ${item.title}`}
                       className="flex-shrink-0 text-[10px] px-2 py-1 rounded text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
                     >

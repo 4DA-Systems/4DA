@@ -43,7 +43,7 @@ export function SignalUpgradeCTA({ compact }: SignalUpgradeCTAProps) {
       </a>
       {canStartTrial && (
         <button
-          onClick={handleStartTrial}
+          onClick={() => { void handleStartTrial(); }}
           disabled={starting}
           className={`font-medium text-text-secondary border border-border rounded-lg hover:border-gray-400 hover:text-white transition-colors disabled:opacity-50 ${
             compact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'

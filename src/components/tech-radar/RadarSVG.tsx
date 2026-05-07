@@ -95,9 +95,11 @@ const RadarTooltip = memo(function RadarTooltip({ tooltip }: { tooltip: TooltipS
         rx="6" fill="#1F1F1F" stroke="#2A2A2A" strokeWidth="1" />
       <text x={tx + 8} y={ty + 16} fill="#FFFFFF" fontSize="11" fontWeight="600">{tooltip.entry.name}</text>
       <text x={tx + 8} y={ty + 30} fill="#A0A0A0" fontSize="9">{ringLabel} / {quadLabel}</text>
+      {/* eslint-disable i18next/no-literal-string */}
       <text x={tx + 8} y={ty + 44} fill="#8A8A8A" fontSize="9">
         Score: {tooltip.entry.score.toFixed(2)} | Movement: {tooltip.entry.movement}
       </text>
+      {/* eslint-enable i18next/no-literal-string */}
       {tooltip.entry.signals.slice(0, 3).map((signal, i) => (
         <text key={i} x={tx + 8} y={ty + 58 + i * 14} fill="#8A8A8A" fontSize="8">
           - {signal.length > 28 ? signal.slice(0, 28) + '...' : signal}

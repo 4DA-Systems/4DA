@@ -106,6 +106,7 @@ function SourceLabels({ labels, show, onToggle }: { labels: string[]; show: bool
   return (
     <div className="px-5 py-2 border-t border-border">
       <button onClick={onToggle} className="text-[10px] text-text-muted hover:text-text-secondary transition-colors">
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         {show ? '▾' : '▸'} Data Sources ({labels.length})
       </button>
       {show && (

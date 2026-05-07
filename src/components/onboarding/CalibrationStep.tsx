@@ -46,18 +46,18 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
   useEffect(() => {
     if (!hasAutoRun.current) {
       hasAutoRun.current = true;
-      runCalibration();
+      void runCalibration();
     }
   }, [runCalibration]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listen<PullProgress>('ollama-pull-progress', (event) => {
+    void listen<PullProgress>('ollama-pull-progress', (event) => {
       setPullProgress(event.payload);
       if (event.payload.done) {
         setActionInProgress(null);
         setTimeout(() => setPullProgress(null), 1500);
-        setTimeout(() => runCalibration(), 2000);
+        setTimeout(() => { void runCalibration(); }, 2000);
       }
     }).then(fn => { unlisten = fn; });
     return () => { unlisten?.(); };
@@ -192,7 +192,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                   </div>
                   {rec.action_type && (
                     <button
-                      onClick={() => handleAction(rec)}
+                      onClick={() => { void handleAction(rec); }}
                       disabled={!!actionInProgress}
                       style={{
                         padding: '3px 10px', background: actionInProgress === rec.action_type ? '#2A2A2A' : '#D4AF37',
@@ -226,6 +226,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
                 {embeddingMode === 'keyword-only'
@@ -235,6 +236,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
                 {(discoveredContext?.tech?.length ?? 0) > 0
@@ -246,6 +248,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
                 {(userContext?.interests?.length ?? 0) > 0

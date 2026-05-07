@@ -138,7 +138,7 @@ export const ContentTranslationProvider = memo(function ContentTranslationProvid
       batchQueueRef.current.push(...newItems);
 
       if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
-      batchTimerRef.current = setTimeout(flushBatch, 150);
+      batchTimerRef.current = setTimeout(() => { void flushBatch(); }, 150);
     },
     [isActive, translations, flushBatch],
   );

@@ -86,7 +86,7 @@ export const createAgentSlice: StateCreator<AppStore, [], [], AgentSlice> = (set
       }) as unknown as AgentMemoryEntry[];
       set({ agentMemories: memories });
       // Also reload decisions if available
-      get().loadDecisions();
+      void get().loadDecisions();
     } catch (error) {
       console.error('Failed to promote memory to decision:', error);
     }

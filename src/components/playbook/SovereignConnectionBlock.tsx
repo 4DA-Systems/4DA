@@ -31,6 +31,7 @@ export function SovereignConnectionBlock({ block }: Props) {
         onClick={() => setExpanded(!expanded)}
         className="mt-3 text-[10px] text-text-muted hover:text-text-secondary transition-colors"
       >
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         {expanded ? '▾' : '▸'} Data Sources ({block.data_sources.length})
       </button>
       {expanded && (

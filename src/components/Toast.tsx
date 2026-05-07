@@ -41,6 +41,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
                 {toast.action.label}
               </button>
             )}
+            {/* eslint-disable i18next/no-literal-string */}
             <button
               onClick={() => onDismiss(toast.id)}
               className="text-text-muted hover:text-text-secondary transition-colors flex-shrink-0 ms-1"
@@ -48,6 +49,7 @@ export function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
             >
               x
             </button>
+            {/* eslint-enable i18next/no-literal-string */}
           </div>
         );
       })}

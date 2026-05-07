@@ -85,7 +85,7 @@ export function PersonalizationSection() {
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
-                onClick={updateRole}
+                onClick={() => { void updateRole(); }}
                 className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-blue-500/30 transition-all"
               >
                 {t('settings.personalization.set')}
@@ -102,12 +102,12 @@ export function PersonalizationSection() {
                 aria-label={t('settings.personalization.addTech')}
                 value={newTechStack}
                 onChange={(e) => setNewTechStack(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addTechStack()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void addTechStack(); }}
                 placeholder={t('settings.personalization.techPlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-blue-500/50 focus:outline-none transition-colors"
               />
               <button
-                onClick={addTechStack}
+                onClick={() => { void addTechStack(); }}
                 className="px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-blue-500/30 transition-all"
               >
                 {t('action.add')}
@@ -121,7 +121,7 @@ export function PersonalizationSection() {
                 >
                   {tech}
                   <button
-                    onClick={() => removeTechStack(tech)}
+                    onClick={() => { void removeTechStack(tech); }}
                     aria-label={t('settings.personalization.removeTech', { name: tech })}
                     className="text-orange-400/50 hover:text-red-400 transition-colors"
                   >
@@ -147,12 +147,12 @@ export function PersonalizationSection() {
                 aria-label={t('settings.personalization.addInterest')}
                 value={newInterest}
                 onChange={(e) => setNewInterest(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addInterest()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void addInterest(); }}
                 placeholder={t('settings.personalization.interestPlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-green-500/50 focus:outline-none transition-colors"
               />
               <button
-                onClick={addInterest}
+                onClick={() => { void addInterest(); }}
                 className="px-4 py-2.5 text-sm bg-green-500/10 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/20 transition-all"
               >
                 {t('action.add')}
@@ -168,7 +168,7 @@ export function PersonalizationSection() {
                   {interest.has_embedding && <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />}
                   {interest.topic}
                   <button
-                    onClick={() => removeInterest(interest.topic)}
+                    onClick={() => { void removeInterest(interest.topic); }}
                     aria-label={t('settings.personalization.removeInterest', { name: interest.topic })}
                     className="text-green-400/50 hover:text-red-400 transition-colors"
                   >
@@ -198,14 +198,14 @@ export function PersonalizationSection() {
                     </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button
-                        onClick={() => handleAddSuggestion(suggestion.topic)}
+                        onClick={() => { void handleAddSuggestion(suggestion.topic); }}
                         aria-label={t('settings.personalization.addSuggestion', { name: suggestion.topic })}
                         className="text-xs px-2 py-0.5 rounded bg-border text-success hover:bg-[#333] transition-colors"
                       >
                         {t('action.add')}
                       </button>
                       <button
-                        onClick={() => handleDismissSuggestion(suggestion.topic)}
+                        onClick={() => { void handleDismissSuggestion(suggestion.topic); }}
                         aria-label={t('settings.personalization.dismissSuggestion', { name: suggestion.topic })}
                         className="text-xs px-2 py-0.5 rounded bg-border text-text-muted hover:bg-[#333] transition-colors"
                       >
@@ -230,12 +230,12 @@ export function PersonalizationSection() {
                 aria-label={t('settings.personalization.addExclusion')}
                 value={newExclusion}
                 onChange={(e) => setNewExclusion(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addExclusion()}
+                onKeyDown={(e) => { if (e.key === 'Enter') void addExclusion(); }}
                 placeholder={t('settings.personalization.exclusionPlaceholder')}
                 className="flex-1 px-3 py-2.5 bg-bg-secondary border border-border rounded-lg text-sm text-white placeholder:text-text-muted focus:border-red-500/50 focus:outline-none transition-colors"
               />
               <button
-                onClick={addExclusion}
+                onClick={() => { void addExclusion(); }}
                 className="px-4 py-2.5 text-sm bg-red-500/10 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-all"
               >
                 {t('settings.personalization.block')}
@@ -249,7 +249,7 @@ export function PersonalizationSection() {
                 >
                   {exclusion}
                   <button
-                    onClick={() => removeExclusion(exclusion)}
+                    onClick={() => { void removeExclusion(exclusion); }}
                     aria-label={t('settings.personalization.removeExclusion', { name: exclusion })}
                     className="text-red-400/50 hover:text-white transition-colors"
                   >

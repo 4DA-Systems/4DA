@@ -153,7 +153,7 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
-  useEffect(() => { registerFourdaComponent('fourda-simplex-unfold'); }, []);
+  useEffect(() => { void registerFourdaComponent('fourda-simplex-unfold'); }, []);
 
   // Estimated time remaining — initialized from parent's source-count estimate
   // Uses a ref-based counter to avoid infinite timer chains in test environments

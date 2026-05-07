@@ -2,6 +2,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
+/* eslint-disable i18next/no-literal-string */
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -58,7 +59,7 @@ export const FrameworkPage = memo(function FrameworkPage({ onClose }: FrameworkP
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/framework'))}
+            onClick={() => { void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl('https://4da.ai/framework')); }}
             className="px-3 py-1.5 text-xs text-text-secondary hover:text-white border border-border rounded-lg hover:border-orange-500/30 transition-all"
           >
             Open on 4da.ai

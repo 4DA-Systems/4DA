@@ -98,8 +98,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
   // General + Intelligence tabs load on mount
   useEffect(() => {
-    loadSettings();
-    loadMonitoringStatus();
+    void loadSettings();
+    void loadMonitoringStatus();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
@@ -108,7 +108,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     if (initialized.has(tab)) return;
     setInitialized(prev => new Set(prev).add(tab));
     switch (tab) {
-      case 'projects': loadDiscoveredContext(); loadUserContext(); loadSuggestedInterests(); break;
+      case 'projects': void loadDiscoveredContext(); void loadUserContext(); void loadSuggestedInterests(); break;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable store actions
   }, [initialized]);
@@ -153,6 +153,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <span aria-hidden="true">&#x2699;&#xfe0f;</span>
               </div>
               <h2 id="settings-modal-title" className="text-lg font-medium text-white">{t('settings.title')}</h2>
@@ -187,8 +188,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               monitoring={monitoring}
               monitoringInterval={monitoringInterval}
               setMonitoringInterval={setMonitoringInterval}
-              onToggleMonitoring={handleToggleMonitoring}
-              onUpdateInterval={handleUpdateMonitoringInterval}
+              onToggleMonitoring={() => { void handleToggleMonitoring(); }}
+              onUpdateInterval={() => { void handleUpdateMonitoringInterval(); }}
             />
             </div>
           )}
@@ -201,12 +202,12 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               setSettingsForm={setSettingsFormFull}
               ollamaStatus={ollamaStatus}
               ollamaModels={ollamaModels}
-              checkOllamaStatus={checkOllamaStatus}
+              checkOllamaStatus={(baseUrl?: string) => { void checkOllamaStatus(baseUrl); }}
               modelRegistry={modelRegistry}
-              onRefreshRegistry={refreshModelRegistry}
+              onRefreshRegistry={() => { void refreshModelRegistry(); }}
               setSettingsStatus={setSettingsStatus}
-              saveSettings={saveSettings}
-              testConnection={testConnection}
+              saveSettings={() => { void saveSettings(); }}
+              testConnection={() => { void testConnection(); }}
             />
             </div>
           )}
@@ -224,8 +225,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               <div className="space-y-6">
                 <PanelErrorBoundary name="Context Discovery">
                   <ContextDiscoverySection scanDirectories={scanDirectories} newScanDir={newScanDir} setNewScanDir={setNewScanDir}
-                    isScanning={isScanning} discoveredContext={discoveredContext} runAutoDiscovery={runAutoDiscovery}
-                    runFullScan={runFullScan} addScanDirectory={addScanDirectory} removeScanDirectory={removeScanDirectory} />
+                    isScanning={isScanning} discoveredContext={discoveredContext} runAutoDiscovery={() => { void runAutoDiscovery(); }}
+                    runFullScan={() => { void runFullScan(); }} addScanDirectory={() => { void addScanDirectory(); }} removeScanDirectory={(dir: string) => { void removeScanDirectory(dir); }} />
                 </PanelErrorBoundary>
                 <PanelErrorBoundary name="Indexed Documents"><IndexedDocumentsPanel onStatusChange={setSettingsStatus} /></PanelErrorBoundary>
                 <PanelErrorBoundary name="Personalization"><PersonalizationSection /></PanelErrorBoundary>
@@ -249,8 +250,10 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
         {/* Copyright */}
         <div className="px-6 pb-6">
           <div className="pt-4 border-t border-border text-center">
+            {/* eslint-disable i18next/no-literal-string */}
             <p className="text-xs text-text-muted">4DA v{__APP_VERSION__} &copy; 2025-2026 4DA Systems. All rights reserved.</p>
             <p className="text-xs text-text-muted mt-1">Licensed under FSL-1.1-Apache-2.0</p>
+            {/* eslint-enable i18next/no-literal-string */}
           </div>
         </div>
       </div>

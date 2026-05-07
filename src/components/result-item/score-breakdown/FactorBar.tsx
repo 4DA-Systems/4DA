@@ -80,7 +80,7 @@ export const FactorBar = memo(function FactorBar({
         ) : (
           <>
             <button
-              onClick={() => handleFeedback('up')}
+              onClick={() => { void handleFeedback('up'); }}
               className="text-[10px] text-text-muted hover:text-green-400 transition-colors px-0.5"
               title="This factor was relevant"
               aria-label={`${factorLabel} was relevant`}
@@ -88,7 +88,7 @@ export const FactorBar = memo(function FactorBar({
               +
             </button>
             <button
-              onClick={() => handleFeedback('down')}
+              onClick={() => { void handleFeedback('down'); }}
               className="text-[10px] text-text-muted hover:text-amber-400 transition-colors px-0.5"
               title="This factor wasn't relevant"
               aria-label={`${factorLabel} was not relevant`}

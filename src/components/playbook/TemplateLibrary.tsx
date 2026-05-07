@@ -127,7 +127,7 @@ function TemplateViewer({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={handleCopy}
+              onClick={() => { void handleCopy(); }}
               aria-label={copied ? t('action.copied') : t('action.copy')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 copied

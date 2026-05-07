@@ -37,7 +37,7 @@ export function useAppListeners({
 
   // Deep-link handler: 4da://activate?key=...
   useEffect(() => {
-    const unlisten = listen<string>('deep-link-activate', async (event) => {
+    const unlisten = listen<string>('deep-link-activate', (event) => { void (async () => {
       try {
         const url = new URL(event.payload);
         if (url.hostname === 'activate' || url.pathname === '/activate') {
@@ -55,7 +55,7 @@ export function useAppListeners({
       } catch {
         // Ignore malformed URLs
       }
-    });
+    })(); });
     return () => { void unlisten.then(fn => fn()); };
   }, [activateLicense, activateStreetsLicense, addToast]);
 

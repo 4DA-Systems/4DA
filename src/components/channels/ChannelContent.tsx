@@ -83,7 +83,7 @@ export function ChannelContent() {
           {t('channels.neverRendered')}
         </p>
         <button
-          onClick={() => activeChannelId && renderChannel(activeChannelId)}
+          onClick={() => { if (activeChannelId) void renderChannel(activeChannelId); }}
           className="px-4 py-2 text-sm bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/30 transition-colors"
         >
           {t('channels.renderNow')}
@@ -100,6 +100,7 @@ export function ChannelContent() {
           <h2 className="text-lg font-semibold text-white">
             {activeChannel ? getTranslated(`ch-title-${activeChannel.id}`, activeChannel.title) : ''}
           </h2>
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <span className="px-2 py-0.5 text-[10px] font-mono text-cyan-400 bg-cyan-500/10 rounded">
             v{activeRender.version}
           </span>
@@ -115,7 +116,7 @@ export function ChannelContent() {
           )}
         </div>
         <button
-          onClick={() => activeChannelId && renderChannel(activeChannelId)}
+          onClick={() => { if (activeChannelId) void renderChannel(activeChannelId); }}
           disabled={renderLoading}
           className="px-3 py-1.5 text-xs bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/30 transition-colors disabled:opacity-50"
         >
@@ -139,12 +140,14 @@ export function ChannelContent() {
         <span>
           {activeRender.source_item_ids.length} {t('channels.sources')}
         </span>
+        {/* eslint-disable i18next/no-literal-string */}
         {activeRender.tokens_used && (
           <span>{activeRender.tokens_used} tokens</span>
         )}
         {activeRender.latency_ms && (
           <span>{activeRender.latency_ms}ms</span>
         )}
+        {/* eslint-enable i18next/no-literal-string */}
       </div>
 
       {/* Changelog diff between versions */}

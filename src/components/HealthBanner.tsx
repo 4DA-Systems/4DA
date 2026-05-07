@@ -82,14 +82,15 @@ export function HealthBanner() {
             </span>
           )}
         </button>
+        {/* eslint-disable i18next/no-literal-string */}
         <button
           onClick={handleDismiss}
           className="text-text-muted hover:text-text-secondary text-xs px-1"
           aria-label={t('action.dismiss')}
         >
-          {/* eslint-disable-next-line i18next/no-literal-string */}
           &#10005;
         </button>
+        {/* eslint-enable i18next/no-literal-string */}
       </div>
 
       {/* Expanded details */}

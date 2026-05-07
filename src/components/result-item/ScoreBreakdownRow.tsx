@@ -57,9 +57,10 @@ export function ScoreBreakdownRow({ item, isNew, isTopPick, isHighConfidence }: 
           )}
           {item.score_breakdown.matched_deps && item.score_breakdown.matched_deps.length > 0 && (
             <span className="text-violet-400/80" title={item.score_breakdown.matched_deps.join(', ')}>
-              {t('score.deps', { count: item.score_breakdown.matched_deps.length, defaultValue: `${item.score_breakdown.matched_deps.length} deps` })}
+              {t('score.deps', { count: item.score_breakdown.matched_deps.length })}
             </span>
           )}
+          {/* eslint-disable i18next/no-literal-string */}
           {item.score_breakdown.affinity_mult > 1.05 && (
             <span className="text-pink-400/80">
               {t('score.affinity', 'affinity')} x{item.score_breakdown.affinity_mult.toFixed(1)}
@@ -70,6 +71,7 @@ export function ScoreBreakdownRow({ item, isNew, isTopPick, isHighConfidence }: 
               {t('score.penalty', 'penalty')} x{item.score_breakdown.anti_penalty.toFixed(1)}
             </span>
           )}
+          {/* eslint-enable i18next/no-literal-string */}
           {item.score_breakdown.freshness_mult != null && item.score_breakdown.freshness_mult !== 1.0 && (
             <span className={item.score_breakdown.freshness_mult > 1.0 ? 'text-teal-400/80' : 'text-text-muted/80'}>
               {t('score.fresh', 'fresh')} {item.score_breakdown.freshness_mult > 1.0 ? '+' : ''}{Math.round((item.score_breakdown.freshness_mult - 1.0) * 100)}%

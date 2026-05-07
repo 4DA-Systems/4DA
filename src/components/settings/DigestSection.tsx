@@ -52,7 +52,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
   const [savingSmtp, setSavingSmtp] = useState(false);
 
   useEffect(() => {
-    loadDigestConfig();
+    void loadDigestConfig();
   }, []);
 
   const loadDigestConfig = async () => {
@@ -155,7 +155,7 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
               </span>
             </div>
             <button
-              onClick={handleToggleDigest}
+              onClick={() => { void handleToggleDigest(); }}
               className={`px-4 py-2 text-sm rounded-lg transition-all ${
                 digestConfig.enabled
                   ? 'bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20'
@@ -292,14 +292,14 @@ export function DigestSection({ setSettingsStatus }: DigestSectionProps) {
 
                     <div className="flex gap-3 pt-2">
                       <button
-                        onClick={handleSaveSmtp}
+                        onClick={() => { void handleSaveSmtp(); }}
                         disabled={savingSmtp || !smtpForm.email}
                         className="px-4 py-2 text-sm rounded-lg bg-white/10 text-white border border-border hover:bg-white/20 transition-colors disabled:opacity-40"
                       >
                         {savingSmtp ? t('action.saving') : t('settings.digest.saveSmtp')}
                       </button>
                       <button
-                        onClick={handleTestEmail}
+                        onClick={() => { void handleTestEmail(); }}
                         disabled={testingSend || !smtpConfigured}
                         className="px-4 py-2 text-sm rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 transition-colors disabled:opacity-40"
                       >

@@ -86,6 +86,7 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
           </span>
         )}
         {activeModuleId && hasTranslation && (
+          // eslint-disable-next-line i18next/no-literal-string
           <span className="ms-auto text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-400 border border-green-500/20">
             ✓
           </span>
@@ -95,7 +96,7 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
       {/* Translation action for active module */}
       {activeModuleId && !hasTranslation && currentLang !== 'en' && (
         <button
-          onClick={handleTranslateModule}
+          onClick={() => { void handleTranslateModule(); }}
           disabled={isTranslating}
           className="mt-1.5 w-full px-3 py-1.5 text-[10px] text-accent-gold border border-accent-gold/20 rounded-lg hover:bg-accent-gold/10 transition-colors disabled:opacity-50 disabled:cursor-wait"
         >
@@ -111,12 +112,12 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
           {LANGUAGES.map((lang) => (
             <button
               key={lang.code}
-              onClick={async () => {
-                i18n.changeLanguage(lang.code);
+              onClick={() => {
+                void i18n.changeLanguage(lang.code);
                 localStorage.setItem('4da_language', lang.code);
-                await cmd('set_locale', { country: '', language: lang.code, currency: '' }).catch(() => {});
+                void cmd('set_locale', { country: '', language: lang.code, currency: '' }).catch(() => {});
                 setShowPicker(false);
-                useAppStore.getState().reloadForLanguage();
+                void useAppStore.getState().reloadForLanguage();
                 onLanguageChange?.();
               }}
               className={`w-full text-start px-3 py-2 text-xs hover:bg-bg-tertiary transition-colors flex items-center justify-between ${
@@ -125,6 +126,7 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
             >
               <span>{lang.native}</span>
               {lang.code === currentLang && (
+                // eslint-disable-next-line i18next/no-literal-string
                 <span className="text-accent-gold">●</span>
               )}
             </button>

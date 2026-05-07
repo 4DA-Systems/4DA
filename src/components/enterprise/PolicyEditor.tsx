@@ -31,7 +31,7 @@ export function PolicyEditor() {
   const [saveStatus, setSaveStatus] = useState<{ key: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    loadRetentionPolicies();
+    void loadRetentionPolicies();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,7 +98,7 @@ export function PolicyEditor() {
 
                 <select
                   value={currentDays}
-                  onChange={e => handlePolicyChange(key, parseInt(e.target.value, 10))}
+                  onChange={e => { void handlePolicyChange(key, parseInt(e.target.value, 10)); }}
                   disabled={isSaving || orgLoading}
                   className="px-2 py-1 text-xs bg-bg-tertiary border border-border rounded text-white focus:outline-none focus:border-success/50 disabled:opacity-50"
                   aria-label={`Retention period for ${label}`}

@@ -145,7 +145,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
 
               {/* Create Button */}
               <button
-                onClick={handleCreate}
+                onClick={() => { void handleCreate(); }}
                 disabled={loading}
                 className="w-full px-4 py-2.5 text-sm font-medium text-white bg-success rounded-lg hover:bg-[#1DA34D] transition-colors disabled:opacity-50"
               >
@@ -163,6 +163,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
               {/* Invite Code Display */}
               <div className="text-center space-y-3">
                 <div className="w-12 h-12 mx-auto rounded-full bg-success/15 flex items-center justify-center">
+                  {/* eslint-disable-next-line i18next/no-literal-string */}
                   <span className="text-success text-lg">&#10003;</span>
                 </div>
                 <p className="text-xs text-text-secondary">
@@ -180,7 +181,7 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
                 </div>
 
                 <button
-                  onClick={handleCopy}
+                  onClick={() => { void handleCopy(); }}
                   className="w-full px-4 py-2 text-xs font-medium text-success border border-success/30 rounded-lg hover:bg-success/10 transition-colors"
                 >
                   {copied

@@ -82,7 +82,7 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
   }, []);
 
   useEffect(() => {
-    loadSources();
+    void loadSources();
   }, [loadSources]);
 
   const rssParsed = useMemo(

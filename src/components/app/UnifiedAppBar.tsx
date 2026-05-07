@@ -111,6 +111,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
                 top: summaryBadges.topCount,
               })}
             >
+              {/* eslint-disable i18next/no-literal-string */}
               <span className="text-green-400">{summaryBadges.relevantCount}</span>
               <span className="text-text-muted">relevant</span>
               {summaryBadges.topCount > 0 && (
@@ -120,6 +121,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
                   <span className="text-text-muted">top</span>
                 </>
               )}
+              {/* eslint-enable i18next/no-literal-string */}
             </span>
           )}
 
@@ -154,7 +156,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
           {/* Cancel button during analysis */}
           {isLoading && (
             <button
-              onClick={() => cmd('cancel_analysis')}
+              onClick={() => { void cmd('cancel_analysis'); }}
               className="w-8 h-8 flex items-center justify-center rounded-md bg-bg-tertiary text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-all"
               aria-label={t('action.cancelAnalysis', 'Cancel analysis')}
             >

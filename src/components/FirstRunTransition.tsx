@@ -95,7 +95,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
       const holdMs = hasScanData ? 3500 : 2000;
       setTimeout(() => void startAnalysis(), holdMs);
     };
-    init();
+    void init();
   }, [startAnalysis]);
 
   // Narration events from backend analysis
@@ -115,7 +115,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         setSourceMessages(prev => [...prev.slice(-4), getSourceNarration(source, count)]);
       });
     };
-    setup();
+    void setup();
     return () => { if (unlisten) unlisten(); };
   }, []);
 
@@ -136,7 +136,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         }]);
       });
     };
-    setup();
+    void setup();
     return () => { if (unlisten) unlisten(); };
   }, []);
 

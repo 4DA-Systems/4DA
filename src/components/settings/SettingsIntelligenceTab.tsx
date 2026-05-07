@@ -101,7 +101,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
         {/* AI Configuration Actions */}
         <div className="flex gap-3">
           <button
-            onClick={handleSave}
+            onClick={() => { void handleSave(); }}
             disabled={saveState === 'loading'}
             aria-label={t('settings.ai.saveConfiguration')}
             className={`flex-1 px-4 py-2.5 text-sm font-medium rounded-lg transition-all shadow-lg flex items-center justify-center gap-2 ${
@@ -118,7 +118,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
             {saveState === 'success' ? t('settings.ai.saved') : saveState === 'error' ? t('settings.ai.saveFailed') : t('settings.ai.saveConfiguration')}
           </button>
           <button
-            onClick={handleTest}
+            onClick={() => { void handleTest(); }}
             disabled={testState === 'loading'}
             aria-label={t('settings.testConnection')}
             className={`px-6 py-2.5 text-sm border rounded-lg transition-all flex items-center gap-2 ${

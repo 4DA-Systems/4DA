@@ -18,10 +18,12 @@ export function ProgressiveRevealBanner({ block }: Props) {
           <path d="M2 17l10 5 10-5" />
           <path d="M2 12l10 5 10-5" />
         </svg>
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <h4 className="text-xs font-semibold text-accent-gold uppercase tracking-wider">
           New Data Unlocked
         </h4>
       </div>
+      {/* eslint-disable-next-line i18next/no-literal-string */}
       <p className="text-xs text-text-secondary mb-2">
         Completed modules: {newly_completed.join(', ')}
       </p>

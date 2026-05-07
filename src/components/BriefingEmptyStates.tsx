@@ -67,7 +67,7 @@ export function BriefingReadyState() {
   const handleGenerate = () => {
     if (clicked || isLoading) return;
     setClicked(true);
-    generateBriefing();
+    void generateBriefing();
   };
 
   const handleStartTrial = async () => {
@@ -77,7 +77,7 @@ export function BriefingReadyState() {
     if (ok) {
       // Trial started — now generate immediately
       setClicked(true);
-      generateBriefing();
+      void generateBriefing();
     }
   };
 
@@ -112,7 +112,7 @@ export function BriefingReadyState() {
               </button>
               {canStartTrial && (
                 <button
-                  onClick={handleStartTrial}
+                  onClick={() => { void handleStartTrial(); }}
                   disabled={startingTrial}
                   className="px-5 py-2.5 text-sm font-medium text-accent-gold border border-accent-gold/30 rounded-lg hover:bg-accent-gold/10 transition-colors disabled:opacity-50"
                 >
@@ -167,7 +167,7 @@ export function BriefingNoDataState() {
   const embeddingMode = useAppStore(s => s.embeddingMode);
   const { containerRef: turingRef } = useFourdaComponent('fourda-turing-fire');
 
-  useEffect(() => { registerFourdaComponent('fourda-simplex-unfold'); }, []);
+  useEffect(() => { void registerFourdaComponent('fourda-simplex-unfold'); }, []);
 
   return (
     <div className="relative bg-bg-primary rounded-lg">
@@ -180,7 +180,7 @@ export function BriefingNoDataState() {
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.runAnalysis')}
         </p>
-        <button onClick={startAnalysis} aria-label="Start content analysis" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
+        <button onClick={() => { void startAnalysis(); }} aria-label="Start content analysis" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
           {t('results.analyzeNow')}
         </button>
         <p className="text-xs text-text-muted mt-3">

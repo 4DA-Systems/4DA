@@ -82,7 +82,7 @@ export function LocaleSection() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const locale = await cmd('get_locale');
         if (cancelled) return;
@@ -98,8 +98,8 @@ export function LocaleSection() {
   }, []);
 
   useEffect(() => {
-    cmd('get_translation_config').then(setTxConfig).catch(() => {});
-    cmd('get_embedding_model_info').then(setEmbeddingInfo).catch(() => {});
+    void cmd('get_translation_config').then(setTxConfig).catch(() => {});
+    void cmd('get_embedding_model_info').then(setEmbeddingInfo).catch(() => {});
   }, []);
 
   const saveTxConfig = useCallback(async (next: TranslationConfig) => {
@@ -121,17 +121,17 @@ export function LocaleSection() {
     if (match) {
       setLanguage(match.lang);
       setCurrency(match.currency);
-      saveLocale(code, match.lang, match.currency);
+      void saveLocale(code, match.lang, match.currency);
     } else {
-      saveLocale(code, language, currency);
+      void saveLocale(code, language, currency);
     }
   }, [language, currency, saveLocale]);
 
   const handleLanguageChange = useCallback((code: string) => {
     setLanguage(code);
-    i18n.changeLanguage(code);
+    void i18n.changeLanguage(code);
     localStorage.setItem('4da_language', code);
-    saveLocale(country, code, currency);
+    void saveLocale(country, code, currency);
     // Check translation coverage for the new language
     if (code !== 'en') {
       cmd('get_translation_status', { lang: code })
@@ -144,7 +144,7 @@ export function LocaleSection() {
 
   const handleCurrencyChange = useCallback((cur: string) => {
     setCurrency(cur);
-    saveLocale(country, language, cur);
+    void saveLocale(country, language, cur);
   }, [country, language, saveLocale]);
 
   const [showEditor, setShowEditor] = useState(false);
@@ -244,7 +244,7 @@ export function LocaleSection() {
                 onClick={() => {
                   const lang = getLanguageName(language);
                   const url = `https://github.com/runyourempire/4DA/issues/new?template=translation.yml&labels=i18n&title=${encodeURIComponent(`[i18n] ${lang}: Translation improvement`)}&language=${encodeURIComponent(lang)}&version=${encodeURIComponent(String(__APP_VERSION__))}`;
-                  import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url));
+                  void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url));
                 }}
                 className="text-accent-gold hover:text-[#C4A030] transition-colors underline underline-offset-2"
               >
@@ -284,7 +284,7 @@ export function LocaleSection() {
                 </label>
                 <select
                   value={txConfig.provider}
-                  onChange={(e) => saveTxConfig({ ...txConfig, provider: e.target.value })}
+                  onChange={(e) => { void saveTxConfig({ ...txConfig, provider: e.target.value }); }}
                   className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
                 >
                   {TRANSLATION_PROVIDERS.map((p) => (
@@ -302,7 +302,7 @@ export function LocaleSection() {
                     type="password"
                     value={txConfig.api_key}
                     onChange={(e) => setTxConfig({ ...txConfig, api_key: e.target.value })}
-                    onBlur={() => saveTxConfig(txConfig)}
+                    onBlur={() => { void saveTxConfig(txConfig); }}
                     className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-white text-sm focus:border-orange-500 focus:outline-none"
                     placeholder="sk-..."
                   />
@@ -322,7 +322,7 @@ export function LocaleSection() {
                     </p>
                   </div>
                   <button
-                    onClick={() => saveTxConfig({ ...txConfig, cloud_translation_consent: !txConfig.cloud_translation_consent })}
+                    onClick={() => { void saveTxConfig({ ...txConfig, cloud_translation_consent: !txConfig.cloud_translation_consent }); }}
                     className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${
                       txConfig.cloud_translation_consent ? 'bg-green-500/40' : 'bg-gray-600'
                     }`}
@@ -339,7 +339,7 @@ export function LocaleSection() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-white">{t('settings.translation.autoTranslate')}</span>
                 <button
-                  onClick={() => saveTxConfig({ ...txConfig, auto_translate: !txConfig.auto_translate })}
+                  onClick={() => { void saveTxConfig({ ...txConfig, auto_translate: !txConfig.auto_translate }); }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
                     txConfig.auto_translate ? 'bg-green-500/40' : 'bg-gray-600'
                   }`}
@@ -355,7 +355,7 @@ export function LocaleSection() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-white">{t('settings.translation.translateDescriptions')}</span>
                 <button
-                  onClick={() => saveTxConfig({ ...txConfig, translate_descriptions: !txConfig.translate_descriptions })}
+                  onClick={() => { void saveTxConfig({ ...txConfig, translate_descriptions: !txConfig.translate_descriptions }); }}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
                     txConfig.translate_descriptions ? 'bg-green-500/40' : 'bg-gray-600'
                   }`}

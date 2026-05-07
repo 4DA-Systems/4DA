@@ -41,7 +41,7 @@ export const ProValuePanel = memo(function ProValuePanel() {
         setLoading(false);
       }
     };
-    load();
+    void load();
   }, []);
 
   if (error) return null;

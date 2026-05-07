@@ -57,7 +57,7 @@ export function DeveloperDnaSection() {
         onClick={() => {
           const willExpand = !expanded;
           setExpanded(willExpand);
-          if (willExpand && !loaded.current) loadDna();
+          if (willExpand && !loaded.current) void loadDna();
         }}
         aria-expanded={expanded}
         aria-label={t('profile.toggleDna')}
@@ -82,10 +82,10 @@ export function DeveloperDnaSection() {
           <div className="flex items-center justify-between">
             <p className="text-xs text-text-secondary">{dna.identity_summary}</p>
             <div className="flex items-center gap-1.5">
-              <button onClick={shareOnX} aria-label={t('profile.shareOnX')} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
+              <button onClick={() => { void shareOnX(); }} aria-label={t('profile.shareOnX')} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
                 {t('profile.shareOnX')}
               </button>
-              <button onClick={copyDna} aria-label={t('profile.copyDna')} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
+              <button onClick={() => { void copyDna(); }} aria-label={t('profile.copyDna')} className="px-2 py-1 text-[10px] text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded transition-colors">
                 {t('profile.copyDna')}
               </button>
             </div>
@@ -116,6 +116,7 @@ export function DeveloperDnaSection() {
               <div className="flex flex-wrap gap-1.5">
                 {dna.blind_spots.slice(0, 5).map((spot) => (
                   <span key={spot.dependency} className="px-2 py-0.5 text-[10px] bg-amber-500/10 text-amber-300 rounded-full border border-amber-500/20">
+                    {/* eslint-disable-next-line i18next/no-literal-string */}
                     {spot.dependency} ({spot.days_stale}d)
                   </span>
                 ))}
