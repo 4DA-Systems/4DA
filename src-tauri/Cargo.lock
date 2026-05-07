@@ -1974,6 +1974,7 @@ dependencies = [
  "urlencoding",
  "uuid",
  "victauri-plugin",
+ "victauri-test",
  "whichlang",
  "windows-sys 0.59.0",
  "winreg 0.55.0",
@@ -7654,6 +7655,17 @@ dependencies = [
  "victauri-macros",
  "windows 0.61.3",
  "x11rb",
+]
+
+[[package]]
+name = "victauri-test"
+version = "0.1.2"
+dependencies = [
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
 ]
 
 [[package]]
