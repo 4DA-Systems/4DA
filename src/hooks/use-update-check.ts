@@ -45,7 +45,7 @@ export function useUpdateCheck() {
     }
 
     // Delay check by 5s to not block startup
-    const timer = setTimeout(checkForUpdate, 5000);
+    const timer = setTimeout(() => void checkForUpdate(), 5000);
     return () => {
       cancelled = true;
       clearTimeout(timer);

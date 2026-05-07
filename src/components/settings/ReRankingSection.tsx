@@ -24,8 +24,9 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
       </div>
 
       <div className="space-y-3">
-        <label className="flex items-center gap-3 cursor-pointer p-3 bg-bg-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all">
+        <label htmlFor="rerank-enabled" aria-label={t('settings.ai.enableRerank')} className="flex items-center gap-3 cursor-pointer p-3 bg-bg-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all">
           <input
+            id="rerank-enabled"
             type="checkbox"
             checked={settingsForm.rerankEnabled}
             onChange={(e) => setSettingsForm((f) => ({ ...f, rerankEnabled: e.target.checked }))}

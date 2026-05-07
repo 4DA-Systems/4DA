@@ -342,7 +342,7 @@ describe('NaturalLanguageSearch', () => {
     it('populates search input when suggested query is clicked from StackHealthBar', () => {
       render(<NaturalLanguageSearch />);
       fireEvent.click(screen.getByTestId('suggested-query-btn'));
-      const input = screen.getByLabelText('Natural language search query') as HTMLInputElement;
+      const input = screen.getByLabelText<HTMLInputElement>('Natural language search query');
       expect(input.value).toBe('suggested query');
     });
 

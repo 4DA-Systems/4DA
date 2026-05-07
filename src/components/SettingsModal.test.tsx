@@ -194,10 +194,9 @@ describe('SettingsModal', () => {
   // --- Error-path tests ---
 
   it('shows error alert when settingsStatus contains "Error"', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
+    vi.mocked(useAppStore).mockImplementation(((selector: (s: Record<string, unknown>) => unknown) => {
       return selector(createMockState({ settingsStatus: 'Error: Invalid API key' }));
-    }) as any);
+    }) as unknown as typeof useAppStore);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Error: Invalid API key');
     expect(statusEl.closest('[role="alert"]')).toBeInTheDocument();
@@ -205,10 +204,9 @@ describe('SettingsModal', () => {
   });
 
   it('shows error alert when settingsStatus contains "failed"', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
+    vi.mocked(useAppStore).mockImplementation(((selector: (s: Record<string, unknown>) => unknown) => {
       return selector(createMockState({ settingsStatus: 'Connection failed: timeout' }));
-    }) as any);
+    }) as unknown as typeof useAppStore);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Connection failed: timeout');
     expect(statusEl.closest('[role="alert"]')).toBeInTheDocument();
@@ -216,10 +214,9 @@ describe('SettingsModal', () => {
   });
 
   it('shows success status with role="status" (not alert)', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
+    vi.mocked(useAppStore).mockImplementation(((selector: (s: Record<string, unknown>) => unknown) => {
       return selector(createMockState({ settingsStatus: 'Settings saved!' }));
-    }) as any);
+    }) as unknown as typeof useAppStore);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Settings saved!');
     expect(statusEl.closest('[role="status"]')).toBeInTheDocument();
@@ -227,10 +224,9 @@ describe('SettingsModal', () => {
   });
 
   it('shows error alert when settingsStatus contains "Connection failed:"', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
+    vi.mocked(useAppStore).mockImplementation(((selector: (s: Record<string, unknown>) => unknown) => {
       return selector(createMockState({ settingsStatus: 'Connection failed: ECONNREFUSED' }));
-    }) as any);
+    }) as unknown as typeof useAppStore);
     render(<SettingsModal onClose={vi.fn()} />);
     const statusEl = screen.getByText('Connection failed: ECONNREFUSED');
     expect(statusEl.closest('[role="alert"]')).toBeInTheDocument();
@@ -238,10 +234,9 @@ describe('SettingsModal', () => {
   });
 
   it('does not show settings status strip when settingsStatus is empty', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(useAppStore).mockImplementation(((selector: any) => {
+    vi.mocked(useAppStore).mockImplementation(((selector: (s: Record<string, unknown>) => unknown) => {
       return selector(createMockState({ settingsStatus: '' }));
-    }) as any);
+    }) as unknown as typeof useAppStore);
     const { container } = render(<SettingsModal onClose={vi.fn()} />);
     const statusStrip = container.querySelector('.mx-6.mt-4[role="alert"], .mx-6.mt-4[role="status"]');
     expect(statusStrip).toBeNull();

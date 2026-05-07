@@ -66,9 +66,9 @@ export const ContentTranslationProvider = memo(function ContentTranslationProvid
     }
 
     // Sync language to backend settings
-    cmd('set_locale', { country: '', language: i18n.language, currency: '' }).catch(() => {});
+    void cmd('set_locale', { country: '', language: i18n.language, currency: '' }).catch(() => {});
 
-    cmd('get_content_translation_settings')
+    void cmd('get_content_translation_settings')
       .then((settings) => {
         setIsActive(settings.enabled);
         if (!settings.enabled) {

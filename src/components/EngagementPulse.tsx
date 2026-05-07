@@ -16,7 +16,7 @@ export const EngagementPulse = memo(function EngagementPulse() {
   const [data, setData] = useState<EngagementData | null>(null);
 
   useEffect(() => {
-    cmd('get_engagement_summary')
+    void cmd('get_engagement_summary')
       .then(r => r as unknown as EngagementData)
       .then(setData)
       .catch(() => {});

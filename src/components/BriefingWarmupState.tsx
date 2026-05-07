@@ -22,7 +22,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
 
   // Load actual configured sources from the backend
   useEffect(() => {
-    cmd('get_sources')
+    void cmd('get_sources')
       .then(r => r as unknown as SourceInfo[])
       .then(rawSources => {
         const sources = Array.isArray(rawSources) ? rawSources : [];

@@ -117,7 +117,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
 
   useEffect(() => {
     if (expanded && loaded.current) {
-      loadDocuments();
+      void loadDocuments();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterType]);
@@ -125,7 +125,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   // Handle search on Enter
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      handleSearch();
+      void handleSearch();
     }
   };
 
@@ -192,11 +192,23 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <div
         className="flex items-center justify-between cursor-pointer"
+        role="button"
+        tabIndex={0}
         onClick={() => {
           const willExpand = !expanded;
           setExpanded(willExpand);
           if (willExpand && !loaded.current) {
-            loadDocuments();
+            void loadDocuments();
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const willExpand = !expanded;
+            setExpanded(willExpand);
+            if (willExpand && !loaded.current) {
+              void loadDocuments();
+            }
           }
         }}
       >
@@ -249,7 +261,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               className="flex-1 px-3 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-white placeholder:text-text-muted focus:outline-none focus:border-emerald-500/50 transition-colors"
             />
             <button
-              onClick={handleSearch}
+              onClick={() => void handleSearch()}
               disabled={loading}
               className="px-4 py-2.5 text-sm bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 rounded-lg hover:bg-emerald-500/30 disabled:opacity-50 transition-all"
             >
@@ -276,7 +288,10 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
               {searchResults.map((result) => (
                 <div
                   key={result.id}
-                  onClick={() => loadDocumentContent(result.id)}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => void loadDocumentContent(result.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void loadDocumentContent(result.id); } }}
                   className="p-3 bg-bg-secondary rounded-lg border border-border cursor-pointer hover:border-emerald-500/30 transition-colors"
                 >
                   <div className="flex items-center gap-2">
@@ -306,7 +321,10 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
                   {documents.map((doc) => (
                     <div
                       key={doc.id}
-                      onClick={() => loadDocumentContent(doc.id)}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void loadDocumentContent(doc.id)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void loadDocumentContent(doc.id); } }}
                       className="flex items-center gap-3 p-3 bg-bg-secondary rounded-lg border border-border cursor-pointer hover:border-emerald-500/30 transition-colors"
                     >
                       <span className="text-lg">
@@ -356,7 +374,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
 
           {/* Refresh button */}
           <button
-            onClick={loadDocuments}
+            onClick={() => void loadDocuments()}
             disabled={loading}
             className="w-full px-4 py-2.5 text-sm bg-bg-secondary border border-border rounded-lg text-text-secondary hover:text-white hover:border-emerald-500/30 disabled:opacity-50 transition-all"
           >

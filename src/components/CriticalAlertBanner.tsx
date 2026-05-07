@@ -45,7 +45,7 @@ export function CriticalAlertBanner() {
       .map((r: SourceRelevance) => r.id);
     if (ids.length === 0) return;
 
-    cmd('get_triage_states', { itemIds: ids })
+    void cmd('get_triage_states', { itemIds: ids })
       .then(records => {
         setTriaged(new Set(records.map(r => r.item_id)));
       })
@@ -81,7 +81,7 @@ export function CriticalAlertBanner() {
 
   const handleTriage = useCallback((id: number, action: string, advisory_id?: string) => {
     setTriaged(prev => new Set([...prev, id]));
-    cmd('triage_alert', {
+    void cmd('triage_alert', {
       itemId: id,
       action,
       advisoryId: advisory_id ?? null,

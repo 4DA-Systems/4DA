@@ -93,7 +93,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
 
       setPhase('intelligence');
       const holdMs = hasScanData ? 3500 : 2000;
-      setTimeout(() => startAnalysis(), holdMs);
+      setTimeout(() => void startAnalysis(), holdMs);
     };
     init();
   }, [startAnalysis]);
@@ -152,7 +152,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     if (appState.analysisComplete) {
       setPhase('celebrating');
       // Auto-render content digests in background while user sees celebration
-      cmd('auto_render_all_channels').catch(() => {});
+      void cmd('auto_render_all_channels').catch(() => {});
       return;
     }
 
@@ -177,7 +177,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     setHasError(false);
     setSourceMessages([]);
     setItemCount(0);
-    startAnalysis();
+    void startAnalysis();
   }, [startAnalysis]);
 
   // User's interests for the preparing phase

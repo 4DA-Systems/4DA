@@ -81,7 +81,7 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
     }
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => {
-      cmd('preview_channel_sources', { topics })
+      void cmd('preview_channel_sources', { topics })
         .then(setSourcePreview)
         .catch(() => setSourcePreview(null));
     }, 400);
@@ -121,8 +121,8 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
         description: description.trim(),
         topicQuery: topics,
       });
-      loadChannels();
-      cmd('auto_render_all_channels').catch(() => {});
+      void loadChannels();
+      void cmd('auto_render_all_channels').catch(() => {});
       setTitle('');
       setDescription('');
       setTopics([]);
@@ -146,10 +146,13 @@ export function CreateChannelModal({ open, onClose }: CreateChannelModalProps) {
       onClick={onClose}
       onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
     >
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
       <div
         ref={dialogRef}
+        role="document"
         className="bg-bg-secondary border border-border rounded-xl w-full max-w-md shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">

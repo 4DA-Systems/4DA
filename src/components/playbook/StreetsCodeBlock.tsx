@@ -303,7 +303,10 @@ export function StreetsCodeBlock({ code, language, moduleId, lessonIdx, blockInd
                   className={`mt-1 mb-2 ms-1 p-3 rounded text-xs font-mono border-s-2 bg-bg-primary cursor-pointer ${
                     result.success ? 'border-success' : 'border-error'
                   }`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => matchedCmd && toggleResult(matchedCmd.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); matchedCmd && toggleResult(matchedCmd.id); } }}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className={`text-[10px] font-medium ${result.success ? 'text-success' : 'text-error'}`}>

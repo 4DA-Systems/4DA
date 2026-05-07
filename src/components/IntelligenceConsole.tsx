@@ -74,7 +74,7 @@ export const IntelligenceConsole = memo(function IntelligenceConsole() {
   }));
 
   useEffect(() => {
-    Promise.allSettled([
+    void Promise.allSettled([
       cmd('get_accuracy_report', { period: 'month' }),
       cmd('get_tech_convergence'),
       cmd('get_ai_usage_summary', { period: 'month' }),

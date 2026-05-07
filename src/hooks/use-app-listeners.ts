@@ -56,7 +56,7 @@ export function useAppListeners({
         // Ignore malformed URLs
       }
     });
-    return () => { unlisten.then(fn => fn()); };
+    return () => { void unlisten.then(fn => fn()); };
   }, [activateLicense, activateStreetsLicense, addToast]);
 
   // Embedding status listener — surfaces degraded/unavailable state via toast
@@ -69,7 +69,7 @@ export function useAppListeners({
           : 'Embedding service unavailable — using keyword signals only');
       }
     });
-    return () => { unlisten.then(fn => fn()); };
+    return () => { void unlisten.then(fn => fn()); };
   }, [setEmbeddingStatus, addToast]);
 
   // Framework + Comparison page triggers (from AboutPanel via custom events)
@@ -133,7 +133,7 @@ export function useAppListeners({
         // Silently ignore failures
       }
     };
-    loadOrAnalyze();
+    void loadOrAnalyze();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
   }, []);

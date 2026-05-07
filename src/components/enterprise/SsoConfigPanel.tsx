@@ -92,8 +92,8 @@ export function SsoConfigPanel() {
     try {
       const url = await cmd('initiate_sso_login');
       // Open the IdP login page in the system browser
-      if (isSafeUrl(url as string)) {
-        window.open(url as unknown as string, '_blank', 'noopener,noreferrer');
+      if (isSafeUrl(url)) {
+        window.open(url, '_blank', 'noopener,noreferrer');
       } else {
         setStatus({ ok: false, msg: 'SSO login URL is not a valid HTTPS endpoint' });
         return;

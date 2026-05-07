@@ -190,7 +190,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         });
       }
 
-      setTimeout(() => get().loadLearnedBehavior(), 500);
+      setTimeout(() => void get().loadLearnedBehavior(), 500);
     } catch (error) {
       console.error('Failed to record interaction:', error);
     }

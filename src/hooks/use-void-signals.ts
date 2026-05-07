@@ -40,7 +40,7 @@ export function useVoidSignals() {
 
   // Fetch initial state on mount
   useEffect(() => {
-    cmd('get_void_signal')
+    void cmd('get_void_signal')
       .then((s) => {
         if (!s) return;
         targetRef.current = s;
@@ -64,7 +64,7 @@ export function useVoidSignals() {
     const promise = setup();
     return () => {
       cancelled = true;
-      promise.then((fn) => fn());
+      void promise.then((fn) => fn());
     };
   }, []);
 

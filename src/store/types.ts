@@ -10,7 +10,23 @@ import type {
   FeedbackGiven,
   SuggestedInterest,
   SourceHealthStatus,
+  ProValueReport,
 } from '../types';
+import type { DeveloperDecision } from './decisions-slice';
+import type { AgentMemoryEntry, DelegationScoreEntry } from './agent-slice';
+import type { PlaybookSlice } from './playbook-slice';
+import type { SovereignProfileSlice } from './sovereign-profile-slice';
+import type { AutophagySlice } from './autophagy-slice';
+import type { DecisionAdvantageSlice } from './decision-advantage-slice';
+import type { ChannelsSlice } from './channels-slice';
+import type { UnifiedProfileSlice } from './unified-profile-slice';
+import type { IntelligencePulseSlice } from './intelligence-pulse-slice';
+import type { TeamSlice } from './team-slice';
+import type { EnterpriseSlice } from './enterprise-slice';
+import type { TeamIntelligenceSlice } from './team-intelligence-slice';
+import type { PreemptionSlice } from './preemption-slice';
+import type { BlindSpotsSlice } from './blind-spots-slice';
+import type { TrustSlice } from './trust-slice';
 
 // ============================================================================
 // Shared Types
@@ -351,7 +367,7 @@ export interface SystemHealthSlice {
 }
 
 export interface DecisionsSlice {
-  decisions: import('./decisions-slice').DeveloperDecision[];
+  decisions: DeveloperDecision[];
   decisionsLoading: boolean;
   decisionsError: string | null;
   loadDecisions: () => Promise<void>;
@@ -374,8 +390,8 @@ export interface DecisionsSlice {
 }
 
 export interface AgentSlice {
-  agentMemories: import('./agent-slice').AgentMemoryEntry[];
-  delegationScores: import('./agent-slice').DelegationScoreEntry[];
+  agentMemories: AgentMemoryEntry[];
+  delegationScores: DelegationScoreEntry[];
   agentDataExists: boolean;
   agentMemoryLoading: boolean;
   loadAgentMemories: () => Promise<void>;
@@ -400,7 +416,7 @@ export interface LicenseSlice {
   expiresAt: string | null;
   daysRemaining: number;
   expired: boolean;
-  proValueReport: import('../types').ProValueReport | null;
+  proValueReport: ProValueReport | null;
   loadLicense: () => Promise<void>;
   activateLicense: (key: string) => Promise<{ ok: boolean; reason?: string }>;
   recoverLicenseByEmail: (email: string) => Promise<{ ok: boolean; reason?: string; tier?: string }>;
@@ -430,16 +446,16 @@ export type AppStore =
   & AgentSlice
   & LicenseSlice
   & ToolkitSlice
-  & import('./playbook-slice').PlaybookSlice
-  & import('./sovereign-profile-slice').SovereignProfileSlice
-  & import('./autophagy-slice').AutophagySlice
-  & import('./decision-advantage-slice').DecisionAdvantageSlice
-  & import('./channels-slice').ChannelsSlice
-  & import('./unified-profile-slice').UnifiedProfileSlice
-  & import('./intelligence-pulse-slice').IntelligencePulseSlice
-  & import('./team-slice').TeamSlice
-  & import('./enterprise-slice').EnterpriseSlice
-  & import('./team-intelligence-slice').TeamIntelligenceSlice
-  & import('./preemption-slice').PreemptionSlice
-  & import('./blind-spots-slice').BlindSpotsSlice
-  & import('./trust-slice').TrustSlice;
+  & PlaybookSlice
+  & SovereignProfileSlice
+  & AutophagySlice
+  & DecisionAdvantageSlice
+  & ChannelsSlice
+  & UnifiedProfileSlice
+  & IntelligencePulseSlice
+  & TeamSlice
+  & EnterpriseSlice
+  & TeamIntelligenceSlice
+  & PreemptionSlice
+  & BlindSpotsSlice
+  & TrustSlice;

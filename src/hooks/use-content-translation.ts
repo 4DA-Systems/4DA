@@ -63,7 +63,7 @@ export function useContentTranslation(): UseContentTranslationReturn {
       return;
     }
 
-    cmd('get_content_translation_settings')
+    void cmd('get_content_translation_settings')
       .then((settings) => setIsEnabled(settings.enabled))
       .catch(() => setIsEnabled(false));
   }, [i18n.language]);
@@ -126,7 +126,7 @@ export function useContentTranslation(): UseContentTranslationReturn {
       if (batchTimeoutRef.current) {
         clearTimeout(batchTimeoutRef.current);
       }
-      batchTimeoutRef.current = setTimeout(flushBatch, 100);
+      batchTimeoutRef.current = setTimeout(() => void flushBatch(), 100);
     },
     [isEnabled, translations, flushBatch],
   );

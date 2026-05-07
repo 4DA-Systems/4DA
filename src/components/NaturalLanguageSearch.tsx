@@ -84,7 +84,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
   // Load stack health on mount
   useEffect(() => {
-    cmd('get_stack_health')
+    void cmd('get_stack_health')
       .then(r => r as unknown as StackHealth)
       .then(setStackHealth)
       .catch((err: unknown) => reportError('NaturalLanguageSearch.stackHealth', err));
@@ -137,7 +137,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       setResult(searchResult);
       onStatusChange?.(`Found ${searchResult.total_count} results in ${searchResult.execution_ms}ms`);
       if (searchResult.is_pro) {
-        fetchSynthesis(query);
+        void fetchSynthesis(query);
       }
     } catch (err) {
       const msg = String(err);
@@ -149,7 +149,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') handleSearch(); };
+  const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter') void handleSearch(); };
   const handleSuggestedQuery = (sq: string) => setQuery(sq);
   const clearResults = () => { setResult(null); setQuery(''); setSynthesis(null); };
   const [watchCreated, setWatchCreated] = useState(false);
@@ -295,7 +295,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {result && (
             <div className="space-y-4">
               {/* Synthesis panel (Pro only) */}
-              <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} streamingText={streamingText} onRetry={() => fetchSynthesis(query)} />
+              <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} streamingText={streamingText} onRetry={() => void fetchSynthesis(query)} />
 
               {/* Query parsing info */}
               <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">

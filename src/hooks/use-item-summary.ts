@@ -38,7 +38,7 @@ export function useItemSummary(itemId: number, isExpanded: boolean, options?: Us
   useEffect(() => {
     if (!isExpanded) return;
     let cancelled = false;
-    cmd('get_item_summary', { itemId })
+    void cmd('get_item_summary', { itemId })
       .then(result => {
         if (!cancelled) setSummary(result.summary);
       })
