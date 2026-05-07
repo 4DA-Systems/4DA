@@ -95,7 +95,7 @@ const AttentionCard = memo(function AttentionCard({
 
   const handleTriage = useCallback((action: string) => {
     setTriageAction(action);
-    cmd('triage_alert', {
+    void cmd('triage_alert', {
       itemId: item.id,
       action,
       advisoryId: item.advisory_id ?? null,

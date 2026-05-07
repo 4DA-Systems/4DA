@@ -40,7 +40,7 @@ export function useFourdaComponent(tag: FourdaComponentTag) {
     // Don't mount GPU animations if user prefers reduced motion
     if (reducedMotion) return;
 
-    registerFourdaComponent(tag).then(() => {
+    void registerFourdaComponent(tag).then(() => {
       if (!containerRef.current || elementRef.current) return;
       const el = document.createElement(tag);
       el.style.width = '100%';

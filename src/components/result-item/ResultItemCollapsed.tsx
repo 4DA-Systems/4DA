@@ -41,7 +41,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
     const keys = getScoreFactorKeys(item);
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
-  }, [item.score_breakdown, t]);
+  }, [item, t]);
 
   const recordTitleClick = useCallback(() => {
     const topics = item.title.toLowerCase().split(/\s+/).filter(w => w.length > 3).slice(0, 5);

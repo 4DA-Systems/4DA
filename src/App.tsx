@@ -188,22 +188,22 @@ function App() {
   // 5c. Stabilize onAnalyze callback
   const handleAnalyze = useCallback(() => {
     setNewItemIds(new Set());
-    startAnalysis();
+    void startAnalysis();
   }, [startAnalysis]);
 
   // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
   useEffect(() => {
     trackEvent('app_launch');
     // Load source metadata from backend (populates dynamic source registry + resets filters)
-    loadSourceMeta().then(() => {
+    void loadSourceMeta().then(() => {
       useAppStore.getState().resetSourceFilters();
     });
-    loadPersistedBriefing();
-    loadSourceHealth();
-    loadLicense();
-    loadTrialStatus();
-    loadProValueReport();
-    cmd('prune_personalization_cache').catch(() => {});
+    void loadPersistedBriefing();
+    void loadSourceHealth();
+    void loadLicense();
+    void loadTrialStatus();
+    void loadProValueReport();
+    void cmd('prune_personalization_cache').catch(() => {});
   }, [loadPersistedBriefing, loadSourceHealth, loadLicense, loadTrialStatus, loadProValueReport]);
 
   // Event listeners: deep-link activation, embedding status, framework/comparison triggers, cached result loading
@@ -279,10 +279,10 @@ function App() {
             <Onboarding onComplete={() => {
               setShowOnboarding(false);
               setIsFirstRun(true);
-              loadSettings();
-              loadUserContext();
-              loadDiscoveredContext();
-              loadChannels();
+              void loadSettings();
+              void loadUserContext();
+              void loadDiscoveredContext();
+              void loadChannels();
             }} />
           </Suspense>
         )}

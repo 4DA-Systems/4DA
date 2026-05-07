@@ -29,7 +29,7 @@ export function useDwellTracking(
 
     const pattern = classifyInteractionPattern(dwellSeconds);
 
-    cmd('ace_record_interaction', {
+    void cmd('ace_record_interaction', {
       item_id: itemIdRef.current,
       action_type: 'click',
       action_data: JSON.stringify({

@@ -16,7 +16,7 @@ export function recordTrustEvent(params: {
   topic?: string;
   notes?: string;
 }) {
-  cmd('record_intelligence_feedback', {
+  void cmd('record_intelligence_feedback', {
     eventType: params.eventType,
     signalId: params.signalId,
     alertId: params.alertId,

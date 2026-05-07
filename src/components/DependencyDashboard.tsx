@@ -58,7 +58,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
   // Fetch overview on mount
   useEffect(() => {
     setLoading(true);
-    cmd('get_dependency_overview')
+    void cmd('get_dependency_overview')
       .then(data => {
         setOverview(data);
         // Auto-select first project if available
@@ -77,7 +77,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
       return;
     }
     setLoadingProject(true);
-    cmd('get_project_deps', { projectPath: selectedProject })
+    void cmd('get_project_deps', { projectPath: selectedProject })
       .then(result => {
         setProjectDeps(result.dependencies as DepEntry[]);
       })
@@ -109,7 +109,7 @@ const DependencyDashboard = memo(function DependencyDashboard() {
   // Fetch ACE scan summary when no dependency data is available
   useEffect(() => {
     if (!loading && (!overview || overview.total_dependencies === 0)) {
-      cmd('ace_get_scan_summary')
+      void cmd('ace_get_scan_summary')
         .then((data) => setScanSummary(data as unknown as AceScanSummary))
         .catch(() => {});
     }

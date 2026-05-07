@@ -58,7 +58,7 @@ export const CostTab = memo(function CostTab() {
     setLoading(true);
     setError(null);
 
-    Promise.allSettled([
+    void Promise.allSettled([
       cmd('get_ai_usage_summary', { period: 'month' }),
       cmd('get_ai_cost_recommendation'),
     ])

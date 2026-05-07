@@ -62,7 +62,7 @@ export function useViewTracking({
         actionData.scroll_depth_pct = Math.round(scrollDepthPct * 100) / 100;
       }
 
-      cmd('ace_record_interaction', {
+      void cmd('ace_record_interaction', {
         item_id: itemId,
         action_type: 'scroll',
         action_data: JSON.stringify(actionData),
@@ -77,7 +77,7 @@ export function useViewTracking({
     if (ignoreRecorded.current || hasExplicitFeedback) return;
     ignoreRecorded.current = true;
 
-    cmd('ace_record_interaction', {
+    void cmd('ace_record_interaction', {
       item_id: itemId,
       action_type: 'ignore',
       action_data: null,

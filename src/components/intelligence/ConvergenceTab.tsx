@@ -62,7 +62,7 @@ export const ConvergenceTab = memo(function ConvergenceTab() {
     setLoading(true);
     setError(null);
 
-    Promise.allSettled([
+    void Promise.allSettled([
       cmd('get_tech_convergence'),
       cmd('get_project_health_comparison'),
       cmd('get_cross_project_dependencies'),

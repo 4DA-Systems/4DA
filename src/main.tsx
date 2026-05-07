@@ -94,7 +94,7 @@ try {
   const { emit } = await import('@tauri-apps/api/event');
   const result = emit('frontend-ready');
   if (result && typeof result.catch === 'function') {
-    result.catch(() => { /* ignore in browser mode */ });
+    void result.catch(() => { /* ignore in browser mode */ });
   }
 } catch {
   // Non-Tauri environment (tests, browser) — silently ignore
@@ -102,7 +102,7 @@ try {
 
 // Dev-only: expose briefing trigger for testing (call __testBriefing() in devtools console)
 if (import.meta.env.DEV) {
-  import('./lib/commands').then(({ cmd }) => {
+  void import('./lib/commands').then(({ cmd }) => {
     (window as unknown as Record<string, unknown>).__testBriefing = () =>
       cmd('trigger_morning_briefing').then(console.log, console.error);
   }).catch(() => {});

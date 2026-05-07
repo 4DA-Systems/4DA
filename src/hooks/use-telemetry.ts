@@ -51,7 +51,7 @@ export function trackEvent(
   metadata?: Record<string, unknown>,
 ): void {
   if (activityTrackingEnabled !== true) return;
-  cmd('track_event', {
+  void cmd('track_event', {
     eventType,
     viewId,
     metadata: metadata ? JSON.stringify(metadata) : undefined,

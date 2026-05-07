@@ -33,8 +33,8 @@ export const createUnifiedProfileSlice: StateCreator<AppStore, [], [], UnifiedPr
       // Set up profile-updated listener on first load (deferred from store creation)
       if (!profileListenerSetup) {
         profileListenerSetup = true;
-        listen<string>('profile-updated', () => {
-          (cmd('get_sovereign_developer_profile') as Promise<unknown>)
+        void listen<string>('profile-updated', () => {
+          void (cmd('get_sovereign_developer_profile') as Promise<unknown>)
             .then((data) => set({ unifiedProfile: data as SovereignDeveloperProfile }))
             .catch((e) => console.debug('[unified-profile] refresh:', e));
         }).catch((e) => console.debug('[unified-profile] listener setup:', e));

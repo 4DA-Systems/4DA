@@ -48,7 +48,7 @@ export function useBriefing(
       generatingBriefingRef.current = true;
 
       const briefingTimer = setTimeout(() => {
-        generateBriefing().finally(() => {
+        void generateBriefing().finally(() => {
           generatingBriefingRef.current = false;
         });
       }, 500);
@@ -79,7 +79,7 @@ export function useBriefing(
 
     if (briefingAgeMs > twoHoursMs && hasNewItems) {
       generatingBriefingRef.current = true;
-      generateBriefing().finally(() => {
+      void generateBriefing().finally(() => {
         generatingBriefingRef.current = false;
       });
     }

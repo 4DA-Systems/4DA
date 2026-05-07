@@ -65,7 +65,7 @@ export const AccuracyTab = memo(function AccuracyTab() {
     setLoading(true);
     setError(null);
 
-    Promise.allSettled([
+    void Promise.allSettled([
       cmd('get_accuracy_report', { period: 'month' }),
       cmd('get_intelligence_report', { period: 'month' }),
       cmd('get_temporal_snapshot', { period: 'month' }),

@@ -34,7 +34,7 @@ export function HealthBanner() {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    cmd('get_startup_health')
+    void cmd('get_startup_health')
       .then((result) => {
         if (result && result.length > 0) {
           setIssues(result);

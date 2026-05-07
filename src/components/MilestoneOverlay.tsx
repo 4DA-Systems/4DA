@@ -27,7 +27,7 @@ export const MilestoneOverlay = memo(function MilestoneOverlay() {
       let triggered = false;
       if (m.id === 'first-analysis' && analysisComplete) {
         // Only trigger if this is truly the first analysis
-        cmd('get_intelligence_growth').then((data: { snapshots?: unknown[] }) => {
+        void cmd('get_intelligence_growth').then((data: { snapshots?: unknown[] }) => {
           if (data?.snapshots?.length && data.snapshots.length <= 1 && !localStorage.getItem(key)) {
             localStorage.setItem(key, Date.now().toString());
             triggerBurst();

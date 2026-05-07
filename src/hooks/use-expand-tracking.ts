@@ -58,7 +58,7 @@ function emitExpandSignals(
 
   // Click + dwell + pattern. Pattern is the load-bearing field — a bounced
   // click with 20s dwell (user stared confused) must NOT score as positive.
-  cmd('ace_record_interaction', {
+  void cmd('ace_record_interaction', {
     item_id: itemId,
     action_type: 'click',
     action_data: JSON.stringify({
@@ -72,7 +72,7 @@ function emitExpandSignals(
 
   // Layer 2: engagement_complete — deep engagement depth signal
   // Expanded items show full content, so scroll_depth_pct = 1.0
-  cmd('ace_record_interaction', {
+  void cmd('ace_record_interaction', {
     item_id: itemId,
     action_type: 'engagement_complete',
     action_data: JSON.stringify({

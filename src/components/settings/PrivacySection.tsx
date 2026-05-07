@@ -92,8 +92,9 @@ export function PrivacySection() {
       </div>
 
       <div className="border-t border-border/40 pt-3">
-        <label className="flex items-start gap-3 cursor-pointer">
+        <label htmlFor="privacy-crash-reports" aria-label={t('settings.privacy.crashReports.title', 'Send anonymous crash reports')} className="flex items-start gap-3 cursor-pointer">
           <input
+            id="privacy-crash-reports"
             type="checkbox"
             checked={optedIn}
             disabled={saving}
@@ -166,8 +167,9 @@ export function PrivacySection() {
       </div>
 
       <div className="border-t border-border/40 pt-3">
-        <label className="flex items-start gap-3 cursor-pointer">
+        <label htmlFor="privacy-activity-tracking" aria-label={t('settings.privacy.activityTracking.title', 'Local activity tracking')} className="flex items-start gap-3 cursor-pointer">
           <input
+            id="privacy-activity-tracking"
             type="checkbox"
             checked={activityOptedIn}
             disabled={saving}

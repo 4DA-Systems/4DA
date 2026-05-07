@@ -90,7 +90,7 @@ export function useAnalysis(
           // Auto-enable monitoring after first successful analysis
           const { monitoring } = useAppStore.getState();
           if (monitoring && !monitoring.enabled && relevantCount > 0) {
-            cmd('set_monitoring_enabled', { enabled: true }).then(() => {
+            void cmd('set_monitoring_enabled', { enabled: true }).then(() => {
               useAppStore.getState().loadMonitoringStatus();
             }).catch((e) => console.debug('[analysis] auto-enable monitoring:', e));
           }
@@ -266,7 +266,7 @@ export function useAnalysis(
       unlistens = results;
     };
 
-    setupListeners();
+    void setupListeners();
 
     return () => {
       for (const unlisten of unlistens) unlisten();
@@ -275,14 +275,14 @@ export function useAnalysis(
   }, []);
 
   useEffect(() => {
-    loadContextFiles();
+    void loadContextFiles();
   }, [loadContextFiles]);
 
   // Hydrate from backend cache — catches results from analysis that ran before mount
   useEffect(() => {
     const store = useAppStore.getState();
     if (store.appState.relevanceResults.length > 0) return; // Already have results
-    cmd('get_analysis_status').then((status) => {
+    void cmd('get_analysis_status').then((status) => {
       const s = status as { results?: SourceRelevance[]; completed?: boolean };
       if (s.results && s.results.length > 0) {
         useAppStore.getState().setAppStateFull((prev) => ({
