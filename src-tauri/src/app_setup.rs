@@ -753,6 +753,24 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 warn!(target: "4da::osv", error = %e, "Background OSV sync failed (will retry next launch)");
             }
         }
+
+        // Update offline cache ZIPs in the background (runs after API sync).
+        // Stale checks are cheap (HTTP HEAD), downloads only when ETags differ.
+        match crate::osv::cache::update_all_caches(&db).await {
+            Ok(result) => {
+                if !result.ecosystems_updated.is_empty() {
+                    info!(
+                        target: "4da::osv::cache",
+                        updated = ?result.ecosystems_updated,
+                        advisories = result.total_advisories,
+                        "Background cache update complete"
+                    );
+                }
+            }
+            Err(e) => {
+                warn!(target: "4da::osv::cache", error = %e, "Background cache update failed");
+            }
+        }
     });
 
     // Pre-warm the custom notification window (hidden, ready for instant show)

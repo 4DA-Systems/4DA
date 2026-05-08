@@ -889,6 +889,32 @@ impl ProjectScanner {
 
         packages
     }
+
+    pub(crate) fn parse_composer_lock(content: &str) -> Vec<(String, String)> {
+        let parsed: serde_json::Value = match serde_json::from_str(content) {
+            Ok(v) => v,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut packages = Vec::new();
+
+        for key in &["packages", "packages-dev"] {
+            if let Some(arr) = parsed.get(key).and_then(|v| v.as_array()) {
+                for entry in arr {
+                    let name = entry.get("name").and_then(|v| v.as_str());
+                    let version = entry.get("version").and_then(|v| v.as_str());
+                    if let (Some(n), Some(v)) = (name, version) {
+                        let v = v.strip_prefix('v').unwrap_or(v);
+                        if !n.is_empty() && !v.is_empty() {
+                            packages.push((n.to_string(), v.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+
+        packages
+    }
 }
 
 /// Parse pnpm package key formats:
@@ -1922,5 +1948,29 @@ BUNDLED WITH
         assert_eq!(packages.len(), 2);
         assert!(packages.contains(&("nokogiri".to_string(), "1.16.2".to_string())));
         assert!(packages.contains(&("racc".to_string(), "1.7.3".to_string())));
+    }
+
+    #[test]
+    fn test_parse_composer_lock() {
+        let content = r#"{
+            "packages": [
+                {"name": "monolog/monolog", "version": "3.5.0"},
+                {"name": "symfony/console", "version": "v6.4.3"}
+            ],
+            "packages-dev": [
+                {"name": "phpunit/phpunit", "version": "10.5.9"}
+            ]
+        }"#;
+        let packages = ProjectScanner::parse_composer_lock(content);
+        assert_eq!(packages.len(), 3);
+        assert!(packages.contains(&("monolog/monolog".to_string(), "3.5.0".to_string())));
+        assert!(packages.contains(&("symfony/console".to_string(), "6.4.3".to_string())));
+        assert!(packages.contains(&("phpunit/phpunit".to_string(), "10.5.9".to_string())));
+    }
+
+    #[test]
+    fn test_parse_composer_lock_empty() {
+        assert!(ProjectScanner::parse_composer_lock("{}").is_empty());
+        assert!(ProjectScanner::parse_composer_lock("invalid").is_empty());
     }
 }
