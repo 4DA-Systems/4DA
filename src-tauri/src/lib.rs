@@ -1064,6 +1064,8 @@ pub fn run() {
             osv::osv_sync_now,
             osv::osv_get_matches,
             osv::osv_get_sync_status,
+            osv::osv_update_cache,
+            osv::osv_cache_status,
             // Intelligence Metrics (Phase 9)
             intelligence_metrics::get_intelligence_metrics,
             // Accuracy Tracking (Phase 4.1)

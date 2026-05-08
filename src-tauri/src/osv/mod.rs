@@ -4,6 +4,7 @@
 //! Syncs advisories from the OSV API for the user's actual dependencies,
 //! then cross-references with version matching to produce verified alerts.
 
+pub(crate) mod cache;
 pub(crate) mod matching;
 pub(crate) mod sync;
 pub(crate) mod types;
@@ -40,4 +41,20 @@ pub async fn osv_get_sync_status() -> Result<serde_json::Value> {
         .get_osv_sync_statuses()
         .context("Failed to read sync status")?;
     serde_json::to_value(&statuses).context("Failed to serialize sync status")
+}
+
+/// Update the local OSV cache by downloading ecosystem ZIP files.
+/// Falls back to cached data when the network is unavailable.
+#[tauri::command]
+pub async fn osv_update_cache() -> Result<serde_json::Value> {
+    let db = crate::get_database()?;
+    let result = cache::update_all_caches(&db).await?;
+    serde_json::to_value(&result).context("Failed to serialize cache update result")
+}
+
+/// Get the status of all cached ecosystem ZIP files.
+#[tauri::command]
+pub async fn osv_cache_status() -> Result<serde_json::Value> {
+    let statuses = cache::get_all_cache_statuses()?;
+    serde_json::to_value(&statuses).context("Failed to serialize cache statuses")
 }

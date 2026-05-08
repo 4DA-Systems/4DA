@@ -104,7 +104,7 @@ image = "0.25"                                    # Image analysis (OCR + file e
 ocrs = { version = "0.12", optional = true }     # Pure Rust OCR engine
 rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
-zip = { version = "0.6", optional = true }        # ZIP archive extraction
+zip = "0.6"                                        # ZIP archive extraction (OSV cache + extractors)
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
 
@@ -189,7 +189,7 @@ harness = false
 [features]
 default = []
 ocr = ["dep:ocrs", "dep:rten"]
-archive = ["dep:zip", "dep:tar", "dep:flate2"]
+archive = ["dep:tar", "dep:flate2"]
 void-universe = []
 sql-check = []
 experimental = []
