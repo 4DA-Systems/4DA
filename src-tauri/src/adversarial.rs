@@ -202,12 +202,15 @@ pub(crate) async fn filter_batch(
     let mut delib_count: usize = 0;
 
     for item in items {
-        // Critical/High items get deliberation for explanation quality but
-        // can never be suppressed — the LLM improves their explanation
-        // without questioning whether to surface them.
-        let must_surface = item.urgency == Urgency::Critical
-            || item.urgency == Urgency::High
-            || item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified;
+        // OSV-verified items are machine-confirmed (semver range check against
+        // installed version). No LLM deliberation needed — pass through as-is.
+        if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
+            bypass_count += 1;
+            passed.push(item);
+            continue;
+        }
+
+        let must_surface = item.urgency == Urgency::Critical || item.urgency == Urgency::High;
 
         delib_count += 1;
         if must_surface {
@@ -312,6 +315,7 @@ pub(crate) fn has_grounded_reasoning(explanation: &str) -> bool {
 ///
 /// Returns `true` if title words make up more than 80% of the explanation
 /// words (i.e. the explanation adds almost nothing beyond the title).
+// REMOVE BY 2026-08-01
 #[allow(dead_code)] // Reason: available for callers that have both title and explanation
 pub(crate) fn is_title_restatement(title: &str, explanation: &str) -> bool {
     let title_words: std::collections::HashSet<String> = title
