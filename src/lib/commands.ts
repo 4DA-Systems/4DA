@@ -480,6 +480,8 @@ interface CommandMap {
   osv_sync_now: { params: Record<string, never>; result: { ecosystems_synced: string[]; advisories_stored: number; advisories_matched: number; duration_ms: number; errors: string[] } };
   osv_get_matches: { params: Record<string, never>; result: { advisory_id: string; summary: string; details: string | null; package_name: string; ecosystem: string; installed_version: string | null; fixed_version: string | null; severity_type: string | null; cvss_score: number | null; source_url: string | null; is_version_confirmed: boolean; project_paths: string[]; published_at: string | null }[] };
   osv_get_sync_status: { params: Record<string, never>; result: { ecosystem: string; last_synced_at: string | null; advisory_count: number; error: string | null }[] };
+  osv_update_cache: { params: Record<string, never>; result: { ecosystems_updated: string[]; ecosystems_skipped: string[]; total_advisories: number; duration_ms: number; errors: string[] } };
+  osv_cache_status: { params: Record<string, never>; result: { ecosystem: string; etag: string | null; last_modified: string | null; downloaded_at: string; size_bytes: number; advisory_count: number }[] };
 
   // -- Intelligence Metrics --
   get_intelligence_metrics: { params: { days?: number }; result: { verified: { surfaced: number; dismissed: number; acted_on: number; dismiss_rate: number; engagement_rate: number }; ai_assessed: { surfaced: number; dismissed: number; acted_on: number; dismiss_rate: number; engagement_rate: number }; developing: { surfaced: number; dismissed: number; acted_on: number; dismiss_rate: number; engagement_rate: number }; feedback_distribution: { category: string; count: number }[]; prompt_versions_active: string[] } };

@@ -49,6 +49,12 @@ fn normalize_to_osv(ecosystem: &str) -> &str {
         .unwrap_or(ecosystem)
 }
 
+/// Public-within-module wrapper for ecosystem normalization.
+/// Used by the cache module to map user dependency ecosystems to OSV names.
+pub(super) fn normalize_to_osv_pub(ecosystem: &str) -> String {
+    normalize_to_osv(ecosystem).to_string()
+}
+
 /// Run a full sync: read deps → query OSV → store advisories → update status.
 pub async fn sync(db: &Database) -> Result<SyncResult> {
     let start = std::time::Instant::now();
@@ -101,11 +107,37 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
                     .ok();
             }
             Err(e) => {
+                let err_str = e.to_string();
+                // Rate limit errors should not fall back to cache
+                let is_rate_limit = err_str.contains("429");
+
+                if !is_rate_limit {
+                    // Attempt cache fallback for network/server errors
+                    let pkg_set: std::collections::HashSet<String> =
+                        packages.iter().map(|p| p.to_lowercase()).collect();
+
+                    match super::cache::sync_from_zip(db, ecosystem, &pkg_set) {
+                        Ok(count) if count > 0 => {
+                            info!(
+                                target: "4da::osv",
+                                ecosystem = ecosystem.as_str(),
+                                cached_advisories = count,
+                                "API sync failed, fell back to cached ZIP"
+                            );
+                            result.ecosystems_synced.push(ecosystem.clone());
+                            result.advisories_stored += count;
+                            db.update_osv_sync_status(ecosystem, count as i64, None)
+                                .ok();
+                            continue;
+                        }
+                        _ => {} // No cache available, report original error
+                    }
+                }
+
                 let msg = format!("{ecosystem}: {e}");
                 warn!(target: "4da::osv", error = %msg, "Ecosystem sync failed");
                 result.errors.push(msg);
-                db.update_osv_sync_status(ecosystem, 0, Some(&e.to_string()))
-                    .ok();
+                db.update_osv_sync_status(ecosystem, 0, Some(&err_str)).ok();
             }
         }
     }
@@ -226,7 +258,7 @@ async fn sync_ecosystem(
 
 /// Store a single vulnerability's affected packages into the DB.
 /// Returns the number of rows stored.
-fn store_vulnerability(
+pub(super) fn store_vulnerability(
     db: &Database,
     vuln: &Vulnerability,
     seen: &mut std::collections::HashSet<String>,

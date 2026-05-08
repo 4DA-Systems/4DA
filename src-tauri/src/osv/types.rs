@@ -137,6 +137,27 @@ pub struct SyncStatus {
     pub error: Option<String>,
 }
 
+/// Metadata for a cached ecosystem ZIP file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheMeta {
+    pub ecosystem: String,
+    pub etag: Option<String>,
+    pub last_modified: Option<String>,
+    pub downloaded_at: String,
+    pub size_bytes: u64,
+    pub advisory_count: usize,
+}
+
+/// Result of updating all caches.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheUpdateResult {
+    pub ecosystems_updated: Vec<String>,
+    pub ecosystems_skipped: Vec<String>,
+    pub total_advisories: usize,
+    pub duration_ms: u64,
+    pub errors: Vec<String>,
+}
+
 // ============================================================================
 // Helpers
 // ============================================================================
