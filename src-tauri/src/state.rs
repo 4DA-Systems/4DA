@@ -13,7 +13,6 @@ use crate::ace;
 use crate::context_engine::ContextEngine;
 use crate::db::Database;
 use crate::error::{Result, ResultExt};
-use crate::job_queue;
 use crate::monitoring;
 use crate::settings::SettingsManager;
 use crate::sources::SourceRegistry;
@@ -528,30 +527,6 @@ static MONITORING_STATE: OnceCell<Arc<monitoring::MonitoringState>> = OnceCell::
 
 pub(crate) fn get_monitoring_state() -> &'static Arc<monitoring::MonitoringState> {
     MONITORING_STATE.get_or_init(|| Arc::new(monitoring::MonitoringState::new()))
-}
-
-// ============================================================================
-// Global Job Queue (Background Extraction Processing)
-// ============================================================================
-
-// Planned: async job queue for background task management
-#[allow(dead_code)] // Reason: job queue infrastructure built but not yet wired into app startup
-static JOB_QUEUE: OnceCell<Arc<parking_lot::RwLock<job_queue::JobQueue>>> = OnceCell::new();
-
-// Planned: async job queue for background task management
-#[allow(dead_code)] // Reason: job queue infrastructure built but not yet wired into app startup
-fn init_job_queue() -> Result<Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
-    let conn = open_db_connection()?;
-
-    let queue = job_queue::JobQueue::new(Arc::new(parking_lot::Mutex::new(conn)));
-    info!(target: "4da::job_queue", "Job queue initialized");
-    Ok(Arc::new(parking_lot::RwLock::new(queue)))
-}
-
-// Planned: async job queue for background task management
-#[allow(dead_code)] // Reason: job queue infrastructure built but not yet wired into app startup
-pub(crate) fn get_job_queue() -> Result<&'static Arc<parking_lot::RwLock<job_queue::JobQueue>>> {
-    JOB_QUEUE.get_or_try_init(init_job_queue)
 }
 
 // ============================================================================

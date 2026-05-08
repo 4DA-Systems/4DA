@@ -241,16 +241,6 @@ pub fn get_semantic_shifts(lookback_days: Option<u32>) -> Result<Vec<SemanticShi
     detect_shifts(&conn, lookback_days.unwrap_or(7))
 }
 
-#[allow(dead_code)] // Reason: reserved for MCP integration
-pub fn get_topic_centroids(topic: Option<String>) -> Result<Vec<crate::temporal::TemporalEvent>> {
-    let conn = crate::open_db_connection()?;
-    if let Some(t) = topic {
-        crate::temporal::query_events_by_subject(&conn, &t, 20)
-    } else {
-        crate::temporal::query_events(&conn, "topic_centroid", None, 50)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

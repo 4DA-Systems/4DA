@@ -42,10 +42,14 @@ pub enum ValidationError {
     #[error("id is empty")]
     IdEmpty,
     #[error("explanation required (Phase 9+)")]
-    #[allow(dead_code)] // Gated on a future phase flag; checker wired in Phase 9.
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)]
+    // Gated on a future phase flag; checker wired in Phase 9 — REMOVE BY 2026-08-01
     ExplanationRequired,
     #[error("explanation lacks grounded reasoning (no causal connectors found)")]
-    #[allow(dead_code)] // Gated — will warn in dev, not block, until Phase 10.
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)]
+    // Gated — will warn in dev, not block, until Phase 10 — REMOVE BY 2026-08-01
     ReasoningNotGrounded,
 }
 

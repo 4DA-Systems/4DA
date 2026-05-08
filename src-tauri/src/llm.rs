@@ -136,6 +136,7 @@ impl LLMClient {
     }
 
     /// Check if the client is configured
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)] // Reason: used in tests for provider validation
     pub fn is_configured(&self) -> bool {
         match self.provider.provider.as_str() {
@@ -796,43 +797,6 @@ impl LLMClient {
             output_tokens,
         )
     }
-}
-
-// ============================================================================
-// Ollama Utilities
-// ============================================================================
-
-/// List available models from Ollama API
-#[allow(dead_code)] // Reason: utility for future Ollama model discovery; no callers yet
-pub async fn list_ollama_models(base_url: &str) -> Result<Vec<String>> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .context("Failed to create HTTP client")?;
-
-    let url = format!("{base_url}/api/tags");
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .context("Failed to connect to Ollama")?;
-
-    if !response.status().is_success() {
-        return Err(format!("Ollama returned error: {}", response.status()).into());
-    }
-
-    let data: serde_json::Value = response.json().await.context("Failed to parse response")?;
-
-    let models = data["models"]
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|m| m["name"].as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    Ok(models)
 }
 
 // ============================================================================

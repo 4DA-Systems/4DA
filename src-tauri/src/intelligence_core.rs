@@ -73,7 +73,8 @@ pub struct JudgeResponse {
 /// them per-response to render "Why this score?", at which point the
 /// `allow(dead_code)` here becomes removable.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Metadata fields consumed by Phase 7 receipts UI.
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Serde-serialized metadata fields
 pub struct Validated<T> {
     pub value: T,
     pub identity: ModelIdentity,

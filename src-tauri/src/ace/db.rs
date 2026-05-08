@@ -399,19 +399,6 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     Ok(())
 }
 
-/// Get bootstrap paths for initial scan
-#[allow(dead_code)] // Reason: ACE autonomous scanning feature not yet wired into startup
-pub fn get_bootstrap_paths(conn: &Arc<Mutex<Connection>>) -> Result<Vec<String>> {
-    let conn = conn.lock();
-    let mut stmt =
-        conn.prepare("SELECT path FROM bootstrap_paths WHERE scanned = 0 ORDER BY priority DESC")?;
-
-    let rows = stmt.query_map([], |row| row.get(0))?;
-
-    let paths: std::result::Result<Vec<String>, _> = rows.collect();
-    Ok(paths?)
-}
-
 // ═══════════════════════════════════════════════════════════════
 // REMOVED UNUSED FUNCTIONS (cleanup 2026-01-21):
 // - mark_path_scanned

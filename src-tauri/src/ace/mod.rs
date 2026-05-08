@@ -206,24 +206,6 @@ impl ACE {
         Ok(())
     }
 
-    /// Stop file watching
-    #[allow(dead_code)] // Reason: ACE watcher API, not yet called from app lifecycle
-    pub fn stop_watching(&mut self) {
-        if let Some(ref watcher) = self.watcher {
-            watcher.lock().stop();
-        }
-        self.watcher = None;
-        info!(target: "ace::watcher", "File watching stopped");
-    }
-
-    /// Check if file watching is active
-    #[allow(dead_code)] // Reason: ACE watcher API, not yet called from app lifecycle
-    pub fn is_watching(&self) -> bool {
-        self.watcher
-            .as_ref()
-            .is_some_and(|w| w.lock().is_watching())
-    }
-
     /// Analyze git repositories in the given paths
     pub fn analyze_git_repos(&self, paths: &[PathBuf]) -> Result<Vec<GitSignal>> {
         let mut signals = Vec::new();
@@ -609,64 +591,6 @@ impl ACE {
         }
     }
 
-    /// Clear watcher state
-    #[allow(dead_code)] // Reason: ACE watcher API, not yet called from app lifecycle
-    pub fn clear_watcher_state(&self) -> Result<()> {
-        if let Some(persistence) = &self.watcher_persistence {
-            persistence.clear()
-        } else {
-            Err("Watcher persistence not initialized".into())
-        }
-    }
-
-    /// Get topics from recent file changes for "active work" boosting.
-    ///
-    /// **Deprecated:** Prefer `get_session_aware_work_topics()` which uses session
-    /// detection instead of a fixed time window.
-    #[allow(dead_code)]
-    pub fn get_recent_work_topics(&self, hours: u64) -> Result<Vec<(String, f32)>> {
-        let conn = self.conn.lock();
-
-        let mut stmt = conn.prepare(
-            "SELECT extracted_topics, timestamp FROM file_signals
-                 WHERE timestamp > datetime('now', ?1)
-                 ORDER BY timestamp DESC LIMIT 50",
-        )?;
-
-        let hours_param = format!("-{hours} hours");
-        let rows = stmt.query_map([&hours_param], |row| {
-            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, String>(1)?))
-        })?;
-
-        let mut topic_weights: std::collections::HashMap<String, f32> =
-            std::collections::HashMap::new();
-        let max_hours = hours as f32;
-
-        for row in rows {
-            let (topics_json, timestamp_str) = row?;
-
-            if let Some(json_str) = topics_json {
-                // Parse JSON array of topics
-                if let Ok(topics) = serde_json::from_str::<Vec<String>>(&json_str) {
-                    // Compute recency weight: linear decay from 1.0 to 0.5
-                    let hours_ago = parse_hours_ago(&timestamp_str);
-                    let weight = 1.0 - (hours_ago / max_hours) * 0.5;
-                    let weight = weight.clamp(0.5, 1.0);
-
-                    for topic in topics {
-                        let topic_lower = topic.to_lowercase();
-                        let entry = topic_weights.entry(topic_lower).or_insert(0.0);
-                        *entry = entry.max(weight); // Keep highest weight per topic
-                    }
-                }
-            }
-        }
-
-        let mut result: Vec<(String, f32)> = topic_weights.into_iter().collect();
-        result.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        Ok(result)
-    }
-
     /// Session-aware work topic extraction with gap-based session detection.
     ///
     /// Instead of a fixed 2-hour window, detects natural work sessions by finding
@@ -674,8 +598,6 @@ impl ACE {
     /// - Current session topics: weight 1.0
     /// - Previous same-day session: weight 0.5
     /// - Yesterday's sessions: weight 0.2
-    ///
-    /// Falls back to `get_recent_work_topics(4)` if no signals exist in last 24h.
     pub fn get_session_aware_work_topics(&self) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
 
@@ -857,113 +779,6 @@ mod tests {
             rate_limiter: InteractionRateLimiter::new(1000, 100, 60),
             peak_hours: Vec::new(),
         }
-    }
-
-    #[test]
-    fn test_recent_work_topics_returns_topics() {
-        let ace = create_test_ace();
-        let conn = ace.get_conn().lock();
-
-        // Insert file_signals with topics within 2 hours (use current timestamp)
-        let now = chrono::Utc::now()
-            .naive_utc()
-            .format("%Y-%m-%d %H:%M:%S")
-            .to_string();
-        conn.execute(
-            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
-             VALUES (?1, 'modified', ?2, ?3)",
-            rusqlite::params!["/src/main.rs", r#"["rust", "tauri", "async"]"#, now,],
-        )
-        .expect("insert file signal");
-
-        // Insert another signal 30 minutes ago
-        let thirty_min_ago = (chrono::Utc::now() - chrono::Duration::minutes(30))
-            .naive_utc()
-            .format("%Y-%m-%d %H:%M:%S")
-            .to_string();
-        conn.execute(
-            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
-             VALUES (?1, 'modified', ?2, ?3)",
-            rusqlite::params!["/src/lib.rs", r#"["sqlite", "embeddings"]"#, thirty_min_ago,],
-        )
-        .expect("insert file signal 2");
-
-        drop(conn); // Release lock before calling method
-
-        let topics = ace
-            .get_recent_work_topics(2)
-            .expect("get_recent_work_topics");
-
-        // Should have 5 unique topics
-        assert_eq!(topics.len(), 5, "Expected 5 topics, got {:?}", topics);
-
-        // Most recent topics should have highest weight (close to 1.0)
-        let rust_weight = topics.iter().find(|(t, _)| t == "rust").map(|(_, w)| *w);
-        assert!(rust_weight.is_some(), "Should contain 'rust' topic");
-        assert!(
-            rust_weight.unwrap() > 0.9,
-            "Recent 'rust' topic should have weight > 0.9, got {}",
-            rust_weight.unwrap()
-        );
-
-        // Slightly older topics should still have decent weight
-        let sqlite_weight = topics.iter().find(|(t, _)| t == "sqlite").map(|(_, w)| *w);
-        assert!(sqlite_weight.is_some(), "Should contain 'sqlite' topic");
-        assert!(
-            sqlite_weight.unwrap() > 0.8,
-            "30-min-old 'sqlite' topic should have weight > 0.8, got {}",
-            sqlite_weight.unwrap()
-        );
-    }
-
-    #[test]
-    fn test_old_work_topics_excluded() {
-        let ace = create_test_ace();
-        let conn = ace.get_conn().lock();
-
-        // Insert file_signals > 2 hours old (3 hours ago)
-        let three_hours_ago = (chrono::Utc::now() - chrono::Duration::hours(3))
-            .naive_utc()
-            .format("%Y-%m-%d %H:%M:%S")
-            .to_string();
-        conn.execute(
-            "INSERT INTO file_signals (path, change_type, extracted_topics, timestamp)
-             VALUES (?1, 'modified', ?2, ?3)",
-            rusqlite::params![
-                "/old/file.rs",
-                r#"["old_topic", "stale_tech"]"#,
-                three_hours_ago,
-            ],
-        )
-        .expect("insert old file signal");
-
-        drop(conn);
-
-        let topics = ace
-            .get_recent_work_topics(2)
-            .expect("get_recent_work_topics");
-
-        assert!(
-            topics.is_empty(),
-            "Topics older than 2 hours should not appear in 2-hour window, got {:?}",
-            topics
-        );
-    }
-
-    #[test]
-    fn test_empty_window_returns_empty() {
-        let ace = create_test_ace();
-
-        // Fresh DB with no file_signals at all
-        let topics = ace
-            .get_recent_work_topics(2)
-            .expect("get_recent_work_topics");
-
-        assert!(
-            topics.is_empty(),
-            "Empty DB should return no work topics, got {:?}",
-            topics
-        );
     }
 
     // ========================================================================

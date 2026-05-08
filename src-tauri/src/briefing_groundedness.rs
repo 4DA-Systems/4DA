@@ -45,7 +45,8 @@ pub struct GroundednessReport {
     pub total_terms: usize,
     /// Count of salient terms matched against the source corpus. Surfaced
     /// to the receipts UI as the numerator of the grounding fraction.
-    #[allow(dead_code)] // Surfaced via Debug + future receipts panel.
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Serde: populated during grounding analysis
     pub grounded_terms: usize,
     pub ungrounded_terms: Vec<String>,
 }

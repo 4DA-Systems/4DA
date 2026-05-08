@@ -43,6 +43,7 @@ impl SignalType {
         }
     }
 
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)]
     fn label(&self) -> &'static str {
         match self {
@@ -56,7 +57,7 @@ impl SignalType {
     }
 
     /// Translated label for user-facing display.
-    pub fn label_translated(&self, lang: &str) -> String {
+    pub(crate) fn label_translated(&self, lang: &str) -> String {
         let key = match self {
             SignalType::SecurityAlert => "signals:type.securityAlert",
             SignalType::BreakingChange => "signals:type.breakingChange",
@@ -104,8 +105,9 @@ impl SignalPriority {
     }
 
     /// Translated label for user-facing display.
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)]
-    pub fn label_translated(&self, lang: &str) -> String {
+    pub(crate) fn label_translated(&self, lang: &str) -> String {
         let key = match self {
             SignalPriority::Critical => "signals:priority.critical",
             SignalPriority::Alert => "signals:priority.alert",
@@ -134,8 +136,9 @@ impl SignalHorizon {
     }
 
     /// Translated label for user-facing display.
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)]
-    pub fn label_translated(&self, lang: &str) -> String {
+    pub(crate) fn label_translated(&self, lang: &str) -> String {
         let key = match self {
             SignalHorizon::Tactical => "signals:horizon.tactical",
             SignalHorizon::Strategic => "signals:horizon.strategic",

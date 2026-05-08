@@ -232,7 +232,6 @@ pub fn should_generate_digest(conn: &rusqlite::Connection) -> bool {
 // Tauri Command
 // ============================================================================
 
-#[tauri::command]
 pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
     let now = Utc::now();
     let week_ago = now - Duration::days(7);

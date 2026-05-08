@@ -111,67 +111,6 @@ impl TimeRange {
     }
 }
 
-/// Entity filter for queries (people, places, projects)
-/// Used when NER (Named Entity Recognition) is implemented
-#[allow(dead_code)] // Reason: reserved for NER integration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EntityFilter {
-    /// Entity name or pattern
-    pub name: String,
-    /// Entity type (optional)
-    pub entity_type: Option<EntityType>,
-    /// Whether to match exactly or fuzzy
-    pub exact_match: bool,
-}
-
-/// Entity types for filtering (used with NER)
-#[allow(dead_code)] // Reason: reserved for NER integration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum EntityType {
-    Person,
-    Organization,
-    Project,
-    Location,
-    Topic,
-    Unknown,
-}
-
-#[allow(dead_code)] // Reason: reserved for NER integration
-impl EntityFilter {
-    pub fn person(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            entity_type: Some(EntityType::Person),
-            exact_match: false,
-        }
-    }
-
-    pub fn project(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            entity_type: Some(EntityType::Project),
-            exact_match: false,
-        }
-    }
-
-    pub fn topic(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            entity_type: Some(EntityType::Topic),
-            exact_match: false,
-        }
-    }
-
-    /// Get SQL LIKE pattern for this entity
-    pub fn to_sql_pattern(&self) -> String {
-        if self.exact_match {
-            self.name.clone()
-        } else {
-            format!("%{}%", self.name)
-        }
-    }
-}
-
 /// Sentiment filter for queries
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum SentimentFilter {
@@ -233,54 +172,6 @@ impl SentimentFilter {
     }
 }
 
-/// Combined filter set for a query (builder pattern)
-/// Designed for future advanced query building
-#[allow(dead_code)] // Reason: reserved for advanced query system
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct QueryFilters {
-    pub time_range: Option<TimeRange>,
-    pub entities: Vec<EntityFilter>,
-    pub sentiment: Option<SentimentFilter>,
-    pub file_types: Vec<String>,
-    pub min_confidence: Option<f32>,
-}
-
-#[allow(dead_code)] // Reason: reserved for advanced query system
-impl QueryFilters {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_time_range(mut self, time_range: TimeRange) -> Self {
-        self.time_range = Some(time_range);
-        self
-    }
-
-    pub fn with_entity(mut self, entity: EntityFilter) -> Self {
-        self.entities.push(entity);
-        self
-    }
-
-    pub fn with_sentiment(mut self, sentiment: SentimentFilter) -> Self {
-        self.sentiment = Some(sentiment);
-        self
-    }
-
-    pub fn with_file_type(mut self, file_type: &str) -> Self {
-        self.file_types.push(file_type.to_string());
-        self
-    }
-
-    /// Check if any filters are set
-    pub fn is_empty(&self) -> bool {
-        self.time_range.is_none()
-            && self.entities.is_empty()
-            && self.sentiment.is_none()
-            && self.file_types.is_empty()
-            && self.min_confidence.is_none()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,12 +223,5 @@ mod tests {
         let keywords = stressed.to_keywords();
         assert!(keywords.contains(&"deadline"));
         assert!(keywords.contains(&"pressure"));
-    }
-
-    #[test]
-    fn test_entity_filter() {
-        let filter = EntityFilter::person("John");
-        assert_eq!(filter.entity_type, Some(EntityType::Person));
-        assert_eq!(filter.to_sql_pattern(), "%John%");
     }
 }

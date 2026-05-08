@@ -76,13 +76,15 @@ pub struct InstanceLock {
 
 impl InstanceLock {
     /// Path of the lock file this guard manages.
-    #[allow(dead_code)] // used by tests and future diagnostics
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Test utility: path() used by test assertions
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Disarm the guard — on drop the lock file will NOT be removed.
     /// Use this only if something else takes ownership of the lock.
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)]
     pub fn forget(mut self) {
         self.active = false;

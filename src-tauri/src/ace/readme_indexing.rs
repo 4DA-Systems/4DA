@@ -106,8 +106,8 @@ fn discover_projects_recursive(
 struct ReadmeSection {
     heading: String,
     content: String,
-    #[allow(dead_code)]
-    // Reason: populated during parsing, reserved for future section hierarchy processing
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Serde: populated during README parsing
     level: usize,
 }
 

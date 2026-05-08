@@ -200,6 +200,7 @@ mod decisions;
 #[cfg(feature = "experimental")]
 mod delegation;
 #[cfg(not(feature = "experimental"))]
+// REMOVE BY 2026-08-01
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "delegation_stub.rs"]
 mod delegation;
@@ -219,6 +220,7 @@ mod entity_extraction;
 #[cfg(feature = "experimental")]
 mod achievement_commands;
 #[cfg(not(feature = "experimental"))]
+// REMOVE BY 2026-08-01
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "achievement_commands_stub.rs"]
 mod achievement_commands;
@@ -327,7 +329,8 @@ mod topic_clustering;
 mod url_validation;
 mod void_commands;
 mod void_engine;
-#[allow(dead_code)]
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // WaitlistEntry struct only constructed in tests
 mod waitlist;
 mod weekly_digest;
 
@@ -356,6 +359,7 @@ mod toolkit_export;
 #[cfg(feature = "experimental")]
 mod toolkit_http;
 #[cfg(not(feature = "experimental"))]
+// REMOVE BY 2026-08-01
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "toolkit_http_stub.rs"]
 mod toolkit_http;

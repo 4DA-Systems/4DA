@@ -4,7 +4,7 @@
 use parking_lot::Mutex;
 use rusqlite::Connection;
 use std::sync::Arc;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::error::{Result, ResultExt};
 
@@ -124,119 +124,11 @@ pub fn load_topic_embeddings(
     Ok(result)
 }
 
-/// Generate embeddings for topics that don't have them
-/// Returns count of topics updated
-#[allow(dead_code)] // Reason: batch embedding generation not yet wired into startup pipeline
-pub async fn generate_missing_topic_embeddings(conn: &Arc<Mutex<Connection>>) -> Result<usize> {
-    // Find topics without embeddings
-    let topics_without_embeddings: Vec<(i64, String)> = {
-        let conn_guard = conn.lock();
-        let mut stmt = conn_guard.prepare(
-            "SELECT id, topic FROM active_topics
-                 WHERE embedding IS NULL
-                 AND julianday('now') - julianday(last_seen) <= 7
-                 LIMIT 50",
-        )?;
-
-        let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-
-        rows.collect::<std::result::Result<Vec<_>, _>>()?
-    };
-
-    if topics_without_embeddings.is_empty() {
-        return Ok(0);
-    }
-
-    info!(
-        target: "ace::embedding",
-        count = topics_without_embeddings.len(),
-        "Generating embeddings for topics without embeddings"
-    );
-
-    // Generate embeddings using the main embed_texts function
-    let topic_texts: Vec<String> = topics_without_embeddings
-        .iter()
-        .map(|(_, t)| t.clone())
-        .collect();
-
-    let embeddings = crate::embed_texts(&topic_texts).await?;
-
-    // Store embeddings
-    let mut updated = 0;
-    for ((id, topic), embedding) in topics_without_embeddings.iter().zip(embeddings.iter()) {
-        let embedding_blob = embedding_to_blob(embedding);
-
-        let conn_guard = conn.lock();
-
-        // Update active_topics
-        if conn_guard
-            .execute(
-                "UPDATE active_topics SET embedding = ?1 WHERE id = ?2",
-                rusqlite::params![embedding_blob, id],
-            )
-            .is_ok()
-        {
-            // Insert into vec0 index
-            if let Err(e) = conn_guard.execute(
-                "INSERT OR REPLACE INTO topic_vec (rowid, embedding) VALUES (?1, ?2)",
-                rusqlite::params![id, embedding_blob],
-            ) {
-                tracing::warn!(target: "4da::ace", error = %e, topic = %topic, topic_id = id, "Failed to insert topic embedding into vec0 index");
-            }
-            updated += 1;
-            debug!(target: "ace::embedding", topic = %topic, "Generated embedding for topic");
-        }
-    }
-
-    info!(target: "ace::embedding", updated = updated, "Generated topic embeddings");
-    Ok(updated)
-}
-
-/// KNN search for topics similar to a given embedding
-/// Returns (topic, similarity_score) pairs sorted by similarity
-#[allow(dead_code)] // Reason: semantic topic KNN search not yet wired into scoring pipeline
-pub fn find_similar_topics_knn(
-    conn: &Arc<Mutex<Connection>>,
-    query_embedding: &[f32],
-    limit: usize,
-) -> Result<Vec<(String, f32)>> {
-    let conn = conn.lock();
-    let embedding_blob = embedding_to_blob(query_embedding);
-
-    let mut stmt = conn.prepare(
-        "SELECT at.topic, tv.distance
-             FROM topic_vec tv
-             JOIN active_topics at ON at.id = tv.rowid
-             WHERE tv.embedding MATCH ?1
-             AND k = ?2
-             ORDER BY tv.distance",
-    )?;
-
-    let rows = stmt.query_map(rusqlite::params![embedding_blob, limit as i32], |row| {
-        let topic: String = row.get(0)?;
-        let distance: f32 = row.get(1)?;
-        // Convert L2 distance to similarity (1 / (1 + distance))
-        let similarity = 1.0 / (1.0 + distance);
-        Ok((topic, similarity))
-    })?;
-
-    Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
-}
-
 // ============================================================================
 // ACE Embedding Methods
 // ============================================================================
 
 impl ACE {
-    /// Generate embedding for a topic
-    #[allow(dead_code)] // Reason: ACE embedding API, not yet called from scoring pipeline
-    pub fn embed_topic(&self, topic: &str) -> Result<Vec<f32>> {
-        match &self.embedding_service {
-            Some(service) => service.lock().embed(topic),
-            None => Err("Embedding service not initialized".into()),
-        }
-    }
-
     /// Find similar topics
     pub fn find_similar_topics(&self, query: &str, top_k: usize) -> Result<Vec<(String, f32)>> {
         let topics = self.get_active_topics()?;

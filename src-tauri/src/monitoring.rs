@@ -28,6 +28,7 @@ pub use crate::monitoring_notifications::{
 
 /// A notification that was below the quality threshold and batched for the next briefing
 #[derive(Debug, Clone)]
+// REMOVE BY 2026-08-01
 #[allow(dead_code)] // Reason: signal_priority field only read in tests; other fields used in production
 pub struct BatchedNotification {
     pub title: String,
@@ -1014,62 +1015,6 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             });
         }
     });
-}
-
-// ============================================================================
-// Tray Menu Updates
-// ============================================================================
-
-/// Update the tray menu text based on monitoring state
-#[allow(dead_code)] // Reason: dynamic tray menu updates not yet wired into monitoring loop
-pub fn update_tray_menu<R: Runtime>(
-    tray: &TrayIcon<R>,
-    app: &AppHandle<R>,
-    monitoring_enabled: bool,
-) -> Result<()> {
-    let show_item = MenuItem::with_id(app, "show", "Show 4DA", true, None::<&str>)?;
-    let analyze_item = MenuItem::with_id(app, "analyze", "Analyze Now", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-
-    let monitoring_text = if monitoring_enabled {
-        "Stop Monitoring"
-    } else {
-        "Start Monitoring"
-    };
-    let monitoring_item = MenuItem::with_id(
-        app,
-        "toggle_monitoring",
-        monitoring_text,
-        true,
-        None::<&str>,
-    )?;
-
-    let separator2 = PredefinedMenuItem::separator(app)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-
-    let menu = Menu::with_items(
-        app,
-        &[
-            &show_item,
-            &analyze_item,
-            &separator,
-            &monitoring_item,
-            &separator2,
-            &quit_item,
-        ],
-    )?;
-
-    tray.set_menu(Some(menu))?;
-
-    // Update tooltip
-    let tooltip = if monitoring_enabled {
-        "4DA — Monitoring active"
-    } else {
-        "4DA — All signal. No feed."
-    };
-    tray.set_tooltip(Some(tooltip))?;
-
-    Ok(())
 }
 
 // ============================================================================

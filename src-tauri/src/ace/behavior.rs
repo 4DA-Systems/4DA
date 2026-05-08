@@ -82,6 +82,7 @@ impl InteractionPattern {
     /// True when the pattern suggests the item was above the user's level.
     /// Reread + short-Bounced fall here; Engaged/Completed do not. Used by
     /// the necessity scorer to boost foundational content on the same topic.
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)] // Consumed by necessity-scorer hook in follow-up commit.
     pub fn suggests_above_level(&self) -> bool {
         matches!(
@@ -211,52 +212,6 @@ pub struct AntiTopic {
     pub user_confirmed: bool,
     pub first_rejection: String,
     pub last_rejection: String,
-}
-
-/// Source preference (stub for API compatibility)
-#[allow(dead_code)] // Reason: serde-deserialized struct; not yet constructed in production code
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourcePreference {
-    pub source: String,
-    pub score: f32,
-    pub interactions: u32,
-}
-
-/// Learned behavior (stub for API compatibility)
-#[allow(dead_code)] // Reason: serde-deserialized struct; not yet constructed in production code
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct LearnedBehavior {
-    pub interests: Vec<String>,
-    pub anti_topics: Vec<String>,
-}
-
-/// Activity patterns (stub for API compatibility)
-#[allow(dead_code)] // Reason: serde-deserialized struct; not yet constructed in production code
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActivityPatterns {
-    pub hourly_engagement: Vec<f32>,
-    pub daily_engagement: Vec<f32>,
-}
-
-/// Summary of learned behavior
-#[allow(dead_code)] // Reason: serde-deserialized struct; constructed by get_learned_behavior which is itself unused
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LearnedBehaviorSummary {
-    pub total_interactions: u32,
-    pub learning_confidence: f32,
-    pub interests: Vec<String>,
-    pub anti_topics: Vec<String>,
-    pub source_preferences: Vec<SourcePreferenceSummary>,
-    pub top_affinities: Vec<TopicAffinity>,
-}
-
-/// Source preference summary
-#[allow(dead_code)] // Reason: serde-deserialized struct; constructed by get_learned_behavior which is itself unused
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SourcePreferenceSummary {
-    pub source: String,
-    pub score: f32,
-    pub interactions: u32,
 }
 
 // ============================================================================
@@ -629,87 +584,6 @@ impl ACE {
             .map_err(std::convert::Into::into)
     }
 
-    /// Get behavior modifier for an item
-    #[allow(dead_code)] // Reason: adaptive scoring feature not yet wired into scoring pipeline
-    pub fn get_behavior_modifier(&self, topics: &[String], source: &str) -> Result<f32> {
-        let conn = self.conn.lock();
-        let mut modifier = 0.0;
-        let mut count = 0;
-
-        for topic in topics {
-            let result: std::result::Result<(f32, f32), _> = conn.query_row(
-                "SELECT affinity_score, confidence FROM topic_affinities WHERE topic = ?1",
-                [topic],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            );
-            if let Ok((score, confidence)) = result {
-                modifier += score * confidence;
-                count += 1;
-            }
-        }
-
-        if count > 0 {
-            modifier /= count as f32;
-        }
-
-        let source_score: f32 = conn
-            .query_row(
-                "SELECT score FROM source_preferences WHERE source = ?1",
-                [source],
-                |row| row.get(0),
-            )
-            .unwrap_or(0.0);
-
-        modifier += source_score * 0.3;
-
-        Ok(modifier.clamp(-1.0, 1.0))
-    }
-
-    /// Get learned behavior summary
-    #[allow(dead_code)] // Reason: adaptive scoring feature not yet wired into UI/commands
-    pub fn get_learned_behavior(&self) -> Result<LearnedBehaviorSummary> {
-        let affinities = self.get_topic_affinities()?;
-        let anti_topics = self.get_anti_topics(5)?;
-
-        let conn = self.conn.lock();
-
-        let total_interactions: u32 = conn
-            .query_row("SELECT COUNT(*) FROM interactions", [], |row| row.get(0))
-            .unwrap_or(0);
-
-        let mut stmt = conn.prepare(
-            "SELECT source, score, interactions FROM source_preferences ORDER BY score DESC",
-        )?;
-
-        let source_prefs: Vec<SourcePreferenceSummary> = stmt
-            .query_map([], |row| {
-                Ok(SourcePreferenceSummary {
-                    source: row.get(0)?,
-                    score: row.get(1)?,
-                    interactions: row.get(2)?,
-                })
-            })?
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .map_err(|e| -> crate::error::FourDaError { e.into() })?;
-
-        let learning_confidence = (total_interactions as f32 / 100.0).min(0.95);
-
-        let interests: Vec<String> = affinities
-            .iter()
-            .filter(|a| a.affinity_score > 0.3 && a.confidence > 0.5)
-            .map(|a| a.topic.clone())
-            .collect();
-
-        Ok(LearnedBehaviorSummary {
-            total_interactions,
-            learning_confidence,
-            interests,
-            anti_topics: anti_topics.iter().map(|a| a.topic.clone()).collect(),
-            source_preferences: source_prefs,
-            top_affinities: affinities.into_iter().take(10).collect(),
-        })
-    }
-
     /// Get source preferences for scoring
     pub fn get_source_preferences(&self) -> Result<Vec<(String, f32)>> {
         let conn = self.conn.lock();
@@ -723,18 +597,6 @@ impl ACE {
 
         rows.collect::<std::result::Result<Vec<_>, _>>()
             .map_err(std::convert::Into::into)
-    }
-
-    /// Confirm an anti-topic
-    #[allow(dead_code)] // Reason: anti-topic confirmation not yet exposed via UI/commands
-    pub fn confirm_anti_topic(&self, topic: &str) -> Result<()> {
-        let conn = self.conn.lock();
-        conn.execute(
-            "UPDATE anti_topics SET user_confirmed = 1, confidence = 1.0, updated_at = datetime('now')
-             WHERE topic = ?1",
-            [topic],
-        )?;
-        Ok(())
     }
 
     /// Apply temporal decay to topic affinities

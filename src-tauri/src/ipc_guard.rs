@@ -16,7 +16,6 @@ pub const MAX_INPUT_LENGTH: usize = 10_000;
 pub const MAX_CONTENT_LENGTH: usize = 50_000;
 
 /// Maximum length for URL inputs
-#[allow(dead_code)]
 pub const MAX_URL_LENGTH: usize = 2_048;
 
 /// Maximum length for file path inputs
@@ -57,7 +56,6 @@ pub(crate) fn validate_no_null_bytes(field: &str, value: &str) -> Result<()> {
 }
 
 /// Validate a URL input: length + no null bytes + scheme validation.
-#[allow(dead_code)]
 pub(crate) fn validate_url_input(field: &str, url: &str) -> Result<String> {
     let clean = validate_length(field, url, MAX_URL_LENGTH)?;
     validate_no_null_bytes(field, &clean)?;
@@ -100,6 +98,7 @@ pub(crate) fn validate_path_input(field: &str, path: &str) -> Result<String> {
 /// Validate a file path by resolving symlinks and ensuring the canonical path
 /// is safe. Use this instead of `validate_path_input` when the path will be
 /// used for actual filesystem access (reads, writes, directory listing).
+// REMOVE BY 2026-08-01
 #[allow(dead_code)]
 ///
 /// Performs all checks from `validate_path_input` plus:
@@ -186,12 +185,15 @@ pub(crate) fn validate_path_canonical(
 }
 
 /// Ollama's default local endpoint — explicitly allowed through SSRF checks.
+// REMOVE BY 2026-08-01
 #[allow(dead_code)]
 const OLLAMA_HOST: &str = "127.0.0.1";
+// REMOVE BY 2026-08-01
 #[allow(dead_code)]
 const OLLAMA_PORT: u16 = 11434;
 
 /// Validate a URL is safe for outbound HTTP requests (SSRF prevention).
+// REMOVE BY 2026-08-01
 #[allow(dead_code)]
 ///
 /// Blocks:

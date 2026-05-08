@@ -21,7 +21,7 @@ static FEEDBACK_TOPIC_CACHE: LazyLock<Mutex<Option<Vec<FeedbackTopicSummary>>>> 
 
 /// Invalidate the feedback topic summary cache.
 /// Must be called after any feedback write (record_feedback, etc.).
-pub fn invalidate_feedback_topic_cache() {
+pub(crate) fn invalidate_feedback_topic_cache() {
     let mut cache = FEEDBACK_TOPIC_CACHE.lock().unwrap_or_else(|e| {
         tracing::warn!("FEEDBACK_TOPIC_CACHE mutex poisoned, recovering");
         e.into_inner()
@@ -576,7 +576,7 @@ impl Database {
     /// monopolize the budget and leaves Security/Research/Dependencies chapters
     /// empty. The balanced query uses a window function partitioned by
     /// `source_type` so each source gets a fair slice.
-    pub fn get_items_balanced_by_source(
+    pub(crate) fn get_items_balanced_by_source(
         &self,
         hours: i64,
         per_source_cap: usize,
@@ -634,7 +634,7 @@ impl Database {
     }
 
     /// Get recent source items within a time window (hours)
-    pub fn get_items_since_hours(
+    pub(crate) fn get_items_since_hours(
         &self,
         hours: i64,
         limit: usize,
@@ -698,7 +698,7 @@ impl Database {
     }
 
     /// Get items added since a specific ISO timestamp (for differential analysis)
-    pub fn get_items_since_timestamp(
+    pub(crate) fn get_items_since_timestamp(
         &self,
         since: &str,
         limit: usize,
@@ -753,41 +753,6 @@ impl Database {
     }
 
     /// Prune oldest items when the database exceeds the total item cap.
-    /// Keeps the newest `max_items` by `created_at`, deletes the rest.
-    /// Returns the number of items deleted.
-    pub fn prune_items_if_needed(&self, max_items: usize) -> SqliteResult<usize> {
-        let total = self.total_item_count()? as usize;
-        if total <= max_items {
-            return Ok(0);
-        }
-
-        let to_delete = total - max_items;
-        let conn = self.conn.lock();
-
-        // Delete oldest items (by created_at) that aren't bookmarked/saved
-        let deleted = conn.execute(
-            "DELETE FROM source_items WHERE id IN (
-                SELECT id FROM source_items
-                WHERE id NOT IN (SELECT source_item_id FROM saved_items)
-                ORDER BY created_at ASC
-                LIMIT ?1
-            )",
-            params![to_delete],
-        )?;
-
-        if deleted > 0 {
-            tracing::info!(
-                target: "4da::db",
-                deleted,
-                total,
-                cap = max_items,
-                "Auto-pruned oldest items to stay within capacity"
-            );
-        }
-
-        Ok(deleted)
-    }
-
     // ========================================================================
     // Feedback Operations
     // ========================================================================
@@ -1054,7 +1019,11 @@ impl Database {
     }
 
     /// Get health record for a specific feed.
-    pub fn get_feed_health(&self, feed_origin: &str, source_type: &str) -> Option<FeedHealth> {
+    pub(crate) fn get_feed_health(
+        &self,
+        feed_origin: &str,
+        source_type: &str,
+    ) -> Option<FeedHealth> {
         let conn = self.conn.lock();
         conn.query_row(
             "SELECT feed_origin, source_type, consecutive_failures, total_successes, total_failures, last_success_at, last_failure_at, last_error, circuit_open

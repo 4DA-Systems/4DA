@@ -92,6 +92,7 @@ impl Default for WatcherConfig {
 pub struct FileChange {
     pub path: PathBuf,
     pub change_type: FileChangeType,
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)] // Reason: field populated by watcher events but not yet read
     pub timestamp: Instant,
 }
@@ -157,21 +158,6 @@ impl FileWatcher {
 
             self.watched_paths.lock().insert(path.to_path_buf());
             info!(target: "ace::watcher", path = %path.display(), "Watching");
-        }
-
-        Ok(())
-    }
-
-    /// Stop watching a directory
-    #[allow(dead_code)] // Reason: FileWatcher public API, not yet called from ACE orchestrator
-    pub fn unwatch(&mut self, path: &Path) -> Result<()> {
-        if let Some(ref mut watcher) = self.watcher {
-            watcher
-                .unwatch(path)
-                .map_err(|e| format!("Failed to unwatch {}: {}", path.display(), e))?;
-
-            self.watched_paths.lock().remove(path);
-            info!(target: "ace::watcher", path = %path.display(), "Stopped watching");
         }
 
         Ok(())
@@ -331,12 +317,6 @@ impl FileWatcher {
     /// Get list of watched paths
     pub fn watched_paths(&self) -> Vec<PathBuf> {
         self.watched_paths.lock().iter().cloned().collect()
-    }
-
-    /// Check if currently watching any paths
-    #[allow(dead_code)] // Reason: FileWatcher public API, called by ACE::is_watching but ACE method itself is unused
-    pub fn is_watching(&self) -> bool {
-        !self.watched_paths.lock().is_empty()
     }
 }
 
@@ -858,57 +838,6 @@ impl WatcherStatePersistence {
 
         Ok(())
     }
-
-    /// Load watcher state
-    #[allow(dead_code)] // Reason: WatcherPersistence API, not yet called from main app startup
-    pub fn load(&self) -> Result<Option<WatcherState>> {
-        let conn = self.conn.lock();
-        let result: std::result::Result<String, _> = conn.query_row(
-            "SELECT state_json FROM watcher_state WHERE id = 1",
-            [],
-            |row| row.get(0),
-        );
-
-        match result {
-            Ok(json) => {
-                let state: WatcherState = serde_json::from_str(&json)?;
-                Ok(Some(state))
-            }
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to load watcher state: {e}").into()),
-        }
-    }
-
-    /// Restore watcher from saved state
-    #[allow(dead_code)] // Reason: WatcherPersistence API, not yet called from main app startup
-    pub fn restore(&self, watcher: &mut FileWatcher) -> Result<usize> {
-        let state = self.load()?;
-
-        if let Some(state) = state {
-            let mut restored = 0;
-            for path in state.watched_paths {
-                if path.exists() && watcher.watch(&path).is_ok() {
-                    restored += 1;
-                }
-            }
-            info!(
-                target: "ace::watcher",
-                restored = restored,
-                "Restored watched paths from saved state"
-            );
-            Ok(restored)
-        } else {
-            Ok(0)
-        }
-    }
-
-    /// Clear saved state
-    #[allow(dead_code)] // Reason: WatcherPersistence API, not yet called from main app
-    pub fn clear(&self) -> Result<()> {
-        let conn = self.conn.lock();
-        conn.execute("DELETE FROM watcher_state WHERE id = 1", [])?;
-        Ok(())
-    }
 }
 
 // ============================================================================
@@ -952,13 +881,6 @@ impl RateLimiter {
         }
     }
 
-    /// Record a request without checking (for manual tracking)
-    #[allow(dead_code)] // Reason: RateLimiter public API, not yet called from main app
-    pub fn record(&self) {
-        let mut requests = self.requests.lock();
-        requests.push(Instant::now());
-    }
-
     /// Get remaining requests in current window
     pub fn remaining(&self) -> u32 {
         let requests = self.requests.lock();
@@ -971,33 +893,6 @@ impl RateLimiter {
             .count() as u32;
 
         self.max_requests.saturating_sub(active_requests)
-    }
-
-    /// Get time until next request is allowed (0 if allowed now)
-    #[allow(dead_code)] // Reason: RateLimiter public API, not yet called from main app
-    pub fn time_until_available(&self) -> Duration {
-        if self.check() {
-            Duration::ZERO
-        } else {
-            let requests = self.requests.lock();
-            if let Some(oldest) = requests.first() {
-                let window = Duration::from_secs(self.window_seconds);
-                let elapsed = Instant::now().duration_since(*oldest);
-                if elapsed < window {
-                    window.saturating_sub(elapsed)
-                } else {
-                    Duration::ZERO
-                }
-            } else {
-                Duration::ZERO
-            }
-        }
-    }
-
-    /// Reset the rate limiter
-    #[allow(dead_code)] // Reason: RateLimiter public API, not yet called from main app
-    pub fn reset(&self) {
-        self.requests.lock().clear();
     }
 }
 

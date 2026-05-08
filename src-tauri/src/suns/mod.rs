@@ -36,7 +36,8 @@ pub struct SunResult {
 // These structs are part of the Suns dashboard API, currently used only in tests.
 // They will be wired to the frontend when the Suns dashboard is registered.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Reason: constructed in get_statuses() which is test-only; will be wired to frontend
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Test-only: exercised by suns unit tests
 pub struct SunStatus {
     pub id: String,
     pub name: String,
@@ -50,7 +51,8 @@ pub struct SunStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)] // Reason: used in suns_commands tests; will be wired to frontend
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Test-only: exercised by suns unit tests
 pub struct SunAlert {
     pub id: i64,
     pub sun_id: String,
@@ -95,7 +97,8 @@ pub struct SunRegistry {
 
 struct SunDef {
     id: String,
-    #[allow(dead_code)] // Reason: read by get_statuses(), which is test-only
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Test-only: exercised by suns unit tests
     name: String,
     module_id: String,
     interval_secs: u64,
@@ -216,7 +219,8 @@ impl SunRegistry {
     }
 
     /// Return status for each registered sun.
-    #[allow(dead_code)] // Reason: used in tests; will be wired to frontend
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Test-only: exercised by suns unit tests
     pub fn get_statuses(&self) -> Vec<SunStatus> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -284,7 +288,8 @@ impl SunRegistry {
     }
 
     /// Enable or disable a sun by ID.
-    #[allow(dead_code)] // Reason: used in tests; will be wired to frontend
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Test-only: exercised by suns unit tests
     pub fn set_enabled(&mut self, sun_id: &str, enabled: bool) {
         self.enabled.insert(sun_id.to_string(), enabled);
         info!(target: "4da::suns", sun = sun_id, enabled, "Sun toggled");
@@ -348,7 +353,8 @@ impl SunRegistry {
     }
 
     /// Execute a specific sun by ID, bypassing the interval check.
-    #[allow(dead_code)] // Reason: used in tests; will be wired to frontend
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Test-only: exercised by suns unit tests
     pub fn execute_one(&mut self, sun_id: &str) -> Option<SunResult> {
         let sun = self.suns.iter().find(|s| s.id == sun_id)?;
 

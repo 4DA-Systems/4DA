@@ -94,7 +94,8 @@ pub struct DeveloperDecision {
     pub updated_at: String,
 }
 
-#[allow(dead_code)] // Reason: used by check_alignment (MCP integration pending)
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Used by check_alignment (test-exercised, MCP API surface)
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "bindings/")]
 pub struct AlignmentResult {
@@ -104,7 +105,8 @@ pub struct AlignmentResult {
     pub confidence: f64,
 }
 
-#[allow(dead_code)] // Reason: used by check_alignment (MCP integration pending)
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Used by check_alignment (test-exercised, MCP API surface)
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "bindings/")]
 pub struct AlignmentConflict {
@@ -153,7 +155,8 @@ pub fn record_decision(
 }
 
 /// Get a single decision by ID.
-#[allow(dead_code)] // Reason: public API for MCP integration
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Test-exercised, MCP API surface
 pub fn get_decision(conn: &Connection, id: i64) -> Result<Option<DeveloperDecision>> {
     Ok(conn
         .query_row(
@@ -257,7 +260,8 @@ pub fn update_decision(
 }
 
 /// Supersede an old decision with a new one.
-#[allow(dead_code)] // Reason: public API for MCP integration
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Test-exercised, MCP API surface
 pub fn supersede_decision(conn: &Connection, old_id: i64, new_id: i64) -> Result<()> {
     conn.execute(
         "UPDATE developer_decisions SET status = 'superseded', superseded_by = ?1, updated_at = datetime('now') WHERE id = ?2",
@@ -269,7 +273,8 @@ pub fn supersede_decision(conn: &Connection, old_id: i64, new_id: i64) -> Result
 }
 
 /// Find decisions by subject (fuzzy match on subject + context_tags).
-#[allow(dead_code)] // Reason: public API for MCP integration
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Test-exercised, MCP API surface
 pub fn find_decisions_by_subject(
     conn: &Connection,
     subject: &str,
@@ -298,7 +303,8 @@ pub fn find_decisions_by_subject(
 
 /// Check alignment of a technology/pattern against active decisions.
 /// This is the critical function that AI agents call before suggesting changes.
-#[allow(dead_code)] // Reason: public API for MCP integration
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Test-exercised, MCP API surface
 pub fn check_alignment(
     conn: &Connection,
     technology: &str,

@@ -58,7 +58,8 @@ const PHASE0_BUDGET_SECS: u64 = 5;
 const PHASE0_BUDGET_SECS: u64 = 10;
 
 /// Time budget for Phase 1 (essential services ready).
-#[allow(dead_code)] // Used by Wave 6 phased startup rewrite
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Const: phase budget for startup rewrite
 const PHASE1_BUDGET_SECS: u64 = 10;
 
 /// How often to write the heartbeat file (steady state).
@@ -67,7 +68,8 @@ const HEARTBEAT_INTERVAL_SECS: u64 = 60;
 /// Heartbeat is considered stale if the file is older than this. The
 /// frontend uses this threshold when deciding whether to show the
 /// recovery panel.
-#[allow(dead_code)] // Read by the frontend via future IPC command
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Const: heartbeat staleness threshold
 pub const HEARTBEAT_STALE_SECS: u64 = 180;
 
 /// One-shot guard so phase-0 logging fires exactly once regardless of how
@@ -194,6 +196,7 @@ pub fn mark_phase0_complete() {
 /// does NOT write a stalled marker because Phase 1 runs entirely in the
 /// background and a slow essential-services setup doesn't affect the
 /// user-visible first paint.
+// REMOVE BY 2026-08-01
 #[allow(dead_code)] // Used by Wave 6 phased startup rewrite
 pub fn mark_phase1_complete() {
     #[allow(unsafe_code)]
@@ -303,18 +306,6 @@ const CRASH_LOOP_THRESHOLD: u32 = 3;
 /// Global flag: when Critical, the rest of the code should short-circuit
 /// background tasks and the monitoring scheduler.
 static SAFE_MODE: AtomicBool = AtomicBool::new(false);
-
-/// Returns `true` if the current boot has been flagged as safe mode by
-/// `check_crash_loop`. Callers that do heavy or network work should
-/// bail out when this is true.
-///
-/// Wired into consumers in a follow-up wave (scheduler, background
-/// fetchers). Allowed dead for now because the primary enforcement is via
-/// the frontend `startup-crash-loop-critical` event.
-#[allow(dead_code)]
-pub fn is_safe_mode() -> bool {
-    SAFE_MODE.load(Ordering::SeqCst)
-}
 
 /// Record a timestamp in the crash-history file and classify the current
 /// startup against the recent history.
@@ -572,7 +563,10 @@ mod tests {
                 matches!(status, CrashLoopStatus::Warning(n) if n >= 3),
                 "three crashes within 60s should be Warning in debug (downgraded from Critical), got {status:?}"
             );
-            assert!(!is_safe_mode(), "Debug builds must never enter safe mode");
+            assert!(
+                !SAFE_MODE.load(Ordering::SeqCst),
+                "Debug builds must never enter safe mode"
+            );
         }
         #[cfg(not(debug_assertions))]
         {
@@ -580,7 +574,10 @@ mod tests {
                 matches!(status, CrashLoopStatus::Critical(n) if n >= 3),
                 "three crashes within 60s should be Critical, got {status:?}"
             );
-            assert!(is_safe_mode(), "Critical must set safe-mode flag");
+            assert!(
+                SAFE_MODE.load(Ordering::SeqCst),
+                "Critical must set safe-mode flag"
+            );
         }
 
         // Cleanup: clear safe mode so other tests aren't polluted.

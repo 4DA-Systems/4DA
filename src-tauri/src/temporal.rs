@@ -5,11 +5,9 @@
 //! and cross-item relationships used by predictive context, semantic diff,
 //! signal chains, knowledge decay, and attention tracking.
 
+use crate::error::{Result, ResultExt};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
-
-use crate::error::{Result, ResultExt};
 
 // ============================================================================
 // Path Canonicalization
@@ -287,47 +285,6 @@ pub fn query_events(
     Ok(results)
 }
 
-/// Query temporal events by subject
-#[allow(dead_code)] // Reason: called by semantic_diff, reserved for MCP integration
-pub fn query_events_by_subject(
-    conn: &rusqlite::Connection,
-    subject: &str,
-    limit: usize,
-) -> Result<Vec<TemporalEvent>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, event_type, subject, data, source_item_id, created_at, expires_at
-             FROM temporal_events
-             WHERE subject = ?1
-             ORDER BY created_at DESC LIMIT ?2",
-    )?;
-
-    let results: Vec<TemporalEvent> = stmt
-        .query_map(params![subject, limit as i64], map_event)?
-        .filter_map(|r| match r {
-            Ok(v) => Some(v),
-            Err(e) => {
-                tracing::warn!("Row processing failed in temporal: {e}");
-                None
-            }
-        })
-        .collect();
-
-    Ok(results)
-}
-
-/// Clean up expired temporal events
-#[allow(dead_code)] // Reason: called by cleanup_temporal_events, reserved for scheduled maintenance
-pub fn cleanup_expired(conn: &rusqlite::Connection) -> Result<usize> {
-    let deleted = conn.execute(
-        "DELETE FROM temporal_events WHERE expires_at IS NOT NULL AND expires_at < datetime('now')",
-        [],
-    )?;
-    if deleted > 0 {
-        debug!(target: "4da::temporal", deleted, "Cleaned up expired temporal events");
-    }
-    Ok(deleted)
-}
-
 fn map_event(row: &rusqlite::Row) -> rusqlite::Result<TemporalEvent> {
     let data_str: String = row.get(3)?;
     let data = serde_json::from_str(&data_str).unwrap_or(serde_json::Value::Null);
@@ -340,47 +297,6 @@ fn map_event(row: &rusqlite::Row) -> rusqlite::Result<TemporalEvent> {
         created_at: row.get(5)?,
         expires_at: row.get(6)?,
     })
-}
-
-// ============================================================================
-// Tauri Commands
-// ============================================================================
-
-#[allow(dead_code)] // Reason: reserved for MCP integration
-pub fn get_temporal_events(
-    event_type: String,
-    since: Option<String>,
-    limit: Option<usize>,
-) -> Result<Vec<TemporalEvent>> {
-    let conn = crate::open_db_connection()?;
-    query_events(&conn, &event_type, since.as_deref(), limit.unwrap_or(50))
-}
-
-#[allow(dead_code)] // Reason: reserved for MCP integration
-pub fn get_temporal_event_count(event_type: String) -> Result<usize> {
-    let conn = crate::open_db_connection()?;
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM temporal_events WHERE event_type = ?1",
-        params![event_type],
-        |row| row.get(0),
-    )?;
-    Ok(count as usize)
-}
-
-#[allow(dead_code)] // Reason: reserved for MCP integration
-pub fn get_dependencies(project_path: Option<String>) -> Result<Vec<ProjectDependency>> {
-    let conn = crate::open_db_connection()?;
-    if let Some(path) = project_path {
-        get_project_dependencies(&conn, &path)
-    } else {
-        get_all_dependencies(&conn)
-    }
-}
-
-#[allow(dead_code)] // Reason: reserved for scheduled maintenance task
-pub fn cleanup_temporal_events() -> Result<usize> {
-    let conn = crate::open_db_connection()?;
-    cleanup_expired(&conn)
 }
 
 #[cfg(test)]
@@ -446,52 +362,6 @@ mod tests {
         assert_eq!(a_events.len(), 2);
         let b_events = query_events(&conn, "type_b", None, 10).unwrap();
         assert_eq!(b_events.len(), 1);
-    }
-
-    #[test]
-    fn query_events_by_subject_returns_matching() {
-        let conn = setup_test_db();
-        let data = serde_json::json!({"info": "test"});
-        record_event(&conn, "ev1", "rust", &data, None, None).unwrap();
-        record_event(&conn, "ev2", "rust", &data, None, None).unwrap();
-        record_event(&conn, "ev3", "python", &data, None, None).unwrap();
-
-        let rust_events = query_events_by_subject(&conn, "rust", 10).unwrap();
-        assert_eq!(rust_events.len(), 2);
-        for ev in &rust_events {
-            assert_eq!(ev.subject, "rust");
-        }
-
-        let python_events = query_events_by_subject(&conn, "python", 10).unwrap();
-        assert_eq!(python_events.len(), 1);
-    }
-
-    #[test]
-    fn cleanup_expired_removes_old_events() {
-        let conn = setup_test_db();
-        let data = serde_json::json!({});
-        // Insert an event that expired yesterday
-        conn.execute(
-            "INSERT INTO temporal_events (event_type, subject, data, expires_at)
-             VALUES ('exp', 'old', '{}', datetime('now', '-1 day'))",
-            [],
-        )
-        .unwrap();
-        // Insert an event that expires tomorrow
-        conn.execute(
-            "INSERT INTO temporal_events (event_type, subject, data, expires_at)
-             VALUES ('exp', 'future', '{}', datetime('now', '+1 day'))",
-            [],
-        )
-        .unwrap();
-        // Insert an event with no expiry
-        record_event(&conn, "exp", "permanent", &data, None, None).unwrap();
-
-        let deleted = cleanup_expired(&conn).unwrap();
-        assert_eq!(deleted, 1);
-
-        let remaining = query_events(&conn, "exp", None, 10).unwrap();
-        assert_eq!(remaining.len(), 2);
     }
 
     #[test]

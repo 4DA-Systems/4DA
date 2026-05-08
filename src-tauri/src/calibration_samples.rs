@@ -50,6 +50,7 @@ use tracing::{debug, warn};
 /// Most call sites don't need to build a `CalibrationSample` directly;
 /// `stamp_signals` accepts AdvisorSignal slices and does the conversion.
 /// The struct is exposed so the fitter's SELECT can decode rows into it.
+// REMOVE BY 2026-08-01
 #[allow(dead_code)]
 // Several fields are decoded but not read by the fitter yet;
 // the fitter uses raw_score + source_item_id + created_at +
@@ -139,7 +140,8 @@ pub fn stamp_signals(
 /// Count unprocessed samples for a given (model, task). Exposed for the
 /// UI's "pending samples" indicator; the fitter uses `collect_unprocessed`
 /// directly because it needs the rows, not just a count.
-#[allow(dead_code)] // Consumed by the future receipts UI panel for pending samples.
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // DB query returns this field via SELECT
 pub fn count_unprocessed(
     conn: &Connection,
     identity_hash: &str,

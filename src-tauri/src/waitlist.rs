@@ -49,36 +49,6 @@ pub fn save_waitlist_signup(
     }))
 }
 
-#[tauri::command]
-pub fn get_waitlist_signups() -> Result<Vec<WaitlistEntry>> {
-    let db = crate::get_database()?;
-    let conn = db.conn.lock();
-
-    let mut stmt = conn.prepare(
-        "SELECT id, tier, email, name, team_size, company, role, source, signed_up_at
-         FROM waitlist_signups ORDER BY signed_up_at DESC",
-    )?;
-
-    let entries = stmt
-        .query_map([], |row| {
-            Ok(WaitlistEntry {
-                id: row.get(0)?,
-                tier: row.get(1)?,
-                email: row.get(2)?,
-                name: row.get(3)?,
-                team_size: row.get(4)?,
-                company: row.get(5)?,
-                role: row.get(6)?,
-                source: row.get(7)?,
-                signed_up_at: row.get(8)?,
-            })
-        })?
-        .filter_map(std::result::Result::ok)
-        .collect();
-
-    Ok(entries)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

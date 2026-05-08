@@ -79,7 +79,8 @@ pub struct TrustSummary {
 /// Populated by the background validator (Phase 2 plan, scheduled task runs weekly)
 /// that checks whether past preemption alerts were later validated by reality
 /// (e.g. a CVE we warned about was published, a breaking change actually shipped).
-#[allow(dead_code)] // Scheduled validator lands in Phase 2.4 â€” struct already wired to DB schema
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // DB schema struct — deserialized from preemption_wins table
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PreemptionWin {
@@ -244,28 +245,6 @@ pub fn get_trust_summary(days: u32) -> Result<TrustSummary> {
         avg_lead_time_hours: avg_lead_time,
         trend,
     })
-}
-
-/// Record a preemption win (4DA caught something before it became urgent).
-/// Called by the Phase 2.4 background validator that checks whether past
-/// preemption alerts were later validated by reality.
-#[allow(dead_code)] // Invoked by scheduled validator (Phase 2.4)
-pub fn record_preemption_win(win: PreemptionWin) -> Result<()> {
-    let conn = open_db_connection()?;
-    conn.execute(
-        "INSERT INTO preemption_wins (alert_id, alert_title, alerted_at, incident_at, lead_time_hours, user_acted, verified)
-         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
-        rusqlite::params![
-            win.alert_id,
-            win.alert_title,
-            win.alerted_at,
-            win.incident_at,
-            win.lead_time_hours,
-            win.verified as i32,
-        ],
-    )
-    .context("Failed to insert preemption win")?;
-    Ok(())
 }
 
 /// Compute trend by comparing current period precision to previous period.

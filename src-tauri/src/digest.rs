@@ -4,7 +4,7 @@
 //! Collects relevant items over a time period and formats them into
 //! digestible summaries that can be sent via email or saved locally.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -61,6 +61,7 @@ pub struct SmtpConfig {
     pub port: u16,
     pub username: String,
     #[serde(skip_serializing)]
+    // REMOVE BY 2026-08-01
     #[allow(dead_code)] // Reason: deserialized from JSON for SMTP auth
     pub password: String,
     pub from_address: String,
@@ -647,35 +648,6 @@ impl DigestManager {
         Self { config }
     }
 
-    /// Check if it's time to send a new digest
-    #[allow(dead_code)] // Reason: scheduled digest delivery not yet wired
-    pub fn should_send(&self) -> bool {
-        if !self.config.enabled {
-            return false;
-        }
-
-        let now = Utc::now();
-        let last = self
-            .config
-            .last_sent
-            .unwrap_or_else(|| DateTime::from_timestamp(0, 0).unwrap_or(Utc::now()));
-
-        match self.config.frequency.as_str() {
-            "realtime" => true,
-            "daily" => now - last >= Duration::hours(24),
-            "weekly" => now - last >= Duration::days(7),
-            _ => now - last >= Duration::hours(24),
-        }
-    }
-
-    /// Get the time range for the next digest
-    #[allow(dead_code)] // Reason: scheduled digest delivery not yet wired
-    pub fn get_digest_period(&self) -> (DateTime<Utc>, DateTime<Utc>) {
-        let end = Utc::now();
-        let start = self.config.last_sent.unwrap_or(end - Duration::hours(24));
-        (start, end)
-    }
-
     /// Save digest to local file
     pub fn save_local(&self, digest: &Digest) -> Result<PathBuf> {
         let output_dir = self.config.output_dir.clone().unwrap_or_else(|| {
@@ -702,6 +674,7 @@ impl DigestManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
 
     #[test]
     fn test_digest_creation() {

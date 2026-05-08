@@ -54,7 +54,8 @@ pub const DISAGREEMENT_THRESHOLD: f32 = 0.30;
 /// receipts UI ("Why this score?") will render the adjustment explicitly,
 /// and the tests exercise them as a regression guard for the math.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // pipeline_score + applied_adjustment consumed by Phase 7 receipts UI
+// REMOVE BY 2026-08-01
+#[allow(dead_code)] // Serde-serialized pipeline output fields
 pub struct Reconciled {
     /// The final rank. `pipeline_score + clamped_adjustment`, in [0.0, 1.0].
     pub final_rank: f32,

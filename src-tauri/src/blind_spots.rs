@@ -1940,7 +1940,7 @@ fn recommendation_to_evidence_item(r: &BlindSpotRecommendation, idx: usize) -> E
 /// Convert a legacy `BlindSpotReport` into the canonical `EvidenceFeed`.
 /// Every item is schema-validated; validation failures drop the offending
 /// item with a structured log rather than breaking the feed.
-pub fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
+pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
     let mut items: Vec<EvidenceItem> = Vec::new();
 
     for d in &report.uncovered_dependencies {

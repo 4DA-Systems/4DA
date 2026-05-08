@@ -381,12 +381,6 @@ impl EmbeddingService {
         Ok(similarities)
     }
 
-    /// Get embedding dimension
-    #[allow(dead_code)] // Reason: public API for Ollama embedding pipeline, not yet called from main app
-    pub fn dimension(&self) -> usize {
-        self.dimension
-    }
-
     /// Check if the service is operational.
     /// For non-Mock providers, always returns true since the real pipeline
     /// (`crate::embed_texts`) reads settings internally and we fall back to mock on error.

@@ -86,12 +86,6 @@ pub fn current_grace_secs() -> u64 {
     CACHED_GRACE_SECS.load(Ordering::Relaxed)
 }
 
-/// Get the cached boot context (if detection has run).
-#[allow(dead_code)] // exposed for diagnostics + future telemetry
-pub fn current_boot_context() -> Option<BootContext> {
-    CACHED_BOOT_CONTEXT.get().copied()
-}
-
 /// Detect this process's boot context and cache the result.
 /// Called once from `setup_app` BEFORE the scheduler starts ticking.
 ///

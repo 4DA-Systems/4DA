@@ -27,7 +27,6 @@
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, Result as SqliteResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::info;
 
@@ -252,17 +251,6 @@ impl ContextEngine {
         Ok(())
     }
 
-    /// Get experience level
-    #[allow(dead_code)] // Public API — reserved for future user-profile features
-    pub fn get_experience_level(&self) -> SqliteResult<Option<String>> {
-        let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT experience_level FROM user_identity WHERE id = 1",
-            [],
-            |row| row.get(0),
-        )
-    }
-
     /// Set experience level
     pub fn set_experience_level(&self, level: Option<&str>) -> SqliteResult<()> {
         let conn = self.conn.lock();
@@ -307,25 +295,6 @@ impl ContextEngine {
         let mut stmt = conn.prepare("SELECT domain FROM domains ORDER BY domain")?;
         let rows = stmt.query_map([], |row| row.get(0))?;
         rows.collect()
-    }
-
-    /// Add domain
-    #[allow(dead_code)] // Reason: domain management API, not yet exposed via settings UI
-    pub fn add_domain(&self, domain: &str) -> SqliteResult<()> {
-        let conn = self.conn.lock();
-        conn.execute(
-            "INSERT OR IGNORE INTO domains (domain) VALUES (?1)",
-            params![domain],
-        )?;
-        Ok(())
-    }
-
-    /// Remove domain
-    #[allow(dead_code)] // Reason: domain management API, not yet exposed via settings UI
-    pub fn remove_domain(&self, domain: &str) -> SqliteResult<()> {
-        let conn = self.conn.lock();
-        conn.execute("DELETE FROM domains WHERE domain = ?1", params![domain])?;
-        Ok(())
     }
 
     /// Get all explicit interests
@@ -457,30 +426,6 @@ impl ContextEngine {
             params![source_item_id, action_str, dismiss_reason, dismiss_category],
         )?;
         Ok(())
-    }
-
-    /// Get interaction counts for an item
-    #[allow(dead_code)] // Reason: analytics API, not yet exposed via commands
-    pub fn get_interaction_counts(
-        &self,
-        source_item_id: i64,
-    ) -> SqliteResult<HashMap<String, u32>> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT action, COUNT(*) FROM interactions WHERE source_item_id = ?1 GROUP BY action",
-        )?;
-
-        let mut counts = HashMap::new();
-        let rows = stmt.query_map(params![source_item_id], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
-        })?;
-
-        for row in rows {
-            let (action, count) = row?;
-            counts.insert(action, count);
-        }
-
-        Ok(counts)
     }
 
     // Note: get_context_membrane was removed (2026-01-21) as ContextMembrane

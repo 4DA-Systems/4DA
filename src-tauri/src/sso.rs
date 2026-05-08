@@ -31,7 +31,7 @@ use crate::sso_xml;
 // ============================================================================
 
 /// Ensure SSO tables exist.
-pub fn ensure_sso_tables(conn: &rusqlite::Connection) -> crate::error::Result<()> {
+pub(crate) fn ensure_sso_tables(conn: &rusqlite::Connection) -> crate::error::Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS sso_config (
             id INTEGER PRIMARY KEY CHECK (id = 1),

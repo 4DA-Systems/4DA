@@ -73,7 +73,8 @@ pub(crate) struct ClusterCandidate {
     pub embedding: Vec<f32>,
     pub title: String,
     /// Content type for future mixed-signal detection refinements.
-    #[allow(dead_code)]
+    // REMOVE BY 2026-08-01
+    #[allow(dead_code)] // Serde: deserialized from clustering output
     pub content_type: Option<String>,
 }
 

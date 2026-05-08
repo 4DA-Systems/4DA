@@ -683,7 +683,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
 
 /// Build translated labels for the briefing window.
 /// Uses the i18n system to translate UI strings, falling back to English defaults.
-pub fn build_briefing_labels(lang: &str) -> BriefingLabels {
+pub(crate) fn build_briefing_labels(lang: &str) -> BriefingLabels {
     // Helper: use i18n key if translated, otherwise use the English default.
     // (t() returns the key itself when no translation exists — detect that.)
     let tr = |key: &str, default: &str| -> String {
