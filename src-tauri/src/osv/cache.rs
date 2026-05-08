@@ -373,9 +373,14 @@ pub async fn update_all_caches(db: &Database) -> Result<CacheUpdateResult> {
 fn collect_ecosystem_packages(
     db: &Database,
 ) -> Result<std::collections::HashMap<String, HashSet<String>>> {
-    let deps = db
+    let mut deps = db
         .get_all_user_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
+
+    // Merge lockfile-parsed transitive deps for complete package coverage
+    if let Ok(scanned) = db.get_all_scanned_dependencies() {
+        deps.extend(scanned);
+    }
 
     let mut by_ecosystem: std::collections::HashMap<String, HashSet<String>> =
         std::collections::HashMap::new();
