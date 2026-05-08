@@ -211,52 +211,58 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
 
 fn has_dependency_match(conn: &rusqlite::Connection, topic: &str) -> f64 {
     let lower = topic.to_lowercase();
-    let result = conn.query_row(
-        "SELECT COUNT(*) FROM user_dependencies WHERE LOWER(package_name) LIKE ?1",
-        params![format!("%{}%", lower)],
-        |row| row.get::<_, i64>(0),
-    );
-    match result {
-        // Graduated match: single project = moderate confidence,
-        // multiple projects using the same dep = higher confidence.
-        Ok(count) if count >= 1 => {
-            // Graduate: each project adds confidence, diminishing returns
-            (0.50 + (count as f64 * 0.12).min(0.40)).min(0.90)
-        }
-        _ => 0.0,
+    // Check both user-curated and ACE-scanned dependencies with exact name match.
+    // Substring LIKE was producing false positives ("node" matching "nodemon").
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM (
+                SELECT package_name FROM user_dependencies WHERE LOWER(package_name) = ?1
+                UNION
+                SELECT package_name FROM project_dependencies WHERE LOWER(package_name) = ?1
+            )",
+            params![lower],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    if count >= 1 {
+        (0.50 + (count as f64 * 0.12).min(0.40)).min(0.90)
+    } else {
+        0.0
     }
 }
 
 fn classify_chain_signal(title: &str) -> String {
     let lower = title.to_lowercase();
-    if lower.contains("cve")
+    // Security: strong signal keywords — false positive rate is low
+    if lower.contains("cve-")
         || lower.contains("vulnerability")
-        || lower.contains("security")
+        || lower.contains("security advisory")
         || lower.contains("exploit")
+        || lower.contains("ghsa-")
     {
-        "security_alert".to_string()
-    } else if lower.contains("breaking")
-        || lower.contains("deprecated")
-        || lower.contains("removed")
-        || lower.contains("eol")
-    {
-        "breaking_change".to_string()
-    } else if lower.contains("release")
-        || lower.contains("update")
-        || lower.contains("v2")
-        || lower.contains("v3")
-        || lower.contains("launch")
-    {
-        "tool_discovery".to_string()
-    } else if lower.contains("trend")
-        || lower.contains("adoption")
-        || lower.contains("growing")
-        || lower.contains("popular")
-    {
-        "tech_trend".to_string()
-    } else {
-        "learning".to_string()
+        return "security_alert".to_string();
     }
+    // Breaking: require "breaking change" phrase or "deprecated" (strong signals).
+    // Bare "removed" and "eol" produce too many false positives.
+    if lower.contains("breaking change")
+        || lower.contains("deprecated")
+        || lower.contains("end of life")
+        || lower.contains("end-of-life")
+    {
+        return "breaking_change".to_string();
+    }
+    // Release: require version-like patterns, not bare "update"/"launch"
+    if lower.contains("released")
+        || lower.contains("new release")
+        || lower.contains(" v2")
+        || lower.contains(" v3")
+        || lower.contains(" v4")
+        || lower.contains(" v5")
+    {
+        return "tool_discovery".to_string();
+    }
+    "learning".to_string()
 }
 
 fn priority_rank(priority: &str) -> u8 {

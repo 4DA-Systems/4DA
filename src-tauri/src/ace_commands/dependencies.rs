@@ -384,7 +384,7 @@ fn process_go_sum(
 /// Process a Gemfile.lock, storing transitive deps and updating direct dep versions.
 fn process_gemfile_lock(
     db: &Database,
-    scanner: &crate::ace::scanner::ProjectScanner,
+    _scanner: &crate::ace::scanner::ProjectScanner,
     dir: &PathBuf,
     project_path: &str,
 ) -> u32 {

@@ -923,27 +923,12 @@ impl KnowledgeGap {
             &self.missed_items,
         );
 
-        // Build citations from missed items; cap at top 5 to keep the
-        // payload scannable and to guarantee at least one citation
-        // (required by schema for user-surfaced kinds).
-        let evidence: Vec<EvidenceCitation> = if self.missed_items.is_empty() {
-            // Synthesize an inferred citation so the schema's
-            // "evidence required" rule holds even when there are no
-            // concrete missed items yet.
-            vec![EvidenceCitation {
-                source: "dep-coverage".to_string(),
-                title: truncate_gap_title(&format!("{} engagement gap", self.dependency)),
-                url: None,
-                freshness_days: self.days_since_last_engagement as f32,
-                relevance_note: truncate_gap_note("no engagement recorded"),
-            }]
-        } else {
-            self.missed_items
-                .iter()
-                .take(5)
-                .map(missed_item_to_citation)
-                .collect()
-        };
+        let evidence: Vec<EvidenceCitation> = self
+            .missed_items
+            .iter()
+            .take(5)
+            .map(missed_item_to_citation)
+            .collect();
 
         EvidenceItem {
             id: format!("kg_{}", self.dependency),
@@ -984,6 +969,7 @@ pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
     let gaps = detect_knowledge_gaps(&conn)?;
     let items: Vec<EvidenceItem> = gaps
         .iter()
+        .filter(|g| !g.missed_items.is_empty())
         .map(|g| g.to_evidence_item())
         .filter(|item| match crate::evidence::validate_item(item) {
             Ok(()) => true,
@@ -1144,12 +1130,11 @@ mod tests {
     }
 
     #[test]
-    fn knowledge_gap_with_no_missed_items_synthesizes_citation() {
+    fn knowledge_gap_with_no_missed_items_has_empty_evidence() {
         let mut g = sample_gap();
         g.missed_items.clear();
         let item = g.to_evidence_item();
-        assert_eq!(item.evidence.len(), 1);
-        assert_eq!(item.evidence[0].source, "dep-coverage");
+        assert!(item.evidence.is_empty());
     }
 
     #[test]
