@@ -3,6 +3,7 @@
 //! Requires a running 4DA dev server (`pnpm run tauri dev`).
 //! Run with: `VICTAURI_E2E=1 cargo test --test victauri_dogfood`
 
+use victauri_test::visual::VisualOptions;
 use victauri_test::VictauriClient;
 
 fn skip_unless_e2e() -> bool {
@@ -363,5 +364,163 @@ async fn full_verification_chain() {
         for f in report.failures() {
             eprintln!("  FAIL: {} — {}", f.description, &f.detail);
         }
+    }
+}
+
+// ── Phase 4: New Feature Dogfood (Visual, Coverage, Recording) ─────────────
+
+#[tokio::test]
+async fn visual_regression_baseline() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let snapshot_dir = std::env::temp_dir().join("victauri-4da-snapshots");
+    std::fs::create_dir_all(&snapshot_dir).ok();
+
+    let opts = VisualOptions {
+        snapshot_dir: snapshot_dir.clone(),
+        channel_tolerance: 5,
+        threshold_percent: 1.0,
+        ..VisualOptions::default()
+    };
+
+    let diff = client.screenshot_visual("4da_main_view", &opts).await;
+    match diff {
+        Ok(d) => {
+            let matches = d.is_match(opts.threshold_percent);
+            eprintln!(
+                "Visual regression: match={matches}, match_pct={:.2}%, diff_pixels={}",
+                d.match_percentage, d.diff_pixel_count
+            );
+            if matches {
+                eprintln!("  Baseline matched (or created on first run)");
+            } else {
+                eprintln!("  Diff detected — check {}", snapshot_dir.display());
+            }
+        }
+        Err(e) => {
+            eprintln!("Visual regression error (may be first run): {e}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn ipc_coverage_report() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let report = victauri_test::coverage::coverage_report(&mut client).await;
+
+    match report {
+        Ok(r) => {
+            eprintln!("{}", r.to_summary());
+            eprintln!(
+                "Coverage: {:.1}% ({}/{} commands tested)",
+                r.coverage_percentage, r.tested_commands, r.total_commands
+            );
+        }
+        Err(e) => {
+            eprintln!("Coverage report failed (expected if no registry): {e}");
+        }
+    }
+}
+
+#[tokio::test]
+async fn recording_start_stop_cycle() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let start = client.start_recording(Some("dogfood-test")).await;
+    match start {
+        Ok(s) => eprintln!("Recording started: {s}"),
+        Err(e) => {
+            eprintln!("Recording start failed: {e}");
+            return;
+        }
+    }
+
+    // Trigger a few actions to capture
+    let _ = client.eval_js("document.title").await;
+    let _ = client.dom_snapshot().await;
+
+    let stop = client.stop_recording().await;
+    match stop {
+        Ok(session) => {
+            eprintln!(
+                "Recording stopped: {}",
+                serde_json::to_string_pretty(&session).unwrap_or_default()
+            );
+            let event_count = session
+                .get("events")
+                .and_then(|e| e.as_array())
+                .map_or(0, |a| a.len());
+            eprintln!("  Captured {event_count} events");
+        }
+        Err(e) => eprintln!("Recording stop failed: {e}"),
+    }
+}
+
+#[tokio::test]
+async fn wait_for_text_in_dom() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // 4DA should have some text in the DOM — try common elements
+    let result = client
+        .wait_for("text", Some("4DA"), Some(3000), Some(200))
+        .await;
+
+    match result {
+        Ok(r) => {
+            let ok = r.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            eprintln!("wait_for text '4DA': ok={ok}");
+        }
+        Err(e) => eprintln!("wait_for failed: {e}"),
+    }
+}
+
+#[tokio::test]
+async fn expanded_verification_chain() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let report = client
+        .verify()
+        .no_console_errors()
+        .ipc_healthy()
+        .no_ghost_commands()
+        .run()
+        .await
+        .unwrap();
+
+    let passed = report.results.iter().filter(|r| r.passed).count();
+    let total = report.results.len();
+    eprintln!("Expanded verification: {passed}/{total} checks passed");
+
+    for result in &report.results {
+        eprintln!(
+            "  [{}] {}{}",
+            if result.passed { "PASS" } else { "FAIL" },
+            result.description,
+            if result.detail.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}", result.detail)
+            }
+        );
     }
 }

@@ -118,7 +118,7 @@ semver = "1"
 tauri-plugin-autostart = "2"
 
 # AI agent introspection & control (MCP server, zero-cost in release builds)
-victauri-plugin = { path = "../../runyourempire/victauri/crates/victauri-plugin" }
+victauri-plugin = { git = "https://github.com/runyourempire/victauri.git", rev = "6c03a69" }
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
@@ -180,7 +180,7 @@ required-features = ["ocr"]
 [dev-dependencies]
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
-victauri-test = { path = "../../runyourempire/victauri/crates/victauri-test" }
+victauri-test = { git = "https://github.com/runyourempire/victauri.git", rev = "6c03a69" }
 
 [[bench]]
 name = "db_scale"
