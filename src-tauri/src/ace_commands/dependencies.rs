@@ -59,6 +59,7 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
             lockfile_count += process_poetry_lock(db, &scanner, &dir, &project_path);
             lockfile_count += process_go_sum(db, &scanner, &dir, &project_path);
             lockfile_count += process_gemfile_lock(db, &scanner, &dir, &project_path);
+            lockfile_count += process_composer_lock(db, &dir, &project_path);
 
             // Recurse into subdirectories (skip common non-project dirs)
             if let Ok(entries) = std::fs::read_dir(&dir) {
@@ -423,6 +424,60 @@ fn process_gemfile_lock(
         }
     }
     count
+}
+
+fn process_composer_lock(db: &Database, dir: &PathBuf, project_path: &str) -> u32 {
+    let lockfile = dir.join("composer.lock");
+    if !lockfile.exists() {
+        return 0;
+    }
+    let Ok(content) = std::fs::read_to_string(&lockfile) else {
+        return 0;
+    };
+
+    let direct_deps = read_composer_json_deps(dir);
+
+    let mut count = 0u32;
+    let packages = crate::ace::scanner::ProjectScanner::parse_composer_lock(&content);
+    for (name, version) in &packages {
+        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+            db.store_transitive_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "php",
+                false,
+            )
+            .ok();
+            count += 1;
+        } else {
+            db.store_dependency(
+                project_path,
+                name,
+                Some(version.as_str()),
+                "php",
+                false,
+                None,
+            )
+            .ok();
+        }
+    }
+    count
+}
+
+fn read_composer_json_deps(dir: &PathBuf) -> Vec<String> {
+    let path = dir.join("composer.json");
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+    parsed
+        .get("require")
+        .and_then(|v| v.as_object())
+        .map(|obj| obj.keys().cloned().collect())
+        .unwrap_or_default()
 }
 
 /// Shared: read direct deps from package.json for lockfile processing.
