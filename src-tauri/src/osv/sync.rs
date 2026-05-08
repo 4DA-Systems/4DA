@@ -66,9 +66,34 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         errors: Vec::new(),
     };
 
-    let deps = db
+    let mut deps = db
         .get_all_user_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
+
+    // Merge scanned deps (lockfile-parsed transitive deps) for full coverage
+    let scanned = db
+        .get_all_scanned_dependencies()
+        .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
+
+    let mut seen_keys: std::collections::HashSet<(String, String)> = deps
+        .iter()
+        .map(|d| {
+            (
+                d.package_name.to_lowercase(),
+                normalize_to_osv(&d.ecosystem).to_string(),
+            )
+        })
+        .collect();
+
+    for dep in scanned {
+        let key = (
+            dep.package_name.to_lowercase(),
+            normalize_to_osv(&dep.ecosystem).to_string(),
+        );
+        if seen_keys.insert(key) {
+            deps.push(dep);
+        }
+    }
 
     if deps.is_empty() {
         info!(target: "4da::osv", "No dependencies found — skipping OSV sync");
