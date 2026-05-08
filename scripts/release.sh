@@ -33,7 +33,7 @@ step_elapsed() {
 }
 
 # ── State tracking ───────────────────────────────────────────────────────────
-TOTAL_STEPS=10
+TOTAL_STEPS=11
 HARD_FAILS=0
 WARNINGS=0
 RUST_TEST_COUNT=0
@@ -394,9 +394,51 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 10: Record test counts
+# STEP 10: Bloat score (Necessity Engine)
 # ─────────────────────────────────────────────────────────────────────────────
-step 10 "Record test counts"
+step 10 "Bloat score (Necessity Engine)"
+step_start
+
+BLOAT_SNAPSHOT="$REPO_ROOT/.claude/wisdom/bloat-radar-snapshot.json"
+
+# Run fresh scan
+node scripts/bloat-radar.cjs > /dev/null 2>&1 || true
+
+if [ -f "$BLOAT_SNAPSHOT" ]; then
+  BLOAT_SCORE=$(read_json_field "$BLOAT_SNAPSHOT" "score.value")
+  DEAD_CODE_COUNT=$(read_json_field "$BLOAT_SNAPSHOT" "dead_code.total_annotations")
+  GHOST_CMD_COUNT=$(read_json_field "$BLOAT_SNAPSHOT" "ghost_commands.ghost_count")
+
+  if [ -n "$BLOAT_SCORE" ]; then
+    if [ "$BLOAT_SCORE" -ge 70 ] 2>/dev/null; then
+      pass "Bloat score: ${BLOAT_SCORE}/100"
+      record_pass "Bloat score: ${BLOAT_SCORE}/100"
+    elif [ "$BLOAT_SCORE" -ge 50 ] 2>/dev/null; then
+      warn "Bloat score below target: ${BLOAT_SCORE}/100 (need >= 70)"
+      info "  Dead code annotations: ${DEAD_CODE_COUNT:-?}"
+      info "  Ghost commands: ${GHOST_CMD_COUNT:-?}"
+      record_warn "Bloat score: ${BLOAT_SCORE}/100 (< 70)"
+    else
+      fail "Bloat score critically low: ${BLOAT_SCORE}/100 (need >= 50)"
+      info "  Dead code annotations: ${DEAD_CODE_COUNT:-?}"
+      info "  Ghost commands: ${GHOST_CMD_COUNT:-?}"
+      record_fail "Bloat score: ${BLOAT_SCORE}/100 (< 50)"
+    fi
+  else
+    warn "Bloat score not found in snapshot"
+    record_warn "Bloat score: field missing"
+  fi
+else
+  warn "Bloat radar snapshot not found — run 'node scripts/bloat-radar.cjs' first"
+  record_warn "Bloat score: snapshot missing"
+fi
+
+step_elapsed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 11: Record test counts
+# ─────────────────────────────────────────────────────────────────────────────
+step 11 "Record test counts"
 step_start
 
 TOTAL_TESTS=$((RUST_TEST_COUNT + FRONTEND_TEST_COUNT))
