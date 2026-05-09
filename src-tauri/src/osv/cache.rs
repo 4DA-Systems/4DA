@@ -275,7 +275,10 @@ fn process_single_entry<R: std::io::Read + std::io::Seek>(
     })?;
 
     let name = entry.name().to_string();
-    if !name.ends_with(".json") {
+    if !std::path::Path::new(&name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
+    {
         return Ok(None);
     }
 

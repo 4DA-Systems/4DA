@@ -578,7 +578,7 @@ fn read_gemfile_deps(dir: &PathBuf) -> Vec<String> {
                 continue;
             };
             if let Some(end) = rest[1..].find(quote) {
-                let name = &rest[1..1 + end];
+                let name = &rest[1..=end];
                 if !name.is_empty() {
                     deps.push(name.to_string());
                 }

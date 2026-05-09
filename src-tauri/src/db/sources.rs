@@ -634,6 +634,7 @@ impl Database {
     }
 
     /// Get recent source items within a time window (hours)
+    #[cfg(test)]
     pub(crate) fn get_items_since_hours(
         &self,
         hours: i64,
@@ -752,7 +753,6 @@ impl Database {
         conn.query_row("SELECT COUNT(*) FROM source_items", [], |row| row.get(0))
     }
 
-    /// Prune oldest items when the database exceeds the total item cap.
     // ========================================================================
     // Feedback Operations
     // ========================================================================
@@ -1019,6 +1019,7 @@ impl Database {
     }
 
     /// Get health record for a specific feed.
+    #[cfg(test)]
     pub(crate) fn get_feed_health(
         &self,
         feed_origin: &str,

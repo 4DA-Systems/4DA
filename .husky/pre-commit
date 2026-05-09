@@ -166,6 +166,15 @@ if [ -n "$STAGED_TS" ]; then
     unset NODE_OPTIONS
 fi
 
+# TypeScript dead code detection (knip, ~3s) — warning only, does not block
+if [ -n "$STAGED_TS" ]; then
+    KNIP_OUT=$(npx knip --no-progress --include files 2>/dev/null || true)
+    KNIP_COUNT=$(echo "$KNIP_OUT" | grep -c "Unused files" 2>/dev/null || echo "0")
+    if [ "$KNIP_COUNT" -gt 0 ]; then
+        echo "[WARN] knip detected unused TypeScript files. Run 'npx knip' for details."
+    fi
+fi
+
 # TypeScript type checking (incremental for speed, ~3-8s) — only when .ts/.tsx files are staged
 if [ -n "$STAGED_TS" ]; then
     if [ "$DEV_SERVER_RUNNING" = true ]; then
