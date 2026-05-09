@@ -17,6 +17,7 @@ mod gate;
 mod keywords;
 pub(crate) mod necessity;
 mod pipeline;
+mod pipeline_signals;
 mod pipeline_v2;
 mod semantic;
 #[cfg(test)]
@@ -121,7 +122,7 @@ pub(crate) struct ScoringContext {
     /// Dominant persona from continuous taste inference (persona_index, weight)
     /// Present when dominant weight exceeds uniform threshold (> 0.2)
     // Diagnostic: populated for scoring introspection
-    #[allow(dead_code)] // Reason: diagnostic field for scoring introspection
+    #[allow(dead_code)] // REMOVE BY 2026-08-10: diagnostic field — wire into score breakdown UI or delete
     pub dominant_persona: Option<(usize, f32)>,
     /// User's professional role from onboarding (developer, security, devops, data, manager)
     pub user_role: Option<String>,

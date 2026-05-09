@@ -1402,7 +1402,7 @@ fn classify_signals(
     };
 
     let topics = crate::extract_topics(input.title, input.content, input.source_tags);
-    let corroboration = super::pipeline::build_corroboration(db, &topics, matched_deps);
+    let corroboration = super::pipeline_signals::build_corroboration(db, &topics, matched_deps);
     match clf.classify(
         input.title,
         input.content,

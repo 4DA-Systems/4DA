@@ -401,5 +401,9 @@ pub use settings_commands_llm::*;
 mod settings_commands_license;
 pub use settings_commands_license::*;
 
+#[path = "settings_commands_context.rs"]
+mod settings_commands_context;
+pub use settings_commands_context::*;
+
 #[path = "settings_commands_tests.rs"]
 mod settings_commands_tests;
