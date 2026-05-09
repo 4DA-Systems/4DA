@@ -6,110 +6,18 @@
 //! npm, crates.io, PyPI, Go, Maven, NuGet, RubyGems, Packagist, Pub.
 //!
 //! API docs: <https://osv.dev/docs/>
+//!
+//! Types, constants, and conversion helpers live in `osv_types`.
+
+#[allow(unused_imports)]
+pub(crate) use super::osv_types::ECOSYSTEM_MAP;
+
+use super::osv_types::*;
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
-
-// ============================================================================
-// OSV API Types
-// ============================================================================
-
-#[derive(Debug, Serialize)]
-struct OsvQueryRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    package: Option<OsvPackage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    version: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct OsvBatchRequest {
-    queries: Vec<OsvQueryRequest>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct OsvPackage {
-    name: String,
-    ecosystem: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OsvQueryResponse {
-    vulns: Option<Vec<OsvVulnerability>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OsvBatchResponse {
-    results: Option<Vec<OsvQueryResponse>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OsvVulnerability {
-    id: String,
-    summary: Option<String>,
-    details: Option<String>,
-    severity: Option<Vec<OsvSeverity>>,
-    affected: Option<Vec<OsvAffected>>,
-    references: Option<Vec<OsvReference>>,
-    published: Option<String>,
-    modified: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OsvSeverity {
-    #[serde(rename = "type")]
-    severity_type: String,
-    score: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct OsvAffected {
-    package: Option<OsvPackage>,
-    ranges: Option<Vec<OsvRange>>,
-    #[allow(dead_code)]
-    versions: Option<Vec<String>>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-struct OsvRange {
-    #[serde(rename = "type")]
-    range_type: String,
-    events: Option<Vec<serde_json::Value>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct OsvReference {
-    #[serde(rename = "type")]
-    ref_type: String,
-    url: String,
-}
-
-// ============================================================================
-// Ecosystem mapping (manifest file -> OSV ecosystem string)
-// ============================================================================
-
-/// Map from ACE-detected manifest files to OSV ecosystem identifiers.
-#[allow(dead_code)]
-pub(crate) const ECOSYSTEM_MAP: &[(&str, &str)] = &[
-    ("Cargo.toml", "crates.io"),
-    ("package.json", "npm"),
-    ("pyproject.toml", "PyPI"),
-    ("requirements.txt", "PyPI"),
-    ("go.mod", "Go"),
-    ("pom.xml", "Maven"),
-    ("build.gradle", "Maven"),
-    ("Gemfile", "RubyGems"),
-    (".csproj", "NuGet"),
-    ("composer.json", "Packagist"),
-    ("pubspec.yaml", "Pub"),
-];
-
-/// Default ecosystems to query for broad developer coverage.
-const DEFAULT_ECOSYSTEMS: &[&str] = &["npm", "crates.io", "PyPI", "Go", "Maven"];
 
 // ============================================================================
 // OSV Source
@@ -479,123 +387,6 @@ impl Source for OsvSource {
         let enriched = vuln_to_source_item(&vuln);
         Ok(enriched.content)
     }
-}
-
-// ============================================================================
-// Conversion helpers
-// ============================================================================
-
-/// Convert an OSV vulnerability into a SourceItem for the scoring pipeline.
-fn vuln_to_source_item(vuln: &OsvVulnerability) -> SourceItem {
-    let summary = vuln.summary.as_deref().unwrap_or("Security advisory");
-    let details = vuln.details.as_deref().unwrap_or("");
-
-    // Extract severity info (prefer CVSS_V3 over CVSS_V2)
-    let severity_str = vuln
-        .severity
-        .as_ref()
-        .and_then(|s| {
-            s.iter()
-                .find(|sv| sv.severity_type == "CVSS_V3")
-                .or_else(|| s.first())
-        })
-        .map(|s| format!("{}: {}", s.severity_type, s.score))
-        .unwrap_or_else(|| "Unknown".to_string());
-
-    // Extract affected packages
-    let affected_pkgs: Vec<String> = vuln
-        .affected
-        .as_ref()
-        .map(|affected| {
-            affected
-                .iter()
-                .filter_map(|a| a.package.as_ref())
-                .map(|p| format!("{} ({})", p.name, p.ecosystem))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Extract fixed versions from range events
-    let fixed_versions: Vec<String> = vuln
-        .affected
-        .as_ref()
-        .map(|affected| {
-            affected
-                .iter()
-                .filter_map(|a| a.ranges.as_ref())
-                .flatten()
-                .filter_map(|r| r.events.as_ref())
-                .flatten()
-                .filter_map(|event| {
-                    event
-                        .as_object()
-                        .and_then(|obj| obj.get("fixed"))
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    // Build reference URL (prefer ADVISORY type, then WEB, then fallback)
-    let url = vuln
-        .references
-        .as_ref()
-        .and_then(|refs| {
-            refs.iter()
-                .find(|r| r.ref_type == "ADVISORY")
-                .or_else(|| refs.iter().find(|r| r.ref_type == "WEB"))
-                .or_else(|| refs.first())
-        })
-        .map(|r| r.url.clone())
-        .unwrap_or_else(|| format!("https://osv.dev/vulnerability/{}", vuln.id));
-
-    let content = format!(
-        "{}\n\nSeverity: {}\nAffected: {}\n{}\n{}",
-        summary,
-        severity_str,
-        if affected_pkgs.is_empty() {
-            "Unknown".to_string()
-        } else {
-            affected_pkgs.join(", ")
-        },
-        if fixed_versions.is_empty() {
-            String::new()
-        } else {
-            format!("Fixed in: {}", fixed_versions.join(", "))
-        },
-        details
-    );
-
-    let mut metadata = serde_json::json!({
-        "severity": severity_str,
-        "affected_packages": affected_pkgs,
-        "source_name": "osv",
-    });
-    if !fixed_versions.is_empty() {
-        metadata["fixed_versions"] = serde_json::json!(fixed_versions);
-    }
-    if let Some(published) = &vuln.published {
-        metadata["published"] = serde_json::json!(published);
-    }
-    if let Some(modified) = &vuln.modified {
-        metadata["modified"] = serde_json::json!(modified);
-    }
-
-    // Extract CVSS numeric score if available
-    if let Some(severities) = &vuln.severity {
-        if let Some(cvss) = severities.iter().find(|s| s.severity_type == "CVSS_V3") {
-            // CVSS vector strings contain the score; try parsing a bare number first
-            if let Ok(score) = cvss.score.parse::<f64>() {
-                metadata["cvss_score"] = serde_json::json!(score);
-            }
-        }
-    }
-
-    SourceItem::new("osv", &vuln.id, &format!("[{}] {}", vuln.id, summary))
-        .with_url(Some(url))
-        .with_content(content)
-        .with_metadata(metadata)
 }
 
 // ============================================================================

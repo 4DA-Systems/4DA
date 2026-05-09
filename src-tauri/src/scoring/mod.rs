@@ -121,8 +121,8 @@ pub(crate) struct ScoringContext {
     pub contradicted_topics: std::collections::HashSet<String>,
     /// Dominant persona from continuous taste inference (persona_index, weight)
     /// Present when dominant weight exceeds uniform threshold (> 0.2)
-    // Diagnostic: populated for scoring introspection
-    #[allow(dead_code)] // REMOVE BY 2026-08-10: diagnostic field — wire into score breakdown UI or delete
+    // REMOVE BY 2026-08-10: diagnostic field — wire into score breakdown UI or delete
+    #[allow(dead_code)]
     pub dominant_persona: Option<(usize, f32)>,
     /// User's professional role from onboarding (developer, security, devops, data, manager)
     pub user_role: Option<String>,

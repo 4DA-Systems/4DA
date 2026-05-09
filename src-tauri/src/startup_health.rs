@@ -514,4 +514,3 @@ pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
 
     issues
 }
-

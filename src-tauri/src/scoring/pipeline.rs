@@ -248,7 +248,8 @@ pub(crate) fn score_item(
     let base_score = (base_score - off_domain_penalty).clamp(0.0, 1.0);
 
     // Quality multipliers: competing tech, content quality, DNA, novelty, ecosystem shift
-    let quality = pipeline_signals::compute_quality_composite(input, &topics, ctx, domain_relevance);
+    let quality =
+        pipeline_signals::compute_quality_composite(input, &topics, ctx, domain_relevance);
     let pipeline_signals::QualityComposite {
         composite_mult,
         competing_mult,

@@ -236,7 +236,6 @@ impl Digest {
             high_count,
         }
     }
-
 }
 
 /// Digest manager handles collection and delivery of digests

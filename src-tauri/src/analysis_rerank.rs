@@ -643,4 +643,3 @@ pub(crate) fn maybe_save_digest(results: &[SourceRelevance]) {
         }
     }
 }
-

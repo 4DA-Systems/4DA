@@ -29,6 +29,7 @@ pub mod huggingface;
 pub mod lobsters;
 pub mod npm_registry;
 pub mod osv;
+mod osv_types;
 pub mod papers_with_code;
 pub mod producthunt;
 pub mod pypi;
