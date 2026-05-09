@@ -87,8 +87,8 @@ pub(super) struct OsvReference {
 // Ecosystem mapping (manifest file -> OSV ecosystem string)
 // ============================================================================
 
-/// Map from ACE-detected manifest files to OSV ecosystem identifiers.
-pub(crate) const ECOSYSTEM_MAP: &[(&str, &str)] = &[
+#[cfg(test)]
+pub(super) const ECOSYSTEM_MAP: &[(&str, &str)] = &[
     ("Cargo.toml", "crates.io"),
     ("package.json", "npm"),
     ("pyproject.toml", "PyPI"),

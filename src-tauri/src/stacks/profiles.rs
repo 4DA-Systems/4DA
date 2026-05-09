@@ -19,6 +19,10 @@ pub use profile_data_a::*;
 mod profile_data_b;
 pub use profile_data_b::*;
 
+#[path = "profile_data_c.rs"]
+mod profile_data_c;
+pub use profile_data_c::*;
+
 // ============================================================================
 // Profile Registry
 // ============================================================================

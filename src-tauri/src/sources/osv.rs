@@ -9,9 +9,6 @@
 //!
 //! Types, constants, and conversion helpers live in `osv_types`.
 
-#[allow(unused_imports)]
-pub(crate) use super::osv_types::ECOSYSTEM_MAP;
-
 use super::osv_types::*;
 
 use async_trait::async_trait;
