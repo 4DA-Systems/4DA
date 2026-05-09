@@ -47,7 +47,7 @@ export const URGENCY_ORDER: Urgency[] = ['critical', 'high', 'medium', 'watch'];
 const EVIDENCE_COLLAPSE_THRESHOLD = 2;
 const EXPLANATION_MAX_LENGTH = 280;
 
-export function getTierStyle(provenance: string): {
+function getTierStyle(provenance: string): {
   badge: string | null;
   badgeClass: string;
   borderClass: string;

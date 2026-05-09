@@ -21,7 +21,7 @@ export interface CalibrationResult {
   nearest_persona: string;
 }
 
-export interface PersonaMetrics {
+interface PersonaMetrics {
   name: string;
   display_name: string;
   f1: number;
@@ -34,7 +34,7 @@ export interface PersonaMetrics {
   fn: number;
 }
 
-export interface RigRequirements {
+interface RigRequirements {
   ollama_running: boolean;
   ollama_url: string;
   embedding_model: string | null;
@@ -62,7 +62,7 @@ export interface Recommendation {
 // fit. The UI can render "last fit" tables showing which models/tasks
 // got a curve and which were skipped (and why).
 
-export interface CurveFitSummary {
+interface CurveFitSummary {
   model_identity_hash: string;
   provider: string;
   model: string;
@@ -96,22 +96,11 @@ export interface CurveStatus {
   is_stale: boolean;
 }
 
-// Drift descriptor emitted on the `calibration-drift` event when the
-// rerank loop loads a curve whose prompt_version no longer matches.
-export interface CurveDriftEvent {
-  curve_id: string;
-  task: string;
-  model_identity_hash: string;
-  stored_prompt_version: string;
-  current_prompt_version: string;
-  reason: string;
-}
-
 // ============================================================================
 // Taste Test Calibration
 // ============================================================================
 
-export interface TasteCard {
+interface TasteCard {
   id: number;
   slot: number;
   title: string;
@@ -120,7 +109,7 @@ export interface TasteCard {
   categoryHint: string;
 }
 
-export interface PersonaWeight {
+interface PersonaWeight {
   name: string;
   weight: number;
 }

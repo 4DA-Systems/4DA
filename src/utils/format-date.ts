@@ -83,8 +83,3 @@ export function formatRelativeDate(dateInput: string | Date): string {
 
   return formatLocalDate(date);
 }
-
-/** Format a number with locale-appropriate grouping (e.g., 1,000 vs 1.000). */
-export function formatLocalNumber(num: number): string {
-  return new Intl.NumberFormat(getUserLocale()).format(num);
-}

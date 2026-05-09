@@ -30,23 +30,14 @@ import { createPreemptionSlice } from './preemption-slice';
 import { createBlindSpotsSlice } from './blind-spots-slice';
 import { createTrustSlice } from './trust-slice';
 
-// Re-export all types
+// Re-export types consumed by hooks and components via the barrel
 export type {
   ToastType,
   ToastAction,
   Toast,
   SettingsForm,
   OllamaStatus,
-  DiscoveredContext,
-  TopicAffinity,
-  AntiTopic,
-  SimilarTopicResult,
   BriefingState,
-  AppState,
-  AppStore,
-  LicenseSlice,
-  ToolkitSlice,
-  EmbeddingStatus,
 } from './types';
 
 export const useAppStore = create<AppStore>()((...a) => ({

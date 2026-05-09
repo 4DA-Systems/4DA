@@ -654,6 +654,17 @@ function main() {
     console.error(`${C.red}Failed to save snapshot: ${err.message}${C.reset}`);
   }
 
+  // Record cadence timestamp in ops-state.json
+  const OPS_STATE = path.join(ROOT, '.claude', 'wisdom', 'ops-state.json');
+  try {
+    const ops = JSON.parse(fs.readFileSync(OPS_STATE, 'utf8'));
+    if (!ops.cadence) ops.cadence = {};
+    ops.cadence.lastBloatRadar = new Date().toISOString();
+    fs.writeFileSync(OPS_STATE, JSON.stringify(ops, null, 2) + '\n');
+  } catch (_) {
+    // ops-state.json may not exist — non-fatal
+  }
+
   // Exit with non-zero if score is below 60 (fail)
   if (score < 60) {
     process.exit(1);

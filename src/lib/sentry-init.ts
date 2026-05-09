@@ -189,7 +189,3 @@ export function reportError(error: unknown, context?: Record<string, unknown>): 
   });
 }
 
-/** Is Sentry currently initialized and actively reporting? */
-export function isSentryActive(): boolean {
-  return initialized;
-}

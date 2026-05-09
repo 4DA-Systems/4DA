@@ -33,7 +33,7 @@ step_elapsed() {
 }
 
 # ── State tracking ───────────────────────────────────────────────────────────
-TOTAL_STEPS=11
+TOTAL_STEPS=12
 HARD_FAILS=0
 WARNINGS=0
 RUST_TEST_COUNT=0
@@ -280,7 +280,7 @@ if [ -f "$OPS_STATE" ]; then
   OVERDUE_CADENCES=0
   NOW_EPOCH=$(date +%s)
 
-  for cadence_key in lastDaily lastWeekly lastMonthly; do
+  for cadence_key in lastDaily lastWeekly lastMonthly lastBloatRadar; do
     CADENCE_VAL=$(read_json_field "$OPS_STATE" "cadence.${cadence_key}")
 
     if [ -z "$CADENCE_VAL" ] || [ "$CADENCE_VAL" = "null" ]; then
@@ -295,7 +295,8 @@ if [ -f "$OPS_STATE" ]; then
     case "$cadence_key" in
       lastDaily)   MAX_AGE=172800  ;; # 48 hours (generous)
       lastWeekly)  MAX_AGE=1209600 ;; # 14 days
-      lastMonthly) MAX_AGE=5184000 ;; # 60 days
+      lastMonthly)    MAX_AGE=5184000 ;; # 60 days
+      lastBloatRadar) MAX_AGE=2678400 ;; # 31 days
     esac
 
     AGE=$((NOW_EPOCH - CADENCE_EPOCH))
@@ -394,9 +395,66 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 10: Bloat score (Necessity Engine)
+# STEP 10: Binary size tracking
 # ─────────────────────────────────────────────────────────────────────────────
-step 10 "Bloat score (Necessity Engine)"
+step 10 "Binary size tracking"
+step_start
+
+BINARY_SIZE_FILE="$REPO_ROOT/.claude/wisdom/binary-size-history.json"
+RELEASE_BINARY="$REPO_ROOT/src-tauri/target/release/fourda.exe"
+
+if [ -f "$RELEASE_BINARY" ]; then
+  BINARY_BYTES=$(wc -c < "$RELEASE_BINARY" | tr -d ' ')
+  BINARY_MB=$(node -e "process.stdout.write((${BINARY_BYTES}/1048576).toFixed(1))")
+
+  PREV_SIZE=""
+  if [ -f "$BINARY_SIZE_FILE" ]; then
+    PREV_SIZE=$(read_json_field "$BINARY_SIZE_FILE" "latest.bytes")
+  fi
+
+  node -e "
+    const fs = require('fs');
+    const file = '$BINARY_SIZE_FILE';
+    let data = { history: [] };
+    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch(e) {}
+    if (!Array.isArray(data.history)) data.history = [];
+    const entry = { date: '$(date '+%Y-%m-%d')', version: '${VERSION}', bytes: ${BINARY_BYTES} };
+    const idx = data.history.findIndex(h => h.version === entry.version);
+    if (idx >= 0) { data.history[idx] = entry; } else { data.history.push(entry); }
+    if (data.history.length > 50) data.history = data.history.slice(-50);
+    data.latest = entry;
+    fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  "
+
+  if [ -n "$PREV_SIZE" ] && [ "$PREV_SIZE" != "0" ] && [ "$PREV_SIZE" != "" ]; then
+    GROWTH_PCT=$(node -e "process.stdout.write(((${BINARY_BYTES}-${PREV_SIZE})/${PREV_SIZE}*100).toFixed(1))")
+    if [ "$(node -e "process.stdout.write(${BINARY_BYTES} > ${PREV_SIZE} * 1.05 ? '1' : '0')")" = "1" ]; then
+      warn "Binary grew ${GROWTH_PCT}% (${BINARY_MB}MB vs previous $(node -e "process.stdout.write((${PREV_SIZE}/1048576).toFixed(1))")MB)"
+      record_warn "Binary size: ${BINARY_MB}MB (+${GROWTH_PCT}%)"
+    else
+      pass "Binary size: ${BINARY_MB}MB (${GROWTH_PCT}% change)"
+      record_pass "Binary size: ${BINARY_MB}MB"
+    fi
+  else
+    pass "Binary size: ${BINARY_MB}MB (first baseline recorded)"
+    record_pass "Binary size: ${BINARY_MB}MB (baseline)"
+  fi
+else
+  if [ "$BUILD_EXIT" -ne 0 ]; then
+    info "Binary size skipped — build failed"
+    record_warn "Binary size: build failed"
+  else
+    warn "Release binary not found at expected path"
+    record_warn "Binary size: binary not found"
+  fi
+fi
+
+step_elapsed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 11: Bloat score (Necessity Engine)
+# ─────────────────────────────────────────────────────────────────────────────
+step 11 "Bloat score (Necessity Engine)"
 step_start
 
 BLOAT_SNAPSHOT="$REPO_ROOT/.claude/wisdom/bloat-radar-snapshot.json"
@@ -436,9 +494,9 @@ fi
 step_elapsed
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 11: Record test counts
+# STEP 12: Record test counts
 # ─────────────────────────────────────────────────────────────────────────────
-step 11 "Record test counts"
+step 12 "Record test counts"
 step_start
 
 TOTAL_TESTS=$((RUST_TEST_COUNT + FRONTEND_TEST_COUNT))

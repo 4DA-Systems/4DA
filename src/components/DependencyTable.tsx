@@ -20,14 +20,14 @@ export interface DepEntry {
 // Constants (shared with DependencyDashboard)
 // ============================================================================
 
-export const SEVERITY_COLORS: Record<Severity, string> = {
+const SEVERITY_COLORS: Record<Severity, string> = {
   critical: 'bg-error/15 text-error border-error/25',
   high: 'bg-[var(--color-accent-action)]/15 text-[var(--color-accent-action)] border-[var(--color-accent-action)]/25',
   medium: 'bg-accent-gold/15 text-accent-gold border-accent-gold/25',
   low: 'bg-white/5 text-text-muted border-border',
 };
 
-export const ECOSYSTEM_COLORS: Record<string, string> = {
+const ECOSYSTEM_COLORS: Record<string, string> = {
   rust: 'text-[#DEA584]',
   javascript: 'text-[#F7DF1E]',
   typescript: 'text-[#3178C6]',

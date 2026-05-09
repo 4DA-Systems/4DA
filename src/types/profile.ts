@@ -41,7 +41,7 @@ export interface StackDimension {
   selected_profiles: string[];
 }
 
-export interface DetectedTechEntry {
+interface DetectedTechEntry {
   name: string;
   confidence: number;
 }
@@ -54,18 +54,18 @@ export interface SkillsDimension {
   engagement_sources: SourceEngagementEntry[];
 }
 
-export interface AffinityEntry {
+interface AffinityEntry {
   topic: string;
   score: number;
 }
 
-export interface PlaybookProgressSummary {
+interface PlaybookProgressSummary {
   completed_lessons: number;
   total_lessons: number;
   completed_modules: string[];
 }
 
-export interface SourceEngagementEntry {
+interface SourceEngagementEntry {
   source_type: string;
   items_seen: number;
   items_saved: number;
@@ -80,12 +80,12 @@ export interface PreferencesDimension {
   tech_radar: TechRadarSummary;
 }
 
-export interface ProfileDecisionEntry {
+interface ProfileDecisionEntry {
   subject: string;
   decision: string;
 }
 
-export interface TechRadarSummary {
+interface TechRadarSummary {
   adopt: string[];
   trial: string[];
   assess: string[];
@@ -109,23 +109,23 @@ export interface IntelligenceReport {
   ecosystem_alerts: EcosystemAlert[];
 }
 
-export interface SkillGap {
+interface SkillGap {
   dependency: string;
   reason: string;
 }
 
-export interface OptimizationOpportunity {
+interface OptimizationOpportunity {
   area: string;
   suggestion: string;
   severity: number;
 }
 
-export interface InfrastructureMismatch {
+interface InfrastructureMismatch {
   category: string;
   issue: string;
 }
 
-export interface EcosystemAlert {
+interface EcosystemAlert {
   from_tech: string;
   to_tech: string;
   description: string;
@@ -138,7 +138,7 @@ export interface CompletenessReport {
   dimensions: DimensionCompleteness[];
 }
 
-export interface DimensionCompleteness {
+interface DimensionCompleteness {
   name: string;
   depth: string;
   fact_count: number;
