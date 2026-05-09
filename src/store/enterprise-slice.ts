@@ -5,7 +5,7 @@ import type { AppStore } from './types';
 
 // -- Enterprise: Audit Types --
 
-export interface AuditEntry {
+interface AuditEntry {
   id: number;
   event_id: string;
   team_id: string;
@@ -18,7 +18,7 @@ export interface AuditEntry {
   created_at: string;
 }
 
-export interface AuditSummary {
+interface AuditSummary {
   total_events: number;
   events_by_action: [string, number][];
   events_by_actor: [string, number][];
@@ -53,7 +53,7 @@ export interface WebhookDelivery {
 
 // -- Enterprise: Organization Types --
 
-export interface Organization {
+interface Organization {
   id: string;
   name: string;
   team_count: number;
@@ -61,18 +61,18 @@ export interface Organization {
   created_at: string;
 }
 
-export interface OrgTeamSummary {
+interface OrgTeamSummary {
   team_id: string;
   member_count: number;
   last_active: string | null;
 }
 
-export interface RetentionPolicy {
+interface RetentionPolicy {
   resource_type: string;
   retention_days: number;
 }
 
-export interface CrossTeamCorrelation {
+interface CrossTeamCorrelation {
   correlation_id: string;
   signal_type: string;
   teams_affected: [string, number][];

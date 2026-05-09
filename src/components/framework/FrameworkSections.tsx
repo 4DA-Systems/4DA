@@ -13,7 +13,7 @@ const GATE_TABLE = [
   { axes: 5, mult: 1.25, ceiling: 1.00 },
 ];
 
-export const SOVEREIGNTY_COMPONENTS = [
+const SOVEREIGNTY_COMPONENTS = [
   { name: 'Build Health', weight: '15%', measures: 'Compilation and build success' },
   { name: 'Test Health', weight: '15%', measures: 'Test suite pass rate' },
   { name: 'Source Pipeline', weight: '10%', measures: 'Data source responsiveness' },

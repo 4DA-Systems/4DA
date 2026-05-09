@@ -26,7 +26,7 @@ export const URGENCY_COLORS: Record<Urgency, string> = {
   watch: 'text-blue-400',
 };
 
-export const SCORE_TIERS = [
+const SCORE_TIERS = [
   { max: 25, color: 'text-green-400', bg: 'bg-green-500', labelKey: 'blindspots.score.good' },
   { max: 50, color: 'text-yellow-400', bg: 'bg-yellow-500', labelKey: 'blindspots.score.moderate' },
   { max: 75, color: 'text-orange-400', bg: 'bg-orange-500', labelKey: 'blindspots.score.significant' },

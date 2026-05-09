@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useEffect } from 'react';
 import { cmd } from '../lib/commands';
 
 // ============================================================================
@@ -23,19 +22,11 @@ let activityTrackingEnabled: boolean | null = null; // null = unknown -> drop
  * Called by the settings bootstrap (and any runtime toggle in the
  * Privacy settings panel) to enable or disable local activity tracking.
  *
- * While the flag is null or false, every trackEvent/useTelemetryView
- * call is a no-op — no IPC, no SQLite write, nothing.
+ * While the flag is null or false, every trackEvent call is a no-op
+ * — no IPC, no SQLite write, nothing.
  */
 export function setActivityTrackingEnabled(enabled: boolean): void {
   activityTrackingEnabled = enabled;
-}
-
-/**
- * Returns the current runtime state. Tests can read this to assert
- * the no-op default.
- */
-export function isActivityTrackingEnabled(): boolean {
-  return activityTrackingEnabled === true;
 }
 
 /**
@@ -58,19 +49,3 @@ export function trackEvent(
   }).catch((e) => console.debug('[telemetry] track_event:', e));
 }
 
-/**
- * Track view open on mount and view duration on unmount.
- *
- * Respects the same opt-in gate as trackEvent. On unmount, the close
- * event is skipped if tracking was off throughout.
- */
-export function useTelemetryView(viewId: string): void {
-  useEffect(() => {
-    const start = Date.now();
-    trackEvent(`view_open:${viewId}`, viewId);
-    return () => {
-      const seconds = Math.round((Date.now() - start) / 1000);
-      trackEvent(`view_close:${viewId}`, viewId, { duration_seconds: seconds });
-    };
-  }, [viewId]);
-}

@@ -50,7 +50,7 @@ interface ActionButtonProps {
   onAction: (rec: Recommendation) => void;
 }
 
-export function ActionButton({ rec, actionInProgress, onAction }: ActionButtonProps) {
+function ActionButton({ rec, actionInProgress, onAction }: ActionButtonProps) {
   const { t } = useTranslation();
 
   if (!rec.action_type) return null;

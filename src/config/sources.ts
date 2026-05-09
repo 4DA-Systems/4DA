@@ -67,9 +67,6 @@ export function getSourceFullName(id: string): string {
 export function getSourceColorClass(id: string): string {
   return sourcesCache.get(id)?.colorClass ?? DEFAULT_COLOR;
 }
-export function getSourceCategory(id: string): string {
-  return sourcesCache.get(id)?.category ?? 'general';
-}
 export function getSourcesByCategory(): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const [id, meta] of sourcesCache) {
@@ -79,7 +76,4 @@ export function getSourcesByCategory(): Map<string, string[]> {
     groups.set(cat, list);
   }
   return groups;
-}
-export function isSourcesLoaded(): boolean {
-  return sourcesCache.size > 0;
 }

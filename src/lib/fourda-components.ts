@@ -9,8 +9,6 @@
  * Components are loaded on first use to avoid blocking the main bundle.
  */
 
-let registered = false;
-
 const COMPONENTS = {
   'fourda-celebration-burst': () => import('./fourda-components/celebration-burst.js'),
   'fourda-status-orb': () => import('./fourda-components/status-orb.js'),
@@ -41,13 +39,4 @@ export async function registerFourdaComponent(tag: FourdaComponentTag): Promise<
   } catch (err) {
     console.warn(`[GAME] Failed to load ${tag}:`, err);
   }
-}
-
-/** Register all GAME components. Call once on app startup for eager loading. */
-export async function registerAllFourdaComponents(): Promise<void> {
-  if (registered) return;
-  registered = true;
-  await Promise.allSettled(
-    (Object.keys(COMPONENTS) as FourdaComponentTag[]).map(registerFourdaComponent),
-  );
 }

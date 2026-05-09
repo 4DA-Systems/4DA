@@ -13,7 +13,7 @@ export const WEBHOOK_EVENTS: Record<string, string[]> = {
   system: ['briefing.generated', 'alert.triggered', 'audit.anomaly', 'settings.changed'],
 };
 
-export const CIRCUIT_BREAKER_THRESHOLD = 10;
+const CIRCUIT_BREAKER_THRESHOLD = 10;
 
 // ============================================================================
 // Helpers (shared)

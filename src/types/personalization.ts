@@ -28,7 +28,7 @@ export interface InsightBlock {
   confidence: number;
 }
 
-export type BlockPosition =
+type BlockPosition =
   | { type: 'injection'; marker_id: string }
   | { type: 'end' };
 
@@ -36,14 +36,14 @@ export type InsightContent =
   | { type: 'card' } & SovereignInsightCard
   | { type: 'prose'; text: string; model: string };
 
-export interface SovereignInsightCard {
+interface SovereignInsightCard {
   card_type: CardType;
   title: string;
   data_points: DataPoint[];
   visualization: Visualization | null;
 }
 
-export type CardType =
+type CardType =
   | 'hardware_benchmark'
   | 'stack_fit'
   | 'cost_projection'
@@ -69,25 +69,25 @@ export type Visualization =
   | { type: 'rate_table'; headers: string[]; rows: TableRow[] }
   | { type: 'diff_ribbon'; added: string[]; removed: string[]; changed: DiffChange[] };
 
-export interface BarEntry {
+interface BarEntry {
   label: string;
   value: number;
   highlight: boolean;
 }
 
-export interface RankItem {
+interface RankItem {
   rank: number;
   name: string;
   score: number;
   matches_stack: boolean;
 }
 
-export interface TableRow {
+interface TableRow {
   cells: string[];
   highlight: boolean;
 }
 
-export interface DiffChange {
+interface DiffChange {
   field: string;
   old_value: string;
   new_value: string;
@@ -107,7 +107,7 @@ export interface TemporalBlock {
   block_type: TemporalBlockType;
 }
 
-export type TemporalBlockType =
+type TemporalBlockType =
   | { type: 'diff_ribbon'; added: string[]; removed: string[]; changed: DiffChange[] }
   | { type: 'progressive_reveal'; newly_completed: string[]; unlocked_content: string[] }
   | { type: 'feed_echo'; items: FeedEchoItem[] };

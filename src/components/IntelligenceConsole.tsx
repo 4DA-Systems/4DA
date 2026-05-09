@@ -62,7 +62,7 @@ function TabButton({
 // IntelligenceConsole
 // ============================================================================
 
-export const IntelligenceConsole = memo(function IntelligenceConsole() {
+const IntelligenceConsole = memo(function IntelligenceConsole() {
   const { t } = useTranslation();
   const [tab, setTab] = useState<ConsoleTab>('accuracy');
   const [hasAnyData, setHasAnyData] = useState<boolean | null>(null);

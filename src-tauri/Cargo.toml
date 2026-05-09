@@ -71,7 +71,6 @@ parking_lot = "0.12"
 # activate automatically when SQLCipher is enabled. sqlite-vec is compatible.
 rusqlite = { version = "0.32", features = ["bundled"] }
 sqlite-vec = "0.1"
-zerocopy = { version = "0.8", features = ["derive"] }
 
 # Hashing for deduplication
 sha2 = "0.10"
@@ -137,8 +136,6 @@ x509-cert = { version = "0.2", optional = true }
 chacha20poly1305 = "0.10"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 hkdf = "0.12"
-uhlc = "0.7"
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 rand = "0.8"
 zeroize = "1"

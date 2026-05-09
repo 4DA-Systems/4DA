@@ -71,7 +71,7 @@ export interface StructuredError {
 /**
  * Check if an error is a structured error from the backend.
  */
-export function isStructuredError(error: unknown): error is StructuredError {
+function isStructuredError(error: unknown): error is StructuredError {
   if (typeof error !== 'object' || error === null) return false;
   const obj = error as Record<string, unknown>;
   return typeof obj.code === 'string' && typeof obj.title === 'string' && typeof obj.detail === 'string';
@@ -81,7 +81,7 @@ export function isStructuredError(error: unknown): error is StructuredError {
  * Parse a structured error from various error shapes.
  * The backend may return the error directly or wrapped in a string.
  */
-export function parseStructuredError(error: unknown): StructuredError | null {
+function parseStructuredError(error: unknown): StructuredError | null {
   // Direct object
   if (isStructuredError(error)) return error;
 

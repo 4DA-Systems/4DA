@@ -5,7 +5,7 @@ import type { AppStore } from './types';
 
 // -- Team Intelligence Profile Types --
 
-export interface TeamProfile {
+interface TeamProfile {
   team_id: string;
   member_count: number;
   collective_stack: TeamTechEntry[];
@@ -16,12 +16,12 @@ export interface TeamProfile {
   generated_at: string;
 }
 
-export interface TeamTechEntry { tech: string; members: string[]; team_confidence: number; }
-export interface TeamBlindSpot { topic: string; related_to: string[]; severity: string; }
-export interface OverlapZone { topic: string; members: string[]; member_count: number; }
-export interface UniqueStrength { tech: string; sole_expert: string; risk_level: string; }
+interface TeamTechEntry { tech: string; members: string[]; team_confidence: number; }
+interface TeamBlindSpot { topic: string; related_to: string[]; severity: string; }
+interface OverlapZone { topic: string; members: string[]; member_count: number; }
+interface UniqueStrength { tech: string; sole_expert: string; risk_level: string; }
 
-export interface TeamSignalSummary {
+interface TeamSignalSummary {
   signal_id: string;
   chain_name: string;
   priority: string;
@@ -33,11 +33,11 @@ export interface TeamSignalSummary {
   resolved: boolean;
 }
 
-export interface MemberDetection { client_id: string; display_name: string; detected_at: string; }
+interface MemberDetection { client_id: string; display_name: string; detected_at: string; }
 
 // -- Team Decision Types --
 
-export interface TeamDecision {
+interface TeamDecision {
   id: string;
   team_id: string;
   title: string;
@@ -50,14 +50,14 @@ export interface TeamDecision {
   resolved_at: string | null;
 }
 
-export interface DecisionVote {
+interface DecisionVote {
   voter_id: string;
   stance: string;
   rationale: string;
   voted_at: string;
 }
 
-export interface DecisionDetail {
+interface DecisionDetail {
   id: string;
   team_id: string;
   title: string;
@@ -73,7 +73,7 @@ export interface DecisionDetail {
 
 // -- Team Notification Types --
 
-export interface TeamNotification {
+interface TeamNotification {
   id: string;
   team_id: string;
   notification_type: string;
@@ -85,14 +85,14 @@ export interface TeamNotification {
   metadata: Record<string, unknown> | null;
 }
 
-export interface NotificationSummary {
+interface NotificationSummary {
   total_unread: number;
   by_type: { notification_type: string; count: number }[];
 }
 
 // -- Shared Source Types --
 
-export interface SharedSource {
+interface SharedSource {
   id: string;
   team_id: string;
   source_type: string;

@@ -11,9 +11,3 @@ export function reportError(context: string, error: unknown): void {
   }
   // Production: silent by default, future: send to telemetry
 }
-
-export function reportWarning(context: string, message: string): void {
-  if (isDev) {
-    console.warn(`[4DA] ${context}:`, message);
-  }
-}

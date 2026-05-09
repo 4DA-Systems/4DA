@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 // he (Hebrew), fa (Persian), ur (Urdu) can be added when translations are generated.
 const RTL_LANGUAGES = new Set(['ar']);
 
-export function isRTL(lang: string): boolean {
+function isRTL(lang: string): boolean {
   return RTL_LANGUAGES.has(lang);
 }
 
