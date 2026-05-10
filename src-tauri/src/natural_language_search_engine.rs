@@ -2,7 +2,6 @@
 //! Search engine implementations — text search and vector similarity search
 //! for the natural language query pipeline.
 
-use rusqlite;
 use tracing::{debug, warn};
 
 use crate::db::embedding_to_blob;
