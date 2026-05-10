@@ -271,8 +271,8 @@ fn compute_fallback_level(components: &[ComponentHealth]) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::health_checks::*;
+    use super::*;
     use rusqlite::Connection;
 
     fn setup_test_db() -> Connection {

@@ -77,6 +77,9 @@ data/briefing_snapshot.json.tmp
 # Calibration curves (runtime state — fit from user interactions, per-machine)
 data/calibrations/
 
+# OSV advisory cache (fetched at runtime, machine-local)
+data/osv-cache/
+
 # Startup watchdog markers (Sovereign Cold Boot — runtime state)
 data/.running
 data/.healthy
