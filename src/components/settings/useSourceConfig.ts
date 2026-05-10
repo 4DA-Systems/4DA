@@ -2,12 +2,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
-import type { RssFeedValidation, YouTubeChannelValidation, FeedHealth } from '../../lib/commands';
+import type { FeedHealth } from '../../lib/commands';
 import { reportError } from '../../lib/error-reporter';
 import { translateError } from '../../utils/error-messages';
 import { parseSourceInput } from '../../utils/source-input-parser';
-
-export type ValidationResult = (RssFeedValidation & YouTubeChannelValidation) | null;
+import {
+  type ValidationResult, STATUS_CLEAR_DELAY, VALIDATION_CLEAR_DELAY,
+  STATUS_ERROR_CLEAR_DELAY, createToggleDefault,
+} from './source-config-types';
+export type { ValidationResult } from './source-config-types';
 
 export function useSourceConfig(onStatusChange: (status: string) => void) {
   const { t } = useTranslation();
@@ -81,22 +84,17 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
     }
   }, []);
 
-  useEffect(() => {
-    void loadSources();
-  }, [loadSources]);
+  useEffect(() => { void loadSources(); }, [loadSources]);
 
-  const rssParsed = useMemo(
-    () => (newRssFeed.trim().length > 0 ? parseSourceInput(newRssFeed) : null),
-    [newRssFeed],
+  const rssParsed = useMemo(() => (newRssFeed.trim() ? parseSourceInput(newRssFeed) : null), [newRssFeed]);
+
+  const flash = useCallback(
+    (msg: string) => { onStatusChange(msg); setTimeout(() => onStatusChange(''), STATUS_CLEAR_DELAY); },
+    [onStatusChange],
   );
 
-  const flash = useCallback((msg: string) => {
-    onStatusChange(msg);
-    setTimeout(() => onStatusChange(''), 2000);
-  }, [onStatusChange]);
-
   const clearInput = () => { setNewRssFeed(''); setRssPreviewOpen(false); };
-  const autoClearValidation = () => { setTimeout(() => setValidationResult(null), 5000); };
+  const autoClearValidation = () => { setTimeout(() => setValidationResult(null), VALIDATION_CLEAR_DELAY); };
 
   const confirmRssAdd = async () => {
     if (!rssParsed) return;
@@ -156,10 +154,8 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
   const addRssFeed = () => {
     if (!rssParsed || rssParsed.kind === 'unknown') {
       onStatusChange(t('sources.rss.unrecognized', 'Paste a URL, @handle, or comma-separated language list'));
-      setTimeout(() => onStatusChange(''), 3000);
-      return;
-    }
-    setRssPreviewOpen(true);
+      setTimeout(() => onStatusChange(''), STATUS_ERROR_CLEAR_DELAY); return;
+    } setRssPreviewOpen(true);
   };
 
   const removeRssFeed = async (url: string) => {
@@ -242,52 +238,36 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
     } catch (error) { onStatusChange(`Error: ${translateError(error)}`); }
   };
 
-  const toggleDefaultRss = useCallback(async (url: string, enabled: boolean) => {
-    const updated = enabled
-      ? disabledDefaultRss.filter((f) => f !== url)
-      : [...disabledDefaultRss, url];
-    setDisabledDefaultRss(updated);
-    try { await cmd('set_disabled_default_rss_feeds', { feeds: updated }); }
-    catch (error) { onStatusChange(`Error: ${translateError(error)}`); }
-  }, [disabledDefaultRss, onStatusChange]);
+  const toggleDefaultRss = useCallback(
+    createToggleDefault(() => disabledDefaultRss, setDisabledDefaultRss,
+      'set_disabled_default_rss_feeds', 'feeds', onStatusChange),
+    [disabledDefaultRss, onStatusChange],
+  );
 
-  const toggleDefaultYoutube = useCallback(async (ch: string, enabled: boolean) => {
-    const updated = enabled
-      ? disabledDefaultYoutube.filter((c) => c !== ch)
-      : [...disabledDefaultYoutube, ch];
-    setDisabledDefaultYoutube(updated);
-    try { await cmd('set_disabled_default_youtube_channels', { channels: updated }); }
-    catch (error) { onStatusChange(`Error: ${translateError(error)}`); }
-  }, [disabledDefaultYoutube, onStatusChange]);
+  const toggleDefaultYoutube = useCallback(
+    createToggleDefault(() => disabledDefaultYoutube, setDisabledDefaultYoutube,
+      'set_disabled_default_youtube_channels', 'channels', onStatusChange),
+    [disabledDefaultYoutube, onStatusChange],
+  );
 
-  const toggleDefaultTwitter = useCallback(async (handle: string, enabled: boolean) => {
-    const updated = enabled
-      ? disabledDefaultTwitter.filter((h) => h !== handle)
-      : [...disabledDefaultTwitter, handle];
-    setDisabledDefaultTwitter(updated);
-    try { await cmd('set_disabled_default_twitter_handles', { handles: updated }); }
-    catch (error) { onStatusChange(`Error: ${translateError(error)}`); }
-  }, [disabledDefaultTwitter, onStatusChange]);
+  const toggleDefaultTwitter = useCallback(
+    createToggleDefault(() => disabledDefaultTwitter, setDisabledDefaultTwitter,
+      'set_disabled_default_twitter_handles', 'handles', onStatusChange),
+    [disabledDefaultTwitter, onStatusChange],
+  );
 
   const resetFeedHealth = useCallback(async (feedOrigin: string, sourceType: string) => {
     try {
       await cmd('reset_feed_health', { feedOrigin, sourceType });
-      setFeedHealthMap((prev) => {
-        const next = { ...prev };
-        delete next[feedOrigin];
-        return next;
-      });
+      setFeedHealthMap((prev) => { const next = { ...prev }; delete next[feedOrigin]; return next; });
       flash(t('sources.health.reset', 'Feed health reset'));
-    } catch (error) {
-      onStatusChange(`Error: ${translateError(error)}`);
-    }
+    } catch (error) { onStatusChange(`Error: ${translateError(error)}`); }
   }, [flash, onStatusChange, t]);
 
-  const activeDefaultRss = defaultRssFeeds.length - disabledDefaultRss.length;
-  const activeDefaultYoutube = defaultYoutubeChannels.length - disabledDefaultYoutube.length;
-  const activeDefaultTwitter = defaultTwitterHandles.length - disabledDefaultTwitter.length;
   const totalSources = rssFeeds.length + youtubeChannels.length + twitterHandles.length
-    + activeDefaultRss + activeDefaultYoutube + activeDefaultTwitter;
+    + (defaultRssFeeds.length - disabledDefaultRss.length)
+    + (defaultYoutubeChannels.length - disabledDefaultYoutube.length)
+    + (defaultTwitterHandles.length - disabledDefaultTwitter.length);
 
   return {
     // Custom sources

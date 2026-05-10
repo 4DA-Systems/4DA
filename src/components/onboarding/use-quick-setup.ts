@@ -9,12 +9,11 @@ import { normalizeOllamaStatus } from '../../utils/normalize-ollama';
 import { fallbackSuggestions, SECTION_KEY, getPersistedSections } from './onboarding-constants';
 import type { SectionState } from './onboarding-constants';
 import type { ExperienceLevel } from './setup-experience';
-
-interface UseQuickSetupProps {
-  isAnimating: boolean;
-  onComplete: () => void;
-  onBack: () => void;
-}
+import type { UseQuickSetupProps, ProviderType } from './quick-setup-utils';
+import {
+  buildInitialPullProgress, refreshOllamaAfterPull,
+  validateApiKey, saveLlmProvider,
+} from './quick-setup-utils';
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const { t } = useTranslation();
@@ -33,7 +32,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
 
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [provider, setProvider] = useState<'anthropic' | 'openai' | 'ollama' | 'openai-compatible'>('ollama');
+  const [provider, setProvider] = useState<ProviderType>('ollama');
   const [apiKey, setApiKey] = useState('');
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
@@ -61,55 +60,28 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
 
   // --- AI Provider auto-detect ---
   const pullMissingModels = useCallback(async (status: OllamaStatus) => {
-    const needsEmbedding = !status.has_embedding_model;
-    const needsLLM = !status.has_llm_model;
-    if (!needsEmbedding && !needsLLM) return;
+    if (status.has_embedding_model && status.has_llm_model) return;
 
     setPullingModels(true);
-    const models: string[] = [];
-    if (needsEmbedding) models.push('nomic-embed-text');
-    if (needsLLM) models.push('llama3.2');
-
-    const initial: Record<string, PullProgress> = {};
-    for (const m of models) initial[m] = { model: m, status: 'waiting', percent: 0, done: false };
+    const { models, initial } = buildInitialPullProgress(status);
     setPullProgress(initial);
 
     const unlisten = await listen<PullProgress>('ollama-pull-progress', (event) => {
-      setPullProgress((prev) => ({
-        ...prev,
-        [event.payload.model]: event.payload,
-      }));
+      setPullProgress((prev) => ({ ...prev, [event.payload.model]: event.payload }));
     });
 
     try {
       for (const model of models) {
         setPullProgress((prev) => ({
-          ...prev,
-          [model]: { model, status: 'downloading', percent: 0, done: false },
+          ...prev, [model]: { model, status: 'downloading', percent: 0, done: false },
         }));
-        await cmd('pull_ollama_model', {
-          model,
-          baseUrl: status.base_url || null,
-        });
+        await cmd('pull_ollama_model', { model, baseUrl: status.base_url || null });
         setPullProgress((prev) => ({
-          ...prev,
-          [model]: { model, status: 'success', percent: 100, done: true },
+          ...prev, [model]: { model, status: 'success', percent: 100, done: true },
         }));
       }
 
-      // Re-check status after pull
-      let refreshed: OllamaStatus | null = null;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 3000));
-        try {
-          const raw = await cmd('check_ollama_status', { baseUrl: null }) as unknown as Record<string, unknown>;
-          const s = normalizeOllamaStatus(raw);
-          if (s.running && s.models.length > 0) {
-            refreshed = s;
-            break;
-          }
-        } catch { /* retry */ }
-      }
+      const refreshed = await refreshOllamaAfterPull();
       if (refreshed) {
         setOllamaStatus(refreshed);
         setAiConfigured(true);
@@ -155,14 +127,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         const result = await cmd('ace_auto_discover');
         if (cancelled) return;
         setDiscoveryDone(true);
-
         const topics = result.scan_result?.combined?.topics || [];
-        if (topics.length > 0) {
-          setDetectedTech(topics.slice(0, 12));
-        }
-      } catch {
-        setDiscoveryDone(true);
-      }
+        if (topics.length > 0) setDetectedTech(topics.slice(0, 12));
+      } catch { setDiscoveryDone(true); }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -180,9 +147,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
           setInterests(prev => prev.length === 0 ? profile.topInterests : prev);
           setSuggestions(prev => prev.length === 0 ? profile.topInterests : prev);
         }
-      } catch {
-        // Non-critical — taste test may not have been taken
-      }
+      } catch { /* Non-critical — taste test may not have been taken */ }
     })();
     return () => { cancelled = true; };
   }, []);
@@ -195,10 +160,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       try {
         const result = await cmd('ace_get_suggested_interests');
         if (cancelled) return;
-        const topics = result
-          .filter(s => !s.already_declared)
-          .map(s => s.topic)
-          .slice(0, 12);
+        const topics = result.filter(s => !s.already_declared).map(s => s.topic).slice(0, 12);
         const finalSuggestions = topics.length > 0 ? topics : fallbackSuggestions;
         setSuggestions(finalSuggestions);
         setInterests(prev => prev.length === 0 ? finalSuggestions.slice(0, 5) : prev);
@@ -220,15 +182,11 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // Auto-expand remaining sections after a delay if AI not configured
   useEffect(() => {
     if (aiConfigured) return;
-    const timer = setTimeout(() => {
-      setProjectsOpen(true);
-    }, 3000);
+    const timer = setTimeout(() => setProjectsOpen(true), 3000);
     return () => clearTimeout(timer);
   }, [aiConfigured]);
 
-  const removeTag = (tag: string) => {
-    setDetectedTech(prev => prev.filter(t => t !== tag));
-  };
+  const removeTag = (tag: string) => setDetectedTech(prev => prev.filter(t => t !== tag));
 
   const addInterest = () => {
     const trimmed = newInterest.trim();
@@ -239,19 +197,15 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   };
 
   const toggleInterest = (topic: string) => {
-    if (interests.includes(topic)) {
-      setInterests(prev => prev.filter(i => i !== topic));
-    } else {
-      setInterests(prev => [...prev, topic]);
-    }
+    setInterests(prev =>
+      prev.includes(topic) ? prev.filter(i => i !== topic) : [...prev, topic],
+    );
   };
 
-  const handleProviderChange = (p: 'anthropic' | 'openai' | 'ollama' | 'openai-compatible') => {
+  const handleProviderChange = (p: ProviderType) => {
     setProvider(p);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
-    if (p !== 'ollama') {
-      setProjectsOpen(true);
-    }
+    if (p !== 'ollama') setProjectsOpen(true);
   };
 
   const handleApiKeyChange = (key: string) => {
@@ -262,54 +216,16 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       setProjectsOpen(true);
       return;
     }
-    let valid = false;
-    if (provider === 'anthropic') {
-      valid = key.startsWith('sk-ant-') && key.length > 20;
-    } else if (provider === 'openai') {
-      valid = key.startsWith('sk-') && key.length > 20;
-    } else if (provider === 'openai-compatible') {
-      valid = key.trim().length > 10; // Unknown format — just check non-empty
-    } else {
-      valid = key.trim().length > 10;
-    }
+    const valid = validateApiKey(provider, key);
     setAiConfigured(valid);
     setApiKeyHint(valid ? null : t('onboarding.setup.keyFormatHintSoft'));
-  };
-
-  const saveLlmProvider = async () => {
-    const noProvider = { provider: 'none', apiKey: '', model: '', baseUrl: null, openaiApiKey: null };
-    if (provider === 'ollama') {
-      if (ollamaStatus?.running) {
-        const ollamaModel = ollamaStatus.models?.find(m => !m.startsWith('nomic-embed-text')) || 'llama3.2';
-        await cmd('set_llm_provider', {
-          provider: 'ollama', apiKey: '', model: ollamaModel,
-          baseUrl: ollamaStatus.base_url || 'http://localhost:11434', openaiApiKey: null,
-        });
-      } else {
-        await cmd('set_llm_provider', noProvider);
-      }
-    } else if (provider === 'openai-compatible' && apiKey.trim()) {
-      // OpenAI-compatible: save key now, user configures base_url + model in Settings
-      await cmd('set_llm_provider', {
-        provider: 'openai-compatible', apiKey, model: '',
-        baseUrl: null, openaiApiKey: null,
-      });
-    } else if (apiKey.trim()) {
-      const model = provider === 'anthropic' ? 'claude-haiku-4-5-20251001' : 'gpt-4o-mini';
-      await cmd('set_llm_provider', {
-        provider, apiKey, model, baseUrl: null,
-        openaiApiKey: provider === 'openai' ? apiKey : null,
-      });
-    } else {
-      await cmd('set_llm_provider', noProvider);
-    }
   };
 
   const handleContinue = async () => {
     setError(null);
     setIsSaving(true);
     try {
-      await saveLlmProvider();
+      await saveLlmProvider(provider, apiKey, ollamaStatus);
       if (role) await cmd('set_user_role', { role });
       if (experienceLevel) await cmd('set_experience_level', { level: experienceLevel });
 
