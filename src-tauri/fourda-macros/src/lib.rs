@@ -1,7 +1,7 @@
-mod threshold;
-mod score_component;
 mod confirmation_gate;
+mod score_component;
 mod scoring_builder;
+mod threshold;
 
 use proc_macro::TokenStream;
 

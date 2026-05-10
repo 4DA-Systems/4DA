@@ -1,8 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{
-    parse2, punctuated::Punctuated, Expr, ExprLit, ItemConst, Lit, LitFloat, Token,
-};
+use syn::{parse2, punctuated::Punctuated, Expr, ExprLit, ItemConst, Lit, LitFloat, Token};
 
 /// Expand `#[threshold(min, max)]` on a const declaration.
 ///
@@ -44,10 +42,14 @@ pub(crate) fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenS
     };
 
     // Build suffixed boundary tokens (e.g. `0.20_f32`).
-    let min_suffixed: LitFloat =
-        LitFloat::new(&format!("{}_{}", min_lit.base10_digits(), suffix), min_lit.span());
-    let max_suffixed: LitFloat =
-        LitFloat::new(&format!("{}_{}", max_lit.base10_digits(), suffix), max_lit.span());
+    let min_suffixed: LitFloat = LitFloat::new(
+        &format!("{}_{}", min_lit.base10_digits(), suffix),
+        min_lit.span(),
+    );
+    let max_suffixed: LitFloat = LitFloat::new(
+        &format!("{}_{}", max_lit.base10_digits(), suffix),
+        max_lit.span(),
+    );
 
     // Stringify for error messages.
     let val_str = quote!(#const_value).to_string();
@@ -77,9 +79,13 @@ pub(crate) fn expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenS
 /// Extract a `LitFloat` from an `Expr`, producing `msg` on failure.
 fn extract_float_lit(expr: &Expr, msg: &str) -> syn::Result<LitFloat> {
     match expr {
-        Expr::Lit(ExprLit { lit: Lit::Float(f), .. }) => Ok(f.clone()),
+        Expr::Lit(ExprLit {
+            lit: Lit::Float(f), ..
+        }) => Ok(f.clone()),
         // Allow unsuffixed integer literals like `0` or `1` by re-parsing as float.
-        Expr::Lit(ExprLit { lit: Lit::Int(i), .. }) => {
+        Expr::Lit(ExprLit {
+            lit: Lit::Int(i), ..
+        }) => {
             let float_str = format!("{}.0", i.base10_digits());
             Ok(LitFloat::new(&float_str, i.span()))
         }

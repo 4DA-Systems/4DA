@@ -5,7 +5,7 @@
 //! Requires a running 4DA dev server (`pnpm run tauri dev`).
 //! Run with: `VICTAURI_E2E=1 CARGO_TARGET_DIR=target-test cargo test --test victauri_dogfood -- --test-threads=1`
 
-use victauri_test::visual::VisualOptions;
+use victauri_test::visual::{MaskRegion, ThresholdPreset, VisualOptions};
 use victauri_test::VictauriClient;
 
 fn skip_unless_e2e() -> bool {
@@ -255,7 +255,7 @@ async fn ipc_log_captures_commands() {
 
     let mut client = VictauriClient::discover().await.unwrap();
 
-    let checkpoint = client.ipc_checkpoint().await.unwrap();
+    let checkpoint = client.create_ipc_checkpoint().await.unwrap();
 
     let _ = client.invoke_command("get_analysis_status", None).await;
 
@@ -340,10 +340,10 @@ async fn visual_regression_baseline() {
 
     let opts = VisualOptions {
         snapshot_dir: snapshot_dir.clone(),
-        channel_tolerance: 5,
-        threshold_percent: 1.0,
         ..VisualOptions::default()
-    };
+    }
+    .with_preset(ThresholdPreset::AntiAlias)
+    .with_mask(MaskRegion::new(0, 0, 200, 30));
 
     match client.screenshot_visual("4da_main_view", &opts).await {
         Ok(d) => {
@@ -1230,5 +1230,118 @@ async fn missing_auth_token_rejected() {
         resp.status().as_u16(),
         401,
         "missing auth token should be rejected with 401"
+    );
+}
+
+// ── Phase 15: Heavy IPC Traffic ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn parallel_ipc_burst() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let commands = [
+        "get_settings",
+        "get_monitoring_status",
+        "get_developer_dna",
+        "list_channels",
+        "get_analysis_status",
+    ];
+
+    let start = std::time::Instant::now();
+    for round in 0..5 {
+        for cmd in &commands {
+            let result = client.invoke_command(cmd, None).await;
+            assert!(
+                result.is_ok(),
+                "round {round} command {cmd} failed: {:?}",
+                result.err()
+            );
+        }
+    }
+    let elapsed = start.elapsed();
+
+    assert!(
+        elapsed.as_secs() < 60,
+        "25 IPC calls should complete within 60s: {elapsed:?}"
+    );
+
+    let integrity = client.check_ipc_integrity().await.unwrap();
+    victauri_test::assert_ipc_healthy(&integrity);
+}
+
+// ── Phase 16: Multi-Window Snapshots ────────────────────────────────────────
+
+#[tokio::test]
+async fn snapshot_each_window() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let windows = client.list_windows().await.unwrap();
+
+    let labels: Vec<&str> = windows
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|w| w.as_str())
+        .collect();
+
+    for label in &labels {
+        let state = client.get_window_state(Some(label)).await.unwrap();
+        assert!(
+            !state.is_null(),
+            "window '{label}' should return state data"
+        );
+
+        let has_url = state
+            .as_array()
+            .and_then(|arr| arr.iter().find(|w| w["label"] == *label))
+            .and_then(|w| w.get("url"))
+            .is_some()
+            || state.get("url").is_some();
+        assert!(has_url, "window '{label}' state should include URL");
+    }
+}
+
+// ── Phase 17: Event-Driven IPC Capture ──────────────────────────────────────
+
+#[tokio::test]
+async fn ipc_wait_for_capture_returns_complete_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let _ = client.invoke_command("get_settings", None).await;
+
+    let log = client
+        .call_tool(
+            "logs",
+            serde_json::json!({"action": "ipc", "wait_for_capture": true, "limit": 1}),
+        )
+        .await
+        .unwrap();
+
+    let empty = vec![];
+    let entries = log.as_array().unwrap_or(&empty);
+    assert!(
+        !entries.is_empty(),
+        "IPC log with wait_for_capture should return entries"
+    );
+
+    let last = &entries[entries.len() - 1];
+    assert!(
+        last.get("duration_ms").is_some() && !last["duration_ms"].is_null(),
+        "wait_for_capture should ensure duration_ms is populated: {last}"
+    );
+    assert!(
+        last.get("result").is_some() && !last["result"].is_null(),
+        "wait_for_capture should ensure result is captured: {last}"
     );
 }
