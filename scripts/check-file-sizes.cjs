@@ -69,6 +69,7 @@ const EXCEPTIONS = {
   'src-tauri/src/team_sync_commands.rs':   'Team sync — feature-gated, 17 commands',
   'src-tauri/src/settings/license.rs':     'License validation + Keygen integration + tests',
   'src-tauri/src/source_fetching/mod.rs':  'Source fetching orchestration — scheduler + rate limiting',
+  'src-tauri/src/bin/cli.rs':              'Standalone CLI binary — cannot split (cli/ gitignored for workspace)',
 
   // ── TypeScript — justified large files ────────────────────────────────────
   'src/lib/commands.ts':                   'IPC command registry — all typed Tauri commands',

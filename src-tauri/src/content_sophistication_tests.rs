@@ -48,8 +48,7 @@ fn moderate_title_scores_middle() {
 #[test]
 fn senior_audience_penalizes_beginner_content() {
     let dp = mock_domain_senior();
-    let result =
-        compute_sophistication("Getting Started with React", "", SENIOR_TECH_COUNT, &dp);
+    let result = compute_sophistication("Getting Started with React", "", SENIOR_TECH_COUNT, &dp);
     assert!(
         result.multiplier <= 0.60,
         "Expected <=0.60, got {}",
@@ -77,8 +76,7 @@ fn senior_audience_boosts_advanced_content() {
 #[test]
 fn junior_audience_mild_beginner_penalty() {
     let dp = mock_domain_junior();
-    let result =
-        compute_sophistication("Getting Started with React", "", JUNIOR_TECH_COUNT, &dp);
+    let result = compute_sophistication("Getting Started with React", "", JUNIOR_TECH_COUNT, &dp);
     assert!(
         result.multiplier >= 0.85,
         "Junior should get mild penalty, got {}",
