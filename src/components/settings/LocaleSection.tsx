@@ -4,67 +4,14 @@ import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 import { TranslationEditor } from './TranslationEditor';
 import type { TranslationConfig } from '../../lib/commands';
-
-const COUNTRIES = [
-  { code: 'US', name: 'United States', lang: 'en', currency: 'USD' },
-  { code: 'GB', name: 'United Kingdom', lang: 'en', currency: 'GBP' },
-  { code: 'DE', name: 'Germany', lang: 'de', currency: 'EUR' },
-  { code: 'FR', name: 'France', lang: 'fr', currency: 'EUR' },
-  { code: 'NL', name: 'Netherlands', lang: 'en', currency: 'EUR' },
-  { code: 'CA', name: 'Canada', lang: 'en', currency: 'CAD' },
-  { code: 'AU', name: 'Australia', lang: 'en', currency: 'AUD' },
-  { code: 'JP', name: 'Japan', lang: 'ja', currency: 'JPY' },
-  { code: 'IN', name: 'India', lang: 'hi', currency: 'INR' },
-  { code: 'BR', name: 'Brazil', lang: 'pt-BR', currency: 'BRL' },
-  { code: 'IT', name: 'Italy', lang: 'it', currency: 'EUR' },
-  { code: 'ES', name: 'Spain', lang: 'es', currency: 'EUR' },
-  { code: 'SE', name: 'Sweden', lang: 'en', currency: 'SEK' },
-  { code: 'NO', name: 'Norway', lang: 'en', currency: 'NOK' },
-  { code: 'DK', name: 'Denmark', lang: 'en', currency: 'DKK' },
-  { code: 'CH', name: 'Switzerland', lang: 'de', currency: 'CHF' },
-  { code: 'KR', name: 'South Korea', lang: 'ko', currency: 'KRW' },
-  { code: 'NZ', name: 'New Zealand', lang: 'en', currency: 'NZD' },
-  { code: 'AT', name: 'Austria', lang: 'de', currency: 'EUR' },
-  { code: 'BE', name: 'Belgium', lang: 'en', currency: 'EUR' },
-  { code: 'IE', name: 'Ireland', lang: 'en', currency: 'EUR' },
-  { code: 'PT', name: 'Portugal', lang: 'en', currency: 'EUR' },
-  { code: 'FI', name: 'Finland', lang: 'en', currency: 'EUR' },
-  { code: 'SG', name: 'Singapore', lang: 'en', currency: 'SGD' },
-  { code: 'MX', name: 'Mexico', lang: 'es', currency: 'MXN' },
-];
-
-const CURRENCIES = [
-  'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR', 'BRL',
-  'CHF', 'SEK', 'NOK', 'DKK', 'NZD', 'KRW', 'SGD', 'MXN', 'CNY',
-];
-
-const LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'de', name: 'Deutsch' },
-  { code: 'es', name: 'Espa\u00f1ol' },
-  { code: 'fr', name: 'Fran\u00e7ais' },
-  { code: 'ja', name: '\u65e5\u672c\u8a9e' },
-  { code: 'ko', name: '\ud55c\uad6d\uc5b4' },
-  { code: 'pt-BR', name: 'Portugu\u00eas (BR)' },
-  { code: 'ru', name: '\u0420\u0443\u0441\u0441\u043a\u0438\u0439' },
-  { code: 'tr', name: 'T\u00fcrk\u00e7e' },
-  { code: 'zh', name: '\u4e2d\u6587' },
-];
-
-const TRANSLATION_PROVIDERS = [
-  { value: 'auto', labelKey: 'settings.translation.providerAuto' },
-  { value: 'deepl', labelKey: 'settings.translation.providerDeepL' },
-  { value: 'google', labelKey: 'settings.translation.providerGoogle' },
-  { value: 'azure', labelKey: 'settings.translation.providerAzure' },
-  { value: 'ollama', labelKey: 'settings.translation.providerOllama' },
-  { value: 'llm', labelKey: 'settings.translation.providerLLM' },
-] as const;
-
-const PROVIDERS_REQUIRING_KEY = new Set(['deepl', 'google', 'azure']);
-
-function getLanguageName(code: string): string {
-  return LANGUAGES.find(l => l.code === code)?.name ?? code;
-}
+import {
+  COUNTRIES,
+  CURRENCIES,
+  LANGUAGES,
+  TRANSLATION_PROVIDERS,
+  PROVIDERS_REQUIRING_KEY,
+  getLanguageName,
+} from './locale-constants';
 
 export function LocaleSection() {
   const { t, i18n } = useTranslation();

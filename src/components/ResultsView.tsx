@@ -6,10 +6,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { ResultItem } from './ResultItem';
 import { SmartEmptyState } from './SmartEmptyState';
 import { ContextPanel } from './context-panel';
+import { ResultFiltersBar } from './search/ResultFiltersBar';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { getStageLabel } from '../utils/score';
 import { ALL_SOURCE_IDS } from '../config/sources';
-import { SourceCategoryFilter } from './SourceCategoryFilter';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
 import { registerFourdaComponent } from '../lib/fourda-components';
@@ -36,20 +36,18 @@ export function ResultsView({
     })),
   );
 
-  // Action selectors (stable references, no need for useShallow)
+  // Action selectors (stable references)
   const setExpandedItem = useAppStore(s => s.setExpandedItem);
   const startAnalysis = useAppStore(s => s.startAnalysis);
-
-  // Stable toggle handler — avoids inline arrow defeating memo on every virtualized row
-  const handleToggleExpand = useCallback((itemId: number) => {
-    setExpandedItem(useAppStore.getState().expandedItem === itemId ? null : itemId);
-  }, [setExpandedItem]);
   const loadContextFiles = useAppStore(s => s.loadContextFiles);
   const clearContext = useAppStore(s => s.clearContext);
   const indexContext = useAppStore(s => s.indexContext);
   const recordInteraction = useAppStore(s => s.recordInteraction);
 
-  // Filters (zero-param -- reads from store internally)
+  const handleToggleExpand = useCallback((itemId: number) => {
+    setExpandedItem(useAppStore.getState().expandedItem === itemId ? null : itemId);
+  }, [setExpandedItem]);
+
   const {
     sourceFilters,
     sortBy,
@@ -67,7 +65,6 @@ export function ResultsView({
     saveAllAbove,
   } = useResultFilters();
 
-  // Virtual scrolling setup
   const parentRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: filteredResults.length,
@@ -76,13 +73,11 @@ export function ResultsView({
     overscan: 5,
   });
 
-  // 5b. Memoize computed filter counts and unique sources
   const relevantCount = useMemo(() => filteredResults.filter(r => r.relevant).length, [filteredResults]);
   const topPicksCount = useMemo(() => filteredResults.filter(r => r.top_score >= 0.72).length, [filteredResults]);
-  const totalCount = state.relevanceResults.length;
   const criticalCount = useMemo(() => filteredResults.filter(r => r.is_critical_alert).length, [filteredResults]);
+  const totalCount = state.relevanceResults.length;
 
-  // Request content translation for visible results + near misses
   useEffect(() => {
     const items = [
       ...filteredResults.map((r) => ({ id: String(r.id), text: r.title })),
@@ -90,11 +85,7 @@ export function ResultsView({
     ];
     if (items.length > 0) requestTranslation(items);
   }, [filteredResults, state.nearMisses, requestTranslation]);
-  // Show ALL registered sources (not just those with results) so users see full coverage
-  const sourcesWithResults = useMemo(
-    () => new Set(state.relevanceResults.map(r => r.source_type || 'hackernews')),
-    [state.relevanceResults],
-  );
+  const sourcesWithResults = useMemo(() => new Set(state.relevanceResults.map(r => r.source_type || 'hackernews')), [state.relevanceResults]);
 
   return (
     <div className="space-y-6">
@@ -150,120 +141,22 @@ export function ResultsView({
 
           {/* Filter Bar */}
           {state.analysisComplete && (
-            <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3 pt-3 border-t border-border" role="toolbar" aria-label="Filter and sort controls">
-              {/* Search */}
-              <div className="relative w-full sm:w-auto">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder={t('results.searchPlaceholder')}
-                  aria-label="Search results by keyword"
-                  className="bg-bg-tertiary text-sm text-white placeholder-gray-500 rounded-lg ps-8 pe-3 py-1.5 w-full sm:w-48 border border-transparent focus:border-border focus:outline-none transition-all"
-                />
-                <svg className="absolute start-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute end-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary"
-                    aria-label="Clear search"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-
-              {/* Source Filters — grouped by category */}
-              <SourceCategoryFilter
-                sourceFilters={sourceFilters}
-                sourcesWithResults={sourcesWithResults}
-                onToggle={toggleSourceFilter}
-                onReset={resetSourceFilters}
-              />
-
-              {/* Sort */}
-              <div className="flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg" role="group" aria-label="Sort order">
-                <span className="text-xs text-text-muted">{t('results.sort')}</span>
-                {([
-                  ['score', t('results.score')] as const,
-                  ['date', t('results.recent')] as const,
-                  ['urgency', t('results.sortUrgency', 'Urgency')] as const,
-                  ['priority', t('results.sortPriority', 'Priority')] as const,
-                  ['applicability', t('results.sortApplicability', 'Applicability')] as const,
-                  ['freshness', t('results.sortFreshness', 'Freshness')] as const,
-                ]).map(([mode, label]) => (
-                  <button
-                    key={mode}
-                    onClick={() => setSortBy(mode)}
-                    aria-pressed={sortBy === mode}
-                    className={`px-2 py-1 text-xs rounded-lg transition-all ${
-                      sortBy === mode
-                        ? 'bg-white/10 text-white'
-                        : 'text-text-muted hover:text-text-secondary'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Relevance Toggle */}
-              <button
-                onClick={() => { setShowOnlyRelevant(!showOnlyRelevant); if (!showOnlyRelevant) setShowSavedOnly(false); }}
-                aria-pressed={showOnlyRelevant}
-                aria-label="Toggle relevant items only"
-                className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                  showOnlyRelevant
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                {showOnlyRelevant ? t('results.relevantOnly') : t('results.showAllItems')}
-              </button>
-
-              {/* Saved Items Toggle */}
-              <button
-                onClick={() => { setShowSavedOnly(!showSavedOnly); if (!showSavedOnly) setShowOnlyRelevant(false); }}
-                aria-pressed={showSavedOnly}
-                aria-label="Show saved items only"
-                className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
-                  showSavedOnly
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-bg-tertiary text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                {t('results.saved')}
-              </button>
-
-              {/* Spacer */}
-              <div className="flex-1" />
-
-              {/* Batch Operations */}
-              {/* eslint-disable i18next/no-literal-string */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { void dismissAllBelow(0.3); }}
-                  aria-label="Dismiss all items below 30% relevance"
-                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-muted rounded-lg hover:bg-red-500/10 hover:text-red-400 transition-all"
-                  title="Dismiss all items below 30% relevance"
-                >
-                  Hide low-signal
-                </button>
-                <button
-                  onClick={() => { void saveAllAbove(0.6); }}
-                  aria-label="Save all items above 60% relevance"
-                  className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-muted rounded-lg hover:bg-green-500/10 hover:text-green-400 transition-all"
-                  title="Save all items above 60% relevance"
-                >
-                  Save strong matches
-                </button>
-              </div>
-              {/* eslint-enable i18next/no-literal-string */}
-            </div>
+            <ResultFiltersBar
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              sourceFilters={sourceFilters}
+              sourcesWithResults={sourcesWithResults}
+              toggleSourceFilter={toggleSourceFilter}
+              resetSourceFilters={resetSourceFilters}
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              showOnlyRelevant={showOnlyRelevant}
+              setShowOnlyRelevant={setShowOnlyRelevant}
+              showSavedOnly={showSavedOnly}
+              setShowSavedOnly={setShowSavedOnly}
+              dismissAllBelow={dismissAllBelow}
+              saveAllAbove={saveAllAbove}
+            />
           )}
         </div>
         <div ref={parentRef} className="p-4 max-h-[calc(100vh-380px)] overflow-y-auto">

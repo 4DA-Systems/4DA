@@ -1,60 +1,23 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useMemo, useId, useEffect, useRef, useState, useCallback } from 'react';
-import type { VoidSignal } from '../../types';
-
-// ---------------------------------------------------------------------------
-// 3D tetrahedron geometry
-// ---------------------------------------------------------------------------
-
-// Regular tetrahedron inscribed in the unit sphere (vertices on r=1)
-const TETRA_VERTS: [number, number, number][] = [
-  [0, 1, 0],                       // apex
-  [0.9428, -0.3333, 0],            // front-right
-  [-0.4714, -0.3333, 0.8165],      // back-left
-  [-0.4714, -0.3333, -0.8165],     // back-right
-];
-
-// All 6 edges (complete graph K4)
-const TETRA_EDGES: [number, number][] = [
-  [0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3],
-];
-
-// 4 triangular faces (vertex index triples, wound consistently)
-const TETRA_FACES: [number, number, number][] = [
-  [0, 1, 2], // apex-front-left
-  [0, 2, 3], // apex-left-back
-  [0, 3, 1], // apex-back-front
-  [1, 3, 2], // base
-];
-
-// ---------------------------------------------------------------------------
-// 3D math
-// ---------------------------------------------------------------------------
-
-function rotY(x: number, y: number, z: number, a: number): [number, number, number] {
-  const c = Math.cos(a), s = Math.sin(a);
-  return [c * x + s * z, y, -s * x + c * z];
-}
-
-function rotX(x: number, y: number, z: number, a: number): [number, number, number] {
-  const c = Math.cos(a), s = Math.sin(a);
-  return [x, c * y - s * z, s * y + c * z];
-}
-
-function project(
-  x: number, y: number, z: number,
-  camDist: number, scale: number, cx: number, cy: number,
-): [number, number, number] {
-  const w = camDist / (camDist - z);
-  return [cx + x * scale * w, cy - y * scale * w, z];
-}
-
-/** Face normal Z-component (positive = facing camera). Used for backface test. */
-function faceNormalZ(
-  ax: number, ay: number, bx: number, by: number, cx: number, cy: number,
-): number {
-  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-}
+import {
+  useMemo,
+  useId,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import type { VoidSignal } from "../../types";
+import {
+  TETRA_VERTS,
+  TETRA_EDGES,
+  TETRA_FACES,
+  rotY,
+  rotX,
+  project,
+  faceNormalZ,
+} from "./math3d";
+import { deriveSignalVisuals } from "./signal-visuals";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,7 +29,13 @@ interface BrandMarkProps {
 }
 
 type ProjVert = { x: number; y: number; z: number };
-type ProjEdge = { x1: number; y1: number; x2: number; y2: number; depth: number };
+type ProjEdge = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  depth: number;
+};
 type ProjFace = { points: string; depth: number; facing: number };
 
 // ---------------------------------------------------------------------------
@@ -81,81 +50,17 @@ type ProjFace = { points: string; depth: number; facing: number };
  * Signal-responsive: color, glow, and rotation speed.
  */
 export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
-  const filterId = useId().replace(/:/g, '');
+  const filterId = useId().replace(/:/g, "");
 
   // Derive visual state from signal
-  const { glowOpacity, edgeColor, vertexColor, faceColor, stateLabel, rotSpeed } = useMemo(() => {
-    if (!signal) {
-      return {
-        glowOpacity: 0.25,
-        edgeColor: '#C8B560',
-        vertexColor: '#D4AF37',
-        faceColor: '#D4AF37',
-        stateLabel: 'Idle',
-        rotSpeed: 0.014,
-      };
-    }
-
-    const glow = signal.error > 0.5
-      ? 0.15
-      : 0.25 + signal.heat * 0.2 + signal.pulse * 0.15 + signal.burst * 0.25;
-
-    let edge = '#C8B560';
-    let vertex = '#D4AF37';
-    let face = '#D4AF37';
-    if (signal.error > 0.5 || signal.critical_count > 0) {
-      edge = '#EF4444'; vertex = '#F87171'; face = '#EF4444';
-    } else if (signal.signal_color_shift > 0.5) {
-      edge = '#F59E0B'; vertex = '#FBBF24'; face = '#F59E0B';
-    } else if (signal.signal_color_shift < -0.3) {
-      edge = '#6B93C0'; vertex = '#7BA7D4'; face = '#6B93C0';
-    }
-
-    let label = 'Idle';
-    if (signal.critical_count > 0 && signal.signal_intensity > 0.75) {
-      label = signal.critical_count > 1 ? `${signal.critical_count} Alerts` : 'Alert';
-    } else if (signal.signal_color_shift > 0.5) {
-      label = 'Breaking';
-    } else if (signal.signal_color_shift > 0.2) {
-      label = 'Discovery';
-    } else if (signal.signal_color_shift < -0.3) {
-      label = 'Learning';
-    } else if (signal.morph > 0.3) {
-      label = 'Context';
-    } else if (signal.signal_urgency > 0.6) {
-      label = 'Urgent';
-    } else if (signal.item_count === 0 && signal.heat === 0) {
-      label = signal.staleness > 0.9 ? 'Dormant' : 'Awakening';
-    } else if (signal.error > 0.5) {
-      label = 'Error';
-    } else if (signal.staleness > 0.8) {
-      label = 'Stale';
-    } else if (signal.pulse > 0.5) {
-      label = 'Scanning';
-    } else if (signal.heat > 0.5) {
-      label = 'Discoveries';
-    } else if (signal.item_count > 0) {
-      label = 'Active';
-    }
-
-    let speed = 2 * Math.PI / (60 * 30);
-    if (signal.error > 0.5) {
-      speed = 2 * Math.PI / (60 * 30);
-    } else if (signal.pulse > 0.5) {
-      speed = 2 * Math.PI / (18 * 30);
-    } else if (signal.heat > 0.3 || signal.signal_intensity > 0.4) {
-      speed = 2 * Math.PI / (24 * 30);
-    } else if (signal.item_count > 0) {
-      speed = 2 * Math.PI / (36 * 30);
-    } else if (signal.staleness > 0.9) {
-      speed = 2 * Math.PI / (90 * 30);
-    }
-
-    return {
-      glowOpacity: glow, edgeColor: edge, vertexColor: vertex,
-      faceColor: face, stateLabel: label, rotSpeed: speed,
-    };
-  }, [signal]);
+  const {
+    glowOpacity,
+    edgeColor,
+    vertexColor,
+    faceColor,
+    stateLabel,
+    rotSpeed,
+  } = useMemo(() => deriveSignalVisuals(signal), [signal]);
 
   // ---------------------------------------------------------------------------
   // 3D animation loop
@@ -208,8 +113,10 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
       const pa = projected[a]!;
       const pb = projected[b]!;
       return {
-        x1: pa.x, y1: pa.y,
-        x2: pb.x, y2: pb.y,
+        x1: pa.x,
+        y1: pa.y,
+        x2: pb.x,
+        y2: pb.y,
         depth: (pa.z + pb.z) / 2,
       };
     });
@@ -283,24 +190,27 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
 
   const titleParts = [`4DA: ${stateLabel}`];
   if (itemCount > 0) titleParts.push(`${itemCount} items`);
-  if (openWindows > 0) titleParts.push(`${openWindows} decision window${openWindows > 1 ? 's' : ''}`);
+  if (openWindows > 0)
+    titleParts.push(
+      `${openWindows} decision window${openWindows > 1 ? "s" : ""}`,
+    );
 
-  const ariaLabel = `4DA status: ${stateLabel}${itemCount > 0 ? `, ${itemCount} items found` : ''}`;
+  const ariaLabel = `4DA status: ${stateLabel}${itemCount > 0 ? `, ${itemCount} items found` : ""}`;
 
   return (
     <div
       className="brand-mark-container"
       role="status"
       aria-live="polite"
-      title={titleParts.join(' \u00b7 ')}
+      title={titleParts.join(" \u00b7 ")}
       aria-label={ariaLabel}
       style={{
         width: size,
         height: size,
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
       <svg
@@ -310,13 +220,19 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         style={{
-          display: 'block',
+          display: "block",
           transform: `scale(${breathScale})`,
-          transition: 'transform 0.3s ease',
+          transition: "transform 0.3s ease",
         }}
       >
         <defs>
-          <filter id={`glow-${filterId}`} x="-50%" y="-50%" width="200%" height="200%">
+          <filter
+            id={`glow-${filterId}`}
+            x="-50%"
+            y="-50%"
+            width="200%"
+            height="200%"
+          >
             <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
@@ -342,7 +258,10 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
           {edges.map((e, i) => (
             <line
               key={`g${i}`}
-              x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+              x1={e.x1}
+              y1={e.y1}
+              x2={e.x2}
+              y2={e.y2}
               stroke={vertexColor}
               strokeWidth={edgeStroke(e.depth) + 1.5}
               strokeLinecap="round"
@@ -356,7 +275,10 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
           {edges.map((e, i) => (
             <line
               key={`e${i}`}
-              x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+              x1={e.x1}
+              y1={e.y1}
+              x2={e.x2}
+              y2={e.y2}
               stroke={edgeColor}
               strokeWidth={edgeStroke(e.depth)}
               strokeLinecap="round"
@@ -390,21 +312,22 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
         <span
           className="brand-mark-label"
           style={{
-            position: 'absolute',
+            position: "absolute",
             bottom: 8,
             fontSize: 10,
-            color: (signal?.error ?? 0) > 0.5 || (signal?.critical_count ?? 0) > 0
-              ? 'var(--color-error)'
-              : (signal?.signal_color_shift ?? 0) > 0.5
-                ? 'var(--color-accent-gold)'
-                : (signal?.signal_color_shift ?? 0) < -0.3
-                  ? '#4A90D9'
-                  : 'var(--color-text-muted)',
-            letterSpacing: '0.1em',
-            textTransform: 'uppercase',
-            fontFamily: 'JetBrains Mono, monospace',
+            color:
+              (signal?.error ?? 0) > 0.5 || (signal?.critical_count ?? 0) > 0
+                ? "var(--color-error)"
+                : (signal?.signal_color_shift ?? 0) > 0.5
+                  ? "var(--color-accent-gold)"
+                  : (signal?.signal_color_shift ?? 0) < -0.3
+                    ? "#4A90D9"
+                    : "var(--color-text-muted)",
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            fontFamily: "JetBrains Mono, monospace",
             opacity: 0.6,
-            transition: 'color 0.3s ease',
+            transition: "color 0.3s ease",
           }}
         >
           {stateLabel}

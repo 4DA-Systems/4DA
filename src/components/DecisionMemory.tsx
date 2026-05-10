@@ -7,6 +7,7 @@ import { useFourdaComponent } from '../hooks/use-fourda-component';
 import type { DeveloperDecision } from '../store/decisions-slice';
 import { DECISION_TYPES, STATUS_STYLES, EMPTY_FORM } from './decision-memory-constants';
 import type { NewDecisionForm } from './decision-memory-constants';
+import { DecisionForm } from './decisions/DecisionForm';
 import { formatLocalDate } from '../utils/format-date';
 
 export const DecisionMemory = memo(function DecisionMemory() {
@@ -78,21 +79,10 @@ export const DecisionMemory = memo(function DecisionMemory() {
     }
   }, [form, recordDecision, addToast, t]);
 
-  const handleSupersede = useCallback(async (id: number) => {
+  const handleStatusChange = useCallback(async (id: number, status: string) => {
     setIsSubmitting(true);
     try {
-      await updateDecision(id, { status: 'superseded' });
-    } catch {
-      addToast('error', t('error.generic'));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [updateDecision, addToast, t]);
-
-  const handleReconsider = useCallback(async (id: number) => {
-    setIsSubmitting(true);
-    try {
-      await updateDecision(id, { status: 'reconsidering' });
+      await updateDecision(id, { status });
     } catch {
       addToast('error', t('error.generic'));
     } finally {
@@ -122,76 +112,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
           {showForm ? t('action.cancel') : t('decisions.record')}
         </button>
       </div>
-
-      {/* Inline Form */}
       {showForm && (
-        <div role="form" aria-label={t('decisions.record')} aria-busy={isSubmitting} className="p-4 border-b border-border space-y-3">
-          <div className="flex gap-3">
-            <select
-              value={form.decision_type}
-              onChange={(e) => setForm({ ...form, decision_type: e.target.value })}
-              aria-label={t('decisions.typeLabel', 'Decision type')}
-              className="px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg focus:outline-none focus:border-white/30"
-            >
-              {DECISION_TYPES.map((dtype) => (
-                <option key={dtype} value={dtype}>
-                  {t(`decisions.type.${dtype}`)}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              placeholder={t('decisions.subject')}
-              aria-label={t('decisions.subject')}
-              value={form.subject}
-              onChange={(e) => setForm({ ...form, subject: e.target.value })}
-              className="flex-1 px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30"
-            />
-          </div>
-          <textarea
-            placeholder={t('decisions.whatDecided')}
-            aria-label={t('decisions.whatDecided')}
-            value={form.decision}
-            onChange={(e) => setForm({ ...form, decision: e.target.value })}
-            rows={2}
-            aria-required="true"
-            className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
-          />
-          <textarea
-            placeholder={t('decisions.rationaleOptional')}
-            aria-label={t('decisions.rationaleOptional')}
-            value={form.rationale}
-            onChange={(e) => setForm({ ...form, rationale: e.target.value })}
-            rows={2}
-            className="w-full px-3 py-2 text-xs bg-bg-tertiary text-white border border-border rounded-lg placeholder-gray-600 focus:outline-none focus:border-white/30 resize-none"
-          />
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-text-muted">
-              {t('decisions.confidence', { value: Math.round(form.confidence * 100) })}
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={Math.round(form.confidence * 100)}
-              onChange={(e) =>
-                setForm({ ...form, confidence: parseInt(e.target.value, 10) / 100 })
-              }
-              aria-label={t('decisions.confidence', { value: Math.round(form.confidence * 100) })}
-              className="flex-1 accent-white h-1"
-            />
-            <button
-              onClick={() => { void handleSubmit(); }}
-              disabled={isSubmitting || !form.subject.trim() || !form.decision.trim()}
-              className="px-4 py-2 text-xs bg-white text-black rounded-lg font-medium hover:bg-gray-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              aria-label={t('decisions.saveDecision', 'Save decision')}
-            >
-              {t('action.save')}
-            </button>
-          </div>
-        </div>
+        <DecisionForm
+          form={form}
+          onFormChange={setForm}
+          isSubmitting={isSubmitting}
+          onSubmit={() => { void handleSubmit(); }}
+        />
       )}
-
       {/* Auto-detected tech notice */}
       {!decisionsLoading && decisions.some(d => d.decision_type === 'tech_choice' && d.rationale === 'Inferred from project setup') && (
         <div className="px-5 py-3 border-b border-border bg-amber-500/5 flex items-start gap-3">
@@ -202,10 +130,8 @@ export const DecisionMemory = memo(function DecisionMemory() {
           </div>
         </div>
       )}
-
-      {/* Decisions list (live region) */}
+      {/* Decisions list */}
       <div aria-live="polite">
-      {/* Error */}
       {decisionsError && !decisionsLoading && (
         <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
           <p className="text-text-secondary text-sm">{t('error.generic')}</p>
@@ -364,14 +290,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {d.status === 'active' && (
                         <div className="flex gap-2">
                           <button
-                            onClick={() => { void handleReconsider(d.id); }}
+                            onClick={() => { void handleStatusChange(d.id, 'reconsidering'); }}
                             className="px-3 py-1.5 text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded hover:bg-amber-500/20 transition-colors"
                             aria-label={`${t('decisions.reconsider')} ${d.subject}`}
                           >
                             {t('decisions.reconsider')}
                           </button>
                           <button
-                            onClick={() => { void handleSupersede(d.id); }}
+                            onClick={() => { void handleStatusChange(d.id, 'superseded'); }}
                             className="px-3 py-1.5 text-xs bg-gray-500/10 text-text-secondary border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
                             aria-label={`${t('decisions.supersede')} ${d.subject}`}
                           >
@@ -395,14 +321,14 @@ export const DecisionMemory = memo(function DecisionMemory() {
                       {d.status === 'reconsidering' && (
                         <div className="flex gap-2">
                           <button
-                            onClick={() => { void updateDecision(d.id, { status: 'active' }); }}
+                            onClick={() => { void handleStatusChange(d.id, 'active'); }}
                             className="px-3 py-1.5 text-xs bg-green-500/10 text-green-400 border border-green-500/20 rounded hover:bg-green-500/20 transition-colors"
                             aria-label={`${t('decisions.reaffirm')} ${d.subject}`}
                           >
                             {t('decisions.reaffirm')}
                           </button>
                           <button
-                            onClick={() => { void handleSupersede(d.id); }}
+                            onClick={() => { void handleStatusChange(d.id, 'superseded'); }}
                             className="px-3 py-1.5 text-xs bg-gray-500/10 text-text-secondary border border-gray-500/20 rounded hover:bg-gray-500/20 transition-colors"
                             aria-label={`${t('decisions.supersede')} ${d.subject}`}
                           >

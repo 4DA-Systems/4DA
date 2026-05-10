@@ -73,6 +73,7 @@ const EXCEPTIONS = {
 
   // ── TypeScript — justified large files ────────────────────────────────────
   'src/lib/commands.ts':                   'IPC command registry — all typed Tauri commands',
+  'src/store/slice-types.ts':               'Store slice interfaces — 16 pure type definitions',
   'src/types/i18n-resources.d.ts':         'Auto-generated i18n type declarations — regenerated via pnpm i18n:types',
 };
 

@@ -4,96 +4,17 @@ import { useTranslation } from 'react-i18next';
 import type { SourceRelevance } from '../types';
 import { useLicense } from '../hooks/use-license';
 import { SignalUpgradeCTA } from './SignalUpgradeCTA';
-import { getSourceLabel } from '../config/sources';
+import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS, LANES } from './signals/signal-config';
+import { SignalRow } from './signals/SignalRow';
+import type { SignalItem } from './signals/SignalRow';
 
 // ============================================================================
 // Types
 // ============================================================================
 
-interface SignalItem {
-  id: number;
-  title: string;
-  url: string | null;
-  top_score: number;
-  source_type: string;
-  signal_type: string;
-  signal_priority: string;
-  signal_action: string;
-  signal_triggers: string[];
-  similar_count: number;
-  similar_titles: string[];
-}
-
 interface SignalsPanelProps {
   results: SourceRelevance[];
 }
-
-// ============================================================================
-// Constants
-// ============================================================================
-
-const SIGNAL_CONFIG: Record<string, { icon: string; color: string; borderColor: string; bgColor: string }> = {
-  security_alert: { icon: '🛡', color: 'text-red-400', borderColor: 'border-red-500/30', bgColor: 'bg-red-500/10' },
-  breaking_change: { icon: '⚠', color: 'text-amber-400', borderColor: 'border-amber-500/30', bgColor: 'bg-amber-500/10' },
-  tool_discovery: { icon: '🔧', color: 'text-blue-400', borderColor: 'border-blue-500/30', bgColor: 'bg-blue-500/10' },
-  tech_trend: { icon: '📈', color: 'text-purple-400', borderColor: 'border-purple-500/30', bgColor: 'bg-purple-500/10' },
-  learning: { icon: '📚', color: 'text-green-400', borderColor: 'border-green-500/30', bgColor: 'bg-green-500/10' },
-  competitive_intel: { icon: '🏢', color: 'text-cyan-400', borderColor: 'border-cyan-500/30', bgColor: 'bg-cyan-500/10' },
-};
-
-const PRIORITY_CONFIG: Record<string, { label: string; color: string; bgColor: string; dot: string }> = {
-  critical: { label: 'CRITICAL', color: 'text-red-400', bgColor: 'bg-red-500/20', dot: 'bg-red-400' },
-  alert: { label: 'ALERT', color: 'text-orange-400', bgColor: 'bg-orange-500/20', dot: 'bg-orange-400' },
-  advisory: { label: 'ADVISORY', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20', dot: 'bg-yellow-400' },
-  watch: { label: 'WATCH', color: 'text-text-secondary', bgColor: 'bg-gray-500/20', dot: 'bg-gray-400' },
-};
-
-const SIGNAL_LABELS: Record<string, string> = {
-  security_alert: 'Security',
-  breaking_change: 'Breaking',
-  tool_discovery: 'Tools',
-  tech_trend: 'Trends',
-  learning: 'Learning',
-  competitive_intel: 'Competitive',
-};
-
-interface LaneConfig {
-  key: string;
-  label: string;
-  icon: string;
-  color: string;
-  borderColor: string;
-  types: Set<string>;
-  priorityFilter?: Set<string>;
-}
-
-const LANES: LaneConfig[] = [
-  {
-    key: 'critical',
-    label: 'Critical Now',
-    icon: '🔴',
-    color: 'text-red-400',
-    borderColor: 'border-red-500/20',
-    types: new Set(['security_alert', 'breaking_change']),
-    priorityFilter: new Set(['critical', 'alert']),
-  },
-  {
-    key: 'stack',
-    label: 'Stack Updates',
-    icon: '📦',
-    color: 'text-amber-400',
-    borderColor: 'border-amber-500/20',
-    types: new Set(['security_alert', 'breaking_change', 'tool_discovery']),
-  },
-  {
-    key: 'learning',
-    label: 'Learning & Trends',
-    icon: '📈',
-    color: 'text-blue-400',
-    borderColor: 'border-blue-500/20',
-    types: new Set(['learning', 'tech_trend', 'competitive_intel']),
-  },
-];
 
 // ============================================================================
 // Component
@@ -144,7 +65,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
     // Group filtered signals into lanes. Each signal goes into the first
     // matching lane; "Critical Now" requires both type AND priority match.
     const claimed = new Set<number>();
-    const lanes: { config: LaneConfig; items: SignalItem[] }[] = LANES.map((lane) => {
+    const lanes = LANES.map((lane) => {
       const items = filtered.filter((s) => {
         if (claimed.has(s.id)) return false;
         if (!lane.types.has(s.signal_type)) return false;
@@ -350,98 +271,3 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
     </div>
   );
 });
-
-// ============================================================================
-// Signal Row
-// ============================================================================
-
-const SignalRow = ({ signal }: { signal: SignalItem }) => {
-  const { t } = useTranslation();
-  const [showTriggers, setShowTriggers] = useState(false);
-  const config = (SIGNAL_CONFIG[signal.signal_type] ?? SIGNAL_CONFIG['tech_trend'])!;
-  const priority = (PRIORITY_CONFIG[signal.signal_priority] ?? PRIORITY_CONFIG['watch'])!;
-  const sourceLabel = getSourceLabel(signal.source_type);
-
-  return (
-    <div
-      className={`px-4 py-3 rounded-lg border ${config.borderColor} ${config.bgColor} transition-all hover:brightness-125`}
-    >
-      <div className="flex items-start gap-3">
-        {/* Icon + Priority */}
-        <div className="flex flex-col items-center gap-1 pt-0.5" aria-hidden="true">
-          <span className="text-base">{config.icon}</span>
-          <span className={`w-2 h-2 rounded-full ${priority.dot}`} />
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Top row: action text */}
-          <p className={`text-sm font-medium ${config.color} leading-snug`}>
-            {signal.signal_action}
-          </p>
-
-          {/* Title + meta */}
-          <div className="flex items-center gap-2 mt-1">
-            {signal.url ? (
-              <a
-                href={signal.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-text-secondary hover:text-white truncate transition-colors"
-                title={signal.title}
-              >
-                {signal.title}
-              </a>
-            ) : (
-              <span className="text-xs text-text-secondary truncate">{signal.title}</span>
-            )}
-          </div>
-
-          {/* Bottom row: type badge + priority + score + triggers */}
-          <div className="flex items-center gap-2 mt-2">
-            <span className={`px-1.5 py-0.5 text-[10px] rounded ${config.bgColor} ${config.color} border ${config.borderColor}`}>
-              {SIGNAL_LABELS[signal.signal_type] ?? signal.signal_type}
-            </span>
-            <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${priority.bgColor} ${priority.color}`}>
-              {priority.label}
-            </span>
-            <span className="text-[10px] text-text-muted">
-              {t('signals.match', { score: Math.round(signal.top_score * 100) })}
-            </span>
-            <span className="text-[10px] text-text-muted">{sourceLabel}</span>
-            {signal.signal_triggers.length > 0 && (
-              <button
-                onClick={() => setShowTriggers(!showTriggers)}
-                aria-expanded={showTriggers}
-                aria-label={showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
-                className="text-[10px] text-text-muted hover:text-text-secondary transition-colors ms-auto"
-              >
-                {showTriggers ? t('signals.hideTriggers') : t('signals.triggers', { count: signal.signal_triggers.length })}
-              </button>
-            )}
-          </div>
-
-          {/* Similar items grouped */}
-          {signal.similar_count > 0 && (
-            <div className="mt-1.5 text-[10px] text-text-muted">
-              {t('signals.similar', { count: signal.similar_count })}{signal.similar_titles.length > 0 && (
-                <span className="text-text-muted"> ({signal.similar_titles.slice(0, 2).join(', ')}{signal.similar_titles.length > 2 ? '...' : ''})</span>
-              )}
-            </div>
-          )}
-
-          {/* Trigger keywords */}
-          {showTriggers && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {signal.signal_triggers.map((t, i) => (
-                <span key={i} className="px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-secondary rounded border border-border">
-                  {t}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};

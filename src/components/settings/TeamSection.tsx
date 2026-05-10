@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { TeamForms } from './TeamForms';
+import type { FormMode } from './TeamForms';
 
 // ============================================================================
 // Helpers
@@ -48,8 +50,6 @@ const ROLE_BADGE: Record<string, { bg: string; text: string }> = {
 // ============================================================================
 // TeamSection Component
 // ============================================================================
-
-type FormMode = 'none' | 'create' | 'join';
 
 export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
   const { t } = useTranslation();
@@ -147,133 +147,21 @@ export function TeamSection({ onStatus }: { onStatus: (s: string) => void }) {
         </div>
       )}
 
-      {/* ================================================================ */}
-      {/* NOT IN TEAM — show create/join options                           */}
-      {/* ================================================================ */}
+      {/* NOT IN TEAM — show create/join options */}
       {!isInTeam && !teamLoading && (
-        <>
-          {formMode === 'none' && (
-            <div className="flex gap-2">
-              <button
-                onClick={() => setFormMode('create')}
-                aria-label={t('settings.team.createTeam', 'Create Team')}
-                className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors"
-              >
-                {t('settings.team.createTeam', 'Create Team')}
-              </button>
-              <button
-                onClick={() => setFormMode('join')}
-                aria-label={t('settings.team.joinTeam', 'Join Team')}
-                className="flex-1 px-4 py-2 text-xs font-medium text-text-secondary border border-border rounded-lg hover:border-success/50 hover:text-white transition-colors"
-              >
-                {t('settings.team.joinTeam', 'Join Team')}
-              </button>
-            </div>
-          )}
-
-          {/* Create team form */}
-          {formMode === 'create' && (
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-[10px] text-text-muted uppercase tracking-wide">
-                  {t('settings.team.relayUrl', 'Relay URL')}
-                </span>
-                <input
-                  type="url"
-                  value={relayUrl}
-                  onChange={e => setRelayUrl(e.target.value)}
-                  placeholder="https://relay.4da.ai"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] text-text-muted uppercase tracking-wide">
-                  {t('settings.team.displayName', 'Display Name')}
-                </span>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  placeholder="Your name"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50"
-                />
-              </label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { void handleCreate(); }}
-                  disabled={teamLoading || !displayName.trim() || !relayUrl.trim()}
-                  className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                >
-                  {teamLoading ? '...' : t('settings.team.createTeam', 'Create Team')}
-                </button>
-                <button
-                  onClick={() => setFormMode('none')}
-                  className="px-4 py-2 text-xs text-text-muted hover:text-white transition-colors"
-                >
-                  {t('action.cancel', 'Cancel')}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Join team form */}
-          {formMode === 'join' && (
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-[10px] text-text-muted uppercase tracking-wide">
-                  {t('settings.team.relayUrl', 'Relay URL')}
-                </span>
-                <input
-                  type="url"
-                  value={relayUrl}
-                  onChange={e => setRelayUrl(e.target.value)}
-                  placeholder="https://relay.4da.ai"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] text-text-muted uppercase tracking-wide">
-                  {t('settings.team.inviteCode', 'Invite Code')}
-                </span>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={e => setInviteCode(e.target.value.toUpperCase().slice(0, 6))}
-                  placeholder="ABC123"
-                  maxLength={6}
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50 font-mono tracking-widest"
-                />
-              </label>
-              <label className="block">
-                <span className="text-[10px] text-text-muted uppercase tracking-wide">
-                  {t('settings.team.displayName', 'Display Name')}
-                </span>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={e => setDisplayName(e.target.value)}
-                  placeholder="Your name"
-                  className="mt-1 w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-xs text-white placeholder-gray-600 focus:outline-none focus:border-success/50"
-                />
-              </label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => { void handleJoin(); }}
-                  disabled={teamLoading || !displayName.trim() || !relayUrl.trim() || !inviteCode.trim()}
-                  className="flex-1 px-4 py-2 text-xs font-medium text-black bg-success rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                >
-                  {teamLoading ? '...' : t('settings.team.joinTeam', 'Join Team')}
-                </button>
-                <button
-                  onClick={() => setFormMode('none')}
-                  className="px-4 py-2 text-xs text-text-muted hover:text-white transition-colors"
-                >
-                  {t('action.cancel', 'Cancel')}
-                </button>
-              </div>
-            </div>
-          )}
-        </>
+        <TeamForms
+          formMode={formMode}
+          setFormMode={setFormMode}
+          relayUrl={relayUrl}
+          setRelayUrl={setRelayUrl}
+          displayName={displayName}
+          setDisplayName={setDisplayName}
+          inviteCode={inviteCode}
+          setInviteCode={setInviteCode}
+          teamLoading={teamLoading}
+          onCreate={() => { void handleCreate(); }}
+          onJoin={() => { void handleJoin(); }}
+        />
       )}
 
       {/* ================================================================ */}
