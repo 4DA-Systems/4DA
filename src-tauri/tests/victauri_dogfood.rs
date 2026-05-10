@@ -259,7 +259,7 @@ async fn ipc_log_captures_commands() {
 
     let _ = client.invoke_command("get_analysis_status", None).await;
 
-    let calls_since = client.ipc_calls_since(checkpoint).await.unwrap();
+    let calls_since = client.get_ipc_calls_since(checkpoint).await.unwrap();
     assert!(
         !calls_since.is_empty(),
         "IPC log should capture the invoke_command call"
