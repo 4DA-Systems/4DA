@@ -8,47 +8,11 @@ import { useLicense } from '../hooks';
 import { trackEvent } from '../hooks/use-telemetry';
 import { useFourdaComponent } from '../hooks/use-fourda-component';
 import { reportError } from '../lib/error-reporter';
-import { formatLocalDate } from '../utils/format-date';
 import { StackHealthBar, type StackHealth } from './search/StackHealthBar';
-import { SynthesisPanel, type SynthesisResponse } from './search/SynthesisPanel';
-import { GhostPreview, type GhostPreviewData } from './search/GhostPreview';
+import type { SynthesisResponse } from './search/SynthesisPanel';
 import { StandingQueries } from './search/StandingQueries';
-
-interface QueryResultItem {
-  id: number;
-  file_path: string | null;
-  file_name: string | null;
-  preview: string;
-  relevance: number;
-  source_type: string;
-  timestamp: string | null;
-  match_reason: string;
-}
-
-interface QueryResult {
-  query: string;
-  intent: string;
-  items: QueryResultItem[];
-  total_count: number;
-  execution_ms: number;
-  summary: string | null;
-  parsed: {
-    keywords: string[];
-    entities: string[];
-    time_range: { start: string; end: string; relative: string | null } | null;
-    file_types: string[];
-    sentiment: string | null;
-    confidence: number;
-  };
-  stack_context: { name: string; category: string; relevant: boolean }[];
-  related_decisions: { id: number; subject: string; decision: string; relation: string }[];
-  knowledge_gaps: { technology: string; days_stale: number; severity: string }[];
-  ghost_preview: GhostPreviewData | null;
-  is_pro: boolean;
-}
-
-const intentLabels: Record<string, string> = { Find: 'Find', Summarize: 'Summarize', Compare: 'Compare', Timeline: 'Timeline', Count: 'Count' };
-const sourceLabels: Record<string, string> = { pdf: 'PDF', docx: 'DOC', xlsx: 'XLS', image: 'IMG', context: 'CTX' };
+import { SearchResults } from './search/SearchResults';
+import type { QueryResult } from './search/search-types';
 
 interface NaturalLanguageSearchProps {
   onStatusChange?: (status: string) => void;
@@ -165,7 +129,6 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       addToast('error', t('search.watchFailed', 'Failed to create watch. Please try again.'));
     }
   };
-  const relevantStack = result?.stack_context?.filter((s) => s.relevant) ?? [];
 
   return (
     <div className="relative rounded-lg p-5 border border-border overflow-hidden bg-bg-tertiary/50">
@@ -184,14 +147,14 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
       >
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-cyan-400 text-sm font-bold">{'\u2756'}</span>
+            <span className="text-cyan-400 text-sm font-bold">{'❖'}</span>
           </div>
           <div>
             <h2 className="text-white font-medium text-base">{t('search.title')}</h2>
             <p className="text-text-muted text-sm">{t('search.subtitle')}</p>
           </div>
         </div>
-        <span className="text-text-muted text-sm" aria-hidden="true">{expanded ? '\u25BC' : '\u25B6'}</span>
+        <span className="text-text-muted text-sm" aria-hidden="true">{expanded ? '▼' : '▶'}</span>
       </button>
 
       {expanded && !hasAnalysisRun && (
@@ -200,19 +163,19 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
             <p className="text-sm text-white font-medium mb-3">{t('search.noAnalysisTitle')}</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
               <div className="flex items-center gap-2 text-xs text-text-secondary">
-                <span className="text-cyan-400/50">{'\u2756'}</span>
+                <span className="text-cyan-400/50">{'❖'}</span>
                 {t('search.capabilityStack')}
               </div>
               <div className="flex items-center gap-2 text-xs text-text-secondary">
-                <span className="text-cyan-400/50">{'\u2696'}</span>
+                <span className="text-cyan-400/50">{'⚖'}</span>
                 {t('search.capabilityDecisions')}
               </div>
               <div className="flex items-center gap-2 text-xs text-text-secondary">
-                <span className="text-cyan-400/50">{'\u25CE'}</span>
+                <span className="text-cyan-400/50">{'◎'}</span>
                 {t('search.capabilityGaps')}
               </div>
               <div className="flex items-center gap-2 text-xs text-text-secondary">
-                <span className="text-cyan-400/50">{'\u2726'}</span>
+                <span className="text-cyan-400/50">{'✦'}</span>
                 {t('search.capabilitySynthesis')}
               </div>
             </div>
@@ -258,7 +221,7 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
                 aria-label={watchCreated ? t('search.watchCreated', 'Watch created') : t('search.watchThis')}
                 className={`px-3 py-3 text-sm border rounded-lg transition-all ${watchCreated ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-bg-secondary border-border text-text-secondary hover:text-cyan-400 hover:border-cyan-500/30'}`}
               >
-                <span aria-hidden="true">{watchCreated ? '\u2713' : '\u229A'}</span>
+                <span aria-hidden="true">{watchCreated ? '✓' : '⊚'}</span>
               </button>
             )}
           </div>
@@ -266,9 +229,9 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
           {/* Error display */}
           {error && (
             <div role="alert" className="flex items-center gap-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-lg">
-              <span className="text-red-400 text-xs" aria-hidden="true">{'\u26A0'}</span>
+              <span className="text-red-400 text-xs" aria-hidden="true">{'⚠'}</span>
               <span className="text-xs text-red-300 flex-1">{error}</span>
-              <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400/60 hover:text-red-400 text-xs">{'\u2715'}</button>
+              <button onClick={() => setError(null)} aria-label="Dismiss error" className="text-red-400/60 hover:text-red-400 text-xs">{'✕'}</button>
             </div>
           )}
 
@@ -293,119 +256,16 @@ export function NaturalLanguageSearch({ onStatusChange, defaultExpanded = true }
 
           {/* Results */}
           {result && (
-            <div className="space-y-4">
-              {/* Synthesis panel (Pro only) */}
-              <SynthesisPanel query={query} isPro={isPro} synthesis={synthesis} loading={synthesisLoading} streamingText={streamingText} onRetry={() => void fetchSynthesis(query)} />
-
-              {/* Query parsing info */}
-              <div className="flex items-center gap-2 p-3 bg-bg-secondary rounded-lg border border-border flex-wrap">
-                <span className="text-xs font-medium text-text-muted">{intentLabels[result.intent] || result.intent}</span>
-                <span className="text-sm text-white">{'\u2022'}</span>
-                <span className="text-sm text-cyan-400">{result.parsed.keywords.join(', ')}</span>
-                {result.parsed.time_range && (
-                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-text-secondary border border-border">
-                    {result.parsed.time_range.relative || t('search.customRange')}
-                  </span>
-                )}
-                {result.parsed.file_types.length > 0 && (
-                  <span className="px-2 py-1 text-xs bg-bg-tertiary rounded-md text-text-secondary border border-border">
-                    {result.parsed.file_types.join(', ')}
-                  </span>
-                )}
-                <button onClick={clearResults} aria-label="Clear search results" className="ms-auto text-text-muted hover:text-white transition-colors">{'\u2715'}</button>
-              </div>
-
-              {/* Stack context */}
-              {relevantStack.length > 0 && (
-                <div className="flex items-center gap-2 text-xs text-text-secondary">
-                  <span className="text-text-muted">{t('search.yourStack')}:</span>
-                  {relevantStack.map((s) => (
-                    <span key={s.name} className="px-2 py-0.5 bg-bg-secondary rounded border border-border text-text-secondary">{s.name}</span>
-                  ))}
-                </div>
-              )}
-
-              {/* Summary */}
-              {result.summary && (
-                <div className="text-sm text-text-secondary bg-bg-secondary rounded-lg p-4 border border-border">{result.summary}</div>
-              )}
-
-              {/* Result items */}
-              <div className="space-y-2 max-h-64 overflow-y-auto" role="list" aria-label="Search results">
-                {result.items.map((item, index) => (
-                  <div key={`${item.id}-${index}`} role="listitem" className="p-3 bg-bg-secondary rounded-lg border border-border hover:border-cyan-500/30 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <span className="text-[10px] text-text-muted uppercase font-mono bg-bg-tertiary px-1.5 py-0.5 rounded">{sourceLabels[item.source_type] || 'SRC'}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-white font-medium truncate">{item.file_name || t('search.unknownFile')}</span>
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded-md ${item.relevance > 0.7 ? 'bg-green-500/20 text-green-400' : item.relevance > 0.4 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-gray-500/20 text-text-secondary'}`}
-                            aria-label={`Relevance: ${(item.relevance * 100).toFixed(0)}%`}
-                          >
-                            {(item.relevance * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                        <p className="text-xs text-text-muted mt-1 line-clamp-2">{item.preview}</p>
-                        <div className="flex items-center gap-2 mt-2 text-[10px] text-text-muted">
-                          <span className="text-cyan-400/70">{item.match_reason}</span>
-                          {item.timestamp && (
-                            <>
-                              <span>{'\u2022'}</span>
-                              <span>{formatLocalDate(new Date(item.timestamp))}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {result.items.length === 0 && (
-                  <div className="text-center py-6 bg-bg-secondary rounded-lg border border-border">
-                    <div className="text-sm text-text-secondary">{t('search.noResults')}</div>
-                    <div className="text-xs text-text-muted mt-1">{t('search.tryDifferent')}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Related decisions (Pro) */}
-              {isPro && result.related_decisions.length > 0 && (
-                <div className="space-y-1.5">
-                  <h4 className="text-xs text-text-secondary uppercase tracking-wider">{t('search.relatedDecisions')}</h4>
-                  {result.related_decisions.map((d) => (
-                    <div key={d.id} className="px-3 py-2 bg-bg-secondary rounded-lg border border-border text-xs">
-                      <span className="text-text-secondary">{d.subject}</span>
-                      <span className="text-text-muted mx-1.5">{'\u2014'}</span>
-                      <span className="text-text-secondary">{d.decision}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Knowledge gaps (Pro) */}
-              {isPro && result.knowledge_gaps.length > 0 && (
-                <div className="space-y-1.5">
-                  <h4 className="text-xs text-text-secondary uppercase tracking-wider">{t('search.knowledgeGaps')}</h4>
-                  {result.knowledge_gaps.map((gap, i) => (
-                    <div key={i} className="flex items-center gap-2 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-xs">
-                      <span className={gap.severity === 'critical' ? 'text-red-400' : gap.severity === 'high' ? 'text-yellow-400' : 'text-text-secondary'}>{'\u25CF'}</span>
-                      <span className="text-text-secondary">{gap.technology}</span>
-                      <span className="text-text-muted">{t('search.staleForDays', { days: gap.days_stale })}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Ghost preview (non-Pro insight) */}
-              {result.ghost_preview && !result.is_pro && (
-                <GhostPreview preview={result.ghost_preview} />
-              )}
-
-              {/* Stats footer */}
-              <div className="text-xs text-text-muted text-center pt-2 border-t border-border">
-                {t('search.stats', { count: result.total_count, ms: result.execution_ms, confidence: (result.parsed.confidence * 100).toFixed(0) })}
-              </div>
-            </div>
+            <SearchResults
+              query={query}
+              result={result}
+              isPro={isPro}
+              synthesis={synthesis}
+              synthesisLoading={synthesisLoading}
+              streamingText={streamingText}
+              onRetrySynthesis={() => void fetchSynthesis(query)}
+              onClear={clearResults}
+            />
           )}
 
           {/* Standing queries (Pro) */}

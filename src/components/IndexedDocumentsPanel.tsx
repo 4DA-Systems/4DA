@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { reportError } from '../lib/error-reporter';
+import { DocumentDetail } from './documents/DocumentDetail';
 import { formatLocalDate, formatRelativeDate } from '../utils/format-date';
 import type {
   IndexedDocument,
@@ -132,59 +133,10 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
   // Document detail view
   if (selectedDoc) {
     return (
-      <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
-        <div className="flex items-center gap-3 mb-3">
-          <button
-            onClick={() => setSelectedDoc(null)}
-            className="text-sm text-text-secondary hover:text-white transition-colors"
-          >
-            {t('documents.back')}
-          </button>
-          <h3 className="text-white font-medium truncate flex-1">
-            {selectedDoc.document.file_name}
-          </h3>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-text-muted">{t('documents.type')}</div>
-            <div className="text-sm text-white font-medium">{selectedDoc.document.file_type.toUpperCase()}</div>
-          </div>
-          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-text-muted">{t('documents.size')}</div>
-            <div className="text-sm text-white font-medium">{formatFileSize(selectedDoc.document.file_size)}</div>
-          </div>
-          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-text-muted">{t('documents.words')}</div>
-            <div className="text-sm text-white font-medium">{selectedDoc.document.word_count.toLocaleString()}</div>
-          </div>
-          <div className="p-3 bg-bg-secondary rounded-lg border border-border">
-            <div className="text-xs text-text-muted">{t('documents.indexed')}</div>
-            <div className="text-sm text-white font-medium">{formatDate(selectedDoc.document.indexed_at)}</div>
-          </div>
-        </div>
-
-        <div className="border-t border-border pt-4">
-          <div className="text-xs text-text-secondary mb-3">
-            {t('documents.content', { count: selectedDoc.chunks.length })}
-          </div>
-          <div className="max-h-64 overflow-y-auto space-y-2">
-            {selectedDoc.chunks.map((chunk, i) => (
-              <div
-                key={i}
-                className="text-xs text-text-secondary bg-bg-secondary rounded-lg p-3 border border-border whitespace-pre-wrap break-words"
-              >
-                {chunk.content.slice(0, 500)}
-                {chunk.content.length > 500 && '...'}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="text-xs text-text-muted truncate mt-4 pt-3 border-t border-border" title={selectedDoc.document.file_path}>
-          {selectedDoc.document.file_path}
-        </div>
-      </div>
+      <DocumentDetail
+        document={selectedDoc}
+        onBack={() => setSelectedDoc(null)}
+      />
     );
   }
 

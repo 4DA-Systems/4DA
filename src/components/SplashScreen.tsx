@@ -5,39 +5,30 @@ import { cmd } from '../lib/commands';
 import { reportError } from '../lib/error-reporter';
 import sunLogo from '../assets/sun-logo.webp';
 import { translateError } from '../utils/error-messages';
+import {
+  type InitStage,
+  stageKeys,
+  stageExplanations,
+  stageOrder,
+  splashKeyframes,
+  containerStyle,
+  logoRingStyle,
+  fallbackEmojiStyle,
+  spinnerRingStyle,
+  brandNameStyle,
+  taglineStyle,
+  progressTrackStyle,
+  progressFillStyle,
+  miniSpinnerStyle,
+  retryButtonStyle,
+  versionStyle,
+  refreshButtonStyle,
+} from './splash/splash-styles';
 
 interface SplashScreenProps {
   onComplete: () => void;
   minimumDisplayTime?: number;
 }
-
-type InitStage =
-  | 'starting'
-  | 'database'
-  | 'embeddings'
-  | 'context'
-  | 'sources'
-  | 'ready';
-
-const stageKeys: Record<InitStage, string> = {
-  starting: 'splash.starting',
-  database: 'splash.database',
-  embeddings: 'splash.models',
-  context: 'splash.context',
-  sources: 'splash.sources',
-  ready: 'splash.ready',
-};
-
-const stageExplanations: Record<InitStage, string> = {
-  starting: 'Initializing core systems',
-  database: 'Loading your settings and history',
-  embeddings: 'Checking AI provider availability',
-  context: 'Scanning your project environment',
-  sources: 'Preparing content pipelines',
-  ready: 'All systems operational',
-};
-
-const stageOrder: InitStage[] = ['starting', 'database', 'embeddings', 'context', 'sources', 'ready'];
 
 export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScreenProps) {
   const { t } = useTranslation();
@@ -93,7 +84,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
             window.location.href = `http://localhost:${terminalPort}/`;
             return;
           }
-          setError('Desktop app required \u2014 open through Tauri window');
+          setError('Desktop app required — open through Tauri window');
         } else {
           setError(translateError(e));
         }
@@ -125,32 +116,14 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       role="status"
       aria-label={error ? t('splash.error') : t(stageKeys[stage])}
       aria-busy={stage !== 'ready'}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 50,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--color-bg-primary)',
-        transition: 'opacity 300ms',
-        opacity: fadeOut ? 0 : 1,
-      }}
+      style={containerStyle(fadeOut)}
     >
       {/* Content cluster wrapper — ensures the visual block is truly centered
           even with absolutely-positioned elements (version, refresh) outside it */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* Sun Logo with pulse animation */}
       <div style={{ position: 'relative', marginBottom: '2rem' }}>
-        <div style={{
-          width: '10rem',
-          height: '10rem',
-          borderRadius: '50%',
-          overflow: 'hidden',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-          animation: 'pulse 2s ease-in-out infinite',
-        }}>
+        <div style={logoRingStyle}>
           {/* eslint-disable i18next/no-literal-string */}
           {!imageError ? (
             <img
@@ -160,77 +133,37 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
               onError={() => setImageError(true)}
             />
           ) : (
-            <div style={{
-              width: '100%',
-              height: '100%',
-              backgroundColor: 'var(--color-accent-gold)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '3rem',
-            }}>
+            <div style={fallbackEmojiStyle}>
               ☀️
             </div>
           )}
           {/* eslint-enable i18next/no-literal-string */}
         </div>
         {/* Spinning ring around logo */}
-        <div style={{
-          position: 'absolute',
-          inset: '-8px',
-          borderRadius: '50%',
-          border: '2px solid transparent',
-          borderTopColor: 'var(--color-accent-action)',
-          animation: 'spin 1.5s linear infinite',
-        }} />
+        <div style={spinnerRingStyle} />
       </div>
 
       {/* Brand Name */}
       {/* eslint-disable i18next/no-literal-string */}
-      <h1 style={{
-        fontSize: '2.5rem',
-        fontWeight: 600,
-        color: '#FFFFFF',
-        letterSpacing: '-0.025em',
-        marginBottom: '0.5rem',
-      }}>
+      <h1 style={brandNameStyle}>
         4DA
       </h1>
       {/* eslint-enable i18next/no-literal-string */}
 
       {/* Tagline */}
-      <p style={{
-        fontSize: '1rem',
-        color: 'var(--color-accent-action)',
-        letterSpacing: '0.05em',
-        marginBottom: '2.5rem',
-        fontWeight: 500,
-      }}>
+      <p style={taglineStyle}>
         {t('app.tagline')}
       </p>
 
       {/* Progress bar */}
-      <div style={{
-        width: '280px',
-        height: '4px',
-        backgroundColor: 'var(--color-bg-tertiary)',
-        borderRadius: '2px',
-        overflow: 'hidden',
-        marginBottom: '1rem',
-      }}>
+      <div style={progressTrackStyle}>
         <div
           role="progressbar"
           aria-valuenow={Math.round(progress)}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={t('splash.progress', { percent: Math.round(progress) })}
-          style={{
-            height: '100%',
-            width: `${progress}%`,
-            backgroundColor: 'var(--color-accent-action)',
-            borderRadius: '2px',
-            transition: 'width 300ms ease-out',
-          }}
+          style={progressFillStyle(progress)}
         />
       </div>
 
@@ -253,14 +186,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
           gap: '0.75rem',
         }}>
         {stage !== 'ready' && !error && (
-          <div style={{
-            width: '16px',
-            height: '16px',
-            border: '2px solid var(--color-accent-action)',
-            borderTopColor: 'transparent',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
-          }} />
+          <div style={miniSpinnerStyle} />
         )}
         {stage === 'ready' && !error && (
           // eslint-disable-next-line i18next/no-literal-string
@@ -290,16 +216,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
         {error && (
           <button
             onClick={() => window.location.reload()}
-            style={{
-              marginTop: '1rem',
-              padding: '0.5rem 1.5rem',
-              background: 'var(--color-error)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              fontSize: '0.8125rem',
-            }}
+            style={retryButtonStyle}
           >
             {t('action.retry')}
           </button>
@@ -328,34 +245,14 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       </div>
 
       {/* Version */}
-      <p style={{
-        position: 'absolute',
-        bottom: '1.5rem',
-        fontSize: '0.75rem',
-        color: '#4B5563',
-      }}>
+      <p style={versionStyle}>
         {t('splash.version', { version: __APP_VERSION__ })}
       </p>
 
       {/* Subtle refresh button - top right corner */}
       <button
         onClick={() => window.location.reload()}
-        style={{
-          position: 'absolute',
-          top: '1rem',
-          right: '1rem',
-          padding: '0.5rem 0.75rem',
-          fontSize: '0.75rem',
-          color: 'var(--color-text-muted)',
-          backgroundColor: 'transparent',
-          border: '1px solid var(--color-border)',
-          borderRadius: '6px',
-          cursor: 'pointer',
-          transition: 'all 200ms',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.375rem',
-        }}
+        style={refreshButtonStyle}
         onMouseEnter={(e) => {
           e.currentTarget.style.color = '#9CA3AF';
           e.currentTarget.style.borderColor = '#4B5563';
@@ -374,16 +271,7 @@ export function SplashScreen({ onComplete, minimumDisplayTime = 800 }: SplashScr
       </button>
 
       {/* Animations */}
-      <style>{`
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.02); opacity: 0.9; }
-        }
-      `}</style>
+      <style>{splashKeyframes}</style>
     </div>
   );
 }

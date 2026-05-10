@@ -5,37 +5,11 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { ReRankingSection } from './ReRankingSection';
 import { UsageStatsSection } from './UsageStatsSection';
+import { popularEndpoints, getProviderModels, IDLE_VALIDATION } from './ai-provider-constants';
 import type { SettingsForm, AIProviderSectionProps } from './ai-provider-types';
-import type { ModelRegistryData } from '../../store/types';
+import type { EnvDetection, KeyValidation } from './ai-provider-constants';
 
 export type { SettingsForm, AIProviderSectionProps };
-
-// Curated model lists — these are the models users should see.
-// Registry data (LiteLLM) is only used for pricing, not for dropdown population,
-// because it includes hundreds of old/deprecated model names.
-const curatedModels: Record<string, string[]> = {
-  anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
-  openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
-  ollama: ['llama3.2', 'gemma3', 'qwen2.5', 'deepseek-r1', 'mistral', 'phi4'],
-};
-
-// Popular OpenAI-compatible endpoints
-const popularEndpoints: { name: string; url: string }[] = [
-  { name: 'Groq', url: 'https://api.groq.com/openai/v1' },
-  { name: 'Together', url: 'https://api.together.xyz/v1' },
-  { name: 'DeepSeek', url: 'https://api.deepseek.com/v1' },
-  { name: 'Mistral', url: 'https://api.mistral.ai/v1' },
-  { name: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
-  { name: 'LM Studio', url: 'http://localhost:1234/v1' },
-  { name: 'llama.cpp', url: 'http://localhost:8080/v1' },
-];
-
-/** Get models for a provider. Uses curated list for known providers,
- *  registry only for openai-compatible (unknown endpoints). */
-function getProviderModels(provider: string, _registry: ModelRegistryData | null | undefined): string[] {
-  return curatedModels[provider] ?? [];
-}
-
 
 export function AIProviderSection({
   settings,
@@ -49,33 +23,19 @@ export function AIProviderSection({
 }: AIProviderSectionProps) {
   const { t } = useTranslation();
 
-  // Environment detection state
-  const [envDetection, setEnvDetection] = useState<{
-    has_anthropic_env: boolean;
-    anthropic_env_preview: string;
-    has_openai_env: boolean;
-    openai_env_preview: string;
-  } | null>(null);
+  const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
   const [importing, setImporting] = useState(false);
-
-  // Key validation state
-  const [validation, setValidation] = useState<{
-    status: 'idle' | 'checking' | 'valid' | 'invalid' | 'format_error';
-    message: string;
-    models: string[];
-  }>({ status: 'idle', message: '', models: [] });
+  const [validation, setValidation] = useState<KeyValidation>(IDLE_VALIDATION);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Detect env keys on mount
   useEffect(() => {
     cmd('detect_environment').then(setEnvDetection).catch(() => {});
   }, []);
 
-  // Debounced key validation
   const validateKey = useCallback((provider: string, key: string, baseUrl?: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!key.trim() || key === '(imported from environment)') {
-      setValidation({ status: 'idle', message: '', models: [] });
+      setValidation(IDLE_VALIDATION);
       return;
     }
     debounceRef.current = setTimeout(() => {
@@ -109,7 +69,7 @@ export function AIProviderSection({
             });
           }
         } catch {
-          setValidation({ status: 'idle', message: '', models: [] });
+          setValidation(IDLE_VALIDATION);
         }
       })();
     }, 500);
@@ -126,7 +86,6 @@ export function AIProviderSection({
 
   return (
     <>
-      {/* LLM Provider Section */}
       <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 bg-orange-500/20 rounded-lg flex items-center justify-center">
@@ -191,7 +150,7 @@ export function AIProviderSection({
                       ? ''
                       : '',
                 }));
-                setValidation({ status: 'idle', message: '', models: [] });
+                setValidation(IDLE_VALIDATION);
               }}
               className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
             >
@@ -219,7 +178,7 @@ export function AIProviderSection({
                     apiKey: '',
                     baseUrl: '',
                   }));
-                  setValidation({ status: 'idle', message: '', models: [] });
+                  setValidation(IDLE_VALIDATION);
                 }}
                 className="mt-2 text-xs px-3 py-1.5 bg-green-500/20 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors font-medium"
               >

@@ -2,108 +2,33 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { AppStore } from './types';
+import type {
+  DecisionDetail,
+  NotificationSummary,
+  SharedSource,
+  TeamDecision,
+  TeamNotification,
+  TeamProfile,
+  TeamSignalItem,
+  TeamSignalSummary,
+} from './team-intelligence-types';
 
-// -- Team Intelligence Profile Types --
-
-interface TeamProfile {
-  team_id: string;
-  member_count: number;
-  collective_stack: TeamTechEntry[];
-  stack_coverage: number;
-  blind_spots: TeamBlindSpot[];
-  overlap_zones: OverlapZone[];
-  unique_strengths: UniqueStrength[];
-  generated_at: string;
-}
-
-interface TeamTechEntry { tech: string; members: string[]; team_confidence: number; }
-interface TeamBlindSpot { topic: string; related_to: string[]; severity: string; }
-interface OverlapZone { topic: string; members: string[]; member_count: number; }
-interface UniqueStrength { tech: string; sole_expert: string; risk_level: string; }
-
-interface TeamSignalSummary {
-  signal_id: string;
-  chain_name: string;
-  priority: string;
-  tech_topics: string[];
-  detected_by: MemberDetection[];
-  team_confidence: number;
-  first_detected_at: string;
-  suggested_action: string;
-  resolved: boolean;
-}
-
-interface MemberDetection { client_id: string; display_name: string; detected_at: string; }
-
-// -- Team Decision Types --
-
-interface TeamDecision {
-  id: string;
-  team_id: string;
-  title: string;
-  decision_type: string;
-  rationale: string;
-  proposed_by: string;
-  status: string;
-  vote_count: number;
-  created_at: string;
-  resolved_at: string | null;
-}
-
-interface DecisionVote {
-  voter_id: string;
-  stance: string;
-  rationale: string;
-  voted_at: string;
-}
-
-interface DecisionDetail {
-  id: string;
-  team_id: string;
-  title: string;
-  decision_type: string;
-  rationale: string;
-  proposed_by: string;
-  status: string;
-  vote_count: number;
-  votes: DecisionVote[];
-  created_at: string;
-  resolved_at: string | null;
-}
-
-// -- Team Notification Types --
-
-interface TeamNotification {
-  id: string;
-  team_id: string;
-  notification_type: string;
-  title: string;
-  body: string | null;
-  severity: string;
-  read: boolean;
-  created_at: string;
-  metadata: Record<string, unknown> | null;
-}
-
-interface NotificationSummary {
-  total_unread: number;
-  by_type: { notification_type: string; count: number }[];
-}
-
-// -- Shared Source Types --
-
-interface SharedSource {
-  id: string;
-  team_id: string;
-  source_type: string;
-  config_summary: Record<string, unknown>;
-  recommendation: string;
-  shared_by: string;
-  upvotes: number;
-  created_at: string;
-}
-
-// -- Slice Interface --
+export type {
+  DecisionDetail,
+  DecisionVote,
+  MemberDetection,
+  NotificationSummary,
+  OverlapZone,
+  SharedSource,
+  TeamBlindSpot,
+  TeamDecision,
+  TeamNotification,
+  TeamProfile,
+  TeamSignalItem,
+  TeamSignalSummary,
+  TeamTechEntry,
+  UniqueStrength,
+} from './team-intelligence-types';
 
 export interface TeamIntelligenceSlice {
   // Team Signals (from monitoring)
@@ -162,22 +87,6 @@ export interface TeamIntelligenceSlice {
   refreshBusFactorReport: () => Promise<void>;
 }
 
-// Mirror the TeamSignal type from commands.ts
-interface TeamSignalItem {
-  id: string;
-  team_id: string;
-  signal_type: string;
-  title: string;
-  severity: string;
-  tech_topics: string[];
-  detected_by_count: number;
-  first_detected: string;
-  last_detected: string;
-  resolved: boolean;
-  resolved_by: string | null;
-  resolved_at: string | null;
-}
-
 export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamIntelligenceSlice> = (set, _get) => ({
   teamSignals: [],
   teamSignalsLoading: false,
@@ -194,7 +103,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
   teamSignalSummary: [],
   teamSignalSummaryLoading: false,
 
-  // ---- Signals ----
   loadTeamSignals: async (includeResolved = false) => {
     set({ teamSignalsLoading: true });
     try {
@@ -208,7 +116,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
   resolveTeamSignal: async (signalId: string, notes: string) => {
     try {
       await cmd('resolve_team_signal_cmd', { signalId, notes });
-      // Refresh signals after resolving
       set(state => ({
         teamSignals: state.teamSignals.map(s =>
           s.id === signalId ? { ...s, resolved: true } : s,
@@ -217,7 +124,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
     } catch { /* silent */ }
   },
 
-  // ---- Decisions ----
   loadTeamDecisions: async (statusFilter?: string) => {
     set({ decisionsLoading: true });
     try {
@@ -238,7 +144,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
   voteOnDecision: async (decisionId: string, stance: string, rationale: string) => {
     try {
       await cmd('vote_on_decision', { decisionId, stance, rationale });
-      // Refresh the decision detail if viewing it
       const detail = await cmd('get_decision_detail', { decisionId });
       set({ selectedDecision: detail });
     } catch { /* silent */ }
@@ -258,7 +163,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
     } catch { /* silent */ }
   },
 
-  // ---- Notifications ----
   loadNotifications: async (unreadOnly = false) => {
     set({ notificationsLoading: true });
     try {
@@ -311,7 +215,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
     } catch { /* silent */ }
   },
 
-  // ---- Shared Sources ----
   loadSharedSources: async () => {
     set({ sharedSourcesLoading: true });
     try {
@@ -325,7 +228,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
   shareSource: async (sourceType: string, configSummary: string, recommendation: string) => {
     try {
       await cmd('share_source_with_team', { sourceType, configSummary, recommendation });
-      // Refresh the list
       const sources = await cmd('get_team_sources');
       set({ sharedSources: sources });
     } catch { /* silent */ }
@@ -351,7 +253,6 @@ export const createTeamIntelligenceSlice: StateCreator<AppStore, [], [], TeamInt
     } catch { /* silent */ }
   },
 
-  // ---- Intelligence ----
   loadTeamProfile: async () => {
     set({ teamProfileLoading: true });
     try {

@@ -4,16 +4,15 @@
 
 import './i18n';
 
-import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import './App.css';
 import sunLogo from './assets/sun-logo.webp';
 import { SplashScreen } from './components/SplashScreen';
 // Onboarding — only shown on first launch, lazy-loaded for returning users
 const Onboarding = lazy(() => import('./components/Onboarding').then(m => ({ default: m.Onboarding })));
-import { ToastContainer } from './components/Toast';
-import { FeedbackMilestone } from './components/FeedbackMilestone';
 import { UnifiedAppBar } from './components/app/UnifiedAppBar';
+import { AppModals } from './components/app/AppModals';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ViewErrorBoundary } from './components/ViewErrorBoundary';
 import { ViewTabBar } from './components/ViewTabBar';
@@ -25,14 +24,7 @@ import { LicenseRecoveryBanner } from './components/LicenseRecoveryBanner';
 
 // Lazy-loaded non-critical-path components
 const FirstRunTransition = lazy(() => import('./components/FirstRunTransition').then(m => ({ default: m.FirstRunTransition })));
-const GuidedHighlights = lazy(() => import('./components/GuidedHighlights').then(m => ({ default: m.GuidedHighlights })));
-const MilestoneOverlay = lazy(() => import('./components/MilestoneOverlay').then(m => ({ default: m.MilestoneOverlay })));
 
-// Lazy-loaded non-critical views and overlays
-const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
-const KeyboardShortcutsModal = lazy(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
-const FrameworkPage = lazy(() => import('./components/FrameworkPage').then(m => ({ default: m.FrameworkPage })));
-const ComparisonPage = lazy(() => import('./components/ComparisonPage').then(m => ({ default: m.ComparisonPage })));
 import {
   useSettings,
   useMonitoring,
@@ -42,12 +34,11 @@ import {
   useSystemHealth,
   useUserContext,
   useBriefing,
-  useKeyboardShortcuts,
   useToasts,
   useLicense,
   useUiZoom,
 } from './hooks';
-import { ZoomIndicator } from './components/ZoomIndicator';
+import { useAppShortcuts } from './hooks/use-app-shortcuts';
 import { ContentTranslationProvider } from './components/ContentTranslationProvider';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -58,6 +49,7 @@ import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
 import { loadSourceMeta } from './config/sources';
+
 function App() {
   const { t } = useTranslation();
   const { zoom, showIndicator } = useUiZoom();
@@ -70,7 +62,6 @@ function App() {
   const [showComparison, setShowComparison] = useState(false);
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const newItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [analysisPulse, setAnalysisPulse] = useState(false);
   // Data selectors (may change, use useShallow)
   const { activeView, showOnlyRelevant, filteredResults } = useAppStore(
     useShallow((s) => ({
@@ -127,17 +118,15 @@ function App() {
     monitoring,
   } = useMonitoring();
 
-  const handleBackgroundItems = useCallback((itemIds: number[]) => {
+  const handleBackgroundItems = (itemIds: number[]) => {
     setNewItemIds(prev => {
       const next = new Set(prev);
       for (const id of itemIds) next.add(id);
       return next;
     });
-    // Clear any existing timer before setting a new one
     if (newItemTimerRef.current) clearTimeout(newItemTimerRef.current);
-    // Auto-clear "New" badges after 60 seconds
     newItemTimerRef.current = setTimeout(() => setNewItemIds(new Set()), 60000);
-  }, []);
+  };
 
   const {
     state,
@@ -148,14 +137,9 @@ function App() {
     startAnalysis,
   } = useAnalysis(addToast, handleBackgroundItems);
 
-  const {
-    loadDiscoveredContext,
-  } = useContextDiscovery(setSettingsStatus);
+  const { loadDiscoveredContext } = useContextDiscovery(setSettingsStatus);
 
-  // Feedback hook — all state and recordInteraction live in the store
   useFeedback();
-
-  // System health hook - data loaded on mount, consumed by SettingsModal via Zustand
   useSystemHealth(setSettingsStatus);
 
   const {
@@ -185,11 +169,17 @@ function App() {
     aiBriefing,
   } = useBriefing(state.relevanceResults, state.analysisComplete);
 
-  // 5c. Stabilize onAnalyze callback
-  const handleAnalyze = useCallback(() => {
-    setNewItemIds(new Set());
-    void startAnalysis();
-  }, [startAnalysis]);
+  // Global keyboard shortcuts + analyze handler (extracted hook)
+  const { focusedIndex, analysisPulse, handleAnalyze } = useAppShortcuts({
+    showSettings, setShowSettings,
+    showKeyboardHelp, setShowKeyboardHelp,
+    expandedItem, setExpandedItem,
+    state, startAnalysis,
+    showOnlyRelevant, setShowOnlyRelevant,
+    activeView, setActiveView,
+    filteredResults,
+    addToast,
+  });
 
   // Load persisted briefing + source health + license + pro value + game state on mount (instant, from DB)
   useEffect(() => {
@@ -214,53 +204,6 @@ function App() {
     setShowComparison,
     setState,
     startAnalysis: () => { void startAnalysis(); },
-  });
-
-  // Global keyboard shortcuts (extracted hook)
-  const { focusedIndex } = useKeyboardShortcuts({
-    onAnalyze: () => { void startAnalysis(); },
-    onToggleFilters: () => setShowOnlyRelevant(!showOnlyRelevant),
-    onToggleBriefing: () => setActiveView(activeView === 'briefing' ? 'results' : 'briefing'),
-    onOpenSettings: () => setShowSettings(true),
-    onEscape: () => {
-      if (showKeyboardHelp) { setShowKeyboardHelp(false); return; }
-      if (showSettings) { setShowSettings(false); return; }
-      if (expandedItem !== null) { setExpandedItem(null); return; }
-    },
-    onHelp: () => setShowKeyboardHelp(true),
-    analyzeDisabled: state.loading,
-    briefingAvailable: true,
-    filtersAvailable: state.analysisComplete,
-    resultCount: filteredResults.length,
-    onFocusResult: (index: number) => {
-      const el = document.getElementById(`result-item-${filteredResults[index]?.id}`);
-      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    },
-    onToggleExpandResult: (index: number) => {
-      const item = filteredResults[index];
-      if (item) setExpandedItem(expandedItem === item.id ? null : item.id);
-    },
-    onOpenResult: (index: number) => {
-      const item = filteredResults[index];
-      if (item?.url) window.open(item.url, '_blank', 'noopener,noreferrer');
-    },
-    onAnalyzeTriggered: () => {
-      addToast('info', t('analysis.keyboardTriggered'));
-      setAnalysisPulse(true);
-      setTimeout(() => setAnalysisPulse(false), 500);
-    },
-    onSaveFocused: () => {
-      const item = filteredResults[focusedIndex];
-      if (item) void useAppStore.getState().recordInteraction(item.id, 'save', item);
-    },
-    onDismissFocused: () => {
-      const item = filteredResults[focusedIndex];
-      if (item) void useAppStore.getState().recordInteraction(item.id, 'dismiss', item);
-    },
-    onFocusSearch: () => {
-      const el = document.querySelector<HTMLInputElement>('[data-search-input]');
-      el?.focus();
-    },
   });
 
   return (
@@ -367,52 +310,22 @@ function App() {
           />
         )}
 
-        {/* Toast Notifications */}
-        <ToastContainer toasts={toasts} onDismiss={removeToast} />
-        <ZoomIndicator zoom={zoom} visible={showIndicator} />
-        <FeedbackMilestone count={feedbackCount} />
-        <Suspense fallback={null}><MilestoneOverlay /></Suspense>
-
-        {/* Guided Highlights — one-time feature discovery overlay (self-dismisses via localStorage) */}
-        <Suspense fallback={null}><GuidedHighlights /></Suspense>
-
-        {/* Keyboard Shortcuts Help Modal */}
-        {showKeyboardHelp && (
-          <Suspense fallback={null}>
-            <ViewErrorBoundary viewName="Keyboard Shortcuts">
-              <KeyboardShortcutsModal onClose={() => setShowKeyboardHelp(false)} />
-            </ViewErrorBoundary>
-          </Suspense>
-        )}
-
-        {/* Framework Page — philosophy publication */}
-        {showFramework && (
-          <Suspense fallback={null}>
-            <ViewErrorBoundary viewName="Framework">
-              <FrameworkPage onClose={() => setShowFramework(false)} />
-            </ViewErrorBoundary>
-          </Suspense>
-        )}
-
-        {/* Comparison Page — competitive positioning */}
-        {showComparison && (
-          <Suspense fallback={null}>
-            <ViewErrorBoundary viewName="Comparison">
-              <ComparisonPage onClose={() => setShowComparison(false)} />
-            </ViewErrorBoundary>
-          </Suspense>
-        )}
-
-        {/* Settings Modal - now self-sufficient via Zustand store */}
-        {showSettings && (
-          <Suspense fallback={null}>
-            <ViewErrorBoundary viewName="Settings" onReset={() => setShowSettings(false)}>
-              <SettingsModal
-                onClose={() => setShowSettings(false)}
-              />
-            </ViewErrorBoundary>
-          </Suspense>
-        )}
+        {/* Modals, toasts, and overlays */}
+        <AppModals
+          toasts={toasts}
+          removeToast={removeToast}
+          zoom={zoom}
+          showZoomIndicator={showIndicator}
+          feedbackCount={feedbackCount}
+          showKeyboardHelp={showKeyboardHelp}
+          setShowKeyboardHelp={setShowKeyboardHelp}
+          showFramework={showFramework}
+          setShowFramework={setShowFramework}
+          showComparison={showComparison}
+          setShowComparison={setShowComparison}
+          showSettings={showSettings}
+          setShowSettings={setShowSettings}
+        />
 
       </div>
     </>
