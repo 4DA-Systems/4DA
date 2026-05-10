@@ -1306,6 +1306,28 @@ async fn snapshot_each_window() {
             || state.get("url").is_some();
         assert!(has_url, "window '{label}' state should include URL");
     }
+
+    // DOM snapshot per window using the new targeted API
+    let main_snap = client.dom_snapshot_for("main").await.unwrap();
+    assert!(
+        main_snap.get("tree").is_some() || main_snap.get("root").is_some(),
+        "main window DOM snapshot should have tree"
+    );
+}
+
+// ── Phase 18: Connection Resilience ─────────────────────────────────────────
+
+#[tokio::test]
+async fn is_alive_returns_true() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let client = VictauriClient::discover().await.unwrap();
+    assert!(
+        client.is_alive().await,
+        "running server should report alive"
+    );
 }
 
 // ── Phase 17: Event-Driven IPC Capture ──────────────────────────────────────
