@@ -7,14 +7,9 @@ import type { SourceRelevance, AnalysisProgress } from '../types';
 import { getSourceLabel } from '../config/sources';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
-
-export interface NarrationEvent {
-  type: string;
-  message: string;
-  source?: string;
-  relevance?: number;
-  timestamp: number;
-}
+import { extractNearMisses, scrollToAndHighlightItem } from './analysis-utils';
+import type { NarrationEvent } from './analysis-utils';
+export type { NarrationEvent } from './analysis-utils';
 
 /**
  * Analysis hook — thin wrapper around Zustand store.
@@ -63,21 +58,12 @@ export function useAnalysis(
         listen<SourceRelevance[]>('analysis-complete', (event) => {
           const results = event.payload;
           const relevantCount = results.filter((r) => r.relevant).length;
-
-          // Extract near misses: items that almost passed the threshold
-          const NEAR_MISS_FLOOR = 0.20;
-          const NEAR_MISS_LIMIT = 5;
-          const nearMisses = relevantCount < 3
-            ? results
-                .filter((r) => !r.relevant && r.top_score >= NEAR_MISS_FLOOR)
-                .sort((a, b) => b.top_score - a.top_score)
-                .slice(0, NEAR_MISS_LIMIT)
-            : null;
+          const nearMisses = extractNearMisses(results, relevantCount);
 
           useAppStore.getState().setAppStateFull((s) => ({
             ...s,
             relevanceResults: results,
-            nearMisses: nearMisses && nearMisses.length > 0 ? nearMisses : null,
+            nearMisses,
             status: i18n.t('analysis.statusRelevant', { relevant: relevantCount, total: results.length }),
             loading: false,
             analysisComplete: true,
@@ -119,11 +105,6 @@ export function useAnalysis(
           const { source, error } = event.payload;
           useAppStore.getState().addToast('warning', i18n.t('analysis.sourceError', { source: getSourceLabel(source), error }));
         }),
-
-        listen<{ source: string; count: number }>('source-fetched', () => {
-          // Silent — success is the default. Only toast on errors.
-        }),
-
         listen('network-offline', () => {
           useAppStore.getState().addToast('warning', i18n.t('analysis.offline'));
         }),
@@ -143,15 +124,8 @@ export function useAnalysis(
         // Custom notification clicked — navigate to briefing/signals view
         listen<{ item_id?: number }>('navigate-to-signals', (event) => {
           useAppStore.getState().setActiveView('briefing');
-          const itemId = event.payload?.item_id;
-          if (itemId) {
-            // Brief delay to allow view to mount, then scroll to item
-            setTimeout(() => {
-              const el = document.querySelector(`[data-item-id="${itemId}"]`);
-              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              el?.classList.add('ring-1', 'ring-orange-500/50');
-              setTimeout(() => el?.classList.remove('ring-1', 'ring-orange-500/50'), 3000);
-            }, 300);
+          if (event.payload?.item_id) {
+            scrollToAndHighlightItem(event.payload.item_id);
           }
         }),
 
