@@ -9,7 +9,7 @@
 //! preemptive alerts. Tells the user what matters BEFORE it becomes painful.
 
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{debug, warn};
 use ts_rs::TS;
 
 use crate::error::Result;
@@ -240,91 +240,172 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
         }
     };
 
-    matches
-        .iter()
-        .map(|m| {
-            let urgency = match m.cvss_score {
-                Some(s) if s >= 9.0 => AlertUrgency::Critical,
-                Some(s) if s >= 7.0 => AlertUrgency::High,
-                Some(s) if s >= 4.0 => AlertUrgency::Medium,
-                _ => AlertUrgency::Watch,
-            };
+    // Group confirmed matches by (package_name, ecosystem) — one alert per package.
+    let mut pkg_groups: std::collections::BTreeMap<
+        (String, String),
+        Vec<&crate::osv::types::MatchedAdvisory>,
+    > = std::collections::BTreeMap::new();
+    for m in matches.iter().filter(|m| m.is_version_confirmed) {
+        let key = (m.package_name.clone(), m.ecosystem.clone());
+        pkg_groups.entry(key).or_default().push(m);
+    }
+
+    pkg_groups
+        .into_values()
+        .map(|group| {
+            let first = group[0];
+            let advisory_count = group.len();
+
+            // Highest urgency across all advisories for this package
+            let urgency = group
+                .iter()
+                .map(|m| {
+                    if let Some(s) = m.cvss_score {
+                        if s >= 9.0 {
+                            AlertUrgency::Critical
+                        } else if s >= 7.0 {
+                            AlertUrgency::High
+                        } else if s >= 4.0 {
+                            AlertUrgency::Medium
+                        } else {
+                            AlertUrgency::Watch
+                        }
+                    } else {
+                        infer_urgency_from_summary(&m.summary, &m.advisory_id)
+                    }
+                })
+                .min_by_key(|u| urgency_rank(u))
+                .unwrap_or(AlertUrgency::Watch);
+
+            // Highest CVSS across the group
+            let max_cvss = group
+                .iter()
+                .filter_map(|m| m.cvss_score)
+                .fold(None, |acc, s| Some(acc.map_or(s, |a: f64| a.max(s))));
 
             let confidence: f32 = {
-                let base: f32 = if m.is_version_confirmed { 0.92 } else { 0.58 };
-                let cvss_bonus: f32 = if m.cvss_score.is_some() { 0.03 } else { 0.0 };
+                let base: f32 = 0.92;
+                let cvss_bonus: f32 = if max_cvss.is_some() { 0.03 } else { 0.0 };
                 (base + cvss_bonus).min(0.99)
             };
 
-            let version_info = match (&m.installed_version, &m.fixed_version) {
-                (Some(installed), Some(fixed)) => {
-                    format!("Installed version {installed} is affected. Update to >= {fixed}.")
-                }
-                (Some(installed), None) => {
-                    format!("Installed version {installed} is affected. No fix available yet.")
-                }
-                (None, Some(fixed)) => {
-                    format!("Version unconfirmed. Fix available in >= {fixed}.")
-                }
-                (None, None) => {
-                    "Version range unconfirmed — check the advisory for details.".to_string()
-                }
+            // Best fix version (highest semver among fixed_versions)
+            let best_fix: Option<String> = group
+                .iter()
+                .filter_map(|m| m.fixed_version.as_ref())
+                .max_by(|a, b| {
+                    semver::Version::parse(a.trim_start_matches('v'))
+                        .ok()
+                        .zip(semver::Version::parse(b.trim_start_matches('v')).ok())
+                        .map(|(va, vb)| va.cmp(&vb))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .cloned();
+
+            // Merge all project paths
+            let mut all_projects: Vec<String> = group
+                .iter()
+                .flat_map(|m| m.project_paths.iter().cloned())
+                .collect();
+            all_projects.sort();
+            all_projects.dedup();
+
+            let project_display = if all_projects.is_empty() {
+                "your projects".to_string()
+            } else {
+                let mut names: Vec<String> = all_projects
+                    .iter()
+                    .map(|p| shorten_project_path(p))
+                    .collect();
+                names.sort();
+                names.dedup();
+                names.join(", ")
             };
 
-            let cvss_display = m
-                .cvss_score
-                .map(|s| format!(" (CVSS {s:.1})"))
+            let version_str = first.installed_version.as_deref().unwrap_or("unknown");
+            let fix_str = best_fix
+                .as_deref()
+                .map(|f| format!(" Update to >= {f}."))
                 .unwrap_or_default();
 
-            let explanation = format!(
-                "{id}{cvss} affects {pkg} in {projects}. {version}",
-                id = m.advisory_id,
-                cvss = cvss_display,
-                pkg = m.package_name,
-                projects = if m.project_paths.is_empty() {
-                    "your projects".to_string()
-                } else {
-                    let mut names: Vec<String> = m
-                        .project_paths
-                        .iter()
-                        .map(|p| shorten_project_path(p))
-                        .collect();
-                    names.sort();
-                    names.dedup();
-                    names.join(", ")
-                },
-                version = version_info,
-            );
-
-            let action_label = match (&m.installed_version, &m.fixed_version) {
-                (Some(installed), Some(fixed)) => {
-                    format!(
-                        "Update {} from {} to >= {}",
-                        m.package_name, installed, fixed
-                    )
-                }
-                _ => format!("Review {} advisory", m.advisory_id),
+            let vuln_word = if advisory_count == 1 {
+                "vulnerability"
+            } else {
+                "vulnerabilities"
             };
 
-            let evidence = vec![AlertEvidence {
-                source: "osv".to_string(),
-                title: m.summary.clone(),
-                url: m.source_url.clone(),
-                freshness_days: m
-                    .published_at
-                    .as_deref()
-                    .map(|ts| freshness_from_timestamp(ts))
-                    .unwrap_or(0.0),
-                relevance_score: 1.0,
-            }];
+            let title = if advisory_count == 1 {
+                truncate(&first.summary, 120).to_string()
+            } else {
+                format!(
+                    "{pkg}@{ver}: {count} known {vuln_word}",
+                    pkg = first.package_name,
+                    ver = version_str,
+                    count = advisory_count,
+                    vuln_word = vuln_word,
+                )
+            };
+
+            // Collect advisory IDs for explanation
+            let advisory_ids: Vec<&str> = group.iter().map(|m| m.advisory_id.as_str()).collect();
+            let ids_display = if advisory_count <= 3 {
+                advisory_ids.join(", ")
+            } else {
+                format!(
+                    "{}, {} and {} more",
+                    advisory_ids[0],
+                    advisory_ids[1],
+                    advisory_count - 2
+                )
+            };
+
+            let explanation = format!(
+                "{ids} ({count} {vuln_word}) affect {pkg}@{ver} in {projects}.{fix}",
+                ids = ids_display,
+                count = advisory_count,
+                vuln_word = vuln_word,
+                pkg = first.package_name,
+                ver = version_str,
+                projects = project_display,
+                fix = fix_str,
+            );
+
+            let action_label = if let Some(ref fix) = best_fix {
+                format!(
+                    "Update {} from {} to >= {}",
+                    first.package_name, version_str, fix
+                )
+            } else {
+                format!(
+                    "Review {} advisories for {}",
+                    advisory_count, first.package_name
+                )
+            };
+
+            // Include top 3 advisories as evidence entries
+            let evidence: Vec<AlertEvidence> = group
+                .iter()
+                .take(3)
+                .map(|m| AlertEvidence {
+                    source: "osv".to_string(),
+                    title: m.summary.clone(),
+                    url: m.source_url.clone(),
+                    freshness_days: m
+                        .published_at
+                        .as_deref()
+                        .map(|ts| freshness_from_timestamp(ts))
+                        .unwrap_or(0.0),
+                    relevance_score: 1.0,
+                })
+                .collect();
 
             let suggested_actions = vec![
                 SuggestedAction {
                     action_type: "investigate".to_string(),
                     label: action_label,
                     description: format!(
-                        "Review {} and update {} if your version is affected.",
-                        m.advisory_id, m.package_name
+                        "Review {} advisories and update {} if affected.",
+                        advisory_count, first.package_name
                     ),
                 },
                 SuggestedAction {
@@ -337,13 +418,13 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             ];
 
             PreemptionAlert {
-                id: format!("osv-{}-{}", m.advisory_id, m.package_name),
+                id: format!("osv-pkg-{}-{}", first.package_name, first.ecosystem),
                 alert_type: PreemptionType::SecurityAdvisory,
-                title: truncate(&m.summary, 120),
+                title,
                 explanation,
                 evidence,
-                affected_projects: m.project_paths.clone(),
-                affected_dependencies: vec![m.package_name.clone()],
+                affected_projects: all_projects,
+                affected_dependencies: vec![first.package_name.clone()],
                 urgency,
                 confidence,
                 predicted_window: None,
@@ -529,10 +610,14 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     let mut alerts = Vec::new();
 
     // ─── 0. Tier 1: OSV verified advisories (deterministic, highest trust) ──
-    alerts.extend(osv_matches_to_alerts());
+    let tier1 = osv_matches_to_alerts();
+    debug!(target: "4da::preemption", tier1_count = tier1.len(), "Tier 1 OSV alerts");
+    alerts.extend(tier1);
 
     // ─── 0.5. Tier 2: LLM-assessed security items (pre-computed judgments) ──
-    alerts.extend(llm_judged_to_alerts());
+    let tier2 = llm_judged_to_alerts();
+    debug!(target: "4da::preemption", tier2_count = tier2.len(), "Tier 2 LLM alerts");
+    alerts.extend(tier2);
 
     // ─── 1. Signal chain predictions (single call, bounded LIMIT 200) ────
     match crate::signal_chains::detect_chains(&conn) {
@@ -551,6 +636,8 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     // noise that degraded trust in the entire preemption surface. All security
     // alerts now flow through Tier 1 (OSV-verified) or Tier 2 (LLM-assessed).
 
+    let pre_dedup = alerts.len();
+
     // ─── Cross-tier dedup: higher-trust tier wins ────────────────────────
     // Tier 1 (OSV) > Tier 2 (LLM) > Tier 3 (signal chains). When the same
     // vulnerability appears across tiers, keep only the highest-trust entry.
@@ -563,6 +650,13 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
             seen.insert(norm_key)
         });
     }
+    debug!(
+        target: "4da::preemption",
+        pre_dedup = pre_dedup,
+        post_dedup = alerts.len(),
+        removed = pre_dedup - alerts.len(),
+        "Final preemption feed"
+    );
 
     // Sort: Critical first, then High, Medium, Watch. Within same urgency, highest confidence first.
     alerts.sort_by(|a, b| {
@@ -754,6 +848,36 @@ fn shorten_project_path(full_path: &str) -> String {
     } else {
         segments[segments.len() - 2..].join("/")
     }
+}
+
+/// Infer urgency from advisory summary text when CVSS score is absent.
+fn infer_urgency_from_summary(summary: &str, advisory_id: &str) -> AlertUrgency {
+    let s = summary.to_lowercase();
+    let id = advisory_id.to_lowercase();
+    let has_critical_keyword = s.contains("remote code execution")
+        || s.contains("rce")
+        || s.contains("arbitrary code")
+        || s.contains("sandbox escape")
+        || s.contains("authentication bypass")
+        || s.contains("authorization bypass");
+    if has_critical_keyword {
+        return AlertUrgency::High;
+    }
+    let has_high_keyword = s.contains("prototype pollution")
+        || s.contains("ssrf")
+        || s.contains("xss")
+        || s.contains("cross-site scripting")
+        || s.contains("injection")
+        || s.contains("exfiltration")
+        || s.contains("credential")
+        || s.contains("timing sidechannel");
+    if has_high_keyword {
+        return AlertUrgency::Medium;
+    }
+    if id.starts_with("mal-") {
+        return AlertUrgency::High;
+    }
+    AlertUrgency::Watch
 }
 
 /// Build a normalized dedup key for cross-tier duplicate detection.

@@ -23,12 +23,20 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         .map_err(|e| FourDaError::Internal(format!("Failed to read OSV advisories: {e}")))?;
 
     let mut deps = db
-        .get_all_user_dependencies()
+        .get_relevant_user_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read user dependencies: {e}")))?;
 
     let scanned = db
         .get_relevant_scanned_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
+
+    tracing::debug!(
+        target: "4da::osv",
+        user_deps = deps.len(),
+        scanned_deps = scanned.len(),
+        advisories = advisories.len(),
+        "OSV matching: filtered dep counts"
+    );
 
     // Merge scanned deps, deduped by (package_name, project_path, ecosystem)
     let mut seen_deps: std::collections::HashSet<(String, String, String)> = deps
@@ -36,7 +44,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         .map(|d| {
             (
                 d.package_name.to_lowercase(),
-                d.project_path.clone(),
+                d.project_path.replace('\\', "/").to_lowercase(),
                 normalize_ecosystem(&d.ecosystem).to_string(),
             )
         })
@@ -45,7 +53,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
     for dep in scanned {
         let key = (
             dep.package_name.to_lowercase(),
-            dep.project_path.clone(),
+            dep.project_path.replace('\\', "/").to_lowercase(),
             normalize_ecosystem(&dep.ecosystem).to_string(),
         );
         if seen_deps.insert(key) {
@@ -108,6 +116,16 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             continue;
         }
 
+        // Normalize paths: lowercase, forward slashes, dedup
+        project_paths = project_paths
+            .into_iter()
+            .map(|p| {
+                p.replace('\\', "/")
+                    .to_lowercase()
+                    .trim_end_matches('/')
+                    .to_string()
+            })
+            .collect();
         project_paths.sort();
         project_paths.dedup();
 
@@ -150,6 +168,15 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
     });
+
+    let confirmed = matches.iter().filter(|m| m.is_version_confirmed).count();
+    tracing::debug!(
+        target: "4da::osv",
+        total = matches.len(),
+        confirmed = confirmed,
+        conservative = matches.len() - confirmed,
+        "OSV matching: final results"
+    );
 
     Ok(matches)
 }

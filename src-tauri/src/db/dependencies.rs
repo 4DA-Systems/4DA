@@ -155,6 +155,33 @@ impl Database {
             .collect())
     }
 
+    /// Get user dependencies filtered to relevant runtime deps only.
+    ///
+    /// Excludes dev deps, transitive deps, and worktree paths to prevent
+    /// inflated advisory matches from agent-generated worktree copies.
+    pub fn get_relevant_user_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
+             FROM user_dependencies
+             WHERE is_dev = 0 AND is_direct = 1
+               AND project_path NOT LIKE '%/.claude/worktrees/%'
+               AND project_path NOT LIKE '%\\.claude\\worktrees\\%'
+             ORDER BY ecosystem, package_name",
+        )?;
+
+        let rows = stmt.query_map([], map_dependency_row)?;
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in dependencies: {e}");
+                    None
+                }
+            })
+            .collect())
+    }
+
     /// Get all ACE-scanned dependencies from `project_dependencies`.
     /// Returns them as `StoredDependency` for compatibility with OSV matching.
     /// Maps `language` → `ecosystem` and `last_scanned` → `detected_at`/`last_seen_at`.
@@ -661,6 +688,58 @@ mod tests {
             "Lockfile-only dep should be transitive"
         );
         assert_eq!(serde_derive.version.as_deref(), Some("1.0.204"));
+    }
+
+    #[test]
+    fn test_get_relevant_user_dependencies_filters() {
+        let db = test_db();
+        // Direct, non-dev — should be included
+        db.store_dependency(
+            "/projects/myapp",
+            "tokio",
+            Some("1.35.0"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+        // Dev dep — should be excluded
+        db.store_dependency(
+            "/projects/myapp",
+            "pretty_assertions",
+            None,
+            "rust",
+            true,
+            None,
+        )
+        .unwrap();
+        // Transitive — should be excluded
+        db.store_transitive_dependency(
+            "/projects/myapp",
+            "serde_derive",
+            Some("1.0.204"),
+            "rust",
+            false,
+        )
+        .unwrap();
+        // Worktree path — should be excluded
+        db.store_dependency(
+            "/projects/.claude/worktrees/agent-abc123/myapp",
+            "react",
+            Some("18.0.0"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+
+        let relevant = db.get_relevant_user_dependencies().unwrap();
+        assert_eq!(
+            relevant.len(),
+            1,
+            "Only direct non-dev non-worktree deps should be returned"
+        );
+        assert_eq!(relevant[0].package_name, "tokio");
     }
 
     #[test]
