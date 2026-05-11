@@ -235,6 +235,29 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_deduplicates_case_variant_context_dirs() {
+        let mut settings = Settings::default();
+        settings.context_dirs = vec![
+            r"C:\Users\Admin\Documents\project-a".to_string(),
+            r"C:\Users\Admin\documents\project-a".to_string(),
+            r"C:\Users\Admin\Documents\project-b".to_string(),
+        ];
+        settings.validate();
+        assert_eq!(settings.context_dirs.len(), 2);
+    }
+
+    #[test]
+    fn test_validate_deduplicates_slash_variant_context_dirs() {
+        let mut settings = Settings::default();
+        settings.context_dirs = vec![
+            "/home/user/projects/app".to_string(),
+            "/home/user/projects/app/".to_string(),
+        ];
+        settings.validate();
+        assert_eq!(settings.context_dirs.len(), 1);
+    }
+
+    #[test]
     fn test_validate_clamps_serendipity_budget_over_100() {
         let mut settings = Settings::default();
         settings.serendipity.budget_percent = 150;

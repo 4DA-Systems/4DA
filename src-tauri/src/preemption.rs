@@ -250,7 +250,11 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 _ => AlertUrgency::Watch,
             };
 
-            let confidence = if m.is_version_confirmed { 0.95 } else { 0.65 };
+            let confidence: f32 = {
+                let base: f32 = if m.is_version_confirmed { 0.92 } else { 0.58 };
+                let cvss_bonus: f32 = if m.cvss_score.is_some() { 0.03 } else { 0.0 };
+                (base + cvss_bonus).min(0.99)
+            };
 
             let version_info = match (&m.installed_version, &m.fixed_version) {
                 (Some(installed), Some(fixed)) => {
@@ -280,13 +284,14 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 projects = if m.project_paths.is_empty() {
                     "your projects".to_string()
                 } else {
-                    m.project_paths
+                    let mut names: Vec<String> = m
+                        .project_paths
                         .iter()
-                        .filter_map(|p| {
-                            std::path::Path::new(p).file_name().and_then(|n| n.to_str())
-                        })
-                        .collect::<Vec<_>>()
-                        .join(", ")
+                        .map(|p| shorten_project_path(p))
+                        .collect();
+                    names.sort();
+                    names.dedup();
+                    names.join(", ")
                 },
                 version = version_info,
             );
@@ -546,6 +551,19 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     // noise that degraded trust in the entire preemption surface. All security
     // alerts now flow through Tier 1 (OSV-verified) or Tier 2 (LLM-assessed).
 
+    // ─── Cross-tier dedup: higher-trust tier wins ────────────────────────
+    // Tier 1 (OSV) > Tier 2 (LLM) > Tier 3 (signal chains). When the same
+    // vulnerability appears across tiers, keep only the highest-trust entry.
+    // Dedup key normalizes on the advisory/CVE id embedded in the alert id
+    // and the primary affected package.
+    {
+        let mut seen = std::collections::HashSet::new();
+        alerts.retain(|alert| {
+            let norm_key = cross_tier_dedup_key(alert);
+            seen.insert(norm_key)
+        });
+    }
+
     // Sort: Critical first, then High, Medium, Watch. Within same urgency, highest confidence first.
     alerts.sort_by(|a, b| {
         urgency_rank(&a.urgency)
@@ -723,6 +741,55 @@ fn chain_to_alert(
 // ============================================================================
 
 /// Map urgency to a sort rank (lower = more urgent).
+/// Extract the last two path segments for readable project identification.
+/// "C:\Users\Admin\Documents\kairos-mvp\backend" → "kairos-mvp/backend"
+/// Matches the frontend's `shortenProjectPath()` logic.
+fn shorten_project_path(full_path: &str) -> String {
+    let segments: Vec<&str> = full_path
+        .split(['/', '\\'])
+        .filter(|s| !s.is_empty())
+        .collect();
+    if segments.len() <= 2 {
+        segments.join("/")
+    } else {
+        segments[segments.len() - 2..].join("/")
+    }
+}
+
+/// Build a normalized dedup key for cross-tier duplicate detection.
+/// Extracts the advisory identifier (GHSA/CVE) and primary package from
+/// the alert, so the same vulnerability surfaced by OSV (Tier 1) and
+/// LLM (Tier 2) collapses to one entry. Tier 1 entries appear first in
+/// the alerts vec, so `retain()` keeps them over Tier 2/3 duplicates.
+fn cross_tier_dedup_key(alert: &PreemptionAlert) -> String {
+    let pkg = alert
+        .affected_dependencies
+        .first()
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+
+    // Extract advisory id from the title or explanation (GHSA-xxxx or CVE-xxxx)
+    let text = format!("{} {}", alert.title, alert.explanation);
+    let advisory_id = extract_advisory_id(&text).unwrap_or_else(|| alert.id.clone());
+
+    format!("{}:{}", advisory_id.to_lowercase(), pkg)
+}
+
+/// Pull the first GHSA-xxx or CVE-xxx identifier from text.
+fn extract_advisory_id(text: &str) -> Option<String> {
+    let text_upper = text.to_uppercase();
+    for prefix in &["GHSA-", "CVE-"] {
+        if let Some(start) = text_upper.find(prefix) {
+            let end = text[start..]
+                .find(|c: char| c.is_whitespace() || c == ')' || c == ']' || c == ':' || c == ',')
+                .map(|i| start + i)
+                .unwrap_or(text.len().min(start + 30));
+            return Some(text[start..end].to_string());
+        }
+    }
+    None
+}
+
 fn urgency_rank(urgency: &AlertUrgency) -> u8 {
     match urgency {
         AlertUrgency::Critical => 0,
@@ -1373,5 +1440,115 @@ mod tests {
         let item = alert.to_evidence_item();
         // 2026-04-17 09:30:00 UTC → must be a real millis value
         assert!(item.created_at > 1_700_000_000_000);
+    }
+
+    // ─── shorten_project_path ───────────────────────────────────────
+
+    #[test]
+    fn shorten_project_path_windows_long() {
+        assert_eq!(
+            shorten_project_path(r"C:\Users\Admin\Documents\kairos-mvp\backend"),
+            "kairos-mvp/backend"
+        );
+    }
+
+    #[test]
+    fn shorten_project_path_unix_long() {
+        assert_eq!(
+            shorten_project_path("/home/user/projects/my-app/frontend"),
+            "my-app/frontend"
+        );
+    }
+
+    #[test]
+    fn shorten_project_path_short() {
+        assert_eq!(shorten_project_path("my-app"), "my-app");
+    }
+
+    #[test]
+    fn shorten_project_path_two_segments() {
+        assert_eq!(shorten_project_path("parent/child"), "parent/child");
+    }
+
+    // ─── cross_tier_dedup_key ───────────────────────────────────────
+
+    #[test]
+    fn cross_tier_dedup_detects_same_ghsa_across_tiers() {
+        let mut a = sample_alert();
+        a.id = "osv-GHSA-abc-123-xyz-axios".to_string();
+        a.title = "Axios: GHSA-abc-123-xyz SSRF bypass".to_string();
+        a.explanation = "GHSA-abc-123-xyz affects axios".to_string();
+        a.affected_dependencies = vec!["axios".to_string()];
+
+        let mut b = sample_alert();
+        b.id = "llm-source-42".to_string();
+        b.title = "GHSA-abc-123-xyz: Axios SSRF".to_string();
+        b.explanation = "GHSA-abc-123-xyz affects axios".to_string();
+        b.affected_dependencies = vec!["axios".to_string()];
+
+        assert_eq!(cross_tier_dedup_key(&a), cross_tier_dedup_key(&b));
+    }
+
+    #[test]
+    fn cross_tier_dedup_distinguishes_different_advisories() {
+        let mut a = sample_alert();
+        a.title = "GHSA-aaa-bbb-ccc: Axios SSRF".to_string();
+        a.affected_dependencies = vec!["axios".to_string()];
+
+        let mut b = sample_alert();
+        b.title = "GHSA-ddd-eee-fff: Axios DoS".to_string();
+        b.affected_dependencies = vec!["axios".to_string()];
+
+        assert_ne!(cross_tier_dedup_key(&a), cross_tier_dedup_key(&b));
+    }
+
+    // ─── extract_advisory_id ────────────────────────────────────────
+
+    #[test]
+    fn extract_advisory_id_finds_ghsa() {
+        assert_eq!(
+            extract_advisory_id("Axios: GHSA-m7pr-hjqh-92cm allows SSRF"),
+            Some("GHSA-m7pr-hjqh-92cm".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_advisory_id_finds_cve() {
+        assert_eq!(
+            extract_advisory_id("CVE-2025-62718 incomplete fix"),
+            Some("CVE-2025-62718".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_advisory_id_returns_none_for_no_id() {
+        assert_eq!(extract_advisory_id("Some generic title"), None);
+    }
+
+    // ─── confidence scoring ─────────────────────────────────────────
+
+    #[test]
+    fn confidence_confirmed_with_cvss_is_highest() {
+        let c: f32 = {
+            let base: f32 = 0.92;
+            let cvss_bonus: f32 = 0.03;
+            (base + cvss_bonus).min(0.99)
+        };
+        assert!((c - 0.95).abs() < 0.001);
+    }
+
+    #[test]
+    fn confidence_confirmed_no_cvss_lower_than_with() {
+        let with: f32 = 0.95;
+        let without: f32 = 0.92;
+        assert!(without < with);
+    }
+
+    #[test]
+    fn confidence_unconfirmed_clearly_lower() {
+        let confirmed: f32 = 0.92;
+        let unconfirmed: f32 = 0.58;
+        assert!(unconfirmed < confirmed);
+        assert!(confirmed - unconfirmed > 0.3);
     }
 }

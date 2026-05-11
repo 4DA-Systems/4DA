@@ -27,7 +27,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         .map_err(|e| FourDaError::Internal(format!("Failed to read user dependencies: {e}")))?;
 
     let scanned = db
-        .get_all_scanned_dependencies()
+        .get_relevant_scanned_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read scanned dependencies: {e}")))?;
 
     // Merge scanned deps, deduped by (package_name, project_path, ecosystem)

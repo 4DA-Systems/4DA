@@ -166,7 +166,7 @@ const PreemptionView = memo(function PreemptionView() {
               )}
             </div>
             <span className="ms-auto text-xs text-text-muted tabular-nums">
-              {t('preemption.alert', { count: feed.total })}
+              {t('preemption.alert', { count: totalVisible })}
             </span>
           </div>
 

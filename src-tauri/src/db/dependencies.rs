@@ -192,6 +192,81 @@ impl Database {
             .collect())
     }
 
+    /// Get ACE-scanned dependencies filtered to relevant runtime deps only.
+    ///
+    /// Excludes dev deps, transitive deps, and low-relevance projects
+    /// (example/demo/test directories). Falls back gracefully if `is_direct`
+    /// or `project_relevance` columns don't exist in older databases.
+    pub fn get_relevant_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        let conn = self.conn.lock();
+
+        // Check which filter columns exist (Phase 53 added is_direct, Phase 55 added project_relevance)
+        let has_direct = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'is_direct'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        let has_relevance = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('project_dependencies') WHERE name = 'project_relevance'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        let direct_clause = if has_direct { "AND is_direct = 1" } else { "" };
+        let relevance_clause = if has_relevance {
+            "AND project_relevance >= 0.15"
+        } else {
+            ""
+        };
+        let direct_col = if has_direct {
+            "is_direct"
+        } else {
+            "1 as is_direct"
+        };
+
+        let sql = format!(
+            "SELECT id, project_path, package_name, version, language, is_dev, {direct_col}, last_scanned
+             FROM project_dependencies
+             WHERE is_dev = 0
+               {direct_clause}
+               {relevance_clause}
+             ORDER BY language, package_name"
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map([], |row| {
+            Ok(StoredDependency {
+                id: row.get(0)?,
+                project_path: row.get(1)?,
+                package_name: row.get(2)?,
+                version: row.get(3)?,
+                ecosystem: row.get::<_, String>(4)?,
+                is_dev: false,
+                is_direct: row.get::<_, bool>(6)?,
+                detected_at: row.get::<_, String>(7)?,
+                last_seen_at: row.get::<_, String>(7)?,
+                license: None,
+            })
+        })?;
+
+        Ok(rows
+            .filter_map(|r| match r {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    tracing::warn!("Row processing failed in relevant scanned dependencies: {e}");
+                    None
+                }
+            })
+            .collect())
+    }
+
     /// Get packages that appear in multiple projects (cross-project insight).
     pub fn get_cross_project_packages(&self) -> SqliteResult<Vec<CrossProjectPackage>> {
         let conn = self.conn.lock();

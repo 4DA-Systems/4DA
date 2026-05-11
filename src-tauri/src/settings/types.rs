@@ -944,6 +944,23 @@ impl Settings {
             tracing::warn!(target: "4da::settings", removed = before - self.context_dirs.len(), "Removed empty context_dirs entries");
         }
 
+        // Deduplicate context_dirs (case-insensitive on Windows, normalize slashes)
+        {
+            let before_dedup = self.context_dirs.len();
+            let mut seen = std::collections::HashSet::new();
+            self.context_dirs.retain(|d| {
+                let normalized = d.replace('\\', "/").to_lowercase();
+                let normalized = normalized.trim_end_matches('/');
+                seen.insert(normalized.to_string())
+            });
+            if self.context_dirs.len() < before_dedup {
+                tracing::info!(target: "4da::settings",
+                    removed = before_dedup - self.context_dirs.len(),
+                    "Deduplicated case-variant context_dirs entries"
+                );
+            }
+        }
+
         // serendipity.budget_percent should be 0-100
         if self.serendipity.budget_percent > 100 {
             tracing::warn!(target: "4da::settings", field = "serendipity.budget_percent", old = self.serendipity.budget_percent, new = 100, "Clamped invalid value");
