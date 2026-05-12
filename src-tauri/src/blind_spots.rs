@@ -302,11 +302,44 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
             active_deps_in_topic: count_deps_for_topic(&deps, &bs.topic),
             missed_signal_count: count_missed_for_topic(&gaps, &bs.topic),
         })
-        .filter(|st| st.missed_signal_count > 0 || st.active_deps_in_topic >= 5)
+        .filter(|st| st.missed_signal_count > 0)
         .collect();
 
     // 6. Find missed signals (high-relevance, not seen, older than feed window)
     let missed = find_missed_signals(&conn, threshold_days, &deps)?;
+
+    // 6b. Active-project scoping: suppress deps/signals from projects with no
+    // recent git activity. Prevents cross-project pollution (e.g. express from
+    // kairos-mvp showing in 4DA's blind spots). When git_signals is empty we
+    // have no activity data, so skip this filter to avoid hiding everything.
+    let (uncovered, missed) = if active_paths.is_empty() {
+        (uncovered, missed)
+    } else {
+        let is_active_project = |p: &str| -> bool {
+            let p_norm = p.replace('\\', "/");
+            active_paths
+                .iter()
+                .any(|ap| p_norm.starts_with(ap) || ap.starts_with(&p_norm))
+        };
+        let active_dep_names: std::collections::HashSet<String> = deps
+            .iter()
+            .filter(|d| d.projects.iter().any(|p| is_active_project(p)))
+            .map(|d| d.package_name.to_lowercase())
+            .collect();
+        let uc = uncovered
+            .into_iter()
+            .filter(|u| u.projects_using.iter().any(|p| is_active_project(p)))
+            .collect();
+        let ms = missed
+            .into_iter()
+            .filter(|m| {
+                m.dep_name
+                    .as_ref()
+                    .map_or(true, |dn| active_dep_names.contains(&dn.to_lowercase()))
+            })
+            .collect();
+        (uc, ms)
+    };
 
     // 7. Generate recommendations
     let recommendations = generate_recommendations(&uncovered, &stale, &gaps);
@@ -430,6 +463,7 @@ fn find_uncovered_deps(
         .filter(|d| d.package_name.len() >= MIN_DEP_NAME_LEN)
         .filter(|d| !is_builtin_module(&d.package_name))
         .filter(|d| !is_utility_dep(&d.package_name))
+        .filter(|d| !is_generic_dep_name(&d.package_name))
         .collect();
     ranked_deps.sort_by(|a, b| {
         b.projects
@@ -766,6 +800,70 @@ fn is_utility_dep(name: &str) -> bool {
         | "tinyvec" | "smallvec" | "arrayvec" | "indexmap" | "either"
         | "pin-project" | "pin-project-lite" | "futures-core" | "futures-sink"
         | "proc-macro2" | "quote" | "syn" | "unicode-ident"
+    )
+}
+
+fn is_generic_dep_name(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "image"
+            | "images"
+            | "log"
+            | "color"
+            | "colors"
+            | "signal"
+            | "error"
+            | "event"
+            | "events"
+            | "string"
+            | "query"
+            | "source"
+            | "target"
+            | "object"
+            | "value"
+            | "model"
+            | "config"
+            | "server"
+            | "client"
+            | "file"
+            | "files"
+            | "process"
+            | "service"
+            | "state"
+            | "store"
+            | "table"
+            | "index"
+            | "match"
+            | "search"
+            | "update"
+            | "change"
+            | "merge"
+            | "release"
+            | "version"
+            | "result"
+            | "output"
+            | "input"
+            | "cache"
+            | "block"
+            | "chain"
+            | "thread"
+            | "worker"
+            | "agent"
+            | "proxy"
+            | "router"
+            | "stream"
+            | "buffer"
+            | "frame"
+            | "window"
+            | "futures"
+            | "bytes"
+            | "ring"
+            | "native"
+            | "cookie"
+            | "want"
+            | "try"
+            | "num"
+            | "cc"
     )
 }
 
@@ -1422,7 +1520,12 @@ fn compute_why_relevant(
         "time", "lock", "send", "copy", "find", "diff", "pick", "wrap", "trim", "data", "form",
         "icon", "link", "text", "type", "util", "base", "flat", "safe", "fast", "make", "pipe",
         "pump", "read", "call", "nano", "pure", "vary", "yaml", "mime", "race", "uuid", "deep",
-        "http", "https",
+        "http", "https", "image", "images", "log", "color", "colors", "signal", "error", "event",
+        "query", "source", "target", "object", "value", "model", "config", "server", "client",
+        "file", "files", "process", "service", "state", "store", "table", "index", "match",
+        "search", "update", "change", "merge", "release", "version", "result", "output", "input",
+        "cache", "block", "chain", "thread", "worker", "agent", "proxy", "router", "stream",
+        "buffer", "frame", "window", "futures", "bytes", "ring", "native", "cookie", "num", "cc",
     ];
 
     // Look for direct dep mentions, preferring longer names (more specific).
@@ -2604,7 +2707,33 @@ mod tests {
     }
 
     #[test]
-    fn generic_dep_mentions_surface_with_word_boundary_match() {
+    fn word_boundary_match_surfaces_specific_deps() {
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "CVE-2026-9999 in tokio runtime",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            2,
+        );
+
+        let deps = vec![DepCoverage {
+            package_name: "tokio".to_string(),
+            ecosystem: "rust".to_string(),
+            projects: vec!["/proj/a".to_string()],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        assert_eq!(
+            uncovered.len(),
+            1,
+            "word-boundary matches surface for specific (non-generic) dep names"
+        );
+    }
+
+    #[test]
+    fn generic_dep_names_filtered_from_uncovered() {
         let conn = setup_test_db();
         insert_source_item_with_meta(
             &conn,
@@ -2624,8 +2753,8 @@ mod tests {
         let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
-            1,
-            "word-boundary matches surface regardless of source authority"
+            0,
+            "generic English words as dep names must be filtered to prevent false matches"
         );
     }
 
