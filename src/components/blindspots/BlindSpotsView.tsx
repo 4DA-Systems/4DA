@@ -212,6 +212,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   }
 
   const score = report.score ?? 0;
+  const totalTracked = report.total_tracked ?? depRows.length;
   const stackDeps = depRows.filter(d => d.status === 'blind_spot');
   const ecosystemDeps = depRows.filter(d => d.status === 'falling_behind');
   const coveredDeps = depRows.filter(d => d.status === 'well_covered');
@@ -225,7 +226,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           uncoveredText: stackDeps.length > 0 ? t('blindspots.tier.stackSubtitle', { count: stackDeps.length }) : '',
           separator: stackDeps.length > 0 && ecosystemDeps.length > 0 ? ', ' : '',
           driftingText: ecosystemDeps.length > 0 ? t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length }) : '',
-          total: depRows.length,
+          total: totalTracked,
         });
 
   const hasContent = stackDeps.length > 0 || ecosystemDeps.length > 0 || unmatchedSignals.length > 0;

@@ -6,6 +6,7 @@ import { recordTrustEvent } from '../../lib/trust-feedback';
 import { ArticleReader } from '../ArticleReader';
 import {
   type DepRow, STATUS_CONFIG, URGENCY_COLORS, MAX_SIGNALS_PER_DEP, extractItemId,
+  sourceTypeLabel,
 } from './types';
 
 const SignalRow = memo(function SignalRow({
@@ -52,7 +53,20 @@ const SignalRow = memo(function SignalRow({
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-text-muted">
-            {cite && (<><span>{cite.source}</span><span>·</span><span>{freshness}</span></>)}
+            {cite && (() => {
+              const stl = sourceTypeLabel(cite.source);
+              return (
+                <>
+                  {stl && <span className={`text-[10px] ${stl.color}`}>{stl.label}</span>}
+                  <span>{cite.source}</span><span>·</span><span>{freshness}</span>
+                </>
+              );
+            })()}
+            {cite?.relevance_note && cite.relevance_note.startsWith("You're on") && (
+              <span className="text-[10px] text-amber-400/70 px-1.5 py-0.5 bg-amber-400/5 rounded">
+                {cite.relevance_note}
+              </span>
+            )}
           </div>
           {numericId != null && (
             <div className="mt-1">
@@ -209,6 +223,9 @@ export const EmergingSignals = memo(function EmergingSignals({
   onDismiss: (id: string) => void;
 }) {
   const { t } = useTranslation();
+
+  if (items.length === 0) return null;
+
   return (
     <section className="mb-4" aria-label={t('blindspots.emerging.title')}>
       <div className="bg-bg-secondary rounded-lg border overflow-hidden" style={{ borderColor: 'rgba(59, 130, 246, 0.2)' }}>
@@ -220,15 +237,9 @@ export const EmergingSignals = memo(function EmergingSignals({
           </span>
           <span className="text-[10px] px-1.5 py-0.5 rounded shrink-0 text-blue-400">{t('blindspots.emerging.trending')}</span>
         </div>
-        {items.length > 0 ? (
-          <div className="divide-y divide-border/50">
-            {items.map(it => <SignalRow key={it.id} item={it} onDismiss={onDismiss} />)}
-          </div>
-        ) : (
-          <div className="px-4 py-4">
-            <p className="text-xs text-[#8A8A8A]">{t('blindspots.emerging.empty')}</p>
-          </div>
-        )}
+        <div className="divide-y divide-border/50">
+          {items.map(it => <SignalRow key={it.id} item={it} onDismiss={onDismiss} />)}
+        </div>
       </div>
     </section>
   );

@@ -357,6 +357,12 @@ pub struct EvidenceFeed {
     /// meaningless (e.g. Preemption: alerts are individual, not an
     /// aggregate). UIs that show a score MUST tooltip its definition.
     pub score: Option<f32>,
+
+    /// Total items in the tracked universe (e.g. total direct deps for
+    /// Blind Spots). Lets the UI show "5 issues across 47 tracked deps"
+    /// instead of the misleading "5 tracked deps".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_tracked: Option<usize>,
 }
 
 impl EvidenceFeed {
@@ -374,6 +380,7 @@ impl EvidenceFeed {
             critical_count,
             high_count,
             score: None,
+            total_tracked: None,
         }
     }
 
