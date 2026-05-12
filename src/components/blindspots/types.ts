@@ -50,6 +50,23 @@ export function depFromItem(item: EvidenceItem): string | null {
   return item.affected_deps.length > 0 ? item.affected_deps[0]! : null;
 }
 
+const SOURCE_LABELS: Record<string, { label: string; color: string }> = {
+  npm_registry: { label: 'release', color: 'text-green-400/70' },
+  crates_io: { label: 'release', color: 'text-green-400/70' },
+  pypi: { label: 'release', color: 'text-green-400/70' },
+  go_modules: { label: 'release', color: 'text-green-400/70' },
+  devto: { label: 'article', color: 'text-blue-400/60' },
+  hackernews: { label: 'discussion', color: 'text-orange-400/60' },
+  reddit: { label: 'discussion', color: 'text-orange-400/60' },
+  github: { label: 'code', color: 'text-purple-400/60' },
+  lobsters: { label: 'discussion', color: 'text-orange-400/60' },
+  arxiv: { label: 'paper', color: 'text-cyan-400/60' },
+};
+
+export function sourceTypeLabel(source: string): { label: string; color: string } | null {
+  return SOURCE_LABELS[source] ?? null;
+}
+
 export function signalMatchesDep(signal: EvidenceItem, depName: string): boolean {
   const lower = depName.toLowerCase();
   return signal.affected_deps.some(d => d.toLowerCase() === lower)

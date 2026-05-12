@@ -182,6 +182,44 @@ fn oldest_record_age_days(conn: &rusqlite::Connection, sql: &str) -> i64 {
     }
 }
 
+/// Project paths with git commits in the last 14 days. Used to suppress
+/// blind spots for technologies the user is actively developing with.
+fn get_recent_project_paths(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
+    let sql =
+        "SELECT DISTINCT repo_path FROM git_signals WHERE timestamp > datetime('now', '-14 days')";
+    let mut paths = std::collections::HashSet::new();
+    if let Ok(mut stmt) = conn.prepare(sql) {
+        if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for row in rows.flatten() {
+                paths.insert(row.replace('\\', "/"));
+            }
+        }
+    }
+    paths
+}
+
+/// True if the user is actively developing with a technology — recent git
+/// commits in a project that depends on it. Suppresses "Drifting" for tech
+/// the user clearly knows about (e.g. Tauri while building a Tauri app).
+fn is_actively_developed_tech(
+    topic: &str,
+    deps: &[DepCoverage],
+    active_paths: &std::collections::HashSet<String>,
+) -> bool {
+    let topic_lower = topic.to_lowercase();
+    deps.iter().any(|dep| {
+        let dep_lower = dep.package_name.to_lowercase();
+        let name_matches = dep_lower.contains(&topic_lower) || topic_lower.contains(&dep_lower);
+        name_matches
+            && dep.projects.iter().any(|p| {
+                let p_norm = p.replace('\\', "/");
+                active_paths
+                    .iter()
+                    .any(|ap| p_norm.starts_with(ap) || ap.starts_with(&p_norm))
+            })
+    })
+}
+
 /// Generate a comprehensive blind spot report.
 ///
 /// Results are cached for 5 minutes to avoid redundant computation on
@@ -241,6 +279,10 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     // 3. Get all user dependencies with project coverage
     let deps = get_dependency_coverage(&conn)?;
 
+    // 3b. Active project detection — suppress blind spots for tech the user
+    // is clearly working with (recent git commits).
+    let active_paths = get_recent_project_paths(&conn);
+
     // 4. Find uncovered dependencies (deps with no interaction in threshold days)
     let uncovered = find_uncovered_deps(&conn, &deps, threshold_days)?;
 
@@ -253,6 +295,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         .blind_spots
         .iter()
         .filter(|bs| bs.in_codebase)
+        .filter(|bs| !is_actively_developed_tech(&bs.topic, &deps, &active_paths))
         .map(|bs| StaleTopic {
             topic: bs.topic.clone(),
             last_engagement_days: ((1.0 - bs.engagement_level) * 30.0) as u32,
@@ -386,6 +429,7 @@ fn find_uncovered_deps(
         .iter()
         .filter(|d| d.package_name.len() >= MIN_DEP_NAME_LEN)
         .filter(|d| !is_builtin_module(&d.package_name))
+        .filter(|d| !is_utility_dep(&d.package_name))
         .collect();
     ranked_deps.sort_by(|a, b| {
         b.projects
@@ -688,6 +732,43 @@ fn is_builtin_module(name: &str) -> bool {
     )
 }
 
+/// Utility packages with minimal API surface that should never surface as blind spots.
+/// These do one thing, rarely break, and don't require monitoring. Flagging them erodes trust.
+fn is_utility_dep(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        // env loaders
+        "dotenv" | "dotenv-expand" | "cross-env" | "env-cmd" | "envy"
+        // fs utilities
+        | "rimraf" | "mkdirp" | "del" | "del-cli" | "fs-extra" | "graceful-fs"
+        // path utilities
+        | "slash" | "normalize-path" | "upath"
+        // deep merge / clone
+        | "deepmerge" | "merge-deep" | "lodash.merge" | "lodash.clonedeep" | "rfdc"
+        // type checks
+        | "is-even" | "is-odd" | "is-number" | "is-plain-object" | "is-glob"
+        // string escaping
+        | "escape-html" | "escape-string-regexp" | "strip-ansi" | "ansi-regex"
+        // color / terminal
+        | "ansi-styles" | "chalk" | "color-convert" | "color-name" | "supports-color"
+        // micro-utilities
+        | "has-flag" | "yallist" | "wrappy" | "once" | "inherits" | "util-deprecate"
+        | "signal-exit" | "ms" | "bytes" | "semver" | "debug"
+        // cli argument parsers (as deps, not as primary tools)
+        | "commander" | "yargs" | "minimist" | "meow"
+        // case conversion
+        | "camelcase" | "decamelize" | "param-case" | "pascal-case" | "change-case"
+        // runtime polyfills
+        | "tslib" | "regenerator-runtime" | "core-js" | "core-js-pure"
+        // Rust single-purpose crates
+        | "thiserror" | "anyhow" | "once_cell" | "lazy_static" | "cfg-if"
+        | "bitflags" | "byteorder" | "memchr" | "itoa" | "ryu" | "percent-encoding"
+        | "tinyvec" | "smallvec" | "arrayvec" | "indexmap" | "either"
+        | "pin-project" | "pin-project-lite" | "futures-core" | "futures-sink"
+        | "proc-macro2" | "quote" | "syn" | "unicode-ident"
+    )
+}
+
 fn is_actionable_blind_spot_match(
     dep_lower: &str,
     title_lower: &str,
@@ -845,6 +926,15 @@ fn find_missed_signals(
             return true; // Already filtered at SQL level
         }
         !is_preemption_territory(&s.title)
+    });
+
+    // Discussion items need higher relevance to qualify as blind spot signals.
+    // A generic HN discussion that happens to mention a dep name is noise, not
+    // a blind spot. release_notes, expert_analysis, platform_update pass freely.
+    signals.retain(|s| match s.content_type.as_deref() {
+        Some("discussion") => s.relevance_score >= 0.70,
+        Some("curated_digest") => s.relevance_score >= 0.65,
+        _ => true,
     });
 
     // Populate `why_relevant` and `dep_name` by looking for dep mentions in titles.
@@ -1668,6 +1758,50 @@ fn now_millis() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
+/// Look up the installed version of a package from project_dependencies.
+fn lookup_installed_version(dep_name: &str) -> Option<String> {
+    let db = crate::get_database().ok()?;
+    let conn = db.conn.lock();
+    conn.query_row(
+        "SELECT version FROM project_dependencies WHERE package_name = ?1 AND version IS NOT NULL LIMIT 1",
+        params![dep_name],
+        |row| row.get::<_, String>(0),
+    )
+    .ok()
+    .filter(|v| !v.is_empty())
+}
+
+/// Count signal types available for a dep in the last 30 days.
+/// Returns (release_count, analysis_count, other_count).
+fn count_signal_types_for_dep(dep_name: &str) -> (u32, u32, u32) {
+    let db = match crate::get_database() {
+        Ok(db) => db,
+        Err(_) => return (0, 0, 0),
+    };
+    let conn = db.conn.lock();
+    let sql = "SELECT content_type, COUNT(*) FROM source_items
+               WHERE title LIKE '%' || ?1 || '%'
+                 AND created_at >= datetime('now', '-30 days')
+               GROUP BY content_type";
+    let mut releases = 0u32;
+    let mut analyses = 0u32;
+    let mut other = 0u32;
+    if let Ok(mut stmt) = conn.prepare(sql) {
+        if let Ok(rows) = stmt.query_map(params![dep_name], |row| {
+            Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u32>(1)?))
+        }) {
+            for row in rows.flatten() {
+                match row.0.as_deref() {
+                    Some("release_notes") | Some("platform_update") => releases += row.1,
+                    Some("expert_analysis") | Some("deep_dive") => analyses += row.1,
+                    _ => other += row.1,
+                }
+            }
+        }
+    }
+    (releases, analyses, other)
+}
+
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     let title = truncate_title(&format!(
         "{} ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â {} unseen signal{}",
@@ -1679,23 +1813,39 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
             "s"
         }
     ));
-    let time_phrase = if d.days_since_last_signal >= 365 {
-        "over a year".to_string()
-    } else {
-        format!("{} days", d.days_since_last_signal)
-    };
-    let explanation = format!(
-        "{} signal{} about {} appeared but you haven't engaged with {} content in {}.",
-        d.available_signal_count,
-        if d.available_signal_count == 1 {
-            ""
-        } else {
-            "s"
-        },
-        d.name,
-        d.name,
-        time_phrase,
-    );
+    let installed_version = lookup_installed_version(&d.name);
+    let (release_count, analysis_count, _) = count_signal_types_for_dep(&d.name);
+
+    let mut explanation_parts: Vec<String> = Vec::new();
+    if release_count > 0 {
+        let ver_note = installed_version
+            .as_ref()
+            .map(|v| format!(" (you're on {v})"))
+            .unwrap_or_default();
+        explanation_parts.push(format!(
+            "{release_count} new release{}{ver_note} in the last 30 days.",
+            if release_count == 1 { "" } else { "s" }
+        ));
+    }
+    if analysis_count > 0 {
+        explanation_parts.push(format!(
+            "{analysis_count} expert analysis article{} available.",
+            if analysis_count == 1 { "" } else { "s" }
+        ));
+    }
+    if explanation_parts.is_empty() {
+        explanation_parts.push(format!(
+            "{} signal{} about {} available for review.",
+            d.available_signal_count,
+            if d.available_signal_count == 1 {
+                ""
+            } else {
+                "s"
+            },
+            d.name,
+        ));
+    }
+    let explanation = explanation_parts.join(" ");
 
     // Synthesize at least one inferred citation so the schema's
     // "evidence required for user-surfaced kinds" rule holds. Real
@@ -1763,15 +1913,31 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
         ))
     };
     let explanation = if t.missed_signal_count > 0 {
-        format!(
-            "{} article{} about {} appeared in the last 30 days that you didn't engage with.",
-            t.missed_signal_count,
-            if t.missed_signal_count == 1 { "" } else { "s" },
-            t.topic,
-        )
+        let (releases, analyses, _) = count_signal_types_for_dep(&t.topic);
+        if releases > 0 {
+            format!(
+                "{releases} release update{} for {} ecosystem in the last 30 days.",
+                if releases == 1 { "" } else { "s" },
+                t.topic,
+            )
+        } else if analyses > 0 {
+            format!(
+                "{} unreviewed signal{} including {analyses} analysis article{}.",
+                t.missed_signal_count,
+                if t.missed_signal_count == 1 { "" } else { "s" },
+                if analyses == 1 { "" } else { "s" },
+            )
+        } else {
+            format!(
+                "{} signal{} in the {} ecosystem you haven't reviewed.",
+                t.missed_signal_count,
+                if t.missed_signal_count == 1 { "" } else { "s" },
+                t.topic,
+            )
+        }
     } else {
         format!(
-            "You have {} active {} dependenc{} but haven't engaged with {} content recently.",
+            "{} active {} dependenc{} with no recent signal coverage.",
             t.active_deps_in_topic,
             t.topic,
             if t.active_deps_in_topic == 1 {
@@ -1779,7 +1945,6 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
             } else {
                 "ies"
             },
-            t.topic,
         )
     };
 
@@ -1832,17 +1997,34 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
 
 fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
     let title = truncate_title(&m.title);
+    let freshness = chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
+        .map(|dt| {
+            let diff = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
+            (diff as f32 / 86_400.0).max(0.0)
+        })
+        .unwrap_or(0.0);
+
+    // Enrich relevance_note with installed version for release_notes signals
+    let relevance_note = if m.content_type.as_deref() == Some("release_notes") {
+        if let Some(ref dep) = m.dep_name {
+            if let Some(ver) = lookup_installed_version(dep) {
+                truncate_note(&format!("You're on {dep} {ver}"))
+            } else {
+                truncate_note(&m.why_relevant)
+            }
+        } else {
+            truncate_note(&m.why_relevant)
+        }
+    } else {
+        truncate_note(&m.why_relevant)
+    };
+
     let citation = EvidenceCitation {
         source: m.source_type.clone(),
         title: truncate_title(&m.title),
         url: m.url.clone(),
-        freshness_days: chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
-            .map(|dt| {
-                let diff = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
-                (diff as f32 / 86_400.0).max(0.0)
-            })
-            .unwrap_or(0.0),
-        relevance_note: truncate_note(&m.why_relevant),
+        freshness_days: freshness,
+        relevance_note,
     };
 
     // Map urgency from content classification + relevance score.
@@ -2097,10 +2279,20 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
     let mut feed = blind_spot_report_to_feed(&report);
 
+    // Attach total tracked dep count so the UI can show accurate denominator
+    if let Ok(conn) = crate::open_db_connection() {
+        if let Ok(deps) = get_dependency_coverage(&conn) {
+            feed.total_tracked = Some(deps.len());
+        }
+    }
+
     // Tier 2: inject LLM-judged blind spot items (missed signals the user hasn't seen)
     feed.items.extend(llm_judged_blind_spot_items());
 
-    Ok(build_feed_with_existing_score(feed.items, feed.score))
+    let total_tracked = feed.total_tracked;
+    let mut final_feed = build_feed_with_existing_score(feed.items, feed.score);
+    final_feed.total_tracked = total_tracked;
+    Ok(final_feed)
 }
 
 // ============================================================================

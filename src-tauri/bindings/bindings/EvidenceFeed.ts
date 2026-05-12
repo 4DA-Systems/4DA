@@ -15,4 +15,10 @@ export type EvidenceFeed = { items: Array<EvidenceItem>, total: number, critical
  * meaningless (e.g. Preemption: alerts are individual, not an
  * aggregate). UIs that show a score MUST tooltip its definition.
  */
-score: number | null, };
+score: number | null,
+/**
+ * Total items in the tracked universe (e.g. total direct deps for
+ * Blind Spots). Lets the UI show "5 issues across 47 tracked deps"
+ * instead of the misleading "5 tracked deps".
+ */
+total_tracked?: number, };
