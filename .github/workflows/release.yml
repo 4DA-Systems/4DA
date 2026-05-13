@@ -212,7 +212,8 @@ jobs:
         run: |
           set -e
           BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
-          signed=0; failed=0
+          signed=0
+          failed=0
 
           # Verify .app bundle — must be signed + notarized
           APP_PATH=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 3 | head -1)
@@ -222,10 +223,10 @@ jobs:
             echo "  Code signature (codesign --verify --deep --strict):"
             if codesign --verify --deep --strict "$APP_PATH" 2>&1; then
               echo "  SIGNED: $(codesign -d --verbose=1 "$APP_PATH" 2>&1 | grep 'Authority=' | head -1)"
-              ((signed++))
+              signed=$((signed + 1))
             else
               echo "::error::Code signature verification FAILED for .app bundle"
-              ((failed++))
+              failed=$((failed + 1))
             fi
 
             echo "  Entitlements:"
@@ -239,7 +240,7 @@ jobs:
             fi
           else
             echo "::error::No .app bundle found in $BUNDLE_DIR"
-            ((failed++))
+            failed=$((failed + 1))
           fi
 
           # Verify .dmg installer — must be signed
@@ -249,7 +250,7 @@ jobs:
             echo "=== DMG installer: $DMG_PATH ==="
             if codesign --verify --deep --strict "$DMG_PATH" 2>&1; then
               echo "  SIGNED: $(basename "$DMG_PATH")"
-              ((signed++))
+              signed=$((signed + 1))
             else
               echo "::warning::DMG signature verification failed — $(basename "$DMG_PATH")"
             fi
