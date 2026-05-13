@@ -1877,6 +1877,7 @@ async fn blind_spots_no_vanity_metrics() {
         "Sources producing",
         "Validated principles: 0",
         "Decisions tracked: 0",
+        "Actively monitoring",
     ];
 
     for pattern in &banned_patterns {

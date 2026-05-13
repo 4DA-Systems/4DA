@@ -62,7 +62,7 @@ const SignalRow = memo(function SignalRow({
                 </>
               );
             })()}
-            {cite?.relevance_note && cite.relevance_note.startsWith("You're on") && (
+            {cite?.relevance_note && (
               <span className="text-[10px] text-amber-400/70 px-1.5 py-0.5 bg-amber-400/5 rounded">
                 {cite.relevance_note}
               </span>
@@ -126,7 +126,13 @@ const DepCoverageRow = memo(function DepCoverageRow({
         )}
         {!hasContent && <span className="w-[10px]" />}
         <div className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
-        <span className="text-sm font-medium text-white flex-1 truncate">{dep.name}</span>
+        <span className="text-sm font-medium text-white shrink-0">{dep.name}</span>
+        {dep.gap && !expanded && (
+          <span className="text-[11px] text-text-muted truncate flex-1">
+            — {dep.gap.explanation}
+          </span>
+        )}
+        {!dep.gap && <span className="flex-1" />}
         {dep.projects.length > 0 && (
           <span className="text-[10px] text-text-muted shrink-0 truncate max-w-[120px]" title={dep.projects.join(', ')}>
             {dep.projects.length <= 2
@@ -145,12 +151,15 @@ const DepCoverageRow = memo(function DepCoverageRow({
       </button>
       {expanded && hasContent && (
         <div className="bg-bg-tertiary/20 border-t border-border/50">
-          {dep.gap && dep.signals.length > 0 && (
-            <div className="px-4 py-2.5 text-xs text-text-muted border-b border-border/30">
-              {dep.gap.explanation}
+          {dep.gap && (
+            <div className={`px-4 py-2.5 ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
+              <p className="text-xs text-text-muted">{dep.gap.explanation}</p>
+              {dep.gap.evidence[0]?.relevance_note && (
+                <p className="text-[10px] text-text-muted/70 mt-1">{dep.gap.evidence[0].relevance_note}</p>
+              )}
             </div>
           )}
-          {dep.signals.length > 0 ? (
+          {dep.signals.length > 0 && (
             <div className="divide-y divide-border/30">
               {dep.signals.slice(0, MAX_SIGNALS_PER_DEP).map(s => (
                 <SignalRow key={s.id} item={s} onDismiss={onDismissSignal} />
@@ -161,11 +170,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
                 </div>
               )}
             </div>
-          ) : dep.gap ? (
-            <div className="px-4 py-3 text-xs text-text-muted">
-              {dep.gap.explanation}
-            </div>
-          ) : null}
+          )}
         </div>
       )}
     </div>

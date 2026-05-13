@@ -79,11 +79,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     recordTrustEvent({ eventType: 'dismissed', signalId: id, sourceType: 'missed_signal', notes: 'blind_spot_not_relevant' });
   }, []);
 
-  const { depRows, unmatchedSignals } = useMemo(() => {
+  const { depRows, unmatchedSignals, recommendations } = useMemo(() => {
     const items = (report?.items ?? []).filter(it => !dismissed.has(it.id));
 
     const gaps = items.filter(it => it.id.startsWith('bs_uncov_') || it.id.startsWith('bs_stale_'));
     const missed = items.filter(it => it.id.startsWith('bs_missed_') || it.id.startsWith('llm-bs-'));
+    const recs = items.filter(it => it.id.startsWith('bs_rec_'));
 
     const depMap = new Map<string, DepRow>();
 
@@ -146,7 +147,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     );
 
     const unmatched = missed.filter(m => !matchedSignalIds.has(m.id));
-    return { depRows: rows, unmatchedSignals: unmatched };
+    return { depRows: rows, unmatchedSignals: unmatched, recommendations: recs };
   }, [report, dismissed]);
 
   const surfacedRef = useRef(new Set<string>());
@@ -254,9 +255,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-medium text-white">{t('blindspots.scoreContext.excellent')}</h3>
-                <p className="text-xs text-text-muted mt-1">
-                  {t('blindspots.clean.monitoring', { count: totalTracked })}
-                </p>
+                {recommendations.length > 0 && (
+                  <p className="text-xs text-text-muted mt-1">{recommendations[0]!.explanation}</p>
+                )}
               </div>
             </div>
           </div>
@@ -290,6 +291,16 @@ const BlindSpotsView = memo(function BlindSpotsView() {
             />
           )}
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
+          {recommendations.length > 0 && (
+            <div className="space-y-1.5">
+              {recommendations.map(rec => (
+                <div key={rec.id} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border">
+                  <p className="text-xs text-text-secondary">{rec.title}</p>
+                  <p className="text-[11px] text-text-muted mt-0.5">{rec.explanation}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
       <CoveredSection depRows={coveredDeps} onDismissSignal={handleDismiss} />
