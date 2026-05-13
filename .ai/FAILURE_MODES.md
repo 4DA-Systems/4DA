@@ -130,7 +130,7 @@ Living document of fragile areas, previous regressions, and "never again" lesson
 
 **Root cause.** The `Invoke-WebRequest` hits `ssl.com/download/codesigntool-for-windows/` which can redirect to a landing page rather than the versioned ZIP.
 
-**Guards in place (2026-04-19 Wave 5).** Release workflow now computes SHA-256 of the downloaded zip and hard-fails on mismatch (placeholder SHA is in place — must be filled when actual version is pinned).
+**Guards in place (2026-04-19 Wave 5, updated 2026-05-13).** Release workflow computes SHA-256 of the downloaded zip and hard-fails on mismatch. SHA is pinned (`033b55dc...`). Post-build step verifies Authenticode signature on every .exe/.msi before upload. EV cert issued 2026-05-12, eSigner active, all GitHub secrets set.
 
 ---
 

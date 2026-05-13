@@ -2,11 +2,9 @@
 
 4DA runs on Windows 10 and 11. The app is under 100 MB and installs in seconds.
 
-## Why Windows may warn you on first run
+## Publisher verification
 
-4DA is a new application. Microsoft's **SmartScreen** filter is a reputation system — it learns to trust an application only after thousands of people have downloaded and run it without issue. Because 4DA is newly released, SmartScreen has not yet built that reputation, so Windows will show a blue dialog titled **"Windows protected your PC"** the first time you run the installer.
-
-This is expected, and you have the right tools to verify the download is genuine before you proceed.
+4DA is digitally signed with an **Extended Validation (EV) code signing certificate** issued to **4DA Systems Pty Ltd** (ACN 696 078 841). Windows SmartScreen recognises the publisher immediately — no "unknown publisher" warnings on a clean install.
 
 ## Installation steps
 
@@ -38,25 +36,19 @@ If the hash matches byte-for-byte, the file is genuine. If it doesn't match, **d
 
 ### 3. Run the installer
 
-Double-click the `.exe`. When SmartScreen appears:
-
-1. Click **"More info"** in the dialog.
-2. Click **"Run anyway"**.
-3. Follow the installer prompts. Install to the default location.
+Double-click the `.exe`. Windows will show the publisher as **4DA Systems Pty Ltd**. Follow the installer prompts and install to the default location.
 
 ### 4. First launch
 
 Launch **4DA** from the Start menu. On first run, 4DA will scan your local projects to learn your stack — nothing is uploaded; everything stays on your machine. Within 60 seconds you will see your first results.
 
-## Why we ship without EV code signing at launch
+## Code signing
 
-Extended Validation (EV) code signing certificates remove the SmartScreen warning but require a hardware token, organisational validation, and a lead time that does not align with our shipping cadence. Rather than delay the launch, we chose to:
+Every release of 4DA is signed with an EV (Extended Validation) code signing certificate issued by SSL.com to **4DA Systems Pty Ltd**. This means:
 
-1. **Publish checksums and signatures for every release** so any user can verify the build integrity themselves.
-2. **Build reputation transparently** via the auto-updater — as downloads and successful runs accumulate, SmartScreen's reputation system will recognise 4DA automatically.
-3. **Ship signed builds via the built-in updater.** When EV signing is in place, the update is delivered silently. You will not need to re-download or re-install.
-
-This approach keeps the release on schedule and gives technically-inclined users the stronger verification path (hash + signature) that most applications never expose.
+1. **SmartScreen trusts 4DA immediately** — no reputation-building delay.
+2. **Checksums and minisign signatures are still published** alongside every release for independent verification.
+3. **Auto-updates are double-signed** — the Tauri updater verifies a minisign signature, and the binary itself carries an Authenticode signature.
 
 ## Auto-updates
 
@@ -70,7 +62,7 @@ You do not need to do anything to receive updates. When a new version is availab
 
 ## If the installer still won't run
 
-- **"Unknown publisher"** — expected for new builds. Proceed via "More info → Run anyway" as above.
+- **"Unknown publisher"** — should not appear on signed releases. If you see this, re-download from the official Releases page and verify the SHA-256.
 - **"This app can't run on your PC"** — you are likely on 32-bit Windows. 4DA requires 64-bit Windows 10 or later.
 - **Antivirus quarantine** — occasionally aggressive antivirus heuristics flag new Rust binaries. If your antivirus quarantines the installer, restore it from quarantine and verify the SHA-256 matches the Releases page before running. If the hash matches, the file is genuine; you can submit it to your antivirus vendor as a false-positive report to improve detection for all users.
 - **Nothing happens when you double-click** — right-click the `.exe` → **Properties** → check the **"Unblock"** box at the bottom → **OK**. Then double-click again.

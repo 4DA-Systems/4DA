@@ -47,15 +47,17 @@ Keep it under 400 words. Paste into the GitHub Release body at step 6.
 
 ---
 
-## 4. Code signing (manual — requires SSL.com CodeSignTool)
+## 4. Code signing
 
-See `docs/launch/WINDOWS-INSTALL.md` for the signing toolchain setup. Short version:
+**CI handles signing automatically.** When a `v*` tag is pushed, the release workflow downloads CodeSignTool, signs every `.exe` and `.msi` via SSL.com eSigner, and verifies the Authenticode signature before uploading. No manual action required.
+
+**Manual fallback** (if signing outside CI):
 
 ```
 ./scripts/codesign-installer.sh <path-to-unsigned-installer>
 ```
 
-Produces a signed `.exe` in the same directory. Re-run `verify-installer.cjs` without `--unsigned-ok` and confirm Authenticode reports **Valid**.
+Requires `SSL_COM_USERNAME`, `SSL_COM_PASSWORD`, `SSL_COM_CREDENTIAL_ID`, `SSL_COM_TOTP_SECRET` in the environment. Re-run `verify-installer.cjs` without `--unsigned-ok` and confirm Authenticode reports **Valid**.
 
 Record the signed installer's SHA-256 somewhere you'll still have in an hour — you need it for the release notes and for the verification page on 4da.ai.
 

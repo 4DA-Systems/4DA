@@ -181,6 +181,29 @@ jobs:
           # depends on this file existing on every release.
           includeUpdaterJson: true
 
+      - name: Verify Windows Authenticode signature
+        if: runner.os == 'Windows' && env.SSL_COM_CREDENTIAL_ID != ''
+        env:
+          SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
+        shell: powershell
+        run: |
+          $signed = 0; $unsigned = 0; $failed = 0
+          $bundles = Get-ChildItem -Path "src-tauri\target\${{ matrix.target }}\release\bundle" -Recurse -Include *.exe,*.msi
+          foreach ($f in $bundles) {
+            $sig = Get-AuthenticodeSignature -FilePath $f.FullName
+            if ($sig.Status -eq 'Valid') {
+              Write-Host "  SIGNED: $($f.Name) — $($sig.SignerCertificate.Subject)"
+              $signed++
+            } else {
+              Write-Error "  UNSIGNED: $($f.Name) — status: $($sig.Status)"
+              $failed++
+            }
+          }
+          Write-Host ""
+          Write-Host "Signature check: $signed signed, $failed unsigned"
+          if ($failed -gt 0) { Write-Error "One or more binaries are unsigned — release blocked"; exit 1 }
+          if ($signed -eq 0) { Write-Warning "No .exe or .msi found in bundle output" }
+
       - name: Verify macOS code signature (macOS only)
         if: runner.os == 'macOS'
         shell: bash
