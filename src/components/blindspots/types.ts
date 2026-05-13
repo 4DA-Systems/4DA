@@ -27,6 +27,7 @@ export const URGENCY_COLORS: Record<Urgency, string> = {
 };
 
 const SCORE_TIERS = [
+  { max: 10, color: 'text-emerald-400', bg: 'bg-emerald-500', labelKey: 'blindspots.score.excellent' },
   { max: 25, color: 'text-green-400', bg: 'bg-green-500', labelKey: 'blindspots.score.good' },
   { max: 50, color: 'text-yellow-400', bg: 'bg-yellow-500', labelKey: 'blindspots.score.moderate' },
   { max: 75, color: 'text-orange-400', bg: 'bg-orange-500', labelKey: 'blindspots.score.significant' },
@@ -38,7 +39,7 @@ export const URGENCY_ORDER: Record<Urgency, number> = { critical: 0, high: 1, me
 export const MAX_SIGNALS_PER_DEP = 2;
 
 export function getScoreTier(score: number) {
-  return SCORE_TIERS.find(t => score <= t.max) ?? SCORE_TIERS[3];
+  return SCORE_TIERS.find(t => score <= t.max) ?? SCORE_TIERS[4];
 }
 
 export function extractItemId(evidenceId: string): number | null {

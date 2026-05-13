@@ -2746,6 +2746,7 @@
   "nav.blindspots.subtitle": "Was Sie nicht beobachten",
   "blindspots.title": "Index blinder Flecken",
   "blindspots.subtitle": "Was Sie nicht ausreichend beobachten",
+  "blindspots.score.excellent": "Hervorragende Abdeckung",
   "blindspots.score.good": "Gute Abdeckung",
   "blindspots.score.moderate": "Moderate Lücken",
   "blindspots.score.significant": "Erhebliche Lücken",

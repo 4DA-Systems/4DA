@@ -232,6 +232,7 @@
   "blindspots.projects.count_other": "{{count}} مشاريع",
   "blindspots.score.building": "جارٍ بناء صورة التغطية…",
   "blindspots.score.critical": "نقاط عمياء حرجة",
+  "blindspots.score.excellent": "تغطية ممتازة",
   "blindspots.score.good": "تغطية جيدة",
   "blindspots.score.moderate": "ثغرات معتدلة",
   "blindspots.score.significant": "ثغرات كبيرة",

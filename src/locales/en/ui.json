@@ -2746,6 +2746,7 @@
   "nav.blindspots.subtitle": "What you're not watching",
   "blindspots.title": "Blind Spot Index",
   "blindspots.subtitle": "What you're not watching well enough",
+  "blindspots.score.excellent": "Excellent coverage",
   "blindspots.score.good": "Good coverage",
   "blindspots.score.moderate": "Moderate gaps",
   "blindspots.score.significant": "Significant gaps",

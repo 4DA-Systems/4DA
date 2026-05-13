@@ -218,6 +218,7 @@
   "blindspots.projects.count_other": "{{count}} projetos",
   "blindspots.score.building": "Construindo seu panorama de cobertura…",
   "blindspots.score.critical": "Pontos cegos críticos",
+  "blindspots.score.excellent": "Cobertura excelente",
   "blindspots.score.good": "Boa cobertura",
   "blindspots.score.moderate": "Lacunas moderadas",
   "blindspots.score.significant": "Lacunas significativas",

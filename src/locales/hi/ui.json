@@ -216,6 +216,7 @@
   "blindspots.projects.count_other": "{{count}} प्रोजेक्ट",
   "blindspots.score.building": "कवरेज चित्र बनाया जा रहा है…",
   "blindspots.score.critical": "गंभीर ब्लाइंड स्पॉट",
+  "blindspots.score.excellent": "उत्कृष्ट कवरेज",
   "blindspots.score.good": "अच्छी कवरेज",
   "blindspots.score.moderate": "मध्यम अंतराल",
   "blindspots.score.significant": "महत्वपूर्ण अंतराल",

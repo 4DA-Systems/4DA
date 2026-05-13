@@ -226,11 +226,11 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   if (error) {
     const isTimeoutError = /timed?\s*out|deadline/i.test(error);
     return (
-      <div className="space-y-4">
-        <div className="mb-2">
-          <h2 className="text-lg font-semibold text-white">{t('blindspots.title')}</h2>
-          <p className="text-sm text-text-muted">{t('blindspots.subtitle')}</p>
-        </div>
+      <div className="space-y-4" role="tabpanel" id="view-panel-blindspots">
+        <header className="mb-2">
+          <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
+          <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
+        </header>
         <div className="bg-bg-secondary rounded-lg border border-red-500/20 px-5 py-5">
           <div className="flex items-start gap-4">
             <div className="w-9 h-9 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
@@ -276,11 +276,11 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const hasContent = hasProblems || unmatchedSignals.length > 0;
 
   return (
-    <div className="space-y-4 pb-8">
-      <div className="mb-2">
-        <h2 className="text-lg font-semibold text-white">{t('blindspots.title')}</h2>
-        <p className="text-sm text-text-muted">{t('blindspots.subtitle')}</p>
-      </div>
+    <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots">
+      <header className="mb-2">
+        <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
+        <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
+      </header>
       <ScoreBar score={score} />
       {hasContent && (
         <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg bg-bg-secondary border border-border -mt-1">

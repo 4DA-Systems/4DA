@@ -216,6 +216,7 @@
   "blindspots.projects.count_other": "{{count}}개 프로젝트",
   "blindspots.score.building": "커버리지 현황 구성 중…",
   "blindspots.score.critical": "심각한 사각지대",
+  "blindspots.score.excellent": "우수한 커버리지",
   "blindspots.score.good": "양호한 커버리지",
   "blindspots.score.moderate": "보통 수준의 갭",
   "blindspots.score.significant": "상당한 갭",

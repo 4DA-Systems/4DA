@@ -2747,6 +2747,7 @@
   "nav.blindspots.subtitle": "監視していない領域",
   "blindspots.title": "ブラインドスポット指標",
   "blindspots.subtitle": "十分に監視できていない領域",
+  "blindspots.score.excellent": "優れたカバレッジ",
   "blindspots.score.good": "良好なカバレッジ",
   "blindspots.score.moderate": "中程度のギャップ",
   "blindspots.score.significant": "大きなギャップ",

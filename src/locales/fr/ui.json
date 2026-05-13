@@ -2746,6 +2746,7 @@
   "nav.blindspots.subtitle": "Ce que vous ne surveillez pas",
   "blindspots.title": "Index des angles morts",
   "blindspots.subtitle": "Ce que vous ne surveillez pas assez",
+  "blindspots.score.excellent": "Couverture excellente",
   "blindspots.score.good": "Bonne couverture",
   "blindspots.score.moderate": "Lacunes modérées",
   "blindspots.score.significant": "Lacunes significatives",

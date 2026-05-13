@@ -2747,6 +2747,7 @@
   "nav.blindspots.subtitle": "你的技术栈中未被覆盖的领域",
   "blindspots.title": "Blind Spot Index",
   "blindspots.subtitle": "你的技术栈中未被覆盖的领域",
+  "blindspots.score.excellent": "覆盖极佳",
   "blindspots.score.good": "Good coverage",
   "blindspots.score.moderate": "Moderate gaps",
   "blindspots.score.significant": "Significant gaps",

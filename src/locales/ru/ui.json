@@ -2747,6 +2747,7 @@
   "nav.blindspots.subtitle": "Что вы не отслеживаете",
   "blindspots.title": "Индекс слепых зон",
   "blindspots.subtitle": "Что вы отслеживаете недостаточно",
+  "blindspots.score.excellent": "Отличное покрытие",
   "blindspots.score.good": "Хорошее покрытие",
   "blindspots.score.moderate": "Умеренные пробелы",
   "blindspots.score.significant": "Значительные пробелы",

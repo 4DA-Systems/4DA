@@ -29,14 +29,15 @@ function makeItem(overrides: Partial<EvidenceItem>): EvidenceItem {
 }
 
 describe('getScoreTier', () => {
-  it('returns green for low scores (good coverage)', () => {
-    const tier = getScoreTier(0);
-    expect(tier.color).toContain('green');
+  it('returns emerald for excellent coverage (0-10)', () => {
+    expect(getScoreTier(0).color).toContain('emerald');
+    expect(getScoreTier(5).color).toContain('emerald');
+    expect(getScoreTier(10).color).toContain('emerald');
   });
 
-  it('returns green for score 25', () => {
-    const tier = getScoreTier(25);
-    expect(tier.color).toContain('green');
+  it('returns green for good coverage (11-25)', () => {
+    expect(getScoreTier(11).color).toContain('green');
+    expect(getScoreTier(25).color).toContain('green');
   });
 
   it('returns yellow for moderate gaps (26-50)', () => {

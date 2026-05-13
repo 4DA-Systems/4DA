@@ -219,6 +219,7 @@
   "blindspots.projects.count_other": "{{count}} proje",
   "blindspots.score.building": "Kapsam görünümünüz oluşturuluyor…",
   "blindspots.score.critical": "Kritik kör noktalar",
+  "blindspots.score.excellent": "Mükemmel kapsam",
   "blindspots.score.good": "İyi kapsama",
   "blindspots.score.moderate": "Orta düzeyde boşluklar",
   "blindspots.score.significant": "Önemli boşluklar",

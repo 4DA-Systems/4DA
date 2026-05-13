@@ -2746,6 +2746,7 @@
   "nav.blindspots.subtitle": "Ciò che non stai monitorando",
   "blindspots.title": "Indice dei punti ciechi",
   "blindspots.subtitle": "Ciò che non stai monitorando a sufficienza",
+  "blindspots.score.excellent": "Copertura eccellente",
   "blindspots.score.good": "Buona copertura",
   "blindspots.score.moderate": "Lacune moderate",
   "blindspots.score.significant": "Lacune significative",
