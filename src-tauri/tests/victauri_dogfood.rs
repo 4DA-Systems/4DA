@@ -1546,7 +1546,17 @@ async fn blind_spots_items_have_valid_evidence() {
     for item in items {
         let id = item["id"].as_str().unwrap_or("?");
 
-        if id.starts_with("bs_missed_") {
+        let known_prefix = id.starts_with("bs_uncov_")
+            || id.starts_with("bs_stale_")
+            || id.starts_with("bs_missed_")
+            || id.starts_with("bs_rec_")
+            || id.starts_with("llm-bs-");
+        assert!(
+            known_prefix,
+            "item has unknown ID prefix: '{id}' — frontend will silently drop it"
+        );
+
+        if id.starts_with("bs_missed_") || id.starts_with("llm-bs-") {
             let evidence = item.get("evidence").and_then(|e| e.as_array());
             assert!(
                 evidence.is_some() && !evidence.unwrap().is_empty(),
