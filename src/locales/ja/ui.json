@@ -2778,6 +2778,8 @@
   "blindspots.covered.title": "十分にカバー",
   "blindspots.covered.show": "表示",
   "blindspots.covered.hide": "非表示",
+  "blindspots.covered.details": "詳細を表示",
+  "blindspots.covered.compact": "コンパクト表示",
   "blindspots.signal.notRelevant": "関連性なし",
   "blindspots.signal.count_one": "{{count}} 件のシグナル",
   "blindspots.signal.count_other": "{{count}} 件のシグナル",

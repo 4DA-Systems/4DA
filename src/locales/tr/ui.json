@@ -200,6 +200,8 @@
     "loading": "Kapsamınız analiz ediliyor..."
   },
   "blindspots.covered.hide": "Gizle",
+  "blindspots.covered.details": "Ayrıntıları göster",
+  "blindspots.covered.compact": "Kompakt görünüm",
   "blindspots.covered.show": "Göster",
   "blindspots.covered.title": "İyi kapsanmış",
   "blindspots.emerging.empty": "Yükselen sinyal tespit edilmedi",
