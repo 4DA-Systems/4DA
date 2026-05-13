@@ -241,7 +241,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <p className="text-sm text-text-muted">{t('blindspots.subtitle')}</p>
       </div>
       <ScoreBar score={score} />
-      <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>
+      {hasContent && <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>}
       {!hasContent ? (
         score < 0 ? (
           <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
