@@ -2788,6 +2788,7 @@
   "blindspots.scoreContext.excellent": "Your stack coverage is excellent.",
   "blindspots.scoreContext.building": "Scanning your projects to build an accurate coverage picture. Check back soon.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} across your {{total}} tracked dependencies.",
+  "blindspots.clean.monitoring": "Actively monitoring {{count}} dependencies across your projects. Intelligence will surface here when gaps emerge.",
   "blindspots.projects.count_one": "{{count}} project",
   "blindspots.projects.count_other": "{{count}} projects",
   "blindspots.error.title": "Coverage scan unavailable",

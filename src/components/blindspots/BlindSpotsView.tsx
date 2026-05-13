@@ -229,7 +229,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           total: totalTracked,
         });
 
-  const hasContent = stackDeps.length > 0 || ecosystemDeps.length > 0 || unmatchedSignals.length > 0;
+  const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0;
+  const hasContent = hasProblems || unmatchedSignals.length > 0;
 
   return (
     <div className="space-y-4 pb-8">
@@ -239,15 +240,29 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       </div>
       <ScoreBar score={score} />
       <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>
-      {!hasContent && coveredDeps.length === 0 ? (
-        <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
-          <p className="text-sm text-text-muted">
-            {score < 0 ? t('blindspots.scoreContext.building') : t('blindspots.empty')}
-          </p>
-        </div>
+      {!hasContent ? (
+        score < 0 ? (
+          <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
+            <p className="text-sm text-text-muted">{t('blindspots.scoreContext.building')}</p>
+          </div>
+        ) : (
+          <div className="bg-bg-secondary rounded-lg border border-emerald-500/20 px-5 py-6">
+            <div className="flex items-start gap-4">
+              <div className="w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                <span className="text-emerald-400 text-sm">&#10003;</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-medium text-white">{t('blindspots.scoreContext.excellent')}</h3>
+                <p className="text-xs text-text-muted mt-1">
+                  {t('blindspots.clean.monitoring', { count: totalTracked })}
+                </p>
+              </div>
+            </div>
+          </div>
+        )
       ) : (
         <>
-          {(stackDeps.length > 0 || problemCount === 0) && (
+          {stackDeps.length > 0 && (
             <TierSection
               dotColor="#EF4444"
               borderColor="rgba(239, 68, 68, 0.2)"
@@ -260,7 +275,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               emptyText={t('blindspots.tier.stackEmpty')}
             />
           )}
-          {(ecosystemDeps.length > 0 || problemCount === 0) && (
+          {ecosystemDeps.length > 0 && (
             <TierSection
               dotColor="#F59E0B"
               borderColor="rgba(245, 158, 11, 0.15)"
@@ -274,9 +289,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
             />
           )}
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
-          <CoveredSection depRows={coveredDeps} onDismissSignal={handleDismiss} />
         </>
       )}
+      <CoveredSection depRows={coveredDeps} onDismissSignal={handleDismiss} />
     </div>
   );
 });

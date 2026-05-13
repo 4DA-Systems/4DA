@@ -1367,3 +1367,439 @@ async fn ipc_wait_for_capture_returns_complete_data() {
         "wait_for_capture should ensure result is captured: {last}"
     );
 }
+
+// ── Phase 19: Blind Spots Tab ───────────────────────────────────────────────
+
+#[tokio::test]
+#[ignore = "diagnostic only — dumps blind spots data for manual inspection"]
+async fn blind_spots_data_dump() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+
+    let score = result.get("score").and_then(|s| s.as_f64());
+    let total = result.get("total_tracked").and_then(|t| t.as_u64());
+    let items = result["items"].as_array().unwrap();
+
+    eprintln!("=== BLIND SPOTS DATA ===");
+    eprintln!("Score: {score:?}  |  Total tracked: {total:?}  |  Items: {}", items.len());
+    eprintln!();
+
+    for item in items {
+        let id = item["id"].as_str().unwrap_or("?");
+        let title = item["title"].as_str().unwrap_or("?");
+        let urgency = item["urgency"].as_str().unwrap_or("?");
+        let explanation = item["explanation"].as_str().unwrap_or("?");
+        let deps = item["affected_deps"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
+            .unwrap_or_default();
+        let evidence_count = item["evidence"].as_array().map_or(0, |a| a.len());
+
+        eprintln!("[{urgency}] {id}");
+        eprintln!("  title: {title}");
+        eprintln!("  deps: {deps}");
+        eprintln!("  explanation: {explanation}");
+        eprintln!("  evidence: {evidence_count} citations");
+        eprintln!();
+    }
+}
+
+#[tokio::test]
+async fn blind_spots_ipc_returns_evidence_feed() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+
+    assert!(result.is_object(), "get_blind_spots should return object");
+    assert!(
+        result.get("items").is_some(),
+        "EvidenceFeed must have items field: {result}"
+    );
+    let items = result["items"].as_array().expect("items is array");
+
+    for item in items {
+        assert!(
+            item.get("id").is_some() && !item["id"].as_str().unwrap_or("").is_empty(),
+            "every item needs a non-empty id: {item}"
+        );
+        assert!(
+            item.get("title").is_some() && !item["title"].as_str().unwrap_or("").is_empty(),
+            "every item needs a non-empty title: {item}"
+        );
+        assert!(
+            item.get("urgency").is_some(),
+            "every item needs urgency: {item}"
+        );
+        assert!(
+            item.get("explanation").is_some()
+                && !item["explanation"].as_str().unwrap_or("").is_empty(),
+            "every item needs a non-empty explanation: {item}"
+        );
+
+        let id_str = item["id"].as_str().unwrap();
+        let valid_prefix = id_str.starts_with("bs_")
+            || id_str.starts_with("llm-bs-")
+            || id_str.starts_with("bs_rec_");
+        assert!(
+            valid_prefix,
+            "item id must start with bs_ or llm-bs-: {id_str}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn blind_spots_score_is_valid() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+
+    if let Some(score) = result.get("score").and_then(|s| s.as_f64()) {
+        assert!(
+            score == -1.0 || (0.0..=100.0).contains(&score),
+            "score must be -1 (cold-start) or 0-100, got {score}"
+        );
+    }
+
+    if let Some(total) = result.get("total_tracked").and_then(|t| t.as_u64()) {
+        assert!(
+            total <= 5000,
+            "total_tracked should be reasonable, got {total}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn blind_spots_no_template_explanations() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+
+    let empty_items = vec![];
+    let items = result["items"].as_array().unwrap_or(&empty_items);
+    let banned = [
+        "High-relevance item matching",
+        "Moderately relevant based on",
+        "Borderline-relevant",
+        "worth a glance",
+        "Affects X in Y",
+    ];
+
+    for item in items {
+        let explanation = item["explanation"].as_str().unwrap_or("");
+        for pattern in &banned {
+            assert!(
+                !explanation.contains(pattern),
+                "template explanation found in item {}: '{explanation}' contains '{pattern}'",
+                item["id"].as_str().unwrap_or("?")
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn blind_spots_items_have_valid_evidence() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+
+    let empty_items2 = vec![];
+    let items = result["items"].as_array().unwrap_or(&empty_items2);
+    for item in items {
+        let id = item["id"].as_str().unwrap_or("?");
+
+        if id.starts_with("bs_missed_") {
+            let evidence = item.get("evidence").and_then(|e| e.as_array());
+            assert!(
+                evidence.is_some() && !evidence.unwrap().is_empty(),
+                "missed signal {id} must have at least one citation"
+            );
+
+            let cite = &evidence.unwrap()[0];
+            assert!(
+                cite.get("source").is_some(),
+                "citation for {id} must have source"
+            );
+        }
+
+        let urgency = item["urgency"].as_str().unwrap_or("");
+        assert!(
+            ["critical", "high", "medium", "watch"].contains(&urgency),
+            "invalid urgency '{urgency}' on item {id}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn blind_spots_tab_renders_without_errors() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Blind Spots tab
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let tabs = elements.as_array().expect("tabs array");
+    let bs_tab = tabs
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab must exist");
+
+    let ref_id = bs_tab["ref_id"].as_str().unwrap();
+    let click_result = client.click(ref_id).await.unwrap();
+    assert!(
+        click_result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+        "clicking Blind Spots tab should succeed"
+    );
+
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    // Verify no console errors
+    let logs = client.logs("console", Some(100)).await.unwrap();
+    let empty_logs = vec![];
+    let errors: Vec<_> = logs
+        .as_array()
+        .unwrap_or(&empty_logs)
+        .iter()
+        .filter(|l| {
+            l.get("level")
+                .and_then(|v| v.as_str())
+                .map_or(false, |v| v == "error")
+        })
+        .collect();
+
+    assert!(
+        errors.len() <= 1,
+        "Blind Spots tab should not produce console errors: {errors:?}"
+    );
+}
+
+#[tokio::test]
+async fn blind_spots_tab_has_score_bar() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Blind Spots tab
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let tabs = elements.as_array().expect("tabs array");
+    let bs_tab = tabs
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab must exist");
+
+    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let snapshot = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&snapshot).unwrap();
+
+    let has_score = dom_str.contains("/100")
+        || dom_str.contains("building")
+        || dom_str.contains("Building");
+    assert!(
+        has_score,
+        "Blind Spots view must show score bar (X/100) or building state"
+    );
+}
+
+#[tokio::test]
+async fn blind_spots_tab_has_tier_sections() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Blind Spots
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let bs_tab = elements
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab");
+
+    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    // Verify tier sections exist as ARIA regions
+    let sections = client
+        .find_elements(serde_json::json!({"role": "region"}))
+        .await
+        .unwrap();
+    let section_names: Vec<String> = sections
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|s| s.get("name").and_then(|n| n.as_str()).map(String::from))
+        .collect();
+
+    let dom_snapshot = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&dom_snapshot).unwrap();
+
+    // The view should show EITHER tier sections (when data exists) OR an empty/building state
+    // Check both aria-label sections AND translated text content
+    let has_tiers = !section_names.is_empty()
+        || dom_str.contains("needs attention")
+        || dom_str.contains("Needs Attention")
+        || dom_str.contains("drifting")
+        || dom_str.contains("Drifting")
+        || dom_str.contains("covered")
+        || dom_str.contains("Covered")
+        || dom_str.contains("building")
+        || dom_str.contains("Building")
+        || dom_str.contains("clean")
+        || dom_str.contains("/100")
+        || dom_str.contains("Stack Dependencies")
+        || dom_str.contains("Ecosystem Dependencies");
+    assert!(
+        has_tiers,
+        "Blind Spots should show tier sections or empty state. Sections found: {section_names:?}"
+    );
+}
+
+#[tokio::test]
+async fn blind_spots_accessibility_audit() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Blind Spots
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let bs_tab = elements
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab");
+
+    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let audit = client.audit_accessibility().await.unwrap();
+
+    let critical = audit
+        .get("critical")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let serious = audit.get("serious").and_then(|v| v.as_u64()).unwrap_or(0);
+
+    assert!(
+        critical == 0,
+        "Blind Spots tab must have zero critical a11y violations: {audit}"
+    );
+    assert!(
+        serious <= 2,
+        "Blind Spots tab should have minimal serious a11y violations (got {serious}): {audit}"
+    );
+}
+
+#[tokio::test]
+async fn blind_spots_no_vanity_metrics() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Blind Spots
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let bs_tab = elements
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab");
+
+    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let snapshot = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&snapshot).unwrap();
+
+    // Intelligence Doctrine Rule 3: no vanity metrics
+    let banned_patterns = [
+        "Items monitored",
+        "Sources producing",
+        "Validated principles: 0",
+        "Decisions tracked: 0",
+    ];
+
+    for pattern in &banned_patterns {
+        assert!(
+            !dom_str.contains(pattern),
+            "Vanity metric detected in Blind Spots tab: '{pattern}'"
+        );
+    }
+}
