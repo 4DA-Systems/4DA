@@ -14,6 +14,41 @@ import {
 } from './types';
 import { TierSection, EmergingSignals, CoveredSection } from './StackCoverageMap';
 
+const DISMISS_STORAGE_KEY = 'blindspots_dismissed';
+const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function loadPersistedDismissals(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as Array<{ id: string; ts: number }>;
+    const now = Date.now();
+    const valid = parsed.filter(e => now - e.ts < DISMISS_TTL_MS);
+    if (valid.length !== parsed.length) {
+      localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(valid));
+    }
+    return new Set(valid.map(e => e.id));
+  } catch { return new Set(); }
+}
+
+function persistDismissal(id: string) {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    const parsed: Array<{ id: string; ts: number }> = raw ? JSON.parse(raw) : [];
+    parsed.push({ id, ts: Date.now() });
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed));
+  } catch { /* non-fatal */ }
+}
+
+function removeDismissal(id: string) {
+  try {
+    const raw = localStorage.getItem(DISMISS_STORAGE_KEY);
+    if (!raw) return;
+    const parsed: Array<{ id: string; ts: number }> = JSON.parse(raw);
+    localStorage.setItem(DISMISS_STORAGE_KEY, JSON.stringify(parsed.filter(e => e.id !== id)));
+  } catch { /* non-fatal */ }
+}
+
 // ============================================================================
 // Score Bar
 // ============================================================================
@@ -68,7 +103,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     })),
   );
   const loadBlindSpots = useAppStore((s) => s.loadBlindSpots);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(loadPersistedDismissals);
+  const [lastDismissed, setLastDismissed] = useState<string | null>(null);
+  const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { void loadBlindSpots(); }, [loadBlindSpots]);
 
@@ -76,8 +113,24 @@ const BlindSpotsView = memo(function BlindSpotsView() {
 
   const handleDismiss = useCallback((id: string) => {
     setDismissed(prev => new Set(prev).add(id));
+    persistDismissal(id);
+    setLastDismissed(id);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
     recordTrustEvent({ eventType: 'dismissed', signalId: id, sourceType: 'missed_signal', notes: 'blind_spot_not_relevant' });
   }, []);
+
+  const handleUndo = useCallback(() => {
+    if (!lastDismissed) return;
+    setDismissed(prev => {
+      const next = new Set(prev);
+      next.delete(lastDismissed);
+      return next;
+    });
+    removeDismissal(lastDismissed);
+    setLastDismissed(null);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  }, [lastDismissed]);
 
   const { depRows, unmatchedSignals, recommendations } = useMemo(() => {
     const items = (report?.items ?? []).filter(it => !dismissed.has(it.id));
@@ -218,18 +271,6 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const stackDeps = depRows.filter(d => d.status === 'blind_spot');
   const ecosystemDeps = depRows.filter(d => d.status === 'falling_behind');
   const coveredDeps = depRows.filter(d => d.status === 'well_covered');
-  const problemCount = stackDeps.length + ecosystemDeps.length;
-
-  const scoreContext = score < 0
-    ? t('blindspots.scoreContext.building')
-    : problemCount === 0
-      ? t('blindspots.scoreContext.excellent')
-      : t('blindspots.scoreContext.summary', {
-          uncoveredText: stackDeps.length > 0 ? t('blindspots.tier.stackSubtitle', { count: stackDeps.length }) : '',
-          separator: stackDeps.length > 0 && ecosystemDeps.length > 0 ? ', ' : '',
-          driftingText: ecosystemDeps.length > 0 ? t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length }) : '',
-          total: totalTracked,
-        });
 
   const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0;
   const hasContent = hasProblems || unmatchedSignals.length > 0;
@@ -241,7 +282,45 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <p className="text-sm text-text-muted">{t('blindspots.subtitle')}</p>
       </div>
       <ScoreBar score={score} />
-      {hasContent && <p className="text-xs text-text-muted px-1 -mt-2">{scoreContext}</p>}
+      {hasContent && (
+        <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg bg-bg-secondary border border-border -mt-1">
+          <div className="flex items-center gap-3 text-xs">
+            {stackDeps.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                {stackDeps.length} {t('blindspots.tier.needsAttention').toLowerCase()}
+              </span>
+            )}
+            {ecosystemDeps.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-yellow-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                {ecosystemDeps.length} {t('blindspots.tier.drifting').toLowerCase()}
+              </span>
+            )}
+            {unmatchedSignals.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-blue-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                {unmatchedSignals.length} {t('blindspots.emerging.trending').toLowerCase()}
+              </span>
+            )}
+          </div>
+          <span className="ms-auto text-xs text-text-muted tabular-nums">
+            {t('blindspots.stats.tracked', { count: totalTracked })}
+          </span>
+        </div>
+      )}
+      {lastDismissed !== null && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 animate-in fade-in">
+          <span className="text-xs text-amber-400">{t('blindspots.dismissed')}</span>
+          <button
+            type="button"
+            onClick={handleUndo}
+            className="text-xs font-medium text-amber-400 hover:text-white underline-offset-2 hover:underline transition-colors"
+          >
+            {t('blindspots.action.undo')}
+          </button>
+        </div>
+      )}
       {!hasContent ? (
         score < 0 ? (
           <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
