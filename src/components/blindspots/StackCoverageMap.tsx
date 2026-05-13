@@ -153,8 +153,19 @@ const DepCoverageRow = memo(function DepCoverageRow({
       {expanded && hasContent && (
         <div className="bg-bg-tertiary/20 border-t border-border/50">
           {dep.gap && (
-            <div className={`px-4 py-2.5 ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
-              <p className="text-xs text-text-muted">{dep.gap.explanation}</p>
+            <div className={`px-4 py-2.5 group/gap ${dep.signals.length > 0 ? 'border-b border-border/30' : ''}`}>
+              <div className="flex items-start gap-2">
+                <p className="text-xs text-text-muted flex-1">{dep.gap.explanation}</p>
+                {/* eslint-disable i18next/no-literal-string */}
+                <button
+                  onClick={() => onDismissSignal(dep.gap!.id)}
+                  className="text-xs text-text-muted hover:text-red-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-red-500/10"
+                  title={t('blindspots.signal.notRelevant')}
+                >
+                  ✕
+                </button>
+                {/* eslint-enable i18next/no-literal-string */}
+              </div>
               {dep.gap.evidence[0]?.relevance_note && (
                 <p className="text-[10px] text-text-muted/70 mt-1">{dep.gap.evidence[0].relevance_note}</p>
               )}

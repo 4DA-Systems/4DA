@@ -373,9 +373,22 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           {recommendations.length > 0 && (
             <div className="space-y-1.5">
               {recommendations.map(rec => (
-                <div key={rec.id} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border">
-                  <p className="text-xs text-text-secondary">{rec.title}</p>
-                  <p className="text-[11px] text-text-muted mt-0.5">{rec.explanation}</p>
+                <div key={rec.id} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border group">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-text-secondary">{rec.title}</p>
+                      <p className="text-[11px] text-text-muted mt-0.5">{rec.explanation}</p>
+                    </div>
+                    {/* eslint-disable i18next/no-literal-string */}
+                    <button
+                      onClick={() => handleDismiss(rec.id)}
+                      className="text-xs text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-red-500/10"
+                      title={t('blindspots.signal.notRelevant')}
+                    >
+                      ✕
+                    </button>
+                    {/* eslint-enable i18next/no-literal-string */}
+                  </div>
                 </div>
               ))}
             </div>
