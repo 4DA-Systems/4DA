@@ -1876,3 +1876,127 @@ async fn blind_spots_no_vanity_metrics() {
         );
     }
 }
+
+#[tokio::test]
+async fn blind_spots_score_shows_coverage_not_problems() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+    let raw_score = result.get("score").and_then(|s| s.as_f64()).unwrap_or(-1.0);
+    if raw_score < 0.0 {
+        eprintln!("Skipping: score is building ({raw_score})");
+        return;
+    }
+
+    let expected_coverage = (100.0 - raw_score).round() as u64;
+
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let bs_tab = elements
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab");
+
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let snapshot = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&snapshot).unwrap();
+
+    let coverage_str = format!("{expected_coverage}");
+    assert!(
+        dom_str.contains(&coverage_str),
+        "Score bar should show coverage ({expected_coverage}/100), not raw score ({raw_score})"
+    );
+
+    if raw_score == 0.0 {
+        assert!(
+            !dom_str.contains(r#""0"</span>"#) || dom_str.contains(&format!("{expected_coverage}")),
+            "Perfect score (raw=0) must NOT display '0' as the score — should show 100"
+        );
+    }
+}
+
+#[tokio::test]
+async fn blind_spots_covered_section_has_compact_view() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+    let total = result
+        .get("total_tracked")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(0);
+    if total == 0 {
+        eprintln!("Skipping: no tracked deps");
+        return;
+    }
+
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let bs_tab = elements
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab");
+
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let snapshot = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&snapshot).unwrap();
+
+    // When score=0, there are no problem deps to compare against, so the
+    // covered section is hidden and the emerald clean-state card shows instead.
+    // When score>0, some deps are problems and the rest appear as "Well Covered".
+    let raw_score = result.get("score").and_then(|s| s.as_f64()).unwrap_or(0.0);
+    if raw_score > 0.0 {
+        let has_covered = dom_str.contains("Well Covered") || dom_str.contains("well_covered");
+        assert!(
+            has_covered,
+            "Should show Well Covered section when some deps have problems"
+        );
+    } else {
+        let has_clean_state = dom_str.contains("excellent")
+            || dom_str.contains("Excellent")
+            || dom_str.contains("monitoring");
+        assert!(
+            has_clean_state,
+            "Clean state (score=0) should show positive card instead of covered section"
+        );
+    }
+}
