@@ -49,17 +49,34 @@ Keep it under 400 words. Paste into the GitHub Release body at step 6.
 
 ## 4. Code signing
 
-**CI handles signing automatically.** When a `v*` tag is pushed, the release workflow downloads CodeSignTool, signs every `.exe` and `.msi` via SSL.com eSigner, and verifies the Authenticode signature before uploading. No manual action required.
+**CI handles signing for both platforms automatically.** When a `v*` tag is pushed, the release workflow signs artifacts on every platform and verifies signatures before uploading. No manual action required.
 
-**Manual fallback** (if signing outside CI):
+### Windows (EV Code Signing via SSL.com eSigner)
 
+CI downloads CodeSignTool, signs every `.exe` and `.msi`, and verifies the Authenticode signature. The EV certificate gives instant SmartScreen trust — no "unknown publisher" warnings.
+
+Secrets: `SSL_COM_USERNAME`, `SSL_COM_PASSWORD`, `SSL_COM_CREDENTIAL_ID`, `SSL_COM_TOTP_SECRET`
+
+**Manual fallback:**
 ```
 ./scripts/codesign-installer.sh <path-to-unsigned-installer>
 ```
 
-Requires `SSL_COM_USERNAME`, `SSL_COM_PASSWORD`, `SSL_COM_CREDENTIAL_ID`, `SSL_COM_TOTP_SECRET` in the environment. Re-run `verify-installer.cjs` without `--unsigned-ok` and confirm Authenticode reports **Valid**.
+### macOS (Developer ID + Notarization)
 
-Record the signed installer's SHA-256 somewhere you'll still have in an hour — you need it for the release notes and for the verification page on 4da.ai.
+CI imports the Developer ID certificate, signs the `.app` bundle with hardened runtime entitlements, submits to Apple for notarization (blocking until approved), and staples the ticket. Gatekeeper will show "4DA" as a verified developer.
+
+Secrets: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`
+
+Post-build, CI runs `codesign --verify --deep --strict` and `spctl --assess` on the `.app` bundle. Unsigned or un-notarized artifacts fail the build.
+
+### Linux
+
+No code signing required — trust is handled by package managers (`.deb`, `.rpm`, `.AppImage`).
+
+### Post-signing
+
+Record the signed installer SHA-256 for each platform — needed for release notes and the verification page on 4da.ai.
 
 ---
 
