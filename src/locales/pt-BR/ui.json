@@ -199,6 +199,8 @@
     "loading": "Analisando sua cobertura..."
   },
   "blindspots.covered.hide": "Ocultar",
+  "blindspots.covered.details": "Mostrar detalhes",
+  "blindspots.covered.compact": "Vista compacta",
   "blindspots.covered.show": "Mostrar",
   "blindspots.covered.title": "Bem coberto",
   "blindspots.emerging.empty": "Nenhum sinal emergente detectado",

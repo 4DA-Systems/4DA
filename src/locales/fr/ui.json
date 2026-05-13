@@ -2777,6 +2777,8 @@
   "blindspots.covered.title": "Bien couvert",
   "blindspots.covered.show": "Afficher",
   "blindspots.covered.hide": "Masquer",
+  "blindspots.covered.details": "Afficher les détails",
+  "blindspots.covered.compact": "Vue compacte",
   "blindspots.signal.notRelevant": "Non pertinent",
   "blindspots.signal.count_one": "{{count}} signal",
   "blindspots.signal.count_other": "{{count}} signaux",

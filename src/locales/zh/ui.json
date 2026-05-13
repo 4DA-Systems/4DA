@@ -2778,6 +2778,8 @@
   "blindspots.covered.title": "覆盖良好",
   "blindspots.covered.show": "显示",
   "blindspots.covered.hide": "隐藏",
+  "blindspots.covered.details": "显示详情",
+  "blindspots.covered.compact": "紧凑视图",
   "blindspots.signal.notRelevant": "不相关",
   "blindspots.signal.count_one": "{{count}} 个信号",
   "blindspots.signal.count_other": "{{count}} 个信号",

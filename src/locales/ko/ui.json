@@ -197,6 +197,8 @@
     "loading": "범위 분석 중..."
   },
   "blindspots.covered.hide": "숨기기",
+  "blindspots.covered.details": "세부정보 보기",
+  "blindspots.covered.compact": "간략한 보기",
   "blindspots.covered.show": "표시",
   "blindspots.covered.title": "충분히 커버됨",
   "blindspots.emerging.empty": "신흥 시그널이 감지되지 않았습니다",

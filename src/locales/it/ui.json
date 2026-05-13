@@ -2777,6 +2777,8 @@
   "blindspots.covered.title": "Ben coperto",
   "blindspots.covered.show": "Mostra",
   "blindspots.covered.hide": "Nascondi",
+  "blindspots.covered.details": "Mostra dettagli",
+  "blindspots.covered.compact": "Vista compatta",
   "blindspots.signal.notRelevant": "Non pertinente",
   "blindspots.signal.count_one": "{{count}} segnale",
   "blindspots.signal.count_other": "{{count}} segnali",

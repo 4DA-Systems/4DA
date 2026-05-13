@@ -213,6 +213,8 @@
     "loading": "تحليل تغطيتك جارٍ..."
   },
   "blindspots.covered.hide": "إخفاء",
+  "blindspots.covered.details": "عرض التفاصيل",
+  "blindspots.covered.compact": "عرض مختصر",
   "blindspots.covered.show": "عرض",
   "blindspots.covered.title": "مغطى جيداً",
   "blindspots.emerging.empty": "لم يتم اكتشاف إشارات ناشئة",

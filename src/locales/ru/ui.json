@@ -2778,6 +2778,8 @@
   "blindspots.covered.title": "Хорошо покрыто",
   "blindspots.covered.show": "Показать",
   "blindspots.covered.hide": "Скрыть",
+  "blindspots.covered.details": "Показать подробности",
+  "blindspots.covered.compact": "Компактный вид",
   "blindspots.signal.notRelevant": "Не релевантно",
   "blindspots.signal.count_one": "{{count}} сигнал",
   "blindspots.signal.count_other": "{{count}} сигналов",

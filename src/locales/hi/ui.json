@@ -197,6 +197,8 @@
     "loading": "आपकी कवरेज का विश्लेषण किया जा रहा है..."
   },
   "blindspots.covered.hide": "छुपाएं",
+  "blindspots.covered.details": "विवरण दिखाएं",
+  "blindspots.covered.compact": "संक्षिप्त दृश्य",
   "blindspots.covered.show": "दिखाएं",
   "blindspots.covered.title": "अच्छी तरह कवर किया गया",
   "blindspots.emerging.empty": "कोई उभरता सिग्नल नहीं मिला",
