@@ -83,7 +83,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     const items = (report?.items ?? []).filter(it => !dismissed.has(it.id));
 
     const gaps = items.filter(it => it.id.startsWith('bs_uncov_') || it.id.startsWith('bs_stale_'));
-    const missed = items.filter(it => it.id.startsWith('bs_missed_'));
+    const missed = items.filter(it => it.id.startsWith('bs_missed_') || it.id.startsWith('llm-bs-'));
 
     const depMap = new Map<string, DepRow>();
 

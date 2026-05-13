@@ -42,7 +42,7 @@ export function getScoreTier(score: number) {
 }
 
 export function extractItemId(evidenceId: string): number | null {
-  const match = evidenceId.match(/bs_missed_(\d+)/);
+  const match = evidenceId.match(/(?:bs_missed_|llm-bs-)(\d+)/);
   return match ? parseInt(match[1]!, 10) : null;
 }
 
