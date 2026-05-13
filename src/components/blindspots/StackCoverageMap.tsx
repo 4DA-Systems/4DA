@@ -253,6 +253,7 @@ export const CoveredSection = memo(function CoveredSection({
 }) {
   const { t } = useTranslation();
   const [showCovered, setShowCovered] = useState(false);
+  const [detailView, setDetailView] = useState(false);
 
   if (depRows.length === 0) return null;
 
@@ -272,9 +273,40 @@ export const CoveredSection = memo(function CoveredSection({
       </button>
       {showCovered && (
         <div className="border-t border-border">
-          {depRows.map(dep => (
-            <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
-          ))}
+          {!detailView ? (
+            <div className="px-4 py-3">
+              <div className="flex flex-wrap gap-1.5">
+                {depRows.map(dep => (
+                  <span
+                    key={dep.name}
+                    className="text-[11px] px-2 py-1 rounded bg-green-500/8 text-green-400/80 border border-green-500/10"
+                  >
+                    {dep.name}
+                  </span>
+                ))}
+              </div>
+              {depRows.some(dep => dep.signals.length > 0) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDetailView(true); }}
+                  className="mt-2.5 text-[10px] text-text-muted hover:text-green-400 transition-colors"
+                >
+                  {t('blindspots.covered.details')}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setDetailView(false); }}
+                className="w-full px-4 py-1.5 text-[10px] text-text-muted hover:text-green-400 transition-colors text-right"
+              >
+                {t('blindspots.covered.compact')}
+              </button>
+              {depRows.map(dep => (
+                <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
