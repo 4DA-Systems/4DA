@@ -193,7 +193,10 @@ fn normalize_path_for_cmp(p: &str) -> String {
         .strip_prefix(r"\\?\")
         .or_else(|| p.strip_prefix("//?/"))
         .unwrap_or(p);
-    let s = stripped.replace('\\', "/").trim_end_matches('/').to_string();
+    let s = stripped
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_string();
     if cfg!(windows) {
         s.to_lowercase()
     } else {
@@ -799,7 +802,8 @@ fn find_uncovered_deps(
         // Ratio-based engagement check: skip only if user has seen more than
         // HALF the available signals recently. One interaction should not hide
         // a dependency with dozens of unseen signals.
-        if days_since < 14 && metrics.interacted > 0 && metrics.interacted >= metrics.available / 2 {
+        if days_since < 14 && metrics.interacted > 0 && metrics.interacted >= metrics.available / 2
+        {
             continue;
         }
         let not_seen = metrics.available.saturating_sub(metrics.interacted);
@@ -905,12 +909,49 @@ fn is_utility_dep(name: &str) -> bool {
 fn is_generic_dep_name(name: &str) -> bool {
     matches!(
         name.to_lowercase().as_str(),
-        "open" | "test" | "core" | "path" | "sync" | "once" | "glob" | "rand"
-            | "time" | "lock" | "send" | "copy" | "find" | "diff" | "pick" | "wrap"
-            | "trim" | "data" | "form" | "icon" | "link" | "text" | "type" | "util"
-            | "base" | "flat" | "safe" | "fast" | "make" | "pipe" | "pump" | "read"
-            | "call" | "nano" | "pure" | "vary" | "deep" | "try" | "want" | "mime"
-            | "race" | "http" | "https"
+        "open"
+            | "test"
+            | "core"
+            | "path"
+            | "sync"
+            | "once"
+            | "glob"
+            | "rand"
+            | "time"
+            | "lock"
+            | "send"
+            | "copy"
+            | "find"
+            | "diff"
+            | "pick"
+            | "wrap"
+            | "trim"
+            | "data"
+            | "form"
+            | "icon"
+            | "link"
+            | "text"
+            | "type"
+            | "util"
+            | "base"
+            | "flat"
+            | "safe"
+            | "fast"
+            | "make"
+            | "pipe"
+            | "pump"
+            | "read"
+            | "call"
+            | "nano"
+            | "pure"
+            | "vary"
+            | "deep"
+            | "try"
+            | "want"
+            | "mime"
+            | "race"
+            | "http"
+            | "https"
     )
 }
 
@@ -1576,12 +1617,10 @@ fn compute_why_relevant(
     // are real crate/package names — the word boundary matching already
     // prevents false positives for those.
     const GENERIC_DEP_NAMES: &[&str] = &[
-        "open", "test", "core", "path", "sync", "once", "glob", "rand",
-        "time", "lock", "send", "copy", "find", "diff", "pick", "wrap",
-        "trim", "data", "form", "icon", "link", "text", "type", "util",
-        "base", "flat", "safe", "fast", "make", "pipe", "pump", "read",
-        "call", "nano", "pure", "vary", "deep", "try", "want", "mime",
-        "race", "http", "https",
+        "open", "test", "core", "path", "sync", "once", "glob", "rand", "time", "lock", "send",
+        "copy", "find", "diff", "pick", "wrap", "trim", "data", "form", "icon", "link", "text",
+        "type", "util", "base", "flat", "safe", "fast", "make", "pipe", "pump", "read", "call",
+        "nano", "pure", "vary", "deep", "try", "want", "mime", "race", "http", "https",
     ];
 
     // Look for direct dep mentions, preferring longer names (more specific).
