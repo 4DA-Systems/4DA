@@ -98,6 +98,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [showAllSignals, setShowAllSignals] = useState(false);
   const cfg = STATUS_CONFIG[dep.status];
   const hasContent = dep.signals.length > 0 || dep.gap !== null;
 
@@ -161,13 +162,18 @@ const DepCoverageRow = memo(function DepCoverageRow({
           )}
           {dep.signals.length > 0 && (
             <div className="divide-y divide-border/30">
-              {dep.signals.slice(0, MAX_SIGNALS_PER_DEP).map(s => (
+              {(showAllSignals ? dep.signals : dep.signals.slice(0, MAX_SIGNALS_PER_DEP)).map(s => (
                 <SignalRow key={s.id} item={s} onDismiss={onDismissSignal} />
               ))}
               {dep.signals.length > MAX_SIGNALS_PER_DEP && (
-                <div className="px-4 py-2 text-[11px] text-text-muted">
-                  {t('blindspots.signal.more', { count: dep.signals.length - MAX_SIGNALS_PER_DEP })}
-                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowAllSignals(prev => !prev); }}
+                  className="w-full px-4 py-2 text-[11px] text-text-muted hover:text-amber-400 transition-colors text-left"
+                >
+                  {showAllSignals
+                    ? t('blindspots.signal.showLess')
+                    : t('blindspots.signal.more', { count: dep.signals.length - MAX_SIGNALS_PER_DEP })}
+                </button>
               )}
             </div>
           )}
