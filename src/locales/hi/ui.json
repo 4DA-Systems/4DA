@@ -222,6 +222,7 @@
   "blindspots.scoreContext.building": "सटीक कवरेज चित्र बनाने के लिए आपके प्रोजेक्ट स्कैन किए जा रहे हैं। जल्द ही दोबारा देखें।",
   "blindspots.scoreContext.excellent": "आपके स्टैक की कवरेज उत्कृष्ट है।",
   "blindspots.scoreContext.summary": "आपकी {{total}} ट्रैक की गई निर्भरताओं में {{uncoveredText}}{{separator}}{{driftingText}}।",
+  "blindspots.clean.monitoring": "आपकी परियोजनाओं में {{count}} निर्भरताओं की सक्रिय निगरानी। अंतराल उभरने पर यहां सूचना दिखाई देगी।",
   "blindspots.signal.count_one": "{{count}} सिग्नल",
   "blindspots.signal.count_other": "{{count}} सिग्नल",
   "blindspots.signal.more_one": "+{{count}} और सिग्नल",

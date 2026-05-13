@@ -2789,6 +2789,7 @@
   "blindspots.scoreContext.building": "Сканируем ваши проекты для построения точной картины покрытия. Загляните позже.",
   "blindspots.scoreContext.excellent": "Покрытие вашего стека превосходно.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} среди ваших {{total}} отслеживаемых зависимостей.",
+  "blindspots.clean.monitoring": "Активный мониторинг {{count}} зависимостей в ваших проектах. Уведомления появятся здесь при обнаружении пробелов.",
   "blindspots.projects.count_one": "{{count}} проект",
   "blindspots.projects.count_other": "{{count}} проектов",
   "blindspots.error.title": "Сканирование покрытия недоступно",

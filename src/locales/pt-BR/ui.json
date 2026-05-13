@@ -224,6 +224,7 @@
   "blindspots.scoreContext.building": "Escaneando seus projetos para construir um panorama de cobertura preciso. Volte em breve.",
   "blindspots.scoreContext.excellent": "A cobertura do seu stack é excelente.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} entre suas {{total}} dependências rastreadas.",
+  "blindspots.clean.monitoring": "Monitorando ativamente {{count}} dependências em seus projetos. Alertas aparecerão aqui quando lacunas surgirem.",
   "blindspots.signal.count_one": "{{count}} sinal",
   "blindspots.signal.count_other": "{{count}} sinais",
   "blindspots.signal.more_one": "+{{count}} sinal a mais",

@@ -1388,7 +1388,10 @@ async fn blind_spots_data_dump() {
     let items = result["items"].as_array().unwrap();
 
     eprintln!("=== BLIND SPOTS DATA ===");
-    eprintln!("Score: {score:?}  |  Total tracked: {total:?}  |  Items: {}", items.len());
+    eprintln!(
+        "Score: {score:?}  |  Total tracked: {total:?}  |  Items: {}",
+        items.len()
+    );
     eprintln!();
 
     for item in items {
@@ -1398,7 +1401,12 @@ async fn blind_spots_data_dump() {
         let explanation = item["explanation"].as_str().unwrap_or("?");
         let deps = item["affected_deps"]
             .as_array()
-            .map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", "))
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
             .unwrap_or_default();
         let evidence_count = item["evidence"].as_array().map_or(0, |a| a.len());
 
@@ -1586,7 +1594,10 @@ async fn blind_spots_tab_renders_without_errors() {
     let ref_id = bs_tab["ref_id"].as_str().unwrap();
     let click_result = client.click(ref_id).await.unwrap();
     assert!(
-        click_result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+        click_result
+            .get("ok")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         "clicking Blind Spots tab should succeed"
     );
 
@@ -1635,15 +1646,17 @@ async fn blind_spots_tab_has_score_bar() {
         })
         .expect("Blind Spots tab must exist");
 
-    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
     let snapshot = client.dom_snapshot().await.unwrap();
     let dom_str = serde_json::to_string(&snapshot).unwrap();
 
-    let has_score = dom_str.contains("/100")
-        || dom_str.contains("building")
-        || dom_str.contains("Building");
+    let has_score =
+        dom_str.contains("/100") || dom_str.contains("building") || dom_str.contains("Building");
     assert!(
         has_score,
         "Blind Spots view must show score bar (X/100) or building state"
@@ -1674,7 +1687,10 @@ async fn blind_spots_tab_has_tier_sections() {
         })
         .expect("Blind Spots tab");
 
-    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
     // Verify tier sections exist as ARIA regions
@@ -1737,15 +1753,15 @@ async fn blind_spots_accessibility_audit() {
         })
         .expect("Blind Spots tab");
 
-    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
     let audit = client.audit_accessibility().await.unwrap();
 
-    let critical = audit
-        .get("critical")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let critical = audit.get("critical").and_then(|v| v.as_u64()).unwrap_or(0);
     let serious = audit.get("serious").and_then(|v| v.as_u64()).unwrap_or(0);
 
     assert!(
@@ -1755,6 +1771,60 @@ async fn blind_spots_accessibility_audit() {
     assert!(
         serious <= 2,
         "Blind Spots tab should have minimal serious a11y violations (got {serious}): {audit}"
+    );
+}
+
+#[tokio::test]
+async fn blind_spots_clean_state_shows_positive_ux() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let result = client
+        .invoke_command("get_blind_spots", None)
+        .await
+        .unwrap();
+    let score = result.get("score").and_then(|s| s.as_f64()).unwrap_or(99.0);
+    if score > 0.0 && score != -1.0 {
+        eprintln!("Skipping clean-state test: score={score} (has problems)");
+        return;
+    }
+
+    // Navigate to Blind Spots
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let bs_tab = elements
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains("Blind Spots"))
+        })
+        .expect("Blind Spots tab");
+
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+    let snapshot = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&snapshot).unwrap();
+
+    // Clean state should NOT show empty problem sections with alarming colors
+    let has_positive = dom_str.contains("excellent")
+        || dom_str.contains("Excellent")
+        || dom_str.contains("monitoring")
+        || dom_str.contains("Monitoring");
+    assert!(
+        has_positive,
+        "Clean state should show positive reinforcement, not empty problem sections"
     );
 }
 
@@ -1782,7 +1852,10 @@ async fn blind_spots_no_vanity_metrics() {
         })
         .expect("Blind Spots tab");
 
-    client.click(bs_tab["ref_id"].as_str().unwrap()).await.unwrap();
+    client
+        .click(bs_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
     let snapshot = client.dom_snapshot().await.unwrap();

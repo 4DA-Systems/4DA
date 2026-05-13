@@ -238,6 +238,7 @@
   "blindspots.scoreContext.building": "جارٍ فحص مشاريعك لبناء صورة تغطية دقيقة. تحقق مرة أخرى قريبًا.",
   "blindspots.scoreContext.excellent": "تغطية مجموعتك التقنية ممتازة.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} من بين {{total}} تبعية متتبعة.",
+  "blindspots.clean.monitoring": "يراقب بنشاط {{count}} تبعية عبر مشاريعك. ستظهر التنبيهات هنا عند اكتشاف ثغرات.",
   "blindspots.signal.count_one": "{{count}} إشارة",
   "blindspots.signal.count_other": "{{count}} إشارات",
   "blindspots.signal.more_one": "+{{count}} إشارة إضافية",

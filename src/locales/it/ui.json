@@ -2788,6 +2788,7 @@
   "blindspots.scoreContext.building": "Scansione dei tuoi progetti per costruire un quadro di copertura accurato. Ricontrolla a breve.",
   "blindspots.scoreContext.excellent": "La copertura del tuo stack è eccellente.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} tra le tue {{total}} dipendenze tracciate.",
+  "blindspots.clean.monitoring": "Monitoraggio attivo di {{count}} dipendenze nei tuoi progetti. Le segnalazioni appariranno qui quando emergeranno lacune.",
   "blindspots.projects.count_one": "{{count}} progetto",
   "blindspots.projects.count_other": "{{count}} progetti",
   "blindspots.error.title": "Scansione di copertura non disponibile",

@@ -1721,9 +1721,7 @@ fn generate_recommendations(
     // Positive reinforcement if few blind spots
     if uncovered.is_empty() && stale.is_empty() {
         recs.push(BlindSpotRecommendation {
-            action:
-                "Your signal coverage looks solid — keep monitoring for shifts"
-                    .to_string(),
+            action: "Your signal coverage looks solid — keep monitoring for shifts".to_string(),
             reason: "No critical blind spots detected in your current stack".to_string(),
             priority: "low".to_string(),
         });

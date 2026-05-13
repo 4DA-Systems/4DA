@@ -225,6 +225,7 @@
   "blindspots.scoreContext.building": "Doğru bir kapsam görünümü oluşturmak için projeleriniz taranıyor. Yakında tekrar kontrol edin.",
   "blindspots.scoreContext.excellent": "Stack kapsamınız mükemmel.",
   "blindspots.scoreContext.summary": "{{total}} takip edilen bağımlılığınızda {{uncoveredText}}{{separator}}{{driftingText}}.",
+  "blindspots.clean.monitoring": "Projelerinizde {{count}} bağımlılık aktif olarak izleniyor. Boşluklar ortaya çıktığında bildirimler burada görünecek.",
   "blindspots.signal.count_one": "{{count}} sinyal",
   "blindspots.signal.count_other": "{{count}} sinyal",
   "blindspots.signal.more_one": "+{{count}} sinyal daha",

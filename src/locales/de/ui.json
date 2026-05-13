@@ -2788,6 +2788,7 @@
   "blindspots.scoreContext.building": "Deine Projekte werden gescannt, um ein genaues Abdeckungsbild zu erstellen. Schau bald wieder vorbei.",
   "blindspots.scoreContext.excellent": "Deine Stack-Abdeckung ist ausgezeichnet.",
   "blindspots.scoreContext.summary": "{{uncoveredText}}{{separator}}{{driftingText}} bei deinen {{total}} verfolgten Abhängigkeiten.",
+  "blindspots.clean.monitoring": "{{count}} Abhängigkeiten werden aktiv überwacht. Hier erscheinen Hinweise, wenn Lücken auftreten.",
   "blindspots.projects.count_one": "{{count}} Projekt",
   "blindspots.projects.count_other": "{{count}} Projekte",
   "blindspots.error.title": "Abdeckungsscan nicht verfügbar",

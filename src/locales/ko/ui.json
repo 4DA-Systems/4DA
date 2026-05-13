@@ -222,6 +222,7 @@
   "blindspots.scoreContext.building": "정확한 커버리지 현황을 구성하기 위해 프로젝트를 스캔하고 있습니다. 곧 다시 확인하세요.",
   "blindspots.scoreContext.excellent": "스택 커버리지가 우수합니다.",
   "blindspots.scoreContext.summary": "추적 중인 {{total}}개 의존성에서 {{uncoveredText}}{{separator}}{{driftingText}}.",
+  "blindspots.clean.monitoring": "프로젝트 전체에서 {{count}}개의 종속성을 모니터링 중. 격차가 발생하면 여기에 표시됩니다.",
   "blindspots.signal.count_one": "{{count}}개 시그널",
   "blindspots.signal.count_other": "{{count}}개 시그널",
   "blindspots.signal.more_one": "+{{count}}개 시그널 더",

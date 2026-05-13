@@ -2789,6 +2789,7 @@
   "blindspots.scoreContext.building": "正在扫描您的项目以构建准确的覆盖全景。请稍后查看。",
   "blindspots.scoreContext.excellent": "你的技术栈覆盖率非常优秀。",
   "blindspots.scoreContext.summary": "在你追踪的 {{total}} 个依赖中，{{uncoveredText}}{{separator}}{{driftingText}}。",
+  "blindspots.clean.monitoring": "正在跨项目监控 {{count}} 个依赖项。发现覆盖空白时将在此显示。",
   "blindspots.projects.count_one": "{{count}} 个项目",
   "blindspots.projects.count_other": "{{count}} 个项目",
   "blindspots.error.title": "覆盖扫描不可用",
