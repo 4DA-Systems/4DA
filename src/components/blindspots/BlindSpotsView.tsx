@@ -282,29 +282,31 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
       <ScoreBar score={score} />
-      {hasContent && (
+      {totalTracked > 0 && (
         <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg bg-bg-secondary border border-border -mt-1">
-          <div className="flex items-center gap-3 text-xs">
-            {stackDeps.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                {stackDeps.length} {t('blindspots.tier.needsAttention').toLowerCase()}
-              </span>
-            )}
-            {ecosystemDeps.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-yellow-400 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                {ecosystemDeps.length} {t('blindspots.tier.drifting').toLowerCase()}
-              </span>
-            )}
-            {unmatchedSignals.length > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-blue-400 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                {unmatchedSignals.length} {t('blindspots.emerging.trending').toLowerCase()}
-              </span>
-            )}
-          </div>
-          <span className="ms-auto text-xs text-text-muted tabular-nums">
+          {hasContent && (
+            <div className="flex items-center gap-3 text-xs">
+              {stackDeps.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                  {stackDeps.length} {t('blindspots.tier.needsAttention').toLowerCase()}
+                </span>
+              )}
+              {ecosystemDeps.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-yellow-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                  {ecosystemDeps.length} {t('blindspots.tier.drifting').toLowerCase()}
+                </span>
+              )}
+              {unmatchedSignals.length > 0 && (
+                <span className="inline-flex items-center gap-1.5 text-blue-400 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                  {unmatchedSignals.length} {t('blindspots.emerging.trending').toLowerCase()}
+                </span>
+              )}
+            </div>
+          )}
+          <span className="text-xs text-text-muted tabular-nums ms-auto">
             {t('blindspots.stats.tracked', { count: totalTracked })}
           </span>
         </div>
@@ -326,7 +328,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
             <p className="text-sm text-text-muted">{t('blindspots.scoreContext.building')}</p>
           </div>
-        ) : (
+        ) : score > 0 && score <= 10 ? (
+          /* Genuinely excellent: the system actively evaluated and found very few issues */
           <div className="bg-bg-secondary rounded-lg border border-emerald-500/20 px-5 py-6">
             <div className="flex items-start gap-4">
               <div className="w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
@@ -334,6 +337,24 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm font-medium text-white">{t('blindspots.scoreContext.excellent')}</h3>
+                {recommendations.length > 0 && (
+                  <p className="text-xs text-text-muted mt-1">{recommendations[0]!.explanation}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* score === 0 with no items: backend returned empty, don't claim "excellent" */
+          <div className="bg-bg-secondary rounded-lg border border-border px-5 py-6">
+            <div className="flex items-start gap-4">
+              <div className="w-9 h-9 rounded-full bg-bg-tertiary border border-border flex items-center justify-center shrink-0">
+                {/* eslint-disable-next-line i18next/no-literal-string */}
+                <span className="text-text-muted text-sm">&mdash;</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-medium text-text-secondary">
+                  {t('blindspots.empty')}
+                </h3>
                 {recommendations.length > 0 && (
                   <p className="text-xs text-text-muted mt-1">{recommendations[0]!.explanation}</p>
                 )}

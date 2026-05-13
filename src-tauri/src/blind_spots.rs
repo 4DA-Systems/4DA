@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{info, warn};
 use ts_rs::TS;
 
 use crate::error::Result;
@@ -184,6 +184,23 @@ fn oldest_record_age_days(conn: &rusqlite::Connection, sql: &str) -> i64 {
 
 /// Project paths with git commits in the last 14 days. Used to suppress
 /// blind spots for technologies the user is actively developing with.
+/// Normalize a filesystem path for comparison: strip extended-length prefix,
+/// forward slashes, lowercase on Windows. Without this, `D:\4DA` vs `d:\4DA`
+/// or `\\?\D:\4DA` vs `D:\4DA` causes `starts_with` to fail, silently
+/// dropping all blind spots.
+fn normalize_path_for_cmp(p: &str) -> String {
+    let stripped = p
+        .strip_prefix(r"\\?\")
+        .or_else(|| p.strip_prefix("//?/"))
+        .unwrap_or(p);
+    let s = stripped.replace('\\', "/").trim_end_matches('/').to_string();
+    if cfg!(windows) {
+        s.to_lowercase()
+    } else {
+        s
+    }
+}
+
 fn get_recent_project_paths(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
     let sql =
         "SELECT DISTINCT repo_path FROM git_signals WHERE timestamp > datetime('now', '-14 days')";
@@ -191,7 +208,7 @@ fn get_recent_project_paths(conn: &rusqlite::Connection) -> std::collections::Ha
     if let Ok(mut stmt) = conn.prepare(sql) {
         if let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
             for row in rows.flatten() {
-                paths.insert(row.replace('\\', "/"));
+                paths.insert(normalize_path_for_cmp(&row));
             }
         }
     }
@@ -212,10 +229,10 @@ fn is_actively_developed_tech(
         let name_matches = dep_lower.contains(&topic_lower) || topic_lower.contains(&dep_lower);
         name_matches
             && dep.projects.iter().any(|p| {
-                let p_norm = p.replace('\\', "/");
+                let p_norm = normalize_path_for_cmp(p);
                 active_paths
                     .iter()
-                    .any(|ap| p_norm.starts_with(ap) || ap.starts_with(&p_norm))
+                    .any(|ap| p_norm.starts_with(ap.as_str()) || ap.starts_with(p_norm.as_str()))
             })
     })
 }
@@ -312,24 +329,46 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     // recent git activity. Prevents cross-project pollution (e.g. express from
     // kairos-mvp showing in 4DA's blind spots). When git_signals is empty we
     // have no activity data, so skip this filter to avoid hiding everything.
+    info!(
+        target: "4da::blind_spots",
+        active_paths_count = active_paths.len(),
+        paths = %active_paths.iter().take(5).cloned().collect::<Vec<_>>().join(", "),
+        uncovered_pre_filter = uncovered.len(),
+        "active-project filter: inputs"
+    );
     let (uncovered, missed) = if active_paths.is_empty() {
         (uncovered, missed)
     } else {
         let is_active_project = |p: &str| -> bool {
-            let p_norm = p.replace('\\', "/");
+            let p_norm = normalize_path_for_cmp(p);
             active_paths
                 .iter()
-                .any(|ap| p_norm.starts_with(ap) || ap.starts_with(&p_norm))
+                .any(|ap| p_norm.starts_with(ap.as_str()) || ap.starts_with(p_norm.as_str()))
         };
         let active_dep_names: std::collections::HashSet<String> = deps
             .iter()
             .filter(|d| d.projects.iter().any(|p| is_active_project(p)))
             .map(|d| d.package_name.to_lowercase())
             .collect();
-        let uc = uncovered
+        if let Some(sample) = uncovered.first() {
+            info!(
+                target: "4da::blind_spots",
+                dep = %sample.name,
+                projects = %sample.projects_using.join(" | "),
+                "active-project filter: sample dep project paths"
+            );
+        }
+        let pre_count = uncovered.len();
+        let uc: Vec<UncoveredDep> = uncovered
             .into_iter()
             .filter(|u| u.projects_using.iter().any(|p| is_active_project(p)))
             .collect();
+        info!(
+            target: "4da::blind_spots",
+            before = pre_count,
+            after = uc.len(),
+            "active-project filter: uncovered deps"
+        );
         let ms = missed
             .into_iter()
             .filter(|m| {
@@ -346,6 +385,17 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
 
     // 8. Calculate overall score (normalized against direct-dep count)
     let score = calculate_blind_spot_score(&uncovered, &stale, &missed, deps.len());
+
+    info!(
+        target: "4da::blind_spots",
+        uncovered = uncovered.len(),
+        stale = stale.len(),
+        missed = missed.len(),
+        recs = recommendations.len(),
+        score = score,
+        total_deps = deps.len(),
+        "Blind spot report generated"
+    );
 
     Ok(BlindSpotReport {
         overall_score: score,
@@ -473,6 +523,14 @@ fn find_uncovered_deps(
     });
     let eligible_deps: Vec<&DepCoverage> =
         ranked_deps.into_iter().take(MAX_DEPS_TO_PROCESS).collect();
+
+    info!(
+        target: "4da::blind_spots",
+        total_deps = deps.len(),
+        eligible = eligible_deps.len(),
+        names = %eligible_deps.iter().take(10).map(|d| d.package_name.as_str()).collect::<Vec<_>>().join(", "),
+        "find_uncovered_deps: eligible deps after filtering"
+    );
 
     if eligible_deps.is_empty() {
         return Ok(Vec::new());
@@ -702,25 +760,52 @@ fn find_uncovered_deps(
         }
     }
 
+    let zero_signal_count = coverage.values().filter(|c| c.available == 0).count();
+    let has_signal_count = coverage.values().filter(|c| c.available > 0).count();
+    info!(
+        target: "4da::blind_spots",
+        zero_signal = zero_signal_count,
+        has_signal = has_signal_count,
+        "find_uncovered_deps: coverage after SQL queries"
+    );
+
     let mut uncovered = Vec::new();
     for dep in &eligible_deps {
         let Some(metrics) = coverage.get(&dep.package_name) else {
             continue;
         };
+        let Some(dep_info) = dep_lookup.get(dep.package_name.as_str()) else {
+            continue;
+        };
+        // Zero signals for a dependency IS a blind spot — the biggest kind.
+        // No signals means zero visibility into updates, releases, or security advisories.
         if metrics.available == 0 {
+            let risk_level = match dep_info.projects.len() {
+                3.. => "high".to_string(),
+                2 => "medium".to_string(),
+                _ => "low".to_string(),
+            };
+            uncovered.push(UncoveredDep {
+                name: dep_info.package_name.clone(),
+                dep_type: dep_info.ecosystem.clone(),
+                projects_using: dep_info.projects.clone(),
+                days_since_last_signal: 999,
+                available_signal_count: 0,
+                risk_level,
+            });
             continue;
         }
         let days_since = metrics.days_since_last_signal.unwrap_or(999);
-        if days_since < 14 && metrics.interacted > 0 {
+        // Ratio-based engagement check: skip only if user has seen more than
+        // HALF the available signals recently. One interaction should not hide
+        // a dependency with dozens of unseen signals.
+        if days_since < 14 && metrics.interacted > 0 && metrics.interacted >= metrics.available / 2 {
             continue;
         }
         let not_seen = metrics.available.saturating_sub(metrics.interacted);
         if not_seen == 0 && days_since < 30 {
             continue;
         }
-        let Some(dep_info) = dep_lookup.get(dep.package_name.as_str()) else {
-            continue;
-        };
         let risk_level = classify_dep_risk(days_since, not_seen, dep_info.projects.len());
         uncovered.push(UncoveredDep {
             name: dep_info.package_name.clone(),
@@ -731,6 +816,13 @@ fn find_uncovered_deps(
             risk_level,
         });
     }
+
+    info!(
+        target: "4da::blind_spots",
+        uncovered_before_sort = uncovered.len(),
+        names = %uncovered.iter().take(5).map(|u| u.name.as_str()).collect::<Vec<_>>().join(", "),
+        "find_uncovered_deps: result before active-project filter"
+    );
 
     let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
 
@@ -748,8 +840,10 @@ fn find_uncovered_deps(
 /// LIKE matching their names against source_items catches unrelated content
 /// (e.g. "crypto" matches cryptocurrency articles).
 fn is_builtin_module(name: &str) -> bool {
+    let check = name.to_lowercase();
+    let check = check.strip_prefix("node:").unwrap_or(&check);
     matches!(
-        name.to_lowercase().as_str(),
+        check,
         "crypto" | "http" | "https" | "path" | "stream" | "events"
         | "buffer" | "util" | "assert" | "child_process" | "cluster"
         | "dgram" | "domain" | "module" | "perf_hooks" | "process"
@@ -757,6 +851,7 @@ fn is_builtin_module(name: &str) -> bool {
         | "timers" | "tty" | "v8" | "vm" | "worker_threads" | "zlib"
         | "async_hooks" | "console" | "inspector" | "trace_events"
         | "wasi" | "diagnostics_channel"
+        | "fs" | "os" | "net" | "url" | "dns" | "tls"
         // Python built-ins
         | "json" | "logging" | "typing" | "collections" | "functools"
         | "itertools" | "pathlib" | "asyncio" | "socket" | "threading"
@@ -803,67 +898,19 @@ fn is_utility_dep(name: &str) -> bool {
     )
 }
 
+/// Dep names that are so generic they cause false matches in SQL LIKE queries.
+/// Only truly generic English words that appear in nearly every article title.
+/// Words like "futures", "bytes", "ring", "cookie", "config", "router" are real
+/// crate/package names — the word boundary matching already prevents false positives.
 fn is_generic_dep_name(name: &str) -> bool {
     matches!(
         name.to_lowercase().as_str(),
-        "image"
-            | "images"
-            | "log"
-            | "color"
-            | "colors"
-            | "signal"
-            | "error"
-            | "event"
-            | "events"
-            | "string"
-            | "query"
-            | "source"
-            | "target"
-            | "object"
-            | "value"
-            | "model"
-            | "config"
-            | "server"
-            | "client"
-            | "file"
-            | "files"
-            | "process"
-            | "service"
-            | "state"
-            | "store"
-            | "table"
-            | "index"
-            | "match"
-            | "search"
-            | "update"
-            | "change"
-            | "merge"
-            | "release"
-            | "version"
-            | "result"
-            | "output"
-            | "input"
-            | "cache"
-            | "block"
-            | "chain"
-            | "thread"
-            | "worker"
-            | "agent"
-            | "proxy"
-            | "router"
-            | "stream"
-            | "buffer"
-            | "frame"
-            | "window"
-            | "futures"
-            | "bytes"
-            | "ring"
-            | "native"
-            | "cookie"
-            | "want"
-            | "try"
-            | "num"
-            | "cc"
+        "open" | "test" | "core" | "path" | "sync" | "once" | "glob" | "rand"
+            | "time" | "lock" | "send" | "copy" | "find" | "diff" | "pick" | "wrap"
+            | "trim" | "data" | "form" | "icon" | "link" | "text" | "type" | "util"
+            | "base" | "flat" | "safe" | "fast" | "make" | "pipe" | "pump" | "read"
+            | "call" | "nano" | "pure" | "vary" | "deep" | "try" | "want" | "mime"
+            | "race" | "http" | "https"
     )
 }
 
@@ -1047,7 +1094,16 @@ fn find_missed_signals(
     // deps are available (cold start), pass everything through rather than
     // showing an empty tab.
     if !direct_deps.is_empty() {
-        signals.retain(|s| !s.why_relevant.is_empty());
+        // Keep signals that either have a dep match OR score >= 0.75 relevance.
+        // High-relevance signals without an exact dep name match are still
+        // valuable — they matched on stack/ecosystem context.
+        signals.retain(|s| !s.why_relevant.is_empty() || s.relevance_score >= 0.75);
+        // Give high-relevance unmatched signals a generic explanation
+        for signal in &mut signals {
+            if signal.why_relevant.is_empty() {
+                signal.why_relevant = "Highly relevant to your technology stack".to_string();
+            }
+        }
     }
 
     // Deduplicate missed signals by normalized title similarity.
@@ -1515,17 +1571,17 @@ fn compute_why_relevant(
 
     // Dep names that are common English words — they produce false matches
     // against nearly every article title ("open source", "next steps", etc.)
+    // Only truly generic English words with no tech package meaning.
+    // Words like "futures", "bytes", "ring", "cookie", "config", "router"
+    // are real crate/package names — the word boundary matching already
+    // prevents false positives for those.
     const GENERIC_DEP_NAMES: &[&str] = &[
-        "open", "next", "node", "vite", "test", "core", "path", "sync", "once", "glob", "rand",
-        "time", "lock", "send", "copy", "find", "diff", "pick", "wrap", "trim", "data", "form",
-        "icon", "link", "text", "type", "util", "base", "flat", "safe", "fast", "make", "pipe",
-        "pump", "read", "call", "nano", "pure", "vary", "yaml", "mime", "race", "uuid", "deep",
-        "http", "https", "image", "images", "log", "color", "colors", "signal", "error", "event",
-        "query", "source", "target", "object", "value", "model", "config", "server", "client",
-        "file", "files", "process", "service", "state", "store", "table", "index", "match",
-        "search", "update", "change", "merge", "release", "version", "result", "output", "input",
-        "cache", "block", "chain", "thread", "worker", "agent", "proxy", "router", "stream",
-        "buffer", "frame", "window", "futures", "bytes", "ring", "native", "cookie", "num", "cc",
+        "open", "test", "core", "path", "sync", "once", "glob", "rand",
+        "time", "lock", "send", "copy", "find", "diff", "pick", "wrap",
+        "trim", "data", "form", "icon", "link", "text", "type", "util",
+        "base", "flat", "safe", "fast", "make", "pipe", "pump", "read",
+        "call", "nano", "pure", "vary", "deep", "try", "want", "mime",
+        "race", "http", "https",
     ];
 
     // Look for direct dep mentions, preferring longer names (more specific).
@@ -1904,49 +1960,63 @@ fn count_signal_types_for_dep(dep_name: &str) -> (u32, u32, u32) {
 }
 
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
-    let title = truncate_title(&format!(
-        "{} — {} unseen signal{}",
-        d.name,
-        d.available_signal_count,
-        if d.available_signal_count == 1 {
-            ""
-        } else {
-            "s"
-        }
-    ));
-    let installed_version = lookup_installed_version(&d.name);
-    let (release_count, analysis_count, _) = count_signal_types_for_dep(&d.name);
-
-    let mut explanation_parts: Vec<String> = Vec::new();
-    if release_count > 0 {
-        let ver_note = installed_version
-            .as_ref()
-            .map(|v| format!(" (you're on {v})"))
-            .unwrap_or_default();
-        explanation_parts.push(format!(
-            "{release_count} new release{}{ver_note} in the last 30 days.",
-            if release_count == 1 { "" } else { "s" }
-        ));
-    }
-    if analysis_count > 0 {
-        explanation_parts.push(format!(
-            "{analysis_count} expert analysis article{} available.",
-            if analysis_count == 1 { "" } else { "s" }
-        ));
-    }
-    if explanation_parts.is_empty() {
-        explanation_parts.push(format!(
-            "{} signal{} about {} available for review.",
+    // Zero-signal deps get a distinct title and explanation — they have
+    // NO coverage at all, which is qualitatively different from "has signals
+    // you haven't seen".
+    let (title, explanation) = if d.available_signal_count == 0 {
+        let title = truncate_title(&format!("{} — no signal coverage", d.name));
+        let explanation = format!(
+            "No signals found for {} in your monitored sources. \
+             You have no visibility into updates, releases, or security advisories \
+             for this dependency.",
+            d.name
+        );
+        (title, explanation)
+    } else {
+        let title = truncate_title(&format!(
+            "{} — {} unseen signal{}",
+            d.name,
             d.available_signal_count,
             if d.available_signal_count == 1 {
                 ""
             } else {
                 "s"
-            },
-            d.name,
+            }
         ));
-    }
-    let explanation = explanation_parts.join(" ");
+        let installed_version = lookup_installed_version(&d.name);
+        let (release_count, analysis_count, _) = count_signal_types_for_dep(&d.name);
+
+        let mut explanation_parts: Vec<String> = Vec::new();
+        if release_count > 0 {
+            let ver_note = installed_version
+                .as_ref()
+                .map(|v| format!(" (you're on {v})"))
+                .unwrap_or_default();
+            explanation_parts.push(format!(
+                "{release_count} new release{}{ver_note} in the last 30 days.",
+                if release_count == 1 { "" } else { "s" }
+            ));
+        }
+        if analysis_count > 0 {
+            explanation_parts.push(format!(
+                "{analysis_count} expert analysis article{} available.",
+                if analysis_count == 1 { "" } else { "s" }
+            ));
+        }
+        if explanation_parts.is_empty() {
+            explanation_parts.push(format!(
+                "{} signal{} about {} available for review.",
+                d.available_signal_count,
+                if d.available_signal_count == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+                d.name,
+            ));
+        }
+        (title, explanation_parts.join(" "))
+    };
 
     // Synthesize at least one inferred citation so the schema's
     // "evidence required for user-surfaced kinds" rule holds. Real
@@ -2622,11 +2692,12 @@ mod tests {
     }
 
     #[test]
-    fn fix2_find_uncovered_deps_skips_zero_available() {
+    fn fix2_find_uncovered_deps_flags_zero_available_as_blind_spot() {
         let conn = setup_test_db();
         insert_project_dep(&conn, "/proj/a", "nobodycares", "javascript", true, false);
 
-        // No source_items mention "nobodycares" at all.
+        // No source_items mention "nobodycares" at all — this IS a blind spot.
+        // Zero signal coverage means zero visibility into the dependency.
         let deps = vec![DepCoverage {
             package_name: "nobodycares".to_string(),
             ecosystem: "javascript".to_string(),
@@ -2636,9 +2707,43 @@ mod tests {
         let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
-            0,
-            "deps with zero available signals must not be flagged as blind spots"
+            1,
+            "deps with zero available signals ARE blind spots — no coverage at all"
         );
+        let u = &uncovered[0];
+        assert_eq!(u.available_signal_count, 0);
+        assert_eq!(u.days_since_last_signal, 999);
+        assert_eq!(u.risk_level, "low"); // 1 project = low risk
+    }
+
+    #[test]
+    fn fix2_zero_signal_dep_risk_scales_with_project_count() {
+        let conn = setup_test_db();
+
+        // 3+ projects using a dep with zero signals = high risk
+        let deps = vec![DepCoverage {
+            package_name: "invisidep".to_string(),
+            ecosystem: "cargo".to_string(),
+            projects: vec![
+                "/proj/a".to_string(),
+                "/proj/b".to_string(),
+                "/proj/c".to_string(),
+            ],
+        }];
+
+        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        assert_eq!(uncovered.len(), 1);
+        assert_eq!(uncovered[0].risk_level, "high");
+
+        // 2 projects = medium risk
+        let deps2 = vec![DepCoverage {
+            package_name: "invisidep2".to_string(),
+            ecosystem: "cargo".to_string(),
+            projects: vec!["/proj/a".to_string(), "/proj/b".to_string()],
+        }];
+        let uncovered2 = find_uncovered_deps(&conn, &deps2, 14).unwrap();
+        assert_eq!(uncovered2.len(), 1);
+        assert_eq!(uncovered2[0].risk_level, "medium");
     }
 
     // ─── Fix 3: LIMIT and short-name filter ──────────────────────────────
@@ -2735,20 +2840,34 @@ mod tests {
         let conn = setup_test_db();
         insert_source_item_with_meta(
             &conn,
-            "CVE-2026-9999 in image crate",
-            "osv",
-            Some("security_advisory"),
+            "How to find the best open source tools",
+            "rss",
+            Some("tutorial"),
             0.9,
             2,
         );
 
-        let deps = vec![DepCoverage {
-            package_name: "image".to_string(),
-            ecosystem: "rust".to_string(),
-            projects: vec!["/proj/a".to_string()],
-        }];
+        // "find" and "open" are truly generic English words — they should be
+        // filtered to prevent false matches against article titles.
+        let deps = vec![
+            DepCoverage {
+                package_name: "find".to_string(),
+                ecosystem: "npm".to_string(),
+                projects: vec!["/proj/a".to_string()],
+            },
+            DepCoverage {
+                package_name: "open".to_string(),
+                ecosystem: "npm".to_string(),
+                projects: vec!["/proj/a".to_string()],
+            },
+        ];
 
         let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        // Both are generic AND < 4 chars ("find" is 4 chars, passes length
+        // check but is in generic list; "open" is 4 chars, same).
+        // They get filtered by is_generic_dep_name before entering the query.
+        // The remaining uncovered entries are zero-signal deps (from our Fix 1
+        // change) but both deps are filtered out of eligible_deps entirely.
         assert_eq!(
             uncovered.len(),
             0,
