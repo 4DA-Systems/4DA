@@ -204,17 +204,66 @@ jobs:
           if ($failed -gt 0) { Write-Error "One or more binaries are unsigned — release blocked"; exit 1 }
           if ($signed -eq 0) { Write-Warning "No .exe or .msi found in bundle output" }
 
-      - name: Verify macOS code signature (macOS only)
-        if: runner.os == 'macOS'
+      - name: Verify macOS code signature and notarization
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         shell: bash
         run: |
-          APP_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle -name "*.app" -maxdepth 3 | head -1)
+          set -e
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle"
+          signed=0; failed=0
+
+          # Verify .app bundle — must be signed + notarized
+          APP_PATH=$(find "$BUNDLE_DIR" -name "*.app" -maxdepth 3 | head -1)
           if [[ -n "$APP_PATH" ]]; then
-            echo "Verifying code signature for: $APP_PATH"
-            codesign --verify --deep --strict "$APP_PATH" 2>&1 || echo "::warning::Code signature verification failed"
+            echo "=== .app bundle: $APP_PATH ==="
+
+            echo "  Code signature (codesign --verify --deep --strict):"
+            if codesign --verify --deep --strict "$APP_PATH" 2>&1; then
+              echo "  SIGNED: $(codesign -d --verbose=1 "$APP_PATH" 2>&1 | grep 'Authority=' | head -1)"
+              ((signed++))
+            else
+              echo "::error::Code signature verification FAILED for .app bundle"
+              ((failed++))
+            fi
+
+            echo "  Entitlements:"
             codesign -d --entitlements :- "$APP_PATH" 2>&1 | head -20 || true
+
+            echo "  Gatekeeper assessment (spctl):"
+            if spctl --assess --verbose --type execute "$APP_PATH" 2>&1; then
+              echo "  NOTARIZED: Gatekeeper accepts this app"
+            else
+              echo "::warning::Gatekeeper assessment failed — notarization may still be propagating"
+            fi
           else
-            echo "::warning::No .app bundle found for signature verification"
+            echo "::error::No .app bundle found in $BUNDLE_DIR"
+            ((failed++))
+          fi
+
+          # Verify .dmg installer — must be signed
+          DMG_PATH=$(find "$BUNDLE_DIR" -name "*.dmg" -maxdepth 3 | head -1)
+          if [[ -n "$DMG_PATH" ]]; then
+            echo ""
+            echo "=== DMG installer: $DMG_PATH ==="
+            if codesign --verify --deep --strict "$DMG_PATH" 2>&1; then
+              echo "  SIGNED: $(basename "$DMG_PATH")"
+              ((signed++))
+            else
+              echo "::warning::DMG signature verification failed — $(basename "$DMG_PATH")"
+            fi
+          fi
+
+          echo ""
+          echo "macOS signature check: $signed signed, $failed failed"
+          if [[ $failed -gt 0 ]]; then
+            echo "::error::One or more macOS artifacts are unsigned — release blocked"
+            exit 1
+          fi
+          if [[ $signed -eq 0 ]]; then
+            echo "::error::No signed macOS artifacts found"
+            exit 1
           fi
 
       - name: Report binary sizes
