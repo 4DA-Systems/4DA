@@ -52,6 +52,9 @@ static DISMISS_CANCEL: std::sync::LazyLock<parking_lot::Mutex<Option<Arc<AtomicB
 /// Whether the briefing window's JS listener is registered and ready.
 static WINDOW_READY: AtomicBool = AtomicBool::new(false);
 
+/// Whether the briefing window is currently visible (shown and not hidden).
+static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
+
 // ============================================================================
 // Window Lifecycle
 // ============================================================================
@@ -86,6 +89,11 @@ pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()>
 /// Called when the frontend emits `briefing-ready`.
 pub fn mark_ready() {
     WINDOW_READY.store(true, Ordering::Relaxed);
+}
+
+/// Check if the briefing window is currently showing.
+pub fn is_briefing_visible() -> bool {
+    WINDOW_VISIBLE.load(Ordering::Relaxed)
 }
 
 /// Show the briefing window with enriched morning briefing data.
@@ -194,6 +202,8 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
         return;
     }
 
+    WINDOW_VISIBLE.store(true, Ordering::Relaxed);
+
     info!(
         target: "4da::briefing",
         items = briefing.items.len(),
@@ -234,6 +244,7 @@ pub fn show_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotifica
 /// Hide the briefing window.
 pub fn hide_briefing<R: Runtime>(app: &AppHandle<R>) {
     cancel_dismiss_timer();
+    WINDOW_VISIBLE.store(false, Ordering::Relaxed);
     if let Some(window) = app.get_webview_window(WINDOW_LABEL) {
         let _ = window.hide();
     }

@@ -92,6 +92,18 @@ pub struct PreemptionAlert {
     /// breaking_change (not just keyword matching). Drives llm_assessed provenance.
     #[serde(default)]
     pub source_classified: bool,
+    /// Installed version of the affected package (from project_dependencies).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    /// Fixed version to update to (from OSV advisory).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_version: Option<String>,
+    /// Whether this is a direct dependency (true) or transitive (false).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_direct: Option<bool>,
+    /// Whether this is a dev-only dependency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_dev: Option<bool>,
 }
 
 /// The full preemption feed with summary counts.
@@ -417,6 +429,19 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 },
             ];
 
+            // Look up dependency context (direct/transitive, dev/prod)
+            let (dep_is_direct, dep_is_dev) = {
+                let conn = db.conn.lock();
+                conn.query_row(
+                    "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 LIMIT 1",
+                    rusqlite::params![first.package_name],
+                    |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                )
+                .ok()
+                .map(|(d, v)| (Some(d), Some(v)))
+                .unwrap_or((None, None))
+            };
+
             PreemptionAlert {
                 id: format!("osv-pkg-{}-{}", first.package_name, first.ecosystem),
                 alert_type: PreemptionType::SecurityAdvisory,
@@ -432,6 +457,10 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 created_at: chrono::Utc::now().to_rfc3339(),
                 osv_verified: true,
                 source_classified: false,
+                installed_version: first.installed_version.clone(),
+                fixed_version: best_fix.clone(),
+                is_direct: dep_is_direct,
+                is_dev: dep_is_dev,
             }
         })
         .collect()
@@ -584,6 +613,10 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             created_at: j.judged_at.clone(),
             osv_verified: false,
             source_classified: false,
+            installed_version: None,
+            fixed_version: None,
+            is_direct: None,
+            is_dev: None,
         });
     }
 
@@ -827,6 +860,10 @@ fn chain_to_alert(
         created_at: chrono::Utc::now().to_rfc3339(),
         osv_verified: false,
         source_classified: false,
+        installed_version: None,
+        fixed_version: None,
+        is_direct: None,
+        is_dev: None,
     }
 }
 
@@ -1172,11 +1209,37 @@ impl PreemptionAlert {
             .collect::<String>();
 
         let kind = preemption_kind_to_canonical(&self.alert_type);
-        let evidence: Vec<EvidenceCitation> = self
+        let mut evidence: Vec<EvidenceCitation> = self
             .evidence
             .iter()
             .map(alert_evidence_to_citation)
             .collect();
+
+        // Add version context as a structured citation when available
+        if self.installed_version.is_some() || self.fixed_version.is_some() {
+            let installed = self.installed_version.as_deref().unwrap_or("unknown");
+            let fixed_note = self
+                .fixed_version
+                .as_deref()
+                .map(|f| format!(" \u{2192} update to >= {f}"))
+                .unwrap_or_default();
+            let direct_note = match self.is_direct {
+                Some(true) => " (direct)",
+                Some(false) => " (transitive)",
+                None => "",
+            };
+            let dev_note = match self.is_dev {
+                Some(true) => " [dev]",
+                _ => "",
+            };
+            evidence.push(EvidenceCitation {
+                source: "version_context".to_string(),
+                title: format!("Installed: {installed}{fixed_note}{direct_note}{dev_note}"),
+                url: None,
+                freshness_days: 0.0,
+                relevance_note: "Dependency version metadata from project scan".to_string(),
+            });
+        }
 
         let suggested_actions: Vec<EvidenceAction> = self
             .suggested_actions
@@ -1414,6 +1477,10 @@ mod tests {
             created_at: "2026-04-17 09:30:00".to_string(),
             osv_verified: false,
             source_classified: false,
+            installed_version: None,
+            fixed_version: None,
+            is_direct: None,
+            is_dev: None,
         }
     }
 

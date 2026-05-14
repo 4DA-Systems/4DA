@@ -411,6 +411,26 @@ html, body {
   flex-shrink: 0;
 }
 
+/* ====================== Action Groups ====================== */
+
+.action-group {
+  margin-bottom: 8px;
+}
+.action-group-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8A8A8A);
+  padding: 4px 12px 2px;
+}
+.action-group-label.urgency-critical {
+  color: #ef4444;
+}
+.action-group-label.urgency-high {
+  color: #f59e0b;
+}
+
 /* ====================== Knowledge Gaps ====================== */
 
 .gaps-list {

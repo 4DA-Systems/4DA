@@ -205,6 +205,21 @@ function buildPreemptionHtml(alerts) {
   return html;
 }
 
+function classifyItem(item) {
+  var priority = (item.signal_priority || '').toLowerCase();
+  var contentType = (item.content_type || '').toLowerCase();
+
+  if (priority === 'critical' || priority === 'alert'
+      || contentType === 'security_advisory' || contentType === 'vulnerability_report') {
+    return 'review';
+  }
+  if (contentType === 'breaking_change' || contentType === 'deprecation_notice'
+      || contentType === 'migration_guide') {
+    return 'breaking';
+  }
+  return 'signals';
+}
+
 function renderBriefing(data) {
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
@@ -258,16 +273,39 @@ function renderBriefing(data) {
     chainsSection.style.display = 'none';
   }
 
-  // Signal items — compact list, no scores
+  // Action-oriented item sections
   if (!data.items || data.items.length === 0) {
     itemsList.innerHTML = '';
     document.getElementById('items-section').style.display = 'none';
   } else {
-    document.getElementById('items-section').style.display = '';
-    var html = '';
+    var review = [];
+    var breaking = [];
+    var signals = [];
     for (var i = 0; i < data.items.length; i++) {
-      html += buildItemHtml(data.items[i]);
+      var cat = classifyItem(data.items[i]);
+      if (cat === 'review') review.push(data.items[i]);
+      else if (cat === 'breaking') breaking.push(data.items[i]);
+      else signals.push(data.items[i]);
     }
+
+    var html = '';
+    if (review.length > 0) {
+      html += '<div class="action-group"><div class="action-group-label urgency-critical">REVIEW</div>';
+      for (var r = 0; r < review.length; r++) html += buildItemHtml(review[r]);
+      html += '</div>';
+    }
+    if (breaking.length > 0) {
+      html += '<div class="action-group"><div class="action-group-label urgency-high">BREAKING CHANGES</div>';
+      for (var b = 0; b < breaking.length; b++) html += buildItemHtml(breaking[b]);
+      html += '</div>';
+    }
+    if (signals.length > 0) {
+      html += '<div class="action-group"><div class="action-group-label">SIGNALS</div>';
+      for (var s = 0; s < signals.length; s++) html += buildItemHtml(signals[s]);
+      html += '</div>';
+    }
+
+    document.getElementById('items-section').style.display = html ? '' : 'none';
     itemsList.innerHTML = html;
   }
 

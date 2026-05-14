@@ -300,6 +300,15 @@ export const ItemCard = memo(function ItemCard({
         </div>
       </header>
       <div className="px-4 pb-4">
+        {(() => {
+          const versionCite = item.evidence.find(e => e.source === 'version_context');
+          if (!versionCite) return null;
+          return (
+            <div className="flex items-center gap-2 mt-1 mb-2 px-2.5 py-1.5 rounded bg-black/20 border border-border text-[11px] font-mono text-text-secondary">
+              {versionCite.title}
+            </div>
+          );
+        })()}
         {item.explanation && (
           <p className="text-xs text-text-secondary leading-relaxed">
             {displayedExplanation}
@@ -317,7 +326,7 @@ export const ItemCard = memo(function ItemCard({
           </p>
         )}
         <AffectedChips item={item} />
-        <EvidenceList evidence={item.evidence} cardTitle={item.title} />
+        <EvidenceList evidence={item.evidence.filter(e => e.source !== 'version_context')} cardTitle={item.title} />
         {item.suggested_actions.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-2">
             {item.suggested_actions.map((action, i) => (

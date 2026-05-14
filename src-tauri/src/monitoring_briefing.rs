@@ -724,7 +724,18 @@ pub fn send_morning_briefing_notification<R: Runtime>(
     // Primary: desktop-level briefing window (ambient, non-intrusive)
     crate::briefing_window::show_briefing(app, briefing);
 
-    // Companion: native OS notification with concise professional summary
+    // Companion OS notification — only if the briefing window isn't showing.
+    // When the widget is visible, the OS notification is redundant.
+    if crate::briefing_window::is_briefing_visible() {
+        info!(
+            target: "4da::briefing",
+            items = briefing.total_relevant,
+            "Briefing delivered via desktop widget (OS notification suppressed)"
+        );
+        return;
+    }
+
+    // Fallback: native OS notification (briefing window failed to show)
     let body = build_notification_summary(briefing);
 
     #[cfg(target_os = "windows")]
@@ -759,7 +770,7 @@ pub fn send_morning_briefing_notification<R: Runtime>(
         items = briefing.total_relevant,
         gaps = briefing.knowledge_gaps.len(),
         chains = briefing.escalating_chains.len(),
-        "Intelligence briefing delivered (desktop widget + OS notification)"
+        "Intelligence briefing delivered (OS notification fallback)"
     );
 }
 

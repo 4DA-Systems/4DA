@@ -799,13 +799,50 @@ fn find_uncovered_deps(
         let Some(dep_info) = dep_lookup.get(&norm) else {
             continue;
         };
-        // Zero signals for a dependency IS a blind spot — the biggest kind.
-        // No signals means zero visibility into updates, releases, or security advisories.
+        // Zero signals for a dependency CAN be a blind spot — but only if the dep
+        // is likely to have public signals. Single-project deps in unknown ecosystems
+        // are usually internal or too niche; surfacing them as blind spots is just
+        // coverage inventory noise that erodes trust.
         if metrics.available == 0 {
-            let risk_level = match dep_info.projects.len() {
-                3.. => "high".to_string(),
-                2 => "medium".to_string(),
-                _ => "low".to_string(),
+            let eco_lower = dep_info.ecosystem.to_lowercase();
+            let in_known_ecosystem = matches!(
+                eco_lower.as_str(),
+                "npm"
+                    | "javascript"
+                    | "typescript"
+                    | "crates.io"
+                    | "cargo"
+                    | "rust"
+                    | "pypi"
+                    | "python"
+                    | "go"
+                    | "golang"
+                    | "maven"
+                    | "java"
+                    | "kotlin"
+                    | "nuget"
+                    | "csharp"
+                    | "dotnet"
+                    | "packagist"
+                    | "php"
+                    | "rubygems"
+                    | "ruby"
+                    | "swift"
+                    | "cocoapods"
+            );
+
+            // Single-project deps in unknown ecosystems are likely internal or
+            // too niche to have public signals — suppress to avoid inventory noise.
+            if dep_info.projects.len() <= 1 && !in_known_ecosystem {
+                continue;
+            }
+
+            let risk_level = if dep_info.projects.len() >= 3 && in_known_ecosystem {
+                "high".to_string()
+            } else if dep_info.projects.len() >= 2 || in_known_ecosystem {
+                "medium".to_string()
+            } else {
+                "low".to_string()
             };
             uncovered.push(UncoveredDep {
                 name: dep_info.package_name.clone(),
@@ -1843,19 +1880,33 @@ fn generate_recommendations(
     }
 
     if uncovered.len() > 5 {
-        let top_uncovered: Vec<&str> = uncovered
+        let top_uncovered: Vec<(&str, &str)> = uncovered
             .iter()
             .filter(|d| d.available_signal_count == 0)
             .take(5)
-            .map(|d| d.name.as_str())
+            .map(|d| (d.name.as_str(), d.dep_type.as_str()))
             .collect();
         if !top_uncovered.is_empty() {
+            let dep_names: Vec<&str> = top_uncovered.iter().map(|(n, _)| *n).collect();
+            let ecosystems: std::collections::HashSet<&str> =
+                top_uncovered.iter().map(|(_, e)| *e).collect();
+            let source_hint = if ecosystems.len() == 1 {
+                match *ecosystems.iter().next().unwrap() {
+                    "crates.io" => " — enable the crates.io source or watch their GitHub repos",
+                    "npm" => " — enable the npm registry source",
+                    "pypi" => " — enable the PyPI source",
+                    "go" => " — enable the Go modules source",
+                    _ => " — add their release feeds or GitHub repos to your sources",
+                }
+            } else {
+                " — add their package registry feeds or GitHub repos to your sources"
+            };
             recs.push(BlindSpotRecommendation {
-                action: format!("Add source coverage for: {}", top_uncovered.join(", ")),
+                action: format!("Add source coverage for: {}", dep_names.join(", ")),
                 reason: format!(
-                    "{} dependencies have zero signal coverage — add their GitHub repos, \
-                     release feeds, or package registry watches to your sources",
-                    top_uncovered.len()
+                    "{} dependencies have zero signal coverage{}",
+                    top_uncovered.len(),
+                    source_hint,
                 ),
                 priority: "medium".to_string(),
             });
@@ -2800,7 +2851,7 @@ mod tests {
         let u = &uncovered[0];
         assert_eq!(u.available_signal_count, 0);
         assert_eq!(u.days_since_last_signal, 999);
-        assert_eq!(u.risk_level, "low"); // 1 project = low risk
+        assert_eq!(u.risk_level, "medium"); // 1 project in known ecosystem = medium
     }
 
     #[test]

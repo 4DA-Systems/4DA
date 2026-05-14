@@ -17,4 +17,20 @@ osv_verified: boolean,
  * True when the source itself classified this as security_advisory or
  * breaking_change (not just keyword matching). Drives llm_assessed provenance.
  */
-source_classified: boolean, };
+source_classified: boolean, 
+/**
+ * Installed version of the affected package (from project_dependencies).
+ */
+installed_version: string | null, 
+/**
+ * Fixed version to update to (from OSV advisory).
+ */
+fixed_version: string | null, 
+/**
+ * Whether this is a direct dependency (true) or transitive (false).
+ */
+is_direct: boolean | null, 
+/**
+ * Whether this is a dev-only dependency.
+ */
+is_dev: boolean | null, };
