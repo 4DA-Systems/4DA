@@ -1890,17 +1890,18 @@ fn generate_recommendations(
             let dep_names: Vec<&str> = top_uncovered.iter().map(|(n, _)| *n).collect();
             let ecosystems: std::collections::HashSet<&str> =
                 top_uncovered.iter().map(|(_, e)| *e).collect();
-            let source_hint = if ecosystems.len() == 1 {
-                match *ecosystems.iter().next().unwrap() {
-                    "crates.io" => " — enable the crates.io source or watch their GitHub repos",
-                    "npm" => " — enable the npm registry source",
-                    "pypi" => " — enable the PyPI source",
-                    "go" => " — enable the Go modules source",
-                    _ => " — add their release feeds or GitHub repos to your sources",
-                }
-            } else {
-                " — add their package registry feeds or GitHub repos to your sources"
-            };
+            let source_hint =
+                if let Some(&eco) = ecosystems.iter().next().filter(|_| ecosystems.len() == 1) {
+                    match eco {
+                        "crates.io" => " — enable the crates.io source or watch their GitHub repos",
+                        "npm" => " — enable the npm registry source",
+                        "pypi" => " — enable the PyPI source",
+                        "go" => " — enable the Go modules source",
+                        _ => " — add their release feeds or GitHub repos to your sources",
+                    }
+                } else {
+                    " — add their package registry feeds or GitHub repos to your sources"
+                };
             recs.push(BlindSpotRecommendation {
                 action: format!("Add source coverage for: {}", dep_names.join(", ")),
                 reason: format!(
