@@ -44,7 +44,7 @@ var isHovering = false;
 
 // i18n: translatable strings (populated from Rust payload, defaults to English)
 var gapDaysSuffix = 'd since last signal';
-var trackingLabel = 'Tracking:';
+var trackingLabel = 'Still tracking:';
 
 // ---------------------------------------------------------------------------
 // Helpers

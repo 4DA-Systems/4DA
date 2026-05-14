@@ -410,6 +410,13 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     })
 }
 
+/// Normalize a package name for identity comparison.
+/// Rust crates: `async-trait` == `async_trait` (Cargo normalizes hyphens to underscores).
+/// npm scoped: `@babel/core` stays as-is (scope is meaningful).
+fn normalize_dep_name(name: &str) -> String {
+    name.to_lowercase().replace('-', "_")
+}
+
 /// Query `project_dependencies` to get a coverage view of the user's stack.
 ///
 /// Uses `project_dependencies` (not `user_dependencies`) because:
@@ -428,15 +435,17 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
 fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverage>> {
     // One query: aggregate projects per unique (package_name, language) pair,
     // filtering to direct runtime deps only.
-    let sql = "SELECT package_name,
+    // Group by normalized name so `async-trait` and `async_trait` merge.
+    let sql = "SELECT REPLACE(LOWER(package_name), '-', '_') as norm_name,
+                      package_name,
                       language,
                       MAX(is_direct) as any_direct,
                       GROUP_CONCAT(DISTINCT project_path) as project_list
                FROM project_dependencies
                WHERE is_dev = 0
-               GROUP BY package_name, language
+               GROUP BY norm_name, language
                HAVING any_direct = 1
-               ORDER BY package_name";
+               ORDER BY norm_name";
 
     let mut stmt = match conn.prepare(sql) {
         Ok(s) => s,
@@ -450,9 +459,10 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
     };
 
     let rows = stmt.query_map([], |row| {
-        let package_name: String = row.get(0)?;
-        let ecosystem: String = row.get(1)?;
-        let project_list: Option<String> = row.get(3).ok();
+        let _norm_name: String = row.get(0)?;
+        let package_name: String = row.get(1)?;
+        let ecosystem: String = row.get(2)?;
+        let project_list: Option<String> = row.get(4).ok();
         let projects: Vec<String> = project_list
             .unwrap_or_default()
             .split(',')
@@ -571,7 +581,8 @@ fn find_uncovered_deps(
             }
         };
         for dep in &eligible_deps {
-            if let Err(e) = insert_stmt.execute(params![dep.package_name]) {
+            let norm = normalize_dep_name(&dep.package_name);
+            if let Err(e) = insert_stmt.execute(params![norm]) {
                 warn!(
                     target: "4da::blind_spots",
                     "Failed to insert dep '{}' into temp table: {e}",
@@ -611,7 +622,8 @@ fn find_uncovered_deps(
                 ELSE 0
             END AS interacted
         FROM _blind_spot_deps bd
-        JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
+        JOIN source_items si ON (si.title LIKE '%' || bd.name || '%'
+                                 OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
         WHERE si.created_at >= datetime('now', ?1)
           AND LOWER(si.source_type) != 'stackoverflow'
           AND (si.content_type IS NULL
@@ -626,19 +638,25 @@ fn find_uncovered_deps(
             si.content_type,
             CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since
         FROM _blind_spot_deps bd
-        JOIN source_items si ON si.title LIKE '%' || bd.name || '%'
+        JOIN source_items si ON (si.title LIKE '%' || bd.name || '%'
+                                 OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
         JOIN interactions i ON i.item_id = si.id OR i.source_item_id = si.id
         WHERE LOWER(si.source_type) != 'stackoverflow'
         GROUP BY bd.name, si.id, si.title, si.source_type, si.content_type
     ";
 
-    let dep_lookup: std::collections::HashMap<&str, &DepCoverage> = eligible_deps
+    let dep_lookup: std::collections::HashMap<String, &DepCoverage> = eligible_deps
         .iter()
-        .map(|d| (d.package_name.as_str(), *d))
+        .map(|d| (normalize_dep_name(&d.package_name), *d))
         .collect();
     let mut coverage: std::collections::HashMap<String, DepSignalCoverage> = eligible_deps
         .iter()
-        .map(|dep| (dep.package_name.clone(), DepSignalCoverage::default()))
+        .map(|dep| {
+            (
+                normalize_dep_name(&dep.package_name),
+                DepSignalCoverage::default(),
+            )
+        })
         .collect();
 
     {
@@ -774,10 +792,11 @@ fn find_uncovered_deps(
 
     let mut uncovered = Vec::new();
     for dep in &eligible_deps {
-        let Some(metrics) = coverage.get(&dep.package_name) else {
+        let norm = normalize_dep_name(&dep.package_name);
+        let Some(metrics) = coverage.get(&norm) else {
             continue;
         };
-        let Some(dep_info) = dep_lookup.get(dep.package_name.as_str()) else {
+        let Some(dep_info) = dep_lookup.get(&norm) else {
             continue;
         };
         // Zero signals for a dependency IS a blind spot — the biggest kind.
@@ -899,6 +918,29 @@ fn is_utility_dep(name: &str) -> bool {
         | "tinyvec" | "smallvec" | "arrayvec" | "indexmap" | "either"
         | "pin-project" | "pin-project-lite" | "futures-core" | "futures-sink"
         | "proc-macro2" | "quote" | "syn" | "unicode-ident"
+        // Rust async/runtime ecosystem
+        | "tokio" | "tokio-util" | "tokio-stream" | "tokio-macros"
+        | "futures" | "futures-util" | "futures-io" | "futures-channel"
+        | "futures-executor" | "futures-macro" | "futures-task"
+        | "async-trait" | "async_trait"
+        // Rust serialization
+        | "serde" | "serde_json" | "serde_derive" | "serde_yaml" | "toml"
+        | "bincode" | "ciborium" | "postcard"
+        // Rust encoding/compression
+        | "base64" | "hex" | "flate2" | "zstd" | "lz4_flex"
+        // Rust error/logging
+        | "tracing" | "tracing-subscriber" | "tracing-core" | "log" | "env_logger"
+        // Rust HTTP clients (as deps, not primary tools)
+        | "hyper" | "hyper-util" | "http" | "http-body" | "http-body-util"
+        | "tower" | "tower-service" | "tower-layer" | "tower-http"
+        // Rust crypto primitives
+        | "ring" | "rustls" | "rustls-pemfile" | "webpki-roots"
+        // Rust build/proc-macro deps
+        | "cc" | "pkg-config" | "autocfg" | "version_check"
+        // Node.js stable infra
+        | "better-sqlite3" | "better_sqlite3"
+        | "typescript" | "eslint" | "prettier"
+        | "webpack" | "rollup" | "esbuild" | "swc"
     )
 }
 
@@ -1800,17 +1842,24 @@ fn generate_recommendations(
         });
     }
 
-    // General recommendation if many uncovered deps
     if uncovered.len() > 5 {
-        recs.push(BlindSpotRecommendation {
-            action: "Consider adding RSS feeds or watches for your most-used dependencies"
-                .to_string(),
-            reason: format!(
-                "{} of your dependencies have no recent signal coverage",
-                uncovered.len()
-            ),
-            priority: "medium".to_string(),
-        });
+        let top_uncovered: Vec<&str> = uncovered
+            .iter()
+            .filter(|d| d.available_signal_count == 0)
+            .take(5)
+            .map(|d| d.name.as_str())
+            .collect();
+        if !top_uncovered.is_empty() {
+            recs.push(BlindSpotRecommendation {
+                action: format!("Add source coverage for: {}", top_uncovered.join(", ")),
+                reason: format!(
+                    "{} dependencies have zero signal coverage — add their GitHub repos, \
+                     release feeds, or package registry watches to your sources",
+                    top_uncovered.len()
+                ),
+                priority: "medium".to_string(),
+            });
+        }
     }
 
     // Positive reinforcement if few blind spots
@@ -2003,11 +2052,10 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     // NO coverage at all, which is qualitatively different from "has signals
     // you haven't seen".
     let (title, explanation) = if d.available_signal_count == 0 {
-        let title = truncate_title(&format!("{} — no signal coverage", d.name));
+        let title = truncate_title(&format!("{} — unmonitored", d.name));
         let explanation = format!(
-            "No signals found for {} in your monitored sources. \
-             You have no visibility into updates, releases, or security advisories \
-             for this dependency.",
+            "{} is in your stack but none of your sources cover it. \
+             Add its GitHub repo or package registry to get release and security alerts.",
             d.name
         );
         (title, explanation)
@@ -2853,7 +2901,7 @@ mod tests {
         let conn = setup_test_db();
         insert_source_item_with_meta(
             &conn,
-            "CVE-2026-9999 in tokio runtime",
+            "CVE-2026-9999 in axum web framework",
             "osv",
             Some("security_advisory"),
             0.9,
@@ -2861,7 +2909,7 @@ mod tests {
         );
 
         let deps = vec![DepCoverage {
-            package_name: "tokio".to_string(),
+            package_name: "axum".to_string(),
             ecosystem: "rust".to_string(),
             projects: vec!["/proj/a".to_string()],
         }];

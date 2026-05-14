@@ -70,18 +70,18 @@ const ScoreBar = memo(function ScoreBar({ score }: { score: number }) {
   }
 
   const tier = getScoreTier(score);
-  const coverage = Math.round(Math.max(0, 100 - score));
+  const pressure = Math.round(score);
   return (
     <div className="bg-bg-secondary rounded-lg border border-border p-5">
       <div className="flex items-baseline gap-3 mb-3">
-        <span className={`text-3xl font-semibold tabular-nums ${tier.color}`}>{coverage}</span>
+        <span className={`text-3xl font-semibold tabular-nums ${tier.color}`}>{pressure}</span>
         <span className="text-text-muted text-sm">/100</span>
         <span className={`text-sm ${tier.color}`}>{t(tier.labelKey)}</span>
       </div>
       <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-500 ${tier.bg}`}
-          style={{ width: `${coverage}%` }}
+          style={{ width: `${Math.max(0, 100 - pressure)}%` }}
         />
       </div>
     </div>

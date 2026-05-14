@@ -699,8 +699,8 @@ pub(crate) fn build_briefing_labels(lang: &str) -> BriefingLabels {
         header: tr("ui:briefing.header", "INTELLIGENCE BRIEFING"),
         escalating: tr("ui:briefing.escalating", "ESCALATING"),
         signals: tr("ui:briefing.signals", "SOURCES"),
-        blind_spots: tr("ui:briefing.blind_spots", "BLIND SPOTS"),
-        tracking: tr("ui:briefing.tracking", "Tracking:"),
+        blind_spots: tr("ui:briefing.blind_spots", "QUIET IN YOUR SOURCES"),
+        tracking: tr("ui:briefing.tracking", "Still tracking:"),
         gap_days_suffix: tr("ui:briefing.gap_days_suffix", "d since last signal"),
         signals_today_suffix: tr("ui:briefing.signals_today_suffix", " today"),
         empty_state: tr(
@@ -819,7 +819,7 @@ fn build_notification_summary(briefing: &BriefingNotification) -> String {
     if let Some(top) = briefing.items.first() {
         let safe_title = strip_control_chars(&top.title);
         let title = truncate_safe(&safe_title, 80);
-        format!("{summary}\n{title}")
+        format!("{title}\n{summary}")
     } else {
         summary
     }
@@ -828,6 +828,26 @@ fn build_notification_summary(briefing: &BriefingNotification) -> String {
 // ============================================================================
 // Novelty Detection
 // ============================================================================
+
+/// Extract the most likely topic keyword from a title.
+/// Looks for proper nouns (capitalized words 3+ chars) that aren't common English.
+fn extract_topic_from_title(title: &str) -> String {
+    const STOP_WORDS: &[&str] = &[
+        "the", "how", "why", "new", "top", "best", "this", "that", "what", "with", "from", "your",
+        "will", "for", "are", "was", "has", "have", "not", "all", "can", "get", "use", "now",
+        "just", "more", "into", "out", "about", "than", "been", "its", "our", "but", "who",
+        "first", "last", "week", "today", "part",
+    ];
+    title
+        .split_whitespace()
+        .find(|w| {
+            w.len() >= 3
+                && w.chars().next().is_some_and(|c| c.is_uppercase())
+                && !STOP_WORDS.contains(&w.to_lowercase().as_str())
+        })
+        .unwrap_or("")
+        .to_string()
+}
 
 /// Filter briefing items for novelty — items whose titles appeared in the last 3 days
 /// are moved to "ongoing topics" instead of being shown again.
@@ -865,7 +885,15 @@ fn apply_novelty_filter(items: Vec<BriefingItem>, today: &str) -> (Vec<BriefingI
 
     for item in items {
         if recent_titles.contains(&item.title.to_lowercase()) {
-            ongoing.push(item.source_type.clone());
+            // Extract the actual topic, not the source platform
+            let topic = if !item.matched_deps.is_empty() {
+                item.matched_deps[0].clone()
+            } else {
+                extract_topic_from_title(&item.title)
+            };
+            if !topic.is_empty() {
+                ongoing.push(topic);
+            }
         } else {
             novel.push(item);
         }
@@ -1424,8 +1452,8 @@ BANNED:
 
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
-    // The threshold is conservative — require 65% of salient terms to
-    // be grounded. Anything below suggests the LLM invented content.
+    // The threshold is conservative — require at least 35% of salient terms
+    // to be grounded. Below this, the LLM likely invented content wholesale.
     const GROUNDEDNESS_THRESHOLD: f32 = 0.35;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
