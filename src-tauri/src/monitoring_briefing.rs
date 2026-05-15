@@ -2519,8 +2519,12 @@ mod tests {
             briefing.suggested_actions,
             vec!["Update axios from 1.6.0 to >= 1.7.4", "Not affected"]
         );
-        assert!(briefing.advisory_ids.contains(&"GHSA-wf5p-g6vw-rhxx".to_string()));
-        assert!(briefing.advisory_ids.contains(&"CVE-2024-39338".to_string()));
+        assert!(briefing
+            .advisory_ids
+            .contains(&"GHSA-wf5p-g6vw-rhxx".to_string()));
+        assert!(briefing
+            .advisory_ids
+            .contains(&"CVE-2024-39338".to_string()));
     }
 
     #[test]

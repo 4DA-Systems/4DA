@@ -800,9 +800,9 @@ mod tests {
             domain: "ecosystem".into(),
             precision: Some(0.6),
             total_surfaced: 50,
-            engaged: 15,      // clicked/acted on (engagement signal)
+            engaged: 15, // clicked/acted on (engagement signal)
             false_positives: 4,
-            validated: 6,      // explicitly confirmed relevant (true positive)
+            validated: 6, // explicitly confirmed relevant (true positive)
         };
         // Precision should be validated / (validated + FP) = 6/10 = 0.6
         let expected = dp.validated as f32 / (dp.validated + dp.false_positives) as f32;
