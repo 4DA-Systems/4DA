@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 68;
+        const TARGET_VERSION: i64 = 69;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2511,6 +2511,41 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Added withdrawn_at column to osv_advisories (filters withdrawn from active counts)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 69: source_item_dependencies — durable links between source items and user deps
+            if current_version < 69 {
+                Self::run_versioned_migration(
+                    &conn,
+                    68,
+                    69,
+                    "Phase 69: source_item_dependencies table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS source_item_dependencies (
+                                id INTEGER PRIMARY KEY,
+                                source_item_id INTEGER NOT NULL,
+                                package_name TEXT NOT NULL,
+                                ecosystem TEXT,
+                                match_type TEXT NOT NULL DEFAULT 'title_heuristic',
+                                confidence REAL NOT NULL DEFAULT 0.5,
+                                evidence_text TEXT,
+                                source_url TEXT,
+                                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                FOREIGN KEY (source_item_id) REFERENCES source_items(id) ON DELETE CASCADE
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_sid_pkg ON source_item_dependencies(source_item_id, package_name);
+                            CREATE INDEX IF NOT EXISTS idx_pkg_eco ON source_item_dependencies(package_name, ecosystem);
+                            CREATE INDEX IF NOT EXISTS idx_match_type ON source_item_dependencies(match_type);
+                            CREATE UNIQUE INDEX IF NOT EXISTS idx_sid_pkg_eco ON source_item_dependencies(source_item_id, package_name, COALESCE(ecosystem, ''));",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created source_item_dependencies table with indexes (replaces title LIKE heuristic)"
                         );
                         Ok(())
                     },

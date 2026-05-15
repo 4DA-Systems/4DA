@@ -556,6 +556,11 @@ pub(crate) async fn fetch_all_sources(
         // ---- End per-source embed + insert ----
     }
 
+    // Link newly ingested items to known dependencies
+    if let Err(e) = crate::dep_linker::link_recent_items(db) {
+        warn!(target: "4da::dep_linker", "Failed to link source items to deps: {e}");
+    }
+
     // Log summary of fetch results
     if all_items.is_empty() {
         warn!(target: "4da::sources", "No items fetched from any source - check network connectivity");

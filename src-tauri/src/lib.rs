@@ -204,6 +204,7 @@ mod delegation;
 #[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "delegation_stub.rs"]
 mod delegation;
+pub(crate) mod dep_linker;
 mod dependency_commands;
 mod dependency_health;
 mod developer_dna;

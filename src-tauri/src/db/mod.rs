@@ -14,6 +14,7 @@ mod history;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
 mod osv_advisories;
+pub mod source_item_deps;
 mod sources;
 #[cfg(test)]
 mod stress_tests;

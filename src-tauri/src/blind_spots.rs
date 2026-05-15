@@ -1106,7 +1106,7 @@ fn is_actionable_blind_spot_match(
 /// Unlike `is_generic_dep_name` (which blocks them from queries entirely),
 /// ambiguous names ARE queried but require ecosystem-qualified proof
 /// (exact_registry or advisory match) to surface.
-fn is_ambiguous_package_name(name: &str) -> bool {
+pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
     matches!(
         name.to_lowercase().as_str(),
         "image"

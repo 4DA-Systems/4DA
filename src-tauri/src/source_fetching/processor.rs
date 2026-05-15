@@ -238,6 +238,11 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
         }
     }
 
+    // Link newly ingested items to known dependencies
+    if let Err(e) = crate::dep_linker::link_recent_items(db) {
+        warn!(target: "4da::dep_linker", "Failed to link source items to deps: {e}");
+    }
+
     void_signal_cache_filled(app);
 
     info!(target: "4da::cache", total = total_cached, "=== BACKGROUND CACHE FILL COMPLETE ===");
