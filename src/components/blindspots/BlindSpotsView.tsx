@@ -110,6 +110,15 @@ const BlindSpotsView = memo(function BlindSpotsView() {
 
   useEffect(() => { void loadBlindSpots(); }, [loadBlindSpots]);
 
+  // Fetch source health diagnostics — shows WHY blind spots exist
+  // (adapter failing, circuit open, stale, etc.)
+  const [sourceHealth, setSourceHealth] = useState<{
+    total_active: number; total_failing: number; total_disabled: number;
+  } | null>(null);
+  useEffect(() => {
+    void cmd('get_source_health').then(setSourceHealth).catch(() => {});
+  }, []);
+
   const handleRetry = useCallback(() => { void loadBlindSpots(); }, [loadBlindSpots]);
 
   const handleDismiss = useCallback((id: string) => {
@@ -321,6 +330,13 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               </span>
             )}
           </span>
+        </div>
+      )}
+      {sourceHealth && sourceHealth.total_failing > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
+          {sourceHealth.total_failing} source {sourceHealth.total_failing === 1 ? 'adapter' : 'adapters'} failing
+          {sourceHealth.total_disabled > 0 && <span className="text-text-muted ml-1">({sourceHealth.total_disabled} stale)</span>}
         </div>
       )}
       {lastDismissed !== null && (

@@ -481,6 +481,7 @@ interface CommandMap {
   // carries the 0-100 coverage index.
   get_preemption_alerts: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
+  get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --
   osv_sync_now: { params: Record<string, never>; result: { ecosystems_synced: string[]; advisories_stored: number; advisories_matched: number; duration_ms: number; errors: string[] } };
