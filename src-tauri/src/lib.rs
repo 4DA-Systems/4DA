@@ -308,6 +308,7 @@ mod signals;
 mod source_config;
 mod source_fetch_commands;
 mod source_fetching;
+mod source_health_diagnostics;
 pub(crate) mod source_tiers;
 pub mod sources;
 mod standing_queries;
@@ -810,6 +811,7 @@ pub fn run() {
             blind_spots::get_blind_spots,
             blind_spots::add_package_watch,
             blind_spots::dismiss_blind_spot,
+            source_health_diagnostics::get_source_health,
             knowledge_decay::get_knowledge_gaps,
             preemption::get_preemption_alerts,
             signal_chains::get_signal_chains,
