@@ -80,11 +80,190 @@ pub struct ChainSummary {
 }
 
 /// A preemption alert included in the morning briefing (critical/high only).
+///
+/// Carries the rich evidence fields from the backend `PreemptionAlert` so the
+/// frontend can render actionable checklist cards (package, versions, projects,
+/// advisory IDs) instead of opaque title/explanation blobs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefingPreemptionAlert {
     pub title: String,
     pub urgency: String,
     pub explanation: String,
+    /// Unique alert identifier (e.g. "osv-pkg-axios-npm")
+    #[serde(default)]
+    pub alert_id: Option<String>,
+    /// Primary affected package name (first entry from affected_dependencies)
+    #[serde(default)]
+    pub package_name: Option<String>,
+    /// Package ecosystem (extracted from alert id, e.g. "npm", "crates.io")
+    #[serde(default)]
+    pub ecosystem: Option<String>,
+    /// Currently installed version of the affected package
+    #[serde(default)]
+    pub installed_version: Option<String>,
+    /// Version that fixes the vulnerability
+    #[serde(default)]
+    pub fixed_version: Option<String>,
+    /// Project paths affected by this alert
+    #[serde(default)]
+    pub affected_projects: Vec<String>,
+    /// Whether the affected package is a direct dependency
+    #[serde(default)]
+    pub is_direct: Option<bool>,
+    /// Whether the affected package is a dev-only dependency
+    #[serde(default)]
+    pub is_dev: Option<bool>,
+    /// Advisory identifiers extracted from evidence (e.g. GHSA-xxxx, CVE-xxxx)
+    #[serde(default)]
+    pub advisory_ids: Vec<String>,
+    /// URL to the primary advisory source
+    #[serde(default)]
+    pub source_url: Option<String>,
+    /// Human-readable action labels from suggested_actions
+    #[serde(default)]
+    pub suggested_actions: Vec<String>,
+}
+
+impl BriefingPreemptionAlert {
+    /// Build a briefing alert from a full `PreemptionAlert`, carrying through
+    /// all evidence fields the frontend needs for checklist cards.
+    pub fn from_preemption_alert(a: &crate::preemption::PreemptionAlert) -> Self {
+        let package_name = a.affected_dependencies.first().cloned();
+        let ecosystem = extract_ecosystem_from_alert_id(&a.id);
+        let source_url = a.evidence.iter().find_map(|e| e.url.clone());
+        let advisory_ids = extract_advisory_ids_from_evidence(&a.evidence);
+        let suggested_actions = a
+            .suggested_actions
+            .iter()
+            .map(|sa| sa.label.clone())
+            .collect();
+
+        Self {
+            title: a.title.clone(),
+            urgency: format!("{:?}", a.urgency).to_lowercase(),
+            explanation: a.explanation.clone(),
+            alert_id: Some(a.id.clone()),
+            package_name,
+            ecosystem,
+            installed_version: a.installed_version.clone(),
+            fixed_version: a.fixed_version.clone(),
+            affected_projects: a.affected_projects.clone(),
+            is_direct: a.is_direct,
+            is_dev: a.is_dev,
+            advisory_ids,
+            source_url,
+            suggested_actions,
+        }
+    }
+}
+
+/// Extract ecosystem from alert id like "osv-pkg-axios-npm" -> Some("npm").
+///
+/// The id format is `osv-pkg-{package_name}-{ecosystem}`. Because the package
+/// name may contain hyphens (e.g. "json-web-token"), we split on "osv-pkg-"
+/// and take everything after the last hyphen as the ecosystem.
+fn extract_ecosystem_from_alert_id(id: &str) -> Option<String> {
+    let suffix = id.strip_prefix("osv-pkg-")?;
+    let last_hyphen = suffix.rfind('-')?;
+    let eco = &suffix[last_hyphen + 1..];
+    if eco.is_empty() {
+        None
+    } else {
+        Some(eco.to_string())
+    }
+}
+
+/// Extract advisory identifiers (GHSA-xxxx-xxxx-xxxx, CVE-yyyy-nnnnn) from
+/// evidence titles and URLs. Uses simple string scanning to avoid adding a
+/// regex dependency.
+fn extract_advisory_ids_from_evidence(
+    evidence: &[crate::preemption::AlertEvidence],
+) -> Vec<String> {
+    let mut ids = Vec::new();
+    for ev in evidence {
+        let texts: Vec<&str> = std::iter::once(ev.title.as_str())
+            .chain(std::iter::once(ev.source.as_str()))
+            .chain(ev.url.iter().map(|s| s.as_str()))
+            .collect();
+        for text in texts {
+            extract_ids_from_text(text, &mut ids);
+        }
+    }
+    ids
+}
+
+/// Scan `text` for GHSA-xxxx-xxxx-xxxx and CVE-YYYY-NNNNN patterns,
+/// appending unique matches to `out`.
+fn extract_ids_from_text(text: &str, out: &mut Vec<String>) {
+    // GHSA pattern: "GHSA-" followed by three groups of 4 alphanumeric chars separated by hyphens
+    let mut start = 0;
+    while let Some(pos) = text[start..].find("GHSA-") {
+        let abs = start + pos;
+        // GHSA-xxxx-xxxx-xxxx = 19 chars total
+        if abs + 19 <= text.len() {
+            let candidate = &text[abs..abs + 19];
+            if is_valid_ghsa(candidate) {
+                let id = candidate.to_string();
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        start = abs + 5;
+    }
+
+    // CVE pattern: "CVE-" followed by 4-digit year, hyphen, 4+ digit sequence
+    start = 0;
+    while let Some(pos) = text[start..].find("CVE-") {
+        let abs = start + pos;
+        let rest = &text[abs + 4..];
+        if let Some(id_suffix) = parse_cve_suffix(rest) {
+            let full_id = format!("CVE-{id_suffix}");
+            if !out.contains(&full_id) {
+                out.push(full_id);
+            }
+        }
+        start = abs + 4;
+    }
+}
+
+/// Check if a 19-char string matches GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}
+fn is_valid_ghsa(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    if bytes.len() != 19 {
+        return false;
+    }
+    if bytes[9] != b'-' || bytes[14] != b'-' {
+        return false;
+    }
+    for &i in &[5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 18] {
+        if !bytes[i].is_ascii_alphanumeric() {
+            return false;
+        }
+    }
+    true
+}
+
+/// Parse a CVE id suffix: "YYYY-NNNNN..." returning "YYYY-NNNNN" portion.
+fn parse_cve_suffix(rest: &str) -> Option<&str> {
+    if rest.len() < 9 {
+        return None;
+    }
+    if !rest[..4].chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if rest.as_bytes()[4] != b'-' {
+        return None;
+    }
+    let num_start = 5;
+    let num_end = rest[num_start..]
+        .find(|c: char| !c.is_ascii_digit())
+        .map(|p| num_start + p)
+        .unwrap_or(rest.len());
+    if num_end - num_start < 4 {
+        return None;
+    }
+    Some(&rest[..num_end])
 }
 
 /// Translated labels for the briefing window UI
@@ -237,11 +416,7 @@ pub(crate) fn build_enriched_briefing(
                     )
                 })
                 .take(3)
-                .map(|a| BriefingPreemptionAlert {
-                    title: a.title.clone(),
-                    urgency: format!("{:?}", a.urgency).to_lowercase(),
-                    explanation: a.explanation.clone(),
-                })
+                .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
                 .collect(),
             Err(_) => Vec::new(),
         };
@@ -1994,19 +2169,42 @@ mod tests {
         }
     }
 
+    fn make_test_preemption_alert(
+        title: &str,
+        urgency: &str,
+        explanation: &str,
+    ) -> BriefingPreemptionAlert {
+        BriefingPreemptionAlert {
+            title: title.into(),
+            urgency: urgency.into(),
+            explanation: explanation.into(),
+            alert_id: None,
+            package_name: None,
+            ecosystem: None,
+            installed_version: None,
+            fixed_version: None,
+            affected_projects: vec![],
+            is_direct: None,
+            is_dev: None,
+            advisory_ids: vec![],
+            source_url: None,
+            suggested_actions: vec![],
+        }
+    }
+
     #[test]
     fn test_preemption_only_briefing_fires() {
         let mut b = empty_briefing();
-        b.preemption_alerts.push(BriefingPreemptionAlert {
-            title: "axios CVE-2024-1234".into(),
-            urgency: "critical".into(),
-            explanation: "RCE in axios < 1.7".into(),
-        });
-        b.preemption_alerts.push(BriefingPreemptionAlert {
-            title: "jsonwebtoken timing attack".into(),
-            urgency: "high".into(),
-            explanation: "HMAC comparison not constant-time".into(),
-        });
+        b.preemption_alerts.push(make_test_preemption_alert(
+            "axios CVE-2024-1234",
+            "critical",
+            "RCE in axios < 1.7",
+        ));
+        b.preemption_alerts.push(make_test_preemption_alert(
+            "jsonwebtoken timing attack",
+            "high",
+            "HMAC comparison not constant-time",
+        ));
         assert!(b.has_meaningful_content());
     }
 
@@ -2243,5 +2441,193 @@ mod tests {
             !is_low_quality_commodity(&null_ok),
             "NULL content_type at 0.55+ is not commodity"
         );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // BriefingPreemptionAlert mapping & serialization tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_briefing_preemption_from_full_alert() {
+        use crate::preemption::{
+            AlertEvidence, AlertUrgency, PreemptionAlert, PreemptionType, SuggestedAction,
+        };
+        let alert = PreemptionAlert {
+            id: "osv-pkg-axios-npm".into(),
+            alert_type: PreemptionType::SecurityAdvisory,
+            title: "axios@1.6.0: 2 known vulnerabilities".into(),
+            explanation: "GHSA-wf5p-g6vw-rhxx, CVE-2024-39338 affect axios@1.6.0".into(),
+            evidence: vec![
+                AlertEvidence {
+                    source: "osv".into(),
+                    title: "GHSA-wf5p-g6vw-rhxx: Axios SSRF".into(),
+                    url: Some("https://github.com/advisories/GHSA-wf5p-g6vw-rhxx".into()),
+                    freshness_days: 5.0,
+                    relevance_score: 1.0,
+                },
+                AlertEvidence {
+                    source: "osv".into(),
+                    title: "CVE-2024-39338: Server-Side Request Forgery".into(),
+                    url: Some("https://nvd.nist.gov/vuln/detail/CVE-2024-39338".into()),
+                    freshness_days: 12.0,
+                    relevance_score: 1.0,
+                },
+            ],
+            affected_projects: vec!["/home/user/my-project".into()],
+            affected_dependencies: vec!["axios".into()],
+            urgency: AlertUrgency::Critical,
+            confidence: 0.95,
+            predicted_window: None,
+            suggested_actions: vec![
+                SuggestedAction {
+                    action_type: "investigate".into(),
+                    label: "Update axios from 1.6.0 to >= 1.7.4".into(),
+                    description: "Review advisories and update.".into(),
+                },
+                SuggestedAction {
+                    action_type: "dismiss".into(),
+                    label: "Not affected".into(),
+                    description: "Dismiss if confirmed.".into(),
+                },
+            ],
+            created_at: "2026-05-16T00:00:00Z".into(),
+            osv_verified: true,
+            source_classified: false,
+            installed_version: Some("1.6.0".into()),
+            fixed_version: Some("1.7.4".into()),
+            is_direct: Some(true),
+            is_dev: Some(false),
+        };
+
+        let briefing = BriefingPreemptionAlert::from_preemption_alert(&alert);
+
+        assert_eq!(briefing.title, "axios@1.6.0: 2 known vulnerabilities");
+        assert_eq!(briefing.urgency, "critical");
+        assert_eq!(briefing.alert_id.as_deref(), Some("osv-pkg-axios-npm"));
+        assert_eq!(briefing.package_name.as_deref(), Some("axios"));
+        assert_eq!(briefing.ecosystem.as_deref(), Some("npm"));
+        assert_eq!(briefing.installed_version.as_deref(), Some("1.6.0"));
+        assert_eq!(briefing.fixed_version.as_deref(), Some("1.7.4"));
+        assert_eq!(briefing.affected_projects, vec!["/home/user/my-project"]);
+        assert_eq!(briefing.is_direct, Some(true));
+        assert_eq!(briefing.is_dev, Some(false));
+        assert_eq!(
+            briefing.source_url.as_deref(),
+            Some("https://github.com/advisories/GHSA-wf5p-g6vw-rhxx")
+        );
+        assert_eq!(
+            briefing.suggested_actions,
+            vec!["Update axios from 1.6.0 to >= 1.7.4", "Not affected"]
+        );
+        assert!(briefing.advisory_ids.contains(&"GHSA-wf5p-g6vw-rhxx".to_string()));
+        assert!(briefing.advisory_ids.contains(&"CVE-2024-39338".to_string()));
+    }
+
+    #[test]
+    fn test_briefing_preemption_serializes_all_fields() {
+        let alert = BriefingPreemptionAlert {
+            title: "lodash prototype pollution".into(),
+            urgency: "high".into(),
+            explanation: "CVE-2020-28500 affects lodash@4.17.20".into(),
+            alert_id: Some("osv-pkg-lodash-npm".into()),
+            package_name: Some("lodash".into()),
+            ecosystem: Some("npm".into()),
+            installed_version: Some("4.17.20".into()),
+            fixed_version: Some("4.17.21".into()),
+            affected_projects: vec!["/app".into()],
+            is_direct: Some(true),
+            is_dev: Some(false),
+            advisory_ids: vec!["CVE-2020-28500".into()],
+            source_url: Some("https://nvd.nist.gov/vuln/detail/CVE-2020-28500".into()),
+            suggested_actions: vec!["Update lodash to >= 4.17.21".into()],
+        };
+
+        let json = serde_json::to_value(&alert).expect("serialize");
+        assert_eq!(json["title"], "lodash prototype pollution");
+        assert_eq!(json["alert_id"], "osv-pkg-lodash-npm");
+        assert_eq!(json["package_name"], "lodash");
+        assert_eq!(json["ecosystem"], "npm");
+        assert_eq!(json["installed_version"], "4.17.20");
+        assert_eq!(json["fixed_version"], "4.17.21");
+        assert_eq!(json["affected_projects"][0], "/app");
+        assert_eq!(json["is_direct"], true);
+        assert_eq!(json["is_dev"], false);
+        assert_eq!(json["advisory_ids"][0], "CVE-2020-28500");
+        assert_eq!(
+            json["source_url"],
+            "https://nvd.nist.gov/vuln/detail/CVE-2020-28500"
+        );
+        assert_eq!(json["suggested_actions"][0], "Update lodash to >= 4.17.21");
+    }
+
+    #[test]
+    fn test_briefing_preemption_defaults_serialize_cleanly() {
+        let alert = make_test_preemption_alert("test alert", "high", "explanation");
+        let json = serde_json::to_value(&alert).expect("serialize");
+
+        assert_eq!(json["alert_id"], serde_json::Value::Null);
+        assert_eq!(json["package_name"], serde_json::Value::Null);
+        assert_eq!(json["affected_projects"], serde_json::json!([]));
+        assert_eq!(json["advisory_ids"], serde_json::json!([]));
+        assert_eq!(json["suggested_actions"], serde_json::json!([]));
+        assert_eq!(json["title"], "test alert");
+        assert_eq!(json["urgency"], "high");
+    }
+
+    #[test]
+    fn test_extract_ecosystem_from_alert_id_variants() {
+        assert_eq!(
+            extract_ecosystem_from_alert_id("osv-pkg-axios-npm"),
+            Some("npm".to_string())
+        );
+        assert_eq!(
+            extract_ecosystem_from_alert_id("osv-pkg-json-web-token-npm"),
+            Some("npm".to_string()),
+            "package names with hyphens: ecosystem is last segment"
+        );
+        assert_eq!(
+            extract_ecosystem_from_alert_id("osv-pkg-serde-crates.io"),
+            Some("crates.io".to_string())
+        );
+        assert_eq!(
+            extract_ecosystem_from_alert_id("signal-chain-123"),
+            None,
+            "non-osv alert ids return None"
+        );
+        assert_eq!(
+            extract_ecosystem_from_alert_id("osv-pkg-"),
+            None,
+            "trailing prefix with no content returns None"
+        );
+    }
+
+    #[test]
+    fn test_advisory_id_extraction() {
+        use crate::preemption::AlertEvidence;
+        // Extract from evidence titles
+        let evidence = vec![
+            AlertEvidence {
+                source: "osv".into(),
+                title: "GHSA-wf5p-g6vw-rhxx: Axios SSRF vulnerability".into(),
+                url: None,
+                freshness_days: 1.0,
+                relevance_score: 1.0,
+            },
+            AlertEvidence {
+                source: "osv".into(),
+                title: "CVE-2024-39338: Server-Side Request Forgery in Axios".into(),
+                url: None,
+                freshness_days: 2.0,
+                relevance_score: 1.0,
+            },
+        ];
+        let ids = extract_advisory_ids_from_evidence(&evidence);
+        assert!(ids.contains(&"GHSA-wf5p-g6vw-rhxx".to_string()));
+        assert!(ids.contains(&"CVE-2024-39338".to_string()));
+        assert_eq!(ids.len(), 2, "no duplicates");
+
+        // Empty evidence
+        let empty_ids = extract_advisory_ids_from_evidence(&[]);
+        assert!(empty_ids.is_empty());
     }
 }
