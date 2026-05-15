@@ -322,6 +322,7 @@ pub(super) fn store_vulnerability(
             source_url.as_deref(),
             vuln.published.as_deref(),
             vuln.modified.as_deref(),
+            vuln.withdrawn.as_deref(),
         )
         .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
 
@@ -470,6 +471,7 @@ mod tests {
             references: None,
             published: None,
             modified: None,
+            withdrawn: None,
         };
 
         let stored1 = store_vulnerability(&db, &vuln, &mut seen).unwrap();

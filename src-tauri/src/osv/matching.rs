@@ -508,6 +508,7 @@ mod tests {
             Some("https://github.com/advisories/GHSA-test-001"),
             Some("2026-01-01T00:00:00Z"),
             None,
+            None,
         )
         .unwrap();
 
@@ -542,6 +543,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .unwrap();
 
@@ -570,6 +572,7 @@ mod tests {
             Some(r#"["1.0.200"]"#),
             None,
             Some(5.0),
+            None,
             None,
             None,
             None,

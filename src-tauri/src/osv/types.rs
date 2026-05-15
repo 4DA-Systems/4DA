@@ -45,6 +45,9 @@ pub(crate) struct Vulnerability {
     pub references: Option<Vec<Reference>>,
     pub published: Option<String>,
     pub modified: Option<String>,
+    /// ISO date string when the advisory was withdrawn by the source.
+    /// Present only for advisories that have been retracted/withdrawn.
+    pub withdrawn: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -58,7 +61,7 @@ pub(crate) struct Severity {
 pub(crate) struct Affected {
     pub package: Option<PackageRef>,
     pub ranges: Option<Vec<Range>>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // REMOVE BY 2026-08-15 — used by OSV deserialization, not directly accessed yet
     pub versions: Option<Vec<String>>,
 }
 
@@ -97,6 +100,10 @@ pub struct StoredAdvisory {
     pub source_url: Option<String>,
     pub published_at: Option<String>,
     pub modified_at: Option<String>,
+    /// ISO date string when the advisory was withdrawn by the source.
+    /// NULL for active advisories. Rows with a value here are excluded
+    /// from active counts but preserved in the database for audit trails.
+    pub withdrawn_at: Option<String>,
     pub synced_at: String,
 }
 

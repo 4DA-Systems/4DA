@@ -772,4 +772,123 @@ mod tests {
         // Version should be updated to lockfile version (COALESCE keeps non-null)
         assert_eq!(tokio.version.as_deref(), Some("1.35.1"));
     }
+
+    /// Validates the startup cleanup SQL queries that purge worktree rows,
+    /// deduplicate by normalized name+path, and remove ephemeral temp paths
+    /// from user_dependencies (app_setup.rs startup cleanup block).
+    #[test]
+    fn test_startup_user_dependency_cleanup() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // --- Seed test data ---
+
+        // 3 worktree rows (should be purged by query 1)
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('D:\\4DA\\.claude\\worktrees\\agent-abc123\\src', 'tokio', '1.35.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert worktree row 1");
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('D:\\4DA\\.claude\\worktrees\\agent-def456\\src', 'serde', '1.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert worktree row 2");
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('/home/user/.claude/worktrees/agent-789/proj', 'react', '18.0.0', 'javascript', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert worktree row 3");
+
+        // 2 casing duplicates of the same logical dep (query 2 keeps the latest rowid)
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('D:\\Documents\\myapp', 'my-pkg', '1.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert casing dup 1");
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('D:\\documents\\myapp', 'my_pkg', '2.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert casing dup 2");
+
+        // 1 temp-path row (should be purged by query 3)
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('C:\\Users\\Admin\\AppData\\Local\\Temp\\clone\\proj', 'axios', '1.0.0', 'javascript', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert temp row");
+
+        // 2 clean rows (should survive all queries)
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('D:\\4DA', 'tauri', '2.0.0', 'rust', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert clean row 1");
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at)
+             VALUES ('D:\\projects\\web', 'vite', '5.0.0', 'javascript', 0, 1, datetime('now'), datetime('now'))",
+            [],
+        ).expect("insert clean row 2");
+
+        // Verify starting count: 3 worktree + 2 dups + 1 temp + 2 clean = 8
+        let before: i64 = conn
+            .query_row("SELECT COUNT(*) FROM user_dependencies", [], |r| r.get(0))
+            .expect("count before");
+        assert_eq!(before, 8, "Expected 8 rows before cleanup");
+
+        // --- Query 1: purge worktree rows ---
+        let deleted_worktree = conn
+            .execute(
+                "DELETE FROM user_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
+                [],
+            )
+            .expect("worktree purge");
+        assert_eq!(deleted_worktree, 3, "Should purge 3 worktree rows");
+
+        // --- Query 2: deduplicate by normalized name + path + ecosystem ---
+        let deleted_dedup = conn
+            .execute(
+                "DELETE FROM user_dependencies WHERE rowid NOT IN (
+                    SELECT MAX(rowid) FROM user_dependencies
+                    GROUP BY LOWER(REPLACE(package_name, '-', '_')), LOWER(project_path), LOWER(ecosystem)
+                )",
+                [],
+            )
+            .expect("dedup");
+        assert_eq!(
+            deleted_dedup, 1,
+            "Should deduplicate 1 casing/hyphen variant"
+        );
+
+        // --- Query 3: purge temp paths ---
+        let deleted_temp = conn
+            .execute(
+                "DELETE FROM user_dependencies WHERE project_path LIKE '%/tmp/%' OR project_path LIKE '%\\tmp\\%' OR project_path LIKE '%AppData%Local%Temp%'",
+                [],
+            )
+            .expect("temp purge");
+        assert_eq!(deleted_temp, 1, "Should purge 1 temp-path row");
+
+        // --- Verify final state ---
+        let remaining: i64 = conn
+            .query_row("SELECT COUNT(*) FROM user_dependencies", [], |r| r.get(0))
+            .expect("count after");
+        assert_eq!(
+            remaining, 3,
+            "Should have 3 rows remaining: 1 surviving dup + 2 clean"
+        );
+
+        // Verify the surviving rows are the expected ones
+        let mut stmt = conn
+            .prepare("SELECT package_name FROM user_dependencies ORDER BY package_name")
+            .expect("prepare final query");
+        let names: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .expect("query names")
+            .filter_map(|r| r.ok())
+            .collect();
+        // my_pkg survived (higher rowid than my-pkg), plus tauri and vite
+        assert_eq!(names, vec!["my_pkg", "tauri", "vite"]);
+    }
 }

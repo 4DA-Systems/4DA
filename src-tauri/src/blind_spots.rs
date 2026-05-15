@@ -132,6 +132,8 @@ struct DepSignalCoverage {
     available: u32,
     interacted: u32,
     days_since_last_signal: Option<u32>,
+    /// Best match type seen: "exact_registry" > "advisory" > "title_heuristic"
+    best_match_type: Option<String>,
 }
 
 // ============================================================================
@@ -712,11 +714,13 @@ fn find_uncovered_deps(
             ) {
                 continue;
             }
+            let mt = classify_match_type(&source_type, content_type.as_deref());
             let entry = coverage.entry(name).or_default();
             entry.available += 1;
             if interacted > 0 {
                 entry.interacted += 1;
             }
+            upgrade_match_type(&mut entry.best_match_type, mt);
         }
     }
 
@@ -773,11 +777,13 @@ fn find_uncovered_deps(
             ) {
                 continue;
             }
+            let mt = classify_match_type(&source_type, content_type.as_deref());
             let entry = coverage.entry(name).or_default();
             entry.days_since_last_signal = Some(match entry.days_since_last_signal {
                 Some(existing) => existing.min(days_since),
                 None => days_since,
             });
+            upgrade_match_type(&mut entry.best_match_type, mt);
         }
     }
 
@@ -791,6 +797,7 @@ fn find_uncovered_deps(
     );
 
     let mut uncovered = Vec::new();
+    let mut suppressed_weak: Vec<String> = Vec::new();
     for dep in &eligible_deps {
         let norm = normalize_dep_name(&dep.package_name);
         let Some(metrics) = coverage.get(&norm) else {
@@ -799,6 +806,27 @@ fn find_uncovered_deps(
         let Some(dep_info) = dep_lookup.get(&norm) else {
             continue;
         };
+
+        // ── Match-type gate: suppress ambiguous names with only title heuristic ──
+        // For deps with signals: check if the best match type is strong enough.
+        // Ambiguous names (common English words like "image", "config", "log")
+        // require exact_registry or advisory proof — title LIKE matches are
+        // almost always false positives (e.g. "image" matching ImageMagick articles).
+        let best_mt = metrics
+            .best_match_type
+            .as_deref()
+            .unwrap_or("title_heuristic");
+        if metrics.available > 0
+            && best_mt == "title_heuristic"
+            && is_ambiguous_package_name(&dep_info.package_name)
+        {
+            suppressed_weak.push(dep_info.package_name.clone());
+            continue;
+        }
+
+        // Ecosystem-qualified display name for clarity
+        let display_name = format_dep_display_name(&dep_info.package_name, &dep_info.ecosystem);
+
         // Zero signals for a dependency CAN be a blind spot — but only if the dep
         // is likely to have public signals. Single-project deps in unknown ecosystems
         // are usually internal or too niche; surfacing them as blind spots is just
@@ -845,7 +873,7 @@ fn find_uncovered_deps(
                 "low".to_string()
             };
             uncovered.push(UncoveredDep {
-                name: dep_info.package_name.clone(),
+                name: display_name,
                 dep_type: dep_info.ecosystem.clone(),
                 projects_using: dep_info.projects.clone(),
                 days_since_last_signal: 999,
@@ -868,13 +896,22 @@ fn find_uncovered_deps(
         }
         let risk_level = classify_dep_risk(days_since, not_seen, dep_info.projects.len());
         uncovered.push(UncoveredDep {
-            name: dep_info.package_name.clone(),
+            name: display_name,
             dep_type: dep_info.ecosystem.clone(),
             projects_using: dep_info.projects.clone(),
             days_since_last_signal: days_since,
             available_signal_count: not_seen,
             risk_level,
         });
+    }
+
+    if !suppressed_weak.is_empty() {
+        info!(
+            target: "4da::blind_spots",
+            count = suppressed_weak.len(),
+            names = %suppressed_weak.join(", "),
+            "suppressed ambiguous deps with title-heuristic-only matches"
+        );
     }
 
     info!(
@@ -1041,6 +1078,113 @@ fn is_actionable_blind_spot_match(
     _content_type: Option<&str>,
 ) -> bool {
     has_word_boundary_match(title_lower, dep_lower)
+}
+
+/// Package names that are common English words AND real package names.
+/// Unlike `is_generic_dep_name` (which blocks them from queries entirely),
+/// ambiguous names ARE queried but require ecosystem-qualified proof
+/// (exact_registry or advisory match) to surface.
+fn is_ambiguous_package_name(name: &str) -> bool {
+    matches!(
+        name.to_lowercase().as_str(),
+        "image"
+            | "config"
+            | "log"
+            | "time"
+            | "rand"
+            | "error"
+            | "hash"
+            | "ring"
+            | "url"
+            | "http"
+            | "crypto"
+            | "lazy"
+            | "quote"
+            | "lock"
+            | "once"
+            | "pin"
+            | "signal"
+            | "sync"
+            | "bytes"
+            | "regex"
+            | "either"
+            | "paste"
+            | "clap"
+            | "nom"
+            | "base"
+            | "core"
+            | "test"
+            | "data"
+            | "utils"
+            | "proc_macro2"
+            | "proc-macro2"
+    )
+}
+
+/// Classify how a source_item matched a dependency name.
+fn classify_match_type(source_type: &str, content_type: Option<&str>) -> &'static str {
+    let st = source_type.to_lowercase();
+    if matches!(
+        st.as_str(),
+        "npm"
+            | "crates_io"
+            | "crates"
+            | "pypi"
+            | "go"
+            | "maven"
+            | "nuget"
+            | "packagist"
+            | "rubygems"
+            | "cocoapods"
+            | "producthunt"
+    ) {
+        return "exact_registry";
+    }
+    if matches!(
+        content_type,
+        Some("security_advisory") | Some("vulnerability_report") | Some("cve")
+    ) {
+        return "advisory";
+    }
+    if matches!(st.as_str(), "osv" | "cve") {
+        return "advisory";
+    }
+    "title_heuristic"
+}
+
+/// Promote best_match_type if the new match is stronger.
+fn upgrade_match_type(current: &mut Option<String>, new_type: &str) {
+    fn match_rank(mt: &str) -> u8 {
+        match mt {
+            "exact_registry" => 2,
+            "advisory" => 1,
+            _ => 0,
+        }
+    }
+    let dominated = match current.as_deref() {
+        Some(existing) => match_rank(new_type) > match_rank(existing),
+        None => true,
+    };
+    if dominated {
+        *current = Some(new_type.to_string());
+    }
+}
+
+/// Format a dependency name with its ecosystem qualifier for display.
+fn format_dep_display_name(package_name: &str, ecosystem: &str) -> String {
+    let qualifier = match ecosystem.to_lowercase().as_str() {
+        "rust" | "cargo" | "crates.io" => "crates.io",
+        "javascript" | "typescript" | "npm" => "npm",
+        "python" | "pypi" => "PyPI",
+        "go" | "golang" => "Go",
+        "java" | "kotlin" | "maven" => "Maven",
+        "csharp" | "dotnet" | "nuget" => "NuGet",
+        "php" | "packagist" => "Packagist",
+        "ruby" | "rubygems" => "RubyGems",
+        "swift" | "cocoapods" => "CocoaPods",
+        _ => return package_name.to_string(),
+    };
+    format!("{package_name} ({qualifier})")
 }
 
 /// Classify risk level based on coverage gap severity.

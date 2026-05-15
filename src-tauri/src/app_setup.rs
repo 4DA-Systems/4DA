@@ -696,6 +696,62 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: sun_runs failed"); }
             }
 
+            // Purge stale worktree paths from user_dependencies.
+            // Same problem as project_dependencies: agent worktrees create ephemeral
+            // copies that get scanned then abandoned, polluting blind spots/preemption.
+            match conn.execute(
+                "DELETE FROM user_dependencies WHERE project_path LIKE '%worktrees%agent-%'",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: stale worktree user dependencies");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: worktree user_deps failed");
+                }
+            }
+
+            // Deduplicate user_dependencies by normalized name + path, keeping most recent.
+            // Path casing differences (Documents vs documents) and hyphen/underscore variants
+            // (my-pkg vs my_pkg) cause the same logical dependency to appear multiple times.
+            match conn.execute(
+                "DELETE FROM user_dependencies WHERE rowid NOT IN (
+                    SELECT MAX(rowid) FROM user_dependencies
+                    GROUP BY LOWER(REPLACE(package_name, '-', '_')), LOWER(project_path), LOWER(ecosystem)
+                )",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: deduplicated user dependencies");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: user_deps dedup failed");
+                }
+            }
+
+            // Purge user_dependencies with clearly ephemeral project paths (temp dirs).
+            // Filesystem checks would block the async runtime, so we pattern-match instead.
+            match conn.execute(
+                "DELETE FROM user_dependencies WHERE project_path LIKE '%/tmp/%' OR project_path LIKE '%\\tmp\\%' OR project_path LIKE '%AppData%Local%Temp%'",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: ephemeral temp-path user dependencies");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: temp-path user_deps failed");
+                }
+            }
+
             if total_deleted > 0 {
                 info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
                 // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,

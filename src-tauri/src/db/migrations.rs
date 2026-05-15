@@ -2496,6 +2496,27 @@ impl Database {
                 )?;
             }
 
+            // Phase 68: Add withdrawn_at column to osv_advisories
+            if current_version < 68 {
+                Self::run_versioned_migration(
+                    &conn,
+                    67,
+                    68,
+                    "Phase 68: track withdrawn OSV advisories",
+                    |c| {
+                        c.execute(
+                            "ALTER TABLE osv_advisories ADD COLUMN withdrawn_at TEXT",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Added withdrawn_at column to osv_advisories (filters withdrawn from active counts)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }

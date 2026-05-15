@@ -122,8 +122,8 @@ fn snapshot_path() -> PathBuf {
 pub fn save_snapshot(briefing: &BriefingNotification) {
     // Refuse to save snapshots with no items — they would just produce a
     // blank screen on next boot, defeating the entire point.
-    if briefing.items.is_empty() {
-        debug!(target: "4da::briefing_snapshot", "Skipping snapshot save — empty briefing");
+    if !briefing.has_meaningful_content() {
+        debug!(target: "4da::briefing_snapshot", "Skipping snapshot save — no meaningful content");
         return;
     }
 

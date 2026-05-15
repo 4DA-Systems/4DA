@@ -134,6 +134,27 @@ pub struct BriefingNotification {
     pub personalization_context: Option<String>,
 }
 
+const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
+
+impl BriefingNotification {
+    /// Returns true if any section has meaningful intelligence worth showing.
+    /// Used instead of `items.is_empty()` so preemption-only briefings still fire.
+    pub fn has_meaningful_content(&self) -> bool {
+        if !self.items.is_empty() {
+            return true;
+        }
+        if !self.preemption_alerts.is_empty() {
+            return true;
+        }
+        if !self.escalating_chains.is_empty() {
+            return true;
+        }
+        self.knowledge_gaps
+            .iter()
+            .any(|g| g.days_since_last > KNOWLEDGE_GAP_HIGH_URGENCY_DAYS)
+    }
+}
+
 // ============================================================================
 // Enrichment Pipeline
 // ============================================================================
@@ -660,7 +681,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // Apply quality gate + dedupe + enrichment via shared pipeline
     let briefing = build_enriched_briefing(raw_items, &user_lang, false);
 
-    if briefing.items.is_empty() {
+    if !briefing.has_meaningful_content() {
         return None;
     }
 
@@ -1822,5 +1843,58 @@ mod tests {
         let result = apply_diversity_slots(items, 8);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].title, "Only one");
+    }
+
+    fn empty_briefing() -> BriefingNotification {
+        BriefingNotification {
+            title: String::new(),
+            items: vec![],
+            total_relevant: 0,
+            ongoing_topics: vec![],
+            knowledge_gaps: vec![],
+            escalating_chains: vec![],
+            synthesis: None,
+            preemption_alerts: vec![],
+            blind_spot_score: None,
+            labels: None,
+            personalization_context: None,
+        }
+    }
+
+    #[test]
+    fn test_preemption_only_briefing_fires() {
+        let mut b = empty_briefing();
+        b.preemption_alerts.push(BriefingPreemptionAlert {
+            title: "axios CVE-2024-1234".into(),
+            urgency: "critical".into(),
+            explanation: "RCE in axios < 1.7".into(),
+        });
+        b.preemption_alerts.push(BriefingPreemptionAlert {
+            title: "jsonwebtoken timing attack".into(),
+            urgency: "high".into(),
+            explanation: "HMAC comparison not constant-time".into(),
+        });
+        assert!(b.has_meaningful_content());
+    }
+
+    #[test]
+    fn test_truly_empty_briefing_blocked() {
+        assert!(!empty_briefing().has_meaningful_content());
+    }
+
+    #[test]
+    fn test_knowledge_gaps_urgency_threshold() {
+        let mut b = empty_briefing();
+        b.knowledge_gaps.push(KnowledgeGap {
+            topic: "rust".into(),
+            days_since_last: 2,
+        });
+        assert!(!b.has_meaningful_content(), "2-day gap is low urgency");
+
+        b.knowledge_gaps.push(KnowledgeGap {
+            topic: "security".into(),
+            days_since_last: 10,
+        });
+        assert!(b.has_meaningful_content(), "10-day gap is high urgency");
     }
 }
