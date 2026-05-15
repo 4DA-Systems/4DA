@@ -429,17 +429,27 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 },
             ];
 
-            // Look up dependency context (direct/transitive, dev/prod)
             let (dep_is_direct, dep_is_dev) = {
                 let conn = db.conn.lock();
-                conn.query_row(
-                    "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 LIMIT 1",
-                    rusqlite::params![first.package_name],
-                    |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
-                )
-                .ok()
-                .map(|(d, v)| (Some(d), Some(v)))
-                .unwrap_or((None, None))
+                let scoped_result = all_projects.first().and_then(|project| {
+                    conn.query_row(
+                        "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 AND project_path = ?2 LIMIT 1",
+                        rusqlite::params![first.package_name, project],
+                        |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                    )
+                    .ok()
+                });
+                scoped_result
+                    .or_else(|| {
+                        conn.query_row(
+                            "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 LIMIT 1",
+                            rusqlite::params![first.package_name],
+                            |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                        )
+                        .ok()
+                    })
+                    .map(|(d, v)| (Some(d), Some(v)))
+                    .unwrap_or((None, None))
             };
 
             PreemptionAlert {
@@ -1741,5 +1751,79 @@ mod tests {
         let unconfirmed: f32 = 0.58;
         assert!(unconfirmed < confirmed);
         assert!(confirmed - unconfirmed > 0.3);
+    }
+
+    #[test]
+    fn test_osv_alerts_use_project_scoped_dep_context() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language)
+             VALUES (?1, 'package.json', 'jsonwebtoken', '9.0.0', 0, 1, 'javascript')",
+            rusqlite::params!["/projects/fourda"],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language)
+             VALUES (?1, 'package.json', 'jsonwebtoken', '8.5.1', 1, 0, 'javascript')",
+            rusqlite::params!["/projects/kairos"],
+        )
+        .unwrap();
+
+        let (is_direct, is_dev): (Option<bool>, Option<bool>) = {
+            let scoped = conn
+                .query_row(
+                    "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 AND project_path = ?2 LIMIT 1",
+                    rusqlite::params!["jsonwebtoken", "/projects/fourda"],
+                    |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                )
+                .ok();
+            scoped
+                .map(|(d, v)| (Some(d), Some(v)))
+                .unwrap_or((None, None))
+        };
+
+        assert_eq!(is_direct, Some(true), "fourda has jsonwebtoken as direct");
+        assert_eq!(is_dev, Some(false), "fourda has jsonwebtoken as prod");
+
+        let (is_direct2, is_dev2): (Option<bool>, Option<bool>) = {
+            let scoped = conn
+                .query_row(
+                    "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 AND project_path = ?2 LIMIT 1",
+                    rusqlite::params!["jsonwebtoken", "/projects/kairos"],
+                    |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                )
+                .ok();
+            scoped
+                .map(|(d, v)| (Some(d), Some(v)))
+                .unwrap_or((None, None))
+        };
+
+        assert_eq!(
+            is_direct2,
+            Some(false),
+            "kairos has jsonwebtoken as transitive"
+        );
+        assert_eq!(is_dev2, Some(true), "kairos has jsonwebtoken as dev");
+
+        let (is_direct_unscoped, _): (Option<bool>, Option<bool>) = {
+            let result = conn
+                .query_row(
+                    "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 LIMIT 1",
+                    rusqlite::params!["jsonwebtoken"],
+                    |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+                )
+                .ok();
+            result
+                .map(|(d, v)| (Some(d), Some(v)))
+                .unwrap_or((None, None))
+        };
+
+        assert!(
+            is_direct_unscoped.is_some(),
+            "unscoped fallback still returns a row"
+        );
     }
 }

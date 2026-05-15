@@ -8,4 +8,9 @@ export type BlindSpotReport = {
 /**
  * 0-100, higher = more blind spots
  */
-overall_score: number, uncovered_dependencies: Array<UncoveredDep>, stale_topics: Array<StaleTopic>, missed_signals: Array<MissedSignal>, recommendations: Array<BlindSpotRecommendation>, generated_at: string, };
+overall_score: number, uncovered_dependencies: Array<UncoveredDep>, stale_topics: Array<StaleTopic>, missed_signals: Array<MissedSignal>, recommendations: Array<BlindSpotRecommendation>, 
+/**
+ * Dependencies suppressed because they only had weak (title-heuristic) matches.
+ * Hidden by default in the UI. Separate from uncovered_dependencies.
+ */
+weak_matches: Array<UncoveredDep>, generated_at: string, };

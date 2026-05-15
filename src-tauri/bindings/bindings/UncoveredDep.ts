@@ -12,4 +12,8 @@ available_signal_count: number,
 /**
  * critical, high, medium, low
  */
-risk_level: string, };
+risk_level: string, 
+/**
+ * How the dependency was matched: "exact_registry", "advisory", "title_heuristic", or "none"
+ */
+match_type: string, };

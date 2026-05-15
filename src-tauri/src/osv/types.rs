@@ -61,7 +61,8 @@ pub(crate) struct Severity {
 pub(crate) struct Affected {
     pub package: Option<PackageRef>,
     pub ranges: Option<Vec<Range>>,
-    #[allow(dead_code)] // REMOVE BY 2026-08-15 — used by OSV deserialization, not directly accessed yet
+    // REMOVE BY 2026-08-15 — used by OSV deserialization, not directly accessed yet
+    #[allow(dead_code)]
     pub versions: Option<Vec<String>>,
 }
 

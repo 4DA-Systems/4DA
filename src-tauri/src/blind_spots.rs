@@ -53,6 +53,9 @@ pub struct BlindSpotReport {
     pub stale_topics: Vec<StaleTopic>,
     pub missed_signals: Vec<MissedSignal>,
     pub recommendations: Vec<BlindSpotRecommendation>,
+    /// Dependencies suppressed because they only had weak (title-heuristic) matches.
+    /// Hidden by default in the UI. Separate from uncovered_dependencies.
+    pub weak_matches: Vec<UncoveredDep>,
     pub generated_at: String,
 }
 
@@ -68,6 +71,8 @@ pub struct UncoveredDep {
     pub available_signal_count: u32,
     /// critical, high, medium, low
     pub risk_level: String,
+    /// How the dependency was matched: "exact_registry", "advisory", "title_heuristic", or "none"
+    pub match_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -286,6 +291,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
             stale_topics: vec![],
             missed_signals: vec![],
             recommendations: vec![],
+            weak_matches: vec![],
             generated_at: chrono::Utc::now().to_rfc3339(),
         });
     }
@@ -306,7 +312,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     let active_paths = get_recent_project_paths(&conn);
 
     // 4. Find uncovered dependencies (deps with no interaction in threshold days)
-    let uncovered = find_uncovered_deps(&conn, &deps, threshold_days)?;
+    let (uncovered, weak_matches) = find_uncovered_deps(&conn, &deps, threshold_days)?;
 
     // 5. Find stale topics from attention blind spots.
     // Only include topics with actual missed signals — a topic with
@@ -341,8 +347,8 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         uncovered_pre_filter = uncovered.len(),
         "active-project filter: inputs"
     );
-    let (uncovered, missed) = if active_paths.is_empty() {
-        (uncovered, missed)
+    let (uncovered, weak_matches, missed) = if active_paths.is_empty() {
+        (uncovered, weak_matches, missed)
     } else {
         let is_active_project = |p: &str| -> bool {
             let p_norm = normalize_path_for_cmp(p);
@@ -368,6 +374,10 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
             .into_iter()
             .filter(|u| u.projects_using.iter().any(|p| is_active_project(p)))
             .collect();
+        let wm: Vec<UncoveredDep> = weak_matches
+            .into_iter()
+            .filter(|u| u.projects_using.iter().any(|p| is_active_project(p)))
+            .collect();
         info!(
             target: "4da::blind_spots",
             before = pre_count,
@@ -382,7 +392,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
                     .map_or(true, |dn| active_dep_names.contains(&dn.to_lowercase()))
             })
             .collect();
-        (uc, ms)
+        (uc, wm, ms)
     };
 
     // 7. Generate recommendations
@@ -408,6 +418,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         stale_topics: stale,
         missed_signals: missed,
         recommendations,
+        weak_matches,
         generated_at: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -518,7 +529,7 @@ fn find_uncovered_deps(
     conn: &rusqlite::Connection,
     deps: &[DepCoverage],
     threshold_days: u32,
-) -> Result<Vec<UncoveredDep>> {
+) -> Result<(Vec<UncoveredDep>, Vec<UncoveredDep>)> {
     const MAX_DEPS_TO_PROCESS: usize = 50;
     const MIN_DEP_NAME_LEN: usize = 4;
 
@@ -548,7 +559,7 @@ fn find_uncovered_deps(
     );
 
     if eligible_deps.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     // ── Step 1: Create temp table with dep names ────────────────────────
@@ -561,7 +572,7 @@ fn find_uncovered_deps(
             target: "4da::blind_spots",
             "Failed to create temp table for batched dep query: {e}"
         );
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     // Clear any stale rows from a previous call in the same connection.
@@ -579,7 +590,7 @@ fn find_uncovered_deps(
                     "Failed to prepare dep insert: {e}"
                 );
                 let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             }
         };
         for dep in &eligible_deps {
@@ -670,7 +681,7 @@ fn find_uncovered_deps(
                     "Failed to prepare recent blind-spot dep query: {e}"
                 );
                 let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             }
         };
         let rows = match stmt.query_map(params![window], |row| {
@@ -689,7 +700,7 @@ fn find_uncovered_deps(
                     "Failed to execute recent blind-spot dep query: {e}"
                 );
                 let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             }
         };
 
@@ -733,7 +744,7 @@ fn find_uncovered_deps(
                     "Failed to prepare history blind-spot dep query: {e}"
                 );
                 let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             }
         };
         let rows = match stmt.query_map([], |row| {
@@ -752,7 +763,7 @@ fn find_uncovered_deps(
                     "Failed to execute history blind-spot dep query: {e}"
                 );
                 let _ = conn.execute_batch("DROP TABLE IF EXISTS _blind_spot_deps");
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             }
         };
 
@@ -797,7 +808,7 @@ fn find_uncovered_deps(
     );
 
     let mut uncovered = Vec::new();
-    let mut suppressed_weak: Vec<String> = Vec::new();
+    let mut weak_match_deps: Vec<UncoveredDep> = Vec::new();
     for dep in &eligible_deps {
         let norm = normalize_dep_name(&dep.package_name);
         let Some(metrics) = coverage.get(&norm) else {
@@ -820,7 +831,16 @@ fn find_uncovered_deps(
             && best_mt == "title_heuristic"
             && is_ambiguous_package_name(&dep_info.package_name)
         {
-            suppressed_weak.push(dep_info.package_name.clone());
+            let display_name = format_dep_display_name(&dep_info.package_name, &dep_info.ecosystem);
+            weak_match_deps.push(UncoveredDep {
+                name: display_name,
+                dep_type: dep_info.ecosystem.clone(),
+                projects_using: dep_info.projects.clone(),
+                days_since_last_signal: metrics.days_since_last_signal.unwrap_or(999),
+                available_signal_count: metrics.available.saturating_sub(metrics.interacted),
+                risk_level: "low".to_string(),
+                match_type: "title_heuristic".to_string(),
+            });
             continue;
         }
 
@@ -879,6 +899,7 @@ fn find_uncovered_deps(
                 days_since_last_signal: 999,
                 available_signal_count: 0,
                 risk_level,
+                match_type: "none".to_string(),
             });
             continue;
         }
@@ -902,14 +923,15 @@ fn find_uncovered_deps(
             days_since_last_signal: days_since,
             available_signal_count: not_seen,
             risk_level,
+            match_type: best_mt.to_string(),
         });
     }
 
-    if !suppressed_weak.is_empty() {
+    if !weak_match_deps.is_empty() {
         info!(
             target: "4da::blind_spots",
-            count = suppressed_weak.len(),
-            names = %suppressed_weak.join(", "),
+            count = weak_match_deps.len(),
+            names = %weak_match_deps.iter().map(|d| d.name.as_str()).collect::<Vec<_>>().join(", "),
             "suppressed ambiguous deps with title-heuristic-only matches"
         );
     }
@@ -929,7 +951,7 @@ fn find_uncovered_deps(
             .then(b.days_since_last_signal.cmp(&a.days_since_last_signal))
     });
 
-    Ok(uncovered)
+    Ok((uncovered, weak_match_deps))
 }
 
 /// Common runtime built-in modules that generate false blind spots.
@@ -2582,6 +2604,12 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
     for d in &report.uncovered_dependencies {
         items.push(uncovered_dep_to_evidence_item(d));
     }
+    for d in &report.weak_matches {
+        let mut item = uncovered_dep_to_evidence_item(d);
+        // Prefix id so the frontend can identify and hide weak matches by default
+        item.id = format!("weak-match-{}", item.id);
+        items.push(item);
+    }
     for t in &report.stale_topics {
         items.push(stale_topic_to_evidence_item(t));
     }
@@ -2960,7 +2988,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).expect("must not SQL-error");
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).expect("must not SQL-error");
         assert_eq!(uncovered.len(), 1, "should flag as blind spot");
         let u = &uncovered[0];
 
@@ -2987,7 +3015,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
             1,
@@ -3014,7 +3042,7 @@ mod tests {
             ],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(uncovered.len(), 1);
         assert_eq!(uncovered[0].risk_level, "high");
 
@@ -3024,7 +3052,7 @@ mod tests {
             ecosystem: "cargo".to_string(),
             projects: vec!["/proj/a".to_string(), "/proj/b".to_string()],
         }];
-        let uncovered2 = find_uncovered_deps(&conn, &deps2, 14).unwrap();
+        let (uncovered2, _weak2) = find_uncovered_deps(&conn, &deps2, 14).unwrap();
         assert_eq!(uncovered2.len(), 1);
         assert_eq!(uncovered2[0].risk_level, "medium");
     }
@@ -3046,7 +3074,7 @@ mod tests {
             });
         }
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert!(
             uncovered.len() <= 50,
             "must cap at MAX_DEPS_TO_PROCESS=50, got {}",
@@ -3065,7 +3093,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
             0,
@@ -3084,7 +3112,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
             0,
@@ -3110,7 +3138,7 @@ mod tests {
             projects: vec!["/proj/a".to_string()],
         }];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         assert_eq!(
             uncovered.len(),
             1,
@@ -3145,7 +3173,7 @@ mod tests {
             },
         ];
 
-        let uncovered = find_uncovered_deps(&conn, &deps, 14).unwrap();
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).unwrap();
         // Both are generic AND < 4 chars ("find" is 4 chars, passes length
         // check but is in generic list; "open" is 4 chars, same).
         // They get filtered by is_generic_dep_name before entering the query.
@@ -3229,6 +3257,7 @@ mod tests {
                 days_since_last_signal: 30,
                 available_signal_count: 5,
                 risk_level: "medium".to_string(),
+                match_type: "none".to_string(),
             })
             .collect();
         let stale: Vec<StaleTopic> = (0..3)
@@ -3286,6 +3315,7 @@ mod tests {
             days_since_last_signal: 100,
             available_signal_count: 5,
             risk_level: "critical".to_string(),
+            match_type: "none".to_string(),
         }];
         // total_direct_deps = 1 → floor to 5 → 1.0/5 = 0.2 uncovered_pressure
         // Score = 0.2 * 55 = 11.0
@@ -3396,6 +3426,7 @@ mod tests {
             days_since_last_signal: 21,
             available_signal_count: 4,
             risk_level: "critical".into(),
+            match_type: "exact_registry".into(),
         }
     }
 
@@ -3438,6 +3469,7 @@ mod tests {
             stale_topics: vec![stale_sample()],
             missed_signals: vec![missed_sample()],
             recommendations: vec![rec_sample()],
+            weak_matches: vec![],
             generated_at: "2026-04-17 00:00:00".into(),
         }
     }
@@ -3497,6 +3529,7 @@ mod tests {
             stale_topics: vec![],
             missed_signals: vec![],
             recommendations: vec![],
+            weak_matches: vec![],
             generated_at: String::new(),
         };
         let feed = blind_spot_report_to_feed(&report);
@@ -3604,5 +3637,78 @@ mod tests {
         m.relevance_score = 0.8;
         let item = missed_signal_to_evidence_item(&m);
         assert_eq!(item.urgency, crate::evidence::Urgency::Watch);
+    }
+
+    #[test]
+    fn test_weak_match_deps_separated() {
+        let conn = setup_test_db();
+
+        // Insert source items with titles matching dep names.
+        // "image" is ambiguous — title_heuristic only from hackernews → weak match.
+        // "axum" is NOT ambiguous — title_heuristic still counts as uncovered.
+        insert_source_item_with_meta(
+            &conn,
+            "Rust image crate v3.0 released with AVIF support",
+            "hackernews",
+            None,
+            0.8,
+            5,
+        );
+        insert_source_item_with_meta(
+            &conn,
+            "axum web framework hits 1.0 milestone",
+            "hackernews",
+            None,
+            0.8,
+            5,
+        );
+
+        // Set up deps: both are in the user's stack
+        let deps = vec![
+            DepCoverage {
+                package_name: "image".to_string(),
+                ecosystem: "cargo".to_string(),
+                projects: vec!["/proj/myapp".to_string()],
+            },
+            DepCoverage {
+                package_name: "axum".to_string(),
+                ecosystem: "cargo".to_string(),
+                projects: vec!["/proj/myapp".to_string()],
+            },
+        ];
+
+        let (uncovered, weak_matches) = find_uncovered_deps(&conn, &deps, 14).unwrap();
+
+        // "image" should be in weak_matches (ambiguous + title_heuristic only)
+        assert!(
+            weak_matches.iter().any(|d| d.name.contains("image")),
+            "image should be in weak_matches, got: {:?}",
+            weak_matches.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+        assert!(
+            weak_matches
+                .iter()
+                .all(|d| d.match_type == "title_heuristic"),
+            "all weak_matches should have match_type title_heuristic"
+        );
+
+        // "image" should NOT be in uncovered
+        assert!(
+            !uncovered.iter().any(|d| d.name.contains("image")),
+            "image should NOT be in uncovered"
+        );
+
+        // "axum" should be in uncovered (not ambiguous, has signals)
+        assert!(
+            uncovered.iter().any(|d| d.name.contains("axum")),
+            "axum should be in uncovered, got: {:?}",
+            uncovered.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+
+        // "axum" should NOT be in weak_matches
+        assert!(
+            !weak_matches.iter().any(|d| d.name.contains("axum")),
+            "axum should NOT be in weak_matches"
+        );
     }
 }
