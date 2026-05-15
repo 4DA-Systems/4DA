@@ -2634,4 +2634,152 @@ mod tests {
         let empty_ids = extract_advisory_ids_from_evidence(&[]);
         assert!(empty_ids.is_empty());
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // T3-3: Morning Brief Edge Case Tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_section_split_security_to_action() {
+        // security_advisory and cve content types must land in the "action" section
+        let items = vec![
+            make_item_with_type("GHSA in serde", "github", 0.80, Some("security_advisory")),
+            make_item_with_type("CVE-2026-9999 in tokio", "osv", 0.75, Some("cve")),
+        ];
+
+        let result = apply_section_split(items);
+
+        assert_eq!(result.len(), 2);
+        for item in &result {
+            assert_eq!(
+                item.section.as_deref(),
+                Some("action"),
+                "item '{}' with content_type {:?} must be in action section",
+                item.title,
+                item.content_type
+            );
+        }
+    }
+
+    #[test]
+    fn test_section_split_tutorials_to_reading() {
+        // tutorial, blog_post, discussion are NOT actionable -- they go to
+        // "reading" (when uncorroborated or low-score) not "action"
+        let items = vec![
+            make_item_with_type("Learn async Rust", "reddit", 0.55, Some("tutorial")),
+            make_item_with_type("Why I love Tauri", "hackernews", 0.52, Some("blog_post")),
+            make_item_with_type("Is Rust worth it?", "reddit", 0.50, Some("discussion")),
+        ];
+
+        let result = apply_section_split(items);
+
+        assert_eq!(result.len(), 3);
+        for item in &result {
+            assert_eq!(
+                item.section.as_deref(),
+                Some("reading"),
+                "item '{}' with content_type {:?} must be in reading section",
+                item.title,
+                item.content_type
+            );
+        }
+    }
+
+    #[test]
+    fn test_section_split_corroborated_to_watch() {
+        // A high-score (>= 0.6) non-actionable item WITH corroboration goes to "watch"
+        let mut item = make_item_with_type(
+            "Rust 2027 edition discussion",
+            "reddit",
+            0.75,
+            Some("blog_post"),
+        );
+        item.corroboration_count = 3;
+
+        let result = apply_section_split(vec![item]);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].section.as_deref(),
+            Some("watch"),
+            "corroborated high-score non-actionable item must be in watch section"
+        );
+    }
+
+    #[test]
+    fn test_null_content_type_never_hero() {
+        // NULL content_type must NEVER end up in "action" regardless of score
+        let items = vec![
+            make_item_with_type("Unknown high-score item", "rss", 0.95, None),
+            make_item_with_type("Another mystery item", "hackernews", 0.88, None),
+        ];
+
+        let result = apply_section_split(items);
+
+        for item in &result {
+            assert_ne!(
+                item.section.as_deref(),
+                Some("action"),
+                "NULL content_type '{}' must never be in action section",
+                item.title
+            );
+        }
+    }
+
+    #[test]
+    fn test_section_caps_enforced() {
+        // Create 10 actionable items -- only 5 should survive the cap
+        let mut items: Vec<BriefingItem> = (0..10)
+            .map(|i| {
+                make_item_with_type(
+                    &format!("Security advisory {i}"),
+                    "github",
+                    0.90 - (i as f32 * 0.01),
+                    Some("security_advisory"),
+                )
+            })
+            .collect();
+
+        // Also add 8 reading items to test that cap
+        for i in 0..8 {
+            items.push(make_item_with_type(
+                &format!("Tutorial {i}"),
+                "reddit",
+                0.50 - (i as f32 * 0.01),
+                Some("tutorial"),
+            ));
+        }
+
+        // And 7 watch items (high score + corroboration)
+        for i in 0..7 {
+            let mut watch = make_item_with_type(
+                &format!("Hot topic {i}"),
+                "hackernews",
+                0.70,
+                Some("blog_post"),
+            );
+            watch.corroboration_count = 2;
+            items.push(watch);
+        }
+
+        let result = apply_section_split(items);
+
+        let action_count = result
+            .iter()
+            .filter(|i| i.section.as_deref() == Some("action"))
+            .count();
+        let watch_count = result
+            .iter()
+            .filter(|i| i.section.as_deref() == Some("watch"))
+            .count();
+        let reading_count = result
+            .iter()
+            .filter(|i| i.section.as_deref() == Some("reading"))
+            .count();
+
+        assert_eq!(action_count, 5, "action section capped at 5");
+        assert_eq!(watch_count, 5, "watch section capped at 5");
+        assert_eq!(reading_count, 5, "reading section capped at 5");
+        assert_eq!(result.len(), 15, "total = 5 + 5 + 5");
+    }
 }

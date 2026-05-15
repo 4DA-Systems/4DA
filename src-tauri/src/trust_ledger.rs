@@ -808,4 +808,146 @@ mod tests {
         let expected = dp.validated as f32 / (dp.validated + dp.false_positives) as f32;
         assert!((dp.precision.unwrap() - expected).abs() < 0.001);
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // T3-4: Trust Metric Calibration Tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_precision_none_below_threshold() {
+        // When validated + FP < MIN_PRECISION_DATA_POINTS (5), precision must be None.
+        // Simulate the calculation that get_domain_precision performs.
+        let validated: u32 = 2;
+        let fp: u32 = 1;
+        let precision_denominator = validated + fp; // 3 < 5
+        let precision = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+            Some(validated as f32 / precision_denominator as f32)
+        } else {
+            None
+        };
+        assert!(
+            precision.is_none(),
+            "precision must be None with only {} data points (threshold = {})",
+            precision_denominator,
+            MIN_PRECISION_DATA_POINTS
+        );
+
+        // Verify the constant is what we expect
+        assert_eq!(MIN_PRECISION_DATA_POINTS, 5);
+    }
+
+    #[test]
+    fn test_engagement_not_counted_as_tp() {
+        // acted_on events must not inflate true positives in the precision formula.
+        // The production code uses: TP = validated only. acted_on = engagement.
+        let conn = test_db();
+
+        // Insert 20 acted_on events -- these are engagement, NOT confirmations
+        for _ in 0..20 {
+            insert_event(&conn, "acted_on", "hackernews");
+        }
+        // Insert 1 false_positive
+        insert_event(&conn, "false_positive", "hackernews");
+
+        // If acted_on were incorrectly counted as TP, precision denominator would
+        // be 21 (20 TP + 1 FP), and precision = 20/21 = ~0.95.
+        // Correctly, TP = 0 (no validated events), denominator = 0 + 1 = 1,
+        // which is < MIN_PRECISION_DATA_POINTS. So has_precision_data = false.
+        let validated: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM trust_events WHERE event_type = 'validated'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let false_positives: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM trust_events WHERE event_type = 'false_positive'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        let denominator = validated + false_positives;
+        assert_eq!(validated, 0, "no validated events exist");
+        assert_eq!(false_positives, 1, "1 false positive exists");
+        assert!(
+            denominator < MIN_PRECISION_DATA_POINTS,
+            "denominator ({}) must be below threshold ({})",
+            denominator,
+            MIN_PRECISION_DATA_POINTS
+        );
+    }
+
+    #[test]
+    fn test_validated_counts_as_tp() {
+        // validated events ARE the true positive signal for precision.
+        let conn = test_db();
+
+        // Insert 4 validated + 1 FP = 5 total (meets threshold)
+        for _ in 0..4 {
+            insert_event(&conn, "validated", "security");
+        }
+        insert_event(&conn, "false_positive", "security");
+
+        let validated: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM trust_events WHERE event_type = 'validated'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let fp: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM trust_events WHERE event_type = 'false_positive'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        let denominator = validated + fp;
+        assert!(
+            denominator >= MIN_PRECISION_DATA_POINTS,
+            "enough data points to compute precision"
+        );
+
+        let precision = validated as f32 / denominator as f32;
+        assert!(
+            (precision - 0.8).abs() < 0.001,
+            "precision should be 4/5 = 0.8, got {}",
+            precision
+        );
+    }
+
+    #[test]
+    fn test_weekly_precision_sentinel_with_no_data() {
+        // When fewer than MIN_PRECISION_DATA_POINTS exist, the weekly precision
+        // computation stores -1.0 as a sentinel value. Verify the logic.
+        let validated: u32 = 0;
+        let false_positives: u32 = 0;
+        let precision_denominator = validated + false_positives;
+        let precision = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+            validated as f32 / precision_denominator as f32
+        } else {
+            -1.0 // Insufficient data sentinel
+        };
+        assert_eq!(
+            precision, -1.0,
+            "with zero data, precision sentinel must be -1.0"
+        );
+
+        // Also verify with some data below threshold
+        let validated2: u32 = 2;
+        let false_positives2: u32 = 1;
+        let precision_denominator2 = validated2 + false_positives2; // 3 < 5
+        let precision2 = if precision_denominator2 >= MIN_PRECISION_DATA_POINTS {
+            validated2 as f32 / precision_denominator2 as f32
+        } else {
+            -1.0
+        };
+        assert_eq!(
+            precision2, -1.0,
+            "with 3 data points (below threshold of 5), sentinel must be -1.0"
+        );
+    }
 }

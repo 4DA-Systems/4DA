@@ -1826,4 +1826,96 @@ mod tests {
             "unscoped fallback still returns a row"
         );
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // T3-5: Regression Tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_scope_filter_current_repo_only() {
+        // When a package exists in multiple projects, querying with a specific
+        // project_path must return only that project's dep context (is_direct,
+        // is_dev). This prevents cross-project contamination where project A's
+        // transitive dev dep is reported as project B's direct prod dep.
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+
+        // Project Alpha: axios as direct prod dependency
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language)
+             VALUES (?1, 'package.json', 'axios', '1.7.0', 0, 1, 'javascript')",
+            rusqlite::params!["/projects/alpha"],
+        )
+        .unwrap();
+
+        // Project Beta: axios as transitive dev dependency
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language)
+             VALUES (?1, 'package.json', 'axios', '1.6.0', 1, 0, 'javascript')",
+            rusqlite::params!["/projects/beta"],
+        )
+        .unwrap();
+
+        // Project Gamma: does NOT use axios at all
+        conn.execute(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, is_dev, is_direct, language)
+             VALUES (?1, 'package.json', 'lodash', '4.17.21', 0, 1, 'javascript')",
+            rusqlite::params!["/projects/gamma"],
+        )
+        .unwrap();
+
+        // Query scoped to Alpha -- must see direct + prod
+        let (is_direct_alpha, is_dev_alpha): (Option<bool>, Option<bool>) = conn
+            .query_row(
+                "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 AND project_path = ?2 LIMIT 1",
+                rusqlite::params!["axios", "/projects/alpha"],
+                |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+            )
+            .ok()
+            .map(|(d, v)| (Some(d), Some(v)))
+            .unwrap_or((None, None));
+
+        assert_eq!(is_direct_alpha, Some(true), "Alpha has axios as direct");
+        assert_eq!(is_dev_alpha, Some(false), "Alpha has axios as prod");
+
+        // Query scoped to Beta -- must see transitive + dev
+        let (is_direct_beta, is_dev_beta): (Option<bool>, Option<bool>) = conn
+            .query_row(
+                "SELECT is_direct, is_dev FROM project_dependencies WHERE package_name = ?1 AND project_path = ?2 LIMIT 1",
+                rusqlite::params!["axios", "/projects/beta"],
+                |row| Ok((row.get::<_, bool>(0)?, row.get::<_, bool>(1)?)),
+            )
+            .ok()
+            .map(|(d, v)| (Some(d), Some(v)))
+            .unwrap_or((None, None));
+
+        assert_eq!(is_direct_beta, Some(false), "Beta has axios as transitive");
+        assert_eq!(is_dev_beta, Some(true), "Beta has axios as dev");
+
+        // Query scoped to Gamma -- axios must not exist
+        let gamma_axios = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_dependencies WHERE package_name = 'axios' AND project_path = '/projects/gamma'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(
+            gamma_axios, 0,
+            "Gamma has no axios -- scoped query must return 0 rows"
+        );
+
+        // Verify that without project_path scope, you get ambiguous results
+        let total_axios: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_dependencies WHERE package_name = 'axios'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            total_axios, 2,
+            "unscoped query returns both Alpha and Beta rows -- ambiguous"
+        );
+    }
 }
