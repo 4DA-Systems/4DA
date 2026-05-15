@@ -335,8 +335,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       {sourceHealth && sourceHealth.total_failing > 0 && (
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400">
           <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-          {sourceHealth.total_failing} source {sourceHealth.total_failing === 1 ? 'adapter' : 'adapters'} failing
-          {sourceHealth.total_disabled > 0 && <span className="text-text-muted ml-1">({sourceHealth.total_disabled} stale)</span>}
+          {t('blindspots.sourceHealth.failing', { count: sourceHealth.total_failing })}
+          {sourceHealth.total_disabled > 0 && <span className="text-text-muted ml-1">{t('blindspots.sourceHealth.stale', { count: sourceHealth.total_disabled })}</span>}
         </div>
       )}
       {lastDismissed !== null && (
@@ -361,6 +361,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           <div className="bg-bg-secondary rounded-lg border border-emerald-500/20 px-5 py-6">
             <div className="flex items-start gap-4">
               <div className="w-9 h-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <span className="text-emerald-400 text-sm">&#10003;</span>
               </div>
               <div className="min-w-0 flex-1">
@@ -376,7 +377,6 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           <div className="bg-bg-secondary rounded-lg border border-border px-5 py-6">
             <div className="flex items-start gap-4">
               <div className="w-9 h-9 rounded-full bg-bg-tertiary border border-border flex items-center justify-center shrink-0">
-                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <span className="text-text-muted text-sm">&mdash;</span>
               </div>
               <div className="min-w-0 flex-1">
