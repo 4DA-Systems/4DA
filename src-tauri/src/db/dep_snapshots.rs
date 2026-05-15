@@ -52,11 +52,7 @@ impl Database {
     /// `(project_path, package_name, ecosystem)` unique constraint, so
     /// re-scanning the same project replaces the previous snapshot row
     /// for each dependency.
-    pub fn snapshot_project_deps(
-        &self,
-        project_path: &str,
-        deps: &[DepEntry],
-    ) -> Result<usize> {
+    pub fn snapshot_project_deps(&self, project_path: &str, deps: &[DepEntry]) -> Result<usize> {
         let conn = self.conn.lock();
         let tx = conn
             .unchecked_transaction()
@@ -289,7 +285,9 @@ mod tests {
             .unwrap();
         }
 
-        let deleted = db.expire_stale_snapshots(90).expect("expire should succeed");
+        let deleted = db
+            .expire_stale_snapshots(90)
+            .expect("expire should succeed");
         assert_eq!(deleted, 2, "both deps should be expired (>90 days old)");
 
         let current = db.get_current_deps("/proj").unwrap();
