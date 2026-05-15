@@ -73,6 +73,11 @@ pub struct UncoveredDep {
     pub risk_level: String,
     /// How the dependency was matched: "exact_registry", "advisory", "title_heuristic", or "none"
     pub match_type: String,
+    /// Why this dep has no/limited coverage. Provides honest diagnostics instead of
+    /// the misleading "none of your sources cover it" language.
+    /// Examples: "not_checked", "checked_no_results", "adapter_failing", "adapter_disabled", "unknown_ecosystem", "weak_matches_only"
+    #[serde(default)]
+    pub coverage_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -507,6 +512,114 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
     Ok(result)
 }
 
+/// Map ecosystem names to the source adapter types that should cover them.
+fn ecosystem_source_types(ecosystem: &str) -> Vec<String> {
+    match ecosystem.to_lowercase().as_str() {
+        "npm" | "javascript" | "typescript" => vec!["npm".into(), "osv".into(), "github".into()],
+        "crates.io" | "cargo" | "rust" => vec!["crates_io".into(), "osv".into(), "github".into()],
+        "pypi" | "python" => vec!["pypi".into(), "osv".into(), "github".into()],
+        "go" | "golang" => vec!["go".into(), "osv".into(), "github".into()],
+        "maven" | "java" | "kotlin" => vec!["osv".into(), "github".into()],
+        "nuget" | "csharp" | "dotnet" => vec!["osv".into(), "github".into()],
+        _ => vec!["osv".into()],
+    }
+}
+
+/// Diagnose WHY a dependency has no or limited source coverage.
+/// Returns (reason, detail) explaining the gap honestly instead of the
+/// misleading "none of your sources cover it" blanket message.
+fn diagnose_coverage(
+    conn: &rusqlite::Connection,
+    package_name: &str,
+    ecosystem: &str,
+) -> (String, String) {
+    // 1. Check source_item_dependencies for ANY links (including low confidence)
+    let has_any_link: bool = conn
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM source_item_dependencies \
+             WHERE LOWER(REPLACE(package_name, '-', '_')) = LOWER(REPLACE(?1, '-', '_')) LIMIT 1)",
+            params![package_name],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+
+    if has_any_link {
+        return (
+            "weak_matches_only".into(),
+            format!(
+                "{} has source items linked but none strong enough to surface.",
+                package_name
+            ),
+        );
+    }
+
+    // 2. Check which source types SHOULD cover this ecosystem
+    let expected_sources = ecosystem_source_types(ecosystem);
+    if expected_sources.is_empty() {
+        return (
+            "unknown_ecosystem".into(),
+            format!(
+                "No source adapters configured for the {} ecosystem.",
+                ecosystem
+            ),
+        );
+    }
+
+    // 3. Check feed_health for those source types
+    let mut failed_sources = Vec::new();
+    let mut healthy_sources = Vec::new();
+    for source_type in &expected_sources {
+        let health: Option<(i64, i64)> = conn
+            .query_row(
+                "SELECT consecutive_failures, total_successes FROM feed_health \
+                 WHERE source_type = ?1 ORDER BY updated_at DESC LIMIT 1",
+                params![source_type],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+        match health {
+            Some((failures, _)) if failures >= 3 => {
+                failed_sources.push(source_type.as_str());
+            }
+            Some((_, successes)) if successes > 0 => {
+                healthy_sources.push(source_type.as_str());
+            }
+            _ => {} // no data = never ran
+        }
+    }
+
+    if !failed_sources.is_empty() {
+        return (
+            "adapter_failing".into(),
+            format!(
+                "Source adapter{} {} failing. Check feed health.",
+                if failed_sources.len() > 1 { "s" } else { "" },
+                failed_sources.join(", ")
+            ),
+        );
+    }
+
+    if healthy_sources.is_empty() {
+        return (
+            "not_checked".into(),
+            format!(
+                "4DA hasn't checked {} yet — source adapters haven't run for this ecosystem.",
+                package_name
+            ),
+        );
+    }
+
+    // Sources are healthy but found nothing for this specific package
+    (
+        "checked_no_results".into(),
+        format!(
+            "Sources checked ({}) but found no results for {}.",
+            healthy_sources.join(", "),
+            package_name
+        ),
+    )
+}
+
 /// For each direct dependency, check if any source_items mention it in the
 /// last 14 days AND whether the user interacted with them. If no interaction
 /// AND signals exist, it's a blind spot.
@@ -840,6 +953,7 @@ fn find_uncovered_deps(
                 available_signal_count: metrics.available.saturating_sub(metrics.interacted),
                 risk_level: "low".to_string(),
                 match_type: "title_heuristic".to_string(),
+                coverage_reason: Some("weak_matches_only".to_string()),
             });
             continue;
         }
@@ -892,6 +1006,8 @@ fn find_uncovered_deps(
             } else {
                 "low".to_string()
             };
+            let (reason, _detail) =
+                diagnose_coverage(conn, &dep_info.package_name, &dep_info.ecosystem);
             uncovered.push(UncoveredDep {
                 name: display_name,
                 dep_type: dep_info.ecosystem.clone(),
@@ -900,6 +1016,7 @@ fn find_uncovered_deps(
                 available_signal_count: 0,
                 risk_level,
                 match_type: "none".to_string(),
+                coverage_reason: Some(reason),
             });
             continue;
         }
@@ -924,6 +1041,7 @@ fn find_uncovered_deps(
             available_signal_count: not_seen,
             risk_level,
             match_type: best_mt.to_string(),
+            coverage_reason: None, // has signals, coverage isn't the issue
         });
     }
 
@@ -2271,11 +2389,32 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     // you haven't seen".
     let (title, explanation) = if d.available_signal_count == 0 {
         let title = truncate_title(&format!("{} — unmonitored", d.name));
-        let explanation = format!(
-            "{} is in your stack but none of your sources cover it. \
-             Add its GitHub repo or package registry to get release and security alerts.",
-            d.name
-        );
+        let explanation = match d.coverage_reason.as_deref() {
+            Some("not_checked") => format!(
+                "4DA hasn't checked {} yet. Source adapters haven't run for this package.",
+                d.name
+            ),
+            Some("adapter_failing") => format!(
+                "{} may have coverage issues — one or more source adapters are failing. Check feed health.",
+                d.name
+            ),
+            Some("checked_no_results") => format!(
+                "Sources were checked but found no results for {}. This is unusual for a {} package.",
+                d.name, d.dep_type
+            ),
+            Some("unknown_ecosystem") => format!(
+                "No source adapters are configured for the {} ecosystem. {} can't be monitored yet.",
+                d.dep_type, d.name
+            ),
+            Some("weak_matches_only") => format!(
+                "{} has some potential matches but none are confirmed. Review weak matches for details.",
+                d.name
+            ),
+            _ => format!(
+                "{} is in your stack but has no confirmed source coverage yet.",
+                d.name
+            ),
+        };
         (title, explanation)
     } else {
         let title = truncate_title(&format!(
@@ -2865,6 +3004,35 @@ mod tests {
                 relevant INTEGER NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE source_item_dependencies (
+                id INTEGER PRIMARY KEY,
+                source_item_id INTEGER NOT NULL,
+                package_name TEXT NOT NULL,
+                ecosystem TEXT,
+                match_type TEXT NOT NULL DEFAULT 'title_heuristic',
+                confidence REAL NOT NULL DEFAULT 0.5,
+                evidence_text TEXT,
+                source_url TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (source_item_id) REFERENCES source_items(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS feed_health (
+                feed_origin TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                total_successes INTEGER NOT NULL DEFAULT 0,
+                total_failures INTEGER NOT NULL DEFAULT 0,
+                last_success_at TEXT,
+                last_failure_at TEXT,
+                last_error TEXT,
+                circuit_open INTEGER NOT NULL DEFAULT 0,
+                circuit_opened_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (feed_origin, source_type)
+            );
             ",
         )
         .expect("schema create");
@@ -3258,6 +3426,7 @@ mod tests {
                 available_signal_count: 5,
                 risk_level: "medium".to_string(),
                 match_type: "none".to_string(),
+                coverage_reason: None,
             })
             .collect();
         let stale: Vec<StaleTopic> = (0..3)
@@ -3316,6 +3485,7 @@ mod tests {
             available_signal_count: 5,
             risk_level: "critical".to_string(),
             match_type: "none".to_string(),
+            coverage_reason: None,
         }];
         // total_direct_deps = 1 → floor to 5 → 1.0/5 = 0.2 uncovered_pressure
         // Score = 0.2 * 55 = 11.0
@@ -3427,6 +3597,7 @@ mod tests {
             available_signal_count: 4,
             risk_level: "critical".into(),
             match_type: "exact_registry".into(),
+            coverage_reason: None,
         }
     }
 
@@ -3709,6 +3880,155 @@ mod tests {
         assert!(
             !weak_matches.iter().any(|d| d.name.contains("axum")),
             "axum should NOT be in weak_matches"
+        );
+    }
+
+    // ─── Coverage diagnostics tests ─────────────────────────────────────
+
+    #[test]
+    fn test_diagnose_coverage_no_links_no_health() {
+        let conn = setup_test_db();
+        // No source_item_dependencies rows, no feed_health rows
+        let (reason, _detail) = diagnose_coverage(&conn, "some-crate", "cargo");
+        assert_eq!(
+            reason, "not_checked",
+            "with no feed_health data, adapters haven't run yet"
+        );
+    }
+
+    #[test]
+    fn test_diagnose_coverage_with_weak_links() {
+        let conn = setup_test_db();
+        // Insert a source item and link it via source_item_dependencies
+        let item_id = insert_source_item(&conn, "some-crate release notes", 0.6, 3);
+        conn.execute(
+            "INSERT INTO source_item_dependencies (source_item_id, package_name, ecosystem, match_type, confidence) \
+             VALUES (?1, 'some-crate', 'cargo', 'title_heuristic', 0.3)",
+            params![item_id],
+        )
+        .unwrap();
+
+        let (reason, _detail) = diagnose_coverage(&conn, "some-crate", "cargo");
+        assert_eq!(
+            reason, "weak_matches_only",
+            "dep with linked source items should be weak_matches_only"
+        );
+    }
+
+    #[test]
+    fn test_diagnose_coverage_healthy_sources_no_results() {
+        let conn = setup_test_db();
+        // No source_item_dependencies, but feed_health shows crates_io is healthy
+        conn.execute(
+            "INSERT INTO feed_health (feed_origin, source_type, consecutive_failures, total_successes, updated_at) \
+             VALUES ('default', 'crates_io', 0, 50, datetime('now'))",
+            [],
+        )
+        .unwrap();
+
+        let (reason, detail) = diagnose_coverage(&conn, "nonexistent-crate", "cargo");
+        assert_eq!(
+            reason, "checked_no_results",
+            "healthy adapters + no results = checked_no_results"
+        );
+        assert!(
+            detail.contains("crates_io"),
+            "detail should mention which sources were checked: {detail}"
+        );
+    }
+
+    #[test]
+    fn test_diagnose_coverage_adapter_failing() {
+        let conn = setup_test_db();
+        // feed_health shows crates_io is failing
+        conn.execute(
+            "INSERT INTO feed_health (feed_origin, source_type, consecutive_failures, total_successes, updated_at) \
+             VALUES ('default', 'crates_io', 5, 10, datetime('now'))",
+            [],
+        )
+        .unwrap();
+
+        let (reason, _detail) = diagnose_coverage(&conn, "tokio", "cargo");
+        assert_eq!(
+            reason, "adapter_failing",
+            "adapter with >=3 consecutive failures should be flagged"
+        );
+    }
+
+    #[test]
+    fn test_ecosystem_source_types_known() {
+        assert!(!ecosystem_source_types("npm").is_empty());
+        assert!(ecosystem_source_types("npm").contains(&"npm".to_string()));
+        assert!(!ecosystem_source_types("crates.io").is_empty());
+        assert!(ecosystem_source_types("crates.io").contains(&"crates_io".to_string()));
+        assert!(!ecosystem_source_types("pypi").is_empty());
+        assert!(ecosystem_source_types("pypi").contains(&"pypi".to_string()));
+    }
+
+    #[test]
+    fn test_ecosystem_source_types_unknown_has_osv() {
+        let types = ecosystem_source_types("unknown_lang");
+        assert!(!types.is_empty(), "even unknown ecosystems get osv");
+        assert!(types.contains(&"osv".to_string()));
+    }
+
+    #[test]
+    fn test_coverage_reason_in_evidence_item_zero_signal() {
+        let dep = UncoveredDep {
+            name: "mystery-pkg".into(),
+            dep_type: "npm".into(),
+            projects_using: vec!["/proj".into()],
+            days_since_last_signal: 999,
+            available_signal_count: 0,
+            risk_level: "medium".into(),
+            match_type: "none".into(),
+            coverage_reason: Some("not_checked".into()),
+        };
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert!(
+            item.explanation.contains("hasn't checked"),
+            "not_checked reason should produce honest explanation: {}",
+            item.explanation
+        );
+    }
+
+    #[test]
+    fn test_coverage_reason_adapter_failing_in_evidence() {
+        let dep = UncoveredDep {
+            name: "failing-pkg".into(),
+            dep_type: "cargo".into(),
+            projects_using: vec!["/proj".into()],
+            days_since_last_signal: 999,
+            available_signal_count: 0,
+            risk_level: "high".into(),
+            match_type: "none".into(),
+            coverage_reason: Some("adapter_failing".into()),
+        };
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert!(
+            item.explanation.contains("source adapters are failing"),
+            "adapter_failing should mention failing adapters: {}",
+            item.explanation
+        );
+    }
+
+    #[test]
+    fn test_coverage_reason_none_fallback() {
+        let dep = UncoveredDep {
+            name: "fallback-pkg".into(),
+            dep_type: "npm".into(),
+            projects_using: vec!["/proj".into()],
+            days_since_last_signal: 999,
+            available_signal_count: 0,
+            risk_level: "low".into(),
+            match_type: "none".into(),
+            coverage_reason: None,
+        };
+        let item = uncovered_dep_to_evidence_item(&dep);
+        assert!(
+            item.explanation.contains("no confirmed source coverage"),
+            "None coverage_reason should use generic fallback: {}",
+            item.explanation
         );
     }
 }
