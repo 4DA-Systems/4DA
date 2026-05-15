@@ -8,6 +8,7 @@ mod cache;
 mod channels;
 #[cfg(test)]
 mod concurrency_tests;
+pub(crate) mod dep_snapshots;
 mod dependencies;
 pub(crate) mod encryption;
 mod history;
@@ -20,6 +21,7 @@ mod sources;
 mod stress_tests;
 
 pub use cache::*;
+pub use dep_snapshots::*;
 pub use dependencies::*;
 pub use history::*;
 pub use sources::*;

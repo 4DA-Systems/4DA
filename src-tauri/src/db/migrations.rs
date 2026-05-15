@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 70;
+        const TARGET_VERSION: i64 = 71;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2578,6 +2578,51 @@ impl Database {
                 )?;
             }
 
+            // Phase 71: dependency_snapshots — point-in-time dep snapshots + current view
+            if current_version < 71 {
+                Self::run_versioned_migration(
+                    &conn,
+                    70,
+                    71,
+                    "Phase 71: dependency_snapshots table + current_dependencies view",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS dependency_snapshots (
+                                id INTEGER PRIMARY KEY,
+                                project_path TEXT NOT NULL,
+                                package_name TEXT NOT NULL,
+                                ecosystem TEXT NOT NULL,
+                                version TEXT,
+                                is_direct INTEGER NOT NULL DEFAULT 1,
+                                is_dev INTEGER NOT NULL DEFAULT 0,
+                                source TEXT NOT NULL DEFAULT 'manifest',
+                                scanned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                UNIQUE(project_path, package_name, ecosystem)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_ds_project ON dependency_snapshots(project_path);
+                            CREATE INDEX IF NOT EXISTS idx_ds_package ON dependency_snapshots(package_name);
+                            CREATE INDEX IF NOT EXISTS idx_ds_scanned ON dependency_snapshots(scanned_at);
+
+                            CREATE VIEW IF NOT EXISTS current_dependencies AS
+                            SELECT ds.* FROM dependency_snapshots ds
+                            INNER JOIN (
+                                SELECT project_path, package_name, ecosystem, MAX(scanned_at) as latest
+                                FROM dependency_snapshots
+                                GROUP BY project_path, package_name, ecosystem
+                            ) latest ON ds.project_path = latest.project_path
+                                AND ds.package_name = latest.package_name
+                                AND ds.ecosystem = latest.ecosystem
+                                AND ds.scanned_at = latest.latest;",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created dependency_snapshots table + current_dependencies view"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -3637,6 +3682,85 @@ mod tests {
             indexes.iter().any(|i| i == "idx_bsd_item"),
             "idx_bsd_item index missing; got {:?}",
             indexes
+        );
+    }
+
+    /// Phase 71: dependency_snapshots table, indexes, and current_dependencies view.
+    #[test]
+    fn test_phase_71_dependency_snapshots() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Table exists.
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='dependency_snapshots'",
+                [],
+                |row| row.get::<_, i64>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+        assert!(
+            table_exists,
+            "dependency_snapshots table should exist after Phase 71 migration"
+        );
+
+        // Expected columns present.
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('dependency_snapshots')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for col in [
+            "id",
+            "project_path",
+            "package_name",
+            "ecosystem",
+            "version",
+            "is_direct",
+            "is_dev",
+            "source",
+            "scanned_at",
+        ] {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "dependency_snapshots column '{}' missing; got {:?}",
+                col,
+                cols
+            );
+        }
+
+        // Indexes exist.
+        let mut idx_stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='dependency_snapshots'")
+            .unwrap();
+        let indexes: Vec<String> = idx_stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for idx in ["idx_ds_project", "idx_ds_package", "idx_ds_scanned"] {
+            assert!(
+                indexes.iter().any(|i| i == idx),
+                "index '{}' missing on dependency_snapshots; got {:?}",
+                idx,
+                indexes
+            );
+        }
+
+        // View exists.
+        let view_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='view' AND name='current_dependencies'",
+                [],
+                |row| row.get::<_, i64>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+        assert!(
+            view_exists,
+            "current_dependencies view should exist after Phase 71 migration"
         );
     }
 }
