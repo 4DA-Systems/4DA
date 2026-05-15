@@ -315,6 +315,11 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           )}
           <span className="text-xs text-text-muted tabular-nums ms-auto">
             {t('blindspots.stats.tracked', { count: totalTracked })}
+            {(report.weak_match_count ?? 0) > 0 && (
+              <span className="text-text-muted/60 ml-2">
+                {t('blindspots.stats.weakHidden', { count: report.weak_match_count ?? undefined })}
+              </span>
+            )}
           </span>
         </div>
       )}
