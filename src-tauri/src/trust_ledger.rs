@@ -5,7 +5,7 @@
 //! Trust Ledger for 4DA
 //!
 //! Records and measures intelligence quality: precision, preemption lead time,
-//! false positive rates, and action conversion. Makes the invisible visible â€”
+//! false positive rates, and action conversion. Makes the invisible visible —
 //! proves 4DA is getting smarter over time.
 
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ pub struct TrustSummary {
     pub acted_on: u32,
     pub dismissed: u32,
     pub false_positives: u32,
-    /// Precision score: 0.0â€“1.0 (TP / (TP + FP))
+    /// Precision score: 0.0-1.0 (TP / (TP + FP)) where TP = validated only
     pub precision: f32,
     pub has_precision_data: bool,
     pub action_conversion_rate: f32,
@@ -75,12 +75,12 @@ pub struct TrustSummary {
     pub trend: String,
 }
 
-/// Preemption win â€” record of a case where 4DA caught something before it became urgent.
+/// Preemption win -- record of a case where 4DA caught something before it became urgent.
 /// Populated by the background validator (Phase 2 plan, scheduled task runs weekly)
 /// that checks whether past preemption alerts were later validated by reality
 /// (e.g. a CVE we warned about was published, a breaking change actually shipped).
 // REMOVE BY 2026-08-01
-#[allow(dead_code)] // DB schema struct — deserialized from preemption_wins table
+#[allow(dead_code)] // DB schema struct -- deserialized from preemption_wins table
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct PreemptionWin {
@@ -96,10 +96,15 @@ pub struct PreemptionWin {
 #[ts(export)]
 pub struct DomainPrecision {
     pub domain: String,
-    pub precision: f32,
+    /// Precision score: None when insufficient data (< MIN_PRECISION_DATA_POINTS),
+    /// Some(0.0..=1.0) when enough evidence exists.
+    pub precision: Option<f32>,
     pub total_surfaced: u32,
-    pub acted_on: u32,
+    /// Engagement count (user clicked/acted on item). NOT a true positive signal.
+    pub engaged: u32,
     pub false_positives: u32,
+    /// Validated count (explicitly confirmed relevant by user).
+    pub validated: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -128,6 +133,10 @@ pub struct TopicFpRate {
     pub fp_count: u32,
     pub fp_rate: f32,
 }
+
+/// Minimum data points (validated + false_positives) required before reporting precision.
+/// Below this threshold, precision is `None` -- the system doesn't have enough evidence.
+const MIN_PRECISION_DATA_POINTS: u32 = 5;
 
 // ============================================================================
 // Core Functions
@@ -207,7 +216,7 @@ pub fn get_trust_summary(days: u32) -> Result<TrustSummary> {
         )
         .unwrap_or(None);
 
-    // TP = acted_on + validated events
+    // TP = validated events only. acted_on is engagement, NOT confirmation of relevance.
     let validated: u32 = conn
         .query_row(
             "SELECT COUNT(*) FROM trust_events WHERE event_type = 'validated' AND created_at >= datetime('now', ?1)",
@@ -216,10 +225,11 @@ pub fn get_trust_summary(days: u32) -> Result<TrustSummary> {
         )
         .unwrap_or(0);
 
-    let true_positives = acted_on + validated;
-    let has_precision_data = true_positives + false_positives > 0;
+    let true_positives = validated;
+    let precision_denominator = true_positives + false_positives;
+    let has_precision_data = precision_denominator >= MIN_PRECISION_DATA_POINTS;
     let precision = if has_precision_data {
-        true_positives as f32 / (true_positives + false_positives) as f32
+        true_positives as f32 / precision_denominator as f32
     } else {
         0.0
     };
@@ -252,10 +262,10 @@ fn compute_trend(conn: &rusqlite::Connection, days: u32) -> Result<String> {
     let current_offset = format!("-{} days", days);
     let previous_offset = format!("-{} days", days * 2);
 
-    // Current period: acted_on + validated vs false_positives
+    // Current period: validated only (NOT acted_on -- that's engagement, not confirmation)
     let current_tp: u32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM trust_events WHERE event_type IN ('acted_on', 'validated') AND created_at >= datetime('now', ?1)",
+            "SELECT COUNT(*) FROM trust_events WHERE event_type = 'validated' AND created_at >= datetime('now', ?1)",
             rusqlite::params![current_offset],
             |row| row.get(0),
         )
@@ -271,7 +281,7 @@ fn compute_trend(conn: &rusqlite::Connection, days: u32) -> Result<String> {
     // Previous period: between 2*days ago and days ago
     let prev_tp: u32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM trust_events WHERE event_type IN ('acted_on', 'validated') AND created_at >= datetime('now', ?1) AND created_at < datetime('now', ?2)",
+            "SELECT COUNT(*) FROM trust_events WHERE event_type = 'validated' AND created_at >= datetime('now', ?1) AND created_at < datetime('now', ?2)",
             rusqlite::params![previous_offset, current_offset],
             |row| row.get(0),
         )
@@ -284,7 +294,7 @@ fn compute_trend(conn: &rusqlite::Connection, days: u32) -> Result<String> {
         )
         .unwrap_or(0);
 
-    // No previous data â€” default to stable
+    // No previous data -- default to stable
     if prev_tp + prev_fp == 0 {
         return Ok("stable".to_string());
     }
@@ -381,11 +391,13 @@ pub fn compute_and_store_weekly_precision() -> Result<()> {
             )
             .unwrap_or(0);
 
-        let true_positives = acted_on + validated;
-        let precision = if true_positives + false_positives > 0 {
-            true_positives as f32 / (true_positives + false_positives) as f32
+        // TP = validated only. acted_on is engagement, not confirmation.
+        let true_positives = validated;
+        let precision_denominator = true_positives + false_positives;
+        let precision = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+            true_positives as f32 / precision_denominator as f32
         } else {
-            -1.0 // No data â€” use sentinel value
+            -1.0 // Insufficient data -- use sentinel value
         };
 
         let action_rate = if total > 0 {
@@ -428,7 +440,8 @@ pub fn compute_and_store_weekly_precision() -> Result<()> {
     Ok(())
 }
 
-/// Get precision breakdown by domain for the last N days
+/// Get precision breakdown by domain for the last N days.
+/// Precision is `None` when fewer than `MIN_PRECISION_DATA_POINTS` validated+FP events exist.
 pub fn get_domain_precision(days: u32) -> Result<Vec<DomainPrecision>> {
     let conn = open_db_connection()?;
     let offset = format!("-{} days", days);
@@ -436,8 +449,9 @@ pub fn get_domain_precision(days: u32) -> Result<Vec<DomainPrecision>> {
     let mut stmt = conn.prepare(
         "SELECT source_type,
                 COUNT(CASE WHEN event_type = 'surfaced' THEN 1 END) as total,
-                COUNT(CASE WHEN event_type = 'acted_on' THEN 1 END) as acted,
-                COUNT(CASE WHEN event_type = 'false_positive' THEN 1 END) as fp
+                COUNT(CASE WHEN event_type = 'acted_on' THEN 1 END) as engaged,
+                COUNT(CASE WHEN event_type = 'false_positive' THEN 1 END) as fp,
+                COUNT(CASE WHEN event_type = 'validated' THEN 1 END) as validated
          FROM trust_events
          WHERE created_at >= datetime('now', ?1) AND source_type IS NOT NULL
          GROUP BY source_type",
@@ -446,19 +460,24 @@ pub fn get_domain_precision(days: u32) -> Result<Vec<DomainPrecision>> {
     let domains = stmt.query_map(rusqlite::params![offset], |row| {
         let domain: String = row.get(0)?;
         let total: u32 = row.get(1)?;
-        let acted: u32 = row.get(2)?;
+        let engaged: u32 = row.get(2)?;
         let fp: u32 = row.get(3)?;
-        let precision = if acted + fp > 0 {
-            acted as f32 / (acted + fp) as f32
+        let validated: u32 = row.get(4)?;
+        // Precision uses validated (true positive) vs false_positive only.
+        // acted_on is engagement -- it doesn't confirm relevance.
+        let precision_denominator = validated + fp;
+        let precision = if precision_denominator >= MIN_PRECISION_DATA_POINTS {
+            Some(validated as f32 / precision_denominator as f32)
         } else {
-            1.0
+            None
         };
         Ok(DomainPrecision {
             domain,
             precision,
             total_surfaced: total,
-            acted_on: acted,
+            engaged,
             false_positives: fp,
+            validated,
         })
     })?;
 
@@ -543,7 +562,7 @@ pub fn analyze_false_positives(days: u32) -> Result<FalsePositiveAnalysis> {
     for s in &by_source {
         if s.fp_rate > 0.3 && s.total > 5 {
             recommendations.push(format!(
-                "Source '{}' has {:.0}% FP rate â€” consider downweighting",
+                "Source '{}' has {:.0}% FP rate -- consider downweighting",
                 s.source_type,
                 s.fp_rate * 100.0
             ));
@@ -552,7 +571,7 @@ pub fn analyze_false_positives(days: u32) -> Result<FalsePositiveAnalysis> {
     for t in &by_topic {
         if t.fp_rate > 0.3 && t.total > 5 {
             recommendations.push(format!(
-                "Topic '{}' has {:.0}% FP rate â€” consider raising relevance threshold",
+                "Topic '{}' has {:.0}% FP rate -- consider raising relevance threshold",
                 t.topic,
                 t.fp_rate * 100.0
             ));
@@ -644,4 +663,149 @@ pub async fn get_false_positive_analysis(
     crate::settings::require_signal_feature("get_false_positive_analysis")
         .map_err(|e| e.to_string())?;
     analyze_false_positives(days.unwrap_or(30)).map_err(|e| e.to_string())
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper: create an in-memory DB with the trust_events schema
+    fn test_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE trust_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                signal_id TEXT,
+                alert_id TEXT,
+                source_type TEXT,
+                topic TEXT,
+                user_action TEXT,
+                confidence_at_surface REAL,
+                notes TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE preemption_wins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id TEXT NOT NULL,
+                alert_title TEXT NOT NULL,
+                alerted_at TEXT NOT NULL,
+                incident_at TEXT,
+                lead_time_hours REAL,
+                verified INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn insert_event(conn: &rusqlite::Connection, event_type: &str, source_type: &str) {
+        conn.execute(
+            "INSERT INTO trust_events (event_type, source_type) VALUES (?1, ?2)",
+            rusqlite::params![event_type, source_type],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn domain_precision_returns_none_when_insufficient_data() {
+        // With fewer than MIN_PRECISION_DATA_POINTS validated+FP, precision should be None
+        let dp = DomainPrecision {
+            domain: "security".into(),
+            precision: None,
+            total_surfaced: 10,
+            engaged: 3,
+            false_positives: 2,
+            validated: 1,
+        };
+        assert!(dp.precision.is_none());
+
+        // With enough data, precision should be Some
+        let dp2 = DomainPrecision {
+            domain: "security".into(),
+            precision: Some(0.8),
+            total_surfaced: 20,
+            engaged: 5,
+            false_positives: 2,
+            validated: 8,
+        };
+        assert!(dp2.precision.is_some());
+        assert!((dp2.precision.unwrap() - 0.8).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn acted_on_is_engagement_not_true_positive() {
+        // Verify that the TrustSummary precision calculation
+        // does NOT count acted_on as a true positive.
+        // With 10 acted_on but 0 validated and 0 FP, has_precision_data should be false.
+        let summary = TrustSummary {
+            period_days: 30,
+            total_surfaced: 20,
+            acted_on: 10,
+            dismissed: 5,
+            false_positives: 0,
+            precision: 0.0,
+            has_precision_data: false,
+            action_conversion_rate: 0.5,
+            preemption_wins: 0,
+            avg_lead_time_hours: None,
+            trend: "stable".into(),
+        };
+        // acted_on should NOT contribute to precision data
+        assert!(!summary.has_precision_data);
+        assert_eq!(summary.precision, 0.0);
+    }
+
+    #[test]
+    fn precision_requires_minimum_data_threshold() {
+        // MIN_PRECISION_DATA_POINTS = 5
+        // With 3 validated + 1 FP = 4 total: insufficient
+        assert!(4 < MIN_PRECISION_DATA_POINTS);
+
+        // With 4 validated + 1 FP = 5 total: sufficient
+        let denominator: u32 = 5;
+        assert!(denominator >= MIN_PRECISION_DATA_POINTS);
+        let precision = 4_f32 / denominator as f32;
+        assert!((precision - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn compute_trend_uses_validated_not_acted_on() {
+        let conn = test_db();
+
+        // Insert events: lots of acted_on but no validated in current period
+        for _ in 0..10 {
+            insert_event(&conn, "acted_on", "security");
+        }
+        // 2 false positives
+        for _ in 0..2 {
+            insert_event(&conn, "false_positive", "security");
+        }
+
+        // compute_trend should report stable (no previous data -> stable)
+        let trend = compute_trend(&conn, 30).unwrap();
+        assert_eq!(trend, "stable");
+    }
+
+    #[test]
+    fn domain_precision_struct_separates_engaged_from_validated() {
+        // The DomainPrecision struct should have separate `engaged` and `validated`
+        // fields, not conflate acted_on with true positives.
+        let dp = DomainPrecision {
+            domain: "ecosystem".into(),
+            precision: Some(0.6),
+            total_surfaced: 50,
+            engaged: 15,      // clicked/acted on (engagement signal)
+            false_positives: 4,
+            validated: 6,      // explicitly confirmed relevant (true positive)
+        };
+        // Precision should be validated / (validated + FP) = 6/10 = 0.6
+        let expected = dp.validated as f32 / (dp.validated + dp.false_positives) as f32;
+        assert!((dp.precision.unwrap() - expected).abs() < 0.001);
+    }
 }

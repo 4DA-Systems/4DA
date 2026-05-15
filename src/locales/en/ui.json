@@ -2781,6 +2781,8 @@
   "blindspots.signal.showLess": "Show fewer",
   "blindspots.stats.tracked_one": "{{count}} dependency tracked",
   "blindspots.stats.tracked_other": "{{count}} dependencies tracked",
+  "blindspots.stats.weakHidden_one": "({{count}} weak match hidden)",
+  "blindspots.stats.weakHidden_other": "({{count}} weak matches hidden)",
   "blindspots.dismissed": "Signal dismissed.",
   "blindspots.action.undo": "Undo",
   "blindspots.action.watch": "Watch this package",

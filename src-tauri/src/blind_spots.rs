@@ -2931,8 +2931,16 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     feed.items.extend(llm_judged_blind_spot_items());
 
     let total_tracked = feed.total_tracked;
+    let weak_count = feed
+        .items
+        .iter()
+        .filter(|i| i.id.starts_with("weak-match-"))
+        .count();
     let mut final_feed = build_feed_with_existing_score(feed.items, feed.score);
     final_feed.total_tracked = total_tracked;
+    if weak_count > 0 {
+        final_feed.weak_match_count = Some(weak_count);
+    }
     Ok(final_feed)
 }
 

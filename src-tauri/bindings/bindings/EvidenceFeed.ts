@@ -21,4 +21,8 @@ score: number | null,
  * Blind Spots). Lets the UI show "5 issues across 47 tracked deps"
  * instead of the misleading "5 tracked deps".
  */
-total_tracked: number | null, };
+total_tracked: number | null,
+/**
+ * Count of items hidden as weak/title-heuristic matches.
+ */
+weak_match_count: number | null, };

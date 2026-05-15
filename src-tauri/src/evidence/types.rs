@@ -363,6 +363,11 @@ pub struct EvidenceFeed {
     /// instead of the misleading "5 tracked deps".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_tracked: Option<usize>,
+
+    /// Count of items hidden as weak/title-heuristic matches.
+    /// Lets the UI say "27 weak matches hidden" so the denominator is transparent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub weak_match_count: Option<usize>,
 }
 
 impl EvidenceFeed {
@@ -381,6 +386,7 @@ impl EvidenceFeed {
             high_count,
             score: None,
             total_tracked: None,
+            weak_match_count: None,
         }
     }
 

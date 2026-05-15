@@ -112,10 +112,14 @@ interface TrustSummary {
 
 interface DomainPrecision {
   domain: string;
-  precision: number;
+  /** null when insufficient data (< 5 validated+FP events) */
+  precision: number | null;
   total_surfaced: number;
-  acted_on: number;
+  /** Engagement count -- user clicked/acted on item. NOT a true positive signal. */
+  engaged: number;
   false_positives: number;
+  /** Explicitly confirmed relevant by user -- true positive for precision. */
+  validated: number;
 }
 
 interface FalsePositiveAnalysis {
