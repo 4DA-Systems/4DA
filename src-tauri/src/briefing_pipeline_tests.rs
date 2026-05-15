@@ -47,6 +47,7 @@ fn mk(title: &str, source: &str, score: f32) -> BriefingItem {
         content_type: None,
         corroboration_count: 0,
         alt_sources: vec![],
+        section: None,
     }
 }
 

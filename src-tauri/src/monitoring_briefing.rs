@@ -57,6 +57,9 @@ pub struct BriefingItem {
     /// Alternative sources that reported the same topic (cluster members)
     #[serde(default)]
     pub alt_sources: Vec<crate::topic_clustering::AltSource>,
+    /// Which section of the brief this item belongs to: "action", "watch", or "reading"
+    #[serde(default)]
+    pub section: Option<String>,
 }
 
 /// A topic the user hasn't seen intelligence about recently
@@ -296,6 +299,12 @@ pub(crate) fn build_enriched_briefing(
     let mut items = items;
     apply_topic_clustering(&mut items);
 
+    // Split items into action-first sections.
+    // Actions (security, breaking changes, etc.) lead the briefing.
+    // Watch items are non-actionable but corroborated and high-scoring.
+    // Reading items are everything else — informational, lower confidence.
+    let items = apply_section_split(items);
+
     let total_relevant = items.len();
 
     // Detect knowledge gaps: declared tech with no recent signals
@@ -342,16 +351,54 @@ pub(crate) fn build_enriched_briefing(
 /// This prevents a single dominant source type (e.g. security advisories)
 /// from consuming all briefing slots.
 ///
+/// Content types that represent actionable intelligence — things a developer
+/// might need to DO something about. These get priority in the brief's hero section.
+fn is_actionable_content_type(content_type: Option<&str>) -> bool {
+    matches!(
+        content_type,
+        Some("security_advisory")
+            | Some("vulnerability_report")
+            | Some("cve")
+            | Some("breaking_change")
+            | Some("deprecation_notice")
+            | Some("release_notes")
+            | Some("platform_update")
+            | Some("migration_guide")
+    )
+}
+
+/// Content types that are informational but not actionable — good for awareness
+/// but shouldn't displace actionable items in the hero section.
+#[cfg(test)]
+fn is_optional_reading_type(content_type: Option<&str>) -> bool {
+    matches!(
+        content_type,
+        Some("tutorial")
+            | Some("show_and_tell")
+            | Some("opinion")
+            | Some("blog_post")
+            | Some("discussion")
+            | Some("general")
+            | Some("announcement")
+            | Some("comparison")
+    ) || content_type.is_none()
+}
+
 /// Check if a briefing item is low-quality commodity content.
-/// Commodity = Tutorial/HelpRequest/Question with score below 0.45.
+/// Commodity = Tutorial/HelpRequest/Question/ShowAndTell with score below 0.45,
+/// or any item with NULL content_type (cannot be verified as action material).
 /// These items don't count toward the minimum quality gate.
 fn is_low_quality_commodity(item: &BriefingItem) -> bool {
+    // NULL content_type items are unclassified — treat as low confidence
+    if item.content_type.is_none() && item.score < 0.55 {
+        return true;
+    }
     if item.score >= 0.45 {
         return false;
     }
     matches!(
         item.content_type.as_deref(),
-        Some("tutorial") | Some("help_request") | Some("question")
+        Some("tutorial") | Some("help_request") | Some("question") | Some("show_and_tell")
     )
 }
 
@@ -510,6 +557,74 @@ fn apply_diversity_slots(items: Vec<BriefingItem>, max_items: usize) -> Vec<Brie
 }
 
 // ============================================================================
+// Section Split (Action → Watch → Reading)
+// ============================================================================
+
+/// Split briefing items into action-first sections and recombine.
+///
+/// The briefing prioritizes actionable intelligence (security advisories,
+/// breaking changes, migration guides) above informational content (tutorials,
+/// blog posts, discussions). Within each section, items retain their existing
+/// priority-then-score ordering from the upstream sort.
+///
+/// Sections:
+/// - **action**: items whose `content_type` is actionable (security, breaking, etc.)
+/// - **watch**: non-actionable items with score >= 0.6 AND corroboration from
+///   multiple sources (high confidence, worth monitoring)
+/// - **reading**: everything else (informational, uncorroborated, lower confidence)
+///
+/// Each section is capped at 5 items. The final vec is action + watch + reading.
+fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
+    let mut action_items: Vec<BriefingItem> = items
+        .iter()
+        .filter(|i| is_actionable_content_type(i.content_type.as_deref()))
+        .cloned()
+        .map(|mut i| {
+            i.section = Some("action".into());
+            i
+        })
+        .collect();
+
+    let mut watch_items: Vec<BriefingItem> = items
+        .iter()
+        .filter(|i| {
+            !is_actionable_content_type(i.content_type.as_deref())
+                && i.score >= 0.6
+                && i.corroboration_count > 0
+        })
+        .cloned()
+        .map(|mut i| {
+            i.section = Some("watch".into());
+            i
+        })
+        .collect();
+
+    let mut reading_items: Vec<BriefingItem> = items
+        .iter()
+        .filter(|i| {
+            !is_actionable_content_type(i.content_type.as_deref())
+                && (i.score < 0.6 || i.corroboration_count == 0)
+        })
+        .cloned()
+        .map(|mut i| {
+            i.section = Some("reading".into());
+            i
+        })
+        .collect();
+
+    // Cap each section
+    action_items.truncate(5);
+    watch_items.truncate(5);
+    reading_items.truncate(5);
+
+    // Combine: actions first, then watch, then reading
+    let mut final_items = action_items;
+    final_items.extend(watch_items);
+    final_items.extend(reading_items);
+    final_items
+}
+
+// ============================================================================
 // Morning Briefing Check
 // ============================================================================
 
@@ -637,6 +752,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                         .and_then(|b| b.content_type.clone()),
                     corroboration_count: 0,
                     alt_sources: vec![],
+                    section: None,
                 })
                 .collect()
         } else {
@@ -668,6 +784,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                             content_type: None,
                             corroboration_count: 0,
                             alt_sources: vec![],
+                            section: None,
                         })
                         .collect()
                 })
@@ -1561,6 +1678,7 @@ mod tests {
             content_type: None,
             corroboration_count: 0,
             alt_sources: vec![],
+            section: None,
         };
         assert_eq!(item.title, "Rust 2026 Edition announced");
         assert_eq!(item.source_type, "hackernews");
@@ -1589,6 +1707,7 @@ mod tests {
                     content_type: None,
                     corroboration_count: 0,
                     alt_sources: vec![],
+                    section: None,
                 },
                 BriefingItem {
                     title: "Tauri 3.0 beta released".to_string(),
@@ -1603,6 +1722,7 @@ mod tests {
                     content_type: None,
                     corroboration_count: 0,
                     alt_sources: vec![],
+                    section: None,
                 },
             ],
             total_relevant: 2,
@@ -1712,6 +1832,19 @@ mod tests {
             content_type: None,
             corroboration_count: 0,
             alt_sources: vec![],
+            section: None,
+        }
+    }
+
+    fn make_item_with_type(
+        title: &str,
+        source: &str,
+        score: f32,
+        content_type: Option<&str>,
+    ) -> BriefingItem {
+        BriefingItem {
+            content_type: content_type.map(String::from),
+            ..make_briefing_item(title, source, score)
         }
     }
 
@@ -1896,5 +2029,219 @@ mod tests {
             days_since_last: 10,
         });
         assert!(b.has_meaningful_content(), "10-day gap is high urgency");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Content type classifier tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_actionable_content_types() {
+        assert!(is_actionable_content_type(Some("security_advisory")));
+        assert!(is_actionable_content_type(Some("vulnerability_report")));
+        assert!(is_actionable_content_type(Some("cve")));
+        assert!(is_actionable_content_type(Some("breaking_change")));
+        assert!(is_actionable_content_type(Some("deprecation_notice")));
+        assert!(is_actionable_content_type(Some("release_notes")));
+        assert!(is_actionable_content_type(Some("platform_update")));
+        assert!(is_actionable_content_type(Some("migration_guide")));
+
+        assert!(!is_actionable_content_type(Some("tutorial")));
+        assert!(!is_actionable_content_type(Some("blog_post")));
+        assert!(!is_actionable_content_type(Some("show_and_tell")));
+        assert!(!is_actionable_content_type(None));
+    }
+
+    #[test]
+    fn test_optional_reading_types() {
+        assert!(is_optional_reading_type(Some("tutorial")));
+        assert!(is_optional_reading_type(Some("show_and_tell")));
+        assert!(is_optional_reading_type(Some("blog_post")));
+        assert!(is_optional_reading_type(Some("discussion")));
+        assert!(is_optional_reading_type(None));
+
+        assert!(!is_optional_reading_type(Some("security_advisory")));
+        assert!(!is_optional_reading_type(Some("cve")));
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // Section split tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_actionable_items_prioritized() {
+        // 10 items: 2 security, 1 breaking, 3 tutorials, 4 blog posts
+        // After section split, the first items must be security + breaking.
+        let items = vec![
+            make_item_with_type("CVE in tokio", "github", 0.90, Some("security_advisory")),
+            make_item_with_type("CVE in serde", "github", 0.85, Some("cve")),
+            make_item_with_type(
+                "Breaking: Rust 2027",
+                "hackernews",
+                0.80,
+                Some("breaking_change"),
+            ),
+            make_item_with_type("Learn Rust in 30 days", "reddit", 0.78, Some("tutorial")),
+            make_item_with_type(
+                "How to build a web server",
+                "reddit",
+                0.75,
+                Some("tutorial"),
+            ),
+            make_item_with_type(
+                "My first Rust project",
+                "hackernews",
+                0.72,
+                Some("tutorial"),
+            ),
+            make_item_with_type("Why I switched to Rust", "reddit", 0.70, Some("blog_post")),
+            make_item_with_type(
+                "Rust vs Go benchmark",
+                "hackernews",
+                0.68,
+                Some("blog_post"),
+            ),
+            make_item_with_type("Async patterns in Rust", "reddit", 0.65, Some("blog_post")),
+            make_item_with_type(
+                "Rust adoption survey",
+                "hackernews",
+                0.60,
+                Some("blog_post"),
+            ),
+        ];
+
+        let result = apply_section_split(items);
+
+        // First 3 items must be the actionable ones (security + breaking)
+        assert_eq!(result[0].section.as_deref(), Some("action"));
+        assert_eq!(result[1].section.as_deref(), Some("action"));
+        assert_eq!(result[2].section.as_deref(), Some("action"));
+        assert_eq!(result[0].title, "CVE in tokio");
+        assert_eq!(result[1].title, "CVE in serde");
+        assert_eq!(result[2].title, "Breaking: Rust 2027");
+
+        // Remaining items should be in reading section (no corroboration = not watch)
+        for item in &result[3..] {
+            assert_eq!(item.section.as_deref(), Some("reading"));
+        }
+    }
+
+    #[test]
+    fn test_null_content_type_not_in_actions() {
+        // Item with None content_type should NOT be in "action" section
+        let items = vec![
+            make_item_with_type("Mystery item", "rss", 0.80, None),
+            make_item_with_type("CVE-2026-1234", "github", 0.75, Some("cve")),
+        ];
+
+        let result = apply_section_split(items);
+
+        // The CVE should be first (action section)
+        assert_eq!(result[0].title, "CVE-2026-1234");
+        assert_eq!(result[0].section.as_deref(), Some("action"));
+
+        // The None content_type item should be in reading, not action
+        let mystery = result.iter().find(|i| i.title == "Mystery item").unwrap();
+        assert_ne!(
+            mystery.section.as_deref(),
+            Some("action"),
+            "NULL content_type must not be in action section"
+        );
+    }
+
+    #[test]
+    fn test_section_caps() {
+        // 10 actionable items -> only 5 should make it to the final list
+        let items: Vec<BriefingItem> = (0..10)
+            .map(|i| {
+                make_item_with_type(
+                    &format!("CVE-{i}"),
+                    "github",
+                    0.90 - (i as f32 * 0.01),
+                    Some("security_advisory"),
+                )
+            })
+            .collect();
+
+        let result = apply_section_split(items);
+
+        // Only 5 action items should survive the cap
+        let action_count = result
+            .iter()
+            .filter(|i| i.section.as_deref() == Some("action"))
+            .count();
+        assert_eq!(action_count, 5, "action section must be capped at 5");
+        assert_eq!(result.len(), 5, "no other sections present, total = 5");
+
+        // The first 5 by score should be kept
+        assert_eq!(result[0].title, "CVE-0");
+        assert_eq!(result[4].title, "CVE-4");
+    }
+
+    #[test]
+    fn test_watch_section_requires_corroboration() {
+        // High-scoring non-actionable item WITHOUT corroboration -> reading, not watch
+        let mut high_score_no_corrob =
+            make_item_with_type("Interesting post", "hackernews", 0.80, Some("blog_post"));
+        high_score_no_corrob.corroboration_count = 0;
+
+        // High-scoring non-actionable item WITH corroboration -> watch
+        let mut high_score_corrob =
+            make_item_with_type("Hot topic", "reddit", 0.75, Some("discussion"));
+        high_score_corrob.corroboration_count = 2;
+
+        let items = vec![high_score_no_corrob, high_score_corrob];
+        let result = apply_section_split(items);
+
+        let interesting = result
+            .iter()
+            .find(|i| i.title == "Interesting post")
+            .unwrap();
+        assert_eq!(
+            interesting.section.as_deref(),
+            Some("reading"),
+            "uncorroborated high-score item goes to reading"
+        );
+
+        let hot = result.iter().find(|i| i.title == "Hot topic").unwrap();
+        assert_eq!(
+            hot.section.as_deref(),
+            Some("watch"),
+            "corroborated high-score item goes to watch"
+        );
+    }
+
+    #[test]
+    fn test_low_quality_commodity_show_and_tell() {
+        // show_and_tell below 0.45 should be flagged as commodity
+        let show_tell = make_item_with_type("My project", "hn", 0.40, Some("show_and_tell"));
+        assert!(
+            is_low_quality_commodity(&show_tell),
+            "show_and_tell below 0.45 is commodity"
+        );
+
+        // show_and_tell above 0.45 is not commodity
+        let show_tell_good = make_item_with_type("My project", "hn", 0.50, Some("show_and_tell"));
+        assert!(
+            !is_low_quality_commodity(&show_tell_good),
+            "show_and_tell above 0.45 is not commodity"
+        );
+    }
+
+    #[test]
+    fn test_low_quality_null_content_type() {
+        // NULL content_type below 0.55 is treated as low-confidence commodity
+        let null_low = make_item_with_type("Unknown item", "rss", 0.50, None);
+        assert!(
+            is_low_quality_commodity(&null_low),
+            "NULL content_type below 0.55 is commodity"
+        );
+
+        // NULL content_type at 0.55+ is not commodity
+        let null_ok = make_item_with_type("Unknown item", "rss", 0.55, None);
+        assert!(
+            !is_low_quality_commodity(&null_ok),
+            "NULL content_type at 0.55+ is not commodity"
+        );
     }
 }

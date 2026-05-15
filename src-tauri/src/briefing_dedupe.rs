@@ -142,6 +142,7 @@ mod tests {
             content_type: None,
             corroboration_count: 0,
             alt_sources: vec![],
+            section: None,
         }
     }
 

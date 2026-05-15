@@ -493,6 +493,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
                 content_type: Some("security_advisory".to_string()),
                 corroboration_count: 0,
                 alt_sources: vec![],
+                section: None,
             },
             BriefingItem {
                 title: "Tauri 3.0 drops macOS 11 support — migration guide".to_string(),
@@ -507,6 +508,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
                 content_type: Some("release_note".to_string()),
                 corroboration_count: 0,
                 alt_sources: vec![],
+                section: None,
             },
             BriefingItem {
                 title: "Show HN: Rust testing framework 10x faster than cargo test".to_string(),
@@ -521,6 +523,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
                 content_type: Some("show_and_tell".to_string()),
                 corroboration_count: 0,
                 alt_sources: vec![],
+                section: None,
             },
         ],
         total_relevant: 3,

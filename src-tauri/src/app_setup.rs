@@ -1459,6 +1459,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                             .and_then(|b| b.content_type.clone()),
                         corroboration_count: 0,
                         alt_sources: vec![],
+                        section: None,
                     })
                     .collect();
                 if !items.is_empty() {
