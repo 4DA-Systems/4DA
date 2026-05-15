@@ -808,6 +808,8 @@ pub fn run() {
             // Intelligence panels
             attention::get_attention_report,
             blind_spots::get_blind_spots,
+            blind_spots::add_package_watch,
+            blind_spots::dismiss_blind_spot,
             knowledge_decay::get_knowledge_gaps,
             preemption::get_preemption_alerts,
             signal_chains::get_signal_chains,

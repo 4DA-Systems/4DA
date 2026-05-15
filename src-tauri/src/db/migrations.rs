@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 69;
+        const TARGET_VERSION: i64 = 70;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2552,6 +2552,32 @@ impl Database {
                 )?;
             }
 
+            // Phase 70: blind_spot_dismissals — persist user dismissals across restarts
+            if current_version < 70 {
+                Self::run_versioned_migration(
+                    &conn,
+                    69,
+                    70,
+                    "Phase 70: blind_spot_dismissals table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS blind_spot_dismissals (
+                                id INTEGER PRIMARY KEY,
+                                item_id TEXT NOT NULL UNIQUE,
+                                reason TEXT NOT NULL,
+                                dismissed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_bsd_item ON blind_spot_dismissals(item_id);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created blind_spot_dismissals table for persistent dismissals"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -3559,5 +3585,58 @@ mod tests {
                 indexes
             );
         }
+    }
+
+    /// Phase 70: blind_spot_dismissals table + index present.
+    #[test]
+    fn test_phase_70_blind_spot_dismissals() {
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Table exists.
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='blind_spot_dismissals'",
+                [],
+                |row| row.get::<_, i64>(0).map(|c| c > 0),
+            )
+            .unwrap_or(false);
+        assert!(
+            table_exists,
+            "blind_spot_dismissals table should exist after Phase 70 migration"
+        );
+
+        // Expected columns present.
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('blind_spot_dismissals')")
+            .unwrap();
+        let cols: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        for col in ["id", "item_id", "reason", "dismissed_at"] {
+            assert!(
+                cols.iter().any(|c| c == col),
+                "blind_spot_dismissals column '{}' missing; got {:?}",
+                col,
+                cols
+            );
+        }
+
+        // Index exists.
+        let mut idx_stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='blind_spot_dismissals'")
+            .unwrap();
+        let indexes: Vec<String> = idx_stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(
+            indexes.iter().any(|i| i == "idx_bsd_item"),
+            "idx_bsd_item index missing; got {:?}",
+            indexes
+        );
     }
 }

@@ -2783,6 +2783,7 @@
   "blindspots.stats.tracked_other": "{{count}} dependencies tracked",
   "blindspots.dismissed": "Signal dismissed.",
   "blindspots.action.undo": "Undo",
+  "blindspots.action.watch": "Watch this package",
   "blindspots.status.blindSpot": "Uncovered",
   "blindspots.status.drifting": "Unreviewed",
   "blindspots.status.covered": "Covered",

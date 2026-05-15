@@ -91,10 +91,11 @@ const SignalRow = memo(function SignalRow({
 });
 
 const DepCoverageRow = memo(function DepCoverageRow({
-  dep, onDismissSignal,
+  dep, onDismissSignal, onAddWatch,
 }: {
   dep: DepRow;
   onDismissSignal: (id: string) => void;
+  onAddWatch?: (packageName: string, ecosystem: string) => void;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -157,6 +158,19 @@ const DepCoverageRow = memo(function DepCoverageRow({
               <div className="flex items-start gap-2">
                 <p className="text-xs text-text-muted flex-1">{dep.gap.explanation}</p>
                 {/* eslint-disable i18next/no-literal-string */}
+                {onAddWatch && dep.gap.id.startsWith('bs_uncov_') && (() => {
+                  const parts = dep.gap!.id.replace('bs_uncov_', '').split('_');
+                  const ecosystem = parts[0] ?? '';
+                  return (
+                    <button
+                      onClick={() => onAddWatch(dep.name, ecosystem)}
+                      className="text-xs text-text-muted hover:text-green-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-green-500/10"
+                      title={t('blindspots.action.watch')}
+                    >
+                      +
+                    </button>
+                  );
+                })()}
                 <button
                   onClick={() => onDismissSignal(dep.gap!.id)}
                   className="text-xs text-text-muted hover:text-red-400 opacity-0 group-hover/gap:opacity-100 transition-all shrink-0 px-1.5 py-1 rounded hover:bg-red-500/10"
@@ -203,13 +217,14 @@ interface TierSectionProps {
   badgeColor: string;
   depRows: DepRow[];
   onDismissSignal: (id: string) => void;
+  onAddWatch?: (packageName: string, ecosystem: string) => void;
   emptyText: string;
 }
 
 export const TierSection = memo(function TierSection({
   dotColor, borderColor, title, subtitle,
   badgeText, badgeColor,
-  depRows, onDismissSignal, emptyText,
+  depRows, onDismissSignal, onAddWatch, emptyText,
 }: TierSectionProps) {
   return (
     <section className="mb-4" aria-label={title}>
@@ -225,7 +240,7 @@ export const TierSection = memo(function TierSection({
         {depRows.length > 0 ? (
           <div>
             {depRows.map(dep => (
-              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} />
+              <DepCoverageRow key={dep.name} dep={dep} onDismissSignal={onDismissSignal} onAddWatch={onAddWatch} />
             ))}
           </div>
         ) : (

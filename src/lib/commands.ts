@@ -281,6 +281,8 @@ interface CommandMap {
   get_watched_items: { params: Record<string, never>; result: { watched_items: Array<{ source_item_id: number; topic: string; title: string; created_at: string }> } };
   set_blind_spot_sensitivity: { params: { sensitivity: string }; result: { success: boolean; sensitivity: string } };
   get_blind_spot_sensitivity: { params: Record<string, never>; result: { sensitivity: string } };
+  dismiss_blind_spot: { params: { itemId: string; reason: string }; result: { status: string; item_id: string } };
+  add_package_watch: { params: { packageName: string; ecosystem: string; projectPath?: string }; result: { status: string; package_name: string; ecosystem: string } };
 
   // -- Taste Test Calibration --
   taste_test_start: { params: Record<string, never>; result: TasteTestStepResult };

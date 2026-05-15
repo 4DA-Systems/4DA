@@ -6,6 +6,7 @@ import { memo, useEffect, useRef, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
+import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { useColdStartGate } from '../../hooks/use-cold-start-gate';
 import {
@@ -118,6 +119,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setLastDismissed(null), 8000);
     recordTrustEvent({ eventType: 'dismissed', signalId: id, sourceType: 'missed_signal', notes: 'blind_spot_not_relevant' });
+    void cmd('dismiss_blind_spot', { itemId: id, reason: 'not_relevant' }).catch(() => {});
   }, []);
 
   const handleUndo = useCallback(() => {
@@ -131,6 +133,11 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     setLastDismissed(null);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
+
+  const handleAddWatch = useCallback((packageName: string, ecosystem: string) => {
+    void cmd('add_package_watch', { packageName, ecosystem }).catch(() => {});
+    void loadBlindSpots();
+  }, [loadBlindSpots]);
 
   const { depRows, unmatchedSignals, recommendations } = useMemo(() => {
     const items = (report?.items ?? []).filter(it => !dismissed.has(it.id));
@@ -374,6 +381,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               badgeColor="#EF4444"
               depRows={stackDeps}
               onDismissSignal={handleDismiss}
+              onAddWatch={handleAddWatch}
               emptyText={t('blindspots.tier.stackEmpty')}
             />
           )}
@@ -387,6 +395,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
               badgeColor="#F59E0B"
               depRows={ecosystemDeps}
               onDismissSignal={handleDismiss}
+              onAddWatch={handleAddWatch}
               emptyText={t('blindspots.tier.ecosystemEmpty')}
             />
           )}

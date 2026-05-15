@@ -2759,6 +2759,26 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
         items.push(recommendation_to_evidence_item(r, idx));
     }
 
+    // Filter out dismissed items (persisted in blind_spot_dismissals table)
+    let dismissed_ids: std::collections::HashSet<String> =
+        if let Ok(conn) = crate::open_db_connection() {
+            conn.prepare("SELECT item_id FROM blind_spot_dismissals")
+                .ok()
+                .and_then(|mut stmt| {
+                    stmt.query_map([], |row| row.get::<_, String>(0))
+                        .ok()
+                        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
+                .unwrap_or_default()
+        } else {
+            std::collections::HashSet::new()
+        };
+
+    let items: Vec<EvidenceItem> = items
+        .into_iter()
+        .filter(|item| !dismissed_ids.contains(&item.id))
+        .collect();
+
     let validated: Vec<EvidenceItem> = items
         .into_iter()
         .filter(|item| match crate::evidence::validate_item(item) {
@@ -2916,6 +2936,85 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     Ok(final_feed)
 }
 
+/// Add a watch for a package — the user explicitly wants 4DA to track this dependency.
+/// This ensures the package appears in the user's dependency list and will be
+/// checked by source adapters on the next fetch cycle.
+#[tauri::command]
+pub fn add_package_watch(
+    package_name: String,
+    ecosystem: String,
+    project_path: Option<String>,
+) -> std::result::Result<serde_json::Value, String> {
+    crate::settings::require_signal_feature("add_package_watch").map_err(|e| e.to_string())?;
+
+    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
+
+    let path = project_path.unwrap_or_else(|| "user-watch".to_string());
+
+    conn.execute(
+        "INSERT INTO user_dependencies (project_path, package_name, ecosystem, is_direct, detected_at, last_seen_at)
+         VALUES (?1, ?2, ?3, 1, datetime('now'), datetime('now'))
+         ON CONFLICT(project_path, package_name, ecosystem) DO UPDATE SET
+           last_seen_at = datetime('now')",
+        params![path, package_name, ecosystem],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Invalidate the blind spots cache so the next refresh picks up the change
+    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
+        *guard = None;
+    }
+
+    info!(
+        target: "4da::blind_spots",
+        package = %package_name,
+        ecosystem = %ecosystem,
+        "Package watch added"
+    );
+
+    Ok(serde_json::json!({
+        "status": "ok",
+        "package_name": package_name,
+        "ecosystem": ecosystem,
+    }))
+}
+
+/// Dismiss a blind spot item — the user has reviewed and decided this isn't relevant.
+/// Persisted to the database so it survives restarts.
+#[tauri::command]
+pub fn dismiss_blind_spot(
+    item_id: String,
+    reason: String,
+) -> std::result::Result<serde_json::Value, String> {
+    let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
+
+    // Create the dismissals table if it doesn't exist (defensive — migration should handle this)
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS blind_spot_dismissals (
+            id INTEGER PRIMARY KEY,
+            item_id TEXT NOT NULL UNIQUE,
+            reason TEXT NOT NULL,
+            dismissed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+    )
+    .map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO blind_spot_dismissals (item_id, reason)
+         VALUES (?1, ?2)
+         ON CONFLICT(item_id) DO UPDATE SET reason = excluded.reason, dismissed_at = CURRENT_TIMESTAMP",
+        params![item_id, reason],
+    )
+    .map_err(|e| e.to_string())?;
+
+    // Invalidate cache
+    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
+        *guard = None;
+    }
+
+    Ok(serde_json::json!({ "status": "ok", "item_id": item_id }))
+}
+
 // ============================================================================
 // Tests — use REAL schema definitions from migrations to catch column drift
 // ============================================================================
@@ -3016,6 +3115,13 @@ mod tests {
                 source_url TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (source_item_id) REFERENCES source_items(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS blind_spot_dismissals (
+                id INTEGER PRIMARY KEY,
+                item_id TEXT NOT NULL UNIQUE,
+                reason TEXT NOT NULL,
+                dismissed_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
 
             CREATE TABLE IF NOT EXISTS feed_health (
@@ -4030,5 +4136,142 @@ mod tests {
             "None coverage_reason should use generic fallback: {}",
             item.explanation
         );
+    }
+
+    #[test]
+    fn test_dismiss_blind_spot_filters_from_feed() {
+        let conn = setup_test_db();
+
+        // Build a report with one uncovered dep
+        let report = BlindSpotReport {
+            overall_score: 50.0,
+            uncovered_dependencies: vec![UncoveredDep {
+                name: "serde".into(),
+                dep_type: "cargo".into(),
+                projects_using: vec!["/proj".into()],
+                days_since_last_signal: 30,
+                available_signal_count: 5,
+                risk_level: "medium".into(),
+                match_type: "none".into(),
+                coverage_reason: Some("not_checked".into()),
+            }],
+            stale_topics: Vec::new(),
+            missed_signals: Vec::new(),
+            recommendations: Vec::new(),
+            weak_matches: Vec::new(),
+            generated_at: "2026-05-16T00:00:00Z".into(),
+        };
+
+        // Before dismissal: feed should contain the item
+        let feed_before = blind_spot_report_to_feed(&report);
+        let serde_items: Vec<_> = feed_before
+            .items
+            .iter()
+            .filter(|i| i.id.contains("serde"))
+            .collect();
+        assert!(
+            !serde_items.is_empty(),
+            "serde item should be present before dismissal"
+        );
+
+        // Dismiss the item
+        let serde_id = &serde_items[0].id;
+        conn.execute(
+            "INSERT INTO blind_spot_dismissals (item_id, reason) VALUES (?1, ?2)",
+            params![serde_id, "not relevant"],
+        )
+        .unwrap();
+
+        // After dismissal: the item should be filtered out.
+        // NOTE: blind_spot_report_to_feed queries the real DB via open_db_connection,
+        // which won't see our in-memory test DB. So we test the filtering logic
+        // directly here to verify the mechanism.
+        let dismissed_ids: std::collections::HashSet<String> = {
+            let mut stmt = conn
+                .prepare("SELECT item_id FROM blind_spot_dismissals")
+                .unwrap();
+            stmt.query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+        assert!(
+            dismissed_ids.contains(serde_id.as_str()),
+            "dismissed_ids should contain the dismissed item"
+        );
+
+        // Simulate the filtering that blind_spot_report_to_feed performs
+        let filtered: Vec<_> = feed_before
+            .items
+            .into_iter()
+            .filter(|item| !dismissed_ids.contains(&item.id))
+            .collect();
+        assert!(
+            filtered.iter().all(|i| !i.id.contains("serde")),
+            "serde item should be filtered after dismissal"
+        );
+    }
+
+    #[test]
+    fn test_package_watch_adds_user_dependency() {
+        let conn = setup_test_db();
+
+        // Verify no deps exist initially
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM user_dependencies", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 0, "should start with zero dependencies");
+
+        // Simulate what add_package_watch does (without Tauri command wrapper)
+        let path = "user-watch";
+        let package_name = "tokio";
+        let ecosystem = "cargo";
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, ecosystem, is_direct, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, 1, datetime('now'), datetime('now'))
+             ON CONFLICT(project_path, package_name, ecosystem) DO UPDATE SET
+               last_seen_at = datetime('now')",
+            params![path, package_name, ecosystem],
+        )
+        .unwrap();
+
+        // Verify the dep was inserted
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM user_dependencies", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 1, "should have one dependency after insert");
+
+        // Verify the values
+        let (stored_pkg, stored_eco, stored_path): (String, String, String) = conn
+            .query_row(
+                "SELECT package_name, ecosystem, project_path FROM user_dependencies LIMIT 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(stored_pkg, "tokio");
+        assert_eq!(stored_eco, "cargo");
+        assert_eq!(stored_path, "user-watch");
+
+        // Upsert same package — should update last_seen_at, not create duplicate
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, ecosystem, is_direct, detected_at, last_seen_at)
+             VALUES (?1, ?2, ?3, 1, datetime('now'), datetime('now'))
+             ON CONFLICT(project_path, package_name, ecosystem) DO UPDATE SET
+               last_seen_at = datetime('now')",
+            params![path, package_name, ecosystem],
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM user_dependencies", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 1, "upsert should not create duplicate");
     }
 }
