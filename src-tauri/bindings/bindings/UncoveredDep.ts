@@ -16,4 +16,10 @@ risk_level: string,
 /**
  * How the dependency was matched: "exact_registry", "advisory", "title_heuristic", or "none"
  */
-match_type: string, };
+match_type: string, 
+/**
+ * Why this dep has no/limited coverage. Provides honest diagnostics instead of
+ * the misleading "none of your sources cover it" language.
+ * Examples: "not_checked", "checked_no_results", "adapter_failing", "adapter_disabled", "unknown_ecosystem", "weak_matches_only"
+ */
+coverage_reason: string | null, };
