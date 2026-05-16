@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 72;
+        const TARGET_VERSION: i64 = 73;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2653,6 +2653,27 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Created feedback_outbox table (durable retry queue)"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 73: Dedup index for feedback outbox
+            if current_version < 73 {
+                Self::run_versioned_migration(
+                    &conn,
+                    72,
+                    73,
+                    "Phase 73: feedback_outbox dedup index",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_outbox_dedup
+                                ON feedback_outbox(event_type, COALESCE(signal_id,''), COALESCE(alert_id,''), COALESCE(source_type,''), COALESCE(topic,''), status);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Added dedup index to feedback_outbox"
                         );
                         Ok(())
                     },

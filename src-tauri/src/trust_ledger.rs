@@ -685,7 +685,7 @@ pub fn queue_feedback_event(
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
     conn.execute(
-        "INSERT INTO feedback_outbox (event_type, signal_id, alert_id, source_type, topic, notes, dismiss_reason, dismiss_category, queued_at)
+        "INSERT OR IGNORE INTO feedback_outbox (event_type, signal_id, alert_id, source_type, topic, notes, dismiss_reason, dismiss_category, queued_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%s','now') * 1000)",
         rusqlite::params![
             event_type,

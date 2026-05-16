@@ -36,6 +36,11 @@ const QUEUE_STORAGE_KEY = '4da_feedback_queue';
 const MAX_QUEUE_SIZE = 100;
 const MAX_RETRY_ATTEMPTS = 5;
 
+/** Composite key for deduplication — two events with the same key are considered identical */
+function dedupKey(event: TrustFeedbackEvent): string {
+  return `${event.eventType}|${event.signalId ?? ''}|${event.alertId ?? ''}|${event.sourceType ?? ''}|${event.topic ?? ''}`;
+}
+
 // ============================================================================
 // Queue State
 // ============================================================================
@@ -89,6 +94,12 @@ export function getPendingFeedbackCount(): number {
   return pendingQueue.length;
 }
 
+/** @internal Reset queue state for test isolation. Not for production use. */
+export function _resetQueueForTesting(): void {
+  pendingQueue = [];
+  flushInProgress = false;
+}
+
 /**
  * Flush any pending queued events to the backend.
  * Called automatically on module load (page load / app restart).
@@ -126,9 +137,10 @@ export async function flushPendingFeedback(): Promise<void> {
         }
         if (queued.attempts < MAX_RETRY_ATTEMPTS) {
           failed.push(queued);
+        } else if (queued.id != null) {
+          // Mark as exhausted in SQLite so it's not reloaded on restart
+          void cmd('mark_feedback_sent', { outboxId: queued.id }).catch(() => {});
         }
-        // Events exceeding MAX_RETRY_ATTEMPTS are dropped silently
-        // (SQLite outbox rows stay with attempts >= 5, naturally filtered out)
       }
     }
 
@@ -159,6 +171,10 @@ async function sendEvent(event: TrustFeedbackEvent): Promise<void> {
 
 /** Add a failed event to the retry queue, persisting to SQLite outbox */
 function enqueue(event: TrustFeedbackEvent): void {
+  // Dedup: skip if an identical event is already queued
+  const key = dedupKey(event);
+  if (pendingQueue.some(q => dedupKey(q.event) === key)) return;
+
   // Cap queue size to prevent unbounded growth
   if (pendingQueue.length >= MAX_QUEUE_SIZE) {
     // Drop oldest events to make room
@@ -172,6 +188,9 @@ function enqueue(event: TrustFeedbackEvent): void {
   };
 
   pendingQueue.push(queued);
+
+  // Persist to localStorage immediately (sync, always available)
+  persistQueueFallback();
 
   // Persist to SQLite outbox (durable across crashes)
   void cmd('queue_feedback_event', {
@@ -189,8 +208,7 @@ function enqueue(event: TrustFeedbackEvent): void {
       clearLocalStorageFallback();
     })
     .catch(() => {
-      // SQLite outbox failed too (app shutting down?) -- fall back to localStorage
-      persistQueueFallback();
+      // SQLite outbox failed -- localStorage already has the data, nothing to do
     });
 }
 
