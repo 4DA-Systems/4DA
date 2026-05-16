@@ -496,6 +496,10 @@ interface CommandMap {
   // -- Trust Ledger --
   get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
   record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string }; result: null };
+  queue_feedback_event: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string }; result: null };
+  get_pending_feedback: { params: Record<string, never>; result: Array<{ id: number; eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string; queuedAt: number; attempts: number }> };
+  mark_feedback_sent: { params: { outboxId: number }; result: null };
+  mark_feedback_attempt: { params: { outboxId: number }; result: null };
   get_domain_precision_report: { params: { days?: number }; result: DomainPrecision[] };
   get_false_positive_analysis: { params: { days?: number }; result: FalsePositiveAnalysis };
 

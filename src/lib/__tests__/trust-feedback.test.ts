@@ -37,26 +37,52 @@ describe('trust-feedback', () => {
     });
   });
 
-  it('queues event on backend failure and persists to localStorage', async () => {
+  it('queues event on backend failure and persists to SQLite outbox', async () => {
+    // First cmd call (record_intelligence_feedback) fails, triggering enqueue.
+    // Second cmd call (queue_feedback_event) succeeds — persisted to SQLite outbox.
     mockedCmd.mockRejectedValueOnce(new Error('Backend unavailable'));
 
     recordTrustEvent({ eventType: 'dismissed', sourceType: 'security' });
 
-    // Wait for the async rejection to be handled
+    // Wait for the async rejection to be handled and event queued
     await vi.waitFor(() => {
       expect(getPendingFeedbackCount()).toBeGreaterThanOrEqual(1);
     });
 
-    // Check localStorage persistence
-    const stored = localStorage.getItem('4da_feedback_queue');
-    expect(stored).toBeTruthy();
-    const parsed = JSON.parse(stored!);
-    expect(Array.isArray(parsed)).toBe(true);
-    expect(parsed[0].event.eventType).toBe('dismissed');
+    // Verify the SQLite outbox command was called
+    await vi.waitFor(() => {
+      expect(mockedCmd).toHaveBeenCalledWith('queue_feedback_event', expect.objectContaining({
+        eventType: 'dismissed',
+        sourceType: 'security',
+      }));
+    });
+  });
+
+  it('falls back to localStorage when SQLite outbox also fails', async () => {
+    // Both record_intelligence_feedback AND queue_feedback_event fail
+    mockedCmd
+      .mockRejectedValueOnce(new Error('Backend unavailable'))
+      .mockRejectedValueOnce(new Error('SQLite unavailable'));
+
+    recordTrustEvent({ eventType: 'dismissed', sourceType: 'security' });
+
+    // Wait for both failures to cascade
+    await vi.waitFor(() => {
+      expect(getPendingFeedbackCount()).toBeGreaterThanOrEqual(1);
+    });
+
+    // Give time for the SQLite outbox failure to trigger localStorage fallback
+    await vi.waitFor(() => {
+      const stored = localStorage.getItem('4da_feedback_queue');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+      expect(Array.isArray(parsed)).toBe(true);
+      expect(parsed[0].event.eventType).toBe('dismissed');
+    });
   });
 
   it('flushPendingFeedback retries queued events and clears on success', async () => {
-    // First call fails, second succeeds
+    // First call fails, subsequent calls succeed
     mockedCmd
       .mockRejectedValueOnce(new Error('Backend unavailable'))
       .mockResolvedValue(null as never);
@@ -72,8 +98,6 @@ describe('trust-feedback', () => {
     await flushPendingFeedback();
 
     expect(getPendingFeedbackCount()).toBe(0);
-    // localStorage should be cleared
-    expect(localStorage.getItem('4da_feedback_queue')).toBeNull();
   });
 
   it('does not alter the recordTrustEvent public API (fire-and-forget)', () => {

@@ -666,6 +666,104 @@ pub async fn get_false_positive_analysis(
 }
 
 // ============================================================================
+// Feedback Outbox — durable SQLite-backed retry queue
+// ============================================================================
+
+/// Persist a feedback event to the SQLite outbox for durable retry.
+/// Called by the frontend when the immediate send fails.
+#[tauri::command]
+pub fn queue_feedback_event(
+    event_type: String,
+    signal_id: Option<String>,
+    alert_id: Option<String>,
+    source_type: Option<String>,
+    topic: Option<String>,
+    notes: Option<String>,
+    dismiss_reason: Option<String>,
+    dismiss_category: Option<String>,
+) -> std::result::Result<(), String> {
+    let db = crate::get_database().map_err(|e| e.to_string())?;
+    let conn = db.conn.lock();
+    conn.execute(
+        "INSERT INTO feedback_outbox (event_type, signal_id, alert_id, source_type, topic, notes, dismiss_reason, dismiss_category, queued_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%s','now') * 1000)",
+        rusqlite::params![
+            event_type,
+            signal_id,
+            alert_id,
+            source_type,
+            topic,
+            notes,
+            dismiss_reason,
+            dismiss_category
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Load pending feedback events from the SQLite outbox.
+/// Called by the frontend on startup to resume retry.
+#[tauri::command]
+pub fn get_pending_feedback() -> std::result::Result<Vec<serde_json::Value>, String> {
+    let db = crate::get_database().map_err(|e| e.to_string())?;
+    let conn = db.conn.lock();
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, event_type, signal_id, alert_id, source_type, topic, notes, dismiss_reason, dismiss_category, queued_at, attempts
+             FROM feedback_outbox WHERE status = 'pending' AND attempts < 5 ORDER BY queued_at",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "eventType": row.get::<_, String>(1)?,
+                "signalId": row.get::<_, Option<String>>(2)?,
+                "alertId": row.get::<_, Option<String>>(3)?,
+                "sourceType": row.get::<_, Option<String>>(4)?,
+                "topic": row.get::<_, Option<String>>(5)?,
+                "notes": row.get::<_, Option<String>>(6)?,
+                "dismissReason": row.get::<_, Option<String>>(7)?,
+                "dismissCategory": row.get::<_, Option<String>>(8)?,
+                "queuedAt": row.get::<_, i64>(9)?,
+                "attempts": row.get::<_, i32>(10)?,
+            }))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let items: Vec<serde_json::Value> = rows.filter_map(|r| r.ok()).collect();
+    Ok(items)
+}
+
+/// Mark a feedback outbox event as sent (successfully delivered to backend).
+#[tauri::command]
+pub fn mark_feedback_sent(outbox_id: i64) -> std::result::Result<(), String> {
+    let db = crate::get_database().map_err(|e| e.to_string())?;
+    let conn = db.conn.lock();
+    conn.execute(
+        "UPDATE feedback_outbox SET status = 'sent' WHERE id = ?1",
+        rusqlite::params![outbox_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Increment attempt count for a failed feedback outbox event.
+#[tauri::command]
+pub fn mark_feedback_attempt(outbox_id: i64) -> std::result::Result<(), String> {
+    let db = crate::get_database().map_err(|e| e.to_string())?;
+    let conn = db.conn.lock();
+    conn.execute(
+        "UPDATE feedback_outbox SET attempts = attempts + 1, last_attempt_at = strftime('%s','now') * 1000 WHERE id = ?1",
+        rusqlite::params![outbox_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
