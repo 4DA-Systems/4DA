@@ -1097,6 +1097,10 @@ pub fn run() {
             // Trust Ledger (intelligence quality measurement)
             trust_ledger::get_trust_dashboard,
             trust_ledger::record_intelligence_feedback,
+            trust_ledger::queue_feedback_event,
+            trust_ledger::get_pending_feedback,
+            trust_ledger::mark_feedback_sent,
+            trust_ledger::mark_feedback_attempt,
             trust_ledger::get_domain_precision_report,
             trust_ledger::get_false_positive_analysis,
             // Alert Triage (persistent security triage actions)

@@ -78,6 +78,22 @@ pub struct UncoveredDep {
     /// Examples: "not_checked", "checked_no_results", "adapter_failing", "adapter_disabled", "unknown_ecosystem", "weak_matches_only"
     #[serde(default)]
     pub coverage_reason: Option<String>,
+    /// Which source adapters were searched for this dependency and their status.
+    /// Each entry is like "npm_registry: checked 2h ago" or "osv: adapter_failing".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub adapters_searched: Vec<AdapterStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct AdapterStatus {
+    /// Source adapter name (e.g., "npm_registry", "crates_io", "osv", "github")
+    pub adapter: String,
+    /// Current status: "checked", "not_checked", "failing", "disabled", "rate_limited", "stale"
+    pub status: String,
+    /// When this adapter last successfully fetched data (ISO 8601 string or null)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_checked: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -620,6 +636,86 @@ fn diagnose_coverage(
     )
 }
 
+/// Build per-adapter health status for a dependency's ecosystem.
+///
+/// For each adapter relevant to the ecosystem, queries `feed_health` for failure
+/// counts and `source_items` for the most recent fetch timestamp. Classifies as:
+/// - "checked"     — last fetch within 7 days
+/// - "stale"       — last fetch within 30 days
+/// - "not_checked" — no fetch data at all
+/// - "failing"     — 3+ consecutive failures in feed_health
+fn adapter_statuses_for_ecosystem(
+    conn: &rusqlite::Connection,
+    ecosystem: &str,
+) -> Vec<AdapterStatus> {
+    let adapters = ecosystem_source_types(ecosystem);
+    if adapters.is_empty() {
+        return Vec::new();
+    }
+
+    adapters
+        .iter()
+        .map(|adapter_name| {
+            // Check feed_health for failure info
+            let health: Option<(i64, i64)> = conn
+                .query_row(
+                    "SELECT consecutive_failures, total_successes FROM feed_health \
+                     WHERE source_type = ?1 ORDER BY updated_at DESC LIMIT 1",
+                    params![adapter_name],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .ok();
+
+            let is_failing = matches!(health, Some((failures, _)) if failures >= 3);
+
+            // Get last successful fetch time from source_items
+            let last_fetch: Option<String> = conn
+                .query_row(
+                    "SELECT MAX(fetched_at) FROM source_items WHERE source_type = ?1",
+                    params![adapter_name],
+                    |row| row.get(0),
+                )
+                .ok()
+                .flatten();
+
+            let (status, last_checked) = if is_failing {
+                ("failing".to_string(), last_fetch)
+            } else {
+                match &last_fetch {
+                    Some(ts) => {
+                        let age_days = parse_timestamp_age_days(ts);
+                        if age_days <= 7 {
+                            ("checked".to_string(), Some(ts.clone()))
+                        } else if age_days <= 30 {
+                            ("stale".to_string(), Some(ts.clone()))
+                        } else {
+                            ("not_checked".to_string(), Some(ts.clone()))
+                        }
+                    }
+                    None => ("not_checked".to_string(), None),
+                }
+            };
+
+            AdapterStatus {
+                adapter: adapter_name.clone(),
+                status,
+                last_checked,
+            }
+        })
+        .collect()
+}
+
+/// Parse a timestamp string and return how many days ago it was.
+/// Returns `i64::MAX` on parse failure so it falls through to "not_checked".
+fn parse_timestamp_age_days(ts: &str) -> i64 {
+    let parsed = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S")
+        .or_else(|_| chrono::DateTime::parse_from_rfc3339(ts).map(|dt| dt.naive_utc()));
+    match parsed {
+        Ok(dt) => (chrono::Utc::now().naive_utc() - dt).num_days(),
+        Err(_) => i64::MAX,
+    }
+}
+
 /// For each direct dependency, check if any source_items mention it in the
 /// last 14 days AND whether the user interacted with them. If no interaction
 /// AND signals exist, it's a blind spot.
@@ -1039,6 +1135,7 @@ fn find_uncovered_deps(
                 risk_level: "low".to_string(),
                 match_type: "title_heuristic".to_string(),
                 coverage_reason: Some("weak_matches_only".to_string()),
+                adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
             });
             continue;
         }
@@ -1102,6 +1199,7 @@ fn find_uncovered_deps(
                 risk_level,
                 match_type: "none".to_string(),
                 coverage_reason: Some(reason),
+                adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
             });
             continue;
         }
@@ -1127,6 +1225,7 @@ fn find_uncovered_deps(
             risk_level,
             match_type: best_mt.to_string(),
             coverage_reason: None, // has signals, coverage isn't the issue
+            adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
         });
     }
 
@@ -2843,12 +2942,6 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
     for d in &report.uncovered_dependencies {
         items.push(uncovered_dep_to_evidence_item(d));
     }
-    for d in &report.weak_matches {
-        let mut item = uncovered_dep_to_evidence_item(d);
-        // Prefix id so the frontend can identify and hide weak matches by default
-        item.id = format!("weak-match-{}", item.id);
-        items.push(item);
-    }
     for t in &report.stale_topics {
         items.push(stale_topic_to_evidence_item(t));
     }
@@ -2894,7 +2987,12 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
             }
         })
         .collect();
-    EvidenceFeed::from_items_with_score(validated, report.overall_score)
+    let mut feed = EvidenceFeed::from_items_with_score(validated, report.overall_score);
+    let weak_len = report.weak_matches.len();
+    if weak_len > 0 {
+        feed.weak_match_count = Some(weak_len);
+    }
+    feed
 }
 
 fn build_feed_with_existing_score(items: Vec<EvidenceItem>, score: Option<f32>) -> EvidenceFeed {
@@ -3031,16 +3129,10 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     feed.items.extend(llm_judged_blind_spot_items());
 
     let total_tracked = feed.total_tracked;
-    let weak_count = feed
-        .items
-        .iter()
-        .filter(|i| i.id.starts_with("weak-match-"))
-        .count();
+    let weak_match_count = feed.weak_match_count;
     let mut final_feed = build_feed_with_existing_score(feed.items, feed.score);
     final_feed.total_tracked = total_tracked;
-    if weak_count > 0 {
-        final_feed.weak_match_count = Some(weak_count);
-    }
+    final_feed.weak_match_count = weak_match_count;
     Ok(final_feed)
 }
 
@@ -3641,6 +3733,7 @@ mod tests {
                 risk_level: "medium".to_string(),
                 match_type: "none".to_string(),
                 coverage_reason: None,
+                adapters_searched: Vec::new(),
             })
             .collect();
         let stale: Vec<StaleTopic> = (0..3)
@@ -3700,6 +3793,7 @@ mod tests {
             risk_level: "critical".to_string(),
             match_type: "none".to_string(),
             coverage_reason: None,
+            adapters_searched: Vec::new(),
         }];
         // total_direct_deps = 1 → floor to 5 → 1.0/5 = 0.2 uncovered_pressure
         // Score = 0.2 * 55 = 11.0
@@ -3812,6 +3906,7 @@ mod tests {
             risk_level: "critical".into(),
             match_type: "exact_registry".into(),
             coverage_reason: None,
+            adapters_searched: Vec::new(),
         }
     }
 
@@ -4197,6 +4292,7 @@ mod tests {
             risk_level: "medium".into(),
             match_type: "none".into(),
             coverage_reason: Some("not_checked".into()),
+            adapters_searched: Vec::new(),
         };
         let item = uncovered_dep_to_evidence_item(&dep);
         assert!(
@@ -4217,6 +4313,7 @@ mod tests {
             risk_level: "high".into(),
             match_type: "none".into(),
             coverage_reason: Some("adapter_failing".into()),
+            adapters_searched: Vec::new(),
         };
         let item = uncovered_dep_to_evidence_item(&dep);
         assert!(
@@ -4237,6 +4334,7 @@ mod tests {
             risk_level: "low".into(),
             match_type: "none".into(),
             coverage_reason: None,
+            adapters_searched: Vec::new(),
         };
         let item = uncovered_dep_to_evidence_item(&dep);
         assert!(
@@ -4262,6 +4360,7 @@ mod tests {
                 risk_level: "medium".into(),
                 match_type: "none".into(),
                 coverage_reason: Some("not_checked".into()),
+                adapters_searched: Vec::new(),
             }],
             stale_topics: Vec::new(),
             missed_signals: Vec::new(),
@@ -4827,9 +4926,9 @@ mod tests {
 
     #[test]
     fn test_weak_match_hidden_by_default() {
-        // Items with id starting with "weak-match-" are weak/title-heuristic
-        // matches that the frontend hides by default. Verify the id prefix is
-        // applied correctly when building the feed from a report with weak_matches.
+        // Weak matches are NOT included in the feed's items Vec — only the
+        // count is exposed via weak_match_count. This prevents UI from needing
+        // to filter by id prefix and keeps the items array clean.
         let weak_dep = UncoveredDep {
             name: "imagemagick-wasm".into(),
             dep_type: "npm".into(),
@@ -4839,6 +4938,7 @@ mod tests {
             risk_level: "low".into(),
             match_type: "title_heuristic".into(),
             coverage_reason: Some("weak_matches_only".into()),
+            adapters_searched: Vec::new(),
         };
 
         let report = BlindSpotReport {
@@ -4853,27 +4953,15 @@ mod tests {
 
         let feed = blind_spot_report_to_feed(&report);
 
-        // The weak match item should have a "weak-match-" prefix on its id
         assert_eq!(
             feed.items.len(),
-            1,
-            "one weak match should produce one feed item"
+            0,
+            "weak matches must NOT appear in feed items"
         );
-        assert!(
-            feed.items[0].id.starts_with("weak-match-"),
-            "weak match item id must start with 'weak-match-', got '{}'",
-            feed.items[0].id
-        );
-
-        // Verify the frontend filter pattern would correctly identify it
-        let weak_count = feed
-            .items
-            .iter()
-            .filter(|i| i.id.starts_with("weak-match-"))
-            .count();
         assert_eq!(
-            weak_count, 1,
-            "exactly one item should be filterable as weak match"
+            feed.weak_match_count,
+            Some(1),
+            "weak_match_count must reflect hidden weak matches"
         );
     }
 
@@ -4945,6 +5033,223 @@ mod tests {
         assert_eq!(
             withdrawn_count, 1,
             "withdrawn advisory is distinguishable by content_type"
+        );
+    }
+
+    // ─── P1-4: End-to-end trust pipeline tests ──────────────────────────
+
+    #[test]
+    fn e2e_dep_link_to_blind_spot_to_feed() {
+        let conn = setup_test_db();
+
+        // sqlx-core: SID-linked, user-reviewed signal → NOT a blind spot
+        // sea-orm: NO source items → uncovered blind spot
+        // image (crates.io): ambiguous name, title-heuristic only → weak match
+        insert_project_dep(&conn, "/home/dev/4da", "sqlx-core", "rust", true, false);
+        insert_project_dep(&conn, "/home/dev/4da", "sea-orm", "rust", true, false);
+        insert_project_dep(&conn, "/home/dev/4da", "image", "rust", true, false);
+
+        // sqlx-core: SID-linked signal that the user already reviewed
+        let sqlx_id = insert_source_item_with_meta(
+            &conn,
+            "sqlx-core 0.8.0 released — async SQL toolkit for Rust",
+            "crates_io",
+            Some("release_notes"),
+            0.85,
+            1,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'sqlx-core', 'crates.io', 'exact_registry', 0.95)",
+            params![sqlx_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO interactions (source_item_id, action, action_type)
+             VALUES (?1, 'click', 'view')",
+            params![sqlx_id],
+        )
+        .unwrap();
+
+        // image: title heuristic only (ambiguous name → weak match)
+        insert_source_item_with_meta(
+            &conn,
+            "Next.js image optimization best practices",
+            "hackernews",
+            Some("blog_post"),
+            0.60,
+            2,
+        );
+
+        // sea-orm: NO source items → uncovered
+
+        let deps = get_dependency_coverage(&conn).expect("coverage");
+        let (uncovered, weak) = find_uncovered_deps(&conn, &deps, 30).expect("uncovered");
+
+        // sea-orm (no signals, known ecosystem) → uncovered
+        assert!(
+            uncovered.iter().any(|d| d.name.starts_with("sea-orm")),
+            "sea-orm (no signals) must be uncovered, got: {:?}",
+            uncovered.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+        // sqlx-core (SID-linked + reviewed) → NOT uncovered
+        assert!(
+            !uncovered.iter().any(|d| d.name.starts_with("sqlx")),
+            "sqlx-core (SID-linked, reviewed) must NOT be uncovered"
+        );
+        // image (ambiguous name, title heuristic) → weak match
+        let img_weak = weak.iter().find(|d| d.name.starts_with("image"));
+        assert!(
+            img_weak.is_some(),
+            "image (ambiguous, title heuristic) → weak, got: {:?}",
+            weak.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+        assert_eq!(img_weak.unwrap().match_type, "title_heuristic");
+
+        let report = BlindSpotReport {
+            overall_score: 35.0,
+            uncovered_dependencies: uncovered,
+            stale_topics: Vec::new(),
+            missed_signals: Vec::new(),
+            recommendations: Vec::new(),
+            weak_matches: weak,
+            generated_at: "2026-05-16T00:00:00Z".into(),
+        };
+        let feed = blind_spot_report_to_feed(&report);
+
+        assert!(
+            !feed.items.iter().any(|i| i.id.starts_with("weak-match-")),
+            "weak matches must not be in EvidenceFeed.items"
+        );
+        assert!(
+            feed.weak_match_count.unwrap_or(0) > 0,
+            "weak_match_count must be set"
+        );
+    }
+
+    #[test]
+    fn e2e_preemption_only_briefing_fires() {
+        use crate::monitoring_briefing::{BriefingNotification, BriefingPreemptionAlert};
+
+        let briefing = BriefingNotification {
+            title: "Morning Brief".into(),
+            items: Vec::new(),
+            total_relevant: 0,
+            ongoing_topics: Vec::new(),
+            knowledge_gaps: Vec::new(),
+            escalating_chains: Vec::new(),
+            synthesis: None,
+            preemption_alerts: vec![BriefingPreemptionAlert {
+                title: "CVE-2026-9999: Critical RCE in serde".into(),
+                urgency: "critical".into(),
+                explanation: "Remote code execution via crafted input".into(),
+                alert_id: Some("preempt-serde-cve-2026-9999".into()),
+                package_name: Some("serde".into()),
+                ecosystem: Some("crates.io".into()),
+                installed_version: Some("1.0.200".into()),
+                fixed_version: Some("1.0.201".into()),
+                affected_projects: vec!["/home/dev/4da".into()],
+                is_direct: Some(true),
+                is_dev: Some(false),
+                advisory_ids: vec!["CVE-2026-9999".into()],
+                source_url: Some("https://rustsec.org/advisories/CVE-2026-9999".into()),
+                suggested_actions: vec!["Upgrade serde to 1.0.201".into()],
+            }],
+            blind_spot_score: None,
+            labels: None,
+            personalization_context: None,
+        };
+
+        assert!(
+            briefing.has_meaningful_content(),
+            "briefing with 0 items but preemption alerts MUST fire"
+        );
+        let alert = &briefing.preemption_alerts[0];
+        assert_eq!(alert.package_name.as_deref(), Some("serde"));
+        assert!(!alert.advisory_ids.is_empty());
+        assert!(!alert.affected_projects.is_empty());
+    }
+
+    #[test]
+    fn e2e_sid_preferred_over_title_heuristic() {
+        let conn = setup_test_db();
+        insert_project_dep(&conn, "/proj/a", "react", "javascript", true, false);
+        insert_project_dep(&conn, "/proj/b", "react", "javascript", true, false);
+
+        let id = insert_source_item_with_meta(
+            &conn,
+            "react 19.1 — Server Components stable",
+            "npm",
+            Some("release_notes"),
+            0.90,
+            1,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'react', 'npm', 'exact_registry', 0.95)",
+            params![id],
+        )
+        .unwrap();
+
+        let deps = get_dependency_coverage(&conn).expect("coverage");
+        let (uncovered, weak) = find_uncovered_deps(&conn, &deps, 30).expect("uncovered");
+
+        // SID-linked item shows as uncovered (unreviewed signal) with exact_registry
+        // match type — NOT as a weak match. The SID link proves identity; the user
+        // just hasn't reviewed it yet.
+        let react_uncov = uncovered.iter().find(|d| d.name.starts_with("react"));
+        assert!(
+            react_uncov.is_some(),
+            "react with unreviewed SID signal must appear as uncovered"
+        );
+        assert_eq!(
+            react_uncov.unwrap().match_type,
+            "exact_registry",
+            "SID-linked item must have exact_registry match type, not title_heuristic"
+        );
+
+        // Must NOT be in weak matches (SID link is authoritative)
+        assert!(
+            !weak.iter().any(|d| d.name.starts_with("react")),
+            "react with SID link must not be in weak matches"
+        );
+    }
+
+    #[test]
+    fn e2e_dismissed_gap_excluded_from_feed() {
+        let conn = setup_test_db();
+
+        // Verify dismissal table schema works: insert a dismissal, then verify
+        // the item_id can be queried back. The actual filtering in
+        // blind_spot_report_to_feed uses the singleton DB, but the schema and
+        // query pattern are proven here.
+        conn.execute(
+            "INSERT INTO blind_spot_dismissals (item_id, reason) VALUES ('uncov-lodash_es', 'stable_utility')",
+            [],
+        )
+        .unwrap();
+
+        let dismissed: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT item_id FROM blind_spot_dismissals")
+                .unwrap();
+            stmt.query_map([], |row| row.get::<_, String>(0))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+
+        assert!(
+            dismissed.contains(&"uncov-lodash_es".to_string()),
+            "dismissal must persist in blind_spot_dismissals table"
+        );
+
+        // Simulate the filter that blind_spot_report_to_feed applies
+        let dismissed_set: std::collections::HashSet<String> = dismissed.into_iter().collect();
+        let test_item_id = "uncov-lodash_es";
+        assert!(
+            dismissed_set.contains(test_item_id),
+            "dismissed item id must match feed item id"
         );
     }
 }

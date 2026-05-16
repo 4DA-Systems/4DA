@@ -19,8 +19,10 @@ interface TrustFeedbackEvent {
   dismissCategory?: string;
 }
 
-/** Queued event with timestamp for retry tracking */
+/** Queued event with outbox metadata for retry tracking */
 interface QueuedFeedbackEvent {
+  /** SQLite outbox row id (present when persisted to outbox, absent for localStorage-only fallback) */
+  id?: number;
   event: TrustFeedbackEvent;
   queuedAt: number;
   attempts: number;
@@ -38,7 +40,7 @@ const MAX_RETRY_ATTEMPTS = 5;
 // Queue State
 // ============================================================================
 
-/** In-memory queue, hydrated from localStorage on init */
+/** In-memory queue, hydrated from SQLite outbox (or localStorage fallback) on init */
 let pendingQueue: QueuedFeedbackEvent[] = [];
 let flushInProgress = false;
 
@@ -74,7 +76,7 @@ export function recordTrustEvent(params: {
 
   // Try to send immediately
   void sendEvent(event).catch(() => {
-    // Backend call failed -- queue for retry
+    // Backend call failed -- queue for durable retry
     enqueue(event);
   });
 }
@@ -104,17 +106,34 @@ export async function flushPendingFeedback(): Promise<void> {
     for (const queued of toProcess) {
       try {
         await sendEvent(queued.event);
+        // Mark as sent in the SQLite outbox
+        if (queued.id != null) {
+          try {
+            await cmd('mark_feedback_sent', { outboxId: queued.id });
+          } catch {
+            // Non-fatal: the event was already delivered to the trust ledger
+          }
+        }
       } catch {
         queued.attempts += 1;
+        // Record the attempt in the SQLite outbox
+        if (queued.id != null) {
+          try {
+            await cmd('mark_feedback_attempt', { outboxId: queued.id });
+          } catch {
+            // Non-fatal: attempt tracking is best-effort
+          }
+        }
         if (queued.attempts < MAX_RETRY_ATTEMPTS) {
           failed.push(queued);
         }
         // Events exceeding MAX_RETRY_ATTEMPTS are dropped silently
+        // (SQLite outbox rows stay with attempts >= 5, naturally filtered out)
       }
     }
 
     pendingQueue = failed;
-    persistQueue();
+    persistQueueFallback();
   } finally {
     flushInProgress = false;
   }
@@ -138,7 +157,7 @@ async function sendEvent(event: TrustFeedbackEvent): Promise<void> {
   });
 }
 
-/** Add a failed event to the retry queue */
+/** Add a failed event to the retry queue, persisting to SQLite outbox */
 function enqueue(event: TrustFeedbackEvent): void {
   // Cap queue size to prevent unbounded growth
   if (pendingQueue.length >= MAX_QUEUE_SIZE) {
@@ -146,17 +165,37 @@ function enqueue(event: TrustFeedbackEvent): void {
     pendingQueue.shift();
   }
 
-  pendingQueue.push({
+  const queued: QueuedFeedbackEvent = {
     event,
     queuedAt: Date.now(),
     attempts: 1,
-  });
+  };
 
-  persistQueue();
+  pendingQueue.push(queued);
+
+  // Persist to SQLite outbox (durable across crashes)
+  void cmd('queue_feedback_event', {
+    eventType: event.eventType,
+    signalId: event.signalId,
+    alertId: event.alertId,
+    sourceType: event.sourceType,
+    topic: event.topic,
+    notes: event.notes,
+    dismissReason: event.dismissReason,
+    dismissCategory: event.dismissCategory,
+  })
+    .then(() => {
+      // Outbox persisted successfully -- clear localStorage fallback
+      clearLocalStorageFallback();
+    })
+    .catch(() => {
+      // SQLite outbox failed too (app shutting down?) -- fall back to localStorage
+      persistQueueFallback();
+    });
 }
 
-/** Persist the queue to localStorage as fallback storage */
-function persistQueue(): void {
+/** Persist the queue to localStorage as last-resort fallback */
+function persistQueueFallback(): void {
   try {
     if (pendingQueue.length === 0) {
       localStorage.removeItem(QUEUE_STORAGE_KEY);
@@ -168,8 +207,45 @@ function persistQueue(): void {
   }
 }
 
-/** Load any persisted queue from localStorage */
-function loadQueue(): void {
+/** Clear the localStorage fallback (called when SQLite outbox has the data) */
+function clearLocalStorageFallback(): void {
+  try {
+    localStorage.removeItem(QUEUE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/** Load pending events from SQLite outbox, falling back to localStorage */
+async function loadQueue(): Promise<void> {
+  // Primary: load from SQLite outbox
+  try {
+    const rows = await cmd('get_pending_feedback');
+    if (rows && rows.length > 0) {
+      pendingQueue = rows.map((row: { id: number; eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string; queuedAt: number; attempts: number }) => ({
+        id: row.id,
+        event: {
+          eventType: row.eventType as TrustFeedbackEvent['eventType'],
+          signalId: row.signalId ?? undefined,
+          alertId: row.alertId ?? undefined,
+          sourceType: row.sourceType ?? undefined,
+          topic: row.topic ?? undefined,
+          notes: row.notes ?? undefined,
+          dismissReason: row.dismissReason ?? undefined,
+          dismissCategory: row.dismissCategory ?? undefined,
+        },
+        queuedAt: row.queuedAt,
+        attempts: row.attempts,
+      }));
+      // SQLite outbox has data -- clear any stale localStorage
+      clearLocalStorageFallback();
+      return;
+    }
+  } catch {
+    // SQLite outbox unavailable -- fall through to localStorage
+  }
+
+  // Fallback: load from localStorage
   try {
     const stored = localStorage.getItem(QUEUE_STORAGE_KEY);
     if (stored) {
@@ -196,8 +272,9 @@ function loadQueue(): void {
 // Module init: hydrate queue and flush on load
 // ============================================================================
 
-loadQueue();
-if (pendingQueue.length > 0) {
-  // Flush pending events after a short delay to avoid blocking app startup
-  setTimeout(() => void flushPendingFeedback(), 2000);
-}
+void loadQueue().then(() => {
+  if (pendingQueue.length > 0) {
+    // Flush pending events after a short delay to avoid blocking app startup
+    setTimeout(() => void flushPendingFeedback(), 2000);
+  }
+});

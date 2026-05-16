@@ -45,6 +45,7 @@ const EXCEPTIONS = {
   'src-tauri/src/ace/scanner.rs':          'Project scanner — manifest + lockfile parsers + tests',
   'src-tauri/src/blind_spots.rs':          'TEMP: slated for collapse into EvidenceItem in Intelligence Reconciliation Phase 4',
   'src-tauri/src/preemption.rs':           'TEMP: split suppression list into own module post-launch',
+  'src-tauri/src/trust_ledger.rs':         'Trust feedback + SQLite outbox commands — all trust-related',
 
   // Rust — files over error threshold, candidates for splitting
   'src-tauri/src/scoring/simulation/corpus.rs': 'Test corpus data — fixture definitions',

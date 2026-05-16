@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 71;
+        const TARGET_VERSION: i64 = 72;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2617,6 +2617,42 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Created dependency_snapshots table + current_dependencies view"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 72: Feedback Outbox — durable retry queue for trust feedback
+            if current_version < 72 {
+                Self::run_versioned_migration(
+                    &conn,
+                    71,
+                    72,
+                    "Phase 72: feedback_outbox table for durable retry",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS feedback_outbox (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                event_type TEXT NOT NULL,
+                                signal_id TEXT,
+                                alert_id TEXT,
+                                source_type TEXT,
+                                topic TEXT,
+                                notes TEXT,
+                                dismiss_reason TEXT,
+                                dismiss_category TEXT,
+                                queued_at INTEGER NOT NULL,
+                                attempts INTEGER NOT NULL DEFAULT 0,
+                                last_attempt_at INTEGER,
+                                status TEXT NOT NULL DEFAULT 'pending'
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_feedback_outbox_status
+                                ON feedback_outbox(status, attempts);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Created feedback_outbox table (durable retry queue)"
                         );
                         Ok(())
                     },
