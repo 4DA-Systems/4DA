@@ -97,17 +97,18 @@ pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     );
 
     let mut total_linked = 0usize;
-    let mut offset = 0i64;
+    let mut last_id = 0i64;
     let batch_size = 500;
 
     loop {
-        let batch = load_unlinked_items_paged(&conn, batch_size, offset)?;
+        let batch = load_unlinked_items_after(&conn, batch_size, last_id)?;
         if batch.is_empty() {
             break;
         }
-        let batch_len = batch.len();
+        if let Some(last) = batch.last() {
+            last_id = last.id;
+        }
         total_linked += link_items_to_deps(&conn, &batch, &dep_names)?;
-        offset += batch_len as i64;
     }
 
     info!(
@@ -129,17 +130,25 @@ struct UnlinkedItem {
     source_type: String,
     content_type: Option<String>,
     source_id: String,
+    url: Option<String>,
 }
 
 // ============================================================================
 // Database helpers
 // ============================================================================
 
-/// Load all distinct dependency package names (lowercased, direct, non-dev).
+/// Load all distinct dependency package names (lowercased, direct, non-dev)
+/// from both the ACE-populated project_dependencies table and the
+/// dependency_snapshots table (if populated).
 fn load_dependency_names(conn: &rusqlite::Connection) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT LOWER(package_name) FROM project_dependencies
-         WHERE is_dev = 0 AND is_direct = 1 AND project_relevance >= 0.15",
+        "SELECT DISTINCT LOWER(package_name) FROM (
+             SELECT package_name FROM project_dependencies
+             WHERE is_dev = 0 AND is_direct = 1 AND project_relevance >= 0.15
+             UNION
+             SELECT package_name FROM dependency_snapshots
+             WHERE is_dev = 0 AND is_direct = 1
+         )",
     )?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
     let mut names = Vec::new();
@@ -159,7 +168,7 @@ fn load_unlinked_items(
     limit: i64,
 ) -> Result<Vec<UnlinkedItem>> {
     let sql = format!(
-        "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id
+        "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id, si.url
          FROM source_items si
          LEFT JOIN source_item_dependencies sid ON sid.source_item_id = si.id
          WHERE sid.id IS NULL
@@ -175,6 +184,7 @@ fn load_unlinked_items(
             source_type: row.get(2)?,
             content_type: row.get(3)?,
             source_id: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            url: row.get(5)?,
         })
     })?;
     let mut items = Vec::new();
@@ -186,26 +196,28 @@ fn load_unlinked_items(
     Ok(items)
 }
 
-/// Paginated loader for the backfill path (no date filter).
-fn load_unlinked_items_paged(
+/// Keyset-paginated loader for the backfill path (no date filter).
+/// Uses WHERE si.id > last_id instead of OFFSET to avoid phantom reads.
+fn load_unlinked_items_after(
     conn: &rusqlite::Connection,
     limit: i64,
-    offset: i64,
+    after_id: i64,
 ) -> Result<Vec<UnlinkedItem>> {
-    let sql = "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id
+    let sql = "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id, si.url
                FROM source_items si
                LEFT JOIN source_item_dependencies sid ON sid.source_item_id = si.id
-               WHERE sid.id IS NULL
+               WHERE sid.id IS NULL AND si.id > ?2
                ORDER BY si.id ASC
-               LIMIT ?1 OFFSET ?2";
+               LIMIT ?1";
     let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map(params![limit, offset], |row| {
+    let rows = stmt.query_map(params![limit, after_id], |row| {
         Ok(UnlinkedItem {
             id: row.get(0)?,
             title: row.get(1)?,
             source_type: row.get(2)?,
             content_type: row.get(3)?,
             source_id: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+            url: row.get(5)?,
         })
     })?;
     let mut items = Vec::new();
@@ -227,8 +239,8 @@ fn link_items_to_deps(
     dep_names: &[String],
 ) -> Result<usize> {
     let insert_sql = "INSERT OR IGNORE INTO source_item_dependencies
-                      (source_item_id, package_name, ecosystem, match_type, confidence)
-                      VALUES (?1, ?2, ?3, ?4, ?5)";
+                      (source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url)
+                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
     let mut stmt = conn.prepare(insert_sql)?;
     let mut count = 0usize;
 
@@ -236,8 +248,10 @@ fn link_items_to_deps(
         for dep_name in dep_names {
             if let Some((match_type, confidence)) = classify_item_dep_match(item, dep_name) {
                 let ecosystem = infer_ecosystem(item, dep_name);
+                let evidence = build_evidence_text(match_type, item, dep_name);
+                let source_url = item.url.as_deref();
                 match stmt.execute(params![
-                    item.id, dep_name, ecosystem, match_type, confidence
+                    item.id, dep_name, ecosystem, match_type, confidence, evidence, source_url
                 ]) {
                     Ok(changed) => count += changed,
                     Err(e) => {
@@ -254,6 +268,35 @@ fn link_items_to_deps(
         }
     }
     Ok(count)
+}
+
+fn build_evidence_text(match_type: &str, item: &UnlinkedItem, dep_name: &str) -> String {
+    match match_type {
+        "exact_registry" => format!(
+            "Registry source '{}' published item with source_id matching '{}'",
+            item.source_type, dep_name
+        ),
+        "advisory" => format!(
+            "Security advisory from '{}' mentions '{}' in title: \"{}\"",
+            item.source_type,
+            dep_name,
+            truncate_title(&item.title, 80)
+        ),
+        _ => format!(
+            "Title heuristic: '{}' found in \"{}\" (source: {})",
+            dep_name,
+            truncate_title(&item.title, 80),
+            item.source_type
+        ),
+    }
+}
+
+fn truncate_title(title: &str, max_len: usize) -> &str {
+    if title.len() <= max_len {
+        title
+    } else {
+        &title[..title.floor_char_boundary(max_len)]
+    }
 }
 
 // ============================================================================
@@ -305,10 +348,12 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
 fn is_registry_source(source_type: &str) -> bool {
     matches!(
         source_type,
-        "npm"
+        "npm_registry"
+            | "npm"
             | "crates_io"
             | "crates"
             | "pypi"
+            | "go_modules"
             | "go"
             | "maven"
             | "nuget"
@@ -335,8 +380,8 @@ fn is_advisory_source(source_type: &str, content_type: Option<&str>) -> bool {
 /// for npm). Returns `None` for non-registry sources.
 fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String> {
     match source_type {
-        "npm" | "crates_io" | "crates" | "pypi" | "go" | "maven" | "nuget" | "packagist"
-        | "rubygems" | "cocoapods" => Some(source_id.to_string()),
+        "npm_registry" | "npm" | "crates_io" | "crates" | "pypi" | "go_modules" | "go"
+        | "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => Some(source_id.to_string()),
         _ => None,
     }
 }
@@ -387,10 +432,10 @@ fn matches_dep_in_title(title: &str, dep_name: &str) -> Option<f64> {
 /// Best-effort ecosystem inference from the source type.
 fn infer_ecosystem(item: &UnlinkedItem, _dep_name: &str) -> Option<String> {
     match item.source_type.to_lowercase().as_str() {
-        "npm" => Some("npm".into()),
+        "npm_registry" | "npm" => Some("npm".into()),
         "crates_io" | "crates" => Some("crates.io".into()),
         "pypi" => Some("pypi".into()),
-        "go" => Some("go".into()),
+        "go_modules" | "go" => Some("go".into()),
         "maven" => Some("maven".into()),
         "nuget" => Some("nuget".into()),
         "packagist" => Some("packagist".into()),
@@ -449,6 +494,7 @@ mod tests {
             source_type: "hn".to_string(),
             content_type: None,
             source_id: "12345".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "image");
         assert!(result.is_none(), "Ambiguous dep 'image' should be skipped");
@@ -463,6 +509,7 @@ mod tests {
             source_type: "hn".to_string(),
             content_type: None,
             source_id: "99".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "arc");
         assert!(result.is_none(), "3-char dep 'arc' should be skipped");
@@ -477,6 +524,7 @@ mod tests {
             source_type: "npm".to_string(),
             content_type: None,
             source_id: "axios".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "axios");
         assert_eq!(result, Some(("exact_registry", 0.95)));
@@ -491,6 +539,7 @@ mod tests {
             source_type: "crates_io".to_string(),
             content_type: None,
             source_id: "async-trait".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "async_trait");
         assert_eq!(result, Some(("exact_registry", 0.95)));
@@ -505,6 +554,7 @@ mod tests {
             source_type: "osv".to_string(),
             content_type: Some("security_advisory".to_string()),
             source_id: "RUSTSEC-2023-0001".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "tokio");
         assert_eq!(result, Some(("advisory", 0.90)));
@@ -519,6 +569,7 @@ mod tests {
             source_type: "hn".to_string(),
             content_type: Some("security_advisory".to_string()),
             source_id: "40001".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "serde_json");
         assert_eq!(result, Some(("advisory", 0.90)));
@@ -533,6 +584,7 @@ mod tests {
             source_type: "hn".to_string(),
             content_type: None,
             source_id: "40002".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "axios");
         assert_eq!(result, Some(("title_heuristic", 0.50)));
@@ -546,6 +598,7 @@ mod tests {
             source_type: "hn".to_string(),
             content_type: None,
             source_id: "40003".to_string(),
+            url: None,
         };
         let result = classify_item_dep_match(&item, "tokio");
         assert!(result.is_none());
@@ -560,6 +613,7 @@ mod tests {
             source_type: "npm".to_string(),
             content_type: None,
             source_id: "lodash".to_string(),
+            url: None,
         };
         // Title heuristic for "axios" won't match, and registry source_id is "lodash"
         let result = classify_item_dep_match(&item, "axios");
@@ -599,6 +653,7 @@ mod tests {
             source_type: "crates_io".into(),
             content_type: None,
             source_id: "serde".into(),
+            url: None,
         }];
         let dep_names = vec!["serde".to_string()];
 
@@ -636,10 +691,49 @@ mod tests {
     #[test]
     fn test_is_registry_source() {
         assert!(is_registry_source("npm"));
+        assert!(is_registry_source("npm_registry"));
         assert!(is_registry_source("crates_io"));
         assert!(is_registry_source("pypi"));
+        assert!(is_registry_source("go_modules"));
+        assert!(is_registry_source("go"));
         assert!(!is_registry_source("hn"));
         assert!(!is_registry_source("reddit"));
+    }
+
+    #[test]
+    fn test_canonical_npm_registry_exact_match() {
+        let item = UnlinkedItem {
+            id: 10,
+            title: "axios 2.0 released".to_string(),
+            source_type: "npm_registry".to_string(),
+            content_type: None,
+            source_id: "axios".to_string(),
+            url: None,
+        };
+        let result = classify_item_dep_match(&item, "axios");
+        assert_eq!(
+            result,
+            Some(("exact_registry", 0.95)),
+            "npm_registry source should get exact_registry confidence"
+        );
+    }
+
+    #[test]
+    fn test_canonical_go_modules_exact_match() {
+        let item = UnlinkedItem {
+            id: 11,
+            title: "golang.org/x/net security update".to_string(),
+            source_type: "go_modules".to_string(),
+            content_type: None,
+            source_id: "golang.org/x/net".to_string(),
+            url: None,
+        };
+        let result = classify_item_dep_match(&item, "golang.org/x/net");
+        assert_eq!(
+            result,
+            Some(("exact_registry", 0.95)),
+            "go_modules source should get exact_registry confidence"
+        );
     }
 
     #[test]

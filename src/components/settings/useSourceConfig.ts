@@ -68,14 +68,15 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
       setDisabledDefaultYoutube(disYt.disabled);
       setDisabledDefaultTwitter(disTw.disabled);
 
-      // Load per-feed health
+      // Load per-feed health — guard against non-array responses
       const [rssHealth, ytHealth, twHealth] = await Promise.all([
         cmd('get_feed_health_status', { sourceType: 'rss' }).catch(() => []),
         cmd('get_feed_health_status', { sourceType: 'youtube' }).catch(() => []),
         cmd('get_feed_health_status', { sourceType: 'twitter' }).catch(() => []),
       ]);
       const hMap: Record<string, FeedHealth> = {};
-      for (const h of [...rssHealth, ...ytHealth, ...twHealth]) {
+      const safeArr = (v: unknown): FeedHealth[] => (Array.isArray(v) ? v : []);
+      for (const h of [...safeArr(rssHealth), ...safeArr(ytHealth), ...safeArr(twHealth)]) {
         hMap[h.feed_origin] = h;
       }
       setFeedHealthMap(hMap);

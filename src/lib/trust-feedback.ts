@@ -203,8 +203,9 @@ function enqueue(event: TrustFeedbackEvent): void {
     dismissReason: event.dismissReason,
     dismissCategory: event.dismissCategory,
   })
-    .then(() => {
-      // Outbox persisted successfully -- clear localStorage fallback
+    .then((rowId) => {
+      // Store the outbox row id so flushPendingFeedback can mark it sent
+      queued.id = rowId;
       clearLocalStorageFallback();
     })
     .catch(() => {

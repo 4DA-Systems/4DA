@@ -531,10 +531,14 @@ fn get_dependency_coverage(conn: &rusqlite::Connection) -> Result<Vec<DepCoverag
 /// Map ecosystem names to the source adapter types that should cover them.
 fn ecosystem_source_types(ecosystem: &str) -> Vec<String> {
     match ecosystem.to_lowercase().as_str() {
-        "npm" | "javascript" | "typescript" => vec!["npm".into(), "osv".into(), "github".into()],
-        "crates.io" | "cargo" | "rust" => vec!["crates_io".into(), "osv".into(), "github".into()],
+        "npm" | "javascript" | "typescript" => {
+            vec!["npm_registry".into(), "osv".into(), "github".into()]
+        }
+        "crates.io" | "cargo" | "rust" => {
+            vec!["crates_io".into(), "osv".into(), "github".into()]
+        }
         "pypi" | "python" => vec!["pypi".into(), "osv".into(), "github".into()],
-        "go" | "golang" => vec!["go".into(), "osv".into(), "github".into()],
+        "go" | "golang" => vec!["go_modules".into(), "osv".into(), "github".into()],
         "maven" | "java" | "kotlin" => vec!["osv".into(), "github".into()],
         "nuget" | "csharp" | "dotnet" => vec!["osv".into(), "github".into()],
         _ => vec!["osv".into()],
@@ -1468,10 +1472,12 @@ fn classify_match_type(source_type: &str, content_type: Option<&str>) -> &'stati
     let st = source_type.to_lowercase();
     if matches!(
         st.as_str(),
-        "npm"
+        "npm_registry"
+            | "npm"
             | "crates_io"
             | "crates"
             | "pypi"
+            | "go_modules"
             | "go"
             | "maven"
             | "nuget"
@@ -4291,11 +4297,18 @@ mod tests {
     #[test]
     fn test_ecosystem_source_types_known() {
         assert!(!ecosystem_source_types("npm").is_empty());
-        assert!(ecosystem_source_types("npm").contains(&"npm".to_string()));
+        assert!(
+            ecosystem_source_types("npm").contains(&"npm_registry".to_string()),
+            "npm ecosystem should map to npm_registry adapter"
+        );
         assert!(!ecosystem_source_types("crates.io").is_empty());
         assert!(ecosystem_source_types("crates.io").contains(&"crates_io".to_string()));
         assert!(!ecosystem_source_types("pypi").is_empty());
         assert!(ecosystem_source_types("pypi").contains(&"pypi".to_string()));
+        assert!(
+            ecosystem_source_types("go").contains(&"go_modules".to_string()),
+            "go ecosystem should map to go_modules adapter"
+        );
     }
 
     #[test]
@@ -4663,6 +4676,18 @@ mod tests {
         assert_eq!(
             npm_mt, "exact_registry",
             "npm should classify as 'exact_registry'"
+        );
+
+        let npm_registry_mt = classify_match_type("npm_registry", None);
+        assert_eq!(
+            npm_registry_mt, "exact_registry",
+            "npm_registry (canonical adapter name) should classify as 'exact_registry'"
+        );
+
+        let go_modules_mt = classify_match_type("go_modules", None);
+        assert_eq!(
+            go_modules_mt, "exact_registry",
+            "go_modules (canonical adapter name) should classify as 'exact_registry'"
         );
 
         // Advisory from content_type alone (non-OSV source)

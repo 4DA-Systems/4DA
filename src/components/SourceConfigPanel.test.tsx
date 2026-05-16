@@ -72,6 +72,8 @@ describe('SourceConfigPanel', () => {
           return Promise.resolve({ feeds: [], count: 0, matched_domains: [], detected_languages: [] });
         case 'toggle_curated_feed':
           return Promise.resolve({ success: true, url: '', enabled: true });
+        case 'get_feed_health_status':
+          return Promise.resolve([]);
         default:
           return Promise.resolve({});
       }

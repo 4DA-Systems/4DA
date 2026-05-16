@@ -681,7 +681,7 @@ pub fn queue_feedback_event(
     notes: Option<String>,
     dismiss_reason: Option<String>,
     dismiss_category: Option<String>,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<i64, String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
     conn.execute(
@@ -699,7 +699,7 @@ pub fn queue_feedback_event(
         ],
     )
     .map_err(|e| e.to_string())?;
-    Ok(())
+    Ok(conn.last_insert_rowid())
 }
 
 /// Load pending feedback events from the SQLite outbox.

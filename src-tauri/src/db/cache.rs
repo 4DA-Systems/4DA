@@ -32,6 +32,7 @@ pub struct DigestSourceItem {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub relevance_score: Option<f64>,
     pub topics: Vec<String>,
+    pub content_type: Option<String>,
 }
 
 // ============================================================================
@@ -124,7 +125,7 @@ impl Database {
         let conn = self.conn.lock();
 
         let mut stmt = conn.prepare(
-            "SELECT id, title, url, source_type, created_at, content, relevance_score
+            "SELECT id, title, url, source_type, created_at, content, relevance_score, content_type
              FROM source_items
              WHERE created_at >= ?1
                AND COALESCE(detected_lang, 'en') = ?3
@@ -155,6 +156,7 @@ impl Database {
                     created_at: parse_datetime(row.get::<_, String>(4)?),
                     relevance_score: row.get(6)?,
                     topics,
+                    content_type: row.get(7)?,
                 })
             },
         )?;

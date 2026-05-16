@@ -944,22 +944,36 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 )
                 .ok()
                 .map(|db_items| {
+                    let conn = db.conn.lock();
                     db_items
                         .into_iter()
-                        .map(|i| BriefingItem {
-                            title: i.title,
-                            source_type: i.source_type,
-                            score: i.relevance_score.unwrap_or(0.0) as f32,
-                            signal_type: None,
-                            url: i.url,
-                            item_id: Some(i.id),
-                            signal_priority: None,
-                            description: None,
-                            matched_deps: vec![],
-                            content_type: None,
-                            corroboration_count: 0,
-                            alt_sources: vec![],
-                            section: None,
+                        .map(|i| {
+                            let matched_deps = conn
+                                .prepare_cached(
+                                    "SELECT package_name FROM source_item_dependencies WHERE source_item_id = ?1",
+                                )
+                                .ok()
+                                .and_then(|mut stmt| {
+                                    stmt.query_map(rusqlite::params![i.id], |row| row.get::<_, String>(0))
+                                        .ok()
+                                        .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+                                })
+                                .unwrap_or_default();
+                            BriefingItem {
+                                title: i.title,
+                                source_type: i.source_type,
+                                score: i.relevance_score.unwrap_or(0.0) as f32,
+                                signal_type: None,
+                                url: i.url,
+                                item_id: Some(i.id),
+                                signal_priority: None,
+                                description: None,
+                                matched_deps,
+                                content_type: i.content_type,
+                                corroboration_count: 0,
+                                alt_sources: vec![],
+                                section: None,
+                            }
                         })
                         .collect()
                 })

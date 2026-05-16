@@ -94,6 +94,10 @@ pub(crate) async fn generate_briefing_internal(
                     created_at: Utc::now(),
                     relevance_score: Some(r.top_score as f64),
                     topics: vec![],
+                    content_type: r
+                        .score_breakdown
+                        .as_ref()
+                        .and_then(|b| b.content_type.clone()),
                 })
                 .collect();
             let expl: std::collections::HashMap<i64, String> = results

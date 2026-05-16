@@ -364,6 +364,39 @@ impl ACE {
                                             tracing::warn!(target: "4da::ace", error = %e, dep = %dep, "Failed to upsert dev dependency");
                                         }
                                     }
+
+                                    // Snapshot deps for the dep_linker's UNION query
+                                    if let Ok(db) = crate::get_database() {
+                                        let ecosystem = signal.manifest_type.language().to_string();
+                                        let mut entries: Vec<crate::db::dep_snapshots::DepEntry> =
+                                            signal
+                                                .dependencies
+                                                .iter()
+                                                .map(|d| crate::db::dep_snapshots::DepEntry {
+                                                    name: d.clone(),
+                                                    ecosystem: ecosystem.clone(),
+                                                    version: None,
+                                                    is_direct: true,
+                                                    is_dev: false,
+                                                    source: manifest_type.clone(),
+                                                })
+                                                .collect();
+                                        entries.extend(signal.dev_dependencies.iter().map(|d| {
+                                            crate::db::dep_snapshots::DepEntry {
+                                                name: d.clone(),
+                                                ecosystem: ecosystem.clone(),
+                                                version: None,
+                                                is_direct: true,
+                                                is_dev: true,
+                                                source: manifest_type.clone(),
+                                            }
+                                        }));
+                                        if let Err(e) =
+                                            db.snapshot_project_deps(&project_path, &entries)
+                                        {
+                                            tracing::debug!(target: "4da::ace", error = %e, "Failed to snapshot deps");
+                                        }
+                                    }
                                 }
                             }
 
