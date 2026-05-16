@@ -1339,6 +1339,24 @@ fn is_utility_dep(name: &str) -> bool {
         | "better-sqlite3" | "better_sqlite3"
         | "typescript" | "eslint" | "prettier"
         | "webpack" | "rollup" | "esbuild" | "swc"
+        // Node.js testing frameworks (dev tooling, not primary)
+        | "vitest" | "jest" | "mocha" | "ava" | "cypress" | "playwright"
+        | "@testing-library/react" | "@testing-library/jest-dom" | "@testing-library/dom"
+        // Node.js build tooling
+        | "vite" | "tailwindcss" | "@tailwindcss/vite" | "postcss" | "autoprefixer"
+        // TypeScript type declarations (zero runtime risk)
+        | "@types/node" | "@types/react" | "@types/react-dom"
+        // Stable single-purpose packages
+        | "uuid" | "nanoid" | "clsx" | "classnames" | "cva"
+        | "date-fns" | "dayjs" | "moment"
+        | "zod" | "yup" | "joi"
+        | "lodash" | "underscore" | "ramda"
+        // Rust stable crates
+        | "parking_lot" | "dashmap" | "crossbeam" | "crossbeam-utils" | "crossbeam-channel"
+        | "rayon" | "num-traits" | "num-integer" | "num-bigint"
+        | "regex" | "glob" | "walkdir" | "notify"
+        | "chrono" | "time" | "humantime"
+        | "url" | "mime"
     )
 }
 
@@ -1521,7 +1539,12 @@ fn format_dep_display_name(package_name: &str, ecosystem: &str) -> String {
         "php" | "packagist" => "Packagist",
         "ruby" | "rubygems" => "RubyGems",
         "swift" | "cocoapods" => "CocoaPods",
-        _ => return package_name.to_string(),
+        _ => {
+            if ecosystem.is_empty() {
+                return package_name.to_string();
+            }
+            return format!("{package_name} ({ecosystem})");
+        }
     };
     format!("{package_name} ({qualifier})")
 }
@@ -2455,9 +2478,10 @@ fn calculate_blind_spot_score(
         })
         .sum();
 
-    // Denominator floor: if the user has fewer than 5 direct deps, use 5 as
-    // the denominator. This prevents a 1-dep stack with 1 uncovered critical
-    // from scoring 1.0 (100% uncovered).
+    // Denominator: total direct deps (not just eligible-for-checking). This is
+    // intentional — utility/ambiguous deps are filtered from the uncovered
+    // vector but still count toward the denominator, which keeps the score
+    // stable and prevents noise from small eligible-dep counts.
     let denom = (total_direct_deps.max(5)) as f32;
     let uncovered_pressure = (uncovered_weighted / denom).min(1.0);
 

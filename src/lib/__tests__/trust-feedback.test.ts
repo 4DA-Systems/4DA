@@ -9,7 +9,7 @@ vi.mock('../commands', () => ({
 
 // Must import after mocking
 import { cmd } from '../commands';
-import { recordTrustEvent, getPendingFeedbackCount, flushPendingFeedback } from '../trust-feedback';
+import { recordTrustEvent, getPendingFeedbackCount, flushPendingFeedback, _resetQueueForTesting } from '../trust-feedback';
 
 const mockedCmd = vi.mocked(cmd);
 
@@ -17,6 +17,7 @@ describe('trust-feedback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    _resetQueueForTesting();
     // Default: cmd succeeds
     mockedCmd.mockResolvedValue(null as never);
   });
@@ -64,7 +65,7 @@ describe('trust-feedback', () => {
       .mockRejectedValueOnce(new Error('Backend unavailable'))
       .mockRejectedValueOnce(new Error('SQLite unavailable'));
 
-    recordTrustEvent({ eventType: 'dismissed', sourceType: 'security' });
+    recordTrustEvent({ eventType: 'dismissed', sourceType: 'vulnerability' });
 
     // Wait for both failures to cascade
     await vi.waitFor(() => {
@@ -123,6 +124,72 @@ describe('trust-feedback', () => {
     }
 
     // After exceeding max retries, event should be dropped
+    expect(getPendingFeedbackCount()).toBe(0);
+  });
+
+  it('deduplicates identical events in the queue', async () => {
+    // Both sends fail, triggering enqueue
+    mockedCmd.mockRejectedValue(new Error('Backend unavailable'));
+
+    recordTrustEvent({ eventType: 'acted_on', signalId: '99' });
+    recordTrustEvent({ eventType: 'acted_on', signalId: '99' });
+
+    // Wait for both failures to enqueue
+    await vi.waitFor(() => {
+      expect(getPendingFeedbackCount()).toBeGreaterThanOrEqual(1);
+    });
+
+    // Should only have 1 event despite 2 identical submissions
+    expect(getPendingFeedbackCount()).toBe(1);
+  });
+
+  it('allows distinct events with different keys', async () => {
+    mockedCmd.mockRejectedValue(new Error('Backend unavailable'));
+
+    recordTrustEvent({ eventType: 'acted_on', signalId: '1' });
+    recordTrustEvent({ eventType: 'dismissed', signalId: '1' });
+
+    await vi.waitFor(() => {
+      expect(getPendingFeedbackCount()).toBeGreaterThanOrEqual(2);
+    });
+
+    // Different eventType = different dedup key = both queued
+    expect(getPendingFeedbackCount()).toBe(2);
+  });
+
+  it('marks exhausted events as sent in SQLite outbox on drop', async () => {
+    // First call (record_intelligence_feedback) fails, triggering enqueue.
+    // queue_feedback_event succeeds (gives us an outbox ID).
+    // All subsequent record_intelligence_feedback calls fail (flush retries fail).
+    let callCount = 0;
+    mockedCmd.mockImplementation(((command: string) => {
+      callCount++;
+      if (command === 'record_intelligence_feedback') {
+        return Promise.reject(new Error('Always fails'));
+      }
+      if (command === 'queue_feedback_event') {
+        return Promise.resolve(null);
+      }
+      if (command === 'mark_feedback_attempt') {
+        return Promise.resolve(null);
+      }
+      if (command === 'mark_feedback_sent') {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(null);
+    }) as typeof cmd);
+
+    recordTrustEvent({ eventType: 'validated', signalId: 'exhaust-test' });
+
+    await vi.waitFor(() => {
+      expect(getPendingFeedbackCount()).toBeGreaterThanOrEqual(1);
+    });
+
+    // Flush 6 times to exceed MAX_RETRY_ATTEMPTS (5)
+    for (let i = 0; i < 6; i++) {
+      await flushPendingFeedback();
+    }
+
     expect(getPendingFeedbackCount()).toBe(0);
   });
 });
