@@ -384,12 +384,14 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         }
     };
 
-    if raw_items.is_empty() {
+    // Run full enrichment pipeline even when raw_items is empty — preemption
+    // alerts, knowledge gaps, and escalating chains are added during enrichment,
+    // so a preemption-only briefing (0 scored items, N alerts) must still fire.
+    let briefing = crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
+
+    if !briefing.has_meaningful_content() {
         return Ok("No items available for briefing — run an analysis first".into());
     }
-
-    // Run full enrichment pipeline (skip novelty so manual trigger always shows content)
-    let briefing = crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
 
     let total = briefing.items.len();
     let gaps = briefing.knowledge_gaps.len();

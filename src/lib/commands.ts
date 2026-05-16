@@ -495,7 +495,7 @@ interface CommandMap {
 
   // -- Trust Ledger --
   get_trust_dashboard: { params: { days?: number }; result: TrustSummary };
-  record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string }; result: null };
+  record_intelligence_feedback: { params: { eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string }; result: null };
   get_domain_precision_report: { params: { days?: number }; result: DomainPrecision[] };
   get_false_positive_analysis: { params: { days?: number }; result: FalsePositiveAnalysis };
 

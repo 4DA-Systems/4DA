@@ -718,22 +718,26 @@ fn find_uncovered_deps(
         }
     }
 
-    // ── Step 2: Single batched query for all three metrics ──────────────
+    // ── Step 2: Batched queries with SID-first matching ─────────────────
     //
-    // For each dep name in _blind_spot_deps:
-    //   - available: COUNT of source_items whose title LIKE '%dep_name%'
-    //     within the threshold window
-    //   - interacted: COUNT(DISTINCT) of those items that have an interaction
-    //   - days_since: days since the most recent interaction on ANY item
-    //     matching the dep name (not limited to the window), defaulting to
-    //     999 if never interacted
+    // Two queries (recent_sql + history_sql) each use UNION ALL with two
+    // branches:
     //
-    // The query uses two subqueries (available + interacted from the window,
-    // days_since from all time) correlated on the dep name, matching the
-    // exact semantics of the original per-dep queries.
+    //   Branch 1 (primary): JOIN through source_item_dependencies (SID) on
+    //     normalized package_name. These are authoritative evidence links
+    //     created by the dep linker — high confidence, skip word-boundary
+    //     filtering.
+    //
+    //   Branch 2 (fallback): The original title LIKE '%dep_name%' pattern,
+    //     but with NOT EXISTS to exclude items already matched in Branch 1.
+    //     These are flagged as "title_heuristic" match_source.
+    //
+    // Each row carries a match_source column so the processing loop can
+    // assign the correct match_type to coverage metrics.
     let window = format!("-{threshold_days} days");
 
     let recent_sql = "
+        -- Branch 1: evidence-linked matches via source_item_dependencies (high confidence)
         SELECT
             bd.name,
             si.title,
@@ -746,7 +750,35 @@ fn find_uncovered_deps(
                     WHERE i.item_id = si.id OR i.source_item_id = si.id
                 ) THEN 1
                 ELSE 0
-            END AS interacted
+            END AS interacted,
+            sid.match_type AS match_source
+        FROM _blind_spot_deps bd
+        JOIN source_item_dependencies sid
+            ON LOWER(REPLACE(sid.package_name, '-', '_')) = bd.name
+        JOIN source_items si ON si.id = sid.source_item_id
+        WHERE si.created_at >= datetime('now', ?1)
+          AND LOWER(si.source_type) != 'stackoverflow'
+          AND (si.content_type IS NULL
+               OR si.content_type NOT IN ('show_and_tell','tutorial','question',
+                                          'help_request','hiring','clickbait'))
+
+        UNION ALL
+
+        -- Branch 2: title-heuristic fallback for items not yet in source_item_dependencies
+        SELECT
+            bd.name,
+            si.title,
+            si.source_type,
+            si.content_type,
+            CASE
+                WHEN EXISTS(
+                    SELECT 1
+                    FROM interactions i
+                    WHERE i.item_id = si.id OR i.source_item_id = si.id
+                ) THEN 1
+                ELSE 0
+            END AS interacted,
+            'title_heuristic' AS match_source
         FROM _blind_spot_deps bd
         JOIN source_items si ON (si.title LIKE '%' || bd.name || '%'
                                  OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
@@ -755,19 +787,49 @@ fn find_uncovered_deps(
           AND (si.content_type IS NULL
                OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                           'help_request','hiring','clickbait'))
+          AND NOT EXISTS (
+              SELECT 1 FROM source_item_dependencies sid2
+              WHERE sid2.source_item_id = si.id
+                AND LOWER(REPLACE(sid2.package_name, '-', '_')) = bd.name
+          )
     ";
     let history_sql = "
+        -- Branch 1: evidence-linked interaction history (high confidence)
         SELECT
             bd.name,
             si.title,
             si.source_type,
             si.content_type,
-            CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since
+            CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since,
+            sid.match_type AS match_source
+        FROM _blind_spot_deps bd
+        JOIN source_item_dependencies sid
+            ON LOWER(REPLACE(sid.package_name, '-', '_')) = bd.name
+        JOIN source_items si ON si.id = sid.source_item_id
+        JOIN interactions i ON i.item_id = si.id OR i.source_item_id = si.id
+        WHERE LOWER(si.source_type) != 'stackoverflow'
+        GROUP BY bd.name, si.id, si.title, si.source_type, si.content_type, sid.match_type
+
+        UNION ALL
+
+        -- Branch 2: title-heuristic fallback interaction history
+        SELECT
+            bd.name,
+            si.title,
+            si.source_type,
+            si.content_type,
+            CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since,
+            'title_heuristic' AS match_source
         FROM _blind_spot_deps bd
         JOIN source_items si ON (si.title LIKE '%' || bd.name || '%'
                                  OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
         JOIN interactions i ON i.item_id = si.id OR i.source_item_id = si.id
         WHERE LOWER(si.source_type) != 'stackoverflow'
+          AND NOT EXISTS (
+              SELECT 1 FROM source_item_dependencies sid2
+              WHERE sid2.source_item_id = si.id
+                AND LOWER(REPLACE(sid2.package_name, '-', '_')) = bd.name
+          )
         GROUP BY bd.name, si.id, si.title, si.source_type, si.content_type
     ";
 
@@ -804,6 +866,7 @@ fn find_uncovered_deps(
                 row.get::<_, String>(2)?,
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, i64>(4)?,
+                row.get::<_, String>(5)?,
             ))
         }) {
             Ok(r) => r,
@@ -818,27 +881,40 @@ fn find_uncovered_deps(
         };
 
         for row_result in rows {
-            let (name, title, source_type, content_type, interacted) = match row_result {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(
-                        target: "4da::blind_spots",
-                        "Failed to read recent blind-spot dep row: {e}"
-                    );
+            let (name, title, source_type, content_type, interacted, match_source) =
+                match row_result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!(
+                            target: "4da::blind_spots",
+                            "Failed to read recent blind-spot dep row: {e}"
+                        );
+                        continue;
+                    }
+                };
+            // SID-linked items skip the title word-boundary filter — the link
+            // is authoritative evidence that the item relates to this dep.
+            // Title-heuristic fallback items still need the boundary check.
+            if match_source == "title_heuristic" {
+                let dep_lower = name.to_lowercase();
+                let title_lower = title.to_lowercase();
+                if !is_actionable_blind_spot_match(
+                    &dep_lower,
+                    &title_lower,
+                    &source_type,
+                    content_type.as_deref(),
+                ) {
                     continue;
                 }
-            };
-            let dep_lower = name.to_lowercase();
-            let title_lower = title.to_lowercase();
-            if !is_actionable_blind_spot_match(
-                &dep_lower,
-                &title_lower,
-                &source_type,
-                content_type.as_deref(),
-            ) {
-                continue;
             }
-            let mt = classify_match_type(&source_type, content_type.as_deref());
+            // For SID-linked items, prefer the stored match_type from the link
+            // table (e.g. "exact_registry", "advisory", "llm_analysis").
+            // For title-heuristic fallback, use the old classify_match_type heuristic.
+            let mt = if match_source != "title_heuristic" {
+                sid_match_type_to_coverage(&match_source)
+            } else {
+                classify_match_type(&source_type, content_type.as_deref())
+            };
             let entry = coverage.entry(name).or_default();
             entry.available += 1;
             if interacted > 0 {
@@ -867,6 +943,7 @@ fn find_uncovered_deps(
                 row.get::<_, String>(2)?,
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, u32>(4)?,
+                row.get::<_, String>(5)?,
             ))
         }) {
             Ok(r) => r,
@@ -881,27 +958,35 @@ fn find_uncovered_deps(
         };
 
         for row_result in rows {
-            let (name, title, source_type, content_type, days_since) = match row_result {
-                Ok(r) => r,
-                Err(e) => {
-                    warn!(
-                        target: "4da::blind_spots",
-                        "Failed to read history blind-spot dep row: {e}"
-                    );
+            let (name, title, source_type, content_type, days_since, match_source) =
+                match row_result {
+                    Ok(r) => r,
+                    Err(e) => {
+                        warn!(
+                            target: "4da::blind_spots",
+                            "Failed to read history blind-spot dep row: {e}"
+                        );
+                        continue;
+                    }
+                };
+            // SID-linked items bypass word-boundary filter (authoritative link).
+            if match_source == "title_heuristic" {
+                let dep_lower = name.to_lowercase();
+                let title_lower = title.to_lowercase();
+                if !is_actionable_blind_spot_match(
+                    &dep_lower,
+                    &title_lower,
+                    &source_type,
+                    content_type.as_deref(),
+                ) {
                     continue;
                 }
-            };
-            let dep_lower = name.to_lowercase();
-            let title_lower = title.to_lowercase();
-            if !is_actionable_blind_spot_match(
-                &dep_lower,
-                &title_lower,
-                &source_type,
-                content_type.as_deref(),
-            ) {
-                continue;
             }
-            let mt = classify_match_type(&source_type, content_type.as_deref());
+            let mt = if match_source != "title_heuristic" {
+                sid_match_type_to_coverage(&match_source)
+            } else {
+                classify_match_type(&source_type, content_type.as_deref())
+            };
             let entry = coverage.entry(name).or_default();
             entry.days_since_last_signal = Some(match entry.days_since_last_signal {
                 Some(existing) => existing.min(days_since),
@@ -1307,6 +1392,21 @@ fn upgrade_match_type(current: &mut Option<String>, new_type: &str) {
     };
     if dominated {
         *current = Some(new_type.to_string());
+    }
+}
+
+/// Map `source_item_dependencies.match_type` values to blind-spot coverage
+/// match types. SID link types that carry real evidence (registry data, advisory
+/// references, LLM confirmation) map to "exact_registry" or "advisory".
+/// Everything else (including "title_heuristic" links) stays as-is.
+fn sid_match_type_to_coverage(sid_match_type: &str) -> &'static str {
+    match sid_match_type {
+        // Registry-sourced or LLM-confirmed links are high-confidence evidence
+        "exact_registry" | "registry" | "llm_analysis" | "llm_confirmed" => "exact_registry",
+        // Advisory/vulnerability links
+        "advisory" | "security_advisory" | "cve" | "vulnerability" => "advisory",
+        // Anything else (including "title_heuristic" stored in SID) stays heuristic
+        _ => "title_heuristic",
     }
 }
 

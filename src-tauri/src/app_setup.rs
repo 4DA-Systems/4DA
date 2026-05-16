@@ -767,6 +767,22 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // One-time backfill: link existing source items to dependencies.
+    // Short-circuits when the table already has rows, so safe to call every startup.
+    tauri::async_runtime::spawn(async {
+        if let Ok(db) = crate::get_database() {
+            match crate::dep_linker::backfill_if_empty(&db) {
+                Ok(n) if n > 0 => {
+                    info!(target: "4da::startup", linked = n, "Backfilled source_item_dependencies");
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "dep_linker backfill failed");
+                }
+                _ => {}
+            }
+        }
+    });
+
     // Background OSV advisory sync — keeps the local mirror fresh.
     // Only runs if deps exist and last sync > 6 hours ago (or never synced).
     tauri::async_runtime::spawn(async {

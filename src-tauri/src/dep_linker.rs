@@ -227,15 +227,18 @@ fn link_items_to_deps(
     dep_names: &[String],
 ) -> Result<usize> {
     let insert_sql = "INSERT OR IGNORE INTO source_item_dependencies
-                      (source_item_id, dependency_name, match_type, confidence)
-                      VALUES (?1, ?2, ?3, ?4)";
+                      (source_item_id, package_name, ecosystem, match_type, confidence)
+                      VALUES (?1, ?2, ?3, ?4, ?5)";
     let mut stmt = conn.prepare(insert_sql)?;
     let mut count = 0usize;
 
     for item in items {
         for dep_name in dep_names {
             if let Some((match_type, confidence)) = classify_item_dep_match(item, dep_name) {
-                match stmt.execute(params![item.id, dep_name, match_type, confidence]) {
+                let ecosystem = infer_ecosystem(item, dep_name);
+                match stmt.execute(params![
+                    item.id, dep_name, ecosystem, match_type, confidence
+                ]) {
                     Ok(changed) => count += changed,
                     Err(e) => {
                         debug!(
@@ -379,6 +382,23 @@ fn matches_dep_in_title(title: &str, dep_name: &str) -> Option<f64> {
     }
 
     None
+}
+
+/// Best-effort ecosystem inference from the source type.
+fn infer_ecosystem(item: &UnlinkedItem, _dep_name: &str) -> Option<String> {
+    match item.source_type.to_lowercase().as_str() {
+        "npm" => Some("npm".into()),
+        "crates_io" | "crates" => Some("crates.io".into()),
+        "pypi" => Some("pypi".into()),
+        "go" => Some("go".into()),
+        "maven" => Some("maven".into()),
+        "nuget" => Some("nuget".into()),
+        "packagist" => Some("packagist".into()),
+        "rubygems" => Some("rubygems".into()),
+        "cocoapods" => Some("cocoapods".into()),
+        "osv" | "cve" => Some("advisory".into()),
+        _ => None,
+    }
 }
 
 // ============================================================================
@@ -544,6 +564,73 @@ mod tests {
         // Title heuristic for "axios" won't match, and registry source_id is "lodash"
         let result = classify_item_dep_match(&item, "axios");
         assert!(result.is_none());
+    }
+
+    /// Regression test: proves the INSERT into source_item_dependencies works
+    /// against the real migrated schema. A previous bug used `dependency_name`
+    /// instead of `package_name`, causing a column mismatch at runtime.
+    #[test]
+    fn test_link_items_inserts_into_real_schema() {
+        use crate::test_utils::test_db;
+
+        let db = test_db();
+        let conn = db.conn.lock();
+
+        // Insert a minimal source_items row
+        conn.execute(
+            "INSERT INTO source_items (id, source_type, source_id, title, content, content_hash, embedding)
+             VALUES (1, 'crates_io', 'serde', 'serde 1.0.200 released', '', 'hash1', zeroblob(1536))",
+            [],
+        )
+        .expect("insert source_items");
+
+        // Insert a minimal project_dependencies row so load_dependency_names can find it
+        conn.execute(
+            "INSERT INTO project_dependencies (package_name, project_path, manifest_type, language, is_dev, is_direct, project_relevance)
+             VALUES ('serde', '/home/user/project', 'Cargo.toml', 'rust', 0, 1, 1.0)",
+            [],
+        )
+        .expect("insert project_dependencies");
+
+        // Build an UnlinkedItem that will match via exact_registry tier
+        let items = vec![UnlinkedItem {
+            id: 1,
+            title: "serde 1.0.200 released".into(),
+            source_type: "crates_io".into(),
+            content_type: None,
+            source_id: "serde".into(),
+        }];
+        let dep_names = vec!["serde".to_string()];
+
+        // This is the call that would fail with "table source_item_dependencies
+        // has no column named dependency_name" if the INSERT used the wrong column.
+        let linked = link_items_to_deps(&conn, &items, &dep_names)
+            .expect("link_items_to_deps should succeed against real schema");
+        assert_eq!(linked, 1, "Expected exactly 1 link row");
+
+        // Verify the row exists with the correct columns
+        let (pkg, eco, mt, conf): (String, Option<String>, String, f64) = conn
+            .query_row(
+                "SELECT package_name, ecosystem, match_type, confidence
+                 FROM source_item_dependencies
+                 WHERE source_item_id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("should find the inserted row");
+
+        assert_eq!(pkg, "serde");
+        assert_eq!(eco.as_deref(), Some("crates.io"));
+        assert_eq!(mt, "exact_registry");
+        assert!((conf - 0.95).abs() < f64::EPSILON);
+
+        // Verify total row count is exactly 1
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM source_item_dependencies", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]

@@ -15,6 +15,8 @@ interface TrustFeedbackEvent {
   sourceType?: string;
   topic?: string;
   notes?: string;
+  dismissReason?: string;
+  dismissCategory?: string;
 }
 
 /** Queued event with timestamp for retry tracking */
@@ -56,6 +58,8 @@ export function recordTrustEvent(params: {
   sourceType?: string;
   topic?: string;
   notes?: string;
+  dismissReason?: string;
+  dismissCategory?: string;
 }) {
   const event: TrustFeedbackEvent = {
     eventType: params.eventType,
@@ -64,6 +68,8 @@ export function recordTrustEvent(params: {
     sourceType: params.sourceType,
     topic: params.topic,
     notes: params.notes,
+    dismissReason: params.dismissReason,
+    dismissCategory: params.dismissCategory,
   };
 
   // Try to send immediately
@@ -127,6 +133,8 @@ async function sendEvent(event: TrustFeedbackEvent): Promise<void> {
     sourceType: event.sourceType,
     topic: event.topic,
     notes: event.notes,
+    dismissReason: event.dismissReason,
+    dismissCategory: event.dismissCategory,
   });
 }
 
