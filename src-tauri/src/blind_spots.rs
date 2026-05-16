@@ -21,6 +21,7 @@ use crate::evidence::{
     Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
     EvidenceKind, LensHints, Urgency,
 };
+use crate::monitoring_briefing::DataFreshness;
 use crate::scoring_config;
 
 // ============================================================================
@@ -57,6 +58,11 @@ pub struct BlindSpotReport {
     /// Hidden by default in the UI. Separate from uncovered_dependencies.
     pub weak_matches: Vec<UncoveredDep>,
     pub generated_at: String,
+    /// Source data freshness summary. When is_stale is true, the frontend should
+    /// warn that blind spot analysis may be based on outdated data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub data_freshness: Option<DataFreshness>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -314,6 +320,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
             recommendations: vec![],
             weak_matches: vec![],
             generated_at: chrono::Utc::now().to_rfc3339(),
+            data_freshness: crate::monitoring_briefing::compute_data_freshness(),
         });
     }
 
@@ -441,6 +448,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         recommendations,
         weak_matches,
         generated_at: chrono::Utc::now().to_rfc3339(),
+        data_freshness: crate::monitoring_briefing::compute_data_freshness(),
     })
 }
 
@@ -675,7 +683,7 @@ fn adapter_statuses_for_ecosystem(
             // Get last successful fetch time from source_items
             let last_fetch: Option<String> = conn
                 .query_row(
-                    "SELECT MAX(fetched_at) FROM source_items WHERE source_type = ?1",
+                    "SELECT MAX(last_seen) FROM source_items WHERE source_type = ?1",
                     params![adapter_name],
                     |row| row.get(0),
                 )
@@ -3981,6 +3989,7 @@ mod tests {
             recommendations: vec![rec_sample()],
             weak_matches: vec![],
             generated_at: "2026-04-17 00:00:00".into(),
+            data_freshness: None,
         }
     }
 
@@ -4041,6 +4050,7 @@ mod tests {
             recommendations: vec![],
             weak_matches: vec![],
             generated_at: String::new(),
+            data_freshness: None,
         };
         let feed = blind_spot_report_to_feed(&report);
         assert_eq!(feed.total, 0);
@@ -4404,6 +4414,7 @@ mod tests {
             recommendations: Vec::new(),
             weak_matches: Vec::new(),
             generated_at: "2026-05-16T00:00:00Z".into(),
+            data_freshness: None,
         };
 
         // Before dismissal: feed should contain the item
@@ -4998,6 +5009,7 @@ mod tests {
             recommendations: vec![],
             weak_matches: vec![weak_dep],
             generated_at: "2026-05-16T00:00:00Z".into(),
+            data_freshness: None,
         };
 
         let feed = blind_spot_report_to_feed(&report);
@@ -5163,6 +5175,7 @@ mod tests {
             recommendations: Vec::new(),
             weak_matches: weak,
             generated_at: "2026-05-16T00:00:00Z".into(),
+            data_freshness: None,
         };
         let feed = blind_spot_report_to_feed(&report);
 
@@ -5207,6 +5220,7 @@ mod tests {
             blind_spot_score: None,
             labels: None,
             personalization_context: None,
+            data_freshness: None,
         };
 
         assert!(

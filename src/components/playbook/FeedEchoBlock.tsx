@@ -18,7 +18,7 @@ export function FeedEchoBlock({ block }: Props) {
   // Count items fetched in the last 24 hours as "new"
   const newCount = items.filter((item) => {
     try {
-      const fetched = new Date(item.fetched_at).getTime();
+      const fetched = new Date(item.last_seen).getTime();
       return Date.now() - fetched < 24 * 60 * 60 * 1000;
     } catch {
       return false;
@@ -75,13 +75,13 @@ function FeedEchoRow({ item }: { item: FeedEchoItem }) {
             rel="noopener noreferrer"
             className="text-xs text-text-secondary hover:text-accent-gold transition-colors line-clamp-1"
           >
-            {getTranslated(`echo_${item.source}_${item.matched_topic}`, item.title)}
+            {getTranslated(`echo_${item.source_type}_${item.matched_topic}`, item.title)}
           </a>
         ) : (
-          <span className="text-xs text-text-secondary line-clamp-1">{getTranslated(`echo_${item.source}_${item.matched_topic}`, item.title)}</span>
+          <span className="text-xs text-text-secondary line-clamp-1">{getTranslated(`echo_${item.source_type}_${item.matched_topic}`, item.title)}</span>
         )}
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] text-text-muted">{item.source}</span>
+          <span className="text-[10px] text-text-muted">{item.source_type}</span>
           {item.matched_topic && (
             <span className="text-[10px] text-accent-gold">#{item.matched_topic}</span>
           )}

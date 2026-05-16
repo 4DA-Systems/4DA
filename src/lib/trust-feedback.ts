@@ -205,7 +205,9 @@ function enqueue(event: TrustFeedbackEvent): void {
   })
     .then((rowId) => {
       // Store the outbox row id so flushPendingFeedback can mark it sent
-      queued.id = rowId;
+      if (typeof rowId === 'number' && rowId > 0) {
+        queued.id = rowId;
+      }
       clearLocalStorageFallback();
     })
     .catch(() => {

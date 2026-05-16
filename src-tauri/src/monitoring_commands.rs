@@ -544,6 +544,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
         blind_spot_score: None,
         labels: None,
         personalization_context: None,
+        data_freshness: None,
     };
 
     crate::briefing_window::show_briefing(&app, &preview);

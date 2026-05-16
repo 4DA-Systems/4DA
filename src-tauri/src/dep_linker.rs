@@ -61,40 +61,22 @@ pub fn link_recent_items(db: &Database) -> Result<usize> {
     Ok(total)
 }
 
-/// One-time backfill: link ALL existing source items to dependencies.
+/// Backfill: link source items that have no dependency links yet.
 ///
-/// Checks whether `source_item_dependencies` is empty. If so, processes
-/// every source item in batches of 500 (no date filter). Safe to call on
-/// every startup — it short-circuits immediately when the table already
-/// has rows.
+/// Processes every unlinked source item in batches of 500 (no date filter).
+/// Items that already have rows in `source_item_dependencies` are naturally
+/// skipped by the LEFT JOIN ... WHERE sid.id IS NULL query pattern.
+///
+/// Safe to call on every startup — only processes items missing links.
 ///
 /// Returns the total number of links created.
 pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     let conn = db.conn.lock();
 
-    // Short-circuit: if the table already has rows, nothing to do.
-    let has_rows: bool = conn
-        .query_row(
-            "SELECT EXISTS(SELECT 1 FROM source_item_dependencies LIMIT 1)",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(true); // default to "has rows" on error so we don't blow up
-
-    if has_rows {
-        return Ok(0);
-    }
-
     let dep_names = load_dependency_names(&conn)?;
     if dep_names.is_empty() {
         return Ok(0);
     }
-
-    info!(
-        target: "4da::dep_linker",
-        deps = dep_names.len(),
-        "Backfilling source_item_dependencies (table empty)"
-    );
 
     let mut total_linked = 0usize;
     let mut last_id = 0i64;
@@ -111,12 +93,112 @@ pub fn backfill_if_empty(db: &Database) -> Result<usize> {
         total_linked += link_items_to_deps(&conn, &batch, &dep_names)?;
     }
 
-    info!(
-        target: "4da::dep_linker",
-        total_linked,
-        "Backfill complete"
-    );
+    if total_linked > 0 {
+        info!(
+            target: "4da::dep_linker",
+            total_linked,
+            deps = dep_names.len(),
+            "Backfill linked new items to dependencies"
+        );
+    }
     Ok(total_linked)
+}
+
+/// Repair existing `source_item_dependencies` rows that have NULL or empty
+/// `evidence_text` / `source_url`. Joins back to `source_items` to regenerate
+/// the evidence using the same `build_evidence_text()` logic used during linking.
+///
+/// Returns the number of rows repaired.
+pub fn repair_evidence(db: &Database) -> Result<usize> {
+    let conn = db.conn.lock();
+
+    let mut select_stmt = conn.prepare(
+        "SELECT sid.source_item_id, sid.package_name, sid.ecosystem, sid.match_type, sid.confidence,
+                si.title, si.source_type, si.source_id, si.url
+         FROM source_item_dependencies sid
+         JOIN source_items si ON si.id = sid.source_item_id
+         WHERE sid.evidence_text IS NULL OR sid.evidence_text = ''
+            OR sid.source_url IS NULL OR sid.source_url = ''",
+    )?;
+
+    struct RepairRow {
+        source_item_id: i64,
+        package_name: String,
+        ecosystem: Option<String>,
+        match_type: String,
+        title: String,
+        source_type: String,
+        source_id: String,
+        url: Option<String>,
+    }
+
+    let rows: Vec<RepairRow> = select_stmt
+        .query_map([], |row| {
+            Ok(RepairRow {
+                source_item_id: row.get(0)?,
+                package_name: row.get(1)?,
+                ecosystem: row.get(2)?,
+                match_type: row.get(3)?,
+                title: row.get(5)?,
+                source_type: row.get(6)?,
+                source_id: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                url: row.get(8)?,
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    if rows.is_empty() {
+        return Ok(0);
+    }
+
+    let mut update_stmt = conn.prepare(
+        "UPDATE source_item_dependencies SET evidence_text = ?1, source_url = ?2
+         WHERE source_item_id = ?3 AND package_name = ?4 AND ecosystem IS ?5",
+    )?;
+
+    let mut repaired = 0usize;
+    for row in &rows {
+        // Reconstruct a minimal UnlinkedItem for build_evidence_text
+        let item = UnlinkedItem {
+            id: row.source_item_id,
+            title: row.title.clone(),
+            source_type: row.source_type.clone(),
+            content_type: None,
+            source_id: row.source_id.clone(),
+            url: row.url.clone(),
+        };
+        let evidence = build_evidence_text(&row.match_type, &item, &row.package_name);
+        let source_url = row.url.as_deref();
+
+        match update_stmt.execute(params![
+            evidence,
+            source_url,
+            row.source_item_id,
+            row.package_name,
+            row.ecosystem,
+        ]) {
+            Ok(changed) => repaired += changed,
+            Err(e) => {
+                debug!(
+                    target: "4da::dep_linker",
+                    item_id = row.source_item_id,
+                    dep = row.package_name,
+                    error = %e,
+                    "Failed to repair evidence for dep link"
+                );
+            }
+        }
+    }
+
+    if repaired > 0 {
+        info!(
+            target: "4da::dep_linker",
+            repaired,
+            "Repaired NULL evidence_text/source_url in source_item_dependencies"
+        );
+    }
+    Ok(repaired)
 }
 
 // ============================================================================

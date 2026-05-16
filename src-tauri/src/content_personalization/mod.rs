@@ -284,8 +284,8 @@ pub enum TemporalBlockType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeedEchoItem {
     pub title: String,
-    pub source: String,
+    pub source_type: String,
     pub url: Option<String>,
     pub matched_topic: String,
-    pub fetched_at: String,
+    pub last_seen: String,
 }

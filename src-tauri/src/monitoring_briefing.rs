@@ -14,6 +14,59 @@ use tracing::{info, warn};
 use crate::monitoring::MonitoringState;
 use crate::monitoring_notifications::truncate_safe;
 
+// ============================================================================
+// Data Freshness
+// ============================================================================
+
+/// Summarizes the staleness of source data. Attached to briefings and blind spot
+/// reports so the frontend can distinguish "nothing happening" from "data pipeline
+/// is broken / sources are offline."
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct DataFreshness {
+    /// Hours since the newest item was ingested (None if table is empty).
+    pub newest_item_age_hours: Option<f64>,
+    /// Number of source items created in the last 24 hours.
+    pub items_last_24h: u32,
+    /// Number of source items created in the last 72 hours.
+    pub items_last_72h: u32,
+    /// True when items_last_72h == 0 — the system has received no data in 3 days.
+    pub is_stale: bool,
+}
+
+/// Query source_items to compute a DataFreshness snapshot.
+/// Returns None only if the database is unreachable.
+pub(crate) fn compute_data_freshness() -> Option<DataFreshness> {
+    let conn = crate::open_db_connection().ok()?;
+    let newest_age: Option<f64> = conn
+        .query_row(
+            "SELECT (julianday('now') - julianday(MAX(created_at))) * 24.0 FROM source_items",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+    let items_24h: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-1 day')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let items_72h: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-3 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    Some(DataFreshness {
+        newest_item_age_hours: newest_age,
+        items_last_24h: items_24h,
+        items_last_72h: items_72h,
+        is_stale: items_72h == 0,
+    })
+}
+
 /// Minimum relevance score for an item to appear in the morning briefing.
 /// The briefing is a flagship surface — every bad signal erodes trust.
 /// 0.50 keeps genuinely relevant content while cutting noise that scored
@@ -314,6 +367,10 @@ pub struct BriefingNotification {
     /// system understood the user's profile. Only set on the very first briefing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub personalization_context: Option<String>,
+    /// Source data freshness summary. When is_stale is true, the frontend should
+    /// show a staleness warning instead of treating silence as "all clear."
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_freshness: Option<DataFreshness>,
 }
 
 const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
@@ -446,6 +503,7 @@ pub(crate) fn build_enriched_briefing(
             blind_spot_score: None,
             labels: Some(build_briefing_labels(lang)),
             personalization_context: None,
+            data_freshness: None,
         };
     }
 
@@ -512,6 +570,7 @@ pub(crate) fn build_enriched_briefing(
         blind_spot_score,
         labels: Some(labels),
         personalization_context,
+        data_freshness: compute_data_freshness(),
     }
 }
 
@@ -984,10 +1043,47 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
         }
     };
 
+    // Compute freshness before the quality gate so we can return a stale-data
+    // notification even when there's no meaningful content. Without this, stale
+    // sources produce silence — the user sees "nothing" and assumes all is well.
+    let freshness = compute_data_freshness();
+
     // Apply quality gate + dedupe + enrichment via shared pipeline
     let briefing = build_enriched_briefing(raw_items, &user_lang, false);
 
     if !briefing.has_meaningful_content() {
+        // If data is stale, surface that explicitly instead of returning None.
+        // The frontend can show "No fresh data — sources may need attention."
+        if freshness.as_ref().map_or(false, |f| f.is_stale) {
+            let now = chrono::Local::now();
+            let stale_briefing = BriefingNotification {
+                title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
+                items: vec![],
+                total_relevant: 0,
+                ongoing_topics: vec![],
+                knowledge_gaps: vec![],
+                escalating_chains: vec![],
+                synthesis: None,
+                preemption_alerts: vec![],
+                blind_spot_score: None,
+                labels: Some(build_briefing_labels(&user_lang)),
+                personalization_context: None,
+                data_freshness: freshness,
+            };
+            // Still mark as fired so we don't re-trigger the stale warning all day
+            {
+                let mut last_date = state.last_morning_briefing_date.lock();
+                *last_date = Some(today.clone());
+            }
+            {
+                let mut settings = crate::get_settings_manager().lock();
+                settings.get_mut().monitoring.last_briefing_date = Some(today);
+                if let Err(e) = settings.save() {
+                    warn!(target: "4da::notify", error = %e, "Failed to persist last_briefing_date to settings");
+                }
+            }
+            return Some(stale_briefing);
+        }
         return None;
     }
 
@@ -1932,6 +2028,7 @@ mod tests {
             blind_spot_score: None,
             labels: None,
             personalization_context: None,
+            data_freshness: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
@@ -2180,6 +2277,7 @@ mod tests {
             blind_spot_score: None,
             labels: None,
             personalization_context: None,
+            data_freshness: None,
         }
     }
 

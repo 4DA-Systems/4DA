@@ -334,18 +334,18 @@ fn compute_feed_echoes(
 
     let query = if last_read.is_some() {
         format!(
-            "SELECT si.title, si.source, si.url, si.fetched_at
+            "SELECT si.title, si.source_type, si.url, si.last_seen
              FROM source_items si
-             WHERE ({topic_filter}) AND si.fetched_at > ?{time_param_idx}
-             ORDER BY si.fetched_at DESC
+             WHERE ({topic_filter}) AND si.last_seen > ?{time_param_idx}
+             ORDER BY si.last_seen DESC
              LIMIT 5"
         )
     } else {
         format!(
-            "SELECT si.title, si.source, si.url, si.fetched_at
+            "SELECT si.title, si.source_type, si.url, si.last_seen
              FROM source_items si
-             WHERE ({topic_filter}) AND si.fetched_at > datetime('now', '-7 days')
-             ORDER BY si.fetched_at DESC
+             WHERE ({topic_filter}) AND si.last_seen > datetime('now', '-7 days')
+             ORDER BY si.last_seen DESC
              LIMIT 3"
         )
     };
@@ -355,10 +355,10 @@ fn compute_feed_echoes(
     let map_row = |row: &rusqlite::Row| -> rusqlite::Result<FeedEchoItem> {
         Ok(FeedEchoItem {
             title: row.get(0)?,
-            source: row.get(1)?,
+            source_type: row.get(1)?,
             url: row.get(2)?,
             matched_topic: String::new(),
-            fetched_at: row.get(3)?,
+            last_seen: row.get(3)?,
         })
     };
 
@@ -417,10 +417,10 @@ fn compute_feed_echoes(
             if let Ok(rows) = cstmt.query_map(rusqlite::params![pattern], |row| {
                 Ok(FeedEchoItem {
                     title: row.get(0)?,
-                    source: format!("Channel: {}", row.get::<_, String>(1)?),
+                    source_type: format!("Channel: {}", row.get::<_, String>(1)?),
                     url: row.get(2)?,
                     matched_topic: topic.to_string(),
-                    fetched_at: row.get(3)?,
+                    last_seen: row.get(3)?,
                 })
             }) {
                 for row in rows.flatten() {

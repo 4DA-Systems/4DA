@@ -114,8 +114,8 @@ type TemporalBlockType =
 
 export interface FeedEchoItem {
   title: string;
-  source: string;
+  source_type: string;
   url: string | null;
   matched_topic: string;
-  fetched_at: string;
+  last_seen: string;
 }

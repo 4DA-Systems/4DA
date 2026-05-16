@@ -130,7 +130,7 @@ pub fn compute_source_quality(conn: &Connection, lookback_days: i64) -> Vec<Sour
                 0.35
             ) THEN 1 ELSE 0 END) as relevant
         FROM source_items
-        WHERE fetched_at >= datetime('now', ? || ' days')
+        WHERE last_seen >= datetime('now', ? || ' days')
         GROUP BY source_type
         HAVING total >= 5
         ORDER BY relevant * 1.0 / total ASC

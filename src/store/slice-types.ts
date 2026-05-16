@@ -256,6 +256,14 @@ export interface InstantBriefingSnapshot {
   wisdomSynthesis?: string | null;
 }
 
+/** Source data freshness summary — signals when the pipeline has gone silent. */
+export interface DataFreshness {
+  newest_item_age_hours: number | null;
+  items_last_24h: number;
+  items_last_72h: number;
+  is_stale: boolean;
+}
+
 /** Live morning briefing items received from the T+3s startup check.
  *  Fills the render gap between snapshot and analysis completion. */
 export interface MorningBriefData {
@@ -267,6 +275,8 @@ export interface MorningBriefData {
     score: number;
     signalType?: string | null;
   }>;
+  /** When present and is_stale is true, the data pipeline is silent. */
+  dataFreshness?: DataFreshness | null;
 }
 
 export interface BriefingSlice {

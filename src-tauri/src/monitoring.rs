@@ -923,6 +923,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             "score": i.score,
                             "signal_type": i.signal_type,
                         })).collect::<Vec<_>>(),
+                        "data_freshness": briefing.data_freshness,
                     }),
                 ) {
                     tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");

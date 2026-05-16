@@ -287,6 +287,7 @@ mod tests {
             blind_spot_score: None,
             labels: None,
             personalization_context: None,
+            data_freshness: None,
         }
     }
 

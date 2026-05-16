@@ -161,14 +161,14 @@ describe('trust-feedback', () => {
     // First call (record_intelligence_feedback) fails, triggering enqueue.
     // queue_feedback_event succeeds (gives us an outbox ID).
     // All subsequent record_intelligence_feedback calls fail (flush retries fail).
-    let callCount = 0;
+    let _callCount = 0;
     mockedCmd.mockImplementation(((command: string) => {
-      callCount++;
+      _callCount++;
       if (command === 'record_intelligence_feedback') {
         return Promise.reject(new Error('Always fails'));
       }
       if (command === 'queue_feedback_event') {
-        return Promise.resolve(null);
+        return Promise.resolve(42);
       }
       if (command === 'mark_feedback_attempt') {
         return Promise.resolve(null);
@@ -191,5 +191,12 @@ describe('trust-feedback', () => {
     }
 
     expect(getPendingFeedbackCount()).toBe(0);
+
+    // Verify mark_feedback_sent was called with the real outbox row id (42)
+    const markSentCalls = mockedCmd.mock.calls.filter(
+      (call) => call[0] === 'mark_feedback_sent'
+    );
+    expect(markSentCalls.length).toBeGreaterThanOrEqual(1);
+    expect(markSentCalls[0]![1]).toEqual(expect.objectContaining({ outboxId: 42 }));
   });
 });

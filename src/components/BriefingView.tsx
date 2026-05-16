@@ -214,7 +214,9 @@ export const BriefingView = memo(function BriefingView() {
     // Morning briefing items — fills the gap between startup and analysis completion.
     // The T+3s morning check produces scored items from the DB; render them while
     // the full analysis runs in the background.
-    if (morningBriefData && morningBriefData.items.length > 0) {
+    // Also render when data is stale (0 items but staleness flag set) so the user
+    // sees the problem instead of silence masquerading as "all clear."
+    if (morningBriefData && (morningBriefData.items.length > 0 || morningBriefData.dataFreshness?.is_stale)) {
       return (
         <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
           <div className="bg-bg-secondary rounded-lg border border-border">
@@ -228,6 +230,14 @@ export const BriefingView = memo(function BriefingView() {
               </div>
             </div>
             <div className="p-5 space-y-4">
+              {morningBriefData.dataFreshness?.is_stale && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded bg-[#EF4444]/10 border border-[#EF4444]/30">
+                  <span className="inline-block w-2 h-2 rounded-full bg-error" />
+                  <p className="text-xs text-error">
+                    {t('briefing.staleData', 'No fresh data — sources may need attention')}
+                  </p>
+                </div>
+              )}
               {isAbstentionSynthesis(morningBriefSynthesis) ? (
                 <div className="py-6 text-center space-y-2">
                   <p className="text-xs text-text-muted italic">
@@ -242,6 +252,7 @@ export const BriefingView = memo(function BriefingView() {
                   <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
                 </div>
               ) : null}
+              {morningBriefData.items.length > 0 && (
               <div>
                 <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">
                   {t('briefing.sourceItems', 'Source items')}
@@ -265,6 +276,7 @@ export const BriefingView = memo(function BriefingView() {
                   ))}
                 </div>
               </div>
+              )}
             </div>
           </div>
         </section>

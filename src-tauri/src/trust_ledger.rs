@@ -699,6 +699,17 @@ pub fn queue_feedback_event(
         ],
     )
     .map_err(|e| e.to_string())?;
+
+    if conn.changes() == 0 {
+        // Duplicate hit — find the existing pending row by dedup key
+        let existing_id: i64 = conn.query_row(
+            "SELECT id FROM feedback_outbox WHERE event_type = ?1 AND COALESCE(signal_id,'') = COALESCE(?2,'') AND COALESCE(alert_id,'') = COALESCE(?3,'') AND COALESCE(source_type,'') = COALESCE(?4,'') AND COALESCE(topic,'') = COALESCE(?5,'') AND status = 'pending'",
+            rusqlite::params![event_type, signal_id, alert_id, source_type, topic],
+            |row| row.get(0),
+        ).map_err(|e| format!("Failed to find existing outbox row: {e}"))?;
+        return Ok(existing_id);
+    }
+
     Ok(conn.last_insert_rowid())
 }
 

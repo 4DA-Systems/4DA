@@ -767,8 +767,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
-    // One-time backfill: link existing source items to dependencies.
-    // Short-circuits when the table already has rows, so safe to call every startup.
+    // Backfill: link any source items that have no dependency links yet,
+    // then repair existing rows with NULL evidence_text/source_url.
     tauri::async_runtime::spawn(async {
         if let Ok(db) = crate::get_database() {
             match crate::dep_linker::backfill_if_empty(&db) {
@@ -777,6 +777,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
                 Err(e) => {
                     warn!(target: "4da::startup", error = %e, "dep_linker backfill failed");
+                }
+                _ => {}
+            }
+            match crate::dep_linker::repair_evidence(&db) {
+                Ok(n) if n > 0 => {
+                    info!(target: "4da::startup", repaired = n, "Repaired dep link evidence");
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "dep_linker repair_evidence failed");
                 }
                 _ => {}
             }
@@ -1057,6 +1066,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                             "score": i.score,
                             "signal_type": i.signal_type,
                         })).collect::<Vec<_>>(),
+                        "data_freshness": briefing.data_freshness,
                     }),
                 );
 
@@ -1493,6 +1503,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         blind_spot_score: None,
                         labels: None,
                         personalization_context: None,
+                        data_freshness: None,
                     };
                     drop(analysis_state); // release lock before disk I/O
                     crate::briefing_snapshot::save_snapshot(&briefing);

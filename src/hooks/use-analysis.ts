@@ -158,9 +158,10 @@ export function useAnalysis(
           }
         }),
 
-        listen<{ title: string; total_relevant: number; items: Array<{ title: string; source_type: string; score: number; signal_type?: string }> }>('morning-briefing-ready', (event) => {
-          const { title, total_relevant, items } = event.payload;
-          if (total_relevant > 0) {
+        listen<{ title: string; total_relevant: number; items: Array<{ title: string; source_type: string; score: number; signal_type?: string }>; data_freshness?: { newest_item_age_hours: number | null; items_last_24h: number; items_last_72h: number; is_stale: boolean } | null }>('morning-briefing-ready', (event) => {
+          const { title, total_relevant, items, data_freshness } = event.payload;
+          const isStale = data_freshness?.is_stale ?? false;
+          if (total_relevant > 0 || isStale) {
             // Store morning briefing items for the main view's render waterfall.
             // The instant snapshot is NOT cleared here — it's naturally superseded
             // when aiBriefing.content or analysisComplete becomes true. Clearing it
@@ -175,8 +176,18 @@ export function useAnalysis(
                 score: i.score,
                 signalType: i.signal_type ?? null,
               })),
+              dataFreshness: data_freshness ? {
+                newest_item_age_hours: data_freshness.newest_item_age_hours,
+                items_last_24h: data_freshness.items_last_24h,
+                items_last_72h: data_freshness.items_last_72h,
+                is_stale: data_freshness.is_stale,
+              } : null,
             });
-            useAppStore.getState().addToast('info', i18n.t('analysis.morningBriefingReady', { count: total_relevant }));
+            if (isStale) {
+              useAppStore.getState().addToast('warning', i18n.t('analysis.staleData', 'Source data is stale — sources may need attention'));
+            } else {
+              useAppStore.getState().addToast('info', i18n.t('analysis.morningBriefingReady', { count: total_relevant }));
+            }
           }
         }),
 
