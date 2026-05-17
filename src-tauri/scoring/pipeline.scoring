@@ -268,3 +268,18 @@ community_signal {
     high_threshold: 0.70   # [0.50, 0.90]
     high_boost: 1.12       # [1.00, 1.15]
 }
+
+# Domain diversity — exponential decay for items sharing the same URL domain.
+# Prevents feed clustering around a single prolific source/blog.
+# Inspired by X's author diversity scorer (exponential decay with floor).
+domain_diversity {
+    decay: 0.55           # [0.30, 0.80]
+    floor: 0.15           # [0.05, 0.30]
+}
+
+# Score offset normalization — ensures all final scores are positive.
+# Negative scores map to [0, offset]. Positive scores shift by +offset.
+# Inspired by X's offset_score() pattern.
+score_offset {
+    negative_floor: 0.02      # [0.01, 0.10]
+}

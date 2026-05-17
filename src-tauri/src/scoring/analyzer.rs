@@ -141,11 +141,43 @@ pub(crate) async fn score_items_full(
         ));
     }
 
+    // Collect scoring telemetry
+    let mut telemetry = scoring::ScoringTelemetry::default();
+    telemetry.total_scored = results.len();
+    for item in &results {
+        if item.excluded {
+            telemetry.excluded_count += 1;
+        } else if item.relevant {
+            telemetry.relevant_count += 1;
+        }
+        // Gate distribution from score breakdown
+        if let Some(ref bd) = item.score_breakdown {
+            let sig_count = (bd.signal_count as usize).min(5);
+            telemetry.gate_distribution[sig_count] += 1;
+        }
+        // Source breakdown
+        let entry = telemetry
+            .source_breakdown
+            .entry(item.source_type.clone())
+            .or_insert((0, 0));
+        entry.0 += 1;
+        if item.relevant && !item.excluded {
+            entry.1 += 1;
+        }
+    }
+
     scoring::sort_results(&mut results);
+    let pre_dedup = results.len();
     scoring::dedup_results(&mut results);
+    telemetry.dedup_removed = pre_dedup - results.len();
+    let pre_fuzzy = results.len();
     scoring::fuzzy_dedup_results(&mut results);
+    telemetry.fuzzy_dedup_removed = pre_fuzzy - results.len();
+    let pre_topic = results.len();
     scoring::topic_dedup_results(&mut results);
+    telemetry.topic_dedup_removed = pre_topic - results.len();
     scoring::temporal_cluster_results(&mut results);
+    telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
 
     // Per-source score normalization: blend raw score with source-relative
     // percentile so high-volume sources don't crowd out niche sources
@@ -162,12 +194,15 @@ pub(crate) async fn score_items_full(
                 serendipity_config.budget_percent,
             );
             if !candidates.is_empty() {
+                telemetry.serendipity_injected = candidates.len();
                 tracing::info!(target: "4da::analysis", count = candidates.len(), "Injecting serendipity items (cached)");
                 results.extend(candidates);
                 scoring::sort_results(&mut results);
             }
         }
     }
+
+    telemetry.log_summary();
 
     // LLM Reranking (if enabled and within daily limits)
     // 120s timeout: LLM API calls can hang on provider outages

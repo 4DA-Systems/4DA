@@ -431,3 +431,83 @@ fn test_fuzzy_dedup_preserves_distinct_items() {
         "Distinct items should all survive dedup"
     );
 }
+
+// ===== Domain diversity tests =====
+
+#[test]
+fn domain_diversity_penalizes_repeated_domains() {
+    let mut results = vec![
+        make_item("Article A", Some("https://blog.example.com/a"), 0.80),
+        make_item("Article B", Some("https://blog.example.com/b"), 0.75),
+        make_item("Article C", Some("https://other.com/c"), 0.70),
+        make_item("Article D", Some("https://blog.example.com/d"), 0.65),
+    ];
+    apply_domain_diversity(&mut results);
+    // First from blog.example.com untouched
+    assert!((results[0].top_score - 0.80).abs() < 0.001);
+    // Second from blog.example.com penalized
+    assert!(results[1].top_score < 0.75);
+    // other.com untouched (first from that domain)
+    assert!((results[2].top_score - 0.70).abs() < 0.001);
+    // Third from blog.example.com penalized more
+    assert!(results[3].top_score < results[1].top_score);
+}
+
+#[test]
+fn domain_diversity_skips_excluded_items() {
+    let mut results = vec![
+        make_item("A", Some("https://example.com/a"), 0.80),
+        {
+            let mut r = make_item("B", Some("https://example.com/b"), 0.75);
+            r.excluded = true;
+            r
+        },
+        make_item("C", Some("https://example.com/c"), 0.70),
+    ];
+    apply_domain_diversity(&mut results);
+    assert!((results[0].top_score - 0.80).abs() < 0.001);
+    // Excluded item's score untouched
+    assert!((results[1].top_score - 0.75).abs() < 0.001);
+    // C is position 1 (not 2) because B was excluded
+    let expected = 0.70 * ((1.0 - 0.15) * 0.55_f32.powf(1.0) + 0.15);
+    assert!((results[2].top_score - expected).abs() < 0.01);
+}
+
+#[test]
+fn domain_diversity_no_url_items_untouched() {
+    let mut results = vec![
+        make_item("A", None, 0.80),
+        make_item("B", None, 0.75),
+    ];
+    apply_domain_diversity(&mut results);
+    assert!((results[0].top_score - 0.80).abs() < 0.001);
+    assert!((results[1].top_score - 0.75).abs() < 0.001);
+}
+
+#[test]
+fn domain_diversity_floor_prevents_zero() {
+    let mut results: Vec<_> = (0..10)
+        .map(|i| make_item(&format!("Item {i}"), Some("https://same.com/page"), 0.50))
+        .collect();
+    apply_domain_diversity(&mut results);
+    // Even the 10th item should have score > 0 (floor prevents complete suppression)
+    assert!(results[9].top_score > 0.0);
+    // Floor: multiplier converges to floor (0.15), so min score approaches 0.50 * 0.15 = 0.075
+    assert!(results[9].top_score >= 0.50 * 0.14);
+}
+
+#[test]
+fn extract_domain_strips_www_and_port() {
+    assert_eq!(
+        extract_domain("https://www.example.com/path"),
+        Some("example.com".to_string())
+    );
+    assert_eq!(
+        extract_domain("http://localhost:8080/api"),
+        Some("localhost".to_string())
+    );
+    assert_eq!(
+        extract_domain("https://blog.rust-lang.org/2026/05/post"),
+        Some("blog.rust-lang.org".to_string())
+    );
+}

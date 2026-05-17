@@ -23,6 +23,7 @@ mod semantic;
 #[cfg(test)]
 mod simulation;
 pub(crate) mod stemming;
+mod telemetry;
 mod temporal_cluster;
 mod utils;
 #[allow(dead_code, unused_imports)]
@@ -38,8 +39,8 @@ pub(crate) use calibration::{calibrate_score, compute_interest_score};
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::build_scoring_context;
 pub(crate) use dedup::{
-    compute_serendipity_candidates, dedup_results, fuzzy_dedup_results, sort_results,
-    topic_dedup_results,
+    apply_domain_diversity, compute_serendipity_candidates, dedup_results, fuzzy_dedup_results,
+    sort_results, topic_dedup_results,
 };
 pub(crate) use dependencies::{is_ambiguous_dep_name, match_dependencies, VersionDelta};
 pub(crate) use explanation::{
@@ -47,6 +48,7 @@ pub(crate) use explanation::{
 };
 pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use pipeline::{ScoringInput, ScoringOptions};
+pub(crate) use telemetry::ScoringTelemetry;
 pub(crate) use temporal_cluster::temporal_cluster_results;
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
