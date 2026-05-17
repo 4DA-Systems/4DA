@@ -179,6 +179,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     scoring::sort_results(&mut results);
     scoring::dedup_results(&mut results);
     scoring::topic_dedup_results(&mut results);
+    scoring::apply_domain_diversity(&mut results);
 
     // Serendipity Engine: inject anti-bubble items
     {

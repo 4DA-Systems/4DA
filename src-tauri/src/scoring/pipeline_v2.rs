@@ -1361,6 +1361,23 @@ fn has_version_conflict(title_lower: &str) -> bool {
 }
 
 // ============================================================================
+// Score offset normalization
+// ============================================================================
+
+/// Normalize score to guaranteed-positive range.
+/// Negative scores (from anti-topic penalties, negative feedback) map to [0, floor].
+/// Zero/positive scores shift by +floor to separate from "unknown" items.
+fn normalize_score_offset(score: f32) -> f32 {
+    if score <= 0.0 {
+        // Map negative range [-1.0, 0.0] to [0.0, floor] proportionally
+        (score + 1.0).max(0.0) * scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR
+    } else {
+        // Positive scores shift up by floor amount
+        score + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR
+    }
+}
+
+// ============================================================================
 // Signal classification (mirrors V1 logic)
 // ============================================================================
 
@@ -1680,6 +1697,11 @@ pub(crate) fn score_item(
         sophistication_raw,
         community_signal,
     );
+
+    // ── Score offset normalization ────────────────────────────────────
+    // Guarantees all scores are positive. Separates scored items from
+    // truly-unknown (zero) items by shifting up by floor amount.
+    let combined_score = normalize_score_offset(combined_score);
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual

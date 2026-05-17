@@ -268,6 +268,59 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
     }
 }
 
+/// Extract the registrable domain from a URL string.
+/// Strips scheme, path, query, fragment, port, and `www.` prefix.
+fn extract_domain(url: &str) -> Option<String> {
+    let after_scheme = url.split("://").nth(1).unwrap_or(url);
+    let host = after_scheme.split('/').next()?;
+    let host = host.split('?').next().unwrap_or(host);
+    let host = host.split('#').next().unwrap_or(host);
+    // Strip port
+    let host = host.split(':').next().unwrap_or(host);
+    // Strip www.
+    let host = host.strip_prefix("www.").unwrap_or(host);
+    if host.is_empty() {
+        None
+    } else {
+        Some(host.to_lowercase())
+    }
+}
+
+/// Apply domain diversity decay: penalize items sharing the same URL domain.
+/// Items are processed in score-descending order. The first item from each domain
+/// keeps its full score. Subsequent items get exponentially decayed scores.
+/// This prevents feed clustering around a single prolific blog or source.
+pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
+    let decay = scoring_config::DOMAIN_DIVERSITY_DECAY;
+    let floor = scoring_config::DOMAIN_DIVERSITY_FLOOR;
+
+    let mut domain_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
+    let mut adjusted = 0usize;
+
+    for item in results.iter_mut() {
+        if item.excluded {
+            continue;
+        }
+        let domain = match item.url.as_deref().and_then(extract_domain) {
+            Some(d) => d,
+            None => continue,
+        };
+        let position = domain_counts.entry(domain).or_insert(0);
+        if *position > 0 {
+            let multiplier = (1.0 - floor) * decay.powf(*position as f32) + floor;
+            item.top_score *= multiplier;
+            adjusted += 1;
+        }
+        *position += 1;
+    }
+
+    if adjusted > 0 {
+        info!(target: "4da::scoring", adjusted = adjusted, "Domain diversity applied");
+    }
+    adjusted
+}
+
 /// Compute serendipity candidates from items that failed the confirmation gate
 /// but scored well on exactly 1 axis (partial relevance, different perspective)
 pub(crate) fn compute_serendipity_candidates(
