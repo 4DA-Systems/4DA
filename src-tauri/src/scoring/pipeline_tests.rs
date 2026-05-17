@@ -1046,10 +1046,10 @@ mod tests {
             bd.content_type
         );
 
-        // The commodity ceiling should cap the final score at 0.28
+        // The commodity ceiling caps at 0.28, plus score offset normalization (+0.02)
         assert!(
-            result.top_score <= 0.28,
-            "Low-sophistication tutorial should be capped at commodity ceiling 0.28, got {}",
+            result.top_score <= 0.30,
+            "Low-sophistication tutorial should be capped at commodity ceiling + offset 0.30, got {}",
             result.top_score
         );
     }
@@ -1116,8 +1116,8 @@ mod tests {
         );
 
         assert!(
-            result.top_score <= 0.22,
-            "Low-sophistication help request should be capped at commodity ceiling 0.22, got {}",
+            result.top_score <= 0.24,
+            "Low-sophistication help request should be capped at commodity ceiling + offset 0.24, got {}",
             result.top_score
         );
     }

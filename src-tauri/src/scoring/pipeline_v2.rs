@@ -817,8 +817,8 @@ fn compute_quality_composite(
         source_quality_mult
     };
 
-    // Anti-topic multiplier
-    let anti_mult = 1.0 - raw.anti_penalty;
+    // Anti-topic multiplier (retained for diagnostics, not used in composite)
+    let _anti_mult = 1.0 - raw.anti_penalty;
 
     // Domain quality penalty (NOT dampened — preserves full penalty strength)
     let domain_quality_mult =
@@ -969,7 +969,8 @@ fn compute_quality_composite(
     });
     let community_signal =
         extract_community_signal(input.source_type, input.tags_json, age_hours_for_community);
-    let community_mult = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
+    // community_mult retained for diagnostics, not used in composite (engagement formula uses community_signal directly)
+    let _community_mult = if community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD {
         scoring_config::COMMUNITY_SIGNAL_LOW_PENALTY
     } else if community_signal >= scoring_config::COMMUNITY_SIGNAL_HIGH_THRESHOLD {
         scoring_config::COMMUNITY_SIGNAL_HIGH_BOOST
@@ -977,22 +978,44 @@ fn compute_quality_composite(
         1.0
     };
 
-    // Full-strength multipliers — no dampening. Each multiplier expresses its
-    // complete signal. The confirmation gate (Phase 7) prevents score inflation;
-    // what changes is the FLOOR — bad items drop further, good items stay at ceiling.
-    let composite = competing_mult
+    // ── Structural multipliers (content-intrinsic, multiplicative) ──
+    let structural = competing_mult
         * content_quality.multiplier
         * content_dna_mult
         * novelty.multiplier
         * sophistication_mult
         * freshness
-        * source_quality_mult
-        * raw.affinity_mult
-        * anti_mult
         * domain_quality_mult
         * negative_stack_prior
-        * tier_authority_mult
-        * community_mult;
+        * tier_authority_mult;
+
+    // ── Engagement multiplier (user-learned signals, unified weighted sum) ──
+    // Convert each signal to a centered effect:
+    //   affinity_mult [0.3, 1.7] → effect [-0.7, 0.7] (subtract 1.0)
+    //   anti_penalty [0.0, 0.7] → effect [0.0, -0.7] (negate)
+    //   community_signal [0.0, 1.0] → effect [-0.5, 0.5] (subtract 0.5)
+    //   feedback_boost [-0.20, 0.20] → used directly
+    //   taste_boost [-0.08, 0.08] → used directly
+    //   source_quality_mult [0.8, 1.2] → effect [-0.2, 0.2] (subtract 1.0)
+    let affinity_effect = raw.affinity_mult - 1.0;
+    let anti_effect = -raw.anti_penalty;
+    let community_effect = community_signal - 0.5;
+    let source_quality_effect = source_quality_mult - 1.0;
+
+    let engagement_sum = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W
+        + anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W
+        + community_effect * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W
+        + raw.feedback_boost * scoring_config::ENGAGEMENT_WEIGHTS_FEEDBACK_W
+        + raw.taste_boost * scoring_config::ENGAGEMENT_WEIGHTS_TASTE_W
+        + source_quality_effect * scoring_config::ENGAGEMENT_WEIGHTS_SOURCE_QUALITY_W;
+
+    let engagement_mult = 1.0
+        + engagement_sum.clamp(
+            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
+            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
+        );
+
+    let composite = structural * engagement_mult;
 
     let quality_score = (relevance_score * composite).clamp(0.0, 1.0);
 
@@ -1189,16 +1212,16 @@ fn compute_boosts(
     );
 
     // Sum all boosts -> cap -> dampen -> add
+    // Note: feedback_boost and taste_boost are now handled in the Phase 5
+    // unified engagement formula, not here.
     let total_raw = dep_boost
         + raw.stack_boost
         + intent_boost
-        + raw.feedback_boost
         + window_boost
         + skill_gap_boost
         + calibration_correction
         + anti_pattern_correction
-        - archetype_penalty
-        + raw.taste_boost;
+        - archetype_penalty;
 
     let total_capped = total_raw.clamp(
         scoring_config::BOOST_CLAMP_MIN,
@@ -2360,5 +2383,86 @@ mod tests {
             !matches,
             "Python/pip CVE should not match a Rust dependency"
         );
+    }
+
+    // ========================================================================
+    // Engagement formula tests
+    // ========================================================================
+
+    #[test]
+    fn test_engagement_positive_affinity_boosts() {
+        // High affinity + no anti-topic -> engagement_mult > 1.0
+        let affinity_effect = 0.5; // affinity_mult was 1.5
+        let engagement = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W;
+        let mult = 1.0
+            + engagement.clamp(
+                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
+                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
+            );
+        assert!(mult > 1.0, "Positive affinity should produce boost: {}", mult);
+        assert!(mult <= 1.6, "Should not exceed clamp max: {}", mult);
+    }
+
+    #[test]
+    fn test_engagement_anti_topic_penalizes() {
+        // Strong anti-topic with no affinity -> engagement_mult < 1.0
+        let anti_effect = -0.7; // max anti_penalty
+        let engagement = anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W;
+        let mult = 1.0
+            + engagement.clamp(
+                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
+                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
+            );
+        assert!(mult < 1.0, "Anti-topic should produce penalty: {}", mult);
+        assert!(mult >= 0.5, "Should not go below clamp floor: {}", mult);
+    }
+
+    #[test]
+    fn test_engagement_competing_signals_resolve() {
+        // High affinity + moderate anti-topic -> net positive
+        let affinity_effect = 0.5;
+        let anti_effect = -0.3;
+        let engagement = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W
+            + anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W;
+        let mult = 1.0
+            + engagement.clamp(
+                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
+                scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
+            );
+        // With w_aff=0.55 and w_anti=0.35: 0.5*0.55 + (-0.3)*0.35 = 0.275 - 0.105 = 0.17
+        assert!(
+            mult > 1.0,
+            "Affinity should outweigh moderate anti-topic: {}",
+            mult
+        );
+    }
+
+    #[test]
+    fn test_engagement_clamp_prevents_extreme() {
+        // All negative signals -> clamped at floor
+        let affinity_effect = -0.7;
+        let anti_effect = -0.7;
+        let community_effect = -0.5;
+        let feedback = -0.20_f32;
+        let taste = -0.08_f32;
+        let source_quality_effect = -0.2;
+
+        let engagement = affinity_effect * scoring_config::ENGAGEMENT_WEIGHTS_AFFINITY_W
+            + anti_effect * scoring_config::ENGAGEMENT_WEIGHTS_ANTI_TOPIC_W
+            + community_effect * scoring_config::ENGAGEMENT_WEIGHTS_COMMUNITY_W
+            + feedback * scoring_config::ENGAGEMENT_WEIGHTS_FEEDBACK_W
+            + taste * scoring_config::ENGAGEMENT_WEIGHTS_TASTE_W
+            + source_quality_effect * scoring_config::ENGAGEMENT_WEIGHTS_SOURCE_QUALITY_W;
+        let clamped = engagement.clamp(
+            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
+            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
+        );
+        let mult = 1.0 + clamped;
+        assert_eq!(
+            clamped,
+            scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
+            "Extreme negative should hit floor"
+        );
+        assert!(mult >= 0.5, "Multiplier should be 1 + clamp_min = {}", mult);
     }
 }

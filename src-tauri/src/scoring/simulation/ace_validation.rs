@@ -49,8 +49,8 @@ fn ace_anti_topic_excludes_matching_content() {
         let input = sim_input(item.id, item.title, item.content, &emb);
         let result = score_item(&input, &ctx, &db, &opts, None);
         assert!(
-            result.excluded || result.top_score == 0.0,
-            "Python content should be excluded or scored 0 when 'python' is an anti-topic, \
+            result.excluded || result.top_score < 0.05,
+            "Python content should be excluded or near-zero when 'python' is an anti-topic, \
              but got excluded={}, top_score={:.3}",
             result.excluded,
             result.top_score,

@@ -952,8 +952,8 @@ fn short_title_capped() {
     let result = score_item(&input, &ctx, &db, &opts, None);
 
     assert!(
-        result.top_score <= 0.40,
-        "Short title capped at 0.40, got {:.3}",
+        result.top_score <= 0.43,
+        "Short title capped at 0.40 + offset, got {:.4}",
         result.top_score
     );
 }

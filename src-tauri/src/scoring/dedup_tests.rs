@@ -475,10 +475,7 @@ fn domain_diversity_skips_excluded_items() {
 
 #[test]
 fn domain_diversity_no_url_items_untouched() {
-    let mut results = vec![
-        make_item("A", None, 0.80),
-        make_item("B", None, 0.75),
-    ];
+    let mut results = vec![make_item("A", None, 0.80), make_item("B", None, 0.75)];
     apply_domain_diversity(&mut results);
     assert!((results[0].top_score - 0.80).abs() < 0.001);
     assert!((results[1].top_score - 0.75).abs() < 0.001);
