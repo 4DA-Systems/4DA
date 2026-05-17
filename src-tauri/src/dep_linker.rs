@@ -101,16 +101,20 @@ pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     Ok(total_linked)
 }
 
-/// Delete dependency links that no longer satisfy the current matcher.
+/// Reconcile dependency links against the current classifier.
 ///
-/// Removes rows whose linked source item no longer matches the package name
-/// under current classification rules. Rows that still classify (even to a
-/// different match type) are kept — only truly invalid links are pruned.
+/// - Deletes rows where the classifier no longer produces any match.
+/// - Updates rows where the stored match_type/confidence differs from
+///   what the current classifier would produce (e.g. an old "advisory"
+///   that now classifies as "title_heuristic" gets corrected).
+///
+/// This ensures stale links created by earlier, noisier matching logic
+/// are either corrected or removed on startup.
 pub fn prune_invalid_links(db: &Database) -> Result<usize> {
     let conn = db.conn.lock();
 
     let mut stmt = conn.prepare(
-        "SELECT sid.id, sid.package_name,
+        "SELECT sid.id, sid.package_name, sid.match_type, sid.confidence,
                 si.id, si.title, si.content, si.source_type, si.content_type, si.source_id, si.url
          FROM source_item_dependencies sid
          JOIN source_items si ON si.id = sid.source_item_id",
@@ -119,6 +123,8 @@ pub fn prune_invalid_links(db: &Database) -> Result<usize> {
     struct LinkRow {
         id: i64,
         package_name: String,
+        match_type: String,
+        confidence: f64,
         item: UnlinkedItem,
     }
 
@@ -127,43 +133,65 @@ pub fn prune_invalid_links(db: &Database) -> Result<usize> {
             Ok(LinkRow {
                 id: row.get(0)?,
                 package_name: row.get(1)?,
+                match_type: row.get(2)?,
+                confidence: row.get(3)?,
                 item: UnlinkedItem {
-                    id: row.get(2)?,
-                    title: row.get(3)?,
-                    content: row.get(4)?,
-                    source_type: row.get(5)?,
-                    content_type: row.get(6)?,
-                    source_id: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                    url: row.get(8)?,
+                    id: row.get(4)?,
+                    title: row.get(5)?,
+                    content: row.get(6)?,
+                    source_type: row.get(7)?,
+                    content_type: row.get(8)?,
+                    source_id: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
+                    url: row.get(10)?,
                 },
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
 
-    let invalid_ids: Vec<i64> = rows
-        .iter()
-        .filter(|row| classify_item_dep_match(&row.item, &row.package_name).is_none())
-        .map(|row| row.id)
-        .collect();
+    let mut delete_ids: Vec<i64> = Vec::new();
+    let mut updates: Vec<(i64, &'static str, f64, String)> = Vec::new();
 
-    if invalid_ids.is_empty() {
-        return Ok(0);
+    for row in &rows {
+        match classify_item_dep_match(&row.item, &row.package_name) {
+            None => delete_ids.push(row.id),
+            Some((new_type, new_conf)) => {
+                if new_type != row.match_type || (new_conf - row.confidence).abs() > 0.001 {
+                    let evidence = build_evidence_text(new_type, &row.item, &row.package_name);
+                    updates.push((row.id, new_type, new_conf, evidence));
+                }
+            }
+        }
     }
 
-    let mut delete_stmt = conn.prepare("DELETE FROM source_item_dependencies WHERE id = ?1")?;
     let mut deleted = 0usize;
-    for id in invalid_ids {
-        deleted += delete_stmt.execute(params![id])?;
+    if !delete_ids.is_empty() {
+        let mut del = conn.prepare("DELETE FROM source_item_dependencies WHERE id = ?1")?;
+        for id in &delete_ids {
+            deleted += del.execute(params![id])?;
+        }
     }
 
-    if deleted > 0 {
+    let mut updated = 0usize;
+    if !updates.is_empty() {
+        let mut upd = conn.prepare(
+            "UPDATE source_item_dependencies
+             SET match_type = ?2, confidence = ?3, evidence_text = ?4
+             WHERE id = ?1",
+        )?;
+        for (id, mt, conf, evidence) in &updates {
+            updated += upd.execute(params![id, mt, conf, evidence])?;
+        }
+    }
+
+    if deleted > 0 || updated > 0 {
         info!(
             target: "4da::dep_linker",
             deleted,
-            "Pruned stale dependency links that no longer satisfy matcher"
+            updated,
+            "Reconciled dependency links against current classifier"
         );
     }
-    Ok(deleted)
+    Ok(deleted + updated)
 }
 
 /// Repair existing `source_item_dependencies` rows that have NULL or empty
@@ -370,8 +398,9 @@ fn link_items_to_deps(
     let insert_sql = "INSERT INTO source_item_dependencies
                       (source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url)
                       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                      ON CONFLICT(source_item_id, package_name, COALESCE(ecosystem, ''))
+                      ON CONFLICT(source_item_id, package_name)
                       DO UPDATE SET
+                         ecosystem = COALESCE(NULLIF(excluded.ecosystem, ''), source_item_dependencies.ecosystem),
                          match_type = CASE
                              WHEN excluded.confidence > source_item_dependencies.confidence
                              THEN excluded.match_type
@@ -480,20 +509,20 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
 
     // ---- Tier 2: advisory match (0.90) ----
     if is_advisory_source(&st, item.content_type.as_deref()) {
-        // Prefer structured affected-package evidence carried in OSV/GitHub
-        // advisory content. This prevents generic terms like "os", "path",
-        // "http", or "image" from being promoted by title substrings.
-        if advisory_affected_package_match(&item.content, dep_name) {
-            return Some(("advisory", 0.90));
-        }
-
-        // Fallback only for specific package names and whole-token title
-        // matches, used by RSS/security posts that lack structured affected
-        // package metadata.
-        if is_specific_title_match_candidate(dep_name)
-            && matches_dep_in_title(&item.title, dep_name) == Some(0.50)
-        {
-            return Some(("advisory", 0.75));
+        match advisory_affected_status(&item.content, dep_name) {
+            AffectedStatus::Matched => return Some(("advisory", 0.90)),
+            // Structured metadata exists but names a DIFFERENT package —
+            // title fallback would produce a false positive.
+            AffectedStatus::MetadataExistsNoMatch => return None,
+            // No structured metadata at all — allow title fallback for
+            // RSS/security posts that lack affected-package fields.
+            AffectedStatus::NoMetadata => {
+                if is_specific_title_match_candidate(dep_name)
+                    && matches_dep_in_title(&item.title, dep_name) == Some(0.50)
+                {
+                    return Some(("advisory", 0.75));
+                }
+            }
         }
     }
 
@@ -539,14 +568,43 @@ fn is_advisory_source(source_type: &str, content_type: Option<&str>) -> bool {
     )
 }
 
-/// Extract the package name from a registry source's source_id.
+/// Extract the bare package name from a registry source's source_id.
 ///
-/// For most registries the source_id IS the package name (or `@scope/name`
-/// for npm). Returns `None` for non-registry sources.
+/// Handles adapter-specific formats:
+/// - npm_registry: `react@19.2.5` → `react`, `@tanstack/react-query@5.0.0` → `@tanstack/react-query`
+/// - crates_io: `crate-serde` → `serde`
+/// - Others: source_id is the bare package name.
 fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String> {
     match source_type {
-        "npm_registry" | "npm" | "crates_io" | "crates" | "pypi" | "go_modules" | "go"
-        | "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => Some(source_id.to_string()),
+        "npm_registry" | "npm" => {
+            // npm source_id format: `name@version` or `@scope/name@version`
+            // For scoped packages, the first `@` is the scope prefix.
+            let name = if source_id.starts_with('@') {
+                // Scoped: `@scope/name@version` — find the LAST `@`
+                source_id.rfind('@').map(|pos| {
+                    if pos == 0 {
+                        source_id
+                    } else {
+                        &source_id[..pos]
+                    }
+                })
+            } else {
+                // Unscoped: `name@version` — split at first `@`
+                Some(source_id.split_once('@').map_or(source_id, |(n, _)| n))
+            };
+            name.map(|n| n.to_string())
+        }
+        "crates_io" | "crates" => {
+            // crates_io source_id format: `crate-{name}`
+            Some(
+                source_id
+                    .strip_prefix("crate-")
+                    .unwrap_or(source_id)
+                    .to_string(),
+            )
+        }
+        "pypi" | "go_modules" | "go" | "maven" | "nuget" | "packagist" | "rubygems"
+        | "cocoapods" => Some(source_id.to_string()),
         _ => None,
     }
 }
@@ -597,27 +655,48 @@ fn is_specific_title_match_candidate(dep_name: &str) -> bool {
     !is_ambiguous_package_name(&normalized) && !crate::scoring::is_ambiguous_dep_name(&normalized)
 }
 
-/// Match structured advisory content emitted by the CVE/OSV source adapters.
+enum AffectedStatus {
+    Matched,
+    MetadataExistsNoMatch,
+    NoMetadata,
+}
+
+/// Check structured advisory content for affected-package evidence.
 ///
-/// Both adapters include a line like:
+/// Both CVE/OSV adapters include a line like:
 /// `Affected: package-name (ecosystem), other-package (ecosystem)`.
-/// Only exact package-name matches qualify as advisory evidence.
-fn advisory_affected_package_match(content: &str, dep_name: &str) -> bool {
+///
+/// Returns tri-state: the dep IS in the affected list, the affected list
+/// exists but names different packages, or no structured metadata at all.
+fn advisory_affected_status(content: &str, dep_name: &str) -> AffectedStatus {
     let Some(affected) = content
         .lines()
         .find_map(|line| line.trim().strip_prefix("Affected:").map(str::trim))
     else {
-        return false;
+        return AffectedStatus::NoMetadata;
     };
 
     if affected.eq_ignore_ascii_case("unknown") || affected.is_empty() {
-        return false;
+        return AffectedStatus::NoMetadata;
     }
 
-    affected
+    if affected
         .split(',')
         .map(extract_affected_package_name)
         .any(|pkg| exact_package_name_match(&pkg, dep_name))
+    {
+        AffectedStatus::Matched
+    } else {
+        AffectedStatus::MetadataExistsNoMatch
+    }
+}
+
+/// Bool convenience for evidence text generation.
+fn advisory_affected_package_match(content: &str, dep_name: &str) -> bool {
+    matches!(
+        advisory_affected_status(content, dep_name),
+        AffectedStatus::Matched
+    )
 }
 
 fn extract_affected_package_name(token: &str) -> String {

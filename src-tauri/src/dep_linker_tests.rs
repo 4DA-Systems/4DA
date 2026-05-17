@@ -528,3 +528,172 @@ fn test_is_advisory_source() {
     assert!(!is_advisory_source("hn", None));
     assert!(!is_advisory_source("hn", Some("discussion")));
 }
+
+#[test]
+fn test_advisory_blocks_title_fallback_when_affected_names_different_package() {
+    // OSV advisory about "next" — the Affected: field names "next", not "react".
+    // Even though "react" appears in the title, it must NOT match as advisory.
+    let item = UnlinkedItem {
+        id: 100,
+        title: "React Server Components vulnerability in Next.js".to_string(),
+        content: "Severity: HIGH\nAffected: next (npm)\nFixed in: 14.2.1".to_string(),
+        source_type: "osv".to_string(),
+        content_type: Some("security_advisory".to_string()),
+        source_id: "GHSA-next-123".to_string(),
+        url: None,
+    };
+    assert_eq!(
+        classify_item_dep_match(&item, "next"),
+        Some(("advisory", 0.90)),
+        "next IS in the Affected field — should match"
+    );
+    assert_eq!(
+        classify_item_dep_match(&item, "react"),
+        None,
+        "react is NOT in the Affected field — title fallback must be blocked"
+    );
+}
+
+#[test]
+fn test_advisory_allows_title_fallback_when_no_affected_metadata() {
+    // RSS security post with no structured Affected: field
+    let item = UnlinkedItem {
+        id: 101,
+        title: "Critical XSS in axios request interceptors".to_string(),
+        content: "A security vulnerability was discovered...".to_string(),
+        source_type: "rss".to_string(),
+        content_type: Some("security_advisory".to_string()),
+        source_id: "rss-sec-1".to_string(),
+        url: None,
+    };
+    assert_eq!(
+        classify_item_dep_match(&item, "axios"),
+        Some(("advisory", 0.75)),
+        "no Affected: metadata — title fallback should be allowed for specific names"
+    );
+}
+
+#[test]
+fn test_npm_registry_source_id_version_stripping() {
+    let item = UnlinkedItem {
+        id: 102,
+        title: "react 19.2.5 published".to_string(),
+        content: String::new(),
+        source_type: "npm_registry".to_string(),
+        content_type: None,
+        source_id: "react@19.2.5".to_string(),
+        url: None,
+    };
+    assert_eq!(
+        classify_item_dep_match(&item, "react"),
+        Some(("exact_registry", 0.95)),
+        "npm source_id 'react@19.2.5' must strip version and match 'react'"
+    );
+}
+
+#[test]
+fn test_npm_scoped_package_version_stripping() {
+    let item = UnlinkedItem {
+        id: 103,
+        title: "@tanstack/react-query 5.0.0".to_string(),
+        content: String::new(),
+        source_type: "npm_registry".to_string(),
+        content_type: None,
+        source_id: "@tanstack/react-query@5.0.0".to_string(),
+        url: None,
+    };
+    assert_eq!(
+        classify_item_dep_match(&item, "@tanstack/react-query"),
+        Some(("exact_registry", 0.95)),
+        "scoped npm source_id must strip version correctly"
+    );
+}
+
+#[test]
+fn test_crates_io_source_id_prefix_stripping() {
+    let item = UnlinkedItem {
+        id: 104,
+        title: "serde 1.0.200 released".to_string(),
+        content: String::new(),
+        source_type: "crates_io".to_string(),
+        content_type: None,
+        source_id: "crate-serde".to_string(),
+        url: None,
+    };
+    assert_eq!(
+        classify_item_dep_match(&item, "serde"),
+        Some(("exact_registry", 0.95)),
+        "crates_io source_id 'crate-serde' must strip prefix and match 'serde'"
+    );
+}
+
+#[test]
+fn test_prune_reclassifies_stale_advisory_to_title_heuristic() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO source_items (id, source_type, source_id, url, title, content, content_hash, embedding, content_type)
+             VALUES (1, 'osv', 'GHSA-next-123', NULL,
+                     'React Server Components vulnerability in Next.js',
+                     'Severity: HIGH\nAffected: next (npm)', 'hash1', zeroblob(1536), 'security_advisory')",
+            [],
+        ).expect("insert source item");
+        // Stale row: "react" was marked as advisory 0.90 by old matcher,
+        // but current classifier should reject it (Affected: names "next", not "react")
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (1, 'react', 'npm', 'advisory', 0.90)",
+            [],
+        )
+        .expect("insert stale advisory link");
+    }
+
+    let reconciled = prune_invalid_links(&db).expect("prune/reconcile");
+    assert!(reconciled >= 1, "stale advisory link should be pruned");
+
+    let conn = db.conn.lock();
+    let remaining: i64 = conn
+        .query_row("SELECT COUNT(*) FROM source_item_dependencies", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(
+        remaining, 0,
+        "react→next-advisory link should be deleted (no valid match)"
+    );
+}
+
+#[test]
+fn test_extract_registry_package_formats() {
+    // npm with version
+    assert_eq!(
+        extract_registry_package("npm_registry", "react@19.2.5"),
+        Some("react".to_string())
+    );
+    // npm without version
+    assert_eq!(
+        extract_registry_package("npm", "axios"),
+        Some("axios".to_string())
+    );
+    // scoped npm with version
+    assert_eq!(
+        extract_registry_package("npm_registry", "@tanstack/react-query@5.0.0"),
+        Some("@tanstack/react-query".to_string())
+    );
+    // crates_io with prefix
+    assert_eq!(
+        extract_registry_package("crates_io", "crate-serde"),
+        Some("serde".to_string())
+    );
+    // crates_io without prefix (legacy)
+    assert_eq!(
+        extract_registry_package("crates", "tokio"),
+        Some("tokio".to_string())
+    );
+    // non-registry
+    assert_eq!(extract_registry_package("hn", "12345"), None);
+}

@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 73;
+        const TARGET_VERSION: i64 = 74;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2674,6 +2674,39 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Added dedup index to feedback_outbox"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 74 {
+                Self::run_versioned_migration(
+                    &conn,
+                    73,
+                    74,
+                    "Phase 74: fix source_item_dependencies dedup key (ecosystem-variant duplicates)",
+                    |c| {
+                        c.execute_batch(
+                            "-- Merge ecosystem-variant duplicates: keep the row with highest confidence
+                             DELETE FROM source_item_dependencies
+                             WHERE id NOT IN (
+                                 SELECT id FROM (
+                                     SELECT id, ROW_NUMBER() OVER (
+                                         PARTITION BY source_item_id, package_name
+                                         ORDER BY confidence DESC, id ASC
+                                     ) AS rn
+                                     FROM source_item_dependencies
+                                 ) WHERE rn = 1
+                             );
+                             -- Drop the old unique index that included ecosystem
+                             DROP INDEX IF EXISTS idx_sid_pkg_eco;
+                             -- Create new unique index on (source_item_id, package_name) only
+                             CREATE UNIQUE INDEX idx_sid_pkg_eco ON source_item_dependencies(source_item_id, package_name);",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            "Fixed source_item_dependencies dedup key — removed ecosystem from unique constraint"
                         );
                         Ok(())
                     },

@@ -31,7 +31,7 @@ pub struct SourceItemDep {
 
 impl Database {
     /// Insert a dependency link for a source item.
-    /// Upserts on (source_item_id, package_name, COALESCE(ecosystem, '')):
+    /// Upserts on (source_item_id, package_name):
     /// keeps the higher confidence and its match_type.
     pub fn link_source_item_dep(
         &self,
@@ -48,7 +48,7 @@ impl Database {
             "INSERT INTO source_item_dependencies
                 (source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(source_item_id, package_name, COALESCE(ecosystem, ''))
+             ON CONFLICT(source_item_id, package_name)
              DO UPDATE SET
                 match_type = CASE WHEN excluded.confidence > source_item_dependencies.confidence
                              THEN excluded.match_type
@@ -89,7 +89,7 @@ impl Database {
             "INSERT INTO source_item_dependencies
                 (source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-             ON CONFLICT(source_item_id, package_name, COALESCE(ecosystem, ''))
+             ON CONFLICT(source_item_id, package_name)
              DO UPDATE SET
                 match_type = CASE WHEN excluded.confidence > source_item_dependencies.confidence
                              THEN excluded.match_type
