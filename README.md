@@ -311,7 +311,7 @@ Reads from the same database as the desktop app. No extra setup.
 
 ## Development
 
-4DA is built by a solo engineer with AI-assisted development (Claude Code). All code is human-reviewed. The test suite (3,400+ tests across Rust and TypeScript) and CI pipeline verify correctness on every commit. The scoring algorithm is hand-designed and [benchmarked](#benchmarks) against 9 developer personas with labeled test data.
+4DA is built by a solo engineer with AI-assisted development (Claude Code), with external audits from gpt 5.4 and 5.5. The test suite (3,400+ tests across Rust and TypeScript) and CI pipeline verify correctness on every commit. The scoring algorithm is hand-designed and [benchmarked](#benchmarks) against 9 developer personas with labeled test data.
 
 ```bash
 pnpm tauri dev              # Dev server (localhost:4444)
