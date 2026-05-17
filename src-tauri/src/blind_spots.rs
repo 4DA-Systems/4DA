@@ -1015,13 +1015,14 @@ fn find_uncovered_deps(
                     continue;
                 }
             }
-            // For SID-linked items, prefer the stored match_type from the link
-            // table (e.g. "exact_registry", "advisory", "llm_analysis").
-            // For title-heuristic fallback, use the old classify_match_type heuristic.
+            // Only SID-linked rows can carry registry/advisory proof. Direct
+            // SQL title fallback is always heuristic even if the source itself
+            // is a CVE/OSV feed; otherwise title-only advisory matches bypass
+            // the dep linker's structured affected-package validation.
             let mt = if match_source != "title_heuristic" {
                 sid_match_type_to_coverage(&match_source)
             } else {
-                classify_match_type(&source_type, content_type.as_deref())
+                "title_heuristic"
             };
             let entry = coverage.entry(name).or_default();
             entry.available += 1;
@@ -1093,7 +1094,7 @@ fn find_uncovered_deps(
             let mt = if match_source != "title_heuristic" {
                 sid_match_type_to_coverage(&match_source)
             } else {
-                classify_match_type(&source_type, content_type.as_deref())
+                "title_heuristic"
             };
             let entry = coverage.entry(name).or_default();
             entry.days_since_last_signal = Some(match entry.days_since_last_signal {
@@ -1475,39 +1476,6 @@ pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
     )
 }
 
-/// Classify how a source_item matched a dependency name.
-fn classify_match_type(source_type: &str, content_type: Option<&str>) -> &'static str {
-    let st = source_type.to_lowercase();
-    if matches!(
-        st.as_str(),
-        "npm_registry"
-            | "npm"
-            | "crates_io"
-            | "crates"
-            | "pypi"
-            | "go_modules"
-            | "go"
-            | "maven"
-            | "nuget"
-            | "packagist"
-            | "rubygems"
-            | "cocoapods"
-            | "producthunt"
-    ) {
-        return "exact_registry";
-    }
-    if matches!(
-        content_type,
-        Some("security_advisory") | Some("vulnerability_report") | Some("cve")
-    ) {
-        return "advisory";
-    }
-    if matches!(st.as_str(), "osv" | "cve") {
-        return "advisory";
-    }
-    "title_heuristic"
-}
-
 /// Promote best_match_type if the new match is stronger.
 fn upgrade_match_type(current: &mut Option<String>, new_type: &str) {
     fn match_rank(mt: &str) -> u8 {
@@ -1532,12 +1500,17 @@ fn upgrade_match_type(current: &mut Option<String>, new_type: &str) {
 /// Everything else (including "title_heuristic" links) stays as-is.
 fn sid_match_type_to_coverage(sid_match_type: &str) -> &'static str {
     match sid_match_type {
-        // Registry-sourced or LLM-confirmed links are high-confidence evidence
         "exact_registry" | "registry" | "llm_analysis" | "llm_confirmed" => "exact_registry",
-        // Advisory/vulnerability links
         "advisory" | "security_advisory" | "cve" | "vulnerability" => "advisory",
-        // Anything else (including "title_heuristic" stored in SID) stays heuristic
-        _ => "title_heuristic",
+        "title_heuristic" => "title_heuristic",
+        other => {
+            tracing::debug!(
+                target: "4da::blind_spots",
+                unknown_match_type = other,
+                "unrecognised source_item_dependencies.match_type, treating as title_heuristic"
+            );
+            "title_heuristic"
+        }
     }
 }
 
@@ -4664,51 +4637,25 @@ mod tests {
     }
 
     #[test]
-    fn test_golden_advisory_vs_title_match() {
-        // Verify that classify_match_type distinguishes advisory matches
-        // (from OSV / security_advisory content) from plain title heuristics
-        // (from hackernews / general content).
-        let advisory_mt = classify_match_type("osv", Some("security_advisory"));
+    fn test_golden_sid_match_mapping_and_upgrade_order() {
+        // Only source_item_dependencies rows can promote a match to advisory
+        // or exact_registry. Direct SQL title fallback remains title_heuristic.
+        let advisory_mt = sid_match_type_to_coverage("advisory");
         assert_eq!(
             advisory_mt, "advisory",
-            "OSV + security_advisory should classify as 'advisory'"
+            "stored SID advisory should map to advisory coverage"
         );
 
-        let title_heuristic_mt = classify_match_type("hackernews", None);
-        assert_eq!(
-            title_heuristic_mt, "title_heuristic",
-            "hackernews with no content_type should classify as 'title_heuristic'"
-        );
-
-        let registry_mt = classify_match_type("crates_io", None);
+        let registry_mt = sid_match_type_to_coverage("exact_registry");
         assert_eq!(
             registry_mt, "exact_registry",
-            "crates_io should classify as 'exact_registry'"
+            "stored SID exact_registry should map to exact_registry coverage"
         );
 
-        let npm_mt = classify_match_type("npm", None);
+        let heuristic_mt = sid_match_type_to_coverage("title_heuristic");
         assert_eq!(
-            npm_mt, "exact_registry",
-            "npm should classify as 'exact_registry'"
-        );
-
-        let npm_registry_mt = classify_match_type("npm_registry", None);
-        assert_eq!(
-            npm_registry_mt, "exact_registry",
-            "npm_registry (canonical adapter name) should classify as 'exact_registry'"
-        );
-
-        let go_modules_mt = classify_match_type("go_modules", None);
-        assert_eq!(
-            go_modules_mt, "exact_registry",
-            "go_modules (canonical adapter name) should classify as 'exact_registry'"
-        );
-
-        // Advisory from content_type alone (non-OSV source)
-        let advisory_content_mt = classify_match_type("rss", Some("security_advisory"));
-        assert_eq!(
-            advisory_content_mt, "advisory",
-            "any source with security_advisory content_type should classify as 'advisory'"
+            heuristic_mt, "title_heuristic",
+            "stored heuristic links should stay heuristic"
         );
 
         // Verify that advisory > title_heuristic in the upgrade ordering
@@ -4740,14 +4687,11 @@ mod tests {
     }
 
     #[test]
-    fn test_golden_ambiguous_with_advisory_surfaces() {
-        // An ambiguous dep name like "image" should be SUPPRESSED when
-        // the only match is title_heuristic, but should SURFACE when
-        // an advisory (security) match exists.
+    fn test_golden_title_only_advisory_source_is_weak_without_sid() {
+        // A CVE/OSV source title alone is still only a title heuristic. Without
+        // a structured SID link, ambiguous names like "image" must stay weak.
         let conn = setup_test_db();
 
-        // "image" with an advisory source (osv) should surface as uncovered,
-        // not get sent to weak_matches.
         insert_source_item_with_meta(
             &conn,
             "CVE-2026-5555 in image crate allows buffer overflow",
@@ -4765,16 +4709,54 @@ mod tests {
 
         let (uncovered, weak_matches) = find_uncovered_deps(&conn, &deps, 14).unwrap();
 
-        // "image" matched via advisory source => should surface in uncovered,
-        // NOT in weak_matches.
+        assert!(
+            !uncovered.iter().any(|d| d.name.contains("image")),
+            "title-only advisory source should not promote image into uncovered, got: {:?}",
+            uncovered.iter().map(|d| &d.name).collect::<Vec<_>>()
+        );
+        assert!(
+            weak_matches.iter().any(|d| d.name.contains("image")),
+            "title-only advisory source should remain a weak match"
+        );
+    }
+
+    #[test]
+    fn test_golden_ambiguous_with_sid_advisory_surfaces() {
+        // Structured dep-linker evidence can still promote ambiguous names.
+        let conn = setup_test_db();
+
+        let item_id = insert_source_item_with_meta(
+            &conn,
+            "CVE-2026-5555 in image crate allows buffer overflow",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            5,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'image', 'cargo', 'advisory', 0.90)",
+            params![item_id],
+        )
+        .unwrap();
+
+        let deps = vec![DepCoverage {
+            package_name: "image".to_string(),
+            ecosystem: "cargo".to_string(),
+            projects: vec!["/proj/myapp".to_string()],
+        }];
+
+        let (uncovered, weak_matches) = find_uncovered_deps(&conn, &deps, 14).unwrap();
+
         assert!(
             uncovered.iter().any(|d| d.name.contains("image")),
-            "image with advisory match should appear in uncovered, got: {:?}",
+            "SID advisory match should promote image into uncovered, got: {:?}",
             uncovered.iter().map(|d| &d.name).collect::<Vec<_>>()
         );
         assert!(
             !weak_matches.iter().any(|d| d.name.contains("image")),
-            "image with advisory match should NOT appear in weak_matches"
+            "SID advisory match should not be reported as weak"
         );
     }
 

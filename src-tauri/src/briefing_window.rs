@@ -339,7 +339,9 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                     item_id: Some(r.id as i64),
                     signal_priority: r.signal_priority.clone(),
                     description: r.signal_action.clone(),
-                    matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                    matched_deps: crate::monitoring_briefing::matched_deps_from_signal_triggers(
+                        r.signal_triggers.as_deref(),
+                    ),
                     content_type: r
                         .score_breakdown
                         .as_ref()
@@ -363,17 +365,8 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 db_items
                     .into_iter()
                     .map(|i| {
-                        let matched_deps = conn
-                            .prepare_cached(
-                                "SELECT package_name FROM source_item_dependencies WHERE source_item_id = ?1",
-                            )
-                            .ok()
-                            .and_then(|mut stmt| {
-                                stmt.query_map(rusqlite::params![i.id], |row| row.get::<_, String>(0))
-                                    .ok()
-                                    .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
-                            })
-                            .unwrap_or_default();
+                        let matched_deps =
+                            crate::monitoring_briefing::load_briefing_matched_deps(&conn, i.id);
                         crate::monitoring_briefing::BriefingItem {
                             title: i.title,
                             source_type: i.source_type,

@@ -23,9 +23,11 @@ use crate::{
     SourceRelevance,
 };
 
+use crate::sources::cve_matching::normalize_ecosystem;
+
+use super::dependencies::DepMatch;
 use super::pipeline::{ScoringInput, ScoringOptions};
 use super::*;
-use crate::sources::cve_matching::normalize_ecosystem;
 
 // ============================================================================
 // Security evidence extraction helpers
@@ -351,6 +353,23 @@ fn extract_advisory_ecosystems(content: &str) -> Vec<(String, String)> {
     result
 }
 
+fn normalize_advisory_package_name(name: &str) -> String {
+    name.trim()
+        .trim_start_matches('@')
+        .replace(['/', '_'], "-")
+        .to_lowercase()
+}
+
+fn advisory_affects_dependency(advisory_affected: &[(String, String)], dep: &DepMatch) -> bool {
+    let dep_name = normalize_advisory_package_name(&dep.package_name);
+    let dep_eco = normalize_ecosystem(&dep.ecosystem);
+
+    advisory_affected.iter().any(|(pkg, eco)| {
+        normalize_advisory_package_name(pkg) == dep_name
+            && (dep.ecosystem.is_empty() || normalize_ecosystem(eco) == dep_eco)
+    })
+}
+
 /// Return whichever content should be used for dependency matching. For CVE
 /// and OSV source items the synthetic metadata block is stripped; all other
 /// sources use the content verbatim.
@@ -470,21 +489,14 @@ fn extract_signals(
             score = (total / 2.0).min(1.0);
         }
 
-        // Ecosystem cross-reference: reject matches where the advisory's
-        // affected packages are from a different ecosystem than the user's dep.
-        // e.g. a Maven/Java CVE should never match a Rust "crypto" crate.
+        // Structured advisory cross-reference: when the source adapter gives
+        // us affected packages, require the dependency name and ecosystem to
+        // match that metadata exactly. Title/body matches alone are not enough
+        // to make a CVE applicable.
         if matches!(input.source_type, "cve" | "osv") && !deps.is_empty() {
             let advisory_affected = extract_advisory_ecosystems(input.content);
             if !advisory_affected.is_empty() {
-                deps.retain(|d| {
-                    if d.ecosystem.is_empty() {
-                        return true; // no ecosystem info → can't reject
-                    }
-                    let dep_eco = normalize_ecosystem(&d.ecosystem);
-                    advisory_affected
-                        .iter()
-                        .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco)
-                });
+                deps.retain(|d| advisory_affects_dependency(&advisory_affected, d));
                 let total: f32 = deps.iter().map(|d| d.confidence).sum();
                 score = (total / 2.0).min(1.0);
             }
@@ -1822,21 +1834,18 @@ pub(crate) fn score_item(
     // ── Security applicability + critical alert gate ────────────────────
     let is_security_source = matches!(input.source_type, "cve" | "osv");
     let (applicability, is_critical_alert) = if sig_type.as_deref() == Some("security_alert") {
-        // Ecosystem-verified strong dep: confidence >= 0.40, not dev, AND
-        // either the dep has no ecosystem info (can't reject) or the advisory's
-        // affected packages include the dep's ecosystem.
+        // Metadata-verified strong dep: confidence >= 0.40, not dev, AND
+        // either the advisory has no affected-package metadata or the metadata
+        // names this dependency in the same ecosystem.
         let advisory_ecosystems = extract_advisory_ecosystems(input.content);
         let has_strong_dep = raw.matched_deps.iter().any(|d| {
             if d.is_dev || d.confidence < 0.40 {
                 return false;
             }
-            if d.ecosystem.is_empty() || advisory_ecosystems.is_empty() {
-                return true; // can't verify ecosystem → allow (conservative)
+            if advisory_ecosystems.is_empty() {
+                return true; // can't verify package metadata
             }
-            let dep_eco = normalize_ecosystem(&d.ecosystem);
-            advisory_ecosystems
-                .iter()
-                .any(|(_, eco)| normalize_ecosystem(eco) == dep_eco)
+            advisory_affects_dependency(&advisory_ecosystems, d)
         });
         let has_any_dep = !raw.matched_deps.is_empty();
         let all_dev = raw.matched_deps.iter().all(|d| d.is_dev);
@@ -2240,6 +2249,49 @@ mod tests {
     fn test_extract_advisory_ecosystems_empty() {
         let result = extract_advisory_ecosystems("");
         assert!(result.is_empty());
+    }
+
+    fn test_dep(package_name: &str, ecosystem: &str) -> DepMatch {
+        DepMatch {
+            package_name: package_name.to_string(),
+            confidence: 0.75,
+            version_delta: VersionDelta::Unknown,
+            is_dev: false,
+            is_direct: true,
+            version: None,
+            ecosystem: ecosystem.to_string(),
+        }
+    }
+
+    #[test]
+    fn test_advisory_affects_dependency_requires_exact_package() {
+        let affected = vec![("next".to_string(), "npm".to_string())];
+
+        assert!(
+            advisory_affects_dependency(&affected, &test_dep("next", "javascript")),
+            "same package and normalized ecosystem should match"
+        );
+        assert!(
+            !advisory_affects_dependency(&affected, &test_dep("react", "javascript")),
+            "same ecosystem is not enough when affected package metadata exists"
+        );
+    }
+
+    #[test]
+    fn test_advisory_affects_dependency_normalizes_package_names() {
+        let affected = vec![
+            ("serde-json".to_string(), "crates.io".to_string()),
+            ("@tanstack/react-query".to_string(), "npm".to_string()),
+        ];
+
+        assert!(
+            advisory_affects_dependency(&affected, &test_dep("serde_json", "rust")),
+            "hyphen/underscore variants should match"
+        );
+        assert!(
+            advisory_affects_dependency(&affected, &test_dep("@tanstack/react-query", "npm")),
+            "scoped npm package names should match"
+        );
     }
 
     #[test]

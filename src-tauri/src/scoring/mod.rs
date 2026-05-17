@@ -41,7 +41,7 @@ pub(crate) use dedup::{
     compute_serendipity_candidates, dedup_results, fuzzy_dedup_results, sort_results,
     topic_dedup_results,
 };
-pub(crate) use dependencies::{match_dependencies, VersionDelta};
+pub(crate) use dependencies::{is_ambiguous_dep_name, match_dependencies, VersionDelta};
 pub(crate) use explanation::{
     calculate_confidence, compute_temporal_freshness, generate_relevance_explanation,
 };

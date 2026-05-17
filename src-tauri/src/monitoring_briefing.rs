@@ -186,6 +186,46 @@ pub struct BriefingItem {
     pub section: Option<String>,
 }
 
+pub(crate) fn matched_deps_from_signal_triggers(triggers: Option<&[String]>) -> Vec<String> {
+    let mut deps = Vec::new();
+    for trigger in triggers.into_iter().flatten() {
+        let Some(dep) = trigger.strip_prefix("dep:") else {
+            continue;
+        };
+        let dep = dep.trim();
+        if !dep.is_empty() && !deps.iter().any(|existing| existing == dep) {
+            deps.push(dep.to_string());
+        }
+    }
+    deps
+}
+
+pub(crate) fn load_briefing_matched_deps(
+    conn: &rusqlite::Connection,
+    source_item_id: i64,
+) -> Vec<String> {
+    conn.prepare_cached(
+        "SELECT DISTINCT package_name
+         FROM source_item_dependencies
+         WHERE source_item_id = ?1
+           AND match_type IN (
+               'exact_registry', 'registry',
+               'advisory', 'security_advisory', 'cve', 'vulnerability',
+               'llm_analysis', 'llm_confirmed'
+           )
+         ORDER BY package_name",
+    )
+    .ok()
+    .and_then(|mut stmt| {
+        stmt.query_map(rusqlite::params![source_item_id], |row| {
+            row.get::<_, String>(0)
+        })
+        .ok()
+        .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
+    })
+    .unwrap_or_default()
+}
+
 /// A topic the user hasn't seen intelligence about recently
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeGap {
@@ -1050,7 +1090,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                     item_id: Some(r.id as i64),
                     signal_priority: r.signal_priority.clone(),
                     description: r.signal_action.clone(),
-                    matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                    matched_deps: matched_deps_from_signal_triggers(r.signal_triggers.as_deref()),
                     content_type: r
                         .score_breakdown
                         .as_ref()
@@ -1078,17 +1118,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                     db_items
                         .into_iter()
                         .map(|i| {
-                            let matched_deps = conn
-                                .prepare_cached(
-                                    "SELECT package_name FROM source_item_dependencies WHERE source_item_id = ?1",
-                                )
-                                .ok()
-                                .and_then(|mut stmt| {
-                                    stmt.query_map(rusqlite::params![i.id], |row| row.get::<_, String>(0))
-                                        .ok()
-                                        .map(|rows| rows.filter_map(|r| r.ok()).collect::<Vec<_>>())
-                                })
-                                .unwrap_or_default();
+                            let matched_deps = load_briefing_matched_deps(&conn, i.id);
                             BriefingItem {
                                 title: i.title,
                                 source_type: i.source_type,
@@ -2011,6 +2041,41 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    #[test]
+    fn test_matched_deps_from_signal_triggers_strips_prefix_and_dedupes() {
+        let triggers = vec![
+            "dep:axios".to_string(),
+            "security".to_string(),
+            "dep:tokio".to_string(),
+            "dep:axios".to_string(),
+            "dep: ".to_string(),
+        ];
+
+        let deps = matched_deps_from_signal_triggers(Some(triggers.as_slice()));
+        assert_eq!(deps, vec!["axios".to_string(), "tokio".to_string()]);
+    }
+
+    #[test]
+    fn test_load_briefing_matched_deps_filters_weak_links() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE source_item_dependencies (
+                source_item_id INTEGER NOT NULL,
+                package_name TEXT NOT NULL,
+                match_type TEXT NOT NULL
+            );
+            INSERT INTO source_item_dependencies VALUES (1, 'axios', 'exact_registry');
+            INSERT INTO source_item_dependencies VALUES (1, 'leftpad', 'title_heuristic');
+            INSERT INTO source_item_dependencies VALUES (1, 'tokio', 'advisory');
+            INSERT INTO source_item_dependencies VALUES (1, 'axios', 'exact_registry');
+            INSERT INTO source_item_dependencies VALUES (2, 'serde', 'advisory');",
+        )
+        .unwrap();
+
+        let deps = load_briefing_matched_deps(&conn, 1);
+        assert_eq!(deps, vec!["axios".to_string(), "tokio".to_string()]);
     }
 
     #[test]

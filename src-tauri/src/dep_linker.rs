@@ -10,7 +10,7 @@
 //!
 //! - **Exact registry** (0.95): registry source whose source_id IS the package.
 //! - **Advisory** (0.90): security advisory mentioning a known dep.
-//! - **Title heuristic** (0.30–0.50): general item whose title mentions a dep.
+//! - **Title heuristic** (0.50): general item whose title mentions a dep.
 
 use rusqlite::params;
 use tracing::{debug, info};
@@ -25,11 +25,12 @@ use crate::error::Result;
 
 /// Link recently ingested source items to known dependencies.
 ///
-/// Runs after each fetch cycle. Only processes items that have no rows yet
-/// in `source_item_dependencies`, limited to the last 7 days and at most 500
-/// items per invocation to keep each pass cheap.
+/// Runs after each fetch cycle. Processes recent items even when they already
+/// have dependency rows, because the upsert path can upgrade weak matches and
+/// repair missing evidence/source URLs. Limited to the last 7 days and at most
+/// 500 items per invocation to keep each pass cheap.
 ///
-/// Returns the number of links created.
+/// Returns the number of links created or materially upgraded.
 pub fn link_recent_items(db: &Database) -> Result<usize> {
     let conn = db.conn.lock();
 
@@ -38,22 +39,18 @@ pub fn link_recent_items(db: &Database) -> Result<usize> {
         return Ok(0);
     }
 
-    let unlinked = load_unlinked_items(
-        &conn,
-        "AND si.created_at >= datetime('now', '-7 days')",
-        500,
-    )?;
+    let recent = load_recent_items(&conn, 500)?;
 
-    if unlinked.is_empty() {
+    if recent.is_empty() {
         return Ok(0);
     }
 
-    let total = link_items_to_deps(&conn, &unlinked, &dep_names)?;
+    let total = link_items_to_deps(&conn, &recent, &dep_names)?;
     if total > 0 {
         info!(
             target: "4da::dep_linker",
             linked = total,
-            items = unlinked.len(),
+            items = recent.len(),
             deps = dep_names.len(),
             "Linked source items to dependencies"
         );
@@ -104,6 +101,71 @@ pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     Ok(total_linked)
 }
 
+/// Delete dependency links that no longer satisfy the current matcher.
+///
+/// Removes rows whose linked source item no longer matches the package name
+/// under current classification rules. Rows that still classify (even to a
+/// different match type) are kept — only truly invalid links are pruned.
+pub fn prune_invalid_links(db: &Database) -> Result<usize> {
+    let conn = db.conn.lock();
+
+    let mut stmt = conn.prepare(
+        "SELECT sid.id, sid.package_name,
+                si.id, si.title, si.content, si.source_type, si.content_type, si.source_id, si.url
+         FROM source_item_dependencies sid
+         JOIN source_items si ON si.id = sid.source_item_id",
+    )?;
+
+    struct LinkRow {
+        id: i64,
+        package_name: String,
+        item: UnlinkedItem,
+    }
+
+    let rows: Vec<LinkRow> = stmt
+        .query_map([], |row| {
+            Ok(LinkRow {
+                id: row.get(0)?,
+                package_name: row.get(1)?,
+                item: UnlinkedItem {
+                    id: row.get(2)?,
+                    title: row.get(3)?,
+                    content: row.get(4)?,
+                    source_type: row.get(5)?,
+                    content_type: row.get(6)?,
+                    source_id: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                    url: row.get(8)?,
+                },
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let invalid_ids: Vec<i64> = rows
+        .iter()
+        .filter(|row| classify_item_dep_match(&row.item, &row.package_name).is_none())
+        .map(|row| row.id)
+        .collect();
+
+    if invalid_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let mut delete_stmt = conn.prepare("DELETE FROM source_item_dependencies WHERE id = ?1")?;
+    let mut deleted = 0usize;
+    for id in invalid_ids {
+        deleted += delete_stmt.execute(params![id])?;
+    }
+
+    if deleted > 0 {
+        info!(
+            target: "4da::dep_linker",
+            deleted,
+            "Pruned stale dependency links that no longer satisfy matcher"
+        );
+    }
+    Ok(deleted)
+}
+
 /// Repair existing `source_item_dependencies` rows that have NULL or empty
 /// `evidence_text` / `source_url`. Joins back to `source_items` to regenerate
 /// the evidence using the same `build_evidence_text()` logic used during linking.
@@ -114,7 +176,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
 
     let mut select_stmt = conn.prepare(
         "SELECT sid.id, sid.source_item_id, sid.package_name, sid.ecosystem, sid.match_type,
-                si.title, si.source_type, si.source_id, si.url
+                si.title, si.content, si.source_type, si.source_id, si.url
          FROM source_item_dependencies sid
          JOIN source_items si ON si.id = sid.source_item_id
          WHERE sid.evidence_text IS NULL OR sid.evidence_text = ''
@@ -127,6 +189,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
         package_name: String,
         match_type: String,
         title: String,
+        content: String,
         source_type: String,
         source_id: String,
         url: Option<String>,
@@ -140,9 +203,10 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
                 package_name: row.get(2)?,
                 match_type: row.get(4)?,
                 title: row.get(5)?,
-                source_type: row.get(6)?,
-                source_id: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                url: row.get(8)?,
+                content: row.get(6)?,
+                source_type: row.get(7)?,
+                source_id: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                url: row.get(9)?,
             })
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -162,6 +226,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
         let item = UnlinkedItem {
             id: row.source_item_id,
             title: row.title.clone(),
+            content: row.content.clone(),
             source_type: row.source_type.clone(),
             content_type: None,
             source_id: row.source_id.clone(),
@@ -202,6 +267,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
 struct UnlinkedItem {
     id: i64,
     title: String,
+    content: String,
     source_type: String,
     content_type: Option<String>,
     source_id: String,
@@ -233,31 +299,24 @@ fn load_dependency_names(conn: &rusqlite::Connection) -> Result<Vec<String>> {
     Ok(names)
 }
 
-/// Load source items that have no link rows yet, applying an optional
-/// SQL fragment for date filtering and a hard row limit.
-fn load_unlinked_items(
-    conn: &rusqlite::Connection,
-    date_filter: &str,
-    limit: i64,
-) -> Result<Vec<UnlinkedItem>> {
-    let sql = format!(
-        "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id, si.url
+/// Load recent source items for the post-fetch reconciliation path.
+fn load_recent_items(conn: &rusqlite::Connection, limit: i64) -> Result<Vec<UnlinkedItem>> {
+    let sql =
+        "SELECT si.id, si.title, si.content, si.source_type, si.content_type, si.source_id, si.url
          FROM source_items si
-         LEFT JOIN source_item_dependencies sid ON sid.source_item_id = si.id
-         WHERE sid.id IS NULL
-           {date_filter}
+         WHERE si.created_at >= datetime('now', '-7 days')
          ORDER BY si.created_at DESC
-         LIMIT ?1"
-    );
-    let mut stmt = conn.prepare(&sql)?;
+         LIMIT ?1";
+    let mut stmt = conn.prepare(sql)?;
     let rows = stmt.query_map(params![limit], |row| {
         Ok(UnlinkedItem {
             id: row.get(0)?,
             title: row.get(1)?,
-            source_type: row.get(2)?,
-            content_type: row.get(3)?,
-            source_id: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-            url: row.get(5)?,
+            content: row.get(2)?,
+            source_type: row.get(3)?,
+            content_type: row.get(4)?,
+            source_id: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+            url: row.get(6)?,
         })
     })?;
     let mut items = Vec::new();
@@ -274,7 +333,8 @@ fn load_items_after(
     limit: i64,
     after_id: i64,
 ) -> Result<Vec<UnlinkedItem>> {
-    let sql = "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id, si.url
+    let sql =
+        "SELECT si.id, si.title, si.content, si.source_type, si.content_type, si.source_id, si.url
                FROM source_items si
                WHERE si.id > ?2
                ORDER BY si.id ASC
@@ -284,10 +344,11 @@ fn load_items_after(
         Ok(UnlinkedItem {
             id: row.get(0)?,
             title: row.get(1)?,
-            source_type: row.get(2)?,
-            content_type: row.get(3)?,
-            source_id: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-            url: row.get(5)?,
+            content: row.get(2)?,
+            source_type: row.get(3)?,
+            content_type: row.get(4)?,
+            source_id: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+            url: row.get(6)?,
         })
     })?;
     let mut items = Vec::new();
@@ -363,12 +424,21 @@ fn build_evidence_text(match_type: &str, item: &UnlinkedItem, dep_name: &str) ->
             "Registry source '{}' published item with source_id matching '{}'",
             item.source_type, dep_name
         ),
-        "advisory" => format!(
-            "Security advisory from '{}' mentions '{}' in title: \"{}\"",
-            item.source_type,
-            dep_name,
-            truncate_title(&item.title, 80)
-        ),
+        "advisory" => {
+            if advisory_affected_package_match(&item.content, dep_name) {
+                format!(
+                    "Security advisory from '{}' lists '{}' in Affected packages",
+                    item.source_type, dep_name
+                )
+            } else {
+                format!(
+                    "Security advisory from '{}' references '{}' in title: \"{}\"",
+                    item.source_type,
+                    dep_name,
+                    truncate_title(&item.title, 80)
+                )
+            }
+        }
         _ => format!(
             "Title heuristic: '{}' found in \"{}\" (source: {})",
             dep_name,
@@ -410,21 +480,29 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
 
     // ---- Tier 2: advisory match (0.90) ----
     if is_advisory_source(&st, item.content_type.as_deref()) {
-        // Advisory titles almost always contain the affected package name.
-        if matches_dep_in_title(&item.title, dep_name).is_some() {
+        // Prefer structured affected-package evidence carried in OSV/GitHub
+        // advisory content. This prevents generic terms like "os", "path",
+        // "http", or "image" from being promoted by title substrings.
+        if advisory_affected_package_match(&item.content, dep_name) {
             return Some(("advisory", 0.90));
+        }
+
+        // Fallback only for specific package names and whole-token title
+        // matches, used by RSS/security posts that lack structured affected
+        // package metadata.
+        if is_specific_title_match_candidate(dep_name)
+            && matches_dep_in_title(&item.title, dep_name) == Some(0.50)
+        {
+            return Some(("advisory", 0.75));
         }
     }
 
     // ---- Tier 3: title heuristic (0.30–0.50) ----
-    // Skip very short names (too generic) and known-ambiguous names.
-    if dep_name.len() < 4 {
+    // Skip very short/common/ambiguous names and require a whole-token match.
+    if !is_specific_title_match_candidate(dep_name) {
         return None;
     }
-    if is_ambiguous_package_name(dep_name) {
-        return None;
-    }
-    if let Some(confidence) = matches_dep_in_title(&item.title, dep_name) {
+    if let Some(confidence @ 0.50) = matches_dep_in_title(&item.title, dep_name) {
         return Some(("title_heuristic", confidence));
     }
 
@@ -476,8 +554,7 @@ fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String
 /// Check if a dependency name appears in a title string.
 ///
 /// Returns `Some(confidence)` where:
-/// - 0.50 for a word-boundary match (preceded/followed by non-alphanumeric)
-/// - 0.30 for a plain substring match
+/// - 0.50 for a whole-token match (preceded/followed by non-alphanumeric)
 ///
 /// Normalizes both hyphens and underscores so "async-trait" and
 /// "async_trait" compare equal.
@@ -503,17 +580,65 @@ fn matches_dep_in_title(title: &str, dep_name: &str) -> Option<f64> {
         }
     }
 
-    // Substring match (lower confidence)
-    for variant in [&dep_lower, &dep_normalized, &dep_hyphen] {
-        if variant.is_empty() {
-            continue;
-        }
-        if title_lower.contains(variant.as_str()) {
-            return Some(0.30);
-        }
+    None
+}
+
+/// Generic/common dependency names are too noisy for title-only matching.
+///
+/// Registry and structured advisory matches can still use these names because
+/// those paths have ecosystem/package proof. Title-only paths cannot.
+fn is_specific_title_match_candidate(dep_name: &str) -> bool {
+    let normalized = dep_name
+        .trim()
+        .trim_start_matches('@')
+        .replace(['/', '_'], "-")
+        .to_lowercase();
+
+    !is_ambiguous_package_name(&normalized) && !crate::scoring::is_ambiguous_dep_name(&normalized)
+}
+
+/// Match structured advisory content emitted by the CVE/OSV source adapters.
+///
+/// Both adapters include a line like:
+/// `Affected: package-name (ecosystem), other-package (ecosystem)`.
+/// Only exact package-name matches qualify as advisory evidence.
+fn advisory_affected_package_match(content: &str, dep_name: &str) -> bool {
+    let Some(affected) = content
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("Affected:").map(str::trim))
+    else {
+        return false;
+    };
+
+    if affected.eq_ignore_ascii_case("unknown") || affected.is_empty() {
+        return false;
     }
 
-    None
+    affected
+        .split(',')
+        .map(extract_affected_package_name)
+        .any(|pkg| exact_package_name_match(&pkg, dep_name))
+}
+
+fn extract_affected_package_name(token: &str) -> String {
+    token
+        .trim()
+        .split_once(" (")
+        .map_or_else(|| token.trim(), |(name, _)| name.trim())
+        .to_string()
+}
+
+fn exact_package_name_match(candidate: &str, dep_name: &str) -> bool {
+    let candidate = normalize_package_for_exact_match(candidate);
+    let dep = normalize_package_for_exact_match(dep_name);
+    candidate == dep
+}
+
+fn normalize_package_for_exact_match(name: &str) -> String {
+    name.trim()
+        .trim_start_matches('@')
+        .replace('_', "-")
+        .to_lowercase()
 }
 
 /// Best-effort ecosystem inference from the source type.
@@ -538,349 +663,5 @@ fn infer_ecosystem(item: &UnlinkedItem, _dep_name: &str) -> Option<String> {
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_matches_dep_in_title_word_boundary() {
-        // "react" appears as a whole word — should return 0.50
-        let result = matches_dep_in_title("react 19 released", "react");
-        assert_eq!(result, Some(0.50));
-
-        // At end of string
-        let result = matches_dep_in_title("major update for react", "react");
-        assert_eq!(result, Some(0.50));
-
-        // Surrounded by punctuation (still word-boundary)
-        let result = matches_dep_in_title("[react] v19 is out", "react");
-        assert_eq!(result, Some(0.50));
-
-        // Hyphen/underscore normalization
-        let result = matches_dep_in_title("async-trait 0.2 released", "async_trait");
-        assert_eq!(result, Some(0.50));
-    }
-
-    #[test]
-    fn test_matches_dep_in_title_substring() {
-        // "react" is embedded inside "react-query" — not a word boundary for "react"
-        // but "react-query" as a whole IS a word boundary match.
-        // For dep "react", "react-query" has 'react' followed by '-' which IS non-alphanumeric.
-        // So "react" in "react-query" is actually a word-boundary match at 0.50.
-        // Let's use a genuine substring case instead.
-        let result = matches_dep_in_title("reactivity patterns in Vue", "react");
-        assert_eq!(result, Some(0.30));
-    }
-
-    #[test]
-    fn test_ambiguous_names_skipped() {
-        // "image" is in the ambiguous list — classify_item_dep_match should return None
-        // for title-heuristic tier (tier 3).
-        let item = UnlinkedItem {
-            id: 1,
-            title: "image processing article".to_string(),
-            source_type: "hn".to_string(),
-            content_type: None,
-            source_id: "12345".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "image");
-        assert!(result.is_none(), "Ambiguous dep 'image' should be skipped");
-    }
-
-    #[test]
-    fn test_short_names_skipped() {
-        // Dep names < 4 chars are too generic for title heuristic.
-        let item = UnlinkedItem {
-            id: 2,
-            title: "all about the arc reactor".to_string(),
-            source_type: "hn".to_string(),
-            content_type: None,
-            source_id: "99".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "arc");
-        assert!(result.is_none(), "3-char dep 'arc' should be skipped");
-    }
-
-    #[test]
-    fn test_exact_registry_confidence() {
-        // npm source_id matches dep name exactly — 0.95
-        let item = UnlinkedItem {
-            id: 3,
-            title: "axios 1.7.0".to_string(),
-            source_type: "npm".to_string(),
-            content_type: None,
-            source_id: "axios".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "axios");
-        assert_eq!(result, Some(("exact_registry", 0.95)));
-    }
-
-    #[test]
-    fn test_exact_registry_hyphen_normalization() {
-        // crates_io source with underscore vs hyphen in dep name
-        let item = UnlinkedItem {
-            id: 4,
-            title: "async-trait update".to_string(),
-            source_type: "crates_io".to_string(),
-            content_type: None,
-            source_id: "async-trait".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "async_trait");
-        assert_eq!(result, Some(("exact_registry", 0.95)));
-    }
-
-    #[test]
-    fn test_advisory_match() {
-        // OSV advisory mentioning tokio
-        let item = UnlinkedItem {
-            id: 5,
-            title: "RUSTSEC-2023-0001: tokio race condition".to_string(),
-            source_type: "osv".to_string(),
-            content_type: Some("security_advisory".to_string()),
-            source_id: "RUSTSEC-2023-0001".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "tokio");
-        assert_eq!(result, Some(("advisory", 0.90)));
-    }
-
-    #[test]
-    fn test_advisory_via_content_type() {
-        // Generic source but content_type marks it as advisory
-        let item = UnlinkedItem {
-            id: 6,
-            title: "Critical vulnerability in serde_json".to_string(),
-            source_type: "hn".to_string(),
-            content_type: Some("security_advisory".to_string()),
-            source_id: "40001".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "serde_json");
-        assert_eq!(result, Some(("advisory", 0.90)));
-    }
-
-    #[test]
-    fn test_title_heuristic_general_source() {
-        // HN article mentioning a dep by name (word boundary)
-        let item = UnlinkedItem {
-            id: 7,
-            title: "Why we migrated from axios to fetch".to_string(),
-            source_type: "hn".to_string(),
-            content_type: None,
-            source_id: "40002".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "axios");
-        assert_eq!(result, Some(("title_heuristic", 0.50)));
-    }
-
-    #[test]
-    fn test_no_match_returns_none() {
-        let item = UnlinkedItem {
-            id: 8,
-            title: "Introduction to quantum computing".to_string(),
-            source_type: "hn".to_string(),
-            content_type: None,
-            source_id: "40003".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "tokio");
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_registry_non_match() {
-        // npm source but source_id doesn't match the dep we're checking
-        let item = UnlinkedItem {
-            id: 9,
-            title: "lodash 5.0 released".to_string(),
-            source_type: "npm".to_string(),
-            content_type: None,
-            source_id: "lodash".to_string(),
-            url: None,
-        };
-        // Title heuristic for "axios" won't match, and registry source_id is "lodash"
-        let result = classify_item_dep_match(&item, "axios");
-        assert!(result.is_none());
-    }
-
-    /// Regression test: proves the INSERT into source_item_dependencies works
-    /// against the real migrated schema. A previous bug used `dependency_name`
-    /// instead of `package_name`, causing a column mismatch at runtime.
-    #[test]
-    fn test_link_items_inserts_into_real_schema() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-        let conn = db.conn.lock();
-
-        // Insert a minimal source_items row
-        conn.execute(
-            "INSERT INTO source_items (id, source_type, source_id, title, content, content_hash, embedding)
-             VALUES (1, 'crates_io', 'serde', 'serde 1.0.200 released', '', 'hash1', zeroblob(1536))",
-            [],
-        )
-        .expect("insert source_items");
-
-        // Insert a minimal project_dependencies row so load_dependency_names can find it
-        conn.execute(
-            "INSERT INTO project_dependencies (package_name, project_path, manifest_type, language, is_dev, is_direct, project_relevance)
-             VALUES ('serde', '/home/user/project', 'Cargo.toml', 'rust', 0, 1, 1.0)",
-            [],
-        )
-        .expect("insert project_dependencies");
-
-        // Build an UnlinkedItem that will match via exact_registry tier
-        let items = vec![UnlinkedItem {
-            id: 1,
-            title: "serde 1.0.200 released".into(),
-            source_type: "crates_io".into(),
-            content_type: None,
-            source_id: "serde".into(),
-            url: None,
-        }];
-        let dep_names = vec!["serde".to_string()];
-
-        // This is the call that would fail with "table source_item_dependencies
-        // has no column named dependency_name" if the INSERT used the wrong column.
-        let linked = link_items_to_deps(&conn, &items, &dep_names)
-            .expect("link_items_to_deps should succeed against real schema");
-        assert_eq!(linked, 1, "Expected exactly 1 link row");
-
-        // Verify the row exists with the correct columns
-        let (pkg, eco, mt, conf): (String, Option<String>, String, f64) = conn
-            .query_row(
-                "SELECT package_name, ecosystem, match_type, confidence
-                 FROM source_item_dependencies
-                 WHERE source_item_id = 1",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .expect("should find the inserted row");
-
-        assert_eq!(pkg, "serde");
-        assert_eq!(eco.as_deref(), Some("crates.io"));
-        assert_eq!(mt, "exact_registry");
-        assert!((conf - 0.95).abs() < f64::EPSILON);
-
-        // Verify total row count is exactly 1
-        let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM source_item_dependencies", [], |row| {
-                row.get(0)
-            })
-            .unwrap();
-        assert_eq!(count, 1);
-    }
-
-    #[test]
-    fn test_link_items_upgrades_existing_weak_row_with_exact_evidence() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-        let conn = db.conn.lock();
-        conn.execute(
-            "INSERT INTO source_items (id, source_type, source_id, url, title, content, content_hash, embedding)
-             VALUES (1, 'npm_registry', 'axios', 'https://www.npmjs.com/package/axios', 'axios 2.0 released', '', 'hash1', zeroblob(1536))",
-            [],
-        )
-        .expect("insert source_item");
-        conn.execute(
-            "INSERT INTO source_item_dependencies
-                (source_item_id, package_name, ecosystem, match_type, confidence)
-             VALUES (1, 'axios', 'npm', 'title_heuristic', 0.50)",
-            [],
-        )
-        .expect("insert weak link");
-
-        let items = vec![UnlinkedItem {
-            id: 1,
-            title: "axios 2.0 released".into(),
-            source_type: "npm_registry".into(),
-            content_type: None,
-            source_id: "axios".into(),
-            url: Some("https://www.npmjs.com/package/axios".into()),
-        }];
-        let dep_names = vec!["axios".to_string()];
-
-        let changed = link_items_to_deps(&conn, &items, &dep_names).expect("upsert exact link");
-        assert_eq!(changed, 1);
-
-        let (mt, conf, evidence, source_url): (String, f64, Option<String>, Option<String>) = conn
-            .query_row(
-                "SELECT match_type, confidence, evidence_text, source_url
-                 FROM source_item_dependencies
-                 WHERE source_item_id = 1 AND package_name = 'axios'",
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .unwrap();
-        assert_eq!(mt, "exact_registry");
-        assert!((conf - 0.95).abs() < f64::EPSILON);
-        assert!(evidence.unwrap().contains("Registry source"));
-        assert_eq!(
-            source_url.as_deref(),
-            Some("https://www.npmjs.com/package/axios")
-        );
-    }
-
-    #[test]
-    fn test_is_registry_source() {
-        assert!(is_registry_source("npm"));
-        assert!(is_registry_source("npm_registry"));
-        assert!(is_registry_source("crates_io"));
-        assert!(is_registry_source("pypi"));
-        assert!(is_registry_source("go_modules"));
-        assert!(is_registry_source("go"));
-        assert!(!is_registry_source("hn"));
-        assert!(!is_registry_source("reddit"));
-    }
-
-    #[test]
-    fn test_canonical_npm_registry_exact_match() {
-        let item = UnlinkedItem {
-            id: 10,
-            title: "axios 2.0 released".to_string(),
-            source_type: "npm_registry".to_string(),
-            content_type: None,
-            source_id: "axios".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "axios");
-        assert_eq!(
-            result,
-            Some(("exact_registry", 0.95)),
-            "npm_registry source should get exact_registry confidence"
-        );
-    }
-
-    #[test]
-    fn test_canonical_go_modules_exact_match() {
-        let item = UnlinkedItem {
-            id: 11,
-            title: "golang.org/x/net security update".to_string(),
-            source_type: "go_modules".to_string(),
-            content_type: None,
-            source_id: "golang.org/x/net".to_string(),
-            url: None,
-        };
-        let result = classify_item_dep_match(&item, "golang.org/x/net");
-        assert_eq!(
-            result,
-            Some(("exact_registry", 0.95)),
-            "go_modules source should get exact_registry confidence"
-        );
-    }
-
-    #[test]
-    fn test_is_advisory_source() {
-        assert!(is_advisory_source("osv", None));
-        assert!(is_advisory_source("cve", None));
-        assert!(is_advisory_source("hn", Some("security_advisory")));
-        assert!(is_advisory_source("reddit", Some("vulnerability_report")));
-        assert!(!is_advisory_source("hn", None));
-        assert!(!is_advisory_source("hn", Some("discussion")));
-    }
-}
+#[path = "dep_linker_tests.rs"]
+mod tests;

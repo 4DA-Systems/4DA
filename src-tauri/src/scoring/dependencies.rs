@@ -249,7 +249,7 @@ pub(crate) fn normalize_package_name(name: &str) -> String {
 }
 
 /// Check if a term is a common English word (prone to false positives)
-fn is_ambiguous_dep_name(term: &str) -> bool {
+pub(crate) fn is_ambiguous_dep_name(term: &str) -> bool {
     // Short tech keywords that are legitimate despite being short
     const SHORT_TECH: &[&str] = &["vue", "svelte", "htmx", "bun", "deno", "vite", "esbuild"];
     if SHORT_TECH.contains(&term) {

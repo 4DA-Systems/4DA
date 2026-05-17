@@ -767,8 +767,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
-    // Backfill: link any source items that have no dependency links yet,
-    // then repair existing rows with NULL evidence_text/source_url.
+    // Backfill/reconcile source_item_dependencies, prune stale links created
+    // by older matchers, then repair missing evidence/source URLs.
     tauri::async_runtime::spawn(async {
         if let Ok(db) = crate::get_database() {
             match crate::dep_linker::backfill_if_empty(&db) {
@@ -777,6 +777,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
                 Err(e) => {
                     warn!(target: "4da::startup", error = %e, "dep_linker backfill failed");
+                }
+                _ => {}
+            }
+            match crate::dep_linker::prune_invalid_links(&db) {
+                Ok(n) if n > 0 => {
+                    info!(target: "4da::startup", pruned = n, "Pruned stale dep links");
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "dep_linker prune_invalid_links failed");
                 }
                 _ => {}
             }
@@ -1478,7 +1487,9 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         item_id: Some(r.id as i64),
                         signal_priority: r.signal_priority.clone(),
                         description: r.signal_action.clone(),
-                        matched_deps: r.signal_triggers.clone().unwrap_or_default(),
+                        matched_deps: crate::monitoring_briefing::matched_deps_from_signal_triggers(
+                            r.signal_triggers.as_deref(),
+                        ),
                         content_type: r
                             .score_breakdown
                             .as_ref()
