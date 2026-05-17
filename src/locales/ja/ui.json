@@ -2790,6 +2790,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}}件のソースアダプターでエラー",
   "blindspots.sourceHealth.failing_other": "{{count}}件のソースアダプターでエラー",
   "blindspots.sourceHealth.stale": "({{count}}件が古い)",
+  "blindspots.staleData": "72時間以内にソースアイテムまたはソースチェックの成功がありません。ブラインドスポット分析が古い可能性があります。",
   "blindspots.status.blindSpot": "盲点",
   "blindspots.status.drifting": "変動中",
   "blindspots.status.covered": "カバー済み",

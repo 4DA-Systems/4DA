@@ -2789,6 +2789,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} Quelladapter fehlerhaft",
   "blindspots.sourceHealth.failing_other": "{{count}} Quelladapter fehlerhaft",
   "blindspots.sourceHealth.stale": "({{count}} veraltet)",
+  "blindspots.staleData": "Keine frischen Quellelemente oder erfolgreichen Quellenprüfungen seit 72h. Die Blind-Spot-Analyse könnte veraltet sein.",
   "blindspots.status.blindSpot": "Blinder Fleck",
   "blindspots.status.drifting": "Abweichend",
   "blindspots.status.covered": "Abgedeckt",

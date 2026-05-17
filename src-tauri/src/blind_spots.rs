@@ -3030,6 +3030,7 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
     if weak_len > 0 {
         feed.weak_match_count = Some(weak_len);
     }
+    feed.data_freshness = report.data_freshness.clone();
     feed
 }
 
@@ -3168,9 +3169,11 @@ pub fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
 
     let total_tracked = feed.total_tracked;
     let weak_match_count = feed.weak_match_count;
+    let data_freshness = feed.data_freshness.clone();
     let mut final_feed = build_feed_with_existing_score(feed.items, feed.score);
     final_feed.total_tracked = total_tracked;
     final_feed.weak_match_count = weak_match_count;
+    final_feed.data_freshness = data_freshness;
     Ok(final_feed)
 }
 

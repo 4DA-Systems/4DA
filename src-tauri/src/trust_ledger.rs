@@ -684,6 +684,31 @@ pub fn queue_feedback_event(
 ) -> std::result::Result<i64, String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
+    queue_feedback_event_on_conn(
+        &conn,
+        &event_type,
+        signal_id.as_deref(),
+        alert_id.as_deref(),
+        source_type.as_deref(),
+        topic.as_deref(),
+        notes.as_deref(),
+        dismiss_reason.as_deref(),
+        dismiss_category.as_deref(),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn queue_feedback_event_on_conn(
+    conn: &rusqlite::Connection,
+    event_type: &str,
+    signal_id: Option<&str>,
+    alert_id: Option<&str>,
+    source_type: Option<&str>,
+    topic: Option<&str>,
+    notes: Option<&str>,
+    dismiss_reason: Option<&str>,
+    dismiss_category: Option<&str>,
+) -> std::result::Result<i64, String> {
     conn.execute(
         "INSERT OR IGNORE INTO feedback_outbox (event_type, signal_id, alert_id, source_type, topic, notes, dismiss_reason, dismiss_category, queued_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, strftime('%s','now') * 1000)",
@@ -707,10 +732,23 @@ pub fn queue_feedback_event(
             rusqlite::params![event_type, signal_id, alert_id, source_type, topic],
             |row| row.get(0),
         ).map_err(|e| format!("Failed to find existing outbox row: {e}"))?;
+        conn.execute(
+            "UPDATE feedback_outbox
+             SET notes = COALESCE(?1, notes),
+                 dismiss_reason = COALESCE(?2, dismiss_reason),
+                 dismiss_category = COALESCE(?3, dismiss_category)
+             WHERE id = ?4",
+            rusqlite::params![notes, dismiss_reason, dismiss_category, existing_id],
+        )
+        .map_err(|e| e.to_string())?;
         return Ok(existing_id);
     }
 
-    Ok(conn.last_insert_rowid())
+    let row_id = conn.last_insert_rowid();
+    if row_id <= 0 {
+        return Err("feedback_outbox insert returned invalid row id".into());
+    }
+    Ok(row_id)
 }
 
 /// Load pending feedback events from the SQLite outbox.
@@ -744,8 +782,8 @@ pub fn get_pending_feedback() -> std::result::Result<Vec<serde_json::Value>, Str
         })
         .map_err(|e| e.to_string())?;
 
-    let items: Vec<serde_json::Value> = rows.filter_map(|r| r.ok()).collect();
-    Ok(items)
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(|e| e.to_string())
 }
 
 /// Mark a feedback outbox event as sent (successfully delivered to backend).
@@ -753,11 +791,27 @@ pub fn get_pending_feedback() -> std::result::Result<Vec<serde_json::Value>, Str
 pub fn mark_feedback_sent(outbox_id: i64) -> std::result::Result<(), String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
-    conn.execute(
-        "UPDATE feedback_outbox SET status = 'sent' WHERE id = ?1",
-        rusqlite::params![outbox_id],
-    )
-    .map_err(|e| e.to_string())?;
+    mark_feedback_sent_on_conn(&conn, outbox_id)
+}
+
+fn mark_feedback_sent_on_conn(
+    conn: &rusqlite::Connection,
+    outbox_id: i64,
+) -> std::result::Result<(), String> {
+    if outbox_id <= 0 {
+        return Err(format!("invalid feedback outbox id: {outbox_id}"));
+    }
+    let changed = conn
+        .execute(
+            "UPDATE feedback_outbox SET status = 'sent' WHERE id = ?1",
+            rusqlite::params![outbox_id],
+        )
+        .map_err(|e| e.to_string())?;
+    if changed != 1 {
+        return Err(format!(
+            "feedback outbox row {outbox_id} was not marked sent; changed={changed}"
+        ));
+    }
     Ok(())
 }
 
@@ -766,11 +820,27 @@ pub fn mark_feedback_sent(outbox_id: i64) -> std::result::Result<(), String> {
 pub fn mark_feedback_attempt(outbox_id: i64) -> std::result::Result<(), String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
-    conn.execute(
-        "UPDATE feedback_outbox SET attempts = attempts + 1, last_attempt_at = strftime('%s','now') * 1000 WHERE id = ?1",
+    mark_feedback_attempt_on_conn(&conn, outbox_id)
+}
+
+fn mark_feedback_attempt_on_conn(
+    conn: &rusqlite::Connection,
+    outbox_id: i64,
+) -> std::result::Result<(), String> {
+    if outbox_id <= 0 {
+        return Err(format!("invalid feedback outbox id: {outbox_id}"));
+    }
+    let changed = conn
+        .execute(
+        "UPDATE feedback_outbox SET attempts = attempts + 1, last_attempt_at = strftime('%s','now') * 1000 WHERE id = ?1 AND status = 'pending'",
         rusqlite::params![outbox_id],
     )
     .map_err(|e| e.to_string())?;
+    if changed != 1 {
+        return Err(format!(
+            "feedback outbox row {outbox_id} was not marked attempted; changed={changed}"
+        ));
+    }
     Ok(())
 }
 
@@ -819,6 +889,107 @@ mod tests {
             rusqlite::params![event_type, source_type],
         )
         .unwrap();
+    }
+
+    fn feedback_outbox_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE feedback_outbox (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                signal_id TEXT,
+                alert_id TEXT,
+                source_type TEXT,
+                topic TEXT,
+                notes TEXT,
+                dismiss_reason TEXT,
+                dismiss_category TEXT,
+                queued_at INTEGER NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_attempt_at INTEGER,
+                status TEXT NOT NULL DEFAULT 'pending'
+            );
+            CREATE UNIQUE INDEX idx_feedback_outbox_dedup
+                ON feedback_outbox(event_type, COALESCE(signal_id,''), COALESCE(alert_id,''), COALESCE(source_type,''), COALESCE(topic,''), status);",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn queue_feedback_duplicate_returns_existing_positive_row_id() {
+        let conn = feedback_outbox_db();
+        let first = queue_feedback_event_on_conn(
+            &conn,
+            "dismissed",
+            Some("sig-1"),
+            None,
+            Some("blind_spot"),
+            Some("react"),
+            Some("first note"),
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(first > 0);
+
+        let duplicate = queue_feedback_event_on_conn(
+            &conn,
+            "dismissed",
+            Some("sig-1"),
+            None,
+            Some("blind_spot"),
+            Some("react"),
+            Some("newer note"),
+            Some("not_relevant"),
+            Some("noise"),
+        )
+        .unwrap();
+        assert_eq!(duplicate, first);
+
+        let row: (i64, Option<String>, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT COUNT(*), notes, dismiss_reason, dismiss_category FROM feedback_outbox",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, 1);
+        assert_eq!(row.1.as_deref(), Some("newer note"));
+        assert_eq!(row.2.as_deref(), Some("not_relevant"));
+        assert_eq!(row.3.as_deref(), Some("noise"));
+    }
+
+    #[test]
+    fn mark_feedback_outbox_updates_reject_missing_or_invalid_ids() {
+        let conn = feedback_outbox_db();
+        assert!(mark_feedback_sent_on_conn(&conn, 0).is_err());
+        assert!(mark_feedback_attempt_on_conn(&conn, 99).is_err());
+
+        let row_id = queue_feedback_event_on_conn(
+            &conn,
+            "validated",
+            Some("sig-2"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        mark_feedback_attempt_on_conn(&conn, row_id).unwrap();
+        let attempts: i64 = conn
+            .query_row(
+                "SELECT attempts FROM feedback_outbox WHERE id = ?1",
+                rusqlite::params![row_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(attempts, 1);
+
+        mark_feedback_sent_on_conn(&conn, row_id).unwrap();
+        assert!(mark_feedback_attempt_on_conn(&conn, row_id).is_err());
     }
 
     #[test]

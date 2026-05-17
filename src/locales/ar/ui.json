@@ -248,6 +248,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} محول مصدر يفشل",
   "blindspots.sourceHealth.failing_other": "{{count}} محولات مصدر تفشل",
   "blindspots.sourceHealth.stale": "({{count}} قديمة)",
+  "blindspots.staleData": "لا توجد عناصر مصدر حديثة أو عمليات فحص ناجحة خلال 72 ساعة. قد يكون تحليل النقاط العمياء قديمًا.",
   "blindspots.status.blindSpot": "نقطة عمياء",
   "blindspots.status.covered": "مغطى",
   "blindspots.status.drifting": "منحرف",

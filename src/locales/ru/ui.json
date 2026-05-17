@@ -2790,6 +2790,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} адаптер источника с ошибкой",
   "blindspots.sourceHealth.failing_other": "{{count}} адаптеров источников с ошибками",
   "blindspots.sourceHealth.stale": "({{count}} устаревших)",
+  "blindspots.staleData": "Нет свежих источников или успешных проверок за 72ч. Анализ слепых зон может быть устаревшим.",
   "blindspots.status.blindSpot": "Слепая зона",
   "blindspots.status.drifting": "Дрейфует",
   "blindspots.status.covered": "Покрыто",

@@ -559,17 +559,7 @@ check('SQL schema column drift', () => {
   // Remove an entry when the underlying bug is fixed. Adding an entry here
   // is a deliberate "known issue — tracked" acknowledgement, not a
   // permanent silence.
-  const KNOWN_ISSUES = [
-    // content_personalization/temporal.rs: uses `si.source` and `si.fetched_at`
-    // but the real source_items columns are `source_type` and `created_at`.
-    // Silently failing — flagged for the content_personalization owner.
-    'content_personalization\\temporal.rs',
-    'content_personalization/temporal.rs',
-    // query/executor.rs: uses `c.content` but context_chunks column is `text`.
-    // Silently failing — flagged for the query/executor owner.
-    'query\\executor.rs',
-    'query/executor.rs',
-  ];
+  const KNOWN_ISSUES = [];
 
   // Deduplicate and partition into blocking + known-issue
   const unique = [...new Set(issues)];

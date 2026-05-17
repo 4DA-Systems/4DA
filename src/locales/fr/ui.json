@@ -2789,6 +2789,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} adaptateur source en échec",
   "blindspots.sourceHealth.failing_other": "{{count}} adaptateurs sources en échec",
   "blindspots.sourceHealth.stale": "({{count}} obsolètes)",
+  "blindspots.staleData": "Aucun élément source récent ni vérification de source réussie depuis 72h. L'analyse des angles morts peut être obsolète.",
   "blindspots.status.blindSpot": "Angle mort",
   "blindspots.status.drifting": "En dérive",
   "blindspots.status.covered": "Couvert",

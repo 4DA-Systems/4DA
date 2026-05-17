@@ -290,6 +290,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
 
   const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0;
   const hasContent = hasProblems || unmatchedSignals.length > 0;
+  const dataFreshness = report.data_freshness;
 
   return (
     <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots">
@@ -337,6 +338,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
           {t('blindspots.sourceHealth.failing', { count: sourceHealth.total_failing })}
           {sourceHealth.total_disabled > 0 && <span className="text-text-muted ml-1">{t('blindspots.sourceHealth.stale', { count: sourceHealth.total_disabled })}</span>}
+        </div>
+      )}
+      {dataFreshness?.is_stale && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shrink-0" />
+          {t('blindspots.staleData')}
         </div>
       )}
       {lastDismissed !== null && (

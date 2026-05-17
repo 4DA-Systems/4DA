@@ -24,13 +24,28 @@ use crate::monitoring_notifications::truncate_safe;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
 #[ts(export, export_to = "bindings/")]
 pub struct DataFreshness {
-    /// Hours since the newest item was ingested (None if table is empty).
+    /// Hours since the newest item was created or refreshed (None if table is empty).
     pub newest_item_age_hours: Option<f64>,
-    /// Number of source items created in the last 24 hours.
+    /// Number of source items created or refreshed in the last 24 hours.
     pub items_last_24h: u32,
-    /// Number of source items created in the last 72 hours.
+    /// Number of source items created or refreshed in the last 72 hours.
     pub items_last_72h: u32,
-    /// True when items_last_72h == 0 — the system has received no data in 3 days.
+    /// Hours since any source adapter last succeeded (None if health has never run).
+    #[serde(default)]
+    pub newest_source_check_age_hours: Option<f64>,
+    /// Number of successful source checks in the last 24 hours.
+    #[serde(default)]
+    pub source_checks_last_24h: u32,
+    /// Number of successful source checks in the last 72 hours.
+    #[serde(default)]
+    pub source_checks_last_72h: u32,
+    /// Source adapters currently reporting failures or open circuits.
+    #[serde(default)]
+    pub failing_sources: u32,
+    /// Source adapters with no successful check in more than seven days.
+    #[serde(default)]
+    pub stale_sources: u32,
+    /// True when neither source items nor successful source checks have appeared in 3 days.
     pub is_stale: bool,
 }
 
@@ -38,33 +53,89 @@ pub struct DataFreshness {
 /// Returns None only if the database is unreachable.
 pub(crate) fn compute_data_freshness() -> Option<DataFreshness> {
     let conn = crate::open_db_connection().ok()?;
+    Some(compute_data_freshness_from_conn(&conn))
+}
+
+pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> DataFreshness {
+    let freshest_item_expr =
+        "CASE WHEN COALESCE(last_seen, created_at) > created_at THEN last_seen ELSE created_at END";
     let newest_age: Option<f64> = conn
         .query_row(
-            "SELECT (julianday('now') - julianday(MAX(created_at))) * 24.0 FROM source_items",
+            &format!(
+                "SELECT (julianday('now') - julianday(MAX({freshest_item_expr}))) * 24.0 FROM source_items"
+            ),
             [],
             |row| row.get(0),
         )
         .ok();
     let items_24h: u32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-1 day')",
+            &format!(
+                "SELECT COUNT(*) FROM source_items WHERE {freshest_item_expr} >= datetime('now', '-1 day')"
+            ),
             [],
             |row| row.get(0),
         )
         .unwrap_or(0);
     let items_72h: u32 = conn
         .query_row(
-            "SELECT COUNT(*) FROM source_items WHERE created_at >= datetime('now', '-3 days')",
+            &format!(
+                "SELECT COUNT(*) FROM source_items WHERE {freshest_item_expr} >= datetime('now', '-3 days')"
+            ),
             [],
             |row| row.get(0),
         )
         .unwrap_or(0);
-    Some(DataFreshness {
+    let newest_source_check_age: Option<f64> = conn
+        .query_row(
+            "SELECT (julianday('now') - julianday(MAX(last_success_at))) * 24.0 FROM feed_health",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+    let source_checks_24h: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feed_health WHERE last_success_at >= datetime('now', '-1 day')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let source_checks_72h: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feed_health WHERE last_success_at >= datetime('now', '-3 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let failing_sources: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feed_health WHERE consecutive_failures > 0 OR circuit_open = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let stale_sources: u32 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM feed_health
+             WHERE COALESCE(consecutive_failures, 0) = 0
+               AND COALESCE(circuit_open, 0) = 0
+               AND (last_success_at IS NULL OR last_success_at < datetime('now', '-7 days'))",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    DataFreshness {
         newest_item_age_hours: newest_age,
         items_last_24h: items_24h,
         items_last_72h: items_72h,
-        is_stale: items_72h == 0,
-    })
+        newest_source_check_age_hours: newest_source_check_age,
+        source_checks_last_24h: source_checks_24h,
+        source_checks_last_72h: source_checks_72h,
+        failing_sources,
+        stale_sources,
+        is_stale: items_72h == 0 && source_checks_72h == 0,
+    }
 }
 
 /// Minimum relevance score for an item to appear in the morning briefing.
@@ -1924,6 +1995,68 @@ BANNED:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn freshness_test_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE source_items (
+                created_at TEXT NOT NULL,
+                last_seen TEXT
+            );
+            CREATE TABLE feed_health (
+                last_success_at TEXT,
+                consecutive_failures INTEGER DEFAULT 0,
+                circuit_open INTEGER DEFAULT 0
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_data_freshness_not_stale_when_sources_checked_recently() {
+        let conn = freshness_test_db();
+        conn.execute(
+            "INSERT INTO source_items (created_at, last_seen)
+             VALUES (datetime('now', '-5 days'), datetime('now', '-5 days'))",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO feed_health (last_success_at, consecutive_failures, circuit_open)
+             VALUES (datetime('now'), 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        let freshness = compute_data_freshness_from_conn(&conn);
+        assert_eq!(freshness.items_last_72h, 0);
+        assert_eq!(freshness.source_checks_last_72h, 1);
+        assert!(!freshness.is_stale);
+    }
+
+    #[test]
+    fn test_data_freshness_stale_when_items_and_source_checks_are_old() {
+        let conn = freshness_test_db();
+        conn.execute(
+            "INSERT INTO source_items (created_at, last_seen)
+             VALUES (datetime('now', '-5 days'), datetime('now', '-5 days'))",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO feed_health (last_success_at, consecutive_failures, circuit_open)
+             VALUES (datetime('now', '-5 days'), 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        let freshness = compute_data_freshness_from_conn(&conn);
+        assert_eq!(freshness.items_last_72h, 0);
+        assert_eq!(freshness.source_checks_last_72h, 0);
+        assert_eq!(freshness.stale_sources, 0);
+        assert!(freshness.is_stale);
+    }
 
     #[test]
     fn test_parse_briefing_time_valid() {

@@ -54,7 +54,17 @@ impl Database {
                              THEN excluded.match_type
                              ELSE source_item_dependencies.match_type END,
                 confidence = MAX(source_item_dependencies.confidence, excluded.confidence),
-                evidence_text = COALESCE(excluded.evidence_text, source_item_dependencies.evidence_text)",
+                evidence_text = CASE
+                    WHEN excluded.confidence > source_item_dependencies.confidence
+                    THEN COALESCE(NULLIF(excluded.evidence_text, ''), source_item_dependencies.evidence_text)
+                    ELSE COALESCE(NULLIF(source_item_dependencies.evidence_text, ''), NULLIF(excluded.evidence_text, ''))
+                END,
+                source_url = COALESCE(NULLIF(source_item_dependencies.source_url, ''), NULLIF(excluded.source_url, ''))
+             WHERE excluded.confidence > source_item_dependencies.confidence
+                OR ((source_item_dependencies.evidence_text IS NULL OR source_item_dependencies.evidence_text = '')
+                    AND excluded.evidence_text IS NOT NULL AND excluded.evidence_text <> '')
+                OR ((source_item_dependencies.source_url IS NULL OR source_item_dependencies.source_url = '')
+                    AND excluded.source_url IS NOT NULL AND excluded.source_url <> '')",
             params![source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url],
         )?;
         Ok(conn.last_insert_rowid())
@@ -84,7 +94,18 @@ impl Database {
                 match_type = CASE WHEN excluded.confidence > source_item_dependencies.confidence
                              THEN excluded.match_type
                              ELSE source_item_dependencies.match_type END,
-                confidence = MAX(source_item_dependencies.confidence, excluded.confidence)",
+                confidence = MAX(source_item_dependencies.confidence, excluded.confidence),
+                evidence_text = CASE
+                    WHEN excluded.confidence > source_item_dependencies.confidence
+                    THEN COALESCE(NULLIF(excluded.evidence_text, ''), source_item_dependencies.evidence_text)
+                    ELSE COALESCE(NULLIF(source_item_dependencies.evidence_text, ''), NULLIF(excluded.evidence_text, ''))
+                END,
+                source_url = COALESCE(NULLIF(source_item_dependencies.source_url, ''), NULLIF(excluded.source_url, ''))
+             WHERE excluded.confidence > source_item_dependencies.confidence
+                OR ((source_item_dependencies.evidence_text IS NULL OR source_item_dependencies.evidence_text = '')
+                    AND excluded.evidence_text IS NOT NULL AND excluded.evidence_text <> '')
+                OR ((source_item_dependencies.source_url IS NULL OR source_item_dependencies.source_url = '')
+                    AND excluded.source_url IS NOT NULL AND excluded.source_url <> '')",
         )?;
         let mut count = 0;
         for (sid, pkg, eco, mt, conf, ev, url) in links {
@@ -263,7 +284,7 @@ mod tests {
             "llm_analysis",
             0.8,
             Some("LLM confirmed"),
-            None,
+            Some("https://example.com/react"),
         )
         .expect("upsert link");
 
@@ -276,6 +297,11 @@ mod tests {
         assert_eq!(
             deps[0].match_type, "llm_analysis",
             "match_type should follow higher confidence"
+        );
+        assert_eq!(deps[0].evidence_text.as_deref(), Some("LLM confirmed"));
+        assert_eq!(
+            deps[0].source_url.as_deref(),
+            Some("https://example.com/react")
         );
     }
 

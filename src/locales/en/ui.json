@@ -2789,6 +2789,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} source adapter failing",
   "blindspots.sourceHealth.failing_other": "{{count}} source adapters failing",
   "blindspots.sourceHealth.stale": "({{count}} stale)",
+  "blindspots.staleData": "No fresh source items or successful source checks in 72h. Blind spot analysis may be stale.",
   "blindspots.status.blindSpot": "Uncovered",
   "blindspots.status.drifting": "Unreviewed",
   "blindspots.status.covered": "Covered",

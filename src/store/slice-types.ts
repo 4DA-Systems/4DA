@@ -261,6 +261,11 @@ export interface DataFreshness {
   newest_item_age_hours: number | null;
   items_last_24h: number;
   items_last_72h: number;
+  newest_source_check_age_hours: number | null;
+  source_checks_last_24h: number;
+  source_checks_last_72h: number;
+  failing_sources: number;
+  stale_sources: number;
   is_stale: boolean;
 }
 
