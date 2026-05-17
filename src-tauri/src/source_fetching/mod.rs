@@ -11,6 +11,15 @@ mod processor;
 pub(crate) use fetcher::fetch_all_sources;
 pub(crate) use processor::fill_cache_background;
 
+#[derive(Debug, Default)]
+pub(crate) struct FetchSummary {
+    pub succeeded: usize,
+    pub failed: usize,
+    pub skipped_disabled: usize,
+    pub new_items: usize,
+    pub cached_touches: usize,
+}
+
 use crate::get_settings_manager;
 use crate::sources::rate_limiter::rate_limiter;
 use crate::sources::{SourceError, SourceItem, SourceResult};

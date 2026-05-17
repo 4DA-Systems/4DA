@@ -286,26 +286,66 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
         _ => {} // No pending items or DB error - continue normally
     }
 
-    // Fetch fresh content from all sources before scoring
-    // Without this, manual analysis only re-scores stale cached items
-    // 60s timeout: one slow/hung source must not stall the entire pipeline
-    emit_progress(app, "fetch", 0.08, "Fetching fresh content...", 0, 0);
+    // Fetch fresh content from all sources before scoring.
+    // 90s timeout: one slow/hung source must not stall the entire pipeline.
+    emit_progress(
+        app,
+        "fetch",
+        0.08,
+        "Fetching fresh content from sources...",
+        0,
+        0,
+    );
     match tokio::time::timeout(
-        std::time::Duration::from_secs(60),
+        std::time::Duration::from_secs(90),
         crate::source_fetching::fill_cache_background(app),
     )
     .await
     {
-        Ok(Ok(count)) => {
-            if count > 0 {
-                info!(target: "4da::analysis", new_items = count, "Fetched fresh content before scoring");
+        Ok(Ok(summary)) => {
+            let msg = if summary.new_items > 0 {
+                format!(
+                    "Fetched {} new items from {} sources",
+                    summary.new_items, summary.succeeded
+                )
+            } else if summary.succeeded > 0 {
+                format!("Checked {} sources — no new items", summary.succeeded)
+            } else if summary.failed > 0 {
+                format!(
+                    "Source fetch: {} sources failed, {} skipped",
+                    summary.failed, summary.skipped_disabled
+                )
+            } else {
+                "No enabled sources to fetch".to_string()
+            };
+            if summary.failed > 0 {
+                warn!(
+                    target: "4da::analysis",
+                    succeeded = summary.succeeded,
+                    failed = summary.failed,
+                    new_items = summary.new_items,
+                    "{msg}"
+                );
+            } else {
+                info!(target: "4da::analysis", "{msg}");
             }
+            emit_progress(app, "fetch_done", 0.15, &msg, 0, 0);
         }
         Ok(Err(e)) => {
+            let msg = format!("Source fetch failed: {e}");
             warn!(target: "4da::analysis", error = %e, "Cache fill failed, continuing with existing cache");
+            emit_progress(app, "fetch_done", 0.15, &msg, 0, 0);
         }
         Err(_) => {
-            warn!(target: "4da::analysis", "Cache fill timed out after 60s, continuing with existing cache");
+            warn!(target: "4da::analysis", "Cache fill timed out after 90s, continuing with existing cache");
+            emit_progress(
+                app,
+                "fetch_done",
+                0.15,
+                "Source fetch timed out — scoring cached data",
+                0,
+                0,
+            );
         }
     }
 

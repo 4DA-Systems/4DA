@@ -17,13 +17,12 @@ use super::{fetch_with_retry, AdapterFailureTracker};
 
 /// Fill the cache with items from all sources (background operation)
 /// This is the "write" side of the cache-first architecture
-/// Does NOT emit progress events - runs silently in background
-pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
+pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::FetchSummary> {
     info!(target: "4da::cache", "=== BACKGROUND CACHE FILL STARTED ===");
     void_signal_fetching(app);
 
     let db = get_database()?;
-    let mut total_cached = 0;
+    let mut summary = super::FetchSummary::default();
     let mut new_items_to_embed: Vec<(
         String,
         String,
@@ -33,20 +32,18 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
         Option<String>,
     )> = Vec::new();
 
-    // Build ALL sources from the canonical factory (single source of truth)
     let all_sources = crate::sources::build_all_sources();
     let source_count = all_sources.len();
     let rl = rate_limiter();
     let cache_tracker = AdapterFailureTracker::new();
 
-    // Fetch from each source sequentially with rate limiting
-    // (previous tokio::join! approach required hardcoded variable names)
     for (idx, source) in all_sources.into_iter().enumerate() {
         let st = source.source_type();
         let name = source.name();
 
-        // Skip disabled sources
         if !db.is_source_enabled(st) {
+            summary.skipped_disabled += 1;
+            void_signal_fetch_progress(app, idx + 1, source_count);
             continue;
         }
 
@@ -56,11 +53,11 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
 
         match result {
             Ok(raw_items) => {
-                // Apply algorithmic quality gate before caching
                 let manifest = source.manifest();
                 let items = sources::apply_source_quality_gate(raw_items, &manifest);
                 let filtered = items.len();
                 info!(target: "4da::cache", source = st, fetched = filtered, "Fetched {name} items (quality-gated)");
+                summary.succeeded += 1;
                 for item in items {
                     if db
                         .get_source_item(st, &item.source_id)
@@ -79,19 +76,19 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                         ));
                     } else {
                         db.touch_source_item(st, &item.source_id).ok();
-                        total_cached += 1;
+                        summary.cached_touches += 1;
                     }
                 }
             }
             Err(e) => {
                 warn!(target: "4da::cache", source = st, error = %e, "Fetch failed after retries");
+                summary.failed += 1;
             }
         }
 
         void_signal_fetch_progress(app, idx + 1, source_count);
     }
 
-    // Log persistent failures from cache fill
     for (name, count) in cache_tracker.persistent_failures() {
         warn!(target: "4da::cache", adapter = %name, consecutive_failures = count, "Persistent failure during cache fill");
     }
@@ -229,7 +226,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
                 let count = items_to_insert.len();
                 if !items_to_insert.is_empty() {
                     db.batch_upsert_source_items(&items_to_insert).ok();
-                    total_cached += count;
+                    summary.new_items += count;
                 }
             }
             Err(e) => {
@@ -245,8 +242,14 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<usize> {
 
     void_signal_cache_filled(app);
 
-    info!(target: "4da::cache", total = total_cached, "=== BACKGROUND CACHE FILL COMPLETE ===");
-    Ok(total_cached)
+    info!(
+        target: "4da::cache",
+        succeeded = summary.succeeded,
+        failed = summary.failed,
+        new_items = summary.new_items,
+        "=== BACKGROUND CACHE FILL COMPLETE ==="
+    );
+    Ok(summary)
 }
 
 /// Helper to process source items into cache/embed lists
