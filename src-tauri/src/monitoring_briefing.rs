@@ -573,19 +573,29 @@ pub(crate) fn build_enriched_briefing(
     let escalating_chains = detect_escalating_chains();
     let preemption_alerts: Vec<BriefingPreemptionAlert> =
         match crate::preemption::get_preemption_feed() {
-            Ok(feed) => feed
-                .alerts
-                .iter()
-                .filter(|a| {
-                    matches!(
-                        a.urgency,
-                        crate::preemption::AlertUrgency::Critical
-                            | crate::preemption::AlertUrgency::High
-                    )
-                })
-                .take(3)
-                .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
-                .collect(),
+            Ok(feed) => {
+                let critical: Vec<_> = feed
+                    .alerts
+                    .iter()
+                    .filter(|a| {
+                        matches!(a.urgency, crate::preemption::AlertUrgency::Critical)
+                    })
+                    .take(5)
+                    .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
+                    .collect();
+                let high: Vec<_> = feed
+                    .alerts
+                    .iter()
+                    .filter(|a| {
+                        matches!(a.urgency, crate::preemption::AlertUrgency::High)
+                    })
+                    .take(5_usize.saturating_sub(critical.len()))
+                    .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
+                    .collect();
+                let mut alerts = critical;
+                alerts.extend(high);
+                alerts
+            }
             Err(_) => Vec::new(),
         };
 
@@ -648,6 +658,20 @@ pub(crate) fn build_enriched_briefing(
     // Watch items are non-actionable but corroborated and high-scoring.
     // Reading items are everything else — informational, lower confidence.
     let items = apply_section_split(items);
+
+    // Cross-surface dedup: remove scored items that already appear as preemption alerts.
+    let items: Vec<BriefingItem> = if preemption_alerts.is_empty() {
+        items
+    } else {
+        let alert_titles: Vec<String> = preemption_alerts
+            .iter()
+            .map(|a| a.title.to_lowercase())
+            .collect();
+        items
+            .into_iter()
+            .filter(|item| !alert_titles.iter().any(|at| at == &item.title.to_lowercase()))
+            .collect()
+    };
 
     let total_relevant = items.len();
 
@@ -934,8 +958,7 @@ fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
         .iter()
         .filter(|i| {
             !is_actionable_content_type(i.content_type.as_deref())
-                && i.score >= 0.6
-                && i.corroboration_count > 0
+                && (i.score >= 0.7 || (i.score >= 0.5 && i.corroboration_count > 0))
         })
         .cloned()
         .map(|mut i| {
@@ -948,7 +971,8 @@ fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
         .iter()
         .filter(|i| {
             !is_actionable_content_type(i.content_type.as_deref())
-                && (i.score < 0.6 || i.corroboration_count == 0)
+                && i.score < 0.7
+                && (i.score < 0.5 || i.corroboration_count == 0)
         })
         .cloned()
         .map(|mut i| {
@@ -1489,13 +1513,23 @@ fn detect_knowledge_gaps() -> Vec<KnowledgeGap> {
 
     for tech in &declared_tech {
         let tech_lower = tech.to_lowercase();
-        // Find the most recent item mentioning this tech
+        // Word-boundary aware: match "react" but not "reactive" or "react-native".
+        // SQLite has no regex, so we check 4 boundary patterns:
+        //   exact title, start-of-title, end-of-title, mid-title with spaces.
         let last_seen: Option<i64> = conn
             .query_row(
                 "SELECT CAST(julianday('now') - julianday(MAX(created_at)) AS INTEGER)
                  FROM source_items
-                 WHERE LOWER(title) LIKE ?1",
-                rusqlite::params![format!("%{}%", tech_lower)],
+                 WHERE LOWER(title) = ?1
+                    OR LOWER(title) LIKE ?2
+                    OR LOWER(title) LIKE ?3
+                    OR LOWER(title) LIKE ?4",
+                rusqlite::params![
+                    &tech_lower,
+                    format!("{} %", tech_lower),
+                    format!("% {}", tech_lower),
+                    format!("% {} %", tech_lower),
+                ],
                 |row| row.get(0),
             )
             .ok();
@@ -2628,9 +2662,25 @@ mod tests {
         assert_eq!(result[1].title, "CVE in serde");
         assert_eq!(result[2].title, "Breaking: Rust 2027");
 
-        // Remaining items should be in reading section (no corroboration = not watch)
+        // Remaining non-actionable items: score >= 0.7 -> watch, < 0.7 -> reading
         for item in &result[3..] {
-            assert_eq!(item.section.as_deref(), Some("reading"));
+            if item.score >= 0.7 {
+                assert_eq!(
+                    item.section.as_deref(),
+                    Some("watch"),
+                    "{} (score {}) should be watch",
+                    item.title,
+                    item.score
+                );
+            } else {
+                assert_eq!(
+                    item.section.as_deref(),
+                    Some("reading"),
+                    "{} (score {}) should be reading",
+                    item.title,
+                    item.score
+                );
+            }
         }
     }
 
@@ -2688,17 +2738,22 @@ mod tests {
 
     #[test]
     fn test_watch_section_requires_corroboration() {
-        // High-scoring non-actionable item WITHOUT corroboration -> reading, not watch
+        // Score >= 0.7 goes to watch regardless of corroboration (high confidence)
         let mut high_score_no_corrob =
             make_item_with_type("Interesting post", "hackernews", 0.80, Some("blog_post"));
         high_score_no_corrob.corroboration_count = 0;
 
-        // High-scoring non-actionable item WITH corroboration -> watch
-        let mut high_score_corrob =
-            make_item_with_type("Hot topic", "reddit", 0.75, Some("discussion"));
-        high_score_corrob.corroboration_count = 2;
+        // Score 0.5-0.7 with corroboration -> watch
+        let mut mid_score_corrob =
+            make_item_with_type("Hot topic", "reddit", 0.55, Some("discussion"));
+        mid_score_corrob.corroboration_count = 2;
 
-        let items = vec![high_score_no_corrob, high_score_corrob];
+        // Score 0.5-0.7 without corroboration -> reading
+        let mut mid_score_no_corrob =
+            make_item_with_type("Lone signal", "devto", 0.60, Some("blog_post"));
+        mid_score_no_corrob.corroboration_count = 0;
+
+        let items = vec![high_score_no_corrob, mid_score_corrob, mid_score_no_corrob];
         let result = apply_section_split(items);
 
         let interesting = result
@@ -2707,15 +2762,22 @@ mod tests {
             .unwrap();
         assert_eq!(
             interesting.section.as_deref(),
-            Some("reading"),
-            "uncorroborated high-score item goes to reading"
+            Some("watch"),
+            "high-score (>=0.7) item goes to watch even without corroboration"
         );
 
         let hot = result.iter().find(|i| i.title == "Hot topic").unwrap();
         assert_eq!(
             hot.section.as_deref(),
             Some("watch"),
-            "corroborated high-score item goes to watch"
+            "mid-score corroborated item goes to watch"
+        );
+
+        let lone = result.iter().find(|i| i.title == "Lone signal").unwrap();
+        assert_eq!(
+            lone.section.as_deref(),
+            Some("reading"),
+            "mid-score uncorroborated item goes to reading"
         );
     }
 

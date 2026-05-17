@@ -287,7 +287,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
     }
 
     // Fetch fresh content from all sources before scoring.
-    // 90s timeout: one slow/hung source must not stall the entire pipeline.
+    // 120s timeout: allows 20 sources to each attempt with 30s per-adapter timeout.
     emit_progress(
         app,
         "fetch",
@@ -297,7 +297,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
         0,
     );
     match tokio::time::timeout(
-        std::time::Duration::from_secs(90),
+        std::time::Duration::from_secs(120),
         crate::source_fetching::fill_cache_background(app),
     )
     .await
@@ -337,7 +337,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
             emit_progress(app, "fetch_done", 0.15, &msg, 0, 0);
         }
         Err(_) => {
-            warn!(target: "4da::analysis", "Cache fill timed out after 90s, continuing with existing cache");
+            warn!(target: "4da::analysis", "Cache fill timed out after 120s, continuing with existing cache");
             emit_progress(
                 app,
                 "fetch_done",

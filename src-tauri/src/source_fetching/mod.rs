@@ -146,9 +146,11 @@ where
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         let _global_permit = rate_limiter().acquire_global_permit().await;
-        // 15s per-attempt timeout: one hung HTTP connection must not stall all sources
+        // 30s per-attempt timeout: allows multi-item deep-fetch adapters (HN, RSS 100+ feeds)
+        // to complete while still bounding hung connections. Overall pipeline timeout (90-120s)
+        // caps total wall-clock time across all adapters.
         let attempt_result =
-            tokio::time::timeout(std::time::Duration::from_secs(15), fetch_fn()).await;
+            tokio::time::timeout(std::time::Duration::from_secs(30), fetch_fn()).await;
 
         let fetch_result = match attempt_result {
             Ok(r) => r,
@@ -157,10 +159,10 @@ where
                     target: "4da::retry",
                     adapter = adapter_name,
                     attempt,
-                    "Fetch attempt timed out after 15s"
+                    "Fetch attempt timed out after 30s"
                 );
                 Err(SourceError::Network(format!(
-                    "{adapter_name}: fetch timed out after 15s"
+                    "{adapter_name}: fetch timed out after 30s"
                 )))
             }
         };
