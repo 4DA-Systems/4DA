@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 74;
+        const TARGET_VERSION: i64 = 75;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2708,6 +2708,48 @@ impl Database {
                             target: "4da::db",
                             "Fixed source_item_dependencies dedup key — removed ecosystem from unique constraint"
                         );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 75: Stability Detector — learned facet lifecycle with evidence tracking
+            if current_version < 75 {
+                Self::run_versioned_migration(
+                    &conn,
+                    74,
+                    75,
+                    "Phase 75: stability detector (learned facets + evidence)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS learned_facets (
+                                facet_id TEXT PRIMARY KEY,
+                                class TEXT NOT NULL,
+                                key TEXT NOT NULL,
+                                value TEXT NOT NULL,
+                                stability REAL NOT NULL DEFAULT 0.0,
+                                state TEXT NOT NULL DEFAULT 'candidate',
+                                user_state TEXT NOT NULL DEFAULT 'auto',
+                                evidence_count INTEGER NOT NULL DEFAULT 0,
+                                first_seen_at INTEGER NOT NULL,
+                                last_seen_at INTEGER NOT NULL,
+                                UNIQUE(class, key)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_facets_class_state ON learned_facets(class, state);
+                            CREATE INDEX IF NOT EXISTS idx_facets_stability ON learned_facets(stability DESC);
+
+                            CREATE TABLE IF NOT EXISTS facet_evidence (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                facet_id TEXT NOT NULL REFERENCES learned_facets(facet_id) ON DELETE CASCADE,
+                                cue_family TEXT NOT NULL,
+                                evidence_type TEXT NOT NULL,
+                                confidence REAL NOT NULL,
+                                observed_at INTEGER NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_evidence_facet ON facet_evidence(facet_id);
+                            CREATE INDEX IF NOT EXISTS idx_evidence_observed ON facet_evidence(observed_at DESC);",
+                        )?;
+                        info!(target: "4da::db", "Created learned_facets + facet_evidence tables for stability detector");
                         Ok(())
                     },
                 )?;

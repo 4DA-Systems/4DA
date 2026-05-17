@@ -2399,7 +2399,11 @@ mod tests {
                 scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MIN,
                 scoring_config::ENGAGEMENT_WEIGHTS_CLAMP_MAX,
             );
-        assert!(mult > 1.0, "Positive affinity should produce boost: {}", mult);
+        assert!(
+            mult > 1.0,
+            "Positive affinity should produce boost: {}",
+            mult
+        );
         assert!(mult <= 1.6, "Should not exceed clamp max: {}", mult);
     }
 

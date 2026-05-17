@@ -311,6 +311,32 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         apply_affinity_adjustments(&mut interests, &affinities);
     }
 
+    // Stability Detector — merge active/provisional facets into scoring signals
+    {
+        let facets = crate::stability_detector::get_active_and_provisional(&shared_conn);
+        for facet in &facets {
+            let weight = match facet.state {
+                crate::stability_detector::FacetState::Active => 1.0,
+                crate::stability_detector::FacetState::Provisional => 0.5,
+                _ => 0.0,
+            };
+            match facet.class {
+                crate::stability_detector::FacetClass::Interest
+                | crate::stability_detector::FacetClass::TopicAffinity => {
+                    let boost = 0.15 * weight * (facet.stability / 2.0).min(1.0);
+                    feedback_boosts
+                        .entry(facet.key.clone())
+                        .and_modify(|v| *v = (*v + boost).min(1.0))
+                        .or_insert(boost);
+                }
+                crate::stability_detector::FacetClass::Veto => {
+                    feedback_boosts.insert(facet.key.clone(), -1.0);
+                }
+                _ => {}
+            }
+        }
+    }
+
     if effective_feedback_count < 10 {
         info!(target: "4da::scoring",
             explicit = feedback_interaction_count,

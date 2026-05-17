@@ -36,6 +36,8 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         )
     };
 
+    let gate_policy = crate::scheduler_gate::current_policy();
+
     Ok(serde_json::json!({
         "enabled": state.is_enabled(),
         "interval_secs": state.get_interval(),
@@ -47,7 +49,8 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         "total_checks": state.total_checks.load(std::sync::atomic::Ordering::Relaxed),
         "notification_threshold": notification_threshold,
         "close_to_tray": close_to_tray,
-        "notification_style": notification_style
+        "notification_style": notification_style,
+        "gate_policy": gate_policy.to_string()
     }))
 }
 
