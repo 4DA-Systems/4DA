@@ -343,7 +343,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       {dataFreshness?.is_stale && (
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shrink-0" />
-          {t('blindspots.staleData')}
+          {dataFreshness.newest_item_age_hours != null
+            ? t('blindspots.staleDataAge', { days: Math.floor(dataFreshness.newest_item_age_hours / 24) })
+            : t('blindspots.staleData')}
         </div>
       )}
       {lastDismissed !== null && (
