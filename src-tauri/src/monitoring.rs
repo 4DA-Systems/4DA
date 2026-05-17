@@ -312,12 +312,18 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 .as_secs();
 
             // ================================================================
+            // Scheduler Gate — resource-aware throttling
+            // ================================================================
+            let gate_policy = crate::scheduler_gate::update_policy();
+
+            // ================================================================
             // Background Jobs (run regardless of monitoring enabled state)
             // ================================================================
 
-            // Health check - every 5 minutes
+            // Health check - every 5 minutes (Critical — always runs)
             let last_health = state.last_health_check.load(Ordering::Relaxed);
-            if now - last_health >= HEALTH_CHECK_INTERVAL {
+            if now - last_health >= crate::scheduler_gate::effective_interval(HEALTH_CHECK_INTERVAL)
+            {
                 mark_job_complete(
                     &state.last_health_check,
                     now,
@@ -469,7 +475,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
             // Anomaly detection - every hour + anomaly bridge (Fix 5)
             let last_anomaly = state.last_anomaly_check.load(Ordering::Relaxed);
-            if now - last_anomaly >= ANOMALY_CHECK_INTERVAL {
+            if now - last_anomaly
+                >= crate::scheduler_gate::effective_interval(ANOMALY_CHECK_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Normal)
+            {
                 mark_job_complete(
                     &state.last_anomaly_check,
                     now,
@@ -534,9 +543,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
-            // CVE scan — Developer Immune System (every 30 minutes)
+            // CVE scan — Developer Immune System (Critical — security always runs)
             let last_cve = state.last_cve_scan.load(Ordering::Relaxed);
-            if now - last_cve >= CVE_SCAN_INTERVAL {
+            if now - last_cve >= crate::scheduler_gate::effective_interval(CVE_SCAN_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Critical)
+            {
                 mark_job_complete(
                     &state.last_cve_scan,
                     now,
@@ -548,11 +559,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 });
             }
 
-            // Dependency health check — every 6 hours (Layer 5)
-            // Classifies dependency health from local DB data and creates
-            // proactive decision windows for stale or vulnerable packages.
+            // Dependency health check — every 6 hours (Layer 5, Normal priority)
             let last_dep_health = state.last_dep_health_check.load(Ordering::Relaxed);
-            if now - last_dep_health >= DEP_HEALTH_INTERVAL {
+            if now - last_dep_health
+                >= crate::scheduler_gate::effective_interval(DEP_HEALTH_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Normal)
+            {
                 mark_job_complete(
                     &state.last_dep_health_check,
                     now,
@@ -626,9 +638,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
-            // Behavior decay - daily
+            // Behavior decay - daily (Low priority — can wait on battery)
             let last_decay = state.last_decay.load(Ordering::Relaxed);
-            if now - last_decay >= BEHAVIOR_DECAY_INTERVAL {
+            if now - last_decay
+                >= crate::scheduler_gate::effective_interval(BEHAVIOR_DECAY_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+            {
                 mark_job_complete(
                     &state.last_decay,
                     now,
@@ -858,9 +873,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
-            // Weekly accuracy + timeline recording
+            // Weekly accuracy + timeline recording (Low priority)
             let last_accuracy = state.last_accuracy_check.load(Ordering::Relaxed);
-            if now - last_accuracy >= ACCURACY_RECORD_INTERVAL {
+            if now - last_accuracy
+                >= crate::scheduler_gate::effective_interval(ACCURACY_RECORD_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+            {
                 mark_job_complete(
                     &state.last_accuracy_check,
                     now,
