@@ -2790,6 +2790,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} 个源适配器异常",
   "blindspots.sourceHealth.failing_other": "{{count}} 个源适配器异常",
   "blindspots.sourceHealth.stale": "({{count}} 个已过期)",
+  "blindspots.staleData": "72小时内没有新的来源项目或成功的来源检查。盲点分析可能已过时。",
   "blindspots.status.blindSpot": "盲区",
   "blindspots.status.drifting": "偏移中",
   "blindspots.status.covered": "已覆盖",

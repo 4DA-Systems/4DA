@@ -199,4 +199,33 @@ describe('trust-feedback', () => {
     expect(markSentCalls.length).toBeGreaterThanOrEqual(1);
     expect(markSentCalls[0]![1]).toEqual(expect.objectContaining({ outboxId: 42 }));
   });
+
+  it('keeps localStorage fallback when only some queued events reach SQLite', async () => {
+    mockedCmd.mockImplementation(((command: string, params?: unknown) => {
+      if (command === 'record_intelligence_feedback') {
+        return Promise.reject(new Error('Backend unavailable'));
+      }
+      if (command === 'queue_feedback_event') {
+        const signalId = (params as { signalId?: string } | undefined)?.signalId;
+        return signalId === 'sqlite-ok'
+          ? Promise.resolve(42)
+          : Promise.reject(new Error('SQLite unavailable'));
+      }
+      return Promise.resolve(null);
+    }) as typeof cmd);
+
+    recordTrustEvent({ eventType: 'validated', signalId: 'sqlite-ok' });
+    recordTrustEvent({ eventType: 'validated', signalId: 'sqlite-fail' });
+
+    await vi.waitFor(() => {
+      expect(getPendingFeedbackCount()).toBe(2);
+    });
+
+    await vi.waitFor(() => {
+      const stored = localStorage.getItem('4da_feedback_queue');
+      expect(stored).toBeTruthy();
+      const parsed = JSON.parse(stored!);
+      expect(parsed.some((item: { event: { signalId?: string } }) => item.event.signalId === 'sqlite-fail')).toBe(true);
+    });
+  });
 });

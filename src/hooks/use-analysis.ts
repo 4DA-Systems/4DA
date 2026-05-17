@@ -158,7 +158,7 @@ export function useAnalysis(
           }
         }),
 
-        listen<{ title: string; total_relevant: number; items: Array<{ title: string; source_type: string; score: number; signal_type?: string }>; data_freshness?: { newest_item_age_hours: number | null; items_last_24h: number; items_last_72h: number; is_stale: boolean } | null }>('morning-briefing-ready', (event) => {
+        listen<{ title: string; total_relevant: number; items: Array<{ title: string; source_type: string; score: number; signal_type?: string }>; data_freshness?: { newest_item_age_hours: number | null; items_last_24h: number; items_last_72h: number; newest_source_check_age_hours: number | null; source_checks_last_24h: number; source_checks_last_72h: number; failing_sources: number; stale_sources: number; is_stale: boolean } | null }>('morning-briefing-ready', (event) => {
           const { title, total_relevant, items, data_freshness } = event.payload;
           const isStale = data_freshness?.is_stale ?? false;
           if (total_relevant > 0 || isStale) {
@@ -180,6 +180,11 @@ export function useAnalysis(
                 newest_item_age_hours: data_freshness.newest_item_age_hours,
                 items_last_24h: data_freshness.items_last_24h,
                 items_last_72h: data_freshness.items_last_72h,
+                newest_source_check_age_hours: data_freshness.newest_source_check_age_hours,
+                source_checks_last_24h: data_freshness.source_checks_last_24h,
+                source_checks_last_72h: data_freshness.source_checks_last_72h,
+                failing_sources: data_freshness.failing_sources,
+                stale_sources: data_freshness.stale_sources,
                 is_stale: data_freshness.is_stale,
               } : null,
             });

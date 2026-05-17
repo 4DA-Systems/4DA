@@ -61,15 +61,15 @@ pub fn link_recent_items(db: &Database) -> Result<usize> {
     Ok(total)
 }
 
-/// Backfill: link source items that have no dependency links yet.
+/// Backfill: link source items to known dependencies.
 ///
-/// Processes every unlinked source item in batches of 500 (no date filter).
-/// Items that already have rows in `source_item_dependencies` are naturally
-/// skipped by the LEFT JOIN ... WHERE sid.id IS NULL query pattern.
+/// Processes source items in batches of 500 (no date filter). The insert path
+/// is an idempotent upsert, so this safely revisits partially-linked rows and
+/// can upgrade weak/incomplete links when stronger evidence appears.
 ///
-/// Safe to call on every startup — only processes items missing links.
+/// Safe to call on every startup; no-op conflicts are filtered by the upsert.
 ///
-/// Returns the total number of links created.
+/// Returns the total number of rows inserted or materially upgraded.
 pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     let conn = db.conn.lock();
 
@@ -83,7 +83,7 @@ pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     let batch_size = 500;
 
     loop {
-        let batch = load_unlinked_items_after(&conn, batch_size, last_id)?;
+        let batch = load_items_after(&conn, batch_size, last_id)?;
         if batch.is_empty() {
             break;
         }
@@ -113,7 +113,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
     let conn = db.conn.lock();
 
     let mut select_stmt = conn.prepare(
-        "SELECT sid.source_item_id, sid.package_name, sid.ecosystem, sid.match_type, sid.confidence,
+        "SELECT sid.id, sid.source_item_id, sid.package_name, sid.ecosystem, sid.match_type,
                 si.title, si.source_type, si.source_id, si.url
          FROM source_item_dependencies sid
          JOIN source_items si ON si.id = sid.source_item_id
@@ -122,9 +122,9 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
     )?;
 
     struct RepairRow {
+        id: i64,
         source_item_id: i64,
         package_name: String,
-        ecosystem: Option<String>,
         match_type: String,
         title: String,
         source_type: String,
@@ -135,18 +135,17 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
     let rows: Vec<RepairRow> = select_stmt
         .query_map([], |row| {
             Ok(RepairRow {
-                source_item_id: row.get(0)?,
-                package_name: row.get(1)?,
-                ecosystem: row.get(2)?,
-                match_type: row.get(3)?,
+                id: row.get(0)?,
+                source_item_id: row.get(1)?,
+                package_name: row.get(2)?,
+                match_type: row.get(4)?,
                 title: row.get(5)?,
                 source_type: row.get(6)?,
                 source_id: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
                 url: row.get(8)?,
             })
         })?
-        .filter_map(|r| r.ok())
-        .collect();
+        .collect::<rusqlite::Result<Vec<_>>>()?;
 
     if rows.is_empty() {
         return Ok(0);
@@ -154,7 +153,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
 
     let mut update_stmt = conn.prepare(
         "UPDATE source_item_dependencies SET evidence_text = ?1, source_url = ?2
-         WHERE source_item_id = ?3 AND package_name = ?4 AND ecosystem IS ?5",
+         WHERE id = ?3",
     )?;
 
     let mut repaired = 0usize;
@@ -171,13 +170,7 @@ pub fn repair_evidence(db: &Database) -> Result<usize> {
         let evidence = build_evidence_text(&row.match_type, &item, &row.package_name);
         let source_url = row.url.as_deref();
 
-        match update_stmt.execute(params![
-            evidence,
-            source_url,
-            row.source_item_id,
-            row.package_name,
-            row.ecosystem,
-        ]) {
+        match update_stmt.execute(params![evidence, source_url, row.id,]) {
             Ok(changed) => repaired += changed,
             Err(e) => {
                 debug!(
@@ -235,9 +228,7 @@ fn load_dependency_names(conn: &rusqlite::Connection) -> Result<Vec<String>> {
     let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
     let mut names = Vec::new();
     for name in rows {
-        if let Ok(n) = name {
-            names.push(n);
-        }
+        names.push(name?);
     }
     Ok(names)
 }
@@ -271,24 +262,21 @@ fn load_unlinked_items(
     })?;
     let mut items = Vec::new();
     for row in rows {
-        if let Ok(item) = row {
-            items.push(item);
-        }
+        items.push(row?);
     }
     Ok(items)
 }
 
 /// Keyset-paginated loader for the backfill path (no date filter).
 /// Uses WHERE si.id > last_id instead of OFFSET to avoid phantom reads.
-fn load_unlinked_items_after(
+fn load_items_after(
     conn: &rusqlite::Connection,
     limit: i64,
     after_id: i64,
 ) -> Result<Vec<UnlinkedItem>> {
     let sql = "SELECT si.id, si.title, si.source_type, si.content_type, si.source_id, si.url
                FROM source_items si
-               LEFT JOIN source_item_dependencies sid ON sid.source_item_id = si.id
-               WHERE sid.id IS NULL AND si.id > ?2
+               WHERE si.id > ?2
                ORDER BY si.id ASC
                LIMIT ?1";
     let mut stmt = conn.prepare(sql)?;
@@ -304,25 +292,42 @@ fn load_unlinked_items_after(
     })?;
     let mut items = Vec::new();
     for row in rows {
-        if let Ok(item) = row {
-            items.push(item);
-        }
+        items.push(row?);
     }
     Ok(items)
 }
 
 /// Core linking logic: for each item, check every dep for a match and
-/// insert a `source_item_dependencies` row for each hit.
+/// upsert a `source_item_dependencies` row for each hit.
 ///
-/// Returns the number of link rows created.
+/// Returns the number of link rows inserted or materially upgraded.
 fn link_items_to_deps(
     conn: &rusqlite::Connection,
     items: &[UnlinkedItem],
     dep_names: &[String],
 ) -> Result<usize> {
-    let insert_sql = "INSERT OR IGNORE INTO source_item_dependencies
+    let insert_sql = "INSERT INTO source_item_dependencies
                       (source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url)
-                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
+                      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                      ON CONFLICT(source_item_id, package_name, COALESCE(ecosystem, ''))
+                      DO UPDATE SET
+                         match_type = CASE
+                             WHEN excluded.confidence > source_item_dependencies.confidence
+                             THEN excluded.match_type
+                             ELSE source_item_dependencies.match_type
+                         END,
+                         confidence = MAX(source_item_dependencies.confidence, excluded.confidence),
+                         evidence_text = CASE
+                             WHEN excluded.confidence > source_item_dependencies.confidence
+                             THEN COALESCE(NULLIF(excluded.evidence_text, ''), source_item_dependencies.evidence_text)
+                             ELSE COALESCE(NULLIF(source_item_dependencies.evidence_text, ''), NULLIF(excluded.evidence_text, ''))
+                         END,
+                         source_url = COALESCE(NULLIF(source_item_dependencies.source_url, ''), NULLIF(excluded.source_url, ''))
+                      WHERE excluded.confidence > source_item_dependencies.confidence
+                         OR ((source_item_dependencies.evidence_text IS NULL OR source_item_dependencies.evidence_text = '')
+                             AND excluded.evidence_text IS NOT NULL AND excluded.evidence_text <> '')
+                         OR ((source_item_dependencies.source_url IS NULL OR source_item_dependencies.source_url = '')
+                             AND excluded.source_url IS NOT NULL AND excluded.source_url <> '')";
     let mut stmt = conn.prepare(insert_sql)?;
     let mut count = 0usize;
 
@@ -342,7 +347,7 @@ fn link_items_to_deps(
                             item_id = item.id,
                             dep = dep_name,
                             error = %e,
-                            "Failed to insert dep link"
+                            "Failed to upsert dep link"
                         );
                     }
                 }
@@ -768,6 +773,57 @@ mod tests {
             })
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_link_items_upgrades_existing_weak_row_with_exact_evidence() {
+        use crate::test_utils::test_db;
+
+        let db = test_db();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO source_items (id, source_type, source_id, url, title, content, content_hash, embedding)
+             VALUES (1, 'npm_registry', 'axios', 'https://www.npmjs.com/package/axios', 'axios 2.0 released', '', 'hash1', zeroblob(1536))",
+            [],
+        )
+        .expect("insert source_item");
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (1, 'axios', 'npm', 'title_heuristic', 0.50)",
+            [],
+        )
+        .expect("insert weak link");
+
+        let items = vec![UnlinkedItem {
+            id: 1,
+            title: "axios 2.0 released".into(),
+            source_type: "npm_registry".into(),
+            content_type: None,
+            source_id: "axios".into(),
+            url: Some("https://www.npmjs.com/package/axios".into()),
+        }];
+        let dep_names = vec!["axios".to_string()];
+
+        let changed = link_items_to_deps(&conn, &items, &dep_names).expect("upsert exact link");
+        assert_eq!(changed, 1);
+
+        let (mt, conf, evidence, source_url): (String, f64, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT match_type, confidence, evidence_text, source_url
+                 FROM source_item_dependencies
+                 WHERE source_item_id = 1 AND package_name = 'axios'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!(mt, "exact_registry");
+        assert!((conf - 0.95).abs() < f64::EPSILON);
+        assert!(evidence.unwrap().contains("Registry source"));
+        assert_eq!(
+            source_url.as_deref(),
+            Some("https://www.npmjs.com/package/axios")
+        );
     }
 
     #[test]

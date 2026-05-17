@@ -2789,6 +2789,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} adattatore sorgente in errore",
   "blindspots.sourceHealth.failing_other": "{{count}} adattatori sorgente in errore",
   "blindspots.sourceHealth.stale": "({{count}} obsoleti)",
+  "blindspots.staleData": "Nessun elemento sorgente recente o controlli sorgente riusciti in 72h. L'analisi dei punti ciechi potrebbe essere obsoleta.",
   "blindspots.status.blindSpot": "Punto cieco",
   "blindspots.status.drifting": "In deriva",
   "blindspots.status.covered": "Coperto",

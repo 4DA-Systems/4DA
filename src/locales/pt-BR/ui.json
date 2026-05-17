@@ -234,6 +234,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} adaptador de fonte com falha",
   "blindspots.sourceHealth.failing_other": "{{count}} adaptadores de fonte com falha",
   "blindspots.sourceHealth.stale": "({{count}} desatualizados)",
+  "blindspots.staleData": "Nenhum item de fonte recente ou verificações de fonte bem-sucedidas em 72h. A análise de pontos cegos pode estar desatualizada.",
   "blindspots.status.blindSpot": "Ponto cego",
   "blindspots.status.covered": "Coberto",
   "blindspots.status.drifting": "Desviando",

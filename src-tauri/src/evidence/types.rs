@@ -368,6 +368,11 @@ pub struct EvidenceFeed {
     /// Lets the UI say "27 weak matches hidden" so the denominator is transparent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weak_match_count: Option<usize>,
+
+    /// Optional source freshness summary for lens surfaces whose correctness
+    /// depends on recent source ingestion/checks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_freshness: Option<crate::monitoring_briefing::DataFreshness>,
 }
 
 impl EvidenceFeed {
@@ -387,6 +392,7 @@ impl EvidenceFeed {
             score: None,
             total_tracked: None,
             weak_match_count: None,
+            data_freshness: None,
         }
     }
 

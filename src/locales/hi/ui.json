@@ -232,6 +232,7 @@
   "blindspots.sourceHealth.failing_one": "{{count}} स्रोत एडाप्टर विफल",
   "blindspots.sourceHealth.failing_other": "{{count}} स्रोत एडाप्टर विफल",
   "blindspots.sourceHealth.stale": "({{count}} पुराने)",
+  "blindspots.staleData": "72 घंटों में कोई नया स्रोत आइटम या सफल स्रोत जांच नहीं। ब्लाइंड स्पॉट विश्लेषण पुराना हो सकता है।",
   "blindspots.status.blindSpot": "अंधा स्थान",
   "blindspots.status.covered": "कवर किया गया",
   "blindspots.status.drifting": "विचलित",

@@ -144,8 +144,10 @@ export async function flushPendingFeedback(): Promise<void> {
       }
     }
 
-    pendingQueue = failed;
-    persistQueueFallback();
+    const processed = new Set(toProcess);
+    const queuedDuringFlush = pendingQueue.filter(q => !processed.has(q));
+    pendingQueue = mergeQueuedFeedback([...failed, ...queuedDuringFlush]);
+    syncLocalStorageFallback();
   } finally {
     flushInProgress = false;
   }
@@ -208,7 +210,7 @@ function enqueue(event: TrustFeedbackEvent): void {
       if (typeof rowId === 'number' && rowId > 0) {
         queued.id = rowId;
       }
-      clearLocalStorageFallback();
+      syncLocalStorageFallback();
     })
     .catch(() => {
       // SQLite outbox failed -- localStorage already has the data, nothing to do
@@ -237,13 +239,57 @@ function clearLocalStorageFallback(): void {
   }
 }
 
+function syncLocalStorageFallback(): void {
+  if (pendingQueue.length === 0 || pendingQueue.every(q => q.id != null)) {
+    clearLocalStorageFallback();
+  } else {
+    persistQueueFallback();
+  }
+}
+
+function isQueuedFeedbackEvent(item: unknown): item is QueuedFeedbackEvent {
+  return (
+    typeof item === 'object' &&
+    item !== null &&
+    'event' in item &&
+    'queuedAt' in item &&
+    'attempts' in item
+  );
+}
+
+function loadLocalStorageFallback(): QueuedFeedbackEvent[] {
+  try {
+    const stored = localStorage.getItem(QUEUE_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed.filter(isQueuedFeedbackEvent) : [];
+  } catch {
+    localStorage.removeItem(QUEUE_STORAGE_KEY);
+    return [];
+  }
+}
+
+function mergeQueuedFeedback(items: QueuedFeedbackEvent[]): QueuedFeedbackEvent[] {
+  const byKey = new Map<string, QueuedFeedbackEvent>();
+  for (const item of items) {
+    const key = dedupKey(item.event);
+    const existing = byKey.get(key);
+    if (!existing || (existing.id == null && item.id != null)) {
+      byKey.set(key, item);
+    }
+  }
+  return Array.from(byKey.values()).slice(-MAX_QUEUE_SIZE);
+}
+
 /** Load pending events from SQLite outbox, falling back to localStorage */
 async function loadQueue(): Promise<void> {
+  const fallbackQueue = loadLocalStorageFallback();
+
   // Primary: load from SQLite outbox
   try {
     const rows = await cmd('get_pending_feedback');
     if (rows && rows.length > 0) {
-      pendingQueue = rows.map((row: { id: number; eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string; queuedAt: number; attempts: number }) => ({
+      const sqliteQueue = rows.map((row: { id: number; eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string; queuedAt: number; attempts: number }) => ({
         id: row.id,
         event: {
           eventType: row.eventType as TrustFeedbackEvent['eventType'],
@@ -258,35 +304,16 @@ async function loadQueue(): Promise<void> {
         queuedAt: row.queuedAt,
         attempts: row.attempts,
       }));
-      // SQLite outbox has data -- clear any stale localStorage
-      clearLocalStorageFallback();
+      pendingQueue = mergeQueuedFeedback([...sqliteQueue, ...fallbackQueue]);
+      syncLocalStorageFallback();
       return;
     }
   } catch {
     // SQLite outbox unavailable -- fall through to localStorage
   }
 
-  // Fallback: load from localStorage
-  try {
-    const stored = localStorage.getItem(QUEUE_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        pendingQueue = parsed.filter(
-          (item: unknown): item is QueuedFeedbackEvent =>
-            typeof item === 'object' &&
-            item !== null &&
-            'event' in item &&
-            'queuedAt' in item &&
-            'attempts' in item
-        );
-      }
-    }
-  } catch {
-    // Corrupted data -- start fresh
-    pendingQueue = [];
-    localStorage.removeItem(QUEUE_STORAGE_KEY);
-  }
+  pendingQueue = mergeQueuedFeedback(fallbackQueue);
+  syncLocalStorageFallback();
 }
 
 // ============================================================================

@@ -7,18 +7,38 @@
  */
 export type DataFreshness = { 
 /**
- * Hours since the newest item was ingested (None if table is empty).
+ * Hours since the newest item was created or refreshed (None if table is empty).
  */
 newest_item_age_hours: number | null, 
 /**
- * Number of source items created in the last 24 hours.
+ * Number of source items created or refreshed in the last 24 hours.
  */
 items_last_24h: number, 
 /**
- * Number of source items created in the last 72 hours.
+ * Number of source items created or refreshed in the last 72 hours.
  */
 items_last_72h: number, 
 /**
- * True when items_last_72h == 0 — the system has received no data in 3 days.
+ * Hours since any source adapter last succeeded (None if health has never run).
+ */
+newest_source_check_age_hours: number | null, 
+/**
+ * Number of successful source checks in the last 24 hours.
+ */
+source_checks_last_24h: number, 
+/**
+ * Number of successful source checks in the last 72 hours.
+ */
+source_checks_last_72h: number, 
+/**
+ * Source adapters currently reporting failures or open circuits.
+ */
+failing_sources: number, 
+/**
+ * Source adapters with no successful check in more than seven days.
+ */
+stale_sources: number, 
+/**
+ * True when neither source items nor successful source checks have appeared in 3 days.
  */
 is_stale: boolean, };
