@@ -697,3 +697,227 @@ fn test_extract_registry_package_formats() {
     // non-registry
     assert_eq!(extract_registry_package("hn", "12345"), None);
 }
+
+// ============================================================================
+// Word boundary: compound package names must NOT match partial segments
+// ============================================================================
+
+#[test]
+fn test_title_rejects_compound_package_partial() {
+    // "react" must NOT match in "react-native" — hyphen is package-internal
+    assert_eq!(
+        matches_dep_in_title("react-native 0.74 released", "react"),
+        None,
+        "react must not match inside react-native"
+    );
+    assert_eq!(
+        matches_dep_in_title("upgrade react-query to v5", "react"),
+        None,
+        "react must not match inside react-query"
+    );
+    // underscore variant
+    assert_eq!(
+        matches_dep_in_title("async_std performance improvements", "async"),
+        None,
+        "async must not match inside async_std"
+    );
+    // dot-separated (e.g. Java packages, Go modules)
+    assert_eq!(
+        matches_dep_in_title("com.google.gson vulnerability", "google"),
+        None,
+        "google must not match inside com.google.gson"
+    );
+}
+
+#[test]
+fn test_title_matches_compound_package_exact() {
+    // Full compound name SHOULD match
+    assert_eq!(
+        matches_dep_in_title("react-native 0.74 released", "react-native"),
+        Some(0.50)
+    );
+    assert_eq!(
+        matches_dep_in_title("upgrade to async_trait 0.2", "async-trait"),
+        Some(0.50),
+        "normalized hyphen variant should match underscore in title"
+    );
+}
+
+#[test]
+fn test_title_matches_when_first_occurrence_is_substring() {
+    // "reaction about react" — first find("react") hits "reaction" (invalid),
+    // but the fix iterates to find the standalone "react" later.
+    assert_eq!(
+        matches_dep_in_title("reaction to the new react release", "react"),
+        Some(0.50),
+        "should find standalone match even if first occurrence is a substring"
+    );
+}
+
+#[test]
+fn test_title_at_boundary_with_various_separators() {
+    // Parentheses, brackets, colons, slashes are valid boundaries
+    assert_eq!(
+        matches_dep_in_title("(react) v19 released", "react"),
+        Some(0.50)
+    );
+    assert_eq!(
+        matches_dep_in_title("libraries: react, vue, angular", "react"),
+        Some(0.50)
+    );
+    assert_eq!(
+        matches_dep_in_title("lib/react/core update", "react"),
+        Some(0.50)
+    );
+}
+
+// ============================================================================
+// Helper function unit tests
+// ============================================================================
+
+#[test]
+fn test_extract_affected_package_name() {
+    assert_eq!(extract_affected_package_name("tokio (crates.io)"), "tokio");
+    assert_eq!(extract_affected_package_name("react (npm)"), "react");
+    assert_eq!(
+        extract_affected_package_name("  @tanstack/react-query (npm) "),
+        "@tanstack/react-query"
+    );
+    // No ecosystem marker
+    assert_eq!(extract_affected_package_name("serde"), "serde");
+    assert_eq!(extract_affected_package_name("  lodash  "), "lodash");
+}
+
+#[test]
+fn test_exact_package_name_match() {
+    assert!(exact_package_name_match("react", "react"));
+    assert!(exact_package_name_match("React", "react"));
+    assert!(exact_package_name_match("async_trait", "async-trait"));
+    assert!(exact_package_name_match("Async-Trait", "async_trait"));
+    // Scoped packages: both @ stripped, then compared
+    assert!(exact_package_name_match(
+        "@tanstack/react-query",
+        "@tanstack/react-query"
+    ));
+    assert!(exact_package_name_match(
+        "tanstack/react-query",
+        "@tanstack/react-query"
+    ));
+    // Non-matches
+    assert!(!exact_package_name_match("react", "react-native"));
+    assert!(!exact_package_name_match("serde", "serde-json"));
+}
+
+#[test]
+fn test_normalize_package_for_exact_match() {
+    assert_eq!(normalize_package_for_exact_match("React"), "react");
+    assert_eq!(
+        normalize_package_for_exact_match("async_trait"),
+        "async-trait"
+    );
+    assert_eq!(
+        normalize_package_for_exact_match("@tanstack/react-query"),
+        "tanstack/react-query"
+    );
+    assert_eq!(normalize_package_for_exact_match("  Serde  "), "serde");
+}
+
+#[test]
+fn test_infer_ecosystem() {
+    let npm_item = UnlinkedItem {
+        id: 1,
+        title: String::new(),
+        content: String::new(),
+        source_type: "npm_registry".into(),
+        content_type: None,
+        source_id: String::new(),
+        url: None,
+    };
+    assert_eq!(infer_ecosystem(&npm_item, "react"), Some("npm".into()));
+
+    let crates_item = UnlinkedItem {
+        id: 2,
+        title: String::new(),
+        content: String::new(),
+        source_type: "crates_io".into(),
+        content_type: None,
+        source_id: String::new(),
+        url: None,
+    };
+    assert_eq!(
+        infer_ecosystem(&crates_item, "serde"),
+        Some("crates.io".into())
+    );
+
+    let hn_item = UnlinkedItem {
+        id: 3,
+        title: String::new(),
+        content: String::new(),
+        source_type: "hn".into(),
+        content_type: None,
+        source_id: String::new(),
+        url: None,
+    };
+    assert_eq!(infer_ecosystem(&hn_item, "react"), None);
+}
+
+#[test]
+fn test_advisory_affected_status_edge_cases() {
+    // Multiple packages
+    let content = "Affected: lodash (npm), underscore (npm)";
+    assert!(matches!(
+        advisory_affected_status(content, "lodash"),
+        AffectedStatus::Matched
+    ));
+    assert!(matches!(
+        advisory_affected_status(content, "underscore"),
+        AffectedStatus::Matched
+    ));
+    assert!(matches!(
+        advisory_affected_status(content, "react"),
+        AffectedStatus::MetadataExistsNoMatch
+    ));
+
+    // Unknown treated as no metadata
+    let content = "Affected: unknown";
+    assert!(matches!(
+        advisory_affected_status(content, "react"),
+        AffectedStatus::NoMetadata
+    ));
+
+    // Empty affected line treated as no metadata
+    let content = "Affected: ";
+    assert!(matches!(
+        advisory_affected_status(content, "react"),
+        AffectedStatus::NoMetadata
+    ));
+
+    // No Affected: line at all
+    let content = "This is a security advisory about a buffer overflow.";
+    assert!(matches!(
+        advisory_affected_status(content, "react"),
+        AffectedStatus::NoMetadata
+    ));
+}
+
+#[test]
+fn test_is_package_boundary_chars() {
+    // These are package-internal (NOT boundaries)
+    assert!(!is_package_boundary(b'-'));
+    assert!(!is_package_boundary(b'_'));
+    assert!(!is_package_boundary(b'.'));
+    assert!(!is_package_boundary(b'@'));
+    assert!(!is_package_boundary(b'a'));
+    assert!(!is_package_boundary(b'Z'));
+    assert!(!is_package_boundary(b'9'));
+
+    // These ARE valid boundaries
+    assert!(is_package_boundary(b' '));
+    assert!(is_package_boundary(b'/'));
+    assert!(is_package_boundary(b'('));
+    assert!(is_package_boundary(b')'));
+    assert!(is_package_boundary(b':'));
+    assert!(is_package_boundary(b','));
+    assert!(is_package_boundary(b'['));
+    assert!(is_package_boundary(b']'));
+}

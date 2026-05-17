@@ -612,33 +612,45 @@ fn extract_registry_package(source_type: &str, source_id: &str) -> Option<String
 /// Check if a dependency name appears in a title string.
 ///
 /// Returns `Some(confidence)` where:
-/// - 0.50 for a whole-token match (preceded/followed by non-alphanumeric)
+/// - 0.50 for a whole-token match (preceded/followed by a package-name boundary)
 ///
 /// Normalizes both hyphens and underscores so "async-trait" and
 /// "async_trait" compare equal.
+///
+/// A "package-name boundary" is a character that is NOT alphanumeric, hyphen,
+/// underscore, dot, or `@` — those characters are package-name-internal and
+/// must NOT be treated as word separators. This prevents "react" from matching
+/// inside "react-native" or "react_query".
 fn matches_dep_in_title(title: &str, dep_name: &str) -> Option<f64> {
     let title_lower = title.to_lowercase();
     let dep_lower = dep_name.to_lowercase();
     let dep_normalized = dep_lower.replace('-', "_");
     let dep_hyphen = dep_lower.replace('_', "-");
 
-    // Word-boundary match (higher confidence)
     for variant in [&dep_lower, &dep_normalized, &dep_hyphen] {
         if variant.is_empty() {
             continue;
         }
-        if let Some(pos) = title_lower.find(variant.as_str()) {
-            let before_ok = pos == 0 || !title_lower.as_bytes()[pos - 1].is_ascii_alphanumeric();
-            let after_pos = pos + variant.len();
-            let after_ok = after_pos >= title_lower.len()
-                || !title_lower.as_bytes()[after_pos].is_ascii_alphanumeric();
+        let hay = title_lower.as_bytes();
+        let needle = variant.as_bytes();
+        let mut start = 0;
+        while let Some(rel) = title_lower[start..].find(variant.as_str()) {
+            let pos = start + rel;
+            let before_ok = pos == 0 || is_package_boundary(hay[pos - 1]);
+            let after_pos = pos + needle.len();
+            let after_ok = after_pos >= hay.len() || is_package_boundary(hay[after_pos]);
             if before_ok && after_ok {
                 return Some(0.50);
             }
+            start = pos + 1;
         }
     }
 
     None
+}
+
+fn is_package_boundary(b: u8) -> bool {
+    !b.is_ascii_alphanumeric() && b != b'-' && b != b'_' && b != b'.' && b != b'@'
 }
 
 /// Generic/common dependency names are too noisy for title-only matching.
