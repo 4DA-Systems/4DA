@@ -61,7 +61,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
                 // Record health so staleness checks reflect this fetch
                 db.record_feed_success(st, st).ok();
-                db.record_source_health(st, true, filtered as i64, 0, None).ok();
+                db.record_source_health(st, true, filtered as i64, 0, None)
+                    .ok();
 
                 for item in items {
                     if db
@@ -90,7 +91,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 summary.failed += 1;
                 let err_msg = e.to_string();
                 db.record_feed_failure(st, st, &err_msg).ok();
-                db.record_source_health(st, false, 0, 0, Some(&err_msg)).ok();
+                db.record_source_health(st, false, 0, 0, Some(&err_msg))
+                    .ok();
             }
         }
 

@@ -577,18 +577,14 @@ pub(crate) fn build_enriched_briefing(
                 let critical: Vec<_> = feed
                     .alerts
                     .iter()
-                    .filter(|a| {
-                        matches!(a.urgency, crate::preemption::AlertUrgency::Critical)
-                    })
+                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::Critical))
                     .take(5)
                     .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
                     .collect();
                 let high: Vec<_> = feed
                     .alerts
                     .iter()
-                    .filter(|a| {
-                        matches!(a.urgency, crate::preemption::AlertUrgency::High)
-                    })
+                    .filter(|a| matches!(a.urgency, crate::preemption::AlertUrgency::High))
                     .take(5_usize.saturating_sub(critical.len()))
                     .map(|a| BriefingPreemptionAlert::from_preemption_alert(a))
                     .collect();
@@ -669,7 +665,11 @@ pub(crate) fn build_enriched_briefing(
             .collect();
         items
             .into_iter()
-            .filter(|item| !alert_titles.iter().any(|at| at == &item.title.to_lowercase()))
+            .filter(|item| {
+                !alert_titles
+                    .iter()
+                    .any(|at| at == &item.title.to_lowercase())
+            })
             .collect()
     };
 
