@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { extractTechTopics } from '../lib/known-tech';
 import type { FeedbackAction } from '../types';
 import type { AppStore, FeedbackSlice, AntiTopic } from './types';
 
@@ -12,12 +13,6 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
   mark_irrelevant: -0.20,
   snooze: -0.05,
 };
-
-const STOP_WORDS = new Set([
-  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'have', 'been',
-  'will', 'what', 'when', 'where', 'which', 'about', 'into', 'your',
-  'more', 'some',
-]);
 
 export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> = (set, get) => ({
   feedbackGiven: {},
@@ -72,10 +67,7 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
 
   recordInteraction: async (itemId, actionType, item) => {
     try {
-      const titleWords = item.title.toLowerCase().split(/\s+/);
-      const topics = titleWords
-        .filter(w => w.length > 3 && !STOP_WORDS.has(w))
-        .slice(0, 5);
+      const topics = extractTechTopics(item.title);
 
       const feedbackTypeMap: Record<string, string> = {
         save: 'save',

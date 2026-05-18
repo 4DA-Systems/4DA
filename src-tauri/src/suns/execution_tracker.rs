@@ -42,17 +42,7 @@ pub fn execute() -> SunResult {
         )
         .unwrap_or(0);
 
-    // Coach sessions in last 7 days
-    let recent_sessions: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM coach_sessions
-             WHERE updated_at >= datetime('now', '-7 days')",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(0);
-
-    let velocity_score = (recent_lessons * 3 + recent_commands + recent_sessions) as f32 / 10.0;
+    let velocity_score = (recent_lessons * 3 + recent_commands) as f32 / 10.0;
     let velocity_label = if velocity_score >= 3.0 {
         "high"
     } else if velocity_score >= 1.0 {
@@ -70,7 +60,6 @@ pub fn execute() -> SunResult {
             "recent_lessons": recent_lessons,
             "total_lessons": total_lessons,
             "recent_commands": recent_commands,
-            "recent_sessions": recent_sessions,
             "velocity_score": velocity_score,
             "velocity_label": velocity_label,
         })),

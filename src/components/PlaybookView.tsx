@@ -7,7 +7,6 @@ import { useShallow } from 'zustand/react/shallow';
 import type { InsightContent } from '../types/personalization';
 import { SovereignProfile } from './playbook/SovereignProfile';
 import { StreetHealthBadge } from './playbook/StreetHealthBadge';
-import { TemplateLibrary } from './playbook/TemplateLibrary';
 import { PlaybookSidebar } from './playbook/PlaybookSidebar';
 import { useFourdaComponent } from '../hooks/use-fourda-component';
 import PlaybookLessonList from './playbook/PlaybookLessonList';
@@ -54,7 +53,6 @@ export const PlaybookView = memo(function PlaybookView() {
   const loadPersonalized = useAppStore((s) => s.loadPersonalizedContent);
   const loadStreetsTier = useAppStore((s) => s.loadStreetsTier);
 
-  const [showTemplates, setShowTemplates] = useState(false);
   const [personalizeBannerOpen, setPersonalizeBannerOpen] = useState(true);
 
   // Load modules, progress, and streets tier on mount
@@ -66,7 +64,6 @@ export const PlaybookView = memo(function PlaybookView() {
 
   const handleModuleClick = useCallback(
     (moduleId: string) => {
-      setShowTemplates(false);
       void loadContent(moduleId);
     },
     [loadContent],
@@ -90,10 +87,6 @@ export const PlaybookView = memo(function PlaybookView() {
       handleModuleClick('S');
     }
   }, [activeModuleId, playbookLoading, playbookError, playbookModules, playbookProgress, handleModuleClick]);
-
-  const handleShowTemplates = useCallback(() => {
-    setShowTemplates(true);
-  }, []);
 
   const addToast = useAppStore((s) => s.addToast);
 
@@ -183,9 +176,7 @@ export const PlaybookView = memo(function PlaybookView() {
         playbookModules={playbookModules}
         playbookProgress={playbookProgress}
         activeModuleId={activeModuleId}
-        showTemplates={showTemplates}
         onModuleClick={handleModuleClick}
-        onShowTemplates={handleShowTemplates}
       />
 
       {/* Content Area */}
@@ -220,13 +211,7 @@ export const PlaybookView = memo(function PlaybookView() {
           </div>
         )}
 
-        {showTemplates && (
-          <div className="bg-bg-secondary border border-border rounded-xl p-6">
-            <TemplateLibrary />
-          </div>
-        )}
-
-        {!showTemplates && !activeModuleId && !playbookLoading && !playbookError && (
+        {!activeModuleId && !playbookLoading && !playbookError && (
           <div className="flex flex-col items-center justify-center h-96 text-center">
             <div className="w-16 h-16 bg-accent-gold/10 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl text-accent-gold font-bold">S</span>
@@ -247,7 +232,7 @@ export const PlaybookView = memo(function PlaybookView() {
           </div>
         )}
 
-        {!showTemplates && playbookLoading && (
+        {playbookLoading && (
           <div className="space-y-4">
             <div className="bg-bg-secondary border border-border rounded-xl p-6">
               <div className="h-5 w-48 bg-bg-tertiary rounded animate-pulse mb-3" />
@@ -266,7 +251,7 @@ export const PlaybookView = memo(function PlaybookView() {
           </div>
         )}
 
-        {!showTemplates && playbookContent && !playbookLoading && (
+        {playbookContent && !playbookLoading && (
           <div className="space-y-4">
             <PlaybookPathway
               progress={playbookContent.lessons.length > 0 ? completedSet.size / playbookContent.lessons.length : 0}

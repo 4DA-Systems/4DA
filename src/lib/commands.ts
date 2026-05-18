@@ -335,6 +335,13 @@ interface CommandMap {
   ace_save_watcher_state: { params: Record<string, never>; result: void };
   ace_get_scan_summary: { params: Record<string, never>; result: ScanSummary };
 
+  // -- Learned Preferences (P6) --
+  get_learned_preferences: { params: Record<string, never>; result: { facets: Array<{ facet_id: string; class: string; key: string; value: string; stability: number; state: string; user_state: string; evidence_count: number; first_seen_at: number; last_seen_at: number }>; count: number } };
+  pin_preference: { params: { facet_id: string }; result: { success: boolean } };
+  forget_preference: { params: { facet_id: string }; result: { success: boolean } };
+  reset_preference: { params: { facet_id: string }; result: { success: boolean } };
+  get_preference_evidence: { params: { facet_id: string }; result: { facet_id: string; evidence: Array<{ cue_family: string; evidence_type: string; confidence: number; observed_at: number }>; count: number } };
+
   // -- Context Directories --
   get_context_dirs: { params: Record<string, never>; result: string[] };
   set_context_dirs: { params: { dirs: string[] }; result: void };
@@ -399,10 +406,6 @@ interface CommandMap {
   get_trial_status: { params: Record<string, never>; result: { active: boolean; days_remaining: number; started_at: string | null } };
   start_trial: { params: Record<string, never>; result: { success: boolean; days_remaining?: number } };
   get_pro_value_report: { params: Record<string, never>; result: ProValueReport };
-
-  // -- Templates --
-  get_templates: { params: Record<string, never>; result: Array<{ id: string; title: string; description: string; category: string; content: string }> };
-  get_template_content: { params: { templateId: string }; result: { id: string; title: string; description: string; category: string; content: string } };
 
   // -- Playbook (STREETS) --
   get_playbook_modules: { params: { lang?: string }; result: PlaybookModule[] };

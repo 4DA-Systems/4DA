@@ -123,7 +123,7 @@ pub fn get_untranslated_keys(target_lang: &str) -> Result<HashMap<String, String
     let mut existing: HashMap<String, String> = HashMap::new();
 
     if trans_dir.exists() {
-        for ns in &["ui", "coach", "streets", "errors", "signals"] {
+        for ns in &["ui", "streets", "errors", "signals"] {
             let path = trans_dir.join(format!("{ns}.json"));
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
@@ -161,7 +161,7 @@ pub fn load_english_strings() -> Result<HashMap<String, String>> {
 
     let mut english_strings: HashMap<String, String> = HashMap::new();
 
-    for ns in &["ui", "coach", "streets", "errors", "signals"] {
+    for ns in &["ui", "streets", "errors", "signals"] {
         let path = locales_dir.join(format!("{ns}.json"));
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
@@ -332,7 +332,7 @@ mod tests {
         let result = load_english_strings();
         assert!(result.is_ok());
         let strings = result.unwrap();
-        // Should have entries from ui.json, coach.json, streets.json, errors.json
+        // Should have entries from ui.json, streets.json, errors.json
         assert!(strings.contains_key("ui:app.title"));
         assert!(strings.contains_key("streets:streets.title"));
         assert!(strings.contains_key("errors:error.db.unavailable"));

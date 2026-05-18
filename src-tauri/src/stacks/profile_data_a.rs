@@ -71,12 +71,6 @@ pub static NEXTJS_FULLSTACK: StackProfile = StackProfile {
             keywords: &["bun runtime", "bun install", "bun vs node", "bunx"],
             boost: 1.10,
         },
-        EcosystemShift {
-            from: "prisma",
-            to: "drizzle",
-            keywords: &["drizzle", "prisma", "orm migration", "drizzle-orm"],
-            boost: 1.10,
-        },
     ],
     keyword_boosts: &[
         ("nextjs", 0.12),

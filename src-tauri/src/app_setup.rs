@@ -622,6 +622,11 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     tauri::async_runtime::spawn(async {
         if let Ok(conn) = crate::open_db_connection() {
+            // Purge interest facets that predate the display-worthy gate
+            let purged = crate::stability_detector::purge_non_display_worthy_interests(&conn);
+            if purged > 0 {
+                info!(target: "4da::startup", purged, "Purged non-display-worthy interest facets");
+            }
             let seeded = crate::stability_detector::seed_from_ace(&conn);
             if seeded > 0 {
                 info!(target: "4da::startup", seeded, "Stability detector cold-start seeded from ACE");

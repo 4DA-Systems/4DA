@@ -201,8 +201,39 @@ pub fn record_evidence(
     evidence_type: &str,
     confidence: f64,
 ) {
-    let now = now_unix();
+    // Gate 1: Interest facets must pass the display-worthy vocabulary check.
+    // Prevents contamination from random title words, ORMs, build tools, etc.
+    if class == FacetClass::Interest
+        && !crate::domain_profile::is_display_worthy(&key.to_lowercase())
+    {
+        debug!(
+            target: "4da::stability",
+            key,
+            "Rejected non-display-worthy interest"
+        );
+        return;
+    }
+
+    // Gate 2: Never accumulate evidence on a facet the user explicitly forgot.
     let facet_id = format!("{}:{}", class.as_str(), key);
+    let is_forgotten: bool = conn
+        .query_row(
+            "SELECT user_state = 'forgotten' FROM learned_facets WHERE facet_id = ?1",
+            params![&facet_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
+
+    if is_forgotten {
+        debug!(
+            target: "4da::stability",
+            key,
+            "Skipped evidence for forgotten facet"
+        );
+        return;
+    }
+
+    let now = now_unix();
 
     // Upsert the facet
     if let Err(e) = conn.execute(
@@ -444,6 +475,63 @@ pub fn set_user_state(conn: &Connection, facet_id: &str, state: UserState) -> bo
     .is_ok()
 }
 
+/// Returns all learned facets, ordered by stability descending.
+pub fn get_all_learned_facets(conn: &Connection) -> Vec<LearnedFacet> {
+    let mut stmt = match conn.prepare(
+        "SELECT facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at
+         FROM learned_facets
+         ORDER BY stability DESC",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    stmt.query_map([], |row| {
+        Ok(LearnedFacet {
+            facet_id: row.get(0)?,
+            class: FacetClass::from_str(&row.get::<_, String>(1)?).unwrap_or(FacetClass::Interest),
+            key: row.get(2)?,
+            value: row.get(3)?,
+            stability: row.get(4)?,
+            state: FacetState::from_str(&row.get::<_, String>(5)?),
+            user_state: UserState::from_str(&row.get::<_, String>(6)?),
+            evidence_count: row.get(7)?,
+            first_seen_at: row.get(8)?,
+            last_seen_at: row.get(9)?,
+        })
+    })
+    .ok()
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
+/// Returns evidence records for a specific facet, most recent first.
+pub fn get_facet_evidence(conn: &Connection, facet_id: &str) -> Vec<FacetEvidence> {
+    let mut stmt = match conn.prepare(
+        "SELECT cue_family, evidence_type, confidence, observed_at
+         FROM facet_evidence
+         WHERE facet_id = ?1
+         ORDER BY observed_at DESC
+         LIMIT 50",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    stmt.query_map(params![facet_id], |row| {
+        Ok(FacetEvidence {
+            cue_family: CueFamily::from_str(&row.get::<_, String>(0)?)
+                .unwrap_or(CueFamily::Behavioral),
+            evidence_type: row.get(1)?,
+            confidence: row.get(2)?,
+            observed_at: row.get(3)?,
+        })
+    })
+    .ok()
+    .map(|rows| rows.flatten().collect())
+    .unwrap_or_default()
+}
+
 // ============================================================================
 // Internal Helpers
 // ============================================================================
@@ -539,19 +627,75 @@ fn load_evidence(conn: &Connection, facet_id: &str) -> rusqlite::Result<Vec<Face
 // ============================================================================
 
 pub fn seed_from_ace(conn: &Connection) -> usize {
-    let count: i64 = conn
-        .query_row("SELECT COUNT(*) FROM learned_facets", [], |row| row.get(0))
-        .unwrap_or(1);
+    // Check if table has any facets with REAL evidence (not just cold-start)
+    let has_real_evidence: bool = conn
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM facet_evidence
+                WHERE evidence_type != 'ace_cold_start'
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(false);
 
-    if count > 0 {
+    if has_real_evidence {
         return 0;
     }
 
+    // Preserve user overrides (pinned/forgotten) so re-seeding doesn't resurrect vetoed tech
+    let mut preserved_states: Vec<(String, String)> = Vec::new();
+    if let Ok(mut stmt) =
+        conn.prepare("SELECT facet_id, user_state FROM learned_facets WHERE user_state != 'auto'")
+    {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            preserved_states = rows.flatten().collect();
+        }
+    }
+
+    // Purge stale cold-start data so we can re-seed cleanly
+    let existing: i64 = conn
+        .query_row("SELECT COUNT(*) FROM learned_facets", [], |row| row.get(0))
+        .unwrap_or(0);
+    if existing > 0 {
+        let _ = conn.execute(
+            "DELETE FROM facet_evidence WHERE evidence_type = 'ace_cold_start'",
+            [],
+        );
+        let _ = conn.execute(
+            "DELETE FROM learned_facets WHERE facet_id NOT IN (SELECT DISTINCT facet_id FROM facet_evidence)",
+            [],
+        );
+        info!(target: "4da::stability", purged = existing, "Purged stale cold-start facets for re-seeding");
+    }
+
     let mut seeded = 0usize;
+    const MAX_SEEDS: usize = 15;
+
+    // Collect forgotten facet_ids so we never re-seed them
+    let forgotten_ids: std::collections::HashSet<String> = preserved_states
+        .iter()
+        .filter(|(_, state)| state == "forgotten")
+        .map(|(id, _)| id.clone())
+        .collect();
 
     if let Ok(ace) = crate::get_ace_engine() {
         if let Ok(tech) = ace.get_detected_tech() {
-            for t in &tech {
+            for t in tech.iter().filter(|t| {
+                matches!(
+                    t.category,
+                    crate::ace::TechCategory::Language | crate::ace::TechCategory::Framework
+                ) && crate::domain_profile::is_display_worthy(&t.name.to_lowercase())
+            }) {
+                if seeded >= MAX_SEEDS {
+                    break;
+                }
+                let candidate_id = format!("interest:{}", t.name);
+                if forgotten_ids.contains(&candidate_id) {
+                    continue;
+                }
                 record_evidence(
                     conn,
                     FacetClass::Interest,
@@ -564,28 +708,67 @@ pub fn seed_from_ace(conn: &Connection) -> usize {
                 seeded += 1;
             }
         }
-        if let Ok(topics) = ace.get_active_topics() {
-            for t in &topics {
-                record_evidence(
-                    conn,
-                    FacetClass::TopicAffinity,
-                    &t.topic,
-                    "inferred",
-                    CueFamily::Structural,
-                    "ace_cold_start",
-                    0.7,
-                );
-                seeded += 1;
-            }
-        }
+    }
+
+    // Restore user overrides that survived the purge
+    for (fid, state) in &preserved_states {
+        let _ = conn.execute(
+            "UPDATE learned_facets SET user_state = ?1 WHERE facet_id = ?2",
+            params![state, fid],
+        );
     }
 
     if seeded > 0 {
         rebuild_all(conn);
-        info!(target: "4da::stability", seeded, "Cold-start seeded from ACE");
+        info!(target: "4da::stability", seeded, "Cold-start seeded from ACE (display-worthy languages + frameworks only)");
     }
 
     seeded
+}
+
+/// One-time cleanup: remove Interest facets that fail the display-worthy gate.
+/// Runs at startup to purge contamination from before the gate was added.
+pub fn purge_non_display_worthy_interests(conn: &Connection) -> usize {
+    let mut to_purge = Vec::new();
+
+    if let Ok(mut stmt) =
+        conn.prepare("SELECT facet_id, key FROM learned_facets WHERE class = 'interest'")
+    {
+        if let Ok(rows) = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }) {
+            for pair in rows.flatten() {
+                if !crate::domain_profile::is_display_worthy(&pair.1.to_lowercase()) {
+                    to_purge.push(pair.0);
+                }
+            }
+        }
+    }
+
+    let count = to_purge.len();
+    for fid in &to_purge {
+        let _ = conn.execute(
+            "DELETE FROM facet_evidence WHERE facet_id = ?1",
+            params![fid],
+        );
+        let _ = conn.execute(
+            "DELETE FROM learned_facets WHERE facet_id = ?1",
+            params![fid],
+        );
+    }
+
+    if count > 0 {
+        info!(
+            target: "4da::stability",
+            purged = count,
+            "Purged non-display-worthy interest facets"
+        );
+    }
+    count
+}
+
+pub fn now_unix_pub() -> i64 {
+    now_unix()
 }
 
 fn now_unix() -> i64 {
@@ -849,13 +1032,116 @@ mod tests {
     }
 
     #[test]
+    fn test_record_evidence_rejects_non_display_worthy() {
+        let conn = setup_db();
+        record_evidence(
+            &conn,
+            FacetClass::Interest,
+            "drizzle",
+            "engaged",
+            CueFamily::Behavioral,
+            "engagement",
+            0.8,
+        );
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM learned_facets", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "drizzle should be rejected by display-worthy gate"
+        );
+    }
+
+    #[test]
+    fn test_record_evidence_skips_forgotten_facets() {
+        let conn = setup_db();
+        let now = now_unix();
+        conn.execute(
+            "INSERT INTO learned_facets (facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at)
+             VALUES ('interest:rust', 'interest', 'rust', 'high', 1.0, 'active', 'forgotten', 3, ?1, ?1)",
+            params![now],
+        )
+        .unwrap();
+
+        record_evidence(
+            &conn,
+            FacetClass::Interest,
+            "rust",
+            "new_value",
+            CueFamily::Behavioral,
+            "engagement",
+            0.9,
+        );
+
+        let evidence_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM facet_evidence WHERE facet_id = 'interest:rust'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            evidence_count, 0,
+            "Forgotten facets should not accumulate evidence"
+        );
+
+        let user_state: String = conn
+            .query_row(
+                "SELECT user_state FROM learned_facets WHERE facet_id = 'interest:rust'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(user_state, "forgotten", "user_state must stay forgotten");
+    }
+
+    #[test]
+    fn test_purge_non_display_worthy_interests() {
+        let conn = setup_db();
+        let now = now_unix();
+
+        // Insert display-worthy and non-display-worthy interests
+        for (key, worthy) in [
+            ("rust", true),
+            ("drizzle", false),
+            ("prisma", false),
+            ("typescript", true),
+        ] {
+            conn.execute(
+                "INSERT INTO learned_facets (facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at)
+                 VALUES (?1, 'interest', ?2, ?2, 1.0, 'active', 'auto', 3, ?3, ?3)",
+                params![format!("interest:{}", key), key, now],
+            )
+            .unwrap();
+            let _ = worthy; // suppress unused warning in test
+        }
+
+        let purged = purge_non_display_worthy_interests(&conn);
+        assert_eq!(purged, 2, "Should purge drizzle + prisma");
+
+        let remaining: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT key FROM learned_facets WHERE class = 'interest' ORDER BY key")
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .flatten()
+                .collect()
+        };
+        assert_eq!(remaining, vec!["rust", "typescript"]);
+    }
+
+    #[test]
     fn test_seed_from_ace_idempotent() {
         let conn = setup_db();
         let first = seed_from_ace(&conn);
         let second = seed_from_ace(&conn);
+        // With self-healing: if only cold-start evidence exists, re-seed is expected
+        // (purges stale cold-start, then re-seeds). Both calls should produce the
+        // same count. If ACE isn't available in tests, both return 0.
         assert_eq!(
-            second, 0,
-            "Second call should be a no-op since table is non-empty"
+            second, first,
+            "Second call should re-seed same count (self-healing purge + re-seed)"
         );
         if first > 0 {
             let count: i64 = conn

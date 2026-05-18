@@ -25,7 +25,6 @@ describe('TranslationEditor', () => {
         return Promise.resolve({
           'ui:app.title': { english: '4DA', translated: '4DA', status: 'translated' },
           'ui:app.tagline': { english: 'All signal. No feed.', translated: 'Alles Signal. Kein Feed.', status: 'translated' },
-          'coach:coach.title': { english: 'STREETS Coach', translated: null, status: 'untranslated' },
           'errors:error.generic': { english: 'Something went wrong', translated: 'Etwas ist schiefgelaufen', status: 'overridden' },
         });
       }
@@ -67,11 +66,11 @@ describe('TranslationEditor', () => {
     await waitFor(() => {
       expect(screen.getByText('app.title')).toBeInTheDocument();
     });
-    // Click the "coach" namespace filter button
-    const coachFilter = screen.getByRole('button', { name: 'coach' });
-    fireEvent.click(coachFilter);
+    // Click the "errors" namespace filter button
+    const errorsFilter = screen.getByRole('button', { name: 'errors' });
+    fireEvent.click(errorsFilter);
     await waitFor(() => {
-      expect(screen.getByText('coach.title')).toBeInTheDocument();
+      expect(screen.getByText('error.generic')).toBeInTheDocument();
       expect(screen.queryByText('app.title')).not.toBeInTheDocument();
     });
   });

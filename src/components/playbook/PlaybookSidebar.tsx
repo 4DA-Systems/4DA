@@ -9,18 +9,14 @@ interface PlaybookSidebarProps {
   playbookModules: PlaybookModule[];
   playbookProgress: PlaybookProgress | null;
   activeModuleId: string | null;
-  showTemplates: boolean;
   onModuleClick: (moduleId: string) => void;
-  onShowTemplates: () => void;
 }
 
 export const PlaybookSidebar = memo(function PlaybookSidebar({
   playbookModules,
   playbookProgress,
   activeModuleId,
-  showTemplates,
   onModuleClick,
-  onShowTemplates,
 }: PlaybookSidebarProps) {
   const { t } = useTranslation();
   const overallPct = playbookProgress?.overall_percentage ?? 0;
@@ -76,37 +72,6 @@ export const PlaybookSidebar = memo(function PlaybookSidebar({
           </button>
         );
       })}
-
-      {/* Templates */}
-      <button
-        onClick={onShowTemplates}
-        aria-current={showTemplates ? 'true' : undefined}
-        aria-label={t('playbook.templates')}
-        className={`w-full text-start px-3 py-2.5 rounded-lg transition-all flex items-center gap-3 group ${
-          showTemplates
-            ? 'bg-accent-gold/15 border border-accent-gold/30'
-            : 'hover:bg-bg-tertiary border border-transparent'
-        }`}
-      >
-        <span
-          className={`w-7 h-7 rounded-md flex items-center justify-center text-xs flex-shrink-0 ${
-            showTemplates
-              ? 'bg-accent-gold/20 text-accent-gold'
-              : 'bg-bg-tertiary text-text-secondary'
-          }`}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm truncate ${showTemplates ? 'text-white font-medium' : 'text-text-secondary'}`}>
-            {t('playbook.templates')}
-          </p>
-          <p className="text-[10px] text-text-muted">{t('playbook.templatesSubtitle')}</p>
-        </div>
-      </button>
 
       {/* Language selector for lesson content */}
       <div className="mt-3 pt-3 border-t border-border">

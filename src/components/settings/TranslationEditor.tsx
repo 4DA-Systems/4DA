@@ -20,8 +20,8 @@ interface TranslationStatus {
   percentage: number;
 }
 
-type Namespace = 'all' | 'ui' | 'coach' | 'streets' | 'errors';
-const NAMESPACES: Namespace[] = ['all', 'ui', 'coach', 'streets', 'errors'];
+type Namespace = 'all' | 'ui' | 'streets' | 'errors';
+const NAMESPACES: Namespace[] = ['all', 'ui', 'streets', 'errors'];
 
 interface TranslationEditorProps { language: string }
 

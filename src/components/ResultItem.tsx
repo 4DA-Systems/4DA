@@ -6,6 +6,7 @@ import type { SourceRelevance, FeedbackAction, FeedbackGiven } from '../types';
 import { useItemSummary } from '../hooks/use-item-summary';
 import { useViewTracking } from '../hooks/use-view-tracking';
 import { useExpandTracking } from '../hooks/use-expand-tracking';
+import { extractTechTopics } from '../lib/known-tech';
 import { ResultItemCollapsed } from './result-item/ResultItemCollapsed';
 import { ResultItemExpanded } from './result-item/ResultItemExpanded';
 import { ScoreBreakdownDrawer } from './result-item/ScoreBreakdownDrawer';
@@ -78,9 +79,7 @@ export const ResultItem = memo(function ResultItem({
 
   // Extract topics from title for behavior tracking
   const itemTopics = useMemo(() =>
-    item.title.toLowerCase().split(/\s+/)
-      .filter(w => w.length > 3)
-      .slice(0, 5),
+    extractTechTopics(item.title),
     [item.title],
   );
 

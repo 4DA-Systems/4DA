@@ -245,6 +245,7 @@ mod briefing_quality;
 /// Intelligence Reconciliation (2026-04-16) — the canonical EvidenceItem type
 /// that every intelligence surface emits after Phases 3-5. Read
 /// `docs/strategy/INTELLIGENCE-RECONCILIATION.md` before touching intelligence.
+mod engagement_telemetry;
 mod evidence;
 mod external;
 pub mod extractors;
@@ -284,6 +285,7 @@ mod ollama;
 mod osv;
 pub mod plugins;
 mod preemption;
+mod preference_commands;
 mod probes_corpus;
 mod probes_engine;
 mod project_health;
@@ -359,8 +361,6 @@ mod streets_commands;
 mod streets_engine;
 mod streets_localization;
 mod streets_suggestion;
-mod template_data;
-mod templates;
 mod toolkit;
 mod toolkit_export;
 #[cfg(feature = "experimental")]
@@ -914,9 +914,6 @@ pub fn run() {
             toolkit_intelligence::toolkit_test_feed,
             toolkit_intelligence::toolkit_score_sandbox,
             toolkit_export::toolkit_generate_export_pack,
-            // Templates (STREETS Community)
-            templates::get_templates,
-            templates::get_template_content,
             // Diagnostics
             commands::get_diagnostics,
             startup_health::get_startup_health,
@@ -1111,6 +1108,12 @@ pub fn run() {
             // Alert Triage (persistent security triage actions)
             alert_triage::triage_alert,
             alert_triage::get_triage_states,
+            // Learned Preferences (P6: Compound Lattice)
+            preference_commands::get_learned_preferences,
+            preference_commands::pin_preference,
+            preference_commands::forget_preference,
+            preference_commands::reset_preference,
+            preference_commands::get_preference_evidence,
         ])
         .setup(app_setup::setup_app)
         .build(tauri::generate_context!())

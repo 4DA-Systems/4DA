@@ -366,16 +366,7 @@ pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
     name: "General Web Development",
     core_tech: &["typescript", "javascript", "react", "nodejs"],
     companions: &[
-        "css",
-        "html",
-        "vite",
-        "webpack",
-        "eslint",
-        "prettier",
-        "tailwindcss",
-        "nextjs",
-        "express",
-        "npm",
+        "css", "html", "vite", "webpack", "eslint", "prettier", "npm",
     ],
     competing: &[],
     pain_points: &[
@@ -395,20 +386,12 @@ pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
             description: "Type system adoption",
         },
     ],
-    ecosystem_shifts: &[
-        EcosystemShift {
-            from: "webpack",
-            to: "vite",
-            keywords: &["vite", "vite migration", "webpack to vite"],
-            boost: 1.10,
-        },
-        EcosystemShift {
-            from: "create-react-app",
-            to: "nextjs",
-            keywords: &["nextjs", "cra migration", "app router"],
-            boost: 1.08,
-        },
-    ],
+    ecosystem_shifts: &[EcosystemShift {
+        from: "webpack",
+        to: "vite",
+        keywords: &["vite", "vite migration", "webpack to vite"],
+        boost: 1.10,
+    }],
     keyword_boosts: &[("typescript", 0.10), ("javascript", 0.06)],
     source_preferences: &[("hackernews", 0.05)],
     detection_markers: &[
@@ -420,7 +403,7 @@ pub static BOOTSTRAP_WEBDEV: StackProfile = StackProfile {
         "node_modules",
         "npm",
     ],
-    detection_threshold: 2,
+    detection_threshold: 3,
     seed_content: &[
         SeedItem {
             title: "JavaScript Weekly",

@@ -189,8 +189,8 @@ mod tests {
 
     #[test]
     fn namespace_list_is_consistent() {
-        let expected_namespaces = ["ui", "coach", "streets", "errors"];
-        assert_eq!(expected_namespaces.len(), 4);
+        let expected_namespaces = ["ui", "streets", "errors"];
+        assert_eq!(expected_namespaces.len(), 3);
         for ns in &expected_namespaces {
             assert!(!ns.is_empty(), "Namespace should not be empty");
         }
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn save_override_merges_with_existing() {
         let test_lang = "zz_save_merge_test";
-        let test_ns = "coach";
+        let test_ns = "streets";
         let overrides_dir = crate::i18n::translations_dir()
             .join("overrides")
             .join(test_lang);

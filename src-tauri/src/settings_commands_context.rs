@@ -270,6 +270,34 @@ pub async fn record_interaction(
 
     debug!(target: "4da::context", action = %action, item_id = source_item_id, "Recorded interaction");
 
+    // Feed the stability detector — this is what makes preferences compound
+    if let Ok(conn) = crate::state::open_db_connection() {
+        match action.to_lowercase().as_str() {
+            "click" => crate::engagement_telemetry::on_click(&conn, source_item_id),
+            "save" => crate::engagement_telemetry::on_save(&conn, source_item_id),
+            "dismiss" => crate::engagement_telemetry::on_dismiss(
+                &conn,
+                source_item_id,
+                dismiss_category.as_deref(),
+            ),
+            _ => {}
+        }
+
+        // Record temporal event for compound context
+        let _ = crate::temporal::record_event(
+            &conn,
+            "user_interaction",
+            &action,
+            &serde_json::json!({
+                "source_item_id": source_item_id,
+                "dismiss_reason": dismiss_reason,
+                "dismiss_category": dismiss_category,
+            }),
+            Some(source_item_id),
+            Some(&(chrono::Utc::now() + chrono::Duration::days(30)).to_rfc3339()),
+        );
+    }
+
     // GAME: track saves
     if action.to_lowercase() == "save" {
         if let Ok(db) = crate::get_database() {

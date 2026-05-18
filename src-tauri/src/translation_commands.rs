@@ -77,7 +77,7 @@ pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationE
     let trans_dir = crate::i18n::translations_dir().join(&lang);
     let mut auto_translated: HashMap<String, String> = HashMap::new();
     if trans_dir.exists() {
-        for ns in &["ui", "coach", "streets", "errors"] {
+        for ns in &["ui", "streets", "errors"] {
             let path = trans_dir.join(format!("{ns}.json"));
             if let Ok(content) = std::fs::read_to_string(&path) {
                 if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {
@@ -213,7 +213,7 @@ pub(crate) fn load_overrides(lang: &str) -> Result<HashMap<String, String>> {
         return Ok(overrides);
     }
 
-    for ns in &["ui", "coach", "streets", "errors"] {
+    for ns in &["ui", "streets", "errors"] {
         let path = overrides_dir.join(format!("{ns}.json"));
         if let Ok(content) = std::fs::read_to_string(&path) {
             if let Ok(map) = serde_json::from_str::<HashMap<String, String>>(&content) {

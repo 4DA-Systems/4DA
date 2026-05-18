@@ -591,7 +591,35 @@ pub(crate) fn run_post_analysis_hooks(results: &[SourceRelevance]) {
             );
         }
 
-        info!(target: "4da::analysis", "Post-analysis innovation hooks complete");
+        // 3. Feed stability detector from high-scoring results (recurrence signal)
+        for item in results.iter().filter(|r| r.relevant && r.top_score >= 0.6) {
+            let topics = crate::extract_topics(&item.title, "", &[]);
+            for topic in &topics {
+                crate::stability_detector::record_evidence(
+                    &conn,
+                    crate::stability_detector::FacetClass::TopicAffinity,
+                    topic,
+                    "surfaced",
+                    crate::stability_detector::CueFamily::Recurrence,
+                    "analysis_surface",
+                    (item.top_score as f64).min(1.0) * 0.5,
+                );
+            }
+            crate::stability_detector::record_evidence(
+                &conn,
+                crate::stability_detector::FacetClass::SourcePref,
+                &item.source_type,
+                "producing",
+                crate::stability_detector::CueFamily::Recurrence,
+                "analysis_surface",
+                0.3,
+            );
+        }
+
+        // 4. Rebuild stability scores if enough new evidence accumulated
+        crate::engagement_telemetry::rebuild_if_needed(&conn);
+
+        info!(target: "4da::analysis", "Post-analysis hooks complete (including stability rebuild)");
     }
 }
 

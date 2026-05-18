@@ -69,7 +69,6 @@ const NPM_DEVTOOL_MAP: Record<string, string> = {
   tailwindcss: "tailwind",
   "@tailwindcss/vite": "tailwind",
   prisma: "prisma",
-  drizzle: "drizzle",
 };
 
 /** Rust crate name -> framework label */
@@ -384,7 +383,7 @@ function isNotableTopic(name: string): boolean {
   const notable = new Set([
     // Databases
     "sqlite3", "better-sqlite3", "pg", "mysql2", "mongodb", "mongoose", "redis",
-    "prisma", "drizzle-orm", "typeorm", "sequelize", "knex",
+    "prisma", "typeorm", "sequelize", "knex",
     // Auth
     "passport", "next-auth", "lucia", "clerk",
     // APIs

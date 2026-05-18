@@ -405,7 +405,7 @@ impl ContextEngine {
     // Interaction Tracking (Layer 3 - Foundation)
     // ========================================================================
 
-    /// Record an interaction
+    /// Record an interaction, enriched with item metadata for behavior learning.
     pub fn record_interaction(
         &self,
         source_item_id: i64,
@@ -421,9 +421,25 @@ impl ContextEngine {
             InteractionType::Ignore => "ignore",
         };
 
+        let signal_strength = match action {
+            InteractionType::Save => 0.9,
+            InteractionType::Click => 0.6,
+            InteractionType::Dismiss => 0.3,
+            InteractionType::Ignore => 0.1,
+        };
+
+        let (item_source, item_topics) = conn
+            .query_row(
+                "SELECT source_type, COALESCE(tags, '') FROM source_items WHERE id = ?1",
+                params![source_item_id],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .unwrap_or_default();
+
         conn.execute(
-            "INSERT INTO interactions (source_item_id, item_id, action, action_type, signal_strength, dismiss_reason, dismiss_category) VALUES (?1, ?1, ?2, ?2, 0.5, ?3, ?4)",
-            params![source_item_id, action_str, dismiss_reason, dismiss_category],
+            "INSERT INTO interactions (source_item_id, item_id, action, action_type, signal_strength, dismiss_reason, dismiss_category, item_source, item_topics)
+             VALUES (?1, ?1, ?2, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![source_item_id, action_str, signal_strength, dismiss_reason, dismiss_category, item_source, item_topics],
         )?;
         Ok(())
     }

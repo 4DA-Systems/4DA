@@ -48,8 +48,10 @@ pub fn parse_hours_ago(timestamp_str: &str) -> f32 {
 
 /// Check if a dependency is notable
 pub fn is_notable_dependency(name: &str) -> bool {
+    // Only frameworks, runtimes, and core libraries that define a developer's stack.
+    // ORMs (drizzle, prisma, typeorm, mongoose) and build tools (vite, webpack)
+    // excluded — they are companion dependencies, not identity-defining.
     let notable = [
-        // Rust
         "tokio",
         "async-std",
         "serde",
@@ -64,8 +66,9 @@ pub fn is_notable_dependency(name: &str) -> bool {
         "hyper",
         "tonic",
         "prost",
-        // JavaScript/TypeScript
         "react",
+        "react-dom",
+        "react-native",
         "vue",
         "angular",
         "svelte",
@@ -73,15 +76,6 @@ pub fn is_notable_dependency(name: &str) -> bool {
         "nuxt",
         "express",
         "fastify",
-        "nest",
-        "prisma",
-        "drizzle",
-        "typeorm",
-        "mongoose",
-        "vite",
-        "webpack",
-        "esbuild",
-        // Python
         "django",
         "flask",
         "fastapi",
@@ -92,15 +86,12 @@ pub fn is_notable_dependency(name: &str) -> bool {
         "scikit-learn",
         "sqlalchemy",
         "celery",
-        "redis",
-        // Go
         "gin",
         "echo",
         "fiber",
         "gorm",
         "cobra",
         "viper",
-        // Databases
         "postgresql",
         "mysql",
         "sqlite",
@@ -109,7 +100,28 @@ pub fn is_notable_dependency(name: &str) -> bool {
         "elasticsearch",
     ];
 
-    notable.iter().any(|n| name.to_lowercase().contains(n))
+    let notable_scopes = [
+        "tauri-apps",
+        "nestjs",
+        "prisma",
+        "angular",
+        "vue",
+        "nuxt",
+        "svelte",
+        "tensorflow",
+        "pytorch",
+    ];
+
+    let lower = name.to_lowercase();
+
+    if let Some(rest) = lower.strip_prefix('@') {
+        // Scoped package: match scope root only
+        let scope = rest.split('/').next().unwrap_or("");
+        return notable_scopes.iter().any(|s| scope == *s);
+    }
+
+    // Unscoped: exact match only
+    notable.iter().any(|n| lower == *n)
 }
 
 /// Merge duplicate detected technologies

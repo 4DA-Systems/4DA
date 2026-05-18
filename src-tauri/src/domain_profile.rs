@@ -296,10 +296,7 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
                     .dependency_names
                     .iter()
                     .any(|d| fuzzy_tech_match(&lower, d))
-                || profile
-                    .all_tech
-                    .iter()
-                    .any(|s| fuzzy_tech_match(&lower, s))
+                || profile.all_tech.iter().any(|s| fuzzy_tech_match(&lower, s))
         });
 
         if !has_on_stack {
@@ -1131,10 +1128,7 @@ mod tests {
                 "reqwest".to_string(),
             ]),
             interest_topics: HashSet::from(["security".to_string()]),
-            domain_concerns: HashSet::from([
-                "packaging".to_string(),
-                "installer".to_string(),
-            ]),
+            domain_concerns: HashSet::from(["packaging".to_string(), "installer".to_string()]),
             ace_promoted_tech: HashSet::new(),
         }
     }
