@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
+#![allow(
+    dead_code,
+    clippy::upper_case_acronyms,
+    clippy::field_reassign_with_default,
+    clippy::no_effect_underscore_binding
+)]
+
 //! Scheduler Gate — resource-aware throttling for background work.
 //!
 //! Probes host power state (AC/battery), battery percentage, CPU load,

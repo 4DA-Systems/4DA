@@ -817,7 +817,9 @@ fn compute_quality_composite(
         source_quality_mult
     };
 
-    // Anti-topic multiplier (retained for diagnostics, not used in composite)
+    // Anti-topic multiplier: raw.anti_penalty is used directly in the engagement
+    // formula below. This derived value is kept for score breakdown diagnostics.
+    #[allow(clippy::no_effect_underscore_binding)]
     let _anti_mult = 1.0 - raw.anti_penalty;
 
     // Domain quality penalty (NOT dampened — preserves full penalty strength)
