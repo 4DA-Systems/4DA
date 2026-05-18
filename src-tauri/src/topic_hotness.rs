@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
+#![allow(dead_code)]
+
 //! Topic Hotness — cross-source signal consolidation.
 //!
 //! Tracks when the same topic appears across multiple sources within a time window.
@@ -8,7 +10,7 @@
 //! consolidated section in the briefing instead of N duplicate items.
 
 use rusqlite::{params, Connection};
-use tracing::{debug, info};
+use tracing::debug;
 
 // ============================================================================
 // Constants
@@ -148,7 +150,7 @@ pub fn rebuild_hotness(conn: &Connection) -> usize {
     let mut updated = 0;
     for (key, mentions, sources, last_seen, queries) in &topics {
         let score = compute_hotness(*mentions, *sources, *last_seen, *queries, now);
-        let materialized = if score >= MATERIALIZE_THRESHOLD { 1 } else { 0 };
+        let materialized = i32::from(score >= MATERIALIZE_THRESHOLD);
 
         if let Ok(changed) = conn.execute(
             "UPDATE topic_hotness SET hotness_score = ?1, materialized = ?2 WHERE topic_key = ?3",

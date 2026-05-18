@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
+#![allow(dead_code)]
+
 //! Per-Source Compression Rules — reduce LLM/embedding token usage by applying
 //! source-specific noise removal before content enters the intelligence pipeline.
 //!
@@ -188,7 +190,7 @@ fn strip_markdown(text: &str) -> String {
 
     // Strip bold/italic markers
     result = result.replace("**", "").replace("__", "");
-    result = result.replace("*", "").replace("_", "");
+    result = result.replace(['*', '_'], "");
 
     // Strip link syntax [text](url) → text
     let mut clean = String::with_capacity(result.len());

@@ -279,12 +279,48 @@ Rules:
         })
         .unwrap_or_default();
 
+    let continuity_context = crate::open_db_connection()
+        .map(|conn| {
+            let today_topics: Vec<String> = items
+                .iter()
+                .take(10)
+                .flat_map(|item| crate::extract_topics(&item.title, "", &[]))
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+
+            let signals = crate::briefing_seals::detect_continuity(&conn, &today_topics);
+            if signals.is_empty() {
+                return String::new();
+            }
+
+            let mut parts = Vec::new();
+            for s in &signals {
+                match s.signal_type {
+                    crate::briefing_seals::ContinuityType::DevelopingStory => {
+                        parts.push(format!(
+                            "  - Developing story (day {}): {}",
+                            s.days_running, s.topic
+                        ));
+                    }
+                    crate::briefing_seals::ContinuityType::EmergingSignal => {
+                        parts.push(format!("  - Emerging: {}", s.topic));
+                    }
+                    crate::briefing_seals::ContinuityType::Faded => {
+                        parts.push(format!("  - Faded: {}", s.topic));
+                    }
+                }
+            }
+            format!("\n- Topic continuity signals:\n{}", parts.join("\n"))
+        })
+        .unwrap_or_default();
+
     let user_prompt = format!(
         "My active projects and context:\n\
          - Tech stack: {tech}\n\
          - Currently working on: {topics}\n\
          - Skip these topics: {anti}\n\
-         {decisions}{anomalies}{hot_topics}{seal}\n\n\
+         {decisions}{anomalies}{hot_topics}{seal}{continuity}\n\n\
          Today's {count} items (sorted by relevance):\n\n\
          {items}{batched}\n\n\
          Give me my intelligence briefing.",
@@ -299,6 +335,7 @@ Rules:
         anomalies = anomaly_section,
         hot_topics = hot_topics_context,
         seal = seal_context,
+        continuity = continuity_context,
         count = items.len(),
         items = items_text,
         batched = batched_section,

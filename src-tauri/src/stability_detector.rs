@@ -534,6 +534,60 @@ fn load_evidence(conn: &Connection, facet_id: &str) -> rusqlite::Result<Vec<Face
     Ok(evidence)
 }
 
+// ============================================================================
+// Cold-Start Seeding
+// ============================================================================
+
+pub fn seed_from_ace(conn: &Connection) -> usize {
+    let count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM learned_facets", [], |row| row.get(0))
+        .unwrap_or(1);
+
+    if count > 0 {
+        return 0;
+    }
+
+    let mut seeded = 0usize;
+
+    if let Ok(ace) = crate::get_ace_engine() {
+        if let Ok(tech) = ace.get_detected_tech() {
+            for t in &tech {
+                record_evidence(
+                    conn,
+                    FacetClass::Interest,
+                    &t.name,
+                    &t.name,
+                    CueFamily::Structural,
+                    "ace_cold_start",
+                    0.7,
+                );
+                seeded += 1;
+            }
+        }
+        if let Ok(topics) = ace.get_active_topics() {
+            for t in &topics {
+                record_evidence(
+                    conn,
+                    FacetClass::TopicAffinity,
+                    &t.topic,
+                    "inferred",
+                    CueFamily::Structural,
+                    "ace_cold_start",
+                    0.7,
+                );
+                seeded += 1;
+            }
+        }
+    }
+
+    if seeded > 0 {
+        rebuild_all(conn);
+        info!(target: "4da::stability", seeded, "Cold-start seeded from ACE");
+    }
+
+    seeded
+}
+
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -776,5 +830,38 @@ mod tests {
 
         let facets = get_active_and_provisional(&conn);
         assert_eq!(facets[0].user_state, UserState::Pinned);
+    }
+
+    #[test]
+    fn test_seed_from_ace_skips_nonempty_table() {
+        let conn = setup_db();
+        record_evidence(
+            &conn,
+            FacetClass::Interest,
+            "rust",
+            "high",
+            CueFamily::Explicit,
+            "feedback",
+            1.0,
+        );
+        let seeded = seed_from_ace(&conn);
+        assert_eq!(seeded, 0, "Should skip seeding when facets already exist");
+    }
+
+    #[test]
+    fn test_seed_from_ace_idempotent() {
+        let conn = setup_db();
+        let first = seed_from_ace(&conn);
+        let second = seed_from_ace(&conn);
+        assert_eq!(
+            second, 0,
+            "Second call should be a no-op since table is non-empty"
+        );
+        if first > 0 {
+            let count: i64 = conn
+                .query_row("SELECT COUNT(*) FROM learned_facets", [], |row| row.get(0))
+                .unwrap();
+            assert!(count > 0, "Seeded facets should persist in table");
+        }
     }
 }

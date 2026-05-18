@@ -38,6 +38,49 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
 
     let gate_policy = crate::scheduler_gate::current_policy();
 
+    let (learned_facets_count, hot_topics_count, seal_counts, compression_chars_saved) =
+        crate::open_db_connection()
+            .map(|conn| {
+                let facets: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM learned_facets WHERE state IN ('active', 'provisional')",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                let hot: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM topic_hotness WHERE materialized = 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                let daily: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM briefing_seals WHERE seal_level = 0",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                let weekly: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM briefing_seals WHERE seal_level = 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                let monthly: i64 = conn
+                    .query_row(
+                        "SELECT COUNT(*) FROM briefing_seals WHERE seal_level = 2",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .unwrap_or(0);
+                let chars = crate::compression_rules::chars_saved();
+                (facets, hot, serde_json::json!({"daily": daily, "weekly": weekly, "monthly": monthly}), chars)
+            })
+            .unwrap_or((0, 0, serde_json::json!({"daily": 0, "weekly": 0, "monthly": 0}), 0));
+
     Ok(serde_json::json!({
         "enabled": state.is_enabled(),
         "interval_secs": state.get_interval(),
@@ -50,7 +93,13 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         "notification_threshold": notification_threshold,
         "close_to_tray": close_to_tray,
         "notification_style": notification_style,
-        "gate_policy": gate_policy.to_string()
+        "gate_policy": gate_policy.to_string(),
+        "compound_lattice": {
+            "learned_facets": learned_facets_count,
+            "hot_topics": hot_topics_count,
+            "briefing_seals": seal_counts,
+            "compression_chars_saved": compression_chars_saved,
+        }
     }))
 }
 

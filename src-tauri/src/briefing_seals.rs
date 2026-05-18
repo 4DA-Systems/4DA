@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
+#![allow(dead_code)]
+
 //! Briefing Seals — compound temporal memory for the intelligence briefing.
 //!
 //! Instead of reprocessing historical content each briefing cycle, previous

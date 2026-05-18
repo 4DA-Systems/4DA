@@ -620,6 +620,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    tauri::async_runtime::spawn(async {
+        if let Ok(conn) = crate::open_db_connection() {
+            let seeded = crate::stability_detector::seed_from_ace(&conn);
+            if seeded > 0 {
+                info!(target: "4da::startup", seeded, "Stability detector cold-start seeded from ACE");
+            }
+        }
+    });
+
     // One-time startup data cleanup: purge bloated tables that accumulate dead rows.
     // Non-blocking, non-fatal — runs in background to avoid slowing startup.
     tauri::async_runtime::spawn(async {
