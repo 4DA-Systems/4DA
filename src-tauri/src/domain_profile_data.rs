@@ -107,6 +107,72 @@ pub(crate) const AMBIGUOUS_DEPS: &[&str] = &[
     "buffer",
 ];
 
+/// Technologies that indicate a specific stack choice. When an item mentions
+/// one of these and the user doesn't use it (and no other topic matches the
+/// user's stack), cross-cutting topic rescue is suppressed.
+///
+/// Covers: languages, frameworks, databases, platforms, and niche tools that
+/// are stack-defining — i.e., content about these is only relevant if you
+/// actually use them. General concepts (debugging, testing) are NOT here.
+pub(crate) const KNOWN_TECHNOLOGIES: &[&str] = &[
+    // Languages
+    "rust", "typescript", "javascript", "python", "go", "java", "kotlin",
+    "swift", "csharp", "c#", "ruby", "php", "scala", "elixir", "haskell",
+    "dart", "zig", "nim", "lua", "julia", "ocaml", "clojure", "erlang",
+    "perl", "mojo", "gleam", "roc", "objective-c", "fsharp", "f#", "r",
+    "cpp", "c++",
+    // Web frameworks (frontend)
+    "react", "vue", "angular", "svelte", "solid", "solidjs", "qwik",
+    "htmx", "alpine", "alpinejs", "preact", "lit", "ember", "backbone",
+    "polymer", "knockout",
+    // Meta-frameworks
+    "nextjs", "next.js", "nuxt", "remix", "astro", "sveltekit",
+    "solidstart", "fresh", "analog",
+    // Desktop / mobile
+    "tauri", "electron", "flutter", "react-native", "expo", "swiftui",
+    "jetpack-compose", "maui", "xamarin", "cordova", "ionic", "capacitor",
+    // Backend frameworks
+    "django", "flask", "fastapi", "litestar", "rails", "spring",
+    "springboot", "express", "nest", "nestjs", "hono", "elysia",
+    "actix", "axum", "rocket", "warp", "gin", "fiber", "echo", "chi",
+    "phoenix", "laravel", "symfony",
+    // AI / ML
+    "tensorflow", "pytorch", "jax", "langchain", "llamaindex",
+    "huggingface", "transformers", "onnx",
+    // Runtimes
+    "node", "nodejs", "deno", "bun",
+    // Platforms / infrastructure
+    "aws", "gcp", "azure", "docker", "kubernetes", "vercel",
+    "cloudflare", "supabase", "firebase", "netlify", "fly", "railway",
+    "terraform", "pulumi", "ansible",
+    // Databases
+    "postgresql", "postgres", "mysql", "mongodb", "redis", "sqlite",
+    "dynamodb", "cassandra", "elasticsearch", "neo4j", "cockroachdb",
+    "planetscale", "neon", "turso", "surrealdb", "couchdb", "mariadb",
+    // Messaging
+    "kafka", "rabbitmq", "nats",
+    // Game engines
+    "unity", "unreal", "godot", "bevy",
+    // Data / analytics
+    "spark", "hadoop", "flink", "airflow", "snowflake", "dbt",
+    // API styles
+    "graphql", "grpc",
+    // CMS / ecommerce
+    "wordpress", "drupal", "shopify", "magento",
+    // XML ecosystem (niche but stack-defining)
+    "xslt", "xsl", "xpath", "xquery",
+    // Build tools (stack indicators)
+    "webpack", "maven", "gradle",
+    // Specific platforms
+    "wasm", "webgpu",
+];
+
+/// Check if a topic is a known stack-defining technology.
+/// Used to detect off-stack content for cross-cutting topic suppression.
+pub(crate) fn is_known_technology(topic: &str) -> bool {
+    KNOWN_TECHNOLOGIES.contains(&topic)
+}
+
 /// Tiny utility packages that don't represent meaningful tech identity.
 pub(crate) const UTILITY_DEPS: &[&str] = &[
     "proc-macro2",

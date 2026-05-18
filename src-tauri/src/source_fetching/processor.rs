@@ -2,7 +2,11 @@
 //! Item processing logic: fill_cache_background, process_source_items,
 //! embedding generation, deduplication, validation.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
 use tauri::AppHandle;
+use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
 
 use crate::db::Database;
@@ -15,10 +19,17 @@ use crate::{
 
 use super::{fetch_with_retry, AdapterFailureTracker};
 
-/// Fill the cache with items from all sources (background operation)
-/// This is the "write" side of the cache-first architecture
+type FetchResult = std::result::Result<
+    (String, String, Vec<crate::sources::SourceItem>),
+    (String, super::RetryExhaustedError),
+>;
+
+/// Fill the cache with items from all sources (background operation).
+/// Sources are fetched in parallel, bounded by the rate limiter's 6-permit
+/// semaphore. Results stream in as they complete — fast sources don't wait
+/// behind slow ones.
 pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::FetchSummary> {
-    info!(target: "4da::cache", "=== BACKGROUND CACHE FILL STARTED ===");
+    info!(target: "4da::cache", "=== BACKGROUND CACHE FILL STARTED (parallel) ===");
     void_signal_fetching(app);
 
     let db = get_database()?;
@@ -34,39 +45,82 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
     let all_sources = crate::sources::build_all_sources();
     let source_count = all_sources.len();
-    let rl = rate_limiter();
     let cache_tracker = AdapterFailureTracker::new();
 
-    for (idx, source) in all_sources.into_iter().enumerate() {
+    // Track how many sources have been skipped (disabled) up front
+    let mut enabled_sources = Vec::new();
+    for source in all_sources {
         let st = source.source_type();
-        let name = source.name();
-
         if !db.is_source_enabled(st) {
             summary.skipped_disabled += 1;
-            void_signal_fetch_progress(app, idx + 1, source_count);
-            continue;
+        } else {
+            enabled_sources.push(source);
         }
+    }
 
-        rl.wait_for_rate_limit(st).await;
+    let enabled_count = enabled_sources.len();
+    let completed = Arc::new(AtomicUsize::new(summary.skipped_disabled));
 
-        let result = fetch_with_retry(name, &cache_tracker, || source.fetch_items_deep(50)).await;
+    // Spawn all enabled sources as concurrent tasks
+    let mut join_set: JoinSet<FetchResult> = JoinSet::new();
 
-        match result {
-            Ok(raw_items) => {
-                let manifest = source.manifest();
-                let items = sources::apply_source_quality_gate(raw_items, &manifest);
+    for source in enabled_sources {
+        let tracker = cache_tracker.clone();
+        join_set.spawn(async move {
+            let st = source.source_type().to_string();
+            let name = source.name().to_string();
+
+            rate_limiter().wait_for_rate_limit(&st).await;
+
+            let result =
+                fetch_with_retry(&name, &tracker, || source.fetch_items_deep(50)).await;
+
+            match result {
+                Ok(raw_items) => {
+                    let manifest = source.manifest();
+                    let items = sources::apply_source_quality_gate(raw_items, &manifest);
+                    Ok((st, name, items))
+                }
+                Err(e) => Err((st, e)),
+            }
+        });
+    }
+
+    info!(
+        target: "4da::cache",
+        enabled = enabled_count,
+        disabled = summary.skipped_disabled,
+        total = source_count,
+        "Spawned parallel fetch for {enabled_count} sources"
+    );
+
+    // Collect results as they complete
+    while let Some(join_result) = join_set.join_next().await {
+        let done = completed.fetch_add(1, Ordering::Relaxed) + 1;
+        void_signal_fetch_progress(app, done, source_count);
+
+        let fetch_result = match join_result {
+            Ok(r) => r,
+            Err(join_err) => {
+                warn!(target: "4da::cache", error = %join_err, "Fetch task panicked");
+                summary.failed += 1;
+                continue;
+            }
+        };
+
+        match fetch_result {
+            Ok((st, name, items)) => {
                 let filtered = items.len();
-                info!(target: "4da::cache", source = st, fetched = filtered, "Fetched {name} items (quality-gated)");
+                info!(target: "4da::cache", source = %st, fetched = filtered, "Fetched {name} items (quality-gated)");
                 summary.succeeded += 1;
 
-                // Record health so staleness checks reflect this fetch
-                db.record_feed_success(st, st).ok();
-                db.record_source_health(st, true, filtered as i64, 0, None)
+                db.record_feed_success(&st, &st).ok();
+                db.record_source_health(&st, true, filtered as i64, 0, None)
                     .ok();
 
                 for item in items {
                     if db
-                        .get_source_item(st, &item.source_id)
+                        .get_source_item(&st, &item.source_id)
                         .ok()
                         .flatten()
                         .is_none()
@@ -81,22 +135,20 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                             feed_origin,
                         ));
                     } else {
-                        db.touch_source_item(st, &item.source_id).ok();
+                        db.touch_source_item(&st, &item.source_id).ok();
                         summary.cached_touches += 1;
                     }
                 }
             }
-            Err(e) => {
-                warn!(target: "4da::cache", source = st, error = %e, "Fetch failed after retries");
+            Err((st, e)) => {
+                warn!(target: "4da::cache", source = %st, error = %e, "Fetch failed after retries");
                 summary.failed += 1;
                 let err_msg = e.to_string();
-                db.record_feed_failure(st, st, &err_msg).ok();
-                db.record_source_health(st, false, 0, 0, Some(&err_msg))
+                db.record_feed_failure(&st, &st, &err_msg).ok();
+                db.record_source_health(&st, false, 0, 0, Some(&err_msg))
                     .ok();
             }
         }
-
-        void_signal_fetch_progress(app, idx + 1, source_count);
     }
 
     for (name, count) in cache_tracker.persistent_failures() {

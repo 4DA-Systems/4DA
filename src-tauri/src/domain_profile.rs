@@ -12,7 +12,8 @@
 use std::collections::HashSet;
 
 use crate::domain_profile_data::{
-    adjacency_map, archetype_map, AMBIGUOUS_DEPS, CROSS_CUTTING_TOPICS, UTILITY_DEPS,
+    adjacency_map, archetype_map, is_known_technology, AMBIGUOUS_DEPS, CROSS_CUTTING_TOPICS,
+    UTILITY_DEPS,
 };
 
 /// User's technology identity — what they work with and care about
@@ -271,11 +272,49 @@ pub fn compute_domain_relevance(topics: &[String], profile: &DomainProfile) -> f
         }
     }
 
-    if best_relevance > 0.0 {
-        best_relevance
-    } else {
-        0.15 // Off-domain minimum
+    if best_relevance == 0.0 {
+        return 0.15; // Off-domain minimum
     }
+
+    // Off-stack technology suppression: when the item's topics include a known
+    // technology that's NOT in the user's stack, and NO topic matches the user's
+    // stack at all, suppress cross-cutting and domain-concern rescues.
+    //
+    // "XSLT debugging" → "debugging" is cross-cutting (0.60) but "xslt" is a
+    // known tech not in the user's stack → suppress to 0.25.
+    // "Rust debugging" → "rust" matches primary stack → no suppression.
+    // "debugging strategies" → no known tech topics → no suppression.
+    // "Supabase validation" → "supabase" is off-stack → suppress.
+    if best_relevance <= 0.60 {
+        let has_on_stack = topics.iter().any(|t| {
+            let lower = t.to_lowercase();
+            profile
+                .primary_stack
+                .iter()
+                .any(|s| fuzzy_tech_match(&lower, s))
+                || profile
+                    .dependency_names
+                    .iter()
+                    .any(|d| fuzzy_tech_match(&lower, d))
+                || profile
+                    .all_tech
+                    .iter()
+                    .any(|s| fuzzy_tech_match(&lower, s))
+        });
+
+        if !has_on_stack {
+            let has_off_stack_tech = topics.iter().any(|t| {
+                let lower = t.to_lowercase();
+                is_known_technology(&lower)
+            });
+
+            if has_off_stack_tech {
+                best_relevance = best_relevance.min(0.25);
+            }
+        }
+    }
+
+    best_relevance
 }
 
 /// Fuzzy technology matching that handles common variations:
@@ -1055,5 +1094,165 @@ mod tests {
         ] {
             assert!(is_display_worthy(fw), "{} should be display-worthy", fw);
         }
+    }
+
+    // ====================================================================
+    // Off-Stack Technology Suppression Tests
+    // ====================================================================
+
+    fn rust_tauri_profile() -> DomainProfile {
+        DomainProfile {
+            primary_stack: HashSet::from([
+                "rust".to_string(),
+                "typescript".to_string(),
+                "react".to_string(),
+                "tauri".to_string(),
+                "sqlite".to_string(),
+            ]),
+            adjacent_tech: HashSet::from([
+                "cargo".to_string(),
+                "wasm".to_string(),
+                "desktop".to_string(),
+            ]),
+            all_tech: HashSet::from([
+                "rust".to_string(),
+                "typescript".to_string(),
+                "react".to_string(),
+                "tauri".to_string(),
+                "sqlite".to_string(),
+                "cargo".to_string(),
+                "wasm".to_string(),
+                "tokio".to_string(),
+                "serde".to_string(),
+            ]),
+            dependency_names: HashSet::from([
+                "tokio".to_string(),
+                "serde".to_string(),
+                "reqwest".to_string(),
+            ]),
+            interest_topics: HashSet::from(["security".to_string()]),
+            domain_concerns: HashSet::from([
+                "packaging".to_string(),
+                "installer".to_string(),
+            ]),
+            ace_promoted_tech: HashSet::new(),
+        }
+    }
+
+    #[test]
+    fn test_off_stack_xslt_debugging_suppressed() {
+        // "XSLT debugging patterns" — "debugging" is cross-cutting (0.60)
+        // but "xslt" is off-stack tech → suppress to 0.25
+        let profile = rust_tauri_profile();
+        let topics = vec!["xslt".to_string(), "debugging".to_string()];
+        assert!(
+            compute_domain_relevance(&topics, &profile) <= 0.25,
+            "XSLT debugging should be suppressed for Rust/Tauri dev"
+        );
+    }
+
+    #[test]
+    fn test_off_stack_supabase_suppressed() {
+        // "Supabase storage validation" — off-stack
+        let profile = rust_tauri_profile();
+        let topics = vec!["supabase".to_string(), "validation".to_string()];
+        assert!(
+            compute_domain_relevance(&topics, &profile) <= 0.25,
+            "Supabase content should be suppressed for non-Supabase user"
+        );
+    }
+
+    #[test]
+    fn test_off_stack_nextjs_suppressed() {
+        // "Next.js server-side validation" — off-stack
+        let profile = rust_tauri_profile();
+        let topics = vec!["nextjs".to_string(), "validation".to_string()];
+        assert!(
+            compute_domain_relevance(&topics, &profile) <= 0.25,
+            "Next.js content should be suppressed for non-Next.js user"
+        );
+    }
+
+    #[test]
+    fn test_off_stack_python_html_suppressed() {
+        // "React is Overkill: Why Python + HTML is Dominating" — python is off-stack
+        let profile = rust_tauri_profile();
+        let topics = vec!["python".to_string()];
+        assert!(
+            compute_domain_relevance(&topics, &profile) <= 0.25,
+            "Python-primary content should be suppressed for Rust/React user"
+        );
+    }
+
+    #[test]
+    fn test_on_stack_not_suppressed() {
+        // "React hooks replacing polling loop" — React is in stack
+        let profile = rust_tauri_profile();
+        let topics = vec!["react".to_string(), "hooks".to_string()];
+        assert_eq!(
+            compute_domain_relevance(&topics, &profile),
+            1.0,
+            "React content should not be suppressed for React user"
+        );
+    }
+
+    #[test]
+    fn test_pure_cross_cutting_not_suppressed() {
+        // "debugging strategies" — no tech topic, pure cross-cutting
+        let profile = rust_tauri_profile();
+        let topics = vec!["debugging".to_string()];
+        assert_eq!(
+            compute_domain_relevance(&topics, &profile),
+            0.60,
+            "Pure cross-cutting topics without off-stack tech should keep 0.60"
+        );
+    }
+
+    #[test]
+    fn test_on_stack_plus_cross_cutting_not_suppressed() {
+        // "Rust debugging patterns" — rust is on-stack
+        let profile = rust_tauri_profile();
+        let topics = vec!["rust".to_string(), "debugging".to_string()];
+        assert_eq!(
+            compute_domain_relevance(&topics, &profile),
+            1.0,
+            "On-stack tech + cross-cutting should get full relevance"
+        );
+    }
+
+    #[test]
+    fn test_off_stack_domain_concern_suppressed() {
+        // "Electron packaging" — "packaging" is domain concern (0.60)
+        // but "electron" is off-stack → suppress
+        let profile = rust_tauri_profile();
+        let topics = vec!["electron".to_string(), "packaging".to_string()];
+        assert!(
+            compute_domain_relevance(&topics, &profile) <= 0.25,
+            "Electron packaging should be suppressed for Tauri user"
+        );
+    }
+
+    #[test]
+    fn test_off_stack_interest_match_suppressed() {
+        // "Angular security vulnerability" — user has "security" interest (0.50)
+        // but "angular" is off-stack → suppress
+        let profile = rust_tauri_profile();
+        let topics = vec!["angular".to_string(), "security".to_string()];
+        assert!(
+            compute_domain_relevance(&topics, &profile) <= 0.25,
+            "Off-stack + interest match should be suppressed"
+        );
+    }
+
+    #[test]
+    fn test_mixed_stack_comparison_not_suppressed() {
+        // "React vs Angular" — react is on-stack, so no suppression
+        let profile = rust_tauri_profile();
+        let topics = vec!["react".to_string(), "angular".to_string()];
+        assert_eq!(
+            compute_domain_relevance(&topics, &profile),
+            1.0,
+            "Comparison article with on-stack tech should not be suppressed"
+        );
     }
 }
