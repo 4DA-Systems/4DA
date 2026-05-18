@@ -250,12 +250,41 @@ Rules:
         _ => String::new(),
     };
 
+    // Inject sealed temporal context (compound memory from previous briefings)
+    let seal_context = crate::open_db_connection()
+        .map(|conn| crate::briefing_seals::build_seal_context(&conn))
+        .unwrap_or_default();
+
+    // Inject hot topic consolidation context
+    let hot_topics_context = crate::open_db_connection()
+        .map(|conn| {
+            let hot = crate::topic_hotness::get_hot_topics(&conn, 5);
+            if hot.is_empty() {
+                String::new()
+            } else {
+                let list: Vec<String> = hot
+                    .iter()
+                    .map(|t| {
+                        format!(
+                            "  - {} ({} mentions across {} sources)",
+                            t.topic_key, t.mention_count, t.distinct_sources
+                        )
+                    })
+                    .collect();
+                format!(
+                    "\n- Cross-source hot topics (consolidate instead of repeating):\n{}",
+                    list.join("\n")
+                )
+            }
+        })
+        .unwrap_or_default();
+
     let user_prompt = format!(
         "My active projects and context:\n\
          - Tech stack: {tech}\n\
          - Currently working on: {topics}\n\
          - Skip these topics: {anti}\n\
-         {decisions}{anomalies}\n\n\
+         {decisions}{anomalies}{hot_topics}{seal}\n\n\
          Today's {count} items (sorted by relevance):\n\n\
          {items}{batched}\n\n\
          Give me my intelligence briefing.",
@@ -268,6 +297,8 @@ Rules:
         },
         decisions = decision_context,
         anomalies = anomaly_section,
+        hot_topics = hot_topics_context,
+        seal = seal_context,
         count = items.len(),
         items = items_text,
         batched = batched_section,
@@ -302,6 +333,26 @@ Rules:
                 ) {
                     error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
                 }
+            }
+
+            // Seal today's briefing for compound temporal memory
+            if let Ok(conn) = crate::open_db_connection() {
+                let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+                let top_topics: Vec<String> = items
+                    .iter()
+                    .take(10)
+                    .flat_map(|item| crate::extract_topics(&item.title, "", &[]))
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter()
+                    .take(10)
+                    .collect();
+                crate::briefing_seals::create_daily_seal(
+                    &conn,
+                    &today,
+                    &response.content,
+                    items.len() as i64,
+                    &top_topics,
+                );
             }
 
             Ok(serde_json::json!({
