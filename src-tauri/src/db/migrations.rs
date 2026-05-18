@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 75;
+        const TARGET_VERSION: i64 = 77;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2750,6 +2750,71 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_evidence_observed ON facet_evidence(observed_at DESC);",
                         )?;
                         info!(target: "4da::db", "Created learned_facets + facet_evidence tables for stability detector");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 76: Topic Hotness — cross-source signal consolidation
+            if current_version < 76 {
+                Self::run_versioned_migration(
+                    &conn,
+                    75,
+                    76,
+                    "Phase 76: topic hotness (cross-source consolidation)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS topic_hotness (
+                                topic_key TEXT PRIMARY KEY,
+                                mention_count INTEGER NOT NULL DEFAULT 0,
+                                distinct_sources INTEGER NOT NULL DEFAULT 0,
+                                last_seen_at INTEGER NOT NULL,
+                                query_hits INTEGER NOT NULL DEFAULT 0,
+                                hotness_score REAL NOT NULL DEFAULT 0.0,
+                                materialized INTEGER NOT NULL DEFAULT 0,
+                                first_seen_at INTEGER NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_hotness_score ON topic_hotness(hotness_score DESC);
+                            CREATE INDEX IF NOT EXISTS idx_hotness_materialized ON topic_hotness(materialized, hotness_score DESC);
+
+                            CREATE TABLE IF NOT EXISTS topic_hotness_sources (
+                                day_source_key TEXT PRIMARY KEY,
+                                topic_key TEXT NOT NULL,
+                                source_type TEXT NOT NULL,
+                                seen_at INTEGER NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_hotness_sources_topic ON topic_hotness_sources(topic_key);",
+                        )?;
+                        info!(target: "4da::db", "Created topic_hotness + topic_hotness_sources tables");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 77: Briefing Seals — compound temporal memory
+            if current_version < 77 {
+                Self::run_versioned_migration(
+                    &conn,
+                    76,
+                    77,
+                    "Phase 77: briefing seals (compound temporal memory)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS briefing_seals (
+                                seal_id TEXT PRIMARY KEY,
+                                seal_date TEXT NOT NULL,
+                                seal_level INTEGER NOT NULL DEFAULT 0,
+                                parent_seal_id TEXT,
+                                summary_text TEXT NOT NULL,
+                                item_count INTEGER NOT NULL,
+                                top_topics TEXT NOT NULL DEFAULT '[]',
+                                token_count INTEGER NOT NULL DEFAULT 0,
+                                created_at INTEGER NOT NULL
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_seals_level_date ON briefing_seals(seal_level, seal_date DESC);
+                            CREATE INDEX IF NOT EXISTS idx_seals_parent ON briefing_seals(parent_seal_id);",
+                        )?;
+                        info!(target: "4da::db", "Created briefing_seals table for compound temporal memory");
                         Ok(())
                     },
                 )?;

@@ -163,6 +163,7 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod blind_spots;
 mod boot_context;
+pub(crate) mod briefing_seals;
 mod briefing_snapshot;
 mod briefing_window;
 mod calibration;
@@ -317,6 +318,7 @@ mod standing_queries;
 mod standing_queries_evaluation;
 mod standing_queries_suggestions;
 mod startup_health;
+pub(crate) mod topic_hotness;
 // Wave 5 — universal startup watchdog with crash trail and heartbeat
 mod startup_watchdog;
 // Single-instance file lock (belt-and-braces with tauri_plugin_single_instance)

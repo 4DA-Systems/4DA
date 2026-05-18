@@ -119,7 +119,11 @@ pub async fn run_background_behavior_decay() -> Result<serde_json::Value> {
 
     // Stability detector rebuild — recompute facet lifecycles on the daily cycle
     let facets_rebuilt = match crate::open_db_connection() {
-        Ok(conn) => crate::stability_detector::rebuild_all(&conn),
+        Ok(conn) => {
+            let f = crate::stability_detector::rebuild_all(&conn);
+            crate::topic_hotness::rebuild_hotness(&conn);
+            f
+        }
         Err(_) => 0,
     };
 
