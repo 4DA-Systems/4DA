@@ -182,6 +182,7 @@ pub mod channels;
 mod commitment_contracts;
 mod community_intelligence;
 mod competing_tech;
+pub(crate) mod compression_rules;
 mod concept_graph;
 mod content_analysis;
 mod content_commands;

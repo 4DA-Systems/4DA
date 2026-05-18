@@ -173,7 +173,10 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
         let texts: Vec<String> = new_items_to_embed
             .iter()
-            .map(|(_, _, _, title, content, _, _)| build_embedding_text(title, content))
+            .map(|(st, _, _, title, content, _, _)| {
+                let compressed = crate::compression_rules::compress(st, content);
+                build_embedding_text(title, &compressed)
+            })
             .collect();
 
         match embed_texts(&texts).await {
@@ -309,7 +312,8 @@ pub(crate) fn process_source_items(
                 tags: None,
             };
 
-            let embed_text = build_embedding_text(&item.title, &item.content);
+            let compressed = crate::compression_rules::compress(source_type, &item.content);
+            let embed_text = build_embedding_text(&item.title, &compressed);
             new_items_to_embed.push((generic, embed_text));
         }
     }

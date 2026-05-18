@@ -332,7 +332,8 @@ pub(crate) async fn fetch_all_sources(
                             tags: source_tags,
                         };
 
-                        let embed_text = build_embedding_text(&item.title, &content);
+                        let compressed = crate::compression_rules::compress(source_type, &content);
+                        let embed_text = build_embedding_text(&item.title, &compressed);
                         new_items_to_embed.push((generic, embed_text));
                     }
                 }
