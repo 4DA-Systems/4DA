@@ -142,8 +142,10 @@ pub(crate) async fn score_items_full(
     }
 
     // Collect scoring telemetry
-    let mut telemetry = scoring::ScoringTelemetry::default();
-    telemetry.total_scored = results.len();
+    let mut telemetry = scoring::ScoringTelemetry {
+        total_scored: results.len(),
+        ..Default::default()
+    };
     for item in &results {
         if item.excluded {
             telemetry.excluded_count += 1;
@@ -553,13 +555,16 @@ pub(crate) fn run_post_analysis_hooks(results: &[SourceRelevance]) {
             Some(&(chrono::Utc::now() + chrono::Duration::days(30)).to_rfc3339()),
         );
 
-        // 2. Record topic centroids for semantic drift detection
+        // 2. Record topic centroids for semantic drift detection + topic hotness
         let mut topic_scores: std::collections::HashMap<String, Vec<f32>> =
             std::collections::HashMap::new();
         let mut topic_titles: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
         for item in results.iter().filter(|r| r.relevant) {
             let topics = crate::extract_topics(&item.title, "", &[]);
+            for topic in &topics {
+                crate::topic_hotness::record_topic_mention(&conn, topic, &item.source_type);
+            }
             for topic in topics {
                 topic_scores
                     .entry(topic.clone())

@@ -515,6 +515,12 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                     // Compute compound advantage score (weekly period)
                     let _ = crate::decision_advantage::compute_compound_score(&conn, "weekly");
+
+                    // Topic hotness rebuild — recompute scores + archive cold topics
+                    let updated = crate::topic_hotness::rebuild_hotness(&conn);
+                    if updated > 0 {
+                        info!(target: "4da::monitor", updated, "Topic hotness rebuilt");
+                    }
                 }
             }
 
