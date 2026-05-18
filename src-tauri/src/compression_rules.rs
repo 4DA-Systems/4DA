@@ -158,19 +158,13 @@ fn strip_quoted_text(text: &str) -> String {
     text.lines()
         .filter(|line| {
             let trimmed = line.trim();
-            !trimmed.starts_with('>')
-                && !trimmed.starts_with("&gt;")
-                && !trimmed
-                    .starts_with("On ")
-                    .then_some(())
-                    .and_then(|_| {
-                        if trimmed.contains(" wrote:") {
-                            Some(())
-                        } else {
-                            None
-                        }
-                    })
-                    .is_none()
+            if trimmed.starts_with('>') || trimmed.starts_with("&gt;") {
+                return false;
+            }
+            if trimmed.starts_with("On ") && trimmed.contains(" wrote:") {
+                return false;
+            }
+            true
         })
         .collect::<Vec<_>>()
         .join("\n")
