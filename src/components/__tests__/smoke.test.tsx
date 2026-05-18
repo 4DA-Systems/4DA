@@ -180,10 +180,6 @@ vi.mock('../playbook/ProgressiveRevealBanner', () => ({
 vi.mock('../playbook/PersonalizationDepthIndicator', () => ({
   PersonalizationDepthIndicator: () => null,
 }));
-vi.mock('../playbook/TemplateLibrary', () => ({
-  TemplateLibrary: () => null,
-}));
-
 // Mock error messages util
 vi.mock('../../utils/error-messages', () => ({
   translateError: (e: unknown) => String(e),

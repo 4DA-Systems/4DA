@@ -81,7 +81,6 @@ vi.mock('../playbook/DiffRibbon', () => ({ DiffRibbon: () => null }));
 vi.mock('../playbook/FeedEchoBlock', () => ({ FeedEchoBlock: () => null }));
 vi.mock('../playbook/ProgressiveRevealBanner', () => ({ ProgressiveRevealBanner: () => null }));
 vi.mock('../playbook/PersonalizationDepthIndicator', () => ({ PersonalizationDepthIndicator: () => null }));
-vi.mock('../playbook/TemplateLibrary', () => ({ TemplateLibrary: () => null }));
 vi.mock('../../utils/error-messages', () => ({ translateError: (e: unknown) => String(e) }));
 vi.mock('../../utils/first-run-messages', () => ({
   getStageNarration: () => 'narration',

@@ -1108,19 +1108,6 @@
       "color_hint": "green"
     },
     {
-      "id": "drizzle-blog",
-      "name": "Drizzle Blog",
-      "url": "https://orm.drizzle.team/blog/rss.xml",
-      "homepage": "https://orm.drizzle.team/blog",
-      "description": "TypeScript ORM — type-safe SQL, migrations, serverless database patterns",
-      "domains": ["typescript", "databases"],
-      "content_type": "release_notes",
-      "tier": "ecosystem",
-      "editorial_model": "official",
-      "expected_frequency_days": 14,
-      "color_hint": "green"
-    },
-    {
       "id": "vite-blog",
       "name": "Vite Blog",
       "url": "https://vite.dev/blog/feed.rss",
@@ -1303,19 +1290,6 @@
       "color_hint": "white"
     },
     {
-      "id": "tailwindcss-blog",
-      "name": "Tailwind CSS Blog",
-      "url": "https://tailwindcss.com/feeds/feed.xml",
-      "homepage": "https://tailwindcss.com/blog",
-      "description": "Tailwind CSS releases, utility-first design patterns, performance optimization",
-      "domains": ["web-platform", "javascript", "typescript"],
-      "content_type": "release_notes",
-      "tier": "ecosystem",
-      "editorial_model": "official",
-      "expected_frequency_days": 30,
-      "color_hint": "cyan"
-    },
-    {
       "id": "react-blog",
       "name": "React Blog",
       "url": "https://react.dev/blog/rss.xml",
@@ -1327,19 +1301,6 @@
       "editorial_model": "official",
       "expected_frequency_days": 60,
       "color_hint": "blue"
-    },
-    {
-      "id": "nextjs-blog",
-      "name": "Next.js Blog",
-      "url": "https://nextjs.org/feed.xml",
-      "homepage": "https://nextjs.org/blog",
-      "description": "Next.js releases, App Router, Server Actions, caching, deployment patterns",
-      "domains": ["javascript", "typescript", "web-platform"],
-      "content_type": "release_notes",
-      "tier": "ecosystem",
-      "editorial_model": "official",
-      "expected_frequency_days": 14,
-      "color_hint": "white"
     },
     {
       "id": "remix-blog",

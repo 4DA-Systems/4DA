@@ -3221,6 +3221,9 @@ pub fn dismiss_blind_spot(
     )
     .map_err(|e| e.to_string())?;
 
+    // Feed stability detector — blind spot dismissal is a strong topic veto signal
+    crate::engagement_telemetry::on_blind_spot_dismiss(&conn, &item_id);
+
     // Invalidate cache
     if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
         *guard = None;

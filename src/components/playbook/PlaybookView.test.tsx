@@ -118,10 +118,6 @@ vi.mock('../playbook/PersonalizationDepthIndicator', () => ({
   PersonalizationDepthIndicator: () => <div data-testid="personalization-depth" />,
 }));
 
-vi.mock('../playbook/TemplateLibrary', () => ({
-  TemplateLibrary: () => <div data-testid="template-library" />,
-}));
-
 vi.mock('../../utils/playbook-markdown', () => ({
   renderMarkdown: (content: string) => content,
 }));
@@ -246,43 +242,14 @@ describe('PlaybookView', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Template library section
-  // -------------------------------------------------------------------------
-  it('shows template library when Templates sidebar button is clicked', () => {
-    render(<PlaybookView />);
-
-    // Click the Templates button in the sidebar
-    fireEvent.click(screen.getByText('playbook.templates'));
-
-    expect(screen.getByTestId('template-library')).toBeInTheDocument();
-  });
-
-  it('hides empty state when template library is shown', () => {
-    render(<PlaybookView />);
-
-    fireEvent.click(screen.getByText('playbook.templates'));
-
-    // Empty state content should not be visible
-    expect(screen.queryByText('streets:streets.startWith')).not.toBeInTheDocument();
-    expect(screen.queryByText(/streets:streets\.emptyState\.headline/)).not.toBeInTheDocument();
-  });
-
-  // -------------------------------------------------------------------------
   // Module switching
   // -------------------------------------------------------------------------
-  it('switches from templates back to module content when a module is clicked', () => {
+  it('switches to module content when a module is clicked', () => {
     render(<PlaybookView />);
 
-    // First show templates
-    fireEvent.click(screen.getByText('playbook.templates'));
-    expect(screen.getByTestId('template-library')).toBeInTheDocument();
-
-    // Click a module button — find the "S" module button in the sidebar
     const moduleButtons = screen.getAllByText('S');
     fireEvent.click(moduleButtons[0]!);
 
-    // Templates should be hidden, module content should be loading
-    expect(screen.queryByTestId('template-library')).not.toBeInTheDocument();
     expect(mockLoadContent).toHaveBeenCalledWith('S');
   });
 

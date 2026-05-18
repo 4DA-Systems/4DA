@@ -6,6 +6,7 @@ import { isSafeUrl } from '../../utils/sanitize-html';
 import { useAppStore } from '../../store';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { cmd } from '../../lib/commands';
+import { extractTechTopics } from '../../lib/known-tech';
 
 interface FeedbackButtonsProps {
   item: SourceRelevance;
@@ -95,8 +96,8 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     if (deps && deps.length > 0) return deps[0]!;
     const triggers = item.signal_triggers;
     if (triggers && triggers.length > 0) return triggers[0]!;
-    const words = item.title.toLowerCase().split(/\s+/);
-    return words.find(w => w.length > 3 && !/^(this|that|from|with|have|been|will|what|when|where|about|into|your|more|some)$/.test(w)) || words[0] || 'unknown';
+    const techTopics = extractTechTopics(item.title, 1);
+    return techTopics[0] || 'unknown';
   }, [item]);
 
   const handleSuppress = useCallback((e: React.MouseEvent) => {

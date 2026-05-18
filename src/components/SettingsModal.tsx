@@ -6,6 +6,7 @@ import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { SourceConfigPanel } from './SourceConfigPanel';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
+import { LearnedPreferencesSection } from './settings/LearnedPreferencesSection';
 import { IndexedDocumentsPanel } from './IndexedDocumentsPanel';
 import { AboutPanel } from './AboutPanel';
 import { SettingsGeneralTab } from './settings/SettingsGeneralTab';
@@ -230,6 +231,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
                 </PanelErrorBoundary>
                 <PanelErrorBoundary name="Indexed Documents"><IndexedDocumentsPanel onStatusChange={setSettingsStatus} /></PanelErrorBoundary>
                 <PanelErrorBoundary name="Personalization"><PersonalizationSection /></PanelErrorBoundary>
+                <PanelErrorBoundary name="Learned Preferences"><LearnedPreferencesSection /></PanelErrorBoundary>
               </div>
             </div>
           )}

@@ -8,6 +8,7 @@ import { isSafeUrl } from '../../utils/sanitize-html';
 import { formatLocalDateTime } from '../../utils/format-date';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import { cmd } from '../../lib/commands';
+import { extractTechTopics } from '../../lib/known-tech';
 
 interface ResultItemCollapsedProps {
   item: SourceRelevance;
@@ -44,7 +45,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   }, [item, t]);
 
   const recordTitleClick = useCallback(() => {
-    const topics = item.title.toLowerCase().split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+    const topics = extractTechTopics(item.title);
     cmd('ace_record_interaction', {
       item_id: item.id,
       action_type: 'click',

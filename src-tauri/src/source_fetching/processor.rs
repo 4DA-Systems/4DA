@@ -72,8 +72,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
 
             rate_limiter().wait_for_rate_limit(&st).await;
 
-            let result =
-                fetch_with_retry(&name, &tracker, || source.fetch_items_deep(50)).await;
+            let result = fetch_with_retry(&name, &tracker, || source.fetch_items_deep(50)).await;
 
             match result {
                 Ok(raw_items) => {
