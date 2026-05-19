@@ -73,6 +73,16 @@ impl Default for WatcherConfig {
             ".vscode",
             "coverage",
             ".nyc_output",
+            // Sensitive directories — credentials, keys, secrets
+            ".ssh",
+            ".aws",
+            ".gnupg",
+            ".gpg",
+            ".docker",
+            ".kube",
+            ".terraform",
+            ".vault",
+            ".password-store",
         ] {
             skip_dirs.insert(dir.to_string());
         }
@@ -274,6 +284,11 @@ impl FileWatcher {
                 continue;
             }
 
+            // Skip sensitive files that match watched extensions but contain secrets
+            if is_sensitive_file(path) {
+                continue;
+            }
+
             // Check if in skip directory
             let path_str = path.to_string_lossy();
             if config.skip_dirs.iter().any(|skip| path_str.contains(skip)) {
@@ -329,6 +344,32 @@ impl Drop for FileWatcher {
 // ============================================================================
 // Topic Extraction from File Content
 // ============================================================================
+
+/// Check if a file is sensitive and should never be indexed.
+/// Catches credential files that have watched extensions (.json, .yaml, .toml).
+fn is_sensitive_file(path: &Path) -> bool {
+    let file_name = match path.file_name().and_then(|f| f.to_str()) {
+        Some(name) => name.to_lowercase(),
+        None => return false,
+    };
+
+    // Exact filename matches
+    const SENSITIVE_NAMES: &[&str] = &[
+        ".env", ".env.local", ".env.development", ".env.production", ".env.test",
+        "credentials.json", "service-account.json", "serviceaccount.json",
+        "secrets.yaml", "secrets.yml", "secrets.json", "secrets.toml",
+        ".npmrc", ".pypirc", ".netrc", ".pgpass",
+        "token.json", "tokens.json",
+        "keyfile.json", "keystore.json",
+    ];
+    if SENSITIVE_NAMES.contains(&file_name.as_str()) {
+        return true;
+    }
+
+    // Extension-based exclusions (these are never code)
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    matches!(ext, "pem" | "key" | "p12" | "pfx" | "jks" | "keystore" | "crt" | "cer")
+}
 
 /// Extract topics from a code file's content
 pub fn extract_topics_from_file(path: &Path) -> Result<Vec<String>> {
