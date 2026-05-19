@@ -24,6 +24,12 @@ const TS_SRC = path.join(ROOT, 'src');
 const LIB_RS = path.join(RUST_SRC, 'lib.rs');
 const OUTPUT_JSON = path.join(ROOT, '.claude', 'wisdom', 'ghost-commands.json');
 
+// Commands that are intentionally unregistered (feature-gated, in-progress, etc.)
+// Add name + reason. These are excluded from the unregistered check and exit code.
+const KNOWN_UNREGISTERED = new Set([
+  'prepare_embedding_engine', // behind fastembed-local feature flag — module not yet wired
+]);
+
 // ANSI color codes
 const RED = '\x1b[31m';
 const GREEN = '\x1b[32m';
@@ -221,7 +227,7 @@ function main() {
 
     if (inFrontend && inHandler) {
       live.push({ name, ...primary });
-    } else if (!inHandler) {
+    } else if (!inHandler && !KNOWN_UNREGISTERED.has(name)) {
       unregistered.push({ name, ...primary, inFrontend });
     } else if (!inFrontend) {
       ghosts.push({ name, ...primary });
