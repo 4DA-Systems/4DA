@@ -78,6 +78,25 @@ export function ResultsView({
   const criticalCount = useMemo(() => filteredResults.filter(r => r.is_critical_alert).length, [filteredResults]);
   const totalCount = state.relevanceResults.length;
 
+  // Topic cluster detection: find where 2+ consecutive items share a primary_topic
+  const topicClusterStarts = useMemo(() => {
+    if (sortBy !== 'score') return new Map<number, string>();
+    const starts = new Map<number, string>();
+    let i = 0;
+    while (i < filteredResults.length) {
+      const topic = filteredResults[i]!.primary_topic;
+      if (topic) {
+        let j = i + 1;
+        while (j < filteredResults.length && filteredResults[j]!.primary_topic === topic) j++;
+        if (j - i >= 2) starts.set(i, topic);
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return starts;
+  }, [filteredResults, sortBy]);
+
   useEffect(() => {
     const items = [
       ...filteredResults.map((r) => ({ id: String(r.id), text: r.title })),
@@ -321,6 +340,15 @@ export function ResultsView({
                           {groupHeader}
                         </span>
                         <div className="flex-1 h-px bg-border" />
+                      </div>
+                    )}
+                    {topicClusterStarts.has(idx) && (
+                      <div className="flex items-center gap-2 mb-2 mt-1">
+                        <div className="flex-1 h-px bg-border/50" />
+                        <span className="text-[10px] text-text-muted/70 uppercase tracking-wider font-medium px-1.5">
+                          {topicClusterStarts.get(idx)}
+                        </span>
+                        <div className="flex-1 h-px bg-border/50" />
                       </div>
                     )}
                     <div className="pb-3">

@@ -40,6 +40,8 @@ export interface SourceRelevance {
   applicability?: string;
   /** Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234") */
   advisory_id?: string;
+  /** Primary extracted topic for topic clustering (e.g. "webassembly", "rust") */
+  primary_topic?: string;
 }
 
 export interface ScoreBreakdown {

@@ -76,6 +76,26 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
           {formatScore(item.top_score)}
         </button>
 
+        {/* Signal strength: micro-dots showing independent confirmation axes */}
+        {item.score_breakdown && (item.score_breakdown.signal_count ?? 0) > 0 && (
+          <span
+            className="flex-shrink-0 flex gap-px"
+            title={t('results.signalStrength', { count: item.score_breakdown.signal_count })}
+            aria-label={t('results.signalStrength', { count: item.score_breakdown.signal_count })}
+          >
+            {[0, 1, 2, 3, 4].map(i => (
+              <span
+                key={i}
+                className={`w-1 h-1 rounded-full ${
+                  i < (item.score_breakdown?.signal_count ?? 0)
+                    ? (item.score_breakdown?.signal_count ?? 0) >= 4 ? 'bg-green-400' : 'bg-text-muted'
+                    : 'bg-white/[0.06]'
+                }`}
+              />
+            ))}
+          </span>
+        )}
+
         {/* Source badge */}
         <span className={`flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(item.source_type || '')}`}>
           {getSourceLabel(item.source_type || '') || item.source_type || t('results.unknownSource')}

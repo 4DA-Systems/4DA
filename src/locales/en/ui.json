@@ -1925,6 +1925,8 @@
   "results.predictedContext": "Predicted Context",
   "results.predictedAt": "Predicted at {{time}}",
   "results.refreshInterval": "Refreshes every 5m",
+  "results.signalStrength": "{{count}} confirming signal",
+  "results.signalStrength_other": "{{count}} confirming signals",
   "pro.signals": "{{count}} signal",
   "pro.signals_other": "{{count}} signals",
   "pro.gaps": "{{count}} gap",
