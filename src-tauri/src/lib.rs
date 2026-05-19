@@ -677,6 +677,7 @@ pub fn run() {
             settings_commands::check_ollama_status,
             settings_commands::pull_ollama_model,
             settings_commands::cancel_ollama_pull,
+            embeddings::prepare_embedding_engine,
             settings_commands::check_synthesis_capability,
             settings_commands::list_provider_models,
             settings_commands::detect_local_servers,

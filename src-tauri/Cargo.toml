@@ -31,7 +31,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"
 futures = "0.3"
 
 # HTTP client
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "charset", "http2", "macos-system-configuration"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "blocking", "rustls-tls", "charset", "http2", "macos-system-configuration"] }
 
 # Signal Terminal HTTP server
 axum = { version = "0.8", features = ["tokio"] }
@@ -187,7 +187,7 @@ harness = false
 
 [features]
 default = ["fastembed-local"]
-fastembed-local = ["dep:fastembed"]
+fastembed-local = ["dep:fastembed", "dep:tar", "dep:flate2"]
 ocr = ["dep:ocrs", "dep:rten"]
 archive = ["dep:tar", "dep:flate2"]
 void-universe = []

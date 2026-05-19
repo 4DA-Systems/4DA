@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { EmbeddingSetupProgress } from './EmbeddingSetupProgress';
 import { ReRankingSection } from './ReRankingSection';
 import { UsageStatsSection } from './UsageStatsSection';
 import { popularEndpoints, getProviderModels, IDLE_VALIDATION } from './ai-provider-constants';
@@ -192,6 +193,9 @@ export function AIProviderSection({
               <p className="text-xs text-text-muted">
                 {t('settings.ai.localOnlyNote')}
               </p>
+              <div className="mt-2">
+                <EmbeddingSetupProgress />
+              </div>
             </div>
           )}
 
