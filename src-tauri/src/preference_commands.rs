@@ -5,28 +5,30 @@
 use crate::error::Result;
 use crate::stability_detector;
 
-/// Returns all learned facets grouped for the preferences UI.
+/// Returns learned facets suitable for the preferences UI.
+///
+/// Only surfaces facets a human would recognize: user overrides, languages,
+/// frameworks, sources, vetoes.  Topic affinities are internal scoring
+/// signals — never shown.  Hard-capped at 25 items.
 #[tauri::command]
 pub async fn get_learned_preferences() -> Result<serde_json::Value> {
     let conn = crate::open_db_connection()?;
     let facets = stability_detector::get_all_learned_facets(&conn);
 
-    let items: Vec<serde_json::Value> = facets
+    let mut items: Vec<serde_json::Value> = facets
         .iter()
         .filter(|f| {
-            // Never show forgotten facets in the main interests view.
-            // Users can see them in a separate "filtered" section if needed.
-            if f.user_state == stability_detector::UserState::Forgotten {
+            if f.user_state != stability_detector::UserState::Auto {
+                return true;
+            }
+            if f.class == stability_detector::FacetClass::TopicAffinity {
                 return false;
             }
-            // Include if: user pinned, or has real evidence, or active/provisional
-            f.user_state == stability_detector::UserState::Pinned
-                || f.evidence_count > 1
-                || matches!(
-                    f.state,
-                    stability_detector::FacetState::Active
-                        | stability_detector::FacetState::Provisional
-                )
+            matches!(
+                f.state,
+                stability_detector::FacetState::Active
+                    | stability_detector::FacetState::Provisional
+            )
         })
         .map(|f| {
             serde_json::json!({
@@ -43,6 +45,8 @@ pub async fn get_learned_preferences() -> Result<serde_json::Value> {
             })
         })
         .collect();
+
+    items.truncate(25);
 
     Ok(serde_json::json!({
         "facets": items,

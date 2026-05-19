@@ -144,6 +144,9 @@ export function LearnedPreferencesSection() {
     }
   };
 
+  const hasRealEvidence = facets.some(f => f.evidence_count > 1 || f.user_state !== 'auto');
+  if (!loading && !hasRealEvidence) return null;
+
   const toggleSelect = (id: string) => {
     setSelectedId(prev => prev === id ? null : id);
   };
@@ -156,7 +159,7 @@ export function LearnedPreferencesSection() {
     return acc;
   }, {});
 
-  const groupOrder = ['interest', 'topic_affinity', 'source_pref', 'workflow', 'temporal', 'veto'];
+  const groupOrder = ['interest', 'source_pref', 'workflow', 'temporal', 'veto'];
   const activeGroups = groupOrder.filter(k => grouped[k]?.length);
 
   return (
