@@ -71,7 +71,7 @@ parking_lot = "0.12"
 #   2. Change to: features = ["bundled-sqlcipher-vendored-openssl"]
 # The encryption key management (db/encryption.rs) is already wired and will
 # activate automatically when SQLCipher is enabled. sqlite-vec is compatible.
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
 sqlite-vec = "0.1"
 
 # Hashing for deduplication
