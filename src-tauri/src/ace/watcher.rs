@@ -355,12 +355,26 @@ fn is_sensitive_file(path: &Path) -> bool {
 
     // Exact filename matches
     const SENSITIVE_NAMES: &[&str] = &[
-        ".env", ".env.local", ".env.development", ".env.production", ".env.test",
-        "credentials.json", "service-account.json", "serviceaccount.json",
-        "secrets.yaml", "secrets.yml", "secrets.json", "secrets.toml",
-        ".npmrc", ".pypirc", ".netrc", ".pgpass",
-        "token.json", "tokens.json",
-        "keyfile.json", "keystore.json",
+        ".env",
+        ".env.local",
+        ".env.development",
+        ".env.production",
+        ".env.test",
+        "credentials.json",
+        "service-account.json",
+        "serviceaccount.json",
+        "secrets.yaml",
+        "secrets.yml",
+        "secrets.json",
+        "secrets.toml",
+        ".npmrc",
+        ".pypirc",
+        ".netrc",
+        ".pgpass",
+        "token.json",
+        "tokens.json",
+        "keyfile.json",
+        "keystore.json",
     ];
     if SENSITIVE_NAMES.contains(&file_name.as_str()) {
         return true;
@@ -368,7 +382,10 @@ fn is_sensitive_file(path: &Path) -> bool {
 
     // Extension-based exclusions (these are never code)
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    matches!(ext, "pem" | "key" | "p12" | "pfx" | "jks" | "keystore" | "crt" | "cer")
+    matches!(
+        ext,
+        "pem" | "key" | "p12" | "pfx" | "jks" | "keystore" | "crt" | "cer"
+    )
 }
 
 /// Extract topics from a code file's content
