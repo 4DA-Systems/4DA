@@ -47,7 +47,7 @@ export function EmbeddingSetupProgress() {
   if (progress?.done && progress.stage === 'ready') {
     return (
       <div className="flex items-center gap-2 text-xs text-[var(--success)]">
-        <span>&#10003;</span>
+        <span>{'✓'}</span>
         <span>{t('settings.ai.embeddingSetup.ready')}</span>
       </div>
     );
@@ -57,7 +57,7 @@ export function EmbeddingSetupProgress() {
     <div className="flex flex-col gap-2">
       {!preparing && !progress && (
         <button
-          onClick={handlePrepare}
+          onClick={() => void handlePrepare()}
           className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] underline cursor-pointer"
         >
           {t('settings.ai.embeddingSetup.prepare')}
