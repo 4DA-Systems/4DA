@@ -12,6 +12,168 @@ use crate::get_settings_manager;
 use super::{truncate_and_normalize, EMBEDDING_CLIENT};
 
 // ============================================================================
+// In-process fastembed provider (ONNX Runtime — zero network dependency)
+// ============================================================================
+
+#[cfg(feature = "fastembed-local")]
+use once_cell::sync::OnceCell;
+
+#[cfg(feature = "fastembed-local")]
+static FASTEMBED_MODEL: OnceCell<parking_lot::Mutex<fastembed::TextEmbedding>> = OnceCell::new();
+
+#[cfg(feature = "fastembed-local")]
+fn ort_lib_filename() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "onnxruntime.dll"
+    } else if cfg!(target_os = "macos") {
+        "libonnxruntime.dylib"
+    } else {
+        "libonnxruntime.so"
+    }
+}
+
+#[cfg(feature = "fastembed-local")]
+fn ensure_ort_runtime(cache_dir: &std::path::Path) -> std::result::Result<(), FourDaError> {
+    if std::env::var("ORT_DYLIB_PATH").is_ok() {
+        return Ok(());
+    }
+
+    let ort_dir = cache_dir.join("ort");
+    let dll_path = ort_dir.join(ort_lib_filename());
+
+    if dll_path.exists() {
+        std::env::set_var("ORT_DYLIB_PATH", &dll_path);
+        return Ok(());
+    }
+
+    let _ = std::fs::create_dir_all(&ort_dir);
+    tracing::info!(
+        target: "4da::embeddings",
+        dest = %ort_dir.display(),
+        "Downloading ONNX Runtime 1.24.2 (one-time, ~70MB)"
+    );
+
+    #[cfg(target_os = "windows")]
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-1.24.2.zip";
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz";
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-x86_64-1.24.2.tgz";
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-x64-1.24.2.tgz";
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-aarch64-1.24.2.tgz";
+
+    let archive_path = ort_dir.join("ort_download.tmp");
+    let status = std::process::Command::new("curl")
+        .args(["-L", "-s", "-o"])
+        .arg(&archive_path)
+        .arg(url)
+        .status()
+        .map_err(|e| FourDaError::from(format!("curl not found: {e}")))?;
+
+    if !status.success() {
+        return Err(FourDaError::from("ONNX Runtime download failed"));
+    }
+
+    extract_ort_library(&archive_path, &dll_path)?;
+    let _ = std::fs::remove_file(&archive_path);
+
+    std::env::set_var("ORT_DYLIB_PATH", &dll_path);
+    tracing::info!(target: "4da::embeddings", path = %dll_path.display(), "ONNX Runtime ready");
+    Ok(())
+}
+
+#[cfg(feature = "fastembed-local")]
+fn extract_ort_library(
+    archive_path: &std::path::Path,
+    dll_dest: &std::path::Path,
+) -> std::result::Result<(), FourDaError> {
+    let lib_name = ort_lib_filename();
+
+    if archive_path
+        .extension()
+        .is_some_and(|e| e == "zip" || e == "tmp")
+    {
+        let file = std::fs::File::open(archive_path)
+            .map_err(|e| FourDaError::from(format!("open archive: {e}")))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| FourDaError::from(format!("invalid zip: {e}")))?;
+
+        for i in 0..archive.len() {
+            let mut entry = archive
+                .by_index(i)
+                .map_err(|e| FourDaError::from(format!("zip entry: {e}")))?;
+            let name = entry.name().to_string();
+            if name.ends_with(lib_name) {
+                let mut out = std::fs::File::create(dll_dest)
+                    .map_err(|e| FourDaError::from(format!("create dll: {e}")))?;
+                std::io::copy(&mut entry, &mut out)
+                    .map_err(|e| FourDaError::from(format!("extract dll: {e}")))?;
+                return Ok(());
+            }
+        }
+        return Err(FourDaError::from(format!(
+            "{lib_name} not found in archive"
+        )));
+    }
+
+    // .tgz — use system tar
+    let status = std::process::Command::new("tar")
+        .args(["xzf"])
+        .arg(archive_path)
+        .arg("--strip-components=2")
+        .arg("-C")
+        .arg(
+            dll_dest
+                .parent()
+                .ok_or_else(|| FourDaError::from("no parent dir"))?,
+        )
+        .arg(format!("--include=*/{lib_name}"))
+        .status()
+        .map_err(|e| FourDaError::from(format!("tar failed: {e}")))?;
+
+    if !status.success() || !dll_dest.exists() {
+        return Err(FourDaError::from("Failed to extract ORT from tgz"));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "fastembed-local")]
+fn get_or_init_fastembed(
+) -> std::result::Result<&'static parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
+    FASTEMBED_MODEL.get_or_try_init(|| {
+        let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
+        ensure_ort_runtime(&cache_dir)?;
+
+        tracing::info!(
+            target: "4da::embeddings",
+            cache = %cache_dir.display(),
+            "Initializing in-process embedding (nomic-embed-text-v1.5 quantized, ~137MB first download)"
+        );
+        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15Q)
+            .with_cache_dir(cache_dir)
+            .with_show_download_progress(true);
+        fastembed::TextEmbedding::try_new(options)
+            .map(parking_lot::Mutex::new)
+            .map_err(|e| {
+                tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
+                FourDaError::from(format!("fastembed init: {e}"))
+            })
+    })
+}
+
+#[cfg(feature = "fastembed-local")]
+pub(super) fn embed_texts_fastembed_sync(texts: &[String]) -> Result<Vec<Vec<f32>>> {
+    let model_mutex = get_or_init_fastembed()?;
+    let mut model = model_mutex.lock();
+    let str_refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+    model
+        .embed(str_refs, None)
+        .map_err(|e| FourDaError::from(format!("fastembed embed: {e}")))
+}
+
+// ============================================================================
 // OpenAI provider
 // ============================================================================
 

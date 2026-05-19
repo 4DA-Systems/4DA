@@ -57,7 +57,9 @@ notify = "8"
 scraper = "0.23"
 
 # Embeddings (local MiniLM model)
-# fastembed = "4"  # DISABLED: ONNX linking issues on Windows - using OpenAI embeddings only
+# In-process embedding via ONNX Runtime — zero network, zero config, privacy preserved.
+# ort-load-dynamic: loads onnxruntime shared lib at runtime (avoids MSVC 2022 static link requirement).
+fastembed = { version = "5", optional = true, default-features = false, features = ["ort-load-dynamic", "hf-hub-native-tls"] }
 
 # Thread-safe state
 once_cell = "1"
@@ -184,7 +186,8 @@ name = "db_scale"
 harness = false
 
 [features]
-default = []
+default = ["fastembed-local"]
+fastembed-local = ["dep:fastembed"]
 ocr = ["dep:ocrs", "dep:rten"]
 archive = ["dep:tar", "dep:flate2"]
 void-universe = []
