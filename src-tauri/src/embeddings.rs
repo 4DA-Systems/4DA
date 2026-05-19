@@ -12,6 +12,7 @@ use crate::get_settings_manager;
 
 #[cfg(feature = "fastembed-local")]
 use embeddings_providers::embed_texts_fastembed_sync;
+pub use embeddings_providers::*;
 use embeddings_providers::{embed_texts_ollama, embed_texts_openai, retry_with_backoff};
 
 /// Shared HTTP client for embedding API calls (reused across requests)
@@ -30,6 +31,56 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 // ============================================================================
 // Embeddings - supports OpenAI and Ollama
 // ============================================================================
+
+/// Attempt in-process fastembed (ONNX Runtime) — zero network, privacy preserved.
+/// Returns `Some(embeddings)` on success, `None` on failure.
+#[cfg(feature = "fastembed-local")]
+async fn try_fastembed_fallback(texts: &[String]) -> Option<Vec<Vec<f32>>> {
+    let texts_for_fe = texts.to_vec();
+    match tokio::task::spawn_blocking(move || embed_texts_fastembed_sync(&texts_for_fe)).await {
+        Ok(Ok(embeddings)) => {
+            tracing::info!(
+                target: "4da::embeddings",
+                count = embeddings.len(),
+                "Embedded in-process via fastembed (ONNX, zero network)"
+            );
+            Some(
+                validate_embeddings(embeddings)
+                    .into_iter()
+                    .map(truncate_and_normalize)
+                    .collect(),
+            )
+        }
+        Ok(Err(e)) => {
+            tracing::debug!(
+                target: "4da::embeddings",
+                error = %e,
+                "fastembed unavailable — falling back to zero vectors"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::debug!(
+                target: "4da::embeddings",
+                error = %e,
+                "fastembed task panicked — falling back to zero vectors"
+            );
+            None
+        }
+    }
+}
+
+/// Produce zero-vector placeholders and report embedding capability as degraded.
+fn zero_vector_fallback(count: usize) -> Vec<Vec<f32>> {
+    crate::capabilities::report_degraded(
+        crate::capabilities::Capability::EmbeddingSearch,
+        "No embedding provider available",
+        "Keyword matching with context synthesis (install Ollama for semantic search)",
+    );
+    (0..count)
+        .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
+        .collect()
+}
 
 /// Generate embeddings for a list of texts
 /// Supports OpenAI (text-embedding-3-small) and Ollama (nomic-embed-text)
@@ -161,12 +212,21 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
             }
             // Try default Ollama
             let texts = texts.to_vec();
-            retry_with_backoff("embed_ollama_default", 2, || {
+            match retry_with_backoff("embed_ollama_default", 2, || {
                 let t = texts.clone();
                 async move { embed_texts_ollama(&t, &None).await }
             })
             .await
-            .map(validate_embeddings)
+            {
+                Ok(result) => Ok(validate_embeddings(result)),
+                Err(_) => {
+                    #[cfg(feature = "fastembed-local")]
+                    if let Some(result) = try_fastembed_fallback(&texts).await {
+                        return Ok(result);
+                    }
+                    Ok(zero_vector_fallback(texts.len()))
+                }
+            }
         }
         // "none" or unknown provider: try Ollama → fastembed (in-process) → zero vectors
         _ => {
@@ -180,54 +240,16 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
                 return Ok(validate_embeddings(result));
             }
 
-            // Try in-process fastembed (ONNX Runtime) — zero network, privacy preserved
             #[cfg(feature = "fastembed-local")]
-            {
-                let texts_for_fe = texts.clone();
-                match tokio::task::spawn_blocking(move || embed_texts_fastembed_sync(&texts_for_fe))
-                    .await
-                {
-                    Ok(Ok(embeddings)) => {
-                        tracing::info!(
-                            target: "4da::embeddings",
-                            count = embeddings.len(),
-                            "Embedded in-process via fastembed (ONNX, zero network)"
-                        );
-                        return Ok(validate_embeddings(embeddings)
-                            .into_iter()
-                            .map(truncate_and_normalize)
-                            .collect());
-                    }
-                    Ok(Err(e)) => {
-                        tracing::debug!(
-                            target: "4da::embeddings",
-                            error = %e,
-                            "fastembed unavailable — falling back to zero vectors"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::debug!(
-                            target: "4da::embeddings",
-                            error = %e,
-                            "fastembed task panicked — falling back to zero vectors"
-                        );
-                    }
-                }
+            if let Some(result) = try_fastembed_fallback(&texts).await {
+                return Ok(result);
             }
 
             tracing::debug!(
                 target: "4da::embeddings",
                 "No embedding provider available — scoring via keyword matching with ACE context synthesis"
             );
-            crate::capabilities::report_degraded(
-                crate::capabilities::Capability::EmbeddingSearch,
-                "No embedding provider available",
-                "Keyword matching with context synthesis (install Ollama for semantic search)",
-            );
-            Ok(texts
-                .iter()
-                .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
-                .collect())
+            Ok(zero_vector_fallback(texts.len()))
         }
     };
 

@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! Provider-specific embedding functions (OpenAI, Ollama) and retry logic.
+//! Provider-specific embedding functions (OpenAI, Ollama, fastembed) and retry logic.
 //!
 //! Split from `embeddings.rs` to keep both modules under the 700-line threshold.
 
@@ -19,7 +19,21 @@ use super::{truncate_and_normalize, EMBEDDING_CLIENT};
 use once_cell::sync::OnceCell;
 
 #[cfg(feature = "fastembed-local")]
+use std::io::{Read as _, Write as _};
+
+#[cfg(feature = "fastembed-local")]
 static FASTEMBED_MODEL: OnceCell<parking_lot::Mutex<fastembed::TextEmbedding>> = OnceCell::new();
+
+#[cfg(feature = "fastembed-local")]
+#[derive(Debug, Clone, serde::Serialize)]
+pub(super) struct DownloadProgress {
+    pub stage: String,
+    pub percent: u32,
+    pub bytes_downloaded: u64,
+    pub bytes_total: u64,
+    pub message: String,
+    pub done: bool,
+}
 
 #[cfg(feature = "fastembed-local")]
 fn ort_lib_filename() -> &'static str {
@@ -33,13 +47,29 @@ fn ort_lib_filename() -> &'static str {
 }
 
 #[cfg(feature = "fastembed-local")]
-fn ensure_ort_runtime(cache_dir: &std::path::Path) -> std::result::Result<(), FourDaError> {
+fn ensure_ort_runtime(
+    cache_dir: &std::path::Path,
+    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
+) -> std::result::Result<(), FourDaError> {
+    let lib_name = ort_lib_filename();
+
     if std::env::var("ORT_DYLIB_PATH").is_ok() {
         return Ok(());
     }
 
+    let bundled_path = crate::runtime_paths::RuntimePaths::get()
+        .resource_dir
+        .join("models")
+        .join("ort")
+        .join(lib_name);
+    if bundled_path.exists() {
+        std::env::set_var("ORT_DYLIB_PATH", &bundled_path);
+        tracing::info!(target: "4da::embeddings", path = %bundled_path.display(), "Using bundled ORT runtime");
+        return Ok(());
+    }
+
     let ort_dir = cache_dir.join("ort");
-    let dll_path = ort_dir.join(ort_lib_filename());
+    let dll_path = ort_dir.join(lib_name);
 
     if dll_path.exists() {
         std::env::set_var("ORT_DYLIB_PATH", &dll_path);
@@ -53,8 +83,10 @@ fn ensure_ort_runtime(cache_dir: &std::path::Path) -> std::result::Result<(), Fo
         "Downloading ONNX Runtime 1.24.2 (one-time, ~70MB)"
     );
 
-    #[cfg(target_os = "windows")]
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-1.24.2.zip";
+    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-arm64-1.24.2.zip";
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz";
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
@@ -65,15 +97,53 @@ fn ensure_ort_runtime(cache_dir: &std::path::Path) -> std::result::Result<(), Fo
     let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-aarch64-1.24.2.tgz";
 
     let archive_path = ort_dir.join("ort_download.tmp");
-    let status = std::process::Command::new("curl")
-        .args(["-L", "-s", "-o"])
-        .arg(&archive_path)
-        .arg(url)
-        .status()
-        .map_err(|e| FourDaError::from(format!("curl not found: {e}")))?;
-
-    if !status.success() {
-        return Err(FourDaError::from("ONNX Runtime download failed"));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| FourDaError::from(format!("HTTP client init: {e}")))?;
+    let mut response = client
+        .get(url)
+        .send()
+        .map_err(|e| FourDaError::from(format!("ORT download failed: {e}")))?;
+    if !response.status().is_success() {
+        return Err(FourDaError::from(format!(
+            "ORT download HTTP {}",
+            response.status()
+        )));
+    }
+    let total = response.content_length().unwrap_or(0);
+    let mut file = std::fs::File::create(&archive_path)
+        .map_err(|e| FourDaError::from(format!("create archive: {e}")))?;
+    let mut downloaded: u64 = 0;
+    let mut buf = [0u8; 65536];
+    loop {
+        let n = response
+            .read(&mut buf)
+            .map_err(|e| FourDaError::from(format!("download read: {e}")))?;
+        if n == 0 {
+            break;
+        }
+        file.write_all(&buf[..n])
+            .map_err(|e| FourDaError::from(format!("write archive: {e}")))?;
+        downloaded += n as u64;
+        if let Some(tx) = progress.as_ref() {
+            let _ = tx.send(DownloadProgress {
+                stage: "ort-download".into(),
+                percent: if total > 0 {
+                    (downloaded * 100 / total) as u32
+                } else {
+                    0
+                },
+                bytes_downloaded: downloaded,
+                bytes_total: total,
+                message: format!(
+                    "Downloading ONNX Runtime ({:.1}/{:.1} MB)",
+                    downloaded as f64 / 1_048_576.0,
+                    total as f64 / 1_048_576.0
+                ),
+                done: false,
+            });
+        }
     }
 
     extract_ort_library(&archive_path, &dll_path)?;
@@ -90,7 +160,6 @@ fn extract_ort_library(
     dll_dest: &std::path::Path,
 ) -> std::result::Result<(), FourDaError> {
     let lib_name = ort_lib_filename();
-
     if archive_path
         .extension()
         .is_some_and(|e| e == "zip" || e == "tmp")
@@ -99,7 +168,6 @@ fn extract_ort_library(
             .map_err(|e| FourDaError::from(format!("open archive: {e}")))?;
         let mut archive = zip::ZipArchive::new(file)
             .map_err(|e| FourDaError::from(format!("invalid zip: {e}")))?;
-
         for i in 0..archive.len() {
             let mut entry = archive
                 .by_index(i)
@@ -117,26 +185,27 @@ fn extract_ort_library(
             "{lib_name} not found in archive"
         )));
     }
-
-    // .tgz — use system tar
-    let status = std::process::Command::new("tar")
-        .args(["xzf"])
-        .arg(archive_path)
-        .arg("--strip-components=2")
-        .arg("-C")
-        .arg(
-            dll_dest
-                .parent()
-                .ok_or_else(|| FourDaError::from("no parent dir"))?,
-        )
-        .arg(format!("--include=*/{lib_name}"))
-        .status()
-        .map_err(|e| FourDaError::from(format!("tar failed: {e}")))?;
-
-    if !status.success() || !dll_dest.exists() {
-        return Err(FourDaError::from("Failed to extract ORT from tgz"));
+    let file = std::fs::File::open(archive_path)
+        .map_err(|e| FourDaError::from(format!("open tgz: {e}")))?;
+    let gz = flate2::read::GzDecoder::new(file);
+    let mut archive = tar::Archive::new(gz);
+    for entry in archive
+        .entries()
+        .map_err(|e| FourDaError::from(format!("tar entries: {e}")))?
+    {
+        let mut entry = entry.map_err(|e| FourDaError::from(format!("tar entry: {e}")))?;
+        let path = entry
+            .path()
+            .map_err(|e| FourDaError::from(format!("tar path: {e}")))?;
+        if path.to_string_lossy().ends_with(lib_name) {
+            let mut out = std::fs::File::create(dll_dest)
+                .map_err(|e| FourDaError::from(format!("create lib: {e}")))?;
+            std::io::copy(&mut entry, &mut out)
+                .map_err(|e| FourDaError::from(format!("extract lib: {e}")))?;
+            return Ok(());
+        }
     }
-    Ok(())
+    Err(FourDaError::from(format!("{lib_name} not found in tgz")))
 }
 
 #[cfg(feature = "fastembed-local")]
@@ -144,8 +213,7 @@ fn get_or_init_fastembed(
 ) -> std::result::Result<&'static parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
     FASTEMBED_MODEL.get_or_try_init(|| {
         let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
-        ensure_ort_runtime(&cache_dir)?;
-
+        ensure_ort_runtime(&cache_dir, None)?;
         tracing::info!(
             target: "4da::embeddings",
             cache = %cache_dir.display(),
@@ -171,6 +239,92 @@ pub(super) fn embed_texts_fastembed_sync(texts: &[String]) -> Result<Vec<Vec<f32
     model
         .embed(str_refs, None)
         .map_err(|e| FourDaError::from(format!("fastembed embed: {e}")))
+}
+
+#[cfg(feature = "fastembed-local")]
+pub(super) fn init_fastembed_with_progress(
+    progress: Option<std::sync::mpsc::Sender<DownloadProgress>>,
+) -> std::result::Result<(), FourDaError> {
+    let _ = FASTEMBED_MODEL.get_or_try_init(|| {
+        let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
+        ensure_ort_runtime(&cache_dir, progress.as_ref())?;
+
+        if let Some(tx) = progress.as_ref() {
+            let _ = tx.send(DownloadProgress {
+                stage: "model-download".into(),
+                percent: 0,
+                bytes_downloaded: 0,
+                bytes_total: 0,
+                message: "Loading embedding model (nomic-embed-text-v1.5, ~137MB first run)".into(),
+                done: false,
+            });
+        }
+
+        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15Q)
+            .with_cache_dir(cache_dir)
+            .with_show_download_progress(true);
+        let result = fastembed::TextEmbedding::try_new(options)
+            .map(parking_lot::Mutex::new)
+            .map_err(|e| {
+                tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
+                FourDaError::from(format!("fastembed init: {e}"))
+            });
+
+        if let Some(tx) = progress.as_ref() {
+            let _ = tx.send(DownloadProgress {
+                stage: "ready".into(),
+                percent: 100,
+                bytes_downloaded: 0,
+                bytes_total: 0,
+                message: "Embedding engine ready".into(),
+                done: true,
+            });
+        }
+
+        result
+    })?;
+    Ok(())
+}
+
+#[cfg(feature = "fastembed-local")]
+#[tauri::command]
+pub async fn prepare_embedding_engine(
+    app: tauri::AppHandle,
+) -> std::result::Result<serde_json::Value, String> {
+    use tauri::Emitter;
+
+    if FASTEMBED_MODEL.get().is_some() {
+        return Ok(serde_json::json!({"status": "ready", "cached": true}));
+    }
+
+    let (tx, rx) = std::sync::mpsc::channel::<DownloadProgress>();
+    let init_handle = tokio::task::spawn_blocking(move || init_fastembed_with_progress(Some(tx)));
+    loop {
+        match rx.try_recv() {
+            Ok(progress) => {
+                let _ = app.emit("embedding-setup-progress", &progress);
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => break,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+    }
+
+    init_handle
+        .await
+        .map_err(|e| format!("init task panicked: {e}"))?
+        .map_err(|e| e.to_string())?;
+
+    Ok(serde_json::json!({"status": "ready", "cached": false}))
+}
+
+#[cfg(not(feature = "fastembed-local"))]
+#[tauri::command]
+pub async fn prepare_embedding_engine() -> std::result::Result<serde_json::Value, String> {
+    Ok(
+        serde_json::json!({"status": "unavailable", "reason": "fastembed-local feature not enabled"}),
+    )
 }
 
 // ============================================================================

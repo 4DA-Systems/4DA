@@ -249,6 +249,7 @@ interface CommandMap {
   mark_onboarding_complete: { params: Record<string, never>; result: void };
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
   cancel_ollama_pull: { params: Record<string, never>; result: string };
+  prepare_embedding_engine: { params: Record<string, never>; result: { status: string; message?: string } };
   list_provider_models: { params: { provider: string; baseUrl: string | null; apiKey: string | null }; result: { models: string[]; error?: string } };
   detect_local_servers: { params: Record<string, never>; result: { servers: Array<{ name: string; base_url: string; model_count: number; running: boolean }> } };
   get_llm_key_for_mcp: { params: Record<string, never>; result: { provider: string; api_key_masked: string; has_api_key: boolean; model: string; base_url: string | null } };
@@ -1842,6 +1843,7 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'index_context',
   'ace_full_scan',
   'pull_ollama_model',
+  'prepare_embedding_engine',
   'natural_language_query',
   'synthesize_search',
   'generate_ai_briefing',

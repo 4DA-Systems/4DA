@@ -134,6 +134,28 @@ pub(crate) fn initialize_pre_tauri() {
     // banner below.
     crate::runtime_paths::RuntimePaths::init();
 
+    // Pre-set ORT_DYLIB_PATH while still single-threaded (safe for env::set_var).
+    // Checks bundled resources first, then cache. If neither exists, the lazy
+    // init in ensure_ort_runtime will download and set it later.
+    #[cfg(feature = "fastembed-local")]
+    {
+        let paths = crate::runtime_paths::RuntimePaths::get();
+        let ort_lib = if cfg!(target_os = "windows") {
+            "onnxruntime.dll"
+        } else if cfg!(target_os = "macos") {
+            "libonnxruntime.dylib"
+        } else {
+            "libonnxruntime.so"
+        };
+        let candidates = [
+            paths.resource_dir.join("models").join("ort").join(ort_lib),
+            paths.model_cache_dir().join("ort").join(ort_lib),
+        ];
+        if let Some(path) = candidates.iter().find(|p| p.exists()) {
+            std::env::set_var("ORT_DYLIB_PATH", path);
+        }
+    }
+
     // Daily-rotated file appender under data_dir/logs. The WorkerGuard is
     // stashed in LOG_FILE_GUARD so records from background tasks flush during
     // shutdown.
