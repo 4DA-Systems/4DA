@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-/* eslint-disable i18next/no-literal-string */
+/* eslint-disable i18next/no-literal-string -- brand names (Anthropic, OpenAI, Ollama) are intentional */
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -88,7 +88,7 @@ export function SetupAIProvider({
                 disabled={importing}
                 className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
-                {importing ? 'Importing...' : t('onboarding.setupAi.useThisKey')}
+                {importing ? t('action.importing') : t('onboarding.setupAi.useThisKey')}
               </button>
             </div>
           )}
@@ -102,7 +102,7 @@ export function SetupAIProvider({
                 disabled={importing}
                 className="text-xs px-3 py-1 bg-blue-500/20 text-blue-300 rounded hover:bg-blue-500/30 transition-colors disabled:opacity-50"
               >
-                {importing ? 'Importing...' : t('onboarding.setupAi.useThisKey')}
+                {importing ? t('action.importing') : t('onboarding.setupAi.useThisKey')}
               </button>
             </div>
           )}
@@ -132,7 +132,7 @@ export function SetupAIProvider({
                   <span className="text-text-primary font-mono font-medium">{model}</span>
                   <span className={isCancelled ? 'text-red-400' : 'text-text-muted'}>
                     {isCancelled
-                      ? 'Cancelled'
+                      ? t('action.cancelled')
                       : p.done
                         ? t('onboarding.apiKeys.pullComplete')
                         : p.status || `${p.percent}%`}
@@ -157,7 +157,7 @@ export function SetupAIProvider({
               onClick={() => { void cmd('cancel_ollama_pull'); }}
               className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
             >
-              Cancel Download
+              {t('action.cancelDownload')}
             </button>
           </div>
         </div>
@@ -229,7 +229,7 @@ export function SetupAIProvider({
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   </div>
                   <div className="text-[10px] text-text-muted mt-0.5">
-                    {server.model_count} {server.model_count === 1 ? 'model' : 'models'} &middot; {server.base_url}
+                    {t('onboarding.setupAi.modelCount', { count: server.model_count })} &middot; {server.base_url}
                   </div>
                 </button>
               ))}

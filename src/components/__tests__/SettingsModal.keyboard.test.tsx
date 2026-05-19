@@ -100,7 +100,7 @@ describe('SettingsModal keyboard navigation', () => {
 
   it('close button is keyboard focusable', () => {
     render(<SettingsModal onClose={vi.fn()} />);
-    const closeBtn = screen.getByLabelText('Close settings');
+    const closeBtn = screen.getByLabelText('settings.closeSettings');
     expect(closeBtn.tagName).toBe('BUTTON');
     expect(closeBtn).not.toHaveAttribute('tabindex', '-1');
   });

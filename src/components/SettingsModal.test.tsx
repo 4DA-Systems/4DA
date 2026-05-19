@@ -128,7 +128,7 @@ describe('SettingsModal', () => {
     const onClose = vi.fn();
     render(<SettingsModal onClose={onClose} />);
 
-    const closeButton = screen.getByLabelText('Close settings');
+    const closeButton = screen.getByLabelText('settings.closeSettings');
     fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
   });

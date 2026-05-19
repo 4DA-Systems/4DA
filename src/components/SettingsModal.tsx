@@ -159,11 +159,11 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
               </div>
               <h2 id="settings-modal-title" className="text-lg font-medium text-white">{t('settings.title')}</h2>
             </div>
-            <button onClick={onClose} aria-label="Close settings" className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all">
+            <button onClick={onClose} aria-label={t('settings.closeSettings')} className="w-8 h-8 rounded-lg bg-bg-tertiary text-text-muted hover:text-white hover:bg-border flex items-center justify-center transition-all">
               &times;
             </button>
           </div>
-          <div className="px-6 flex gap-1 border-b border-border" role="tablist" aria-label="Settings navigation">
+          <div className="px-6 flex gap-1 border-b border-border" role="tablist" aria-label={t('settings.navigation')}>
             {TAB_IDS.map(tabId => (
               <button key={tabId} id={`tab-${tabId}`} role="tab" aria-selected={activeTab === tabId} aria-controls={`tabpanel-${tabId}`} onClick={() => handleTabChange(tabId)}
                 className={`px-4 py-3 text-sm transition-all relative ${activeTab === tabId ? 'text-orange-400 font-medium' : 'text-text-muted hover:text-text-secondary'}`}>
