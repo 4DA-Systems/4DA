@@ -115,7 +115,8 @@ fn ensure_ort_runtime(
     let mut file = std::fs::File::create(&archive_path)
         .map_err(|e| FourDaError::from(format!("create archive: {e}")))?;
     let mut downloaded: u64 = 0;
-    let mut buf = [0u8; 8192];
+    let mut last_report: u64 = 0;
+    let mut buf = [0u8; 32_768];
     loop {
         let n = response
             .read(&mut buf)
@@ -127,23 +128,26 @@ fn ensure_ort_runtime(
             .map_err(|e| FourDaError::from(format!("write chunk: {e}")))?;
         downloaded += n as u64;
         if let Some(tx) = progress.as_ref() {
-            let percent = if total > 0 {
-                ((downloaded as f64 / total as f64) * 50.0) as u32
-            } else {
-                0
-            };
-            let _ = tx.send(DownloadProgress {
-                stage: "ort-download".into(),
-                percent,
-                bytes_downloaded: downloaded,
-                bytes_total: total,
-                message: format!(
-                    "Downloading ONNX Runtime... {:.1}MB / {:.1}MB",
-                    downloaded as f64 / 1_048_576.0,
-                    total as f64 / 1_048_576.0
-                ),
-                done: false,
-            });
+            if downloaded - last_report > 524_288 || n == 0 {
+                last_report = downloaded;
+                let pct = if total > 0 {
+                    ((downloaded as f64 / total as f64) * 50.0) as u32
+                } else {
+                    0
+                };
+                let _ = tx.send(DownloadProgress {
+                    stage: "ort-download".into(),
+                    percent: pct,
+                    bytes_downloaded: downloaded,
+                    bytes_total: total,
+                    message: format!(
+                        "Downloading ONNX Runtime... {:.1}MB / {:.1}MB",
+                        downloaded as f64 / 1_048_576.0,
+                        total as f64 / 1_048_576.0
+                    ),
+                    done: false,
+                });
+            }
         }
     }
     drop(file);
