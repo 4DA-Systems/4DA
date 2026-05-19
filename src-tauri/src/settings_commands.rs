@@ -281,9 +281,17 @@ fn stack_to_feed_domains(detected: &[String]) -> Vec<&'static str> {
     // If no languages detected, keep everything (don't disable any feeds)
     if domains.len() <= 2 {
         domains.extend([
-            "rust", "typescript", "javascript", "python", "go",
-            "web-platform", "systems", "ai-ml", "databases",
-            "devops", "infrastructure",
+            "rust",
+            "typescript",
+            "javascript",
+            "python",
+            "go",
+            "web-platform",
+            "systems",
+            "ai-ml",
+            "databases",
+            "devops",
+            "infrastructure",
         ]);
     }
 
