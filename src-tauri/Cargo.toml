@@ -131,7 +131,7 @@ jsonwebtoken = { version = "9", optional = true }
 # SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) — no fix available as of 2026-04.
 # Only compiled when enterprise feature is enabled (SSO crypto). Monitor: https://rustsec.org/advisories/RUSTSEC-2023-0071
 rsa = { version = "0.9", features = ["sha2"], optional = true }
-pkcs8 = { version = "0.10", features = ["pem"], optional = true }
+pkcs8 = { version = "0.11", features = ["pem"], optional = true }
 x509-cert = { version = "0.2", optional = true }
 
 # Team sync — E2E encrypted metadata relay (AD-023)
