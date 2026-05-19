@@ -184,6 +184,9 @@ pub struct BriefingItem {
     /// Which section of the brief this item belongs to: "action", "watch", or "reading"
     #[serde(default)]
     pub section: Option<String>,
+    /// Why this item was triaged into its section (human-readable reason)
+    #[serde(default)]
+    pub triage_reason: Option<String>,
 }
 
 pub(crate) fn matched_deps_from_signal_triggers(triggers: Option<&[String]>) -> Vec<String> {
@@ -950,6 +953,7 @@ fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
         .cloned()
         .map(|mut i| {
             i.section = Some("action".into());
+            i.triage_reason = Some(triage_reason_for_action(i.content_type.as_deref()));
             i
         })
         .collect();
@@ -963,6 +967,11 @@ fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
         .cloned()
         .map(|mut i| {
             i.section = Some("watch".into());
+            i.triage_reason = if i.corroboration_count > 0 {
+                Some(format!("Seen in {} sources", i.corroboration_count))
+            } else {
+                Some("High relevance match".into())
+            };
             i
         })
         .collect();
@@ -977,20 +986,33 @@ fn apply_section_split(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
         .cloned()
         .map(|mut i| {
             i.section = Some("reading".into());
+            i.triage_reason = Some("Background context".into());
             i
         })
         .collect();
 
-    // Cap each section
     action_items.truncate(5);
     watch_items.truncate(5);
     reading_items.truncate(5);
 
-    // Combine: actions first, then watch, then reading
     let mut final_items = action_items;
     final_items.extend(watch_items);
     final_items.extend(reading_items);
     final_items
+}
+
+fn triage_reason_for_action(content_type: Option<&str>) -> String {
+    match content_type {
+        Some("security_advisory" | "vulnerability_report" | "cve") => {
+            "Security advisory — review impact".into()
+        }
+        Some("breaking_change") => "Breaking change — may affect your code".into(),
+        Some("deprecation_notice") => "Deprecation notice — plan migration".into(),
+        Some("release_notes") => "New release for your stack".into(),
+        Some("platform_update") => "Platform update — check compatibility".into(),
+        Some("migration_guide") => "Migration guide available".into(),
+        _ => "Requires action".into(),
+    }
 }
 
 // ============================================================================
@@ -1122,6 +1144,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                     corroboration_count: 0,
                     alt_sources: vec![],
                     section: None,
+                    triage_reason: None,
                 })
                 .collect()
         } else {
@@ -1157,6 +1180,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                                 corroboration_count: 0,
                                 alt_sources: vec![],
                                 section: None,
+                                triage_reason: None,
                             }
                         })
                         .collect()
@@ -2196,6 +2220,7 @@ mod tests {
             corroboration_count: 0,
             alt_sources: vec![],
             section: None,
+            triage_reason: None,
         };
         assert_eq!(item.title, "Rust 2026 Edition announced");
         assert_eq!(item.source_type, "hackernews");
@@ -2225,6 +2250,7 @@ mod tests {
                     corroboration_count: 0,
                     alt_sources: vec![],
                     section: None,
+                    triage_reason: None,
                 },
                 BriefingItem {
                     title: "Tauri 3.0 beta released".to_string(),
@@ -2240,6 +2266,7 @@ mod tests {
                     corroboration_count: 0,
                     alt_sources: vec![],
                     section: None,
+                    triage_reason: None,
                 },
             ],
             total_relevant: 2,
@@ -2351,6 +2378,7 @@ mod tests {
             corroboration_count: 0,
             alt_sources: vec![],
             section: None,
+            triage_reason: None,
         }
     }
 

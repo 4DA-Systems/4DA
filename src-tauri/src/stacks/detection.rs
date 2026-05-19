@@ -111,6 +111,7 @@ mod tests {
             peak_hours: Vec::new(),
             tech_weights: HashMap::new(),
             negative_stack: Default::default(),
+            tech_projects: Default::default(),
         }
     }
 

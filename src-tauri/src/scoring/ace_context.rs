@@ -36,6 +36,9 @@ pub(crate) struct ACEContext {
     /// Negative stack: Bayesian priors for technologies the user likely does NOT use.
     /// Built from competing-tech inference + anti-topics. Applied undampened in scoring.
     pub negative_stack: crate::stacks::negative_stack::NegativeStackContext,
+    /// Maps detected tech → project directory basename(s) derived from manifest evidence.
+    /// Example: "tauri" → ["4da"], "react" → ["4da", "my-app"]
+    pub tech_projects: HashMap<String, Vec<String>>,
 }
 
 /// Structural labels that don't represent real user interests — they describe
@@ -70,6 +73,21 @@ const STRUCTURAL_LABELS: &[&str] = &[
     "setup",
     "init",
 ];
+
+/// Extract a project directory name from ACE evidence strings like "Found in /path/to/project/Cargo.toml".
+/// Returns the parent directory basename (e.g., "my-app" from "/home/user/my-app/package.json").
+fn extract_project_name_from_evidence(evidence: &str) -> Option<String> {
+    let path_part = evidence.strip_prefix("Found in ").unwrap_or(evidence);
+    let normalized = path_part.replace('\\', "/");
+    let path = std::path::Path::new(normalized.as_str());
+    let parent = path.parent()?;
+    let name = parent.file_name()?.to_str()?;
+    if name.is_empty() || name == "src" || name == "." {
+        parent.parent()?.file_name()?.to_str().map(String::from)
+    } else {
+        Some(name.to_string())
+    }
+}
 
 /// Fetch ACE-discovered context for relevance scoring
 /// PASIFA: Now captures full context including confidence scores
@@ -135,13 +153,23 @@ pub(crate) fn get_ace_context() -> ACEContext {
                 ev_lower.contains(&primary_normalized)
             });
             let weight: f32 = if is_primary { 0.85 } else { 0.40 };
-            // If tech already has a weight (from another project), take the max (primary wins)
             let existing = ctx
                 .tech_weights
                 .get(&name_lower)
                 .copied()
                 .unwrap_or(0.0_f32);
-            ctx.tech_weights.insert(name_lower, weight.max(existing));
+            ctx.tech_weights
+                .insert(name_lower.clone(), weight.max(existing));
+
+            // Extract project name(s) from evidence paths for project association
+            let projects = ctx.tech_projects.entry(name_lower).or_default();
+            for ev in &t.evidence {
+                if let Some(project_name) = extract_project_name_from_evidence(ev) {
+                    if !projects.contains(&project_name) {
+                        projects.push(project_name);
+                    }
+                }
+            }
         }
     }
 

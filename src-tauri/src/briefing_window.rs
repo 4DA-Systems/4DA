@@ -349,6 +349,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                     corroboration_count: 0,
                     alt_sources: vec![],
                     section: None,
+                    triage_reason: None,
                 })
                 .collect()
         } else if let Ok(db) = crate::get_database() {
@@ -381,6 +382,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                             corroboration_count: 0,
                             alt_sources: vec![],
                             section: None,
+                            triage_reason: None,
                         }
                     })
                     .collect()

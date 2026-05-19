@@ -133,6 +133,7 @@ pub(super) fn build_excluded_result(input: &ScoringInput, exclusion: String) -> 
         is_critical_alert: false,
         applicability: None,
         advisory_id: None,
+        primary_topic: None,
     }
 }
 

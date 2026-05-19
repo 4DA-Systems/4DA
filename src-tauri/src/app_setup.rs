@@ -1511,6 +1511,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         corroboration_count: 0,
                         alt_sources: vec![],
                         section: None,
+                        triage_reason: None,
                     })
                     .collect();
                 if !items.is_empty() {

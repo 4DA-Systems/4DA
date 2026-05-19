@@ -36,6 +36,7 @@ fn make_item(title: &str, url: Option<&str>, score: f32) -> SourceRelevance {
         is_critical_alert: false,
         applicability: None,
         advisory_id: None,
+        primary_topic: None,
     }
 }
 

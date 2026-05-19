@@ -5,6 +5,7 @@ use fourda_macros::score_component;
 
 /// Generate a human-readable explanation for why an item was considered relevant.
 /// Produces specific, actionable text naming the exact technologies/topics that matched.
+/// Combines up to 2 primary reasons for multi-signal trust, plus optional annotations.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_relevance_explanation(
     _title: &str,
@@ -16,6 +17,7 @@ pub(crate) fn generate_relevance_explanation(
     interests: &[context_engine::Interest],
     declared_tech: &[String],
     matched_skill_gaps: &[String],
+    confirmation_count: u8,
 ) -> String {
     let mut parts: Vec<String> = Vec::new();
     let mut used_topics: Vec<&str> = Vec::new();
@@ -84,13 +86,23 @@ pub(crate) fn generate_relevance_explanation(
         for &n in &detected_only_hits {
             used_topics.push(n);
         }
-        parts.push(format!(
-            "Related to {} (detected in project)",
-            names.join(", ")
-        ));
+        // Show project name(s) if available from ACE evidence
+        let project_label = detected_only_hits
+            .iter()
+            .find_map(|&tech| {
+                ace_ctx.tech_projects.get(tech).and_then(|projects| {
+                    if projects.len() == 1 {
+                        Some(projects[0].clone())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .map_or_else(|| "detected in project".to_string(), |p| format!("in {p}"));
+        parts.push(format!("Related to {} ({project_label})", names.join(", ")));
     }
 
-    // 2. Active project topic matches
+    // 2. Active project topic matches — combine with tier 1 for multi-signal depth
     let topic_hits: Vec<&str> = item_topics
         .iter()
         .filter_map(|t| {
@@ -102,7 +114,7 @@ pub(crate) fn generate_relevance_explanation(
         })
         .filter(|t| !used_topics.contains(t))
         .collect();
-    if !topic_hits.is_empty() {
+    if !topic_hits.is_empty() && parts.len() < 2 {
         let names: Vec<&str> = topic_hits.iter().copied().take(2).collect();
         for &n in &names {
             used_topics.push(n);
@@ -110,8 +122,8 @@ pub(crate) fn generate_relevance_explanation(
         parts.push(format!("Related to {} (active project)", names.join(", ")));
     }
 
-    // 3. Declared interest matches (name the specific interest)
-    if interest_score > 0.15 {
+    // 3. Declared interest matches — add as second reason if we only have one
+    if interest_score > 0.15 && parts.len() < 2 {
         let interest_hits: Vec<&str> = item_topics
             .iter()
             .filter_map(|t| {
@@ -132,7 +144,6 @@ pub(crate) fn generate_relevance_explanation(
             let names: Vec<&str> = interest_hits.iter().copied().take(2).collect();
             parts.push(format!("Matches interest: {}", names.join(", ")));
         } else if parts.is_empty() {
-            // Interest score is high but no topic-level match — use context match
             if let Some(m) = matches.first().filter(|_| context_score > 0.2) {
                 let phrase = extract_short_phrase(&m.matched_text);
                 if !phrase.is_empty() {
@@ -180,12 +191,15 @@ pub(crate) fn generate_relevance_explanation(
         if !new_gaps.is_empty() {
             parts.push(format!("Closes skill gap: {}", new_gaps.join(", ")));
         } else if !parts.is_empty() {
-            // All gaps already covered by stack match — annotate the existing entry
             parts.push("has unread updates".to_string());
         }
     }
 
-    // Return empty string instead of vague fallback — the frontend handles empty gracefully
+    // 7. Signal count annotation — builds trust in high-confidence scores
+    if confirmation_count >= 3 && !parts.is_empty() {
+        parts.push(format!("{confirmation_count} signals confirmed"));
+    }
+
     parts.join(" · ")
 }
 
@@ -473,6 +487,7 @@ mod tests {
             &[],
             &["Rust".to_string()],
             &[],
+            0,
         );
         assert!(
             explanation.contains("your stack"),
@@ -494,6 +509,7 @@ mod tests {
             &[],
             &[],
             &["tokio".to_string()],
+            0,
         );
         assert!(
             explanation.contains("Closes skill gap: tokio"),
@@ -519,6 +535,7 @@ mod tests {
             &[],
             &["Rust".to_string()],
             &["tokio".to_string()],
+            0,
         );
         assert!(
             explanation.contains("your stack"),
@@ -561,6 +578,7 @@ mod tests {
             &[],
             &["React".to_string()],
             &[],
+            0,
         );
         assert!(
             explanation.contains("v18.3.1"),
@@ -590,6 +608,7 @@ mod tests {
             &[],
             &["React".to_string()],
             &["react".to_string()],
+            0,
         );
         assert!(
             !explanation.contains("Closes skill gap: react"),
@@ -616,11 +635,89 @@ mod tests {
             &[],
             &[],
             &[],
+            0,
         );
-        // With no tech, no interest, no affinity, no context, should be empty
         assert!(
             explanation.is_empty(),
             "Should be empty with no signals: '{}'",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_signal_count_shown_at_3_plus() {
+        let ace_ctx = ACEContext {
+            detected_tech: vec!["rust".to_string()],
+            ..Default::default()
+        };
+        let explanation = generate_relevance_explanation(
+            "Rust Performance",
+            0.2,
+            0.2,
+            &[],
+            &ace_ctx,
+            &["rust".to_string()],
+            &[],
+            &["Rust".to_string()],
+            &[],
+            3,
+        );
+        assert!(
+            explanation.contains("3 signals confirmed"),
+            "Should show signal count at 3+: {}",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_signal_count_hidden_at_2() {
+        let ace_ctx = ACEContext {
+            detected_tech: vec!["rust".to_string()],
+            ..Default::default()
+        };
+        let explanation = generate_relevance_explanation(
+            "Rust Performance",
+            0.2,
+            0.2,
+            &[],
+            &ace_ctx,
+            &["rust".to_string()],
+            &[],
+            &["Rust".to_string()],
+            &[],
+            2,
+        );
+        assert!(
+            !explanation.contains("signals confirmed"),
+            "Should NOT show signal count at 2: {}",
+            explanation
+        );
+    }
+
+    #[test]
+    fn test_generate_explanation_multi_reason() {
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.active_topics = vec!["testing".to_string()];
+        let explanation = generate_relevance_explanation(
+            "Rust Testing Frameworks",
+            0.5,
+            0.3,
+            &[],
+            &ace_ctx,
+            &["rust".to_string(), "testing".to_string()],
+            &[],
+            &["Rust".to_string()],
+            &[],
+            0,
+        );
+        assert!(
+            explanation.contains("your stack"),
+            "Should have stack match: {}",
+            explanation
+        );
+        assert!(
+            explanation.contains("active project"),
+            "Should also have active project match: {}",
             explanation
         );
     }
