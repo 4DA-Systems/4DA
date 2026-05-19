@@ -656,11 +656,6 @@ interface CommandMap {
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
   get_session_diff: { params: Record<string, never>; result: { new_items: number; new_relevant: number; hours_since_last: number; has_previous: boolean } };
 
-  // -- Community Intelligence --
-  get_community_status: { params: Record<string, never>; result: CommunityStatus };
-  set_community_intelligence_enabled: { params: { enabled: boolean }; result: void };
-  set_community_frequency: { params: { frequency: string }; result: void };
-
   // -- Stack Health --
   get_stack_health: { params: Record<string, never>; result: StackHealthData };
   get_missed_intelligence: { params: { days?: number }; result: MissedIntelligence };
@@ -1600,13 +1595,6 @@ interface IntelligenceGrowthData {
   total_relevant: number;
 }
 
-interface CommunityStatus {
-  enabled: boolean;
-  frequency: string;
-  last_contributed: string | null;
-  anonymous_id_preview: string | null;
-}
-
 interface StackHealthData {
   technologies: Array<{ name: string; signal_count: number; trend: string; health: string }>;
   stack_score: number;
@@ -1945,7 +1933,6 @@ export type {
   StandingQueryMatch,
   StandingQuerySuggestion,
   IntelligenceGrowthData,
-  CommunityStatus,
   StackHealthData,
   MissedIntelligence,
   UsageReport,

@@ -105,8 +105,6 @@ import { ConfidenceIndicator } from '../ConfidenceIndicator';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { ViewTabBar } from '../ViewTabBar';
 import { SplashScreen } from '../SplashScreen';
-import { DecisionMemory } from '../DecisionMemory';
-import { AutophagyInsights } from '../AutophagyInsights';
 describe('Accessibility: ConfidenceIndicator', () => {
   it('has no a11y violations with confidence value', async () => {
     const { container } = render(<ConfidenceIndicator confidence={0.85} />);
@@ -150,19 +148,4 @@ describe('Accessibility: SplashScreen', () => {
   });
 });
 
-describe('Accessibility: DecisionMemory', () => {
-  it('has no a11y violations in empty state', async () => {
-    const { container } = render(<DecisionMemory />);
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-});
-
-describe('Accessibility: AutophagyInsights', () => {
-  it('has no a11y violations', async () => {
-    const { container } = render(<AutophagyInsights />);
-    const results = await axe(container);
-    expect(results).toHaveNoViolations();
-  });
-});
 

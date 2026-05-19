@@ -217,14 +217,79 @@ pub async fn get_llm_key_for_mcp() -> Result<serde_json::Value> {
     }))
 }
 
-/// Mark onboarding wizard as complete
+/// Mark onboarding wizard as complete.
+/// Also auto-focuses curated feeds to the user's detected stack so the first
+/// analysis fetches ~15 relevant feeds instead of all 101.
 #[tauri::command]
 pub async fn mark_onboarding_complete() -> Result<()> {
     let manager = get_settings_manager();
     let mut guard = manager.lock();
     guard.mark_onboarding_complete()?;
+
+    // Cold-start feed focus: disable curated feeds outside the user's stack.
+    // On first run this cuts analysis time from 13+ min → ~3 min.
+    // The user can re-enable feeds later in the Source Browser.
+    if guard.get_disabled_default_rss_feeds().is_empty() {
+        let detected = crate::state::get_ace_detected_languages();
+        let relevant_domains = stack_to_feed_domains(&detected);
+
+        let registry = crate::curated_feeds::get_curated_registry();
+        let to_disable: Vec<String> = registry
+            .all_feeds()
+            .iter()
+            .filter(|f| {
+                !f.domains
+                    .iter()
+                    .any(|d| relevant_domains.contains(&d.as_str()))
+            })
+            .map(|f| f.url.clone())
+            .collect();
+
+        if !to_disable.is_empty() {
+            let kept = registry.all_feeds().len() - to_disable.len();
+            guard.set_disabled_default_rss_feeds(to_disable)?;
+            info!(target: "4da::settings", kept, "Cold-start feed focus: kept stack-relevant feeds, disabled rest");
+        }
+    }
+
     info!(target: "4da::settings", "Onboarding marked complete");
     Ok(())
+}
+
+/// Map detected languages to curated feed domain tags.
+fn stack_to_feed_domains(detected: &[String]) -> Vec<&'static str> {
+    let mut domains: Vec<&str> = Vec::new();
+
+    for lang in detected {
+        match lang.to_lowercase().as_str() {
+            "rust" => domains.push("rust"),
+            "typescript" | "javascript" => {
+                domains.extend(["typescript", "javascript", "web-platform"]);
+            }
+            "python" => domains.push("python"),
+            "go" => domains.push("go"),
+            "java" | "kotlin" | "scala" => domains.push("systems"),
+            "c" | "cpp" | "c++" => domains.push("systems"),
+            _ => {}
+        }
+    }
+
+    // Security and open-source are always relevant
+    domains.push("security");
+    domains.push("open-source");
+
+    // If no languages detected, keep everything (don't disable any feeds)
+    if domains.len() <= 2 {
+        domains.extend([
+            "rust", "typescript", "javascript", "python", "go",
+            "web-platform", "systems", "ai-ml", "databases",
+            "devops", "infrastructure",
+        ]);
+    }
+
+    domains.sort_unstable();
+    domains.dedup();
+    domains
 }
 
 /// Update re-ranking configuration

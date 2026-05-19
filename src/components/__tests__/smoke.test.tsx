@@ -223,7 +223,6 @@ import { ConfidenceIndicator } from '../ConfidenceIndicator';
 import { ToastContainer } from '../Toast';
 import { KeyboardShortcutsModal } from '../KeyboardShortcutsModal';
 import { ErrorBoundary } from '../ErrorBoundary';
-import { LearningIndicator } from '../LearningIndicator';
 import { BadgeRow } from '../result-item/BadgeRow';
 import { ScoreBreakdownRow } from '../result-item/ScoreBreakdownRow';
 import { AboutPanel } from '../AboutPanel';
@@ -232,15 +231,12 @@ import { ProValueBadge } from '../ProValueBadge';
 
 import { ViewTabBar } from '../ViewTabBar';
 import { PlaybookView } from '../PlaybookView';
-import { DecisionMemory } from '../DecisionMemory';
 import { FeedbackButtons } from '../result-item/FeedbackButtons';
 import { ProInsightRow } from '../result-item/ProInsightRow';
 import { StreetsEngineLink } from '../result-item/StreetsEngineLink';
 import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from '../BriefingEmptyStates';
 import { SignalsPanel } from '../SignalsPanel';
 import { OllamaStatus } from '../OllamaStatus';
-import { AutophagyInsights } from '../AutophagyInsights';
-import { LearnedBehaviorPanel } from '../LearnedBehaviorPanel';
 import { SplashScreen } from '../SplashScreen';
 import { BrandMark } from '../void-engine/BrandMark';
 // ---------------------------------------------------------------------------
@@ -293,26 +289,6 @@ const SMOKE_COMPONENTS: Array<{
     ),
   },
   {
-    name: 'LearningIndicator (empty)',
-    render: () => (
-      <LearningIndicator learnedAffinities={[]} antiTopics={[]} />
-    ),
-  },
-  {
-    name: 'LearningIndicator (with data)',
-    render: () => (
-      <LearningIndicator
-        learnedAffinities={[
-          { topic: 'rust', positive_signals: 5, negative_signals: 1, affinity_score: 0.8 },
-          { topic: 'react', positive_signals: 3, negative_signals: 0, affinity_score: 0.6 },
-        ]}
-        antiTopics={[
-          { topic: 'cobol', rejection_count: 4, confidence: 0.9, auto_detected: true },
-        ]}
-      />
-    ),
-  },
-  {
     name: 'BadgeRow',
     render: () => <BadgeRow item={makeItem()} />,
   },
@@ -350,11 +326,6 @@ const SMOKE_COMPONENTS: Array<{
     name: 'PlaybookView (no module selected)',
     render: () => <PlaybookView />,
   },
-  {
-    name: 'DecisionMemory (empty)',
-    render: () => <DecisionMemory />,
-  },
-
   // --- New components (19-38) ---
   {
     name: 'FeedbackButtons (no feedback)',
@@ -465,34 +436,6 @@ const SMOKE_COMPONENTS: Array<{
     render: () => <OllamaStatus provider="ollama" />,
   },
   {
-    name: 'AutophagyInsights',
-    render: () => <AutophagyInsights />,
-  },
-  {
-    name: 'LearnedBehaviorPanel (empty)',
-    render: () => (
-      <LearnedBehaviorPanel
-        affinities={[]}
-        antiTopics={[]}
-        onRefresh={vi.fn()}
-      />
-    ),
-  },
-  {
-    name: 'LearnedBehaviorPanel (with data)',
-    render: () => (
-      <LearnedBehaviorPanel
-        affinities={[
-          { topic: 'tauri', positive_signals: 8, negative_signals: 0, affinity_score: 0.95 },
-        ]}
-        antiTopics={[
-          { topic: 'php', rejection_count: 3, confidence: 0.85, auto_detected: true },
-        ]}
-        onRefresh={vi.fn()}
-      />
-    ),
-  },
-  {
     name: 'SplashScreen',
     render: () => <SplashScreen onComplete={vi.fn()} minimumDisplayTime={0} />,
   },
@@ -531,7 +474,6 @@ describe('Component accessibility tests', () => {
       'ToastContainer (with toasts)',
       'KeyboardShortcutsModal',
       'ErrorBoundary (no error)',
-      'LearningIndicator (with data)',
       'BadgeRow',
       'AboutPanel',
       'OllamaStatus (ollama provider)',

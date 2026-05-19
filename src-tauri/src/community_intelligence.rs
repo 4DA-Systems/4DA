@@ -71,7 +71,6 @@ fn generate_anonymous_id() -> String {
 // ============================================================================
 
 /// Get the current community intelligence status
-#[tauri::command]
 pub async fn get_community_status() -> Result<CommunityStatus> {
     let manager = get_settings_manager();
     let guard = manager.lock();
@@ -91,7 +90,6 @@ pub async fn get_community_status() -> Result<CommunityStatus> {
 }
 
 /// Toggle community intelligence on/off
-#[tauri::command]
 pub async fn set_community_intelligence_enabled(enabled: bool) -> Result<()> {
     let manager = get_settings_manager();
     let mut guard = manager.lock();
@@ -112,7 +110,6 @@ pub async fn set_community_intelligence_enabled(enabled: bool) -> Result<()> {
 }
 
 /// Set contribution frequency
-#[tauri::command]
 pub async fn set_community_frequency(frequency: String) -> Result<()> {
     if frequency != "weekly" && frequency != "monthly" {
         return Err(crate::error::FourDaError::Config(

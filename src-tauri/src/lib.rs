@@ -180,6 +180,8 @@ mod channel_render;
 pub mod channels;
 /// Intelligence Reconciliation Phase 11 — Commitment Contracts.
 mod commitment_contracts;
+// REMOVE BY 2026-08-01 — community intelligence commands gated; module kept for CommunityIntelligenceConfig type
+#[allow(dead_code)]
 mod community_intelligence;
 mod competing_tech;
 pub(crate) mod compression_rules;
@@ -983,10 +985,8 @@ pub fn run() {
             // Intelligence History
             intelligence_history::get_intelligence_growth,
             intelligence_history::get_session_diff,
-            // Community Intelligence
-            community_intelligence::get_community_status,
-            community_intelligence::set_community_intelligence_enabled,
-            community_intelligence::set_community_frequency,
+            // Community Intelligence — REMOVED from handler (zero frontend callers)
+            // Module retained for CommunityIntelligenceConfig type in settings
             // Local Telemetry (privacy-first, never leaves machine)
             telemetry::track_event,
             telemetry::get_usage_analytics,
