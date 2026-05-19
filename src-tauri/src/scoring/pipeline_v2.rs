@@ -1729,6 +1729,24 @@ pub(crate) fn score_item(
     // truly-unknown (zero) items by shifting up by floor amount.
     let combined_score = normalize_score_offset(combined_score);
 
+    let combined_score = if !ctx.topic_attention_gaps.is_empty() && !raw.topics.is_empty() {
+        let matching_gaps: Vec<f32> = raw
+            .topics
+            .iter()
+            .filter_map(|t| ctx.topic_attention_gaps.get(t.as_str()).copied())
+            .filter(|&h| h > 48.0)
+            .collect();
+        if matching_gaps.is_empty() {
+            combined_score
+        } else {
+            let avg_gap = matching_gaps.iter().sum::<f32>() / matching_gaps.len() as f32;
+            let boost = ((avg_gap - 48.0) / (168.0 - 48.0)).clamp(0.0, 1.0) * 0.05;
+            (combined_score + boost).min(1.0)
+        }
+    } else {
+        combined_score
+    };
+
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
     // dependencies ALWAYS surface, regardless of relevance score.

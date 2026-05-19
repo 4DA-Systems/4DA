@@ -257,6 +257,44 @@ pub fn rebuild_if_needed(conn: &Connection) {
 }
 
 // ============================================================================
+// Implicit Dismissal (dwell without interaction)
+// ============================================================================
+
+/// Record a weak negative signal when an item was visible long enough to
+/// read (>5s) but the user never clicked, saved, or interacted with it.
+pub fn on_implicit_skip(conn: &Connection, source_item_id: i64, dwell_seconds: f32) {
+    if dwell_seconds < 5.0 {
+        return;
+    }
+
+    let Some(ctx) = lookup_item_context(conn, source_item_id) else {
+        return;
+    };
+
+    let strength = if dwell_seconds > 15.0 { 0.15 } else { 0.10 };
+
+    for tag in extract_tags(&ctx.tags) {
+        stability_detector::record_evidence(
+            conn,
+            FacetClass::TopicAffinity,
+            tag,
+            "skipped",
+            CueFamily::Behavioral,
+            "implicit_skip",
+            strength,
+        );
+    }
+
+    debug!(
+        target: "4da::telemetry",
+        source = %ctx.source_type,
+        item = source_item_id,
+        dwell_seconds,
+        "Implicit skip evidence recorded"
+    );
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -437,5 +475,70 @@ mod tests {
         let conn = setup_db();
         rebuild_if_needed(&conn);
         // Should not panic — just returns without doing anything
+    }
+
+    #[test]
+    fn implicit_skip_records_weak_evidence() {
+        let conn = setup_db();
+        insert_test_item(
+            &conn,
+            5,
+            "hackernews",
+            "WebAssembly runtime",
+            "wasm,runtime",
+        );
+
+        on_implicit_skip(&conn, 5, 10.0);
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM facet_evidence WHERE evidence_type = 'implicit_skip'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 2); // wasm + runtime
+
+        let max_conf: f64 = conn
+            .query_row(
+                "SELECT MAX(confidence) FROM facet_evidence WHERE evidence_type = 'implicit_skip'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(max_conf <= 0.15, "Implicit skip should use weak confidence");
+    }
+
+    #[test]
+    fn implicit_skip_ignored_below_threshold() {
+        let conn = setup_db();
+        insert_test_item(&conn, 6, "reddit", "Quick glance", "rust");
+
+        on_implicit_skip(&conn, 6, 3.0);
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM facet_evidence", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn implicit_skip_stronger_for_long_dwell() {
+        let conn = setup_db();
+        insert_test_item(&conn, 7, "arxiv", "Long visible item", "ml");
+
+        on_implicit_skip(&conn, 7, 20.0);
+
+        let conf: f64 = conn
+            .query_row(
+                "SELECT confidence FROM facet_evidence WHERE evidence_type = 'implicit_skip'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            (conf - 0.15).abs() < 0.01,
+            "Long dwell should use 0.15 strength"
+        );
     }
 }

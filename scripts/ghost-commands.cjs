@@ -26,8 +26,12 @@ const OUTPUT_JSON = path.join(ROOT, '.claude', 'wisdom', 'ghost-commands.json');
 
 // Commands that are intentionally unregistered (feature-gated, in-progress, etc.)
 // Add name + reason. These are excluded from the unregistered check and exit code.
-const KNOWN_UNREGISTERED = new Set([
-  'prepare_embedding_engine', // behind fastembed-local feature flag — module not yet wired
+const KNOWN_UNREGISTERED = new Set([]);
+
+// Commands that are registered but intentionally have no frontend caller yet.
+// Typically: backend-only commands, feature-gated WIP, or commands called via MCP/CLI.
+const KNOWN_GHOST = new Set([
+  'prepare_embedding_engine', // fastembed-local feature — frontend caller coming
 ]);
 
 // ANSI color codes
@@ -229,7 +233,7 @@ function main() {
       live.push({ name, ...primary });
     } else if (!inHandler && !KNOWN_UNREGISTERED.has(name)) {
       unregistered.push({ name, ...primary, inFrontend });
-    } else if (!inFrontend) {
+    } else if (!inFrontend && !KNOWN_GHOST.has(name)) {
       ghosts.push({ name, ...primary });
     }
   }

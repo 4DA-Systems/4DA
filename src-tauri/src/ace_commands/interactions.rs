@@ -202,6 +202,14 @@ pub async fn ace_record_interaction(
                 conf * 0.5, // halved confidence for source-level signal
             );
         }
+
+        // Implicit skip: item was visible but user scrolled past without
+        // engaging. Weak negative signal for topic affinity learning.
+        if action_type == "scroll" {
+            if let ace::BehaviorAction::Scroll { visible_seconds } = &action {
+                crate::engagement_telemetry::on_implicit_skip(&conn, item_id, *visible_seconds);
+            }
+        }
     }
 
     Ok(serde_json::json!({

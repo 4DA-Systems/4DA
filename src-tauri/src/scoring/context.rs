@@ -346,6 +346,11 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         );
     }
 
+    let topic_attention_gaps = match crate::get_ace_engine() {
+        Ok(ace) => super::ace_context::compute_topic_attention_gaps(&ace),
+        Err(_) => HashMap::new(),
+    };
+
     let context = ScoringContext {
         cached_context_count,
         interest_count: interests.len(),
@@ -368,6 +373,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         feed_autopsies,
         anti_pattern_penalties,
         archetype_penalties,
+        topic_attention_gaps,
         contradicted_topics,
         sovereign_profile,
         dominant_persona,
