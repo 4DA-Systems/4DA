@@ -253,6 +253,31 @@ pub(crate) fn get_ace_context() -> ACEContext {
     ctx
 }
 
+/// Compute per-topic attention gaps (hours since last interaction).
+/// Returns only topics with positive affinity and a parseable last_interaction.
+pub(crate) fn compute_topic_attention_gaps(ace: &crate::ace::ACE) -> HashMap<String, f32> {
+    let mut gaps = HashMap::new();
+    let now = chrono::Utc::now().naive_utc();
+    let affinities = match ace.get_topic_affinities() {
+        Ok(a) => a,
+        Err(_) => return gaps,
+    };
+    for aff in affinities {
+        if aff.affinity_score <= 0.0 {
+            continue;
+        }
+        if let Ok(last) =
+            chrono::NaiveDateTime::parse_from_str(&aff.last_interaction, "%Y-%m-%d %H:%M:%S")
+        {
+            let hours = (now - last).num_minutes() as f32 / 60.0;
+            if hours > 0.0 {
+                gaps.insert(aff.topic.to_lowercase(), hours);
+            }
+        }
+    }
+    gaps
+}
+
 /// Check if item should be excluded by ACE anti-topics.
 /// Uses word-boundary matching to prevent "test" blocking "testing" or "contest".
 pub(crate) fn check_ace_exclusions(topics: &[String], ace_ctx: &ACEContext) -> Option<String> {

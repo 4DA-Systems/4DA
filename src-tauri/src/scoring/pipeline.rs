@@ -210,6 +210,23 @@ pub(crate) fn score_item(
     };
     let base_score = (base_score * freshness).clamp(0.0, 1.0);
 
+    let attention_gap_boost = if !ctx.topic_attention_gaps.is_empty() && !topics.is_empty() {
+        let matching_gaps: Vec<f32> = topics
+            .iter()
+            .filter_map(|t| ctx.topic_attention_gaps.get(t.as_str()).copied())
+            .filter(|&h| h > 48.0)
+            .collect();
+        if matching_gaps.is_empty() {
+            0.0
+        } else {
+            let avg_gap = matching_gaps.iter().sum::<f32>() / matching_gaps.len() as f32;
+            ((avg_gap - 48.0) / (168.0 - 48.0)).clamp(0.0, 1.0) * 0.05
+        }
+    } else {
+        0.0
+    };
+    let base_score = (base_score + attention_gap_boost).min(1.0);
+
     // Source quality boost from learned preferences (capped +/-10%)
     let source_quality_boost =
         ctx.source_quality

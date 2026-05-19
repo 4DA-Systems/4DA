@@ -118,6 +118,8 @@ pub(crate) struct ScoringContext {
     pub archetype_penalties: HashMap<String, f32>,
     /// Unified sovereign developer profile (assembled once per run)
     pub sovereign_profile: Option<crate::sovereign_developer_profile::SovereignDeveloperProfile>,
+    /// Hours since last user interaction per topic (attention gap boost).
+    pub topic_attention_gaps: HashMap<String, f32>,
     /// Topics with contradictory signals (both high affinity AND anti-topic).
     /// Content touching these topics gets a necessity boost to help resolve confusion.
     pub contradicted_topics: std::collections::HashSet<String>,
