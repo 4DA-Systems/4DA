@@ -52,6 +52,9 @@ src-tauri/target-codex-audit/
 src-tauri/fourda-macros/target/
 src-tauri/fourda-macros/Cargo.lock
 
+# Runtime cache (model downloads, embeddings cache)
+data/cache/
+
 # SQLite database files
 data/*.db
 data/*.db-shm
