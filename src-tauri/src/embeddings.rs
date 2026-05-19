@@ -86,6 +86,11 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
 
     let result = match effective_provider {
         "openai" => {
+            tracing::info!(
+                target: "4da::embeddings",
+                count = texts.len(),
+                "Embedding via OpenAI — content sent to api.openai.com (retained 30 days per OpenAI policy)"
+            );
             let api_key = llm_settings.api_key.clone();
             let texts = texts.to_vec();
             retry_with_backoff("embed_openai", 2, || {
@@ -115,6 +120,11 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         "anthropic" => {
             // Anthropic doesn't have embeddings API - use dedicated OpenAI key or fallback to Ollama
             if !llm_settings.openai_api_key.is_empty() {
+                tracing::info!(
+                    target: "4da::embeddings",
+                    count = texts.len(),
+                    "Anthropic provider — embedding via OpenAI fallback (content sent to api.openai.com)"
+                );
                 let api_key = llm_settings.openai_api_key.clone();
                 let texts = texts.to_vec();
                 return retry_with_backoff("embed_openai_anthropic_fallback", 2, || {
