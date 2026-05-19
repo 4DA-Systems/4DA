@@ -180,6 +180,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
     scoring::dedup_results(&mut results);
     scoring::topic_dedup_results(&mut results);
     scoring::apply_domain_diversity(&mut results);
+    scoring::apply_source_topic_diversity(&mut results);
 
     // Serendipity Engine: inject anti-bubble items
     {
@@ -257,6 +258,7 @@ pub(crate) async fn run_multi_source_analysis_impl(
                                                 is_critical_alert: false,
                                                 applicability: None,
                                                 advisory_id: None,
+                                                primary_topic: None,
                                             };
                                             info!(
                                                 target: "4da::analysis",

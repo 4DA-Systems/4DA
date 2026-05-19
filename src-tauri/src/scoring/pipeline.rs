@@ -516,6 +516,7 @@ pub(crate) fn score_item(
             &ctx.interests,
             &ctx.declared_tech,
             &matched_skill_gaps,
+            signal_count,
         ))
     } else {
         None
@@ -682,6 +683,7 @@ pub(crate) fn score_item(
         is_critical_alert: false,
         applicability: None,
         advisory_id: None,
+        primary_topic: topics.first().cloned(),
     }
 }
 

@@ -358,6 +358,9 @@ pub struct SourceRelevance {
     /// Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234")
     #[serde(default)]
     pub advisory_id: Option<String>,
+    /// Primary extracted topic for frontend topic clustering (e.g. "webassembly", "rust")
+    #[serde(default)]
+    pub primary_topic: Option<String>,
 }
 
 pub(crate) fn default_lang_en() -> String {

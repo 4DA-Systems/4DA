@@ -276,6 +276,7 @@ mod tests {
                     corroboration_count: 0,
                     alt_sources: vec![],
                     section: None,
+                    triage_reason: None,
                 })
                 .collect(),
             total_relevant: items,

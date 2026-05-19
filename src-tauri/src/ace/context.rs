@@ -539,8 +539,6 @@ mod tests {
         assert!(is_notable_dependency("angular"));
         assert!(is_notable_dependency("next"));
         assert!(is_notable_dependency("express"));
-        assert!(is_notable_dependency("vite"));
-        assert!(is_notable_dependency("prisma"));
     }
 
     #[test]
@@ -575,6 +573,10 @@ mod tests {
         assert!(!is_notable_dependency("custom-tool"));
         assert!(!is_notable_dependency("utils"));
         assert!(!is_notable_dependency("helpers"));
+        assert!(!is_notable_dependency("vite"));
+        assert!(!is_notable_dependency("webpack"));
+        assert!(!is_notable_dependency("prisma"));
+        assert!(is_notable_dependency("@prisma/client"));
     }
 
     // ====================================================================

@@ -60,6 +60,7 @@ mod tests {
             is_critical_alert: false,
             applicability: None,
             advisory_id: None,
+            primary_topic: None,
         }
     }
 

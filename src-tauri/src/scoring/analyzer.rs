@@ -180,6 +180,7 @@ pub(crate) async fn score_items_full(
     telemetry.topic_dedup_removed = pre_topic - results.len();
     scoring::temporal_cluster_results(&mut results);
     telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
+    scoring::apply_source_topic_diversity(&mut results);
 
     // Per-source score normalization: blend raw score with source-relative
     // percentile so high-volume sources don't crowd out niche sources

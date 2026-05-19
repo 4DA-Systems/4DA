@@ -48,6 +48,7 @@ fn mk(title: &str, source: &str, score: f32) -> BriefingItem {
         corroboration_count: 0,
         alt_sources: vec![],
         section: None,
+        triage_reason: None,
     }
 }
 

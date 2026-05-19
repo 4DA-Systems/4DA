@@ -248,10 +248,14 @@ pub(crate) fn topic_dedup_results(results: &mut Vec<SourceRelevance>) {
         }
     }
 
-    // Annotate representatives
+    // Annotate representatives and apply corroboration boost
     for (rep_idx, titles) in &rep_to_titles {
         results[*rep_idx].similar_count = titles.len() as u32;
         results[*rep_idx].similar_titles = titles.clone();
+        // Corroboration boost: items confirmed across multiple sources are more important.
+        // +0.03 per grouped item, capped at +0.09 (3 corroborating items)
+        let boost = (titles.len() as f32 * 0.03).min(0.09);
+        results[*rep_idx].top_score = (results[*rep_idx].top_score + boost).min(1.0);
     }
 
     // Remove grouped items (retain only non-grouped)
@@ -317,6 +321,40 @@ pub(crate) fn apply_domain_diversity(results: &mut [SourceRelevance]) -> usize {
 
     if adjusted > 0 {
         info!(target: "4da::scoring", adjusted = adjusted, "Domain diversity applied");
+    }
+    adjusted
+}
+
+/// Apply source-type diversity: when multiple items share the same source type
+/// AND primary topic, subsequent items get decayed to prevent one source flooding
+/// results with a trending topic (e.g., 4 HN items all about "WebAssembly").
+pub(crate) fn apply_source_topic_diversity(results: &mut [SourceRelevance]) -> usize {
+    let mut group_counts: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
+    let mut adjusted = 0usize;
+
+    for item in results.iter_mut() {
+        if item.excluded {
+            continue;
+        }
+        let topics = extract_topics(&item.title, "", &[]);
+        let primary = match topics.first() {
+            Some(t) => t.clone(),
+            None => continue,
+        };
+        let key = (item.source_type.clone(), primary);
+        let count = group_counts.entry(key).or_insert(0);
+        // Allow 2 items from same source+topic before decaying
+        if *count >= 2 {
+            let penalty = 0.85_f32.powf((*count - 1) as f32);
+            item.top_score *= penalty;
+            adjusted += 1;
+        }
+        *count += 1;
+    }
+
+    if adjusted > 0 {
+        info!(target: "4da::scoring", adjusted, "Source-topic diversity applied");
     }
     adjusted
 }

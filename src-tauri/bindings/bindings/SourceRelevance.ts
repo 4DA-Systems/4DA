@@ -103,4 +103,8 @@ applicability: string | null,
 /**
  * Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234")
  */
-advisory_id: string | null, };
+advisory_id: string | null, 
+/**
+ * Primary extracted topic for frontend topic clustering (e.g. "webassembly", "rust")
+ */
+primary_topic: string | null, };

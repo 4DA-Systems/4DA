@@ -60,6 +60,7 @@ pub struct FloorConfig {
     pub top_n: usize,
     /// Target fraction of top-N that should be Comfort items.
     /// Read by settings/UI; algorithm derives from remainder.
+    // REMOVE BY 2026-09-01 — comfort_pct read via settings but algorithm uses remainder
     #[allow(dead_code)]
     pub comfort_pct: u8,
     /// Target fraction that should be Stretch items.
@@ -305,6 +306,7 @@ mod tests {
             is_critical_alert: false,
             applicability: None,
             advisory_id: None,
+            primary_topic: None,
         }
     }
 
