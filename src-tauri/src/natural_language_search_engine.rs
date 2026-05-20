@@ -10,9 +10,75 @@ use crate::error::{Result, ResultExt};
 use super::{ParsedQuery, QueryResultItem};
 
 // ============================================================================
+// Hybrid search (BM25 + vector KNN fused via RRF)
+// ============================================================================
+
+pub(crate) async fn execute_hybrid_search(
+    query_text: &str,
+    parsed: &ParsedQuery,
+    limit: usize,
+) -> Result<Vec<QueryResultItem>> {
+    // 1. Embed the query
+    let search_text = crate::utils::preprocess_content(&parsed.keywords.join(" "));
+    let query_embedding = if !search_text.is_empty() {
+        match crate::embeddings::embed_texts(&[search_text]).await {
+            Ok(embs) if !embs.is_empty() && embs[0].iter().any(|&v| v != 0.0) => embs[0].clone(),
+            _ => vec![],
+        }
+    } else {
+        vec![]
+    };
+
+    // 2. Call hybrid search
+    let db = crate::get_database()
+        .map_err(|e| crate::error::FourDaError::Internal(format!("DB: {e}")))?;
+    let results = db.hybrid_search(query_text, &query_embedding, limit, 0.4, 0.6);
+
+    if results.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // 3. Normalize RRF scores to [0, 1] relative to top result
+    let max_score = results[0].rrf_score;
+
+    Ok(results
+        .into_iter()
+        .map(|r| {
+            let relevance = if max_score > 0.0 {
+                (r.rrf_score / max_score).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let match_reason = match (r.bm25_rank, r.vec_rank) {
+                (Some(_), Some(_)) => format!("keyword + semantic ({:.0}%)", relevance * 100.0),
+                (Some(_), None) => "keyword match".to_string(),
+                (None, Some(_)) => format!("semantic similarity ({:.0}%)", relevance * 100.0),
+                (None, None) => "match".to_string(),
+            };
+            let preview = if r.content.len() > 200 {
+                format!("{}...", &r.content[..r.content.floor_char_boundary(200)])
+            } else {
+                r.content
+            };
+            QueryResultItem {
+                id: r.item_id,
+                file_path: r.url,
+                file_name: Some(r.title),
+                preview,
+                relevance,
+                source_type: r.source_type,
+                timestamp: r.created_at,
+                match_reason,
+            }
+        })
+        .collect())
+}
+
+// ============================================================================
 // SQL text search
 // ============================================================================
 
+#[allow(dead_code)] // REMOVE BY 2026-08-01 — replaced by hybrid_search
 pub(crate) fn execute_text_search(
     conn: &rusqlite::Connection,
     parsed: &ParsedQuery,
@@ -116,6 +182,7 @@ pub(crate) fn execute_text_search(
 // Vector similarity search
 // ============================================================================
 
+#[allow(dead_code)] // REMOVE BY 2026-08-01 — replaced by hybrid_search
 pub(crate) async fn execute_vector_search(
     parsed: &ParsedQuery,
     limit: usize,

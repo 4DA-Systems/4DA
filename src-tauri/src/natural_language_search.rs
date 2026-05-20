@@ -375,6 +375,7 @@ fn find_query_gaps(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<Quer
 // Merge and deduplicate
 // ============================================================================
 
+#[allow(dead_code)] // REMOVE BY 2026-08-01 — replaced by hybrid_search
 fn merge_results(
     text_results: Vec<QueryResultItem>,
     vector_results: Vec<QueryResultItem>,
@@ -453,12 +454,10 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     let conn = crate::open_db_connection()?;
     let stack_context = build_stack_context(&conn, &parsed.keywords);
 
-    // 3. Execute text search
-    // For non-English queries, translate keywords to English for keyword matching.
-    // Most indexed content titles/descriptions are in English, so keyword LIKE
-    // matching needs English terms. Translation is best-effort -- on failure we
-    // fall back to the original query which may still partially match.
-    let text_search_parsed = if query_lang != "en" {
+    // 3-5. Hybrid search: BM25 (FTS5) + vector KNN fused via RRF
+    // For non-English queries, translate for the BM25 keyword component.
+    // Vector embeddings handle cross-lingual matching natively.
+    let search_text = if query_lang != "en" {
         let request = crate::content_translation::TranslationRequest {
             id: "search_query".to_string(),
             text: query_text.clone(),
@@ -470,31 +469,20 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
                 target: "4da::search",
                 original = %query_text,
                 translated = %result.translated,
-                "Translated search query for keyword matching"
+                "Translated search query for BM25 keyword matching"
             );
-            parse_query_local(&result.translated)
+            result.translated
         } else {
-            parsed.clone()
+            query_text.clone()
         }
     } else {
-        parsed.clone()
+        query_text.clone()
     };
-    let text_results = execute_text_search(&conn, &text_search_parsed, 30)?;
     drop(conn);
 
-    // 4. Execute vector search
-    // Multilingual embeddings handle cross-lingual matching natively.
-    // A Japanese query will match relevant English content without translation.
-    let vector_results = match execute_vector_search(&parsed, 20).await {
-        Ok(results) => results,
-        Err(e) => {
-            debug!(target: "4da::search", error = %e, "Vector search unavailable");
-            Vec::new()
-        }
-    };
-
-    // 5. Merge, deduplicate, boost for stack
-    let mut all_items = merge_results(text_results, vector_results);
+    let mut all_items = execute_hybrid_search(&search_text, &parsed, 30)
+        .await
+        .unwrap_or_default();
     boost_for_stack(&mut all_items, &stack_context);
     all_items.sort_by(|a, b| {
         b.relevance
