@@ -29,16 +29,31 @@ pub(crate) async fn execute_hybrid_search(
         vec![]
     };
 
-    // 2. Call hybrid search
+    // 2. Apply ACE context weighting — nudge embedding toward user's tech domain
+    let mut weighted_embedding = query_embedding;
+    if !weighted_embedding.is_empty() {
+        let ace_ctx = crate::scoring::get_ace_context();
+        let topic_embeddings = crate::scoring::get_topic_embeddings(&ace_ctx).await;
+        if !topic_embeddings.is_empty() {
+            let tech_embs: Vec<Vec<f32>> = topic_embeddings.into_values().collect();
+            crate::scoring::query_weighting::apply_ace_weighting(
+                &mut weighted_embedding,
+                &tech_embs,
+                0.2,
+            );
+        }
+    }
+
+    // 3. Call hybrid search
     let db = crate::get_database()
         .map_err(|e| crate::error::FourDaError::Internal(format!("DB: {e}")))?;
-    let results = db.hybrid_search(query_text, &query_embedding, limit, 0.4, 0.6);
+    let results = db.hybrid_search(query_text, &weighted_embedding, limit, 0.4, 0.6);
 
     if results.is_empty() {
         return Ok(Vec::new());
     }
 
-    // 3. Normalize RRF scores to [0, 1] relative to top result
+    // 4. Normalize RRF scores to [0, 1] relative to top result
     let max_score = results[0].rrf_score;
 
     Ok(results

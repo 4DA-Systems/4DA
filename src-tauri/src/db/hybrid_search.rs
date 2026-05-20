@@ -46,8 +46,15 @@ impl Database {
 
         // Stage 1: BM25 keyword search via FTS5
         let fts_query = sanitize_fts5_query(query_text);
-        let mut bm25_results: Vec<(i64, String, String, String, Option<String>, Option<String>, usize)> =
-            Vec::new();
+        let mut bm25_results: Vec<(
+            i64,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            usize,
+        )> = Vec::new();
         if !fts_query.is_empty() {
             if let Ok(mut stmt) = conn.prepare(
                 "SELECT si.id, si.title, si.content, si.source_type, si.url, si.created_at
@@ -77,8 +84,15 @@ impl Database {
         // Stage 2: Vector KNN search via sqlite-vec
         let embedding_blob = embedding_to_blob(query_embedding);
         let has_real_embedding = query_embedding.iter().any(|&v| v != 0.0);
-        let mut vec_results: Vec<(i64, String, String, String, Option<String>, Option<String>, usize)> =
-            Vec::new();
+        let mut vec_results: Vec<(
+            i64,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            usize,
+        )> = Vec::new();
         if has_real_embedding {
             if let Ok(mut stmt) = conn.prepare(
                 "SELECT sv.rowid, si.title, si.content, si.source_type, si.url, si.created_at
@@ -154,7 +168,10 @@ impl Database {
         let mut results: Vec<HybridSearchResult> = scores
             .into_iter()
             .map(
-                |(id, (score, bm25_rank, vec_rank, title, content, source_type, url, created_at))| {
+                |(
+                    id,
+                    (score, bm25_rank, vec_rank, title, content, source_type, url, created_at),
+                )| {
                     HybridSearchResult {
                         item_id: id,
                         title,
