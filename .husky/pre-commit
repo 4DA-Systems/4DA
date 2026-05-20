@@ -388,4 +388,11 @@ EOF
     fi
 fi
 
+# Cargo sweep — prune build artifacts older than 7 days
+# Prevents target/ from growing unbounded (80+ GB incremental cache observed)
+if command -v cargo-sweep > /dev/null 2>&1; then
+    echo "Sweeping stale build artifacts..."
+    (cd src-tauri && cargo sweep --time 7 2>/dev/null || true)
+fi
+
 echo "Pre-commit validation passed! (full tests run on push)"
