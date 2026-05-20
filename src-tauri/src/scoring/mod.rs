@@ -19,6 +19,8 @@ pub(crate) mod necessity;
 mod pipeline;
 mod pipeline_signals;
 mod pipeline_v2;
+#[allow(dead_code, unused_imports)]
+pub(crate) mod query_weighting;
 mod semantic;
 #[cfg(test)]
 mod simulation;
@@ -26,7 +28,6 @@ pub(crate) mod stemming;
 mod telemetry;
 mod temporal_cluster;
 mod utils;
-#[allow(dead_code, unused_imports)]
 pub(crate) mod validation;
 
 // Public API — external callers use crate::scoring::function_name unchanged

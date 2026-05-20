@@ -305,6 +305,11 @@ pub(crate) async fn run_multi_source_analysis_impl(
         }
     }
 
+    // Cross-encoder reranking (local ONNX, fast) — reorders top candidates
+    // using bidirectional attention before optional LLM reranking.
+    // Blends cross-encoder precision (0.6 weight) with PASIFA scoring (0.4 weight).
+    crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
+
     // LLM Reranking (if enabled and within daily limits)
     emit_narration(
         app,

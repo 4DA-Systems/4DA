@@ -71,6 +71,9 @@ pub fn on_click(conn: &Connection, source_item_id: i64) {
     }
 
     debug!(target: "4da::telemetry", source = %ctx.source_type, item = source_item_id, "Click evidence recorded");
+
+    // Trigger speculative embedding for related items
+    tauri::async_runtime::spawn(crate::speculative_embed::on_engagement(source_item_id));
 }
 
 /// Record preference evidence when a user saves content.
@@ -113,6 +116,9 @@ pub fn on_save(conn: &Connection, source_item_id: i64) {
     );
 
     debug!(target: "4da::telemetry", source = %ctx.source_type, item = source_item_id, "Save evidence recorded");
+
+    // Trigger speculative embedding for related items
+    tauri::async_runtime::spawn(crate::speculative_embed::on_engagement(source_item_id));
 }
 
 /// Record preference evidence when a user dismisses content.
