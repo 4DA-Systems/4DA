@@ -12,6 +12,7 @@ pub(crate) mod dep_snapshots;
 mod dependencies;
 pub(crate) mod encryption;
 mod history;
+pub(crate) mod hybrid_search;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
 mod osv_advisories;

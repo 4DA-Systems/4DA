@@ -234,9 +234,9 @@ fn get_or_init_fastembed(
         tracing::info!(
             target: "4da::embeddings",
             cache = %cache_dir.display(),
-            "Initializing in-process embedding (nomic-embed-text-v1.5 quantized, ~137MB first download)"
+            "Initializing in-process embedding (bge-small-en-v1.5 quantized, ~34MB first download)"
         );
-        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15Q)
+        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15Q)
             .with_cache_dir(cache_dir)
             .with_show_download_progress(true);
         fastembed::TextEmbedding::try_new(options)
@@ -272,12 +272,12 @@ pub(super) fn init_fastembed_with_progress(
                 percent: 50,
                 bytes_downloaded: 0,
                 bytes_total: 0,
-                message: "Initializing embedding model (~137MB first download)...".into(),
+                message: "Initializing embedding model (~34MB first download)...".into(),
                 done: false,
             });
         }
 
-        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15Q)
+        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15Q)
             .with_cache_dir(cache_dir)
             .with_show_download_progress(true);
         let result = fastembed::TextEmbedding::try_new(options)

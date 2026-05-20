@@ -256,7 +256,7 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
             priority: "P0".into(),
             title: "Install and run Ollama".into(),
             description: "Ollama provides local embeddings that dramatically improve scoring accuracy. Without it, scoring relies on keyword matching only.".into(),
-            action: Some("Install from https://ollama.com and run: ollama pull nomic-embed-text".into()),
+            action: Some("Built-in embedding available. For Ollama: ollama pull nomic-embed-text".into()),
             action_type: Some("install_ollama".into()),
         });
     } else if !rig.embedding_available {
@@ -412,7 +412,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         grade_a_requirements.push("Install and run Ollama (https://ollama.com)".into());
     }
     if !embedding_available {
-        grade_a_requirements.push("Pull embedding model: ollama pull nomic-embed-text".into());
+        grade_a_requirements.push("Embedding ready (built-in). For Ollama: ollama pull nomic-embed-text".into());
     }
     grade_a_requirements.push("Add 3+ interests in Settings".into());
     grade_a_requirements.push("Give 10+ feedback interactions (thumbs up/down)".into());
@@ -424,7 +424,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         embedding_model,
         embedding_available,
         gpu_detected,
-        recommended_model: "nomic-embed-text".into(),
+        recommended_model: "bge-small-en-v1.5".into(),
         estimated_ram_gb: if gpu_detected { 8.0 } else { 4.0 },
         can_reach_grade_a: ollama_running && embedding_available,
         grade_a_requirements,

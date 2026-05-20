@@ -483,7 +483,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // current model's similarity distribution. Must run BEFORE first analysis.
     // Check if embedding model has changed — trigger background re-embed if needed.
     if let Ok(db) = get_database() {
-        let model_name = crate::reembed::get_embedding_model();
+        let model_name = {
+            let settings_model = crate::reembed::get_embedding_model();
+            let provider = crate::get_settings_manager().lock().get().llm.provider.clone();
+            if provider == "none" || provider.is_empty() {
+                crate::reembed::FASTEMBED_MODEL_NAME.to_string()
+            } else {
+                settings_model
+            }
+        };
         let needs_reembed = {
             let conn = db.conn.lock();
             crate::embedding_calibration::initialize_calibration(&conn, &model_name);

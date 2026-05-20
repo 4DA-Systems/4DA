@@ -625,7 +625,7 @@ fn compute_relevance(
             && ctx.ace_ctx.detected_tech.len() < 5
             && ctx.ace_ctx.dependency_names.len() < 10;
         let semantic_mult = if truly_thin_profile {
-            scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.4
+            scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.7
         } else {
             scoring_config::INTEREST_ONLY_SEMANTIC_MULT
         };
