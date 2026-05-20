@@ -15,6 +15,9 @@ pub struct HybridSearchResult {
     pub item_id: i64,
     pub title: String,
     pub content: String,
+    pub source_type: String,
+    pub url: Option<String>,
+    pub created_at: Option<String>,
     pub rrf_score: f64,
     pub bm25_rank: Option<usize>,
     pub vec_rank: Option<usize>,
@@ -43,10 +46,11 @@ impl Database {
 
         // Stage 1: BM25 keyword search via FTS5
         let fts_query = sanitize_fts5_query(query_text);
-        let mut bm25_results: Vec<(i64, String, String, usize)> = Vec::new();
+        let mut bm25_results: Vec<(i64, String, String, String, Option<String>, Option<String>, usize)> =
+            Vec::new();
         if !fts_query.is_empty() {
             if let Ok(mut stmt) = conn.prepare(
-                "SELECT si.id, si.title, si.content
+                "SELECT si.id, si.title, si.content, si.source_type, si.url, si.created_at
                  FROM source_items_fts fts
                  JOIN source_items si ON si.id = fts.rowid
                  WHERE source_items_fts MATCH ?1
@@ -58,10 +62,13 @@ impl Database {
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1).unwrap_or_default(),
                         row.get::<_, String>(2).unwrap_or_default(),
+                        row.get::<_, String>(3).unwrap_or_default(),
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Option<String>>(5)?,
                     ))
                 }) {
                     for (rank, row) in rows.flatten().enumerate() {
-                        bm25_results.push((row.0, row.1, row.2, rank + 1));
+                        bm25_results.push((row.0, row.1, row.2, row.3, row.4, row.5, rank + 1));
                     }
                 }
             }
@@ -70,10 +77,11 @@ impl Database {
         // Stage 2: Vector KNN search via sqlite-vec
         let embedding_blob = embedding_to_blob(query_embedding);
         let has_real_embedding = query_embedding.iter().any(|&v| v != 0.0);
-        let mut vec_results: Vec<(i64, String, String, usize)> = Vec::new();
+        let mut vec_results: Vec<(i64, String, String, String, Option<String>, Option<String>, usize)> =
+            Vec::new();
         if has_real_embedding {
             if let Ok(mut stmt) = conn.prepare(
-                "SELECT sv.rowid, si.title, si.content
+                "SELECT sv.rowid, si.title, si.content, si.source_type, si.url, si.created_at
                  FROM source_vec sv
                  JOIN source_items si ON si.id = sv.rowid
                  WHERE sv.embedding MATCH ?1 AND k = ?2
@@ -84,36 +92,61 @@ impl Database {
                         row.get::<_, i64>(0)?,
                         row.get::<_, String>(1).unwrap_or_default(),
                         row.get::<_, String>(2).unwrap_or_default(),
+                        row.get::<_, String>(3).unwrap_or_default(),
+                        row.get::<_, Option<String>>(4)?,
+                        row.get::<_, Option<String>>(5)?,
                     ))
                 }) {
                     for (rank, row) in rows.flatten().enumerate() {
-                        vec_results.push((row.0, row.1, row.2, rank + 1));
+                        vec_results.push((row.0, row.1, row.2, row.3, row.4, row.5, rank + 1));
                     }
                 }
             }
         }
 
         // Stage 3: Reciprocal Rank Fusion
+        // Tuple: (rrf_score, bm25_rank, vec_rank, title, content, source_type, url, created_at)
         use std::collections::HashMap;
-        let mut scores: HashMap<i64, (f64, Option<usize>, Option<usize>, String, String)> =
-            HashMap::new();
+        type FusionEntry = (
+            f64,
+            Option<usize>,
+            Option<usize>,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+        );
+        let mut scores: HashMap<i64, FusionEntry> = HashMap::new();
 
-        for (id, title, content, rank) in &bm25_results {
+        for (id, title, content, source_type, url, created_at, rank) in &bm25_results {
             let rrf = fts_weight / (RRF_K + *rank as f64);
-            let entry =
-                scores
-                    .entry(*id)
-                    .or_insert((0.0, None, None, title.clone(), content.clone()));
+            let entry = scores.entry(*id).or_insert((
+                0.0,
+                None,
+                None,
+                title.clone(),
+                content.clone(),
+                source_type.clone(),
+                url.clone(),
+                created_at.clone(),
+            ));
             entry.0 += rrf;
             entry.1 = Some(*rank);
         }
 
-        for (id, title, content, rank) in &vec_results {
+        for (id, title, content, source_type, url, created_at, rank) in &vec_results {
             let rrf = vec_weight / (RRF_K + *rank as f64);
-            let entry =
-                scores
-                    .entry(*id)
-                    .or_insert((0.0, None, None, title.clone(), content.clone()));
+            let entry = scores.entry(*id).or_insert((
+                0.0,
+                None,
+                None,
+                title.clone(),
+                content.clone(),
+                source_type.clone(),
+                url.clone(),
+                created_at.clone(),
+            ));
             entry.0 += rrf;
             entry.2 = Some(*rank);
         }
@@ -121,13 +154,18 @@ impl Database {
         let mut results: Vec<HybridSearchResult> = scores
             .into_iter()
             .map(
-                |(id, (score, bm25_rank, vec_rank, title, content))| HybridSearchResult {
-                    item_id: id,
-                    title,
-                    content,
-                    rrf_score: score,
-                    bm25_rank,
-                    vec_rank,
+                |(id, (score, bm25_rank, vec_rank, title, content, source_type, url, created_at))| {
+                    HybridSearchResult {
+                        item_id: id,
+                        title,
+                        content,
+                        source_type,
+                        url,
+                        created_at,
+                        rrf_score: score,
+                        bm25_rank,
+                        vec_rank,
+                    }
                 },
             )
             .collect();
