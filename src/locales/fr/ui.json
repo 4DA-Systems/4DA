@@ -318,8 +318,8 @@
   "settings.streets.tierTeam": "Team (29 $/place/mois)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Intégré (Local)",
-  "settings.ai.builtInModel": "all-MiniLM-L6-v2 (384 dimensions)",
-  "settings.ai.builtInDescription": "Embeddings locaux sans configuration. Aucune clé API requise. Le modèle est téléchargé automatiquement lors de la première utilisation (~90 Mo).",
+  "settings.ai.builtInModel": "BGE-Small (384 dimensions)",
+  "settings.ai.builtInDescription": "Embeddings locaux sans configuration. Aucune clé API requise. Fonctionne entièrement sur votre machine (~34 Mo de téléchargement).",
   "settings.ai.embeddingSetup.checking": "Vérification de ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Téléchargement du moteur d'intégration...",
   "settings.ai.embeddingSetup.extracting": "Extraction de l'environnement d'exécution...",
@@ -2812,7 +2812,7 @@
       "providerOpenAI": "OpenAI",
       "providerOllama": "Ollama (Local)",
       "tokens": "Tokens",
-      "builtInModel": "all-MiniLM-L6-v2 (384 dimensions)"
+      "builtInModel": "BGE-Small (384 dimensions)"
     },
     "dataHealth": {
       "embeddings": "Embeddings"

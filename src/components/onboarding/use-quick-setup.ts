@@ -226,6 +226,13 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     setIsSaving(true);
     try {
       await saveLlmProvider(provider, apiKey, ollamaStatus);
+
+      // Auto-trigger embedding engine preparation (fire-and-forget)
+      // This ensures semantic search is ready by the time the user finishes onboarding
+      cmd('prepare_embedding_engine').catch(() => {
+        // Non-fatal: embedding engine will auto-initialize on first use
+      });
+
       if (role) await cmd('set_user_role', { role });
       if (experienceLevel) await cmd('set_experience_level', { level: experienceLevel });
 
