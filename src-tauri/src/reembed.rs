@@ -6,7 +6,7 @@
 //!
 //! Handles configurable embedding model selection, model change detection,
 //! and background re-embedding when the model is switched (e.g., from
-//! `nomic-embed-text` to `nomic-embed-text-v2-moe` for multilingual support).
+//! `bge-small-en-v1.5` to a different model for multilingual support).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -19,6 +19,9 @@ static REEMBED_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
 /// Default embedding model name (English-optimized).
 pub const DEFAULT_EMBEDDING_MODEL: &str = "nomic-embed-text";
+
+/// Model name used by the built-in fastembed (ONNX) provider for calibration lookup.
+pub const FASTEMBED_MODEL_NAME: &str = "bge-small-en-v1.5";
 
 /// Get the currently configured embedding model name from settings.
 /// Falls back to the default if the field is empty or unset.

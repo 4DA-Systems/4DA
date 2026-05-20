@@ -83,7 +83,7 @@ fn zero_vector_fallback(count: usize) -> Vec<Vec<f32>> {
 }
 
 /// Generate embeddings for a list of texts
-/// Supports OpenAI (text-embedding-3-small) and Ollama (nomic-embed-text)
+/// Supports OpenAI (text-embedding-3-small), Ollama (nomic-embed-text), and fastembed (bge-small-en-v1.5)
 /// Provider is determined by settings - uses same provider as LLM when possible
 pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     if texts.is_empty() {

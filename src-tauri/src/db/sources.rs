@@ -109,6 +109,10 @@ impl Database {
                 "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
                 params![embedding_blob, id],
             )?;
+            tx.execute(
+                "INSERT OR REPLACE INTO source_items_fts(rowid, title, content) VALUES (?1, ?2, ?3)",
+                params![id, title, content],
+            )?;
             tx.commit()?;
             Ok(id)
         } else {
@@ -121,6 +125,10 @@ impl Database {
             tx.execute(
                 "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
                 params![id, embedding_blob],
+            )?;
+            tx.execute(
+                "INSERT OR REPLACE INTO source_items_fts(rowid, title, content) VALUES (?1, ?2, ?3)",
+                params![id, title, content],
             )?;
             tx.commit()?;
             Ok(id)
@@ -171,6 +179,9 @@ impl Database {
             )?;
             let mut insert_vec_stmt =
                 tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
+            let mut upsert_fts_stmt = tx.prepare_cached(
+                "INSERT OR REPLACE INTO source_items_fts(rowid, title, content) VALUES (?1, ?2, ?3)",
+            )?;
 
             for (
                 source_type,
@@ -208,6 +219,7 @@ impl Database {
                         id
                     ])?;
                     update_vec_stmt.execute(params![embedding_blob, id])?;
+                    upsert_fts_stmt.execute(params![id, title, content])?;
                 } else {
                     insert_stmt.execute(params![
                         source_type,
@@ -225,6 +237,7 @@ impl Database {
                     ])?;
                     let id = tx.last_insert_rowid();
                     insert_vec_stmt.execute(params![id, embedding_blob])?;
+                    upsert_fts_stmt.execute(params![id, title, content])?;
                 }
                 count += 1;
             }

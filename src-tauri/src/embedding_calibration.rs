@@ -25,12 +25,13 @@ const KNOWN_MODELS: &[(&str, f32, f32)] = &[
     ("mxbai-embed-large", 0.45, 12.0),
     ("all-minilm", 0.38, 15.0),
     ("bge-small", 0.43, 13.0),
+    ("bge-small-en", 0.43, 13.0),
     ("bge-base", 0.44, 12.5),
     ("snowflake-arctic-embed", 0.46, 12.0),
 ];
 
-const DEFAULT_CENTER: f32 = 0.48;
-const DEFAULT_SCALE: f32 = 12.0;
+const DEFAULT_CENTER: f32 = 0.43;
+const DEFAULT_SCALE: f32 = 13.0;
 const MIN_SAMPLES_FOR_AUTO: usize = 50;
 
 pub(crate) fn get_sigmoid_center() -> f32 {

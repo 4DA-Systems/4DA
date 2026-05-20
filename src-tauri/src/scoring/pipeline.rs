@@ -140,7 +140,7 @@ pub(crate) fn score_item(
             && ctx.interest_count < 3
             && ctx.feedback_interaction_count < 10
         {
-            scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.4
+            scoring_config::INTEREST_ONLY_SEMANTIC_MULT * 0.7
         } else {
             scoring_config::INTEREST_ONLY_SEMANTIC_MULT
         };

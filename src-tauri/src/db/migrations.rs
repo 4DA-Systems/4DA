@@ -599,7 +599,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 77;
+        const TARGET_VERSION: i64 = 78;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2815,6 +2815,33 @@ impl Database {
                             CREATE INDEX IF NOT EXISTS idx_seals_parent ON briefing_seals(parent_seal_id);",
                         )?;
                         info!(target: "4da::db", "Created briefing_seals table for compound temporal memory");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 78 {
+                Self::run_versioned_migration(
+                    &conn,
+                    77,
+                    78,
+                    "Phase 78: FTS5 index for hybrid search (BM25 + vector + RRF)",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE VIRTUAL TABLE IF NOT EXISTS source_items_fts USING fts5(
+                                title,
+                                content,
+                                content='source_items',
+                                content_rowid='id',
+                                tokenize='porter unicode61'
+                            );
+
+                            -- Populate FTS5 from existing data
+                            INSERT OR IGNORE INTO source_items_fts(rowid, title, content)
+                                SELECT id, COALESCE(title, ''), COALESCE(content, '')
+                                FROM source_items;",
+                        )?;
+                        info!(target: "4da::db", "Created FTS5 index for hybrid search");
                         Ok(())
                     },
                 )?;
