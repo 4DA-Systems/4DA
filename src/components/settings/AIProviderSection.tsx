@@ -156,9 +156,9 @@ export function AIProviderSection({
             >
               <option value="anthropic">{t('settings.ai.providerAnthropic')} ({t('settings.ai.recommended')})</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
+              <option value="local">{t('settings.ai.builtInLocal')}</option>
               <option value="openai-compatible">{t('settings.ai.providerOpenAICompatible')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
-              <option value="local">{t('settings.ai.builtInLocal')}</option>
             </select>
           </div>
 
