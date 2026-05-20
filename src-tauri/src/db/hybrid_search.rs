@@ -100,18 +100,20 @@ impl Database {
 
         for (id, title, content, rank) in &bm25_results {
             let rrf = fts_weight / (RRF_K + *rank as f64);
-            let entry = scores
-                .entry(*id)
-                .or_insert((0.0, None, None, title.clone(), content.clone()));
+            let entry =
+                scores
+                    .entry(*id)
+                    .or_insert((0.0, None, None, title.clone(), content.clone()));
             entry.0 += rrf;
             entry.1 = Some(*rank);
         }
 
         for (id, title, content, rank) in &vec_results {
             let rrf = vec_weight / (RRF_K + *rank as f64);
-            let entry = scores
-                .entry(*id)
-                .or_insert((0.0, None, None, title.clone(), content.clone()));
+            let entry =
+                scores
+                    .entry(*id)
+                    .or_insert((0.0, None, None, title.clone(), content.clone()));
             entry.0 += rrf;
             entry.2 = Some(*rank);
         }

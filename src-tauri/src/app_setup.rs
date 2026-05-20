@@ -485,7 +485,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     if let Ok(db) = get_database() {
         let model_name = {
             let settings_model = crate::reembed::get_embedding_model();
-            let provider = crate::get_settings_manager().lock().get().llm.provider.clone();
+            let provider = crate::get_settings_manager()
+                .lock()
+                .get()
+                .llm
+                .provider
+                .clone();
             if provider == "none" || provider.is_empty() {
                 crate::reembed::FASTEMBED_MODEL_NAME.to_string()
             } else {
