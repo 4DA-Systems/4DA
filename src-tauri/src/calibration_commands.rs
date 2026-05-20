@@ -412,7 +412,8 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         grade_a_requirements.push("Install and run Ollama (https://ollama.com)".into());
     }
     if !embedding_available {
-        grade_a_requirements.push("Embedding ready (built-in). For Ollama: ollama pull nomic-embed-text".into());
+        grade_a_requirements
+            .push("Embedding ready (built-in). For Ollama: ollama pull nomic-embed-text".into());
     }
     grade_a_requirements.push("Add 3+ interests in Settings".into());
     grade_a_requirements.push("Give 10+ feedback interactions (thumbs up/down)".into());
