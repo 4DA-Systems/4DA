@@ -296,9 +296,12 @@ impl EmbeddingService {
 
         match result {
             Ok(bytes) => {
-                // Decode f32 array from bytes
                 let embedding = bytes_to_f32_vec(&bytes);
-                Ok(Some(embedding))
+                if embedding.len() == self.dimension {
+                    Ok(Some(embedding))
+                } else {
+                    Ok(None)
+                }
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(format!("Cache lookup failed: {e}").into()),
