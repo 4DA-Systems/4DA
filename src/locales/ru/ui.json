@@ -316,7 +316,7 @@
   "settings.streets.tierTeam": "Team ($29/место/мес.)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Встроенный (локальный)",
-  "settings.ai.builtInModel": "BGE-Small (384 измерения)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 измерения)",
   "settings.ai.builtInDescription": "Локальные эмбеддинги без настройки. API-ключ не требуется. Предустановлено — работает полностью на вашем компьютере.",
   "settings.ai.embeddingSetup.checking": "Проверка ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Загрузка движка встраивания...",

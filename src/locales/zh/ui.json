@@ -318,7 +318,7 @@
   "settings.streets.tierTeam": "Team ($29/席/月)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "内置（本地）",
-  "settings.ai.builtInModel": "BGE-Small (384 维)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 维)",
   "settings.ai.builtInDescription": "零配置本地嵌入。无需 API key。内置预装 — 完全在本机运行。",
   "settings.ai.embeddingSetup.checking": "正在检查 ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "正在下载嵌入引擎...",

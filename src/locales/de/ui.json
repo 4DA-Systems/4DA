@@ -318,7 +318,7 @@
   "settings.streets.tierTeam": "Team (29 $/Platz/Monat)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Integriert (Lokal)",
-  "settings.ai.builtInModel": "BGE-Small (384 Dimensionen)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 Dimensionen)",
   "settings.ai.builtInDescription": "Lokale Einbettungen ohne Konfiguration. Kein API-Schlüssel erforderlich. Vorinstalliert — läuft vollständig auf Ihrem Rechner.",
   "settings.ai.embeddingSetup.checking": "ONNX Runtime wird überprüft...",
   "settings.ai.embeddingSetup.downloading": "Einbettungs-Engine wird heruntergeladen...",

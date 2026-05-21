@@ -318,7 +318,7 @@
   "settings.streets.tierTeam": "Team ($29/seat/mo)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Built-in (Local)",
-  "settings.ai.builtInModel": "BGE-Small (384 dimensions)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 dimensions)",
   "settings.ai.builtInDescription": "Zero-config local embeddings. No API key required. Pre-bundled — runs entirely on your machine.",
   "settings.ai.embeddingSetup.checking": "Checking ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Downloading embedding engine...",

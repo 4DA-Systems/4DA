@@ -2187,7 +2187,7 @@
   "settings.ai.baseUrlRequired": "عنوان URL الأساسي مطلوب لهذا المزود",
   "settings.ai.builtInDescription": "تضمينات محلية بدون تكوين. لا يلزم مفتاح API. مثبّت مسبقاً — يعمل بالكامل على جهازك.",
   "settings.ai.builtInLocal": "مدمج (محلي)",
-  "settings.ai.builtInModel": "BGE-Small (384 بُعد)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 بُعد)",
   "settings.ai.embeddingSetup.checking": "جارٍ التحقق من ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "جارٍ تنزيل محرك التضمين...",
   "settings.ai.embeddingSetup.extracting": "جارٍ استخراج بيئة التشغيل...",

@@ -2153,7 +2153,7 @@
   "settings.ai.baseUrlRequired": "A URL base é obrigatória para este provedor",
   "settings.ai.builtInDescription": "Embeddings locais sem configuração. Não requer API key. Pré-instalado — roda inteiramente na sua máquina.",
   "settings.ai.builtInLocal": "Integrado (Local)",
-  "settings.ai.builtInModel": "BGE-Small (384 dimensões)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 dimensões)",
   "settings.ai.embeddingSetup.checking": "Verificando ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Baixando motor de embeddings...",
   "settings.ai.embeddingSetup.extracting": "Extraindo ambiente de execução...",

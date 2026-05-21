@@ -2123,7 +2123,7 @@
   "settings.ai.baseUrlRequired": "इस प्रदाता के लिए बेस URL आवश्यक है",
   "settings.ai.builtInDescription": "शून्य-कॉन्फ़िग स्थानीय एम्बेडिंग्स। कोई API कुंजी आवश्यक नहीं। पूर्व-स्थापित — पूरी तरह आपकी मशीन पर चलता है।",
   "settings.ai.builtInLocal": "अंतर्निर्मित (स्थानीय)",
-  "settings.ai.builtInModel": "BGE-Small (384 आयाम)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 आयाम)",
   "settings.ai.embeddingSetup.checking": "ONNX Runtime की जाँच हो रही है...",
   "settings.ai.embeddingSetup.downloading": "एम्बेडिंग इंजन डाउनलोड हो रहा है...",
   "settings.ai.embeddingSetup.extracting": "रनटाइम निकाला जा रहा है...",
