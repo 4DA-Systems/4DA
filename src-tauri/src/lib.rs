@@ -111,6 +111,9 @@ mod utils;
 
 // Re-export from embeddings
 pub(crate) use embeddings::embed_texts;
+#[cfg(all(test, feature = "fastembed-local"))]
+pub(crate) use embeddings::fastembed_sync;
+pub use embeddings::EMBEDDING_DIMS;
 
 // Re-exports from events
 pub(crate) use events::{

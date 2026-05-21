@@ -51,29 +51,34 @@ node scripts/check-doc-location.cjs || exit 1
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' || true)
 if [ -n "$STAGED_RS" ]; then
     # --- Dead Code Expiry Check ---
+    # Only inspect files that actually contain #[allow(dead_code)].
+    # This avoids spawning git-show+grep per file for large commits,
+    # preventing cygheap fork failures on Windows (observed with 40+ files).
     echo "Checking dead_code expiry annotations..."
     TODAY=$(date +%Y-%m-%d)
     rm -f /tmp/_4da_dead_code_fail
+    DEAD_CODE_FILES=""
     for FILE in $STAGED_RS; do
+        if git show ":$FILE" 2>/dev/null | grep -q '#\[allow(dead_code)\]'; then
+            DEAD_CODE_FILES="$DEAD_CODE_FILES $FILE"
+        fi
+    done
+    for FILE in $DEAD_CODE_FILES; do
         CONTENT=$(git show ":$FILE" 2>/dev/null) || continue
         LINE_NUM=0
         PREV_LINE=""
         echo "$CONTENT" | while IFS= read -r LINE; do
             LINE_NUM=$((LINE_NUM + 1))
             if echo "$LINE" | grep -q '#\[allow(dead_code)\]'; then
-                # Check current line and previous line for REMOVE BY
-                EXPIRY=""
                 EXPIRY_LINE=$(echo "$LINE" | grep -oE 'REMOVE BY [0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' || true)
                 if [ -z "$EXPIRY_LINE" ]; then
                     EXPIRY_LINE=$(echo "$PREV_LINE" | grep -oE 'REMOVE BY [0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' || true)
                 fi
                 if [ -z "$EXPIRY_LINE" ]; then
                     echo "  ERROR: $FILE:$LINE_NUM — #[allow(dead_code)] missing REMOVE BY YYYY-MM-DD" >&2
-                    # Signal failure via temp file (subshell can't set parent vars)
                     echo "FAIL" > /tmp/_4da_dead_code_fail
                 else
                     EXPIRY=$(echo "$EXPIRY_LINE" | sed 's/REMOVE BY //' | tr '/' '-')
-                    # Compare as integers (YYYYMMDD) for POSIX compatibility
                     EXPIRY_INT=$(echo "$EXPIRY" | tr -d '-')
                     TODAY_INT=$(echo "$TODAY" | tr -d '-')
                     if [ "$EXPIRY_INT" -le "$TODAY_INT" ]; then

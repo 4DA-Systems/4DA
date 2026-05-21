@@ -18,6 +18,10 @@ static ACTIVE_CENTER: AtomicU32 = AtomicU32::new(0);
 static ACTIVE_SCALE: AtomicU32 = AtomicU32::new(0);
 
 const KNOWN_MODELS: &[(&str, f32, f32)] = &[
+    ("snowflake-arctic-embed-m", 0.44, 12.5),
+    ("snowflake-arctic-embed-l", 0.45, 12.0),
+    ("snowflake-arctic-embed-s", 0.42, 13.0),
+    ("snowflake-arctic-embed", 0.44, 12.5),
     ("text-embedding-3-small", 0.48, 12.0),
     ("text-embedding-3-large", 0.50, 11.0),
     ("nomic-embed-text-v2", 0.40, 13.0),
@@ -27,7 +31,6 @@ const KNOWN_MODELS: &[(&str, f32, f32)] = &[
     ("bge-small", 0.43, 13.0),
     ("bge-small-en", 0.43, 13.0),
     ("bge-base", 0.44, 12.5),
-    ("snowflake-arctic-embed", 0.46, 12.0),
 ];
 
 const DEFAULT_CENTER: f32 = 0.43;
@@ -52,7 +55,7 @@ pub(crate) fn get_sigmoid_scale() -> f32 {
     }
 }
 
-fn set_active_params(center: f32, scale: f32) {
+pub(crate) fn set_active_params(center: f32, scale: f32) {
     ACTIVE_CENTER.store(center.to_bits(), Ordering::Relaxed);
     ACTIVE_SCALE.store(scale.to_bits(), Ordering::Relaxed);
     info!(
