@@ -10,7 +10,7 @@ mod tests {
     use crate::scoring::{ACEContext, ScoringContext};
     use crate::test_utils::{empty_scoring_context, test_db};
 
-    /// Helper: build a ScoringInput with a dummy 384-dim embedding
+    /// Helper: build a ScoringInput with a dummy embedding
     fn test_input<'a>(title: &'a str, content: &'a str, embedding: &'a [f32]) -> ScoringInput<'a> {
         ScoringInput {
             id: 1,
@@ -31,7 +31,7 @@ mod tests {
     fn test_score_item_zero_context_returns_low_score() {
         let db = test_db();
         let ctx = empty_scoring_context();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Some random article about gardening",
             "Plants and soil",
@@ -63,7 +63,7 @@ mod tests {
         let ctx = ScoringContext::builder()
             .exclusions(vec!["blockchain".to_string()])
             .build();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Blockchain scaling solutions for enterprise",
             "blockchain distributed ledger technology",
@@ -95,7 +95,7 @@ mod tests {
         let db = test_db();
         let ace_ctx = ACEContext::default();
 
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "rust".to_string(),
@@ -150,7 +150,7 @@ mod tests {
         // min 2 signals regardless of feedback interaction count.
         let db = test_db();
         // Only set up interests, no ACE context, no context chunks
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "machine learning".to_string(),
@@ -209,7 +209,7 @@ mod tests {
         let db = test_db();
         let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
         let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Understanding Pin and Send in Async Rust Lifetimes",
             "async pin send lifetime future tokio complexity borrow checker annotations",
@@ -246,7 +246,7 @@ mod tests {
         // and ecosystem_shift_mult must be exactly 1.0.
         let db = test_db();
         let ctx = empty_scoring_context(); // no composed_stack → inactive
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Understanding Pin and Send in Async Rust Lifetimes",
             "async pin send lifetime future tokio complexity",
@@ -286,7 +286,7 @@ mod tests {
         let db = test_db();
         let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
         let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Rust Borrow Checker: Ownership and Move Semantics Deep Dive",
             "borrow checker ownership move semantics lifetime annotation rust patterns",
@@ -401,7 +401,7 @@ mod tests {
         // Verify stack_boost actually changes the final top_score (not dampened to nothing).
         let db = test_db();
         let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Understanding Pin and Send in Async Rust Lifetimes",
             "async pin send lifetime future tokio complexity borrow checker annotations",
@@ -441,7 +441,7 @@ mod tests {
         let db = test_db();
         let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
         let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Async Fn in Trait Is Finally Stable in Rust",
             "native async trait async fn in trait return position impl trait stabilization rust",
@@ -472,7 +472,7 @@ mod tests {
         let db = test_db();
         let rust_stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
         let ctx = ScoringContext::builder().composed_stack(rust_stack).build();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Go 1.23 Performance Improvements for Backend Services",
             "go golang backend services performance goroutine scheduling concurrency",
@@ -504,7 +504,7 @@ mod tests {
         let db = test_db();
         let ace_ctx = ACEContext::default();
 
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "rust".to_string(),
@@ -560,7 +560,7 @@ mod tests {
     #[test]
     fn test_pipeline_normal_mode_requires_two_signals() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "machine learning".to_string(),
@@ -608,7 +608,7 @@ mod tests {
     #[test]
     fn test_pipeline_base_score_interest_only_path() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "rust".to_string(),
@@ -652,7 +652,7 @@ mod tests {
             .interest_count(0) // no interests
             .build();
 
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let input = test_input(
             "Building REST APIs with Rust and Axum",
             "axum rust web api server tokio serde",
@@ -690,7 +690,7 @@ mod tests {
     #[test]
     fn test_empty_title_gets_capped() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "rust".to_string(),
@@ -735,7 +735,7 @@ mod tests {
     #[test]
     fn test_very_long_title_not_penalized() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![context_engine::Interest {
             id: Some(1),
             topic: "rust".to_string(),
@@ -820,8 +820,8 @@ mod tests {
     #[test]
     fn test_all_zero_embeddings_still_scores() {
         let db = test_db();
-        let zero_embedding = vec![0.0_f32; 384];
-        let real_embedding = vec![0.5_f32; 384];
+        let zero_embedding = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let real_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
 
         let interests = vec![context_engine::Interest {
             id: Some(1),
@@ -879,7 +879,7 @@ mod tests {
     #[test]
     fn test_language_mismatch_severely_capped() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
 
         let interests = vec![context_engine::Interest {
             id: Some(1),
@@ -989,7 +989,7 @@ mod tests {
     #[test]
     fn test_commodity_ceiling_caps_tutorial() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "python".to_string(),
@@ -1059,7 +1059,7 @@ mod tests {
     #[test]
     fn test_commodity_ceiling_caps_help_request() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "npm".to_string(),
@@ -1127,7 +1127,7 @@ mod tests {
     #[test]
     fn test_commodity_ceiling_bypassed_by_high_sophistication() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "rust".to_string(),
@@ -1218,7 +1218,7 @@ mod tests {
     #[test]
     fn test_commodity_ceiling_bypassed_by_cve_pattern() {
         let db = test_db();
-        let interest_embedding = vec![0.5_f32; 384];
+        let interest_embedding = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "security".to_string(),
@@ -1302,7 +1302,7 @@ mod tests {
     fn test_freshness_mult_recent_item_boosted() {
         let db = test_db();
         let ctx = empty_scoring_context();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let one_hour_ago = chrono::Utc::now() - chrono::Duration::hours(1);
 
         let input = ScoringInput {
@@ -1350,7 +1350,7 @@ mod tests {
     fn test_freshness_mult_72h_tier_neutral() {
         let db = test_db();
         let ctx = empty_scoring_context();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let just_under_72h = chrono::Utc::now() - chrono::Duration::hours(70);
 
         let input = ScoringInput {
@@ -1393,7 +1393,7 @@ mod tests {
     fn test_freshness_mult_old_item_decayed() {
         let db = test_db();
         let ctx = empty_scoring_context();
-        let embedding = vec![0.1_f32; 384];
+        let embedding = vec![0.1_f32; crate::EMBEDDING_DIMS];
         let thirty_days_ago = chrono::Utc::now() - chrono::Duration::hours(720);
 
         let input = ScoringInput {

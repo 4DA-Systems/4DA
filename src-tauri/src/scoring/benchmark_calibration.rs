@@ -667,7 +667,10 @@ fn full_calibration_with_real_embeddings() {
     for (cat, cr) in &r.by_category {
         eprintln!(
             "  {:16} {}/{} ({:.0}%)",
-            cat, cr.passed, cr.total, cr.accuracy * 100.0
+            cat,
+            cr.passed,
+            cr.total,
+            cr.accuracy * 100.0
         );
     }
     if !r.failures.is_empty() {

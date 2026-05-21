@@ -425,7 +425,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         embedding_model,
         embedding_available,
         gpu_detected,
-        recommended_model: "bge-small-en-v1.5".into(),
+        recommended_model: "snowflake-arctic-embed-m".into(),
         estimated_ram_gb: if gpu_detected { 8.0 } else { 4.0 },
         can_reach_grade_a: ollama_running && embedding_available,
         grade_a_requirements,

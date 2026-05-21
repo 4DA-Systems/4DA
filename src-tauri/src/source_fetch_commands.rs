@@ -130,7 +130,7 @@ async fn embed_and_store_items(items: &[crate::sources::SourceItem]) -> Result<u
             let embedding = embeddings
                 .get(i)
                 .cloned()
-                .unwrap_or_else(|| vec![0.0f32; 384]);
+                .unwrap_or_else(|| vec![0.0f32; crate::EMBEDDING_DIMS]);
 
             (
                 item.source_type.clone(),

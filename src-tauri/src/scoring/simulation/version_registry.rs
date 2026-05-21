@@ -91,7 +91,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let personas = all_personas();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let input = sim_input(1, "Rust memory safety", "Ownership and borrowing", &emb);
         let result = score_with_version(PipelineVersion::V1, &input, &personas[0], &db, &opts);
         assert!(result.top_score >= 0.0);
@@ -102,7 +102,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let personas = all_personas();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let input = sim_input(1, "Rust memory safety", "Ownership and borrowing", &emb);
         let result = score_with_version(PipelineVersion::V2, &input, &personas[0], &db, &opts);
         assert!(result.top_score >= 0.0);
@@ -113,7 +113,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let personas = all_personas();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let input = sim_input(1, "Rust memory safety", "Ownership and borrowing", &emb);
         let cmp = compare_versions(&input, &personas[0], &db, &opts);
         // Delta should be finite

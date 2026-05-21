@@ -90,7 +90,7 @@ fn enriched_python_ctx(
 fn run_enriched_rust_sessions(n: usize) -> Vec<f64> {
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut f1_per_session = Vec::new();
 
@@ -125,7 +125,7 @@ fn run_enriched_rust_sessions(n: usize) -> Vec<f64> {
 fn run_enriched_python_sessions(n: usize) -> Vec<f64> {
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut f1_per_session = Vec::new();
 
@@ -202,7 +202,7 @@ fn enriched_lifecycle_cross_persona_isolation() {
     // Anti-topics should IMPROVE isolation vs base lifecycle tests.
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut boosts: HashMap<String, f64> = HashMap::new();
 
     for session_idx in 0..10 {
@@ -256,7 +256,7 @@ fn enriched_lifecycle_noise_stays_rejected() {
     // Source quality signals should help noise rejection.
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let db = sim_db();
     let opts = sim_no_freshness();
     let mut boosts: HashMap<String, f64> = HashMap::new();

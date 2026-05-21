@@ -15,12 +15,12 @@ pub fn test_db() -> Database {
     Database::new(Path::new(":memory:")).expect("in-memory DB")
 }
 
-/// Deterministic 384-dim normalized embedding from a seed string.
+/// Deterministic EMBEDDING_DIMS-dim normalized embedding from a seed string.
 /// Identical seeds produce identical embeddings (good for test assertions).
 /// Uses a simple hash-based approach — NOT cryptographically random,
 /// but deterministic and reproducible across runs.
 pub fn seed_embedding(seed: &str) -> Vec<f32> {
-    let mut embedding = vec![0.0f32; 384];
+    let mut embedding = vec![0.0f32; crate::EMBEDDING_DIMS];
     let bytes = seed.as_bytes();
     for (i, slot) in embedding.iter_mut().enumerate() {
         let b1 = bytes[i % bytes.len()] as f32;
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn test_seed_embedding_is_384_dim() {
         let emb = seed_embedding("test");
-        assert_eq!(emb.len(), 384);
+        assert_eq!(emb.len(), crate::EMBEDDING_DIMS);
     }
 
     #[test]

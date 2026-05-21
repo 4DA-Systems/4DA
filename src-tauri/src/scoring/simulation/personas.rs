@@ -9,7 +9,7 @@ use super::super::ace_context::ACEContext;
 use super::super::ScoringContext;
 
 pub(super) fn emb() -> Vec<f32> {
-    vec![0.5_f32; 384]
+    vec![0.5_f32; crate::EMBEDDING_DIMS]
 }
 
 pub(super) fn make_interests(topics: &[(&str, f32)]) -> Vec<crate::context_engine::Interest> {

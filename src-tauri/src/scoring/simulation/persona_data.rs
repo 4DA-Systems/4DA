@@ -99,10 +99,10 @@ fn topic_embedding_map(topics: &[&str]) -> HashMap<String, Vec<f32>> {
 
 fn taste_from_topics(topics: &[&str]) -> Vec<f32> {
     if topics.is_empty() {
-        return vec![0.0; 384];
+        return vec![0.0; crate::EMBEDDING_DIMS];
     }
     let embeddings: Vec<Vec<f32>> = topics.iter().map(|t| topic_embedding(t)).collect();
-    let mut avg = vec![0.0_f32; 384];
+    let mut avg = vec![0.0_f32; crate::EMBEDDING_DIMS];
     for emb in &embeddings {
         for (i, v) in emb.iter().enumerate() {
             avg[i] += v;

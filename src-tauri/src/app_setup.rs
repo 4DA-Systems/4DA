@@ -276,7 +276,7 @@ pub(crate) fn initialize_pre_tauri() {
     }
 
     info!(target: "4da::startup", context_dir = ?get_context_dir(), "Context directory");
-    info!(target: "4da::startup", model = "all-MiniLM-L6-v2", dimensions = 384, "Embedding model");
+    info!(target: "4da::startup", model = "snowflake-arctic-embed-m", dimensions = crate::EMBEDDING_DIMS, "Embedding model");
 
     // Sovereign Cold Boot — verify sqlite-vec ONCE per process here, before any
     // other code opens a connection. This eliminates ~200 redundant verification

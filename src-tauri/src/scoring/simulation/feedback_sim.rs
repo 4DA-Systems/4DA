@@ -33,7 +33,7 @@ pub(super) fn rust_ctx_with_boosts(
     boosts: &HashMap<String, f64>,
     interaction_count: i64,
 ) -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let make_interest = |id: i64, topic: &str, weight: f32| crate::context_engine::Interest {
         id: Some(id),
         topic: topic.to_string(),
@@ -124,7 +124,7 @@ pub(super) fn python_ctx_with_boosts(
     boosts: &HashMap<String, f64>,
     interaction_count: i64,
 ) -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let make_interest = |id: i64, topic: &str, weight: f32| crate::context_engine::Interest {
         id: Some(id),
         topic: topic.to_string(),
@@ -222,7 +222,7 @@ pub(super) fn simulate_session_with_embeddings(
 ) -> Vec<FeedbackEvent> {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut events = Vec::new();
     for item in items {
@@ -275,7 +275,7 @@ pub(super) fn simulate_session(
 ) -> Vec<FeedbackEvent> {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut events = Vec::new();
     for item in items {
@@ -359,7 +359,7 @@ pub(super) fn score_corpus_against_ctx(ctx: &ScoringContext, persona_idx: usize)
     let items = lifecycle_corpus();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut relevant_scores = Vec::new();
     for item in &items {

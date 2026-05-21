@@ -31,7 +31,9 @@ fn test_embedding_conversion_empty() {
 
 #[test]
 fn test_embedding_conversion_384_dim() {
-    let original: Vec<f32> = (0..384).map(|i| (i as f32) * 0.001).collect();
+    let original: Vec<f32> = (0..crate::EMBEDDING_DIMS)
+        .map(|i| (i as f32) * 0.001)
+        .collect();
     let blob = embedding_to_blob(&original);
     let restored = blob_to_embedding(&blob);
     assert_eq!(original.len(), restored.len());
@@ -223,7 +225,9 @@ fn test_interest_source_round_trip_all_variants() {
 fn test_interest_embedding_round_trip() {
     let engine = test_engine();
 
-    let embedding: Vec<f32> = (0..384).map(|i| (i as f32) * 0.002 - 0.384).collect();
+    let embedding: Vec<f32> = (0..crate::EMBEDDING_DIMS)
+        .map(|i| (i as f32) * 0.002 - 0.384)
+        .collect();
     engine
         .add_interest("rust", 1.0, Some(&embedding), InterestSource::Explicit)
         .expect("add interest with embedding");
@@ -235,7 +239,11 @@ fn test_interest_embedding_round_trip() {
         .embedding
         .as_ref()
         .expect("embedding should be present");
-    assert_eq!(stored.len(), 384, "Embedding dimension should be 384");
+    assert_eq!(
+        stored.len(),
+        crate::EMBEDDING_DIMS,
+        "Embedding dimension should match EMBEDDING_DIMS"
+    );
 
     for (i, (a, b)) in embedding.iter().zip(stored.iter()).enumerate() {
         assert!(

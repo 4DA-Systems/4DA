@@ -14,7 +14,7 @@ use super::{sim_db, sim_input, sim_no_freshness};
 // ============================================================================
 
 fn make_tech_ctx(topic: &str, declared_tech: &[&str]) -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![crate::context_engine::Interest {
         id: Some(1),
         topic: topic.to_string(),
@@ -35,7 +35,7 @@ fn make_tech_ctx(topic: &str, declared_tech: &[&str]) -> ScoringContext {
 }
 
 fn make_rich_ctx(topic: &str, declared_tech: &[&str]) -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![crate::context_engine::Interest {
         id: Some(1),
         topic: topic.to_string(),
@@ -67,13 +67,13 @@ fn bootstrap_mode_more_permissive_than_normal() {
     // who has established strong anti-preferences.
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let bootstrap = bootstrap_user();
 
     // Make a normal user with some interaction history but same interests
     let normal_ctx = {
-        let e = vec![0.5_f32; 384];
+        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "TypeScript".to_string(),
@@ -119,7 +119,7 @@ fn bootstrap_mode_more_permissive_than_normal() {
 fn bootstrap_user_gets_nonzero_scores_for_tech_content() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = bootstrap_user();
 
     let ts_input = sim_input(1,
@@ -139,7 +139,7 @@ fn bootstrap_user_gets_nonzero_scores_for_tech_content() {
 fn interests_only_scores_topic_match_positively() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // User with only Rust interest
     let ctx = make_tech_ctx("Rust", &["rust"]);
@@ -161,7 +161,7 @@ fn interests_only_scores_topic_match_positively() {
 fn interests_only_noise_stays_low() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let ctx = make_tech_ctx("Rust", &["rust"]);
 
@@ -183,7 +183,7 @@ fn interests_only_noise_stays_low() {
 fn declared_tech_boosts_matching_content() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // With declared tech
     let ctx_with_tech = make_tech_ctx("programming", &["rust", "tauri"]);
@@ -208,7 +208,7 @@ fn declared_tech_boosts_matching_content() {
 fn declared_tech_rust_does_not_boost_unrelated_python_content() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let rust_ctx = make_tech_ctx("Rust", &["rust", "tauri"]);
 
@@ -230,7 +230,7 @@ fn declared_tech_rust_does_not_boost_unrelated_python_content() {
 fn ace_context_improves_relevant_score() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let ctx_without_ace = make_tech_ctx("Rust", &[]);
     let ctx_with_ace = make_rich_ctx("Rust", &["rust", "tauri", "sqlite"]);
@@ -253,7 +253,7 @@ fn ace_context_improves_relevant_score() {
 fn first_run_scores_are_bounded() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = bootstrap_user();
 
     let items = vec![
@@ -286,7 +286,7 @@ fn first_run_scores_are_bounded() {
 fn first_run_tech_content_scores_higher_than_noise() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = bootstrap_user();
 
     let tech_input = sim_input(1,
@@ -311,7 +311,7 @@ fn first_run_tech_content_scores_higher_than_noise() {
 fn zero_context_produces_no_relevant_results() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Completely empty context — no interests, no ACE, 0 interactions
     let empty_ctx = ScoringContext::builder()
@@ -347,7 +347,7 @@ fn zero_context_produces_no_relevant_results() {
 fn score_breakdown_present_for_all_first_run_items() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = bootstrap_user();
 
     let items = vec![
@@ -371,8 +371,8 @@ fn score_breakdown_present_for_all_first_run_items() {
 fn two_interests_improves_over_one_interest() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb_data = vec![0.0_f32; 384];
-    let emb_interest = vec![0.5_f32; 384];
+    let emb_data = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let emb_interest = vec![0.5_f32; crate::EMBEDDING_DIMS];
 
     let one_interest = {
         let interests = vec![crate::context_engine::Interest {

@@ -51,19 +51,17 @@ mod tests {
 
         /// Zero-vector fallback: when provider is "none" and Ollama is unreachable,
         /// embed_texts should return zero vectors (graceful degradation), not an error.
-        /// We verify the zero-vector shape matches TARGET_EMBEDDING_DIMS = 384.
+        /// We verify the zero-vector shape matches EMBEDDING_DIMS (768).
         #[test]
         fn test_zero_vector_fallback_shape() {
-            const TARGET_EMBEDDING_DIMS: usize = 384;
+            const EXPECTED_DIMS: usize = crate::EMBEDDING_DIMS;
             let texts = vec!["test text".to_string(); 3];
-            let zero_vectors: Vec<Vec<f32>> = texts
-                .iter()
-                .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
-                .collect();
+            let zero_vectors: Vec<Vec<f32>> =
+                texts.iter().map(|_| vec![0.0f32; EXPECTED_DIMS]).collect();
 
             assert_eq!(zero_vectors.len(), 3);
             for v in &zero_vectors {
-                assert_eq!(v.len(), TARGET_EMBEDDING_DIMS);
+                assert_eq!(v.len(), EXPECTED_DIMS);
                 assert!(v.iter().all(|&x| x == 0.0));
             }
         }

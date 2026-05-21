@@ -56,7 +56,7 @@ pub(super) fn bench_input<'a>(
 
 /// Rust systems developer — Rust, Tauri, SQLite, systems programming
 fn rust_dev_ctx() -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![
         crate::context_engine::Interest {
             id: Some(1),
@@ -144,7 +144,7 @@ fn rust_dev_ctx() -> ScoringContext {
 
 /// Python ML developer — Python, PyTorch, LLMs
 fn python_ml_ctx() -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![
         crate::context_engine::Interest {
             id: Some(1),
@@ -233,7 +233,7 @@ fn python_ml_ctx() -> ScoringContext {
 
 /// Bootstrap user — 1 interest, 0 feedback, minimal context
 fn bootstrap_ctx() -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![crate::context_engine::Interest {
         id: Some(1),
         topic: "TypeScript".to_string(),
@@ -408,7 +408,7 @@ impl BenchResult {
 fn run_bench(name: &'static str, ctx: &ScoringContext, corpus: &[Labeled]) -> BenchResult {
     let db = bench_db();
     let opts = no_freshness();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
 
     let (mut tp, mut fp, mut tn, mut r#fn) = (0, 0, 0, 0);
 
@@ -515,7 +515,7 @@ fn bench_python_ml_precision_recall() {
 fn gate_zero_signals_below_threshold() {
     let db = bench_db();
     let ctx = rust_dev_ctx();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     for title in &[
@@ -536,7 +536,7 @@ fn gate_zero_signals_below_threshold() {
 #[test]
 fn gate_single_signal_capped_in_normal_mode() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     // Interest-only context: 1 signal max
@@ -544,7 +544,7 @@ fn gate_single_signal_capped_in_normal_mode() {
         id: Some(1),
         topic: "Rust".to_string(),
         weight: 1.0,
-        embedding: Some(vec![0.5_f32; 384]),
+        embedding: Some(vec![0.5_f32; crate::EMBEDDING_DIMS]),
         source: crate::context_engine::InterestSource::Explicit,
     }];
     let ctx = ScoringContext::builder()
@@ -575,7 +575,7 @@ fn gate_single_signal_capped_in_normal_mode() {
 #[test]
 fn gate_two_signals_can_pass() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -603,7 +603,7 @@ fn gate_two_signals_can_pass() {
 #[test]
 fn path_both_context_and_interest() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = ScoringContext::builder()
         .cached_context_count(10)
@@ -612,7 +612,7 @@ fn path_both_context_and_interest() {
             id: Some(1),
             topic: "Rust".to_string(),
             weight: 1.0,
-            embedding: Some(vec![0.5_f32; 384]),
+            embedding: Some(vec![0.5_f32; crate::EMBEDDING_DIMS]),
             source: crate::context_engine::InterestSource::Explicit,
         }])
         .build();
@@ -630,7 +630,7 @@ fn path_both_context_and_interest() {
 #[test]
 fn path_interest_only() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = ScoringContext::builder()
         .cached_context_count(0)
@@ -639,7 +639,7 @@ fn path_interest_only() {
             id: Some(1),
             topic: "Rust".to_string(),
             weight: 1.0,
-            embedding: Some(vec![0.5_f32; 384]),
+            embedding: Some(vec![0.5_f32; crate::EMBEDDING_DIMS]),
             source: crate::context_engine::InterestSource::Explicit,
         }])
         .build();
@@ -660,7 +660,7 @@ fn path_interest_only() {
 #[test]
 fn path_context_only() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = ScoringContext::builder()
         .cached_context_count(10)
@@ -680,7 +680,7 @@ fn path_context_only() {
 #[test]
 fn path_neither() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = ScoringContext::builder()
         .cached_context_count(0)
@@ -708,7 +708,7 @@ fn path_neither() {
 #[test]
 fn domain_primary_outranks_adjacent() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -750,7 +750,7 @@ fn domain_primary_outranks_adjacent() {
 #[test]
 fn domain_off_domain_crushed() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -775,7 +775,7 @@ fn domain_off_domain_crushed() {
 #[test]
 fn stack_competing_tech_penalized() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -798,7 +798,7 @@ fn stack_competing_tech_penalized() {
 #[test]
 fn stack_ecosystem_shift_boosted() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -849,7 +849,7 @@ fn dampening_penalties_stronger_than_boosts() {
 #[test]
 fn bootstrap_more_permissive_than_normal() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     let b_ctx = bootstrap_ctx();
@@ -859,7 +859,7 @@ fn bootstrap_more_permissive_than_normal() {
         id: Some(1),
         topic: "TypeScript".to_string(),
         weight: 1.0,
-        embedding: Some(vec![0.5_f32; 384]),
+        embedding: Some(vec![0.5_f32; crate::EMBEDDING_DIMS]),
         source: crate::context_engine::InterestSource::Explicit,
     }];
     let mut ace = ace_context::ACEContext::default();
@@ -913,7 +913,7 @@ fn bootstrap_more_permissive_than_normal() {
 #[test]
 fn exclusion_produces_zero_score() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = ScoringContext::builder()
         .exclusions(vec!["bitcoin".to_string(), "crypto".to_string()])
@@ -939,7 +939,7 @@ fn exclusion_produces_zero_score() {
 #[test]
 fn short_title_capped() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -965,7 +965,7 @@ fn short_title_capped() {
 #[test]
 fn cross_profile_rust_not_relevant_for_python() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = python_ml_ctx();
 
@@ -987,7 +987,7 @@ fn cross_profile_rust_not_relevant_for_python() {
 #[test]
 fn cross_profile_python_not_relevant_for_rust() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -1013,7 +1013,7 @@ fn cross_profile_python_not_relevant_for_rust() {
 #[test]
 fn more_signals_higher_gate_mult() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     // 1-signal context
@@ -1023,7 +1023,7 @@ fn more_signals_higher_gate_mult() {
             id: Some(1),
             topic: "Rust".to_string(),
             weight: 1.0,
-            embedding: Some(vec![0.5_f32; 384]),
+            embedding: Some(vec![0.5_f32; crate::EMBEDDING_DIMS]),
             source: crate::context_engine::InterestSource::Explicit,
         }])
         .feedback_interaction_count(20)
@@ -1038,7 +1038,7 @@ fn more_signals_higher_gate_mult() {
             id: Some(1),
             topic: "Rust".to_string(),
             weight: 1.0,
-            embedding: Some(vec![0.5_f32; 384]),
+            embedding: Some(vec![0.5_f32; crate::EMBEDDING_DIMS]),
             source: crate::context_engine::InterestSource::Explicit,
         }])
         .ace_ctx(ace)
@@ -1081,7 +1081,7 @@ fn more_signals_higher_gate_mult() {
 #[test]
 fn scoring_deterministic() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = rust_dev_ctx();
 
@@ -1141,7 +1141,7 @@ fn profile_with_skill_gaps(
 
 /// Helper: build a context with a sovereign profile that has skill gaps
 fn ctx_with_skill_gaps(gaps: Vec<&str>) -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![
         crate::context_engine::Interest {
             id: Some(1),
@@ -1176,7 +1176,7 @@ fn ctx_with_skill_gaps(gaps: Vec<&str>) -> ScoringContext {
 #[test]
 fn skill_gap_boost_fires_for_gap_dependency() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     // Context with "tokio" as a skill gap
@@ -1205,7 +1205,7 @@ fn skill_gap_boost_fires_for_gap_dependency() {
 #[test]
 fn skill_gap_boost_does_not_fire_for_engaged_topic() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     // "serde" is the skill gap, but content is about "rust" (which user engages with)
@@ -1230,7 +1230,7 @@ fn skill_gap_boost_does_not_fire_for_engaged_topic() {
 #[test]
 fn skill_gap_boost_multi_match_higher_than_single() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     // Two skill gaps that will both match
@@ -1255,7 +1255,7 @@ fn skill_gap_boost_multi_match_higher_than_single() {
 #[test]
 fn skill_gap_boost_zero_without_profile() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
 
     // No sovereign profile at all
@@ -1279,7 +1279,7 @@ fn skill_gap_boost_zero_without_profile() {
 #[test]
 fn skill_gap_boost_appears_in_explanation() {
     let db = bench_db();
-    let emb = vec![0.1_f32; 384];
+    let emb = vec![0.1_f32; crate::EMBEDDING_DIMS];
     let opts = no_freshness();
     let ctx = ctx_with_skill_gaps(vec!["tokio"]);
 

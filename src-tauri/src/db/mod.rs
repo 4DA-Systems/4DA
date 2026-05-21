@@ -480,8 +480,7 @@ pub(crate) fn hash_content_parts(parts: &[&str]) -> String {
     hex::encode(hasher.finalize())
 }
 
-/// Expected embedding dimension (MiniLM / text-embedding-3-small)
-pub(crate) const EMBEDDING_DIM: usize = 384;
+pub(crate) const EMBEDDING_DIM: usize = crate::EMBEDDING_DIMS;
 
 /// Convert f32 embedding to blob for storage.
 /// Validates dimension before conversion — rejects wrong-sized vectors.

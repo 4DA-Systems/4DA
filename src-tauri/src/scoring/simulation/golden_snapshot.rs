@@ -31,7 +31,7 @@ mod tests {
         let opts = sim_no_freshness();
         let items = corpus();
         let calibrated_embeddings = super::super::load_corpus_embeddings();
-        let zero_emb = vec![0.0_f32; 384];
+        let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
         for exp in expectations {
             let item = items
@@ -271,7 +271,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let items = corpus();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
         let tech_ids: [u64; 4] = [1, 14, 15, 28]; // Rust, React 19, TS 5.4, Next.js
         let mut any_nonzero = false;
@@ -323,7 +323,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let items = corpus();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
         // ID 51: "Ruby on Rails 7.2: What's new" -- contains "rails" in title
         let item = items.iter().find(|i| i.id == 51).unwrap();

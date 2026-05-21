@@ -204,16 +204,16 @@ mod tests {
         assert_eq!(contexts[0].source_file, "test/idempotent.rs");
     }
 
-    /// Stress test: store and retrieve a full 384-dimensional embedding
+    /// Stress test: store and retrieve a full-dimensional embedding
     /// vector. Verify bit-exact roundtrip through the database (f32 -> blob
     /// -> f32 with no precision loss).
     #[test]
     fn stress_large_embedding_roundtrip_384d() {
         let db = test_db();
 
-        // Create a 384-dim embedding with varied values (positive, negative,
+        // Create an EMBEDDING_DIMS-dim embedding with varied values (positive, negative,
         // near-zero, large magnitude) to exercise the full float range.
-        let original: Vec<f32> = (0..384)
+        let original: Vec<f32> = (0..crate::EMBEDDING_DIMS)
             .map(|i| {
                 let x = i as f32;
                 (x * 0.0163 + 0.7).sin() * (1.0 + (x * 0.0071).cos())
@@ -233,8 +233,9 @@ mod tests {
 
         assert_eq!(
             recovered.len(),
-            384,
-            "Recovered embedding should be 384-dim, got {}",
+            crate::EMBEDDING_DIMS,
+            "Recovered embedding should be {}-dim, got {}",
+            crate::EMBEDDING_DIMS,
             recovered.len()
         );
 
@@ -252,7 +253,7 @@ mod tests {
 
         // Also test via source_items path for completeness
         let source_emb = seed_embedding("large_emb_source_test");
-        assert_eq!(source_emb.len(), 384);
+        assert_eq!(source_emb.len(), crate::EMBEDDING_DIMS);
 
         db.upsert_source_item(
             "embed_test",
@@ -268,7 +269,7 @@ mod tests {
             .get_source_item("embed_test", "large_384")
             .unwrap()
             .expect("item should exist");
-        assert_eq!(item.embedding.len(), 384);
+        assert_eq!(item.embedding.len(), crate::EMBEDDING_DIMS);
         for (i, (orig, recv)) in source_emb.iter().zip(item.embedding.iter()).enumerate() {
             assert_eq!(
                 orig.to_bits(),
@@ -302,7 +303,7 @@ mod tests {
             }
         }
 
-        let dim = 384;
+        let dim = crate::EMBEDDING_DIMS;
 
         // Create a fixed query vector: unit vector along a specific direction
         let mut query_vec = vec![0.0f32; dim];

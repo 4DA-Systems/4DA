@@ -30,7 +30,7 @@ pub struct SimulatedPersona {
 // ============================================================================
 
 fn make_interests(topics: &[(&str, f32)]) -> Vec<crate::context_engine::Interest> {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     topics
         .iter()
         .enumerate()

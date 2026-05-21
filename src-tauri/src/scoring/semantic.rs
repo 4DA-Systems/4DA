@@ -190,12 +190,12 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
 /// Compute taste embedding: weighted centroid of topic affinity embeddings.
 ///
 /// The taste embedding captures the user's holistic preference profile as a single
-/// 384-dim unit vector. Items with high cosine similarity to this vector are more
+/// unit vector matching EMBEDDING_DIMS. Items with high cosine similarity to this vector are more
 /// likely to match the user's tastes — even if they don't match any individual topic.
 ///
 /// # Arguments
 /// * `affinities` - (topic, affinity_score, confidence) triples from ACE behavior learning
-/// * `topic_embeddings` - topic -> 384-dim embedding map (already loaded)
+/// * `topic_embeddings` - topic -> embedding map (EMBEDDING_DIMS-dim, already loaded) (already loaded)
 pub(crate) fn compute_taste_embedding(
     affinities: &[(String, f32, f32)],
     topic_embeddings: &HashMap<String, Vec<f32>>,
@@ -204,7 +204,7 @@ pub(crate) fn compute_taste_embedding(
         return None;
     }
 
-    let dim = 384;
+    let dim = crate::EMBEDDING_DIMS;
     let mut centroid = vec![0.0f32; dim];
     let mut total_weight = 0.0f32;
 
@@ -343,11 +343,11 @@ mod tests {
 
     #[test]
     fn test_orthogonal_embeddings_produce_zero_boost() {
-        // Construct two orthogonal 384-dim unit vectors manually
-        let mut emb_a = vec![0.0f32; 384];
+        // Construct two orthogonal unit vector matching EMBEDDING_DIMSs manually
+        let mut emb_a = vec![0.0f32; crate::EMBEDDING_DIMS];
         emb_a[0] = 1.0; // unit vector along dimension 0
 
-        let mut emb_b = vec![0.0f32; 384];
+        let mut emb_b = vec![0.0f32; crate::EMBEDDING_DIMS];
         emb_b[1] = 1.0; // unit vector along dimension 1
 
         let ace_ctx = ace_ctx_with_topics(&[("topic_b", 1.0)]);
@@ -395,7 +395,7 @@ mod tests {
         let taste = compute_taste_embedding(&affinities, &topic_embs);
         assert!(taste.is_some());
         let taste = taste.unwrap();
-        assert_eq!(taste.len(), 384);
+        assert_eq!(taste.len(), crate::EMBEDDING_DIMS);
 
         // Should be unit normalized
         let norm = crate::vector_norm(&taste);
@@ -482,9 +482,9 @@ mod tests {
 
     #[test]
     fn test_taste_boost_orthogonal() {
-        let mut emb_a = vec![0.0f32; 384];
+        let mut emb_a = vec![0.0f32; crate::EMBEDDING_DIMS];
         emb_a[0] = 1.0;
-        let mut emb_b = vec![0.0f32; 384];
+        let mut emb_b = vec![0.0f32; crate::EMBEDDING_DIMS];
         emb_b[1] = 1.0;
 
         let boost = compute_taste_boost(&emb_a, &emb_b);
@@ -502,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_taste_boost_zero_embedding() {
-        let zero = vec![0.0f32; 384];
+        let zero = vec![0.0f32; crate::EMBEDDING_DIMS];
         let taste = seed_embedding("rust");
         let boost = compute_taste_boost(&zero, &taste);
         assert!(
@@ -513,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_zero_norm_embedding_handled_gracefully() {
-        let zero_emb = vec![0.0f32; 384];
+        let zero_emb = vec![0.0f32; crate::EMBEDDING_DIMS];
         let ace_ctx = ace_ctx_with_topics(&[("rust", 1.0)]);
         let mut topic_embeddings = HashMap::new();
         topic_embeddings.insert("rust".to_string(), seed_embedding("rust"));

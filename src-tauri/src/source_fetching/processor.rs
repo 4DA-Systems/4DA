@@ -506,7 +506,7 @@ mod tests {
     fn test_fallback_zero_vector_detection() {
         // This tests the pattern used to detect fallback embeddings
         let real_embedding = [0.1f32, -0.5, 0.3, 0.0, 0.8];
-        let zero_embedding = vec![0.0f32; 384];
+        let zero_embedding = vec![0.0f32; crate::EMBEDDING_DIMS];
         let empty_embedding: Vec<f32> = vec![];
 
         let is_fallback_real = real_embedding.iter().all(|&v| v == 0.0);

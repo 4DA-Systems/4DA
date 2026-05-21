@@ -15,7 +15,7 @@ use tracing::info;
 pub const PROJ_DIM: usize = 3;
 
 #[cfg(test)]
-pub const EMB_DIM_SMALL: usize = 384;
+pub const EMB_DIM_SMALL: usize = crate::EMBEDDING_DIMS;
 
 /// Fixed seed for deterministic projection matrix
 const PROJECTION_SEED: u64 = 0x4DA_0000_2026;
@@ -241,7 +241,7 @@ pub fn build_universe(
         .first()
         .map(|(_, _, _, _, emb, _)| emb.len())
         .or_else(|| context_chunks.first().map(|(_, _, _, emb)| emb.len()))
-        .unwrap_or(384);
+        .unwrap_or(crate::EMBEDDING_DIMS);
 
     if emb_dim == 0 {
         return Ok(VoidUniverse {

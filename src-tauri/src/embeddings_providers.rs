@@ -230,7 +230,7 @@ fn extract_ort_library(
 // ============================================================================
 
 #[cfg(feature = "fastembed-local")]
-const EMBEDDING_CACHE_DIR_NAME: &str = "models--Qdrant--bge-small-en-v1.5-onnx-Q";
+const EMBEDDING_CACHE_DIR_NAME: &str = "models--Snowflake--snowflake-arctic-embed-m";
 
 #[cfg(feature = "fastembed-local")]
 fn ensure_embedding_model(cache_dir: &std::path::Path) -> bool {
@@ -291,14 +291,15 @@ fn get_or_init_fastembed(
         ensure_ort_runtime(&cache_dir, None)?;
         let cached = ensure_embedding_model(&cache_dir);
         let msg = if cached {
-            "Loading bundled embedding model (bge-small-en-v1.5)"
+            "Loading bundled embedding model (snowflake-arctic-embed-m)"
         } else {
-            "Downloading embedding model (bge-small-en-v1.5, ~64MB first run)"
+            "Downloading embedding model (snowflake-arctic-embed-m, ~220MB first run)"
         };
         tracing::info!(target: "4da::embeddings", cache = %cache_dir.display(), "{msg}");
-        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15Q)
-            .with_cache_dir(cache_dir)
-            .with_show_download_progress(!cached);
+        let options =
+            fastembed::InitOptions::new(fastembed::EmbeddingModel::SnowflakeArcticEmbedMQ)
+                .with_cache_dir(cache_dir)
+                .with_show_download_progress(!cached);
         fastembed::TextEmbedding::try_new(options)
             .map(parking_lot::Mutex::new)
             .map_err(|e| {
@@ -331,7 +332,7 @@ pub(super) fn init_fastembed_with_progress(
             let msg = if cached {
                 "Loading bundled embedding model...".to_string()
             } else {
-                "Downloading embedding model (~64MB first run)...".to_string()
+                "Downloading embedding model (~220MB first run)...".to_string()
             };
             let _ = tx.send(DownloadProgress {
                 stage: "model-init".into(),
@@ -343,9 +344,10 @@ pub(super) fn init_fastembed_with_progress(
             });
         }
 
-        let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15Q)
-            .with_cache_dir(cache_dir)
-            .with_show_download_progress(!cached);
+        let options =
+            fastembed::InitOptions::new(fastembed::EmbeddingModel::SnowflakeArcticEmbedMQ)
+                .with_cache_dir(cache_dir)
+                .with_show_download_progress(!cached);
         let result = fastembed::TextEmbedding::try_new(options)
             .map(parking_lot::Mutex::new)
             .map_err(|e| {
@@ -423,7 +425,7 @@ pub(super) async fn embed_texts_openai(texts: &[String], api_key: &str) -> Resul
     let body = serde_json::json!({
         "model": "text-embedding-3-small",
         "input": texts,
-        "dimensions": 384  // Match DB vec0 schema (384-dim MiniLM-compatible)
+        "dimensions": crate::EMBEDDING_DIMS
     });
 
     let response = EMBEDDING_CLIENT

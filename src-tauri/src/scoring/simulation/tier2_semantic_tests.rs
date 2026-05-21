@@ -605,7 +605,7 @@ fn semantic_f1_improves_over_zero_embeddings() {
     let items = corpus();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let zero_ctx = personas::rust_systems_dev();
     let sem_ctx = semantic_rust_ctx();
     let mut zero_metrics = SimMetrics::new();
