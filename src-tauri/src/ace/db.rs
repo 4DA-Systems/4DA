@@ -385,6 +385,60 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     ))
     .context("Failed to create topic vec0 tables")?;
 
+    // Dimension migration: if topic_vec exists with old dimensions, rebuild it.
+    // Check both active_topics blobs AND the vec0 table itself (probe insert).
+    {
+        let dim = crate::EMBEDDING_DIMS;
+        let expected_bytes = dim * 4;
+
+        let stale_blobs: bool = conn
+            .query_row(
+                "SELECT length(embedding) FROM active_topics WHERE embedding IS NOT NULL LIMIT 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|len| len as usize != expected_bytes)
+            .unwrap_or(false);
+
+        let stale_vec = if !stale_blobs {
+            let probe = vec![0u8; expected_bytes];
+            let ok = conn
+                .execute(
+                    "INSERT INTO topic_vec (rowid, embedding) VALUES (-1, ?1)",
+                    rusqlite::params![probe],
+                )
+                .is_ok();
+            if ok {
+                conn.execute("DELETE FROM topic_vec WHERE rowid = -1", [])
+                    .ok();
+                false
+            } else {
+                true
+            }
+        } else {
+            true
+        };
+
+        if stale_blobs || stale_vec {
+            conn.execute_batch(&format!(
+                "DROP TABLE IF EXISTS topic_vec;
+                 CREATE VIRTUAL TABLE topic_vec USING vec0(
+                     embedding float[{dim}]
+                 );
+                 UPDATE active_topics SET embedding = NULL
+                   WHERE embedding IS NOT NULL;"
+            ))
+            .ok();
+            info!(
+                target: "ace::db",
+                dim,
+                stale_blobs,
+                stale_vec,
+                "Rebuilt topic_vec at {dim}d — dimension mismatch detected"
+            );
+        }
+    }
+
     // Key-value store for persisting runtime settings (e.g., auto-tuned relevance threshold)
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS kv_store (

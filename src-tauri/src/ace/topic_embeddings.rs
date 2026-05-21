@@ -110,9 +110,12 @@ pub fn load_topic_embeddings(
         Ok((topic, blob))
     })?;
 
+    let expected_dim = crate::EMBEDDING_DIMS;
     for (topic, blob) in rows.flatten() {
         let embedding = blob_to_embedding(&blob);
-        result.insert(topic, embedding);
+        if embedding.len() == expected_dim {
+            result.insert(topic, embedding);
+        }
     }
 
     debug!(
