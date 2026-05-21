@@ -7,6 +7,10 @@ mod analyzer;
 pub(crate) mod authority;
 #[cfg(test)]
 mod benchmark;
+#[cfg(test)]
+pub(crate) mod benchmark_calibration;
+#[cfg(test)]
+pub(crate) mod benchmark_scenarios;
 mod calibration;
 mod composition;
 mod context;
@@ -104,7 +108,7 @@ pub(crate) struct ScoringContext {
     pub open_windows: Vec<crate::decision_advantage::DecisionWindow>,
     /// Autophagy calibration deltas: topic -> delta (scoring correction)
     pub calibration_deltas: HashMap<String, f32>,
-    /// Taste embedding: user's holistic preference vector (384-dim, unit normalized)
+    /// Taste embedding: user's holistic preference vector (EMBEDDING_DIMS-dim, unit normalized)
     /// Computed from weighted centroid of topic affinity embeddings
     pub taste_embedding: Option<Vec<f32>>,
     /// Topic-aware decay half-lives: topic -> half_life_hours

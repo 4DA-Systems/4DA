@@ -1,0 +1,1307 @@
+[
+  {
+    "id": "tp_rust_release",
+    "category": "true_positive",
+    "description": "Rust release directly relevant to Rust developer",
+    "item": {
+      "title": "Rust 1.80 stabilizes async closures and lazy type aliases",
+      "content": "The latest Rust release brings long-awaited async closure support and lazy type aliases, improving ergonomics for systems programmers working with async Rust codebases.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"programming\", \"release\"]",
+      "created_hours_ago": 12
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.12,
+      "score_max": 0.5,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Rust release with AST topics should fire interest + ace"
+    }
+  },
+  {
+    "id": "tp_tauri_update",
+    "category": "true_positive",
+    "description": "Tauri framework update for Tauri developer",
+    "item": {
+      "title": "Tauri 2.1 released with improved IPC and plugin system",
+      "content": "Tauri 2.1 ships with a revamped IPC bridge, improved plugin lifecycle hooks, and better support for multi-window applications. The Rust backend API now supports typed commands with automatic TypeScript binding generation.",
+      "source_type": "hackernews",
+      "tags_json": "[\"tauri\", \"rust\", \"desktop\"]",
+      "created_hours_ago": 6
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.1,
+      "score_max": 0.45,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Direct match on Tauri — primary stack technology"
+    }
+  },
+  {
+    "id": "tp_sqlite_perf",
+    "category": "true_positive",
+    "description": "SQLite performance tuning relevant to database user",
+    "item": {
+      "title": "SQLite performance tuning for embedded applications",
+      "content": "Comprehensive guide to WAL mode, pragma journal settings, and connection pooling strategies for SQLite in production embedded applications. Includes benchmarks showing 10x improvement with proper configuration.",
+      "source_type": "hackernews",
+      "tags_json": "[\"sqlite\", \"database\", \"performance\"]",
+      "created_hours_ago": 24
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.08,
+      "score_max": 0.35,
+      "should_be_relevant": true,
+      "required_signals": [
+        "ace"
+      ],
+      "notes": "SQLite is in ACE detected tech for Rust developer"
+    }
+  },
+  {
+    "id": "tp_tokio_improvement",
+    "category": "true_positive",
+    "description": "Tokio runtime improvement for async Rust developer",
+    "item": {
+      "title": "Tokio 1.40: improved task scheduling and memory efficiency",
+      "content": "The new Tokio release reduces per-task memory overhead by 30% through a redesigned work-stealing scheduler. The io_uring integration is now stable on Linux, and the tracing integration provides zero-cost structured diagnostics.",
+      "source_type": "hackernews",
+      "tags_json": "[\"tokio\", \"rust\", \"async\"]",
+      "created_hours_ago": 8
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.03,
+      "score_max": 0.2,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Tokio is a declared dependency"
+    }
+  },
+  {
+    "id": "tp_serde_patterns",
+    "category": "true_positive",
+    "description": "Serde serialization patterns for Rust developer",
+    "item": {
+      "title": "Advanced serde patterns: custom deserializers and zero-copy parsing",
+      "content": "Deep dive into writing custom serde deserializers that avoid unnecessary allocations. Covers the Visitor pattern, borrowed data deserialization, and how to implement zero-copy parsing for high-throughput data pipelines in Rust.",
+      "source_type": "hackernews",
+      "tags_json": "[\"serde\", \"rust\", \"serialization\"]",
+      "created_hours_ago": 18
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.08,
+      "score_max": 0.4,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Serde is a declared dependency, content about Rust serialization"
+    }
+  },
+  {
+    "id": "tp_systems_programming",
+    "category": "true_positive",
+    "description": "Systems programming deep dive for systems developer",
+    "item": {
+      "title": "Understanding memory allocators: jemalloc vs mimalloc in production Rust",
+      "content": "Comparative analysis of memory allocator performance in high-throughput Rust services. Benchmarks cover allocation latency, fragmentation, and thread contention under realistic workloads with tokio-based async runtimes.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"performance\", \"systems\"]",
+      "created_hours_ago": 36
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.05,
+      "score_max": 0.3,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Systems programming is an explicit interest"
+    }
+  },
+  {
+    "id": "tp_wasm_rust",
+    "category": "true_positive",
+    "description": "WebAssembly with Rust article",
+    "item": {
+      "title": "Building high-performance WASM modules with Rust and wasm-bindgen",
+      "content": "Step-by-step guide to compiling Rust to WebAssembly, integrating with JavaScript frontends via wasm-bindgen, and optimizing binary size with wasm-opt. Includes real-world performance comparisons against pure JavaScript implementations.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"wasm\", \"webassembly\"]",
+      "created_hours_ago": 48
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.12,
+      "score_max": 0.5,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "WASM is adjacent tech for Rust developer"
+    }
+  },
+  {
+    "id": "tp_embedded_rust",
+    "category": "true_positive",
+    "description": "Embedded Rust development article",
+    "item": {
+      "title": "Rust on microcontrollers: embassy async runtime for embedded systems",
+      "content": "Embassy brings async/await to embedded Rust development, enabling cooperative multitasking on ARM Cortex-M processors without an RTOS. The framework provides HAL abstractions for STM32, nRF, and RP2040 families.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"embedded\", \"async\"]",
+      "created_hours_ago": 30
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.06,
+      "score_max": 0.3,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Embedded Rust is adjacent to systems programming interest"
+    }
+  },
+  {
+    "id": "tp_cargo_improvements",
+    "category": "true_positive",
+    "description": "Cargo build system improvements",
+    "item": {
+      "title": "Cargo workspace improvements: better dependency resolution and build caching",
+      "content": "The latest Cargo update introduces improved workspace dependency deduplication, persistent build caching across clean builds, and a new cargo audit integration that checks for known vulnerabilities in the dependency tree.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"cargo\", \"tooling\"]",
+      "created_hours_ago": 15
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.05,
+      "score_max": 0.28,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Cargo is core Rust tooling — directly relevant"
+    }
+  },
+  {
+    "id": "tp_typescript_react",
+    "category": "true_positive",
+    "description": "TypeScript + React update for fullstack JS developer",
+    "item": {
+      "title": "TypeScript 5.7 introduces improved type narrowing and module declarations",
+      "content": "TypeScript 5.7 brings improved control flow analysis for type narrowing in switch statements, new module declaration syntax for ambient modules, and significantly faster incremental compilation through improved dependency tracking.",
+      "source_type": "hackernews",
+      "tags_json": "[\"typescript\", \"programming\", \"release\"]",
+      "created_hours_ago": 10
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0.12,
+      "score_max": 0.5,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "TypeScript is a primary interest for fullstack JS"
+    }
+  },
+  {
+    "id": "tp_react_update",
+    "category": "true_positive",
+    "description": "React framework update for fullstack JS developer",
+    "item": {
+      "title": "React 20 ships with native signals and compiler optimizations",
+      "content": "React 20 introduces a native reactivity system based on signals, eliminating the need for useMemo and useCallback in most cases. The React Compiler now ships as a stable Babel plugin with automatic dependency tracking.",
+      "source_type": "hackernews",
+      "tags_json": "[\"react\", \"javascript\", \"frontend\"]",
+      "created_hours_ago": 4
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0.06,
+      "score_max": 0.3,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "React is a primary interest and ACE detected tech"
+    }
+  },
+  {
+    "id": "tp_python_ml_paper",
+    "category": "true_positive",
+    "description": "ML paper relevant to Python data scientist",
+    "item": {
+      "title": "Attention Is All You Need revisited: sparse attention scales to 1M tokens",
+      "content": "New research demonstrates that sparse attention patterns with learned routing can process sequences up to 1M tokens with linear memory scaling. Implementation available in PyTorch with native CUDA kernels for training and inference.",
+      "source_type": "arxiv",
+      "tags_json": "[\"machine-learning\", \"transformers\", \"attention\"]",
+      "created_hours_ago": 20
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0.01,
+      "score_max": 0.12,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "ML paper with PyTorch implementation — direct match"
+    }
+  },
+  {
+    "id": "tp_dep_notification",
+    "category": "true_positive",
+    "description": "Dependency update notification for installed package",
+    "item": {
+      "title": "sqlx 0.8 released: async-std removed, major performance improvements",
+      "content": "sqlx 0.8 drops async-std support to focus on tokio, introduces compile-time query verification improvements, and reduces connection overhead by 40%. Migration guide included for projects upgrading from 0.7.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"database\", \"sqlx\"]",
+      "created_hours_ago": 5
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.02,
+      "score_max": 0.18,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "sqlx is a declared dependency"
+    }
+  },
+  {
+    "id": "tp_embedding_arxiv",
+    "category": "true_positive",
+    "description": "arXiv paper on embeddings relevant to ML scientist",
+    "item": {
+      "title": "Matryoshka Representation Learning for flexible embedding dimensions",
+      "content": "We propose Matryoshka Representation Learning, a training approach that encodes information at multiple granularities within a single embedding vector. This allows practitioners to trade off between embedding dimension and accuracy without retraining, reducing storage costs by 14x.",
+      "source_type": "arxiv",
+      "tags_json": "[\"machine-learning\", \"embeddings\", \"representation-learning\"]",
+      "created_hours_ago": 72
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0.01,
+      "score_max": 0.12,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Embeddings paper — directly relevant to ML research"
+    }
+  },
+  {
+    "id": "tp_nodejs_backend",
+    "category": "true_positive",
+    "description": "Node.js backend architecture for fullstack developer",
+    "item": {
+      "title": "Building scalable REST APIs with Express and Prisma ORM",
+      "content": "Practical guide to structuring Node.js backend services with Express middleware patterns, Prisma for type-safe database queries, and proper error handling. Covers connection pooling, transaction management, and automated migration workflows.",
+      "source_type": "devto",
+      "tags_json": "[\"nodejs\", \"express\", \"prisma\", \"backend\"]",
+      "created_hours_ago": 16
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0.1,
+      "score_max": 0.45,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Express and Prisma are declared dependencies for fullstack JS"
+    }
+  },
+  {
+    "id": "tn_cooking_recipe",
+    "category": "true_negative",
+    "description": "Cooking recipe completely irrelevant",
+    "item": {
+      "title": "How to cook the perfect risotto at home",
+      "content": "Master the art of Italian risotto with this step-by-step recipe. Start with quality arborio rice, warm broth, and fresh parmesan. The key is constant stirring and patience — a perfect risotto takes about 25 minutes of devoted attention.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 24
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Zero tech overlap — pure noise"
+    }
+  },
+  {
+    "id": "tn_celebrity_gossip",
+    "category": "true_negative",
+    "description": "Celebrity gossip unrelated to tech",
+    "item": {
+      "title": "Celebrity drama at the Oscars 2026: who wore what",
+      "content": "The red carpet at this year's Academy Awards was full of surprises. From unexpected fashion choices to backstage feuds, the Oscars delivered entertainment beyond the screen. Here is our roundup of the most talked-about moments.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 48
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Entertainment gossip — completely off-domain"
+    }
+  },
+  {
+    "id": "tn_sports_scores",
+    "category": "true_negative",
+    "description": "Sports scores with zero tech content",
+    "item": {
+      "title": "Premier League results: Manchester City clinches title with 3-1 win",
+      "content": "Manchester City secured their sixth consecutive Premier League title with a convincing victory over Arsenal at the Etihad Stadium. Haaland scored twice in the first half before De Bruyne sealed the win with a long-range strike.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 6
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Sports content — zero tech relevance"
+    }
+  },
+  {
+    "id": "tn_marketing_listicle",
+    "category": "true_negative",
+    "description": "Generic marketing listicle",
+    "item": {
+      "title": "10 JavaScript frameworks you should learn in 2026",
+      "content": "The JavaScript ecosystem continues to evolve rapidly. From React to Svelte to SolidJS, there is no shortage of frontend frameworks competing for developer attention. This listicle ranks the top 10 frameworks by GitHub stars and npm downloads.",
+      "source_type": "devto",
+      "tags_json": "[\"javascript\", \"frameworks\"]",
+      "created_hours_ago": 72
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "JS frameworks listicle — wrong stack for Rust developer"
+    }
+  },
+  {
+    "id": "tn_crypto_prices",
+    "category": "true_negative",
+    "description": "Cryptocurrency price update",
+    "item": {
+      "title": "Bitcoin surges past $150K as institutional adoption accelerates",
+      "content": "Bitcoin reached a new all-time high as major financial institutions announced increased cryptocurrency holdings. Ethereum and Solana also posted significant gains as the broader crypto market rally continued through the quarter.",
+      "source_type": "hackernews",
+      "tags_json": "[\"crypto\", \"bitcoin\", \"finance\"]",
+      "created_hours_ago": 3
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Crypto price news — financial content, not tech"
+    }
+  },
+  {
+    "id": "tn_real_estate",
+    "category": "true_negative",
+    "description": "Real estate investment advice",
+    "item": {
+      "title": "Housing market forecast 2026: best cities for real estate investment",
+      "content": "Our analysis of housing market trends identifies the top 15 metropolitan areas poised for growth. Factors include population migration patterns, employment growth, and infrastructure development. Median prices and rental yields are compared.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 96
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Real estate investment — unrelated to ML/data science"
+    }
+  },
+  {
+    "id": "tn_fashion_trends",
+    "category": "true_negative",
+    "description": "Fashion trends article",
+    "item": {
+      "title": "Summer 2026 fashion: minimalist wardrobes and sustainable fabrics",
+      "content": "The fashion industry continues its shift toward sustainability. This season features capsule wardrobes built around neutral tones, organic cotton basics, and recycled polyester activewear. Key brands leading the movement include Patagonia and Everlane.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 168
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Fashion content — zero overlap with any tech profile"
+    }
+  },
+  {
+    "id": "tn_generic_business",
+    "category": "true_negative",
+    "description": "Generic business advice",
+    "item": {
+      "title": "5 leadership lessons from Fortune 500 CEOs for new managers",
+      "content": "Effective leadership requires more than technical skills. Based on interviews with 50 Fortune 500 executives, these five principles — active listening, delegating boldly, embracing failure, building trust, and communicating vision — separate great managers from good ones.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 120
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Generic business/leadership content"
+    }
+  },
+  {
+    "id": "tn_go_tutorial",
+    "category": "true_negative",
+    "description": "Go language tutorial for wrong-stack developer",
+    "item": {
+      "title": "Getting started with Go: building your first web server",
+      "content": "Go provides a simple and efficient approach to building web servers. This tutorial walks through the standard library net/http package, goroutines for concurrent request handling, and basic middleware patterns for authentication and logging.",
+      "source_type": "devto",
+      "tags_json": "[\"go\", \"golang\", \"tutorial\"]",
+      "created_hours_ago": 36
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Go beginner tutorial — competing stack, not relevant"
+    }
+  },
+  {
+    "id": "tn_entertainment_news",
+    "category": "true_negative",
+    "description": "Entertainment industry news",
+    "item": {
+      "title": "Netflix announces 15 new original series for fall 2026 lineup",
+      "content": "Streaming giant Netflix revealed its upcoming slate of original programming at a virtual press event. The lineup includes a sci-fi thriller from the creators of Dark, a true-crime docuseries, and three international dramas from emerging markets.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 12
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Entertainment/streaming content — not tech"
+    }
+  },
+  {
+    "id": "tn_social_media_drama",
+    "category": "true_negative",
+    "description": "Social media drama unrelated to tech",
+    "item": {
+      "title": "Influencer feud escalates as rival creators trade accusations online",
+      "content": "Two prominent social media personalities with a combined 40 million followers exchanged heated accusations across platforms this week. The dispute, originating from a brand collaboration disagreement, has divided their respective fan communities.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 24
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Social media drama — zero tech content"
+    }
+  },
+  {
+    "id": "tn_self_help",
+    "category": "true_negative",
+    "description": "Self-help productivity article",
+    "item": {
+      "title": "The morning routine that changed my life: wake up at 5 AM",
+      "content": "After adopting a 5 AM wake-up routine, I transformed my productivity and mental clarity. The key elements are journaling, cold exposure, meditation, and exercise before checking any devices. This routine has been endorsed by productivity researchers.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 72
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Self-help/productivity — not technical content"
+    }
+  },
+  {
+    "id": "tn_clickbait_title",
+    "category": "true_negative",
+    "description": "Clickbait with no substance",
+    "item": {
+      "title": "You won't believe what this developer did next (number 7 will shock you)",
+      "content": "We compiled a list of unusual career moves by software engineers. From quitting FAANG to become a farmer, to launching a pottery business, these developers chose unconventional paths after burning out on code.",
+      "source_type": "devto",
+      "tags_json": null,
+      "created_hours_ago": 48
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Clickbait lifestyle content mentioning developers"
+    }
+  },
+  {
+    "id": "tn_basic_coding",
+    "category": "true_negative",
+    "description": "Generic beginner coding tutorial",
+    "item": {
+      "title": "What is a variable? Programming basics for absolute beginners",
+      "content": "A variable is a named container that stores a value in your program's memory. In most languages, you declare a variable, assign it a value, and then reference it later. This fundamental concept is the first step in learning any programming language.",
+      "source_type": "devto",
+      "tags_json": "[\"beginners\", \"programming\"]",
+      "created_hours_ago": 96
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Absolute beginner content — too basic for any established developer"
+    }
+  },
+  {
+    "id": "tn_travel_blog",
+    "category": "true_negative",
+    "description": "Travel blog post with zero tech relevance",
+    "item": {
+      "title": "10 hidden gems in rural Portugal: a digital nomad's off-season guide",
+      "content": "Skip the Algarve crowds and head inland. From the terraced vineyards of the Douro Valley to the granite villages of Serra da Estrela, Portugal's interior offers stunning landscapes, affordable guesthouses, and reliable café wifi. Here are ten spots where you can unplug, recharge, and get inspired without fighting for a co-working desk.",
+      "source_type": "rss",
+      "tags_json": "[\"travel\", \"digital-nomad\", \"portugal\"]",
+      "created_hours_ago": 48
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.2,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Pure travel content — no technical substance despite digital nomad angle"
+    }
+  },
+  {
+    "id": "sec_tokio_cve",
+    "category": "security",
+    "description": "CVE affecting tokio — a declared dependency",
+    "item": {
+      "title": "CVE-2026-1234: Tokio runtime denial of service via malformed task wakeup",
+      "content": "A vulnerability in tokio versions prior to 1.39.3 allows remote attackers to trigger a denial of service through crafted task wakeup sequences. Severity: CVSS_V3: 7.5. Upgrade to tokio >= 1.39.3 immediately.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"tokio\", \"rust\"]",
+      "created_hours_ago": 2
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.02,
+      "score_max": 0.2,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Tokio is a declared dependency — critical security advisory"
+    }
+  },
+  {
+    "id": "sec_serde_advisory",
+    "category": "security",
+    "description": "Security advisory for serde — a declared dependency",
+    "item": {
+      "title": "RUSTSEC-2026-0042: serde_derive unbounded recursion during deserialization",
+      "content": "serde_derive versions before 1.0.205 allow unbounded recursion when deserializing deeply nested structures, leading to stack overflow. Severity: CVSS_V3: 5.3. Update serde_derive to >= 1.0.205.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"rustsec\", \"serde\", \"rust\"]",
+      "created_hours_ago": 8
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.08,
+      "score_max": 0.35,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Serde is a declared dependency — relevant advisory"
+    }
+  },
+  {
+    "id": "sec_hyper_vuln",
+    "category": "security",
+    "description": "Hyper HTTP library vulnerability — declared dependency",
+    "item": {
+      "title": "CVE-2026-5678: hyper HTTP/2 CONTINUATION frame flood",
+      "content": "hyper versions < 1.4.2 are vulnerable to HTTP/2 CONTINUATION frame flood attacks, allowing a remote attacker to exhaust server memory. Severity: CVSS_V3: 8.2. All HTTP/2 enabled servers using hyper should upgrade immediately.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"hyper\", \"http\"]",
+      "created_hours_ago": 1
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.01,
+      "score_max": 0.12,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Hyper is a declared dependency — high severity CVE"
+    }
+  },
+  {
+    "id": "sec_react_xss",
+    "category": "security",
+    "description": "React XSS vulnerability — relevant to fullstack JS",
+    "item": {
+      "title": "CVE-2026-7890: React dangerouslySetInnerHTML bypass via SVG injection",
+      "content": "A cross-site scripting vulnerability in React versions before 19.1.2 allows attackers to bypass sanitization through specially crafted SVG elements in dangerouslySetInnerHTML. Severity: CVSS_V3: 6.1. Update react and react-dom.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"react\", \"xss\"]",
+      "created_hours_ago": 4
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0.02,
+      "score_max": 0.2,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "React is a declared dependency for fullstack JS"
+    }
+  },
+  {
+    "id": "sec_pytorch_rce",
+    "category": "security",
+    "description": "PyTorch remote code execution — relevant to Python ML",
+    "item": {
+      "title": "CVE-2026-2468: PyTorch model deserialization remote code execution",
+      "content": "PyTorch versions before 2.4.1 allow arbitrary code execution when loading untrusted model files via torch.load with weights_only=False. Severity: CVSS_V3: 9.8. Use torch.load(weights_only=True) or upgrade to >= 2.4.1.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"pytorch\", \"python\"]",
+      "created_hours_ago": 6
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0.02,
+      "score_max": 0.2,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "PyTorch is a declared dependency for Python ML scientist"
+    }
+  },
+  {
+    "id": "sec_django_unrelated",
+    "category": "security",
+    "description": "Django CVE — not in any test profile's dependencies",
+    "item": {
+      "title": "CVE-2026-3456: Django SQL injection in ORM filter chaining",
+      "content": "Django versions before 5.1.3 contain a SQL injection vulnerability when chaining multiple filter expressions with user-controlled field lookups. Severity: CVSS_V3: 8.6. All Django applications should upgrade immediately.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"django\", \"python\"]",
+      "created_hours_ago": 12
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Django is not a dependency — Rust developer should not see this"
+    }
+  },
+  {
+    "id": "sec_wordpress_unrelated",
+    "category": "security",
+    "description": "WordPress CVE — not relevant to any developer profile",
+    "item": {
+      "title": "CVE-2026-4567: WordPress plugin arbitrary file upload vulnerability",
+      "content": "A critical vulnerability in the popular WordPress form builder plugin WPForms allows unauthenticated file uploads. Severity: CVSS_V3: 9.1. Affects versions before 1.9.2. Disable the plugin or update immediately.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"wordpress\", \"php\"]",
+      "created_hours_ago": 3
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "WordPress/PHP — completely outside Rust developer's stack"
+    }
+  },
+  {
+    "id": "sec_jquery_unrelated",
+    "category": "security",
+    "description": "jQuery CVE — not relevant to Rust developer",
+    "item": {
+      "title": "CVE-2026-6789: jQuery prototype pollution via $.extend deep copy",
+      "content": "jQuery versions before 3.7.2 are vulnerable to prototype pollution through the deep copy mechanism in $.extend. Severity: CVSS_V3: 6.5. Applications using $.extend with untrusted input should upgrade or switch to structuredClone.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"jquery\", \"javascript\"]",
+      "created_hours_ago": 24
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "jQuery is not in Rust developer's dependency tree"
+    }
+  },
+  {
+    "id": "sec_laravel_unrelated",
+    "category": "security",
+    "description": "Laravel CVE — not relevant to any test profile",
+    "item": {
+      "title": "CVE-2026-8901: Laravel session fixation via remember-me token reuse",
+      "content": "Laravel framework versions before 11.3.1 allow session fixation attacks through reused remember-me tokens after password changes. Severity: CVSS_V3: 7.1. Applications using the remember-me feature should upgrade and invalidate existing tokens.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"laravel\", \"php\"]",
+      "created_hours_ago": 48
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Laravel/PHP — completely outside Python ML scientist's domain"
+    }
+  },
+  {
+    "id": "sec_ruby_rails_unrelated",
+    "category": "security",
+    "description": "Ruby on Rails CVE — not in any test profile",
+    "item": {
+      "title": "CVE-2026-9012: Rails ActiveStorage path traversal in direct uploads",
+      "content": "Ruby on Rails versions before 7.2.2 contain a path traversal vulnerability in ActiveStorage direct upload endpoints. Severity: CVSS_V3: 7.7. All Rails applications using ActiveStorage direct uploads must upgrade immediately.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"rails\", \"ruby\"]",
+      "created_hours_ago": 16
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Ruby on Rails — not in fullstack JS developer's stack"
+    }
+  },
+  {
+    "id": "edge_short_title",
+    "category": "edge_case",
+    "description": "Very short title with minimal information",
+    "item": {
+      "title": "Rust?",
+      "content": "Has anyone tried using Rust for their production backend services? I am curious about the learning curve and whether it is worth switching from Go for a team of five engineers working on microservices.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 12
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.43,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Short title gets capped — low information despite keyword match"
+    }
+  },
+  {
+    "id": "edge_long_content",
+    "category": "edge_case",
+    "description": "Very long content with buried relevance",
+    "item": {
+      "title": "My journey switching careers from finance to software engineering",
+      "content": "After 12 years in investment banking, I decided to learn programming. I started with Python basics, moved to web development with React, and eventually discovered systems programming through Rust. The borrow checker was initially frustrating but eventually became intuitive. I now work on distributed systems using tokio and tonic for gRPC services. The transition took 18 months of dedicated study alongside my day job. Key resources included the Rust Book, Exercism, and building real projects.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 48
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Career story mentioning Rust — soft signal but not technical content"
+    }
+  },
+  {
+    "id": "edge_foreign_language",
+    "category": "edge_case",
+    "description": "Foreign language content about Rust",
+    "item": {
+      "title": "Rust言語入門：所有権とライフタイムの基本",
+      "content": "Rustの所有権システムは、ガベージコレクションなしでメモリ安全性を保証します。この記事では、借用チェッカーの仕組みと、ライフタイムアノテーションの基本的な使い方を解説します。",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"programming\"]",
+      "created_hours_ago": 24
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.15,
+      "score_max": 0.65,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Japanese content — language mismatch caps score regardless of topic"
+    }
+  },
+  {
+    "id": "edge_clickbait_tech_keywords",
+    "category": "edge_case",
+    "description": "Clickbait article stuffed with tech keywords",
+    "item": {
+      "title": "This ONE Rust trick will make your code 1000x faster (Tokio devs HATE it)",
+      "content": "Stop using clone everywhere. Use Arc and Mutex instead. This simple change in how you handle shared state across async tasks can dramatically reduce allocation overhead. The real secret? Profile before optimizing.",
+      "source_type": "devto",
+      "tags_json": "[\"rust\", \"performance\"]",
+      "created_hours_ago": 36
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Clickbait style but actual Rust content — borderline, should not pass quality"
+    }
+  },
+  {
+    "id": "edge_electron_for_rust",
+    "category": "edge_case",
+    "description": "Electron article — adjacent but wrong framework for Tauri developer",
+    "item": {
+      "title": "Electron 32 reduces memory usage by 40% with V8 heap snapshots",
+      "content": "The latest Electron release dramatically reduces memory consumption through V8 heap snapshot preloading. Applications can now start with a 40% smaller memory footprint, addressing one of the most common criticisms of Electron-based desktop apps.",
+      "source_type": "hackernews",
+      "tags_json": "[\"electron\", \"desktop\", \"javascript\"]",
+      "created_hours_ago": 12
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.35,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Desktop apps but Electron — competing framework to Tauri"
+    }
+  },
+  {
+    "id": "edge_broad_oss",
+    "category": "edge_case",
+    "description": "Broad open source topic — vague relevance",
+    "item": {
+      "title": "New open source project launches with backing from major tech companies",
+      "content": "A consortium of technology companies announced a new open source initiative aimed at standardizing cloud-native application packaging. The project provides a vendor-neutral specification for container orchestration and service mesh integration.",
+      "source_type": "hackernews",
+      "tags_json": "[\"open-source\", \"cloud\"]",
+      "created_hours_ago": 24
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.35,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Broad OSS announcement — no specific tech overlap"
+    }
+  },
+  {
+    "id": "edge_mixed_signal",
+    "category": "edge_case",
+    "description": "Content that mentions tech but is not about it",
+    "item": {
+      "title": "How Rust Belt cities are reinventing themselves through urban farming",
+      "content": "Former industrial cities across the American Rust Belt are finding new economic vitality through urban agriculture projects. Detroit, Cleveland, and Pittsburgh have seen abandoned lots transformed into productive farms, providing fresh produce and employment opportunities.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 72
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Contains word 'Rust' but about geography/urban planning, not programming"
+    }
+  },
+  {
+    "id": "edge_multi_topic_overlap",
+    "category": "edge_case",
+    "description": "Article spanning multiple tech areas with partial overlap",
+    "item": {
+      "title": "Comparing backend frameworks: Rust Actix vs Go Gin vs Node Express",
+      "content": "We benchmarked three popular backend frameworks across throughput, latency, and memory usage. Actix-web in Rust dominated throughput tests while Go Gin offered the best latency consistency. Express with Node.js remains the easiest to develop with but trails in raw performance.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"go\", \"nodejs\", \"benchmark\"]",
+      "created_hours_ago": 18
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.05,
+      "score_max": 0.3,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Covers Rust alongside competing techs — partial but valid relevance"
+    }
+  },
+  {
+    "id": "edge_tangential_mention",
+    "category": "edge_case",
+    "description": "Python article with one-sentence Rust mention",
+    "item": {
+      "title": "Why Python remains the top language for data science in 2026",
+      "content": "Python's dominance in data science continues thanks to its rich library ecosystem and gentle learning curve. While some teams experiment with Julia or Rust for performance-critical components, the vast majority of ML workflows are still built on Python and NumPy.",
+      "source_type": "hackernews",
+      "tags_json": "[\"python\", \"data-science\"]",
+      "created_hours_ago": 30
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.35,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Python-focused article with tangential Rust mention — not truly relevant"
+    }
+  },
+  {
+    "id": "edge_deprecated_tech",
+    "category": "edge_case",
+    "description": "Article about deprecated Rust feature",
+    "item": {
+      "title": "Migrating from Rust 2018 edition to 2024: what changed and what broke",
+      "content": "The Rust 2024 edition introduces several breaking changes including new keyword reservations, updated module resolution rules, and the removal of certain unstable features that were never stabilized. This guide covers the complete migration path.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"migration\"]",
+      "created_hours_ago": 60
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.06,
+      "score_max": 0.3,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Rust edition migration — directly actionable for Rust developers"
+    }
+  },
+  {
+    "id": "edge_humor_tech",
+    "category": "edge_case",
+    "description": "Humorous tech content with real insights",
+    "item": {
+      "title": "The borrow checker made me cry: a love letter to Rust's strictest teacher",
+      "content": "Every Rust developer has a story about fighting the borrow checker. But after three years of daily Rust development, I can confidently say the borrow checker prevented more bugs than any test suite I have ever written. Here are the five patterns that finally made ownership click.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"programming\"]",
+      "created_hours_ago": 14
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.35,
+      "score_max": 1,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Humorous framing but substantive Rust content"
+    }
+  },
+  {
+    "id": "cold_no_profile",
+    "category": "cold_start",
+    "description": "New user with zero context — general tech article",
+    "item": {
+      "title": "Understanding microservices architecture: when to use and when to avoid",
+      "content": "Microservices offer scalability and independent deployment but come with distributed system complexity. This guide covers the trade-offs, when a monolith is actually the better choice, and common patterns for service communication and data consistency.",
+      "source_type": "hackernews",
+      "tags_json": "[\"architecture\", \"microservices\"]",
+      "created_hours_ago": 24
+    },
+    "profile": "minimal",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "No profile context — should score low but not crash"
+    }
+  },
+  {
+    "id": "cold_single_interest_match",
+    "category": "cold_start",
+    "description": "Minimal profile with single matching interest",
+    "item": {
+      "title": "Rust concurrency patterns: channels, mutexes, and atomics",
+      "content": "A practical overview of Rust's concurrency primitives. Covers when to use mpsc channels versus Arc<Mutex<T>> versus atomic operations, with benchmarks showing the performance characteristics of each approach under contention.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"concurrency\"]",
+      "created_hours_ago": 12
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Should match via interest even without rich context"
+    }
+  },
+  {
+    "id": "cold_no_ace_context",
+    "category": "cold_start",
+    "description": "Profile with interests but no ACE context",
+    "item": {
+      "title": "Building type-safe APIs with TypeScript and tRPC",
+      "content": "tRPC eliminates the API boundary between frontend and backend TypeScript applications. This tutorial covers setting up a tRPC router, defining procedures with Zod validation, and consuming the API from a React frontend with full type inference.",
+      "source_type": "devto",
+      "tags_json": "[\"typescript\", \"trpc\", \"react\"]",
+      "created_hours_ago": 18
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "TypeScript + React match interests even without ACE context"
+    }
+  },
+  {
+    "id": "cold_no_feedback_history",
+    "category": "cold_start",
+    "description": "User with interests but zero feedback history",
+    "item": {
+      "title": "Pandas 3.0 introduces native Arrow backend for 10x faster operations",
+      "content": "Pandas 3.0 replaces NumPy as its default backend with Apache Arrow, enabling zero-copy interop with Polars, DuckDB, and other Arrow-native tools. String operations are up to 20x faster and memory usage drops by 60% for typical dataframe workloads.",
+      "source_type": "hackernews",
+      "tags_json": "[\"python\", \"pandas\", \"data\"]",
+      "created_hours_ago": 8
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Pandas is a dependency — should match even without feedback history"
+    }
+  },
+  {
+    "id": "cold_minimal_noise",
+    "category": "cold_start",
+    "description": "Minimal profile sees noise — should not pass",
+    "item": {
+      "title": "Travel tips for backpacking through Southeast Asia on a budget",
+      "content": "Southeast Asia offers incredible experiences for budget travelers. From the temples of Angkor Wat to the beaches of Thailand, this region delivers stunning scenery, rich culture, and delicious street food for under $30 per day.",
+      "source_type": "hackernews",
+      "tags_json": null,
+      "created_hours_ago": 96
+    },
+    "profile": "minimal",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.3,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Travel content — even permissive bootstrap should reject pure noise"
+    }
+  },
+  {
+    "id": "cold_bootstrap_tech_generic",
+    "category": "cold_start",
+    "description": "Generic tech article with minimal profile",
+    "item": {
+      "title": "The state of developer tooling in 2026",
+      "content": "Developer tools have evolved significantly. AI-powered code completion, infrastructure-as-code, and observability platforms are now standard. This survey of 5000 developers reveals trends in IDE choice, CI/CD adoption, and language preferences.",
+      "source_type": "hackernews",
+      "tags_json": "[\"programming\", \"devtools\"]",
+      "created_hours_ago": 48
+    },
+    "profile": "minimal",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Generic dev survey — minimal profile should not strongly match"
+    }
+  },
+  {
+    "id": "cold_first_run_relevant",
+    "category": "cold_start",
+    "description": "First-run user with only declared interests",
+    "item": {
+      "title": "PyTorch 2.5 introduces native distributed training improvements",
+      "content": "The latest PyTorch release includes improved FSDP for distributed training, native support for FP8 quantization, and a new compile mode that reduces cold-start time by 50%. Benchmarks show 2x throughput improvement for multi-GPU training.",
+      "source_type": "hackernews",
+      "tags_json": "[\"pytorch\", \"ml\", \"distributed\"]",
+      "created_hours_ago": 10
+    },
+    "profile": "python_data_scientist",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Direct match on PyTorch and ML interests"
+    }
+  },
+  {
+    "id": "cold_empty_interests_tech",
+    "category": "cold_start",
+    "description": "Completely empty profile sees highly upvoted tech content",
+    "item": {
+      "title": "Show HN: I built a distributed database in Rust",
+      "content": "After two years of development, I am releasing a distributed key-value store built entirely in Rust with Raft consensus. It supports ACID transactions, multi-region replication, and has a SQL compatibility layer. Benchmarks in the README.",
+      "source_type": "hackernews",
+      "tags_json": "[\"rust\", \"database\", \"distributed\"]",
+      "created_hours_ago": 6
+    },
+    "profile": "minimal",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "No interests to match against — minimal profile cannot confirm relevance"
+    }
+  },
+  {
+    "id": "cold_single_dep_match",
+    "category": "cold_start",
+    "description": "Bootstrap profile where only dependency signal fires",
+    "item": {
+      "title": "Next.js 16 introduces edge middleware for authentication and A/B testing",
+      "content": "Next.js 16 brings edge middleware that runs before route resolution, enabling fast authentication checks and A/B test routing at the CDN edge. The new middleware API supports streaming responses and integrates with the existing App Router.",
+      "source_type": "hackernews",
+      "tags_json": "[\"nextjs\", \"react\", \"edge\"]",
+      "created_hours_ago": 14
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Next.js is a declared dependency — bootstrap should catch this"
+    }
+  },
+  {
+    "id": "cold_graceful_degradation",
+    "category": "cold_start",
+    "description": "Verify scoring does not crash with empty everything",
+    "item": {
+      "title": "Introduction to quantum computing for software engineers",
+      "content": "Quantum computing uses quantum mechanical phenomena like superposition and entanglement to process information. While still in early stages, quantum computers show promise for optimization, cryptography, and drug discovery applications.",
+      "source_type": "hackernews",
+      "tags_json": "[\"quantum\", \"computing\"]",
+      "created_hours_ago": 72
+    },
+    "profile": "minimal",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Empty profile should produce valid score without panicking"
+    }
+  },
+  {
+    "id": "cold_bootstrap_mode_permissive",
+    "category": "cold_start",
+    "description": "Bootstrap mode is more permissive than normal mode",
+    "item": {
+      "title": "Rust error handling: Result, Option, and the question mark operator",
+      "content": "Rust provides a rich error handling system built on the Result and Option types. The question mark operator enables ergonomic error propagation, and libraries like thiserror and anyhow simplify error type definitions and context attachment.",
+      "source_type": "devto",
+      "tags_json": "[\"rust\", \"error-handling\"]",
+      "created_hours_ago": 20
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0,
+      "score_max": 0.6,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "Direct Rust content — should pass even in bootstrap mode"
+    }
+  }
+]

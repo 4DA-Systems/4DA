@@ -13,6 +13,11 @@ use crate::get_settings_manager;
 #[cfg(feature = "fastembed-local")]
 use embeddings_providers::embed_texts_fastembed_sync;
 pub use embeddings_providers::*;
+
+#[cfg(all(test, feature = "fastembed-local"))]
+pub(crate) fn fastembed_sync(texts: &[String]) -> crate::error::Result<Vec<Vec<f32>>> {
+    embed_texts_fastembed_sync(texts)
+}
 use embeddings_providers::{embed_texts_ollama, embed_texts_openai, retry_with_backoff};
 
 /// Shared HTTP client for embedding API calls (reused across requests)
@@ -77,13 +82,11 @@ fn zero_vector_fallback(count: usize) -> Vec<Vec<f32>> {
         "No embedding provider available",
         "Keyword matching with context synthesis (install Ollama for semantic search)",
     );
-    (0..count)
-        .map(|_| vec![0.0f32; TARGET_EMBEDDING_DIMS])
-        .collect()
+    (0..count).map(|_| vec![0.0f32; EMBEDDING_DIMS]).collect()
 }
 
 /// Generate embeddings for a list of texts
-/// Supports OpenAI (text-embedding-3-small), Ollama (nomic-embed-text), and fastembed (bge-small-en-v1.5)
+/// Supports OpenAI (text-embedding-3-small), Ollama (nomic-embed-text), and fastembed (snowflake-arctic-embed-m)
 /// Provider is determined by settings - uses same provider as LLM when possible
 pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     if texts.is_empty() {
@@ -261,8 +264,9 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     result
 }
 
-/// Target embedding dimensions matching DB vec0 schema
-const TARGET_EMBEDDING_DIMS: usize = 384;
+/// Current model: Snowflake Arctic Embed M (quantized) — 768d, 110M params
+/// Single source of truth for embedding dimensions across the entire codebase.
+pub const EMBEDDING_DIMS: usize = 768;
 
 /// Validate embedding vectors — replace NaN/Inf with zero vectors.
 /// This prevents corrupted embeddings from silently degrading search quality.
@@ -275,7 +279,7 @@ fn validate_embeddings(embeddings: Vec<Vec<f32>>) -> Vec<Vec<f32>> {
                     target: "4da::embeddings",
                     "Detected NaN/Inf in embedding vector — replacing with zero vector"
                 );
-                vec![0.0f32; TARGET_EMBEDDING_DIMS]
+                vec![0.0f32; EMBEDDING_DIMS]
             } else {
                 vec
             }
@@ -283,22 +287,22 @@ fn validate_embeddings(embeddings: Vec<Vec<f32>>) -> Vec<Vec<f32>> {
         .collect()
 }
 
-/// Ensure embedding has exactly TARGET_EMBEDDING_DIMS dimensions, then L2-normalize.
+/// Ensure embedding has exactly EMBEDDING_DIMS dimensions, then L2-normalize.
 /// - Too long: truncate (Matryoshka models preserve quality at lower dims)
 /// - Too short: zero-pad (prevents KNN dimension mismatch — critical for sqlite-vec)
 /// - Exact: pass through, normalizing only if truncated/padded
 fn truncate_and_normalize(mut embedding: Vec<f32>) -> Vec<f32> {
-    let modified = if embedding.len() > TARGET_EMBEDDING_DIMS {
-        embedding.truncate(TARGET_EMBEDDING_DIMS);
+    let modified = if embedding.len() > EMBEDDING_DIMS {
+        embedding.truncate(EMBEDDING_DIMS);
         true
-    } else if embedding.len() < TARGET_EMBEDDING_DIMS {
+    } else if embedding.len() < EMBEDDING_DIMS {
         tracing::warn!(
             target: "4da::embeddings",
             got = embedding.len(),
-            expected = TARGET_EMBEDDING_DIMS,
+            expected = EMBEDDING_DIMS,
             "Embedding shorter than target — zero-padding to prevent KNN mismatch"
         );
-        embedding.resize(TARGET_EMBEDDING_DIMS, 0.0);
+        embedding.resize(EMBEDDING_DIMS, 0.0);
         true
     } else {
         false
@@ -327,13 +331,13 @@ mod tests {
 
     #[test]
     fn test_truncate_short_vector_padded_and_normalized() {
-        // Vector shorter than TARGET_EMBEDDING_DIMS should be zero-padded and normalized
+        // Vector shorter than EMBEDDING_DIMS should be zero-padded and normalized
         let v = vec![1.0f32, 0.0, 0.0];
         let result = truncate_and_normalize(v);
         assert_eq!(
             result.len(),
-            TARGET_EMBEDDING_DIMS,
-            "Short vector should be padded to TARGET_EMBEDDING_DIMS"
+            EMBEDDING_DIMS,
+            "Short vector should be padded to EMBEDDING_DIMS"
         );
         // First element should be normalized (1.0 / norm where norm = 1.0)
         assert!(
@@ -349,31 +353,33 @@ mod tests {
 
     #[test]
     fn test_truncate_exact_dims_unchanged() {
-        // Vector exactly TARGET_EMBEDDING_DIMS should pass through unchanged
-        let v: Vec<f32> = (0..TARGET_EMBEDDING_DIMS)
-            .map(|i| (i as f32) * 0.01)
-            .collect();
+        // Vector exactly EMBEDDING_DIMS should pass through unchanged
+        let v: Vec<f32> = (0..EMBEDDING_DIMS).map(|i| (i as f32) * 0.01).collect();
         let result = truncate_and_normalize(v.clone());
         assert_eq!(result, v, "Exact-length vector should not be modified");
     }
 
     #[test]
     fn test_truncate_long_vector_to_target_dims() {
-        // Vector longer than TARGET_EMBEDDING_DIMS should be truncated
-        let v: Vec<f32> = (0..768).map(|i| (i as f32) * 0.001).collect();
+        // Vector longer than EMBEDDING_DIMS should be truncated
+        let v: Vec<f32> = (0..EMBEDDING_DIMS + 256)
+            .map(|i| (i as f32) * 0.001)
+            .collect();
         let result = truncate_and_normalize(v);
         assert_eq!(
             result.len(),
-            TARGET_EMBEDDING_DIMS,
+            EMBEDDING_DIMS,
             "Should be truncated to {} dims",
-            TARGET_EMBEDDING_DIMS
+            EMBEDDING_DIMS
         );
     }
 
     #[test]
     fn test_truncate_preserves_unit_norm() {
         // After truncation + re-normalization, vector should be unit length
-        let v: Vec<f32> = (0..768).map(|i| ((i as f32) * 0.1).sin()).collect();
+        let v: Vec<f32> = (0..EMBEDDING_DIMS + 256)
+            .map(|i| ((i as f32) * 0.1).sin())
+            .collect();
         let result = truncate_and_normalize(v);
         let norm: f32 = result.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!(
@@ -386,9 +392,9 @@ mod tests {
     #[test]
     fn test_truncate_zero_vector_stays_zero() {
         // Zero vector should not cause division by zero
-        let v = vec![0.0f32; 768];
+        let v = vec![0.0f32; EMBEDDING_DIMS + 256];
         let result = truncate_and_normalize(v);
-        assert_eq!(result.len(), TARGET_EMBEDDING_DIMS);
+        assert_eq!(result.len(), EMBEDDING_DIMS);
         assert!(
             result.iter().all(|&x| x == 0.0),
             "Zero vector should remain zero (no NaN from division)"
@@ -398,12 +404,14 @@ mod tests {
     #[test]
     fn test_truncate_preserves_direction() {
         // The truncated + normalized vector should point in the same direction
-        // as the first TARGET_EMBEDDING_DIMS elements (just rescaled)
-        let v: Vec<f32> = (0..768).map(|i| ((i as f32) * 0.3).cos()).collect();
+        // as the first EMBEDDING_DIMS elements (just rescaled)
+        let v: Vec<f32> = (0..EMBEDDING_DIMS + 256)
+            .map(|i| ((i as f32) * 0.3).cos())
+            .collect();
         let result = truncate_and_normalize(v.clone());
 
         // Compute cosine similarity between truncated prefix and result
-        let prefix: Vec<f32> = v[..TARGET_EMBEDDING_DIMS].to_vec();
+        let prefix: Vec<f32> = v[..EMBEDDING_DIMS].to_vec();
         let dot: f32 = prefix.iter().zip(result.iter()).map(|(a, b)| a * b).sum();
         let norm_prefix: f32 = prefix.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_result: f32 = result.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -417,14 +425,14 @@ mod tests {
     }
 
     // ========================================================================
-    // TARGET_EMBEDDING_DIMS constant test
+    // EMBEDDING_DIMS constant test
     // ========================================================================
 
     #[test]
-    fn test_target_embedding_dims_is_384() {
+    fn test_embedding_dims_matches_model() {
         assert_eq!(
-            TARGET_EMBEDDING_DIMS, 384,
-            "Embedding dims must match DB vec0 schema (384)"
+            EMBEDDING_DIMS, 768,
+            "Embedding dims must match DB vec0 schema (768 for Arctic-M)"
         );
     }
 
@@ -445,7 +453,7 @@ mod tests {
         let result = validate_embeddings(input);
         assert_eq!(
             result[0],
-            vec![0.0f32; TARGET_EMBEDDING_DIMS],
+            vec![0.0f32; EMBEDDING_DIMS],
             "Vector with NaN should be replaced with zero vector"
         );
         assert_eq!(
@@ -461,7 +469,7 @@ mod tests {
         let result = validate_embeddings(input);
         assert_eq!(
             result[0],
-            vec![0.0f32; TARGET_EMBEDDING_DIMS],
+            vec![0.0f32; EMBEDDING_DIMS],
             "Vector with Inf should be replaced with zero vector"
         );
     }
@@ -472,7 +480,7 @@ mod tests {
         let result = validate_embeddings(input);
         assert_eq!(
             result[0],
-            vec![0.0f32; TARGET_EMBEDDING_DIMS],
+            vec![0.0f32; EMBEDDING_DIMS],
             "Vector with -Inf should be replaced with zero vector"
         );
     }
@@ -485,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_validate_zero_vector_unchanged() {
-        let input = vec![vec![0.0f32; TARGET_EMBEDDING_DIMS]];
+        let input = vec![vec![0.0f32; EMBEDDING_DIMS]];
         let result = validate_embeddings(input.clone());
         assert_eq!(result, input, "Zero vector should pass through unchanged");
     }
