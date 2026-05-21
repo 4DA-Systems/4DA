@@ -318,7 +318,7 @@
   "settings.streets.tierTeam": "Team (29 $/place/mois)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Intégré (Local)",
-  "settings.ai.builtInModel": "BGE-Small (384 dimensions)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 dimensions)",
   "settings.ai.builtInDescription": "Embeddings locaux sans configuration. Aucune clé API requise. Pré-intégré — fonctionne entièrement sur votre machine.",
   "settings.ai.embeddingSetup.checking": "Vérification de ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Téléchargement du moteur d'intégration...",
@@ -2812,7 +2812,7 @@
       "providerOpenAI": "OpenAI",
       "providerOllama": "Ollama (Local)",
       "tokens": "Tokens",
-      "builtInModel": "BGE-Small (384 dimensions)"
+      "builtInModel": "Arctic Embed M (768 dimensions)"
     },
     "dataHealth": {
       "embeddings": "Embeddings"

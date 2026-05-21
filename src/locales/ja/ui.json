@@ -318,7 +318,7 @@
   "settings.streets.tierTeam": "Team ($29/席/月)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "内蔵（ローカル）",
-  "settings.ai.builtInModel": "BGE-Small (384次元)",
+  "settings.ai.builtInModel": "Arctic Embed M (768次元)",
   "settings.ai.builtInDescription": "設定不要のローカルエンベディング。API keyは不要です。プリバンドル — 完全にローカルで動作します。",
   "settings.ai.embeddingSetup.checking": "ONNX Runtimeを確認中...",
   "settings.ai.embeddingSetup.downloading": "エンベディングエンジンをダウンロード中...",

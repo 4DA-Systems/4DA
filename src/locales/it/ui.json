@@ -318,7 +318,7 @@
   "settings.streets.tierTeam": "Team ($29/posto/mese)",
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Integrato (Locale)",
-  "settings.ai.builtInModel": "BGE-Small (384 dimensioni)",
+  "settings.ai.builtInModel": "Arctic Embed M (768 dimensioni)",
   "settings.ai.builtInDescription": "Embedding locali senza configurazione. Non richiede API key. Pre-installato — funziona interamente sulla tua macchina.",
   "settings.ai.embeddingSetup.checking": "Controllo di ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Download del motore di incorporamento...",

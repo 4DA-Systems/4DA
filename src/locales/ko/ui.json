@@ -2077,7 +2077,7 @@
   "settings.ai.baseUrlRequired": "이 제공자에는 기본 URL이 필요합니다",
   "settings.ai.builtInDescription": "별도 설정 없는 로컬 임베딩. API key 불필요. 사전 설치 — 완전히 로컬에서 실행됩니다.",
   "settings.ai.builtInLocal": "내장 (로컬)",
-  "settings.ai.builtInModel": "BGE-Small (384차원)",
+  "settings.ai.builtInModel": "Arctic Embed M (768차원)",
   "settings.ai.embeddingSetup.checking": "ONNX Runtime 확인 중...",
   "settings.ai.embeddingSetup.downloading": "임베딩 엔진 다운로드 중...",
   "settings.ai.embeddingSetup.extracting": "런타임 추출 중...",
