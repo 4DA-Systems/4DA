@@ -3,15 +3,16 @@
 use super::*;
 
 #[test]
-fn embeddings_are_384_dimensional() {
+fn embeddings_match_expected_dimension() {
     let embeddings = corpus_embeddings();
     for (i, emb) in embeddings.iter().enumerate() {
         assert_eq!(
             emb.len(),
-            384,
-            "Corpus item {} has dimension {} instead of 384",
+            crate::EMBEDDING_DIMS,
+            "Corpus item {} has dimension {} instead of {}",
             i + 1,
-            emb.len()
+            emb.len(),
+            crate::EMBEDDING_DIMS
         );
     }
 }

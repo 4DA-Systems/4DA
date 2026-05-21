@@ -457,7 +457,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let items = corpus();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
         // Score all corpus items
         let mut results: Vec<SourceRelevance> = items
@@ -513,7 +513,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let items = corpus();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
         let mut results: Vec<SourceRelevance> = items
             .iter()
@@ -558,7 +558,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let items = corpus();
-        let emb = vec![0.0_f32; 384];
+        let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
         let mut results: Vec<SourceRelevance> = items
             .iter()

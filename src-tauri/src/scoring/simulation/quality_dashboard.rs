@@ -42,7 +42,7 @@ mod tests {
         let db = sim_db();
         let opts = sim_no_freshness();
         let calibrated_embeddings = super::super::load_corpus_embeddings();
-        let zero_emb = vec![0.0_f32; 384];
+        let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let mut metrics = SimMetrics::new();
         for item in &items {
             let expected = item.expected[persona_idx];
@@ -149,7 +149,7 @@ mod tests {
             let personas = all_personas();
             let db = sim_db();
             let opts = sim_no_freshness();
-            let emb = vec![0.0_f32; 384];
+            let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
             canonical
                 .iter()
                 .map(|item| {

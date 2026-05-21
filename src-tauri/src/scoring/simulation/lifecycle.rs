@@ -26,7 +26,7 @@ const N_SESSIONS: usize = 20;
 fn run_rust_lifecycle_sessions(n: usize) -> Vec<f64> {
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut f1_per_session = Vec::new();
 
@@ -63,7 +63,7 @@ fn run_rust_lifecycle_sessions(n: usize) -> Vec<f64> {
 fn run_python_lifecycle_sessions(n: usize) -> Vec<f64> {
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut boosts: HashMap<String, f64> = HashMap::new();
     let mut f1_per_session = Vec::new();
 
@@ -156,7 +156,7 @@ fn lifecycle_cross_persona_isolation_holds() {
     // Run Rust lifecycle and then verify Python content stays irrelevant
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut rust_boosts: HashMap<String, f64> = HashMap::new();
 
     // Run 10 sessions of Rust feedback
@@ -256,7 +256,7 @@ fn lifecycle_same_item_stable_score_over_sessions() {
     // A fixed item scored against the same-session context should be stable
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let probe_input = sim_input(
         999,
@@ -296,7 +296,7 @@ fn lifecycle_same_item_stable_score_over_sessions() {
 fn lifecycle_noise_stays_rejected_across_sessions() {
     let items = lifecycle_corpus();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let db = sim_db();
     let opts = sim_no_freshness();
     let mut boosts: HashMap<String, f64> = HashMap::new();

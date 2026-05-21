@@ -266,7 +266,7 @@ pub(crate) fn run_probe_calibration(
         apply_signals: false,
         trend_topics: vec![],
     };
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let mut tp = 0u32;
     let mut fp = 0u32;
@@ -380,7 +380,7 @@ pub(crate) struct SignalAudit {
 
 pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) -> SignalAudit {
     // Score a single domain-relevant probe and inspect the breakdown
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let opts = ScoringOptions {
         apply_freshness: false,
         apply_signals: false,

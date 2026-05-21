@@ -51,45 +51,42 @@ node scripts/check-doc-location.cjs || exit 1
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' || true)
 if [ -n "$STAGED_RS" ]; then
     # --- Dead Code Expiry Check ---
-    # Only inspect files that actually contain #[allow(dead_code)].
-    # This avoids spawning git-show+grep per file for large commits,
-    # preventing cygheap fork failures on Windows (observed with 40+ files).
+    # Uses a single git diff --cached pass to find files with dead_code annotations,
+    # then only inspects those files. Prevents cygheap fork failures on Windows
+    # when 40+ Rust files are staged (observed repeatedly 2026-05-22).
     echo "Checking dead_code expiry annotations..."
     TODAY=$(date +%Y-%m-%d)
     rm -f /tmp/_4da_dead_code_fail
-    DEAD_CODE_FILES=""
-    for FILE in $STAGED_RS; do
-        if git show ":$FILE" 2>/dev/null | grep -q '#\[allow(dead_code)\]'; then
-            DEAD_CODE_FILES="$DEAD_CODE_FILES $FILE"
-        fi
-    done
-    for FILE in $DEAD_CODE_FILES; do
-        CONTENT=$(git show ":$FILE" 2>/dev/null) || continue
-        LINE_NUM=0
-        PREV_LINE=""
-        echo "$CONTENT" | while IFS= read -r LINE; do
-            LINE_NUM=$((LINE_NUM + 1))
-            if echo "$LINE" | grep -q '#\[allow(dead_code)\]'; then
-                EXPIRY_LINE=$(echo "$LINE" | grep -oE 'REMOVE BY [0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' || true)
-                if [ -z "$EXPIRY_LINE" ]; then
-                    EXPIRY_LINE=$(echo "$PREV_LINE" | grep -oE 'REMOVE BY [0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' || true)
-                fi
-                if [ -z "$EXPIRY_LINE" ]; then
-                    echo "  ERROR: $FILE:$LINE_NUM — #[allow(dead_code)] missing REMOVE BY YYYY-MM-DD" >&2
-                    echo "FAIL" > /tmp/_4da_dead_code_fail
-                else
-                    EXPIRY=$(echo "$EXPIRY_LINE" | sed 's/REMOVE BY //' | tr '/' '-')
-                    EXPIRY_INT=$(echo "$EXPIRY" | tr -d '-')
-                    TODAY_INT=$(echo "$TODAY" | tr -d '-')
-                    if [ "$EXPIRY_INT" -le "$TODAY_INT" ]; then
-                        echo "  EXPIRED: $FILE:$LINE_NUM — dead code deadline $EXPIRY has passed" >&2
+    DEAD_CODE_FILES=$(git diff --cached -G '#\[allow\(dead_code\)\]' --name-only -- '*.rs' 2>/dev/null || true)
+    if [ -n "$DEAD_CODE_FILES" ]; then
+        for FILE in $DEAD_CODE_FILES; do
+            CONTENT=$(git show ":$FILE" 2>/dev/null) || continue
+            LINE_NUM=0
+            PREV_LINE=""
+            echo "$CONTENT" | while IFS= read -r LINE; do
+                LINE_NUM=$((LINE_NUM + 1))
+                if echo "$LINE" | grep -q '#\[allow(dead_code)\]'; then
+                    EXPIRY_LINE=$(echo "$LINE" | grep -oE 'REMOVE BY [0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' || true)
+                    if [ -z "$EXPIRY_LINE" ]; then
+                        EXPIRY_LINE=$(echo "$PREV_LINE" | grep -oE 'REMOVE BY [0-9]{4}[-/][0-9]{2}[-/][0-9]{2}' || true)
+                    fi
+                    if [ -z "$EXPIRY_LINE" ]; then
+                        echo "  ERROR: $FILE:$LINE_NUM — #[allow(dead_code)] missing REMOVE BY YYYY-MM-DD" >&2
                         echo "FAIL" > /tmp/_4da_dead_code_fail
+                    else
+                        EXPIRY=$(echo "$EXPIRY_LINE" | sed 's/REMOVE BY //' | tr '/' '-')
+                        EXPIRY_INT=$(echo "$EXPIRY" | tr -d '-')
+                        TODAY_INT=$(echo "$TODAY" | tr -d '-')
+                        if [ "$EXPIRY_INT" -le "$TODAY_INT" ]; then
+                            echo "  EXPIRED: $FILE:$LINE_NUM — dead code deadline $EXPIRY has passed" >&2
+                            echo "FAIL" > /tmp/_4da_dead_code_fail
+                        fi
                     fi
                 fi
-            fi
-            PREV_LINE="$LINE"
+                PREV_LINE="$LINE"
+            done
         done
-    done
+    fi
     if [ -f /tmp/_4da_dead_code_fail ]; then
         rm -f /tmp/_4da_dead_code_fail
         echo ""

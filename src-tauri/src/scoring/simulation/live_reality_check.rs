@@ -85,7 +85,7 @@ async fn live_reality_check_hn_top_stories() {
 
     let db = sim_db();
     let opts = sim_no_freshness();
-    let zero_emb = vec![0.0f32; 384];
+    let zero_emb = vec![0.0f32; crate::EMBEDDING_DIMS];
 
     let personas = vec![
         ("rust_systems", rust_systems_dev()),

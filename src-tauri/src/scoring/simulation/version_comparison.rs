@@ -31,7 +31,7 @@ fn run_persona_versioned(
     let db = sim_db();
     let opts = sim_no_freshness();
     let calibrated_embeddings = load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut metrics = SimMetrics::new();
 
     for item in &items {
@@ -266,7 +266,7 @@ fn version_score_stability() {
     let db = sim_db();
     let opts = sim_no_freshness();
     let calibrated_embeddings = load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Sample 20 items spread across the corpus
     let step = items.len().max(1) / 20;

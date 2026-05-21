@@ -278,7 +278,7 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
             chunk_index INTEGER NOT NULL,
             content TEXT NOT NULL,
             word_count INTEGER DEFAULT 0,
-            embedding BLOB,                    -- 384-dim embedding for semantic search
+            embedding BLOB,                    -- embedding for semantic search
             created_at TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (document_id) REFERENCES indexed_documents(id) ON DELETE CASCADE
         );
@@ -371,17 +371,18 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
 
     // Create vec0 virtual table for KNN search on topic embeddings (sqlite-vec)
     // This enables O(log n) semantic similarity search for topics
-    conn.execute_batch(
+    conn.execute_batch(&format!(
         "
-        -- Vector index for active topic embeddings (384-dim MiniLM embeddings)
+        -- Vector index for active topic embeddings ({dim}d embeddings)
         CREATE VIRTUAL TABLE IF NOT EXISTS topic_vec USING vec0(
-            embedding float[384]
+            embedding float[{dim}]
         );
 
         -- REMOVED: affinity_vec — dead virtual table, never queried in production
         -- REMOVED: document_vec — dead virtual table, never queried in production
     ",
-    )
+        dim = crate::EMBEDDING_DIMS
+    ))
     .context("Failed to create topic vec0 tables")?;
 
     // Key-value store for persisting runtime settings (e.g., auto-tuned relevance threshold)

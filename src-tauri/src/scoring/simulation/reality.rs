@@ -23,7 +23,7 @@ fn run_persona_simulation(persona_idx: usize, ctx: &ScoringContext) -> SimMetric
     let db = sim_db();
     let opts = sim_no_freshness();
     let calibrated_embeddings = super::load_corpus_embeddings();
-    let zero_emb = vec![0.0_f32; 384];
+    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let mut metrics = SimMetrics::new();
 
     for item in &items {
@@ -139,7 +139,7 @@ fn reality_rust_persona_does_not_score_python_content() {
     let personas = all_personas();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Find items that are StrongRelevant for Python but NotRelevant for Rust
     let items = corpus();
@@ -173,7 +173,7 @@ fn reality_noise_rejection_all_personas() {
     let personas = all_personas();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let items = corpus();
 
     let noise_items: Vec<_> = items
@@ -219,7 +219,7 @@ fn reality_score_distribution_separation() {
     let personas = all_personas();
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let items = corpus();
 
     // For Rust persona: relevant scores should be higher than noise scores

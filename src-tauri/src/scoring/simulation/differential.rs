@@ -18,7 +18,7 @@ fn rust_ctx() -> ScoringContext {
 }
 
 fn simple_rust_ctx() -> ScoringContext {
-    let emb = vec![0.5_f32; 384];
+    let emb = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![crate::context_engine::Interest {
         id: Some(1),
         topic: "Rust".to_string(),
@@ -45,7 +45,7 @@ fn simple_rust_ctx() -> ScoringContext {
 fn scoring_is_fully_deterministic() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let rust_input = sim_input(1,
         "Rust ownership and borrowing deep dive",
@@ -73,7 +73,7 @@ fn scoring_is_fully_deterministic() {
 fn breakdown_fields_identical_across_runs() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let input = sim_input(
         1,
@@ -109,7 +109,7 @@ fn breakdown_fields_identical_across_runs() {
 fn breakdown_multipliers_in_valid_range() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = rust_ctx();
 
     let input = sim_input(
@@ -143,11 +143,11 @@ fn breakdown_multipliers_in_valid_range() {
 fn breakdown_anti_penalty_range() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Rust ctx with anti-topic for Python
     let ctx = {
-        let e = vec![0.5_f32; 384];
+        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "Rust".to_string(),
@@ -197,14 +197,14 @@ fn breakdown_anti_penalty_range() {
 fn more_interests_does_not_decrease_score() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let rust_content = sim_input(1,
         "Rust async programming with tokio",
         "Building concurrent Rust applications using tokio's async runtime and structured concurrency.",
         &emb);
 
-    let emb_i = vec![0.5_f32; 384];
+    let emb_i = vec![0.5_f32; crate::EMBEDDING_DIMS];
 
     let one_interest = {
         let interests = vec![crate::context_engine::Interest {
@@ -263,8 +263,8 @@ fn more_interests_does_not_decrease_score() {
 fn ace_active_topics_does_not_decrease_score() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
-    let emb_i = vec![0.5_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let emb_i = vec![0.5_f32; crate::EMBEDDING_DIMS];
 
     let rust_input = sim_input(1,
         "Rust SQLite integration with sqlx",
@@ -312,7 +312,7 @@ fn ace_active_topics_does_not_decrease_score() {
 fn signal_count_monotone_with_context_richness() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let rich_content = sim_input(1,
         "Rust Tauri SQLite systems programming async tokio serde",
@@ -338,7 +338,7 @@ fn penalties_asymmetrically_stronger_than_boosts() {
     // Anti-topics should have a meaningful dampening effect
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     let python_input = sim_input(
         1,
@@ -348,7 +348,7 @@ fn penalties_asymmetrically_stronger_than_boosts() {
     );
 
     let neutral_ctx = {
-        let e = vec![0.5_f32; 384];
+        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "programming".to_string(),
@@ -364,7 +364,7 @@ fn penalties_asymmetrically_stronger_than_boosts() {
     };
 
     let anti_ctx = {
-        let e = vec![0.5_f32; 384];
+        let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
         let interests = vec![crate::context_engine::Interest {
             id: Some(1),
             topic: "programming".to_string(),
@@ -405,10 +405,10 @@ fn penalties_asymmetrically_stronger_than_boosts() {
 fn excluded_item_scores_exactly_zero() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Create context with exclusion for "blockchain"
-    let e = vec![0.5_f32; 384];
+    let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![crate::context_engine::Interest {
         id: Some(1),
         topic: "Rust".to_string(),
@@ -443,9 +443,9 @@ fn excluded_item_scores_exactly_zero() {
 fn exclusion_does_not_affect_non_matching_content() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
-    let e = vec![0.5_f32; 384];
+    let e = vec![0.5_f32; crate::EMBEDDING_DIMS];
     let interests = vec![crate::context_engine::Interest {
         id: Some(1),
         topic: "Rust".to_string(),
@@ -478,7 +478,7 @@ fn exclusion_does_not_affect_non_matching_content() {
 fn very_short_title_capped_in_score() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = rust_ctx();
 
     // Very short title with keyword match
@@ -497,7 +497,7 @@ fn very_short_title_capped_in_score() {
 fn empty_content_handled_gracefully() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = rust_ctx();
 
     let empty_input = sim_input(1, "Rust programming language", "", &emb);
@@ -514,7 +514,7 @@ fn empty_content_handled_gracefully() {
 fn source_type_does_not_affect_core_score_determinism() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = rust_ctx();
 
     let title = "Rust memory management deep dive";
@@ -569,7 +569,7 @@ fn source_type_does_not_affect_core_score_determinism() {
 fn score_breakdown_always_present() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = rust_ctx();
 
     let items = vec![
@@ -594,7 +594,7 @@ fn score_breakdown_always_present() {
 fn confirmed_signals_consistent_with_signal_count() {
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let ctx = rust_ctx();
 
     let input = sim_input(1,

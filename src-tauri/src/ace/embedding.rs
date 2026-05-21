@@ -73,8 +73,8 @@ pub struct EmbeddingService {
 impl EmbeddingService {
     pub fn new(config: EmbeddingConfig, conn: Arc<Mutex<Connection>>) -> Self {
         let dimension = match config.provider {
-            // Real providers use crate::embed_texts which returns 384-dim vectors
-            EmbeddingProvider::OpenAI | EmbeddingProvider::Ollama => 384,
+            // Real providers use crate::embed_texts which returns EMBEDDING_DIMS-dim vectors
+            EmbeddingProvider::OpenAI | EmbeddingProvider::Ollama => crate::EMBEDDING_DIMS,
             EmbeddingProvider::Mock => 128, // For testing
         };
 
@@ -109,7 +109,7 @@ impl EmbeddingService {
     }
 
     /// Maximum in-memory cache entries (prevents unbounded growth)
-    /// 10,000 entries * ~1.5KB per 384-dim embedding = ~15MB max
+    /// 10,000 entries * ~3KB per 768-dim embedding = ~30MB max
     const MAX_CACHE_ENTRIES: usize = 10_000;
 
     /// Get or generate embedding for a single text

@@ -491,7 +491,7 @@ pub(crate) async fn fetch_all_sources(
                     // Record embedding failure to local error telemetry
                     crate::telemetry::record_error_async("embedding", &format!("{e}"), None);
                     // Keyword scoring with ACE context synthesis (topics + deps) is a real scoring tier
-                    vec![vec![0.0f32; 384]; texts.len()]
+                    vec![vec![0.0f32; crate::EMBEDDING_DIMS]; texts.len()]
                 }
             };
 

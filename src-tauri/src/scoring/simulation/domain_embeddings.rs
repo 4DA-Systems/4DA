@@ -6,7 +6,7 @@
 //! All simulation tests use these embeddings, enabling cosine-similarity-based
 //! scoring that discriminates in-domain from off-domain content.
 
-const EMBEDDING_DIM: usize = 384;
+const EMBEDDING_DIM: usize = crate::EMBEDDING_DIMS;
 const SIGNATURE_LEN: usize = 32;
 
 // ============================================================================
@@ -31,7 +31,7 @@ pub(super) enum DomainBlock {
 
 impl DomainBlock {
     /// Returns a 32-float signature unique to this domain block.
-    /// Each block has a distinct pattern that tiles across the 384-dim space.
+    /// Each block has a distinct pattern that tiles across the EMBEDDING_DIMS-dim space.
     fn signature(&self) -> [f32; SIGNATURE_LEN] {
         match self {
             Self::Systems => [
@@ -133,7 +133,7 @@ impl Xorshift64 {
 // Core generation
 // ============================================================================
 
-/// Generate a 384-dim embedding from a spec and seed, deterministically.
+/// Generate an embedding from a spec and seed, deterministically.
 fn generate_embedding(spec: &EmbeddingSpec, seed: u64) -> Vec<f32> {
     let mut rng = Xorshift64::new(seed);
     let mut embedding = vec![0.0_f32; EMBEDDING_DIM];
@@ -143,7 +143,7 @@ fn generate_embedding(spec: &EmbeddingSpec, seed: u64) -> Vec<f32> {
         *v = rng.next_noise();
     }
 
-    // Step 2: Add weighted domain block signatures (tiled across 384 dims)
+    // Step 2: Add weighted domain block signatures (tiled across EMBEDDING_DIMS dimensions)
     for &(block, weight) in spec.blocks {
         let sig = block.signature();
         for (i, v) in embedding.iter_mut().enumerate() {
@@ -535,7 +535,7 @@ fn persona_domain_spec(domain_idx: usize) -> &'static EmbeddingSpec {
 // ============================================================================
 
 /// Generate embeddings for all 215 corpus items.
-/// Each embedding is a 384-dim unit vector with domain-specific signal.
+/// Each embedding is a unit vector (EMBEDDING_DIMS dimensions) with domain-specific signal.
 pub(super) fn corpus_embeddings() -> Vec<Vec<f32>> {
     (1..=220)
         .map(|id| {

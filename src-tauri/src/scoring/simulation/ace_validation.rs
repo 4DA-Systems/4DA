@@ -36,7 +36,7 @@ fn ace_anti_topic_excludes_matching_content() {
 
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Find a Python-focused corpus item
     let items = corpus();
@@ -104,7 +104,7 @@ fn ace_dependency_match_boosts_score() {
 
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Score a tokio-related item
     let input = sim_input(
@@ -173,7 +173,7 @@ fn ace_detected_tech_influences_scoring() {
 
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Score Rust content
     let items = corpus();
@@ -250,7 +250,7 @@ fn ace_topic_affinities_amplify_scores() {
     let embeddings = super::domain_embeddings::corpus_embeddings();
 
     {
-        let fallback = vec![0.0_f32; 384];
+        let fallback = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let items = corpus();
         let rust_item = items
             .iter()
@@ -285,7 +285,7 @@ fn ace_topic_affinities_amplify_scores() {
     }
 
     // Also test with zero vectors — keyword path still uses affinities
-    let emb_zero = vec![0.0_f32; 384];
+    let emb_zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let items = corpus();
     let rust_item = items
         .iter()
@@ -332,7 +332,7 @@ fn ace_semantic_boost_nonzero_with_embeddings() {
 
     {
         let embeddings = super::domain_embeddings::corpus_embeddings();
-        let fallback = vec![0.0_f32; 384];
+        let fallback = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let items = corpus();
         // Find a Rust corpus item (IDs 1-10 are Systems/Rust)
         let rust_item = items.iter().find(|i| i.id >= 1 && i.id <= 10);
@@ -351,7 +351,7 @@ fn ace_semantic_boost_nonzero_with_embeddings() {
     }
 
     // With zero embeddings, ACE boost may still activate via keyword path
-    let emb_zero = vec![0.0_f32; 384];
+    let emb_zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
     let items = corpus();
     let rust_item = items.iter().find(|i| i.id >= 1 && i.id <= 10);
     if let Some(item) = rust_item {
@@ -413,7 +413,7 @@ fn ace_context_increases_confirmation_signals() {
 
     let db = sim_db();
     let opts = sim_no_freshness();
-    let emb = vec![0.0_f32; 384];
+    let emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
 
     // Score content that mentions tokio + rust
     let input = sim_input(

@@ -580,26 +580,27 @@ impl Database {
 
         // Create vec0 virtual tables for KNN search (sqlite-vec)
         // These enable O(log n) similarity search instead of O(n) brute force
-        conn.execute_batch(
+        conn.execute_batch(&format!(
             "
-            -- Vector index for context chunks (384-dim MiniLM embeddings)
+            -- Vector index for context chunks ({dim}d embeddings)
             CREATE VIRTUAL TABLE IF NOT EXISTS context_vec USING vec0(
-                embedding float[384]
+                embedding float[{dim}]
             );
 
-            -- Vector index for source items (384-dim MiniLM embeddings)
+            -- Vector index for source items ({dim}d embeddings)
             CREATE VIRTUAL TABLE IF NOT EXISTS source_vec USING vec0(
-                embedding float[384]
+                embedding float[{dim}]
             );
         ",
-        )?;
+            dim = crate::EMBEDDING_DIMS
+        ))?;
 
         // Determine current schema version for backup decision
         let mut current_version: i64 = conn
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 78;
+        const TARGET_VERSION: i64 = 79;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2842,6 +2843,43 @@ impl Database {
                                 FROM source_items;",
                         )?;
                         info!(target: "4da::db", "Created FTS5 index for hybrid search");
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 79 {
+                Self::run_versioned_migration(
+                    &conn,
+                    78,
+                    79,
+                    &format!(
+                        "Phase 79: embedding dimension upgrade to {}d (vec table recreation)",
+                        crate::EMBEDDING_DIMS
+                    ),
+                    |c| {
+                        let dim = crate::EMBEDDING_DIMS;
+                        c.execute_batch(&format!(
+                            "DROP TABLE IF EXISTS context_vec;
+                             DROP TABLE IF EXISTS source_vec;
+                             CREATE VIRTUAL TABLE context_vec USING vec0(
+                                 embedding float[{dim}]
+                             );
+                             CREATE VIRTUAL TABLE source_vec USING vec0(
+                                 embedding float[{dim}]
+                             );"
+                        ))?;
+                        c.execute_batch(
+                            "UPDATE source_items SET embedding = zeroblob(0), embedding_status = 'pending'
+                               WHERE length(embedding) > 0;
+                             UPDATE context_chunks SET embedding = zeroblob(0)
+                               WHERE length(embedding) > 0;",
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            dim,
+                            "Recreated vec0 tables at {dim}d, marked all embeddings for regeneration"
+                        );
                         Ok(())
                     },
                 )?;
