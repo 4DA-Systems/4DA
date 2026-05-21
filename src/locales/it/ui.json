@@ -319,7 +319,7 @@
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Integrato (Locale)",
   "settings.ai.builtInModel": "BGE-Small (384 dimensioni)",
-  "settings.ai.builtInDescription": "Embedding locali senza configurazione. Non richiede API key. Funziona interamente sulla tua macchina (~34MB di download).",
+  "settings.ai.builtInDescription": "Embedding locali senza configurazione. Non richiede API key. Pre-installato — funziona interamente sulla tua macchina.",
   "settings.ai.embeddingSetup.checking": "Controllo di ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Download del motore di incorporamento...",
   "settings.ai.embeddingSetup.extracting": "Estrazione dell'ambiente di esecuzione...",

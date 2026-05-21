@@ -2122,7 +2122,7 @@
   "settings.ai.apiKey": "API Anahtarı",
   "settings.ai.baseUrl": "Temel URL",
   "settings.ai.baseUrlRequired": "Bu sağlayıcı için temel URL gereklidir",
-  "settings.ai.builtInDescription": "Sıfır yapılandırmalı yerel gömmeler. API anahtarı gerekmez. Tamamen makinenizde çalışır (~34MB indirme).",
+  "settings.ai.builtInDescription": "Sıfır yapılandırmalı yerel gömmeler. API anahtarı gerekmez. Önceden yüklü — tamamen makinenizde çalışır.",
   "settings.ai.builtInLocal": "Yerleşik (Yerel)",
   "settings.ai.builtInModel": "BGE-Small (384 boyut)",
   "settings.ai.embeddingSetup.checking": "ONNX Runtime kontrol ediliyor...",

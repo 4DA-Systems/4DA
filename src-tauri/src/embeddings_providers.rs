@@ -225,20 +225,80 @@ fn extract_ort_library(
     Err(FourDaError::from(format!("{lib_name} not found in tgz")))
 }
 
+// ============================================================================
+// Bundled embedding model — copy from installer to writable cache on first run
+// ============================================================================
+
+#[cfg(feature = "fastembed-local")]
+const EMBEDDING_CACHE_DIR_NAME: &str = "models--Qdrant--bge-small-en-v1.5-onnx-Q";
+
+#[cfg(feature = "fastembed-local")]
+fn ensure_embedding_model(cache_dir: &std::path::Path) -> bool {
+    let model_dir = cache_dir.join(EMBEDDING_CACHE_DIR_NAME);
+    let refs_file = model_dir.join("refs").join("main");
+
+    if refs_file.exists() {
+        tracing::debug!(target: "4da::embeddings", "Embedding model already cached");
+        return true;
+    }
+
+    let bundled_dir = crate::runtime_paths::RuntimePaths::get()
+        .resource_dir
+        .join("models")
+        .join("embeddings")
+        .join(EMBEDDING_CACHE_DIR_NAME);
+
+    if !bundled_dir.exists() {
+        tracing::debug!(target: "4da::embeddings", "No bundled embedding model — will download on first use");
+        return false;
+    }
+
+    tracing::info!(
+        target: "4da::embeddings",
+        bundled = %bundled_dir.display(),
+        cache = %model_dir.display(),
+        "Copying bundled embedding model to cache"
+    );
+
+    if let Err(e) = copy_dir_recursive(&bundled_dir, &model_dir) {
+        tracing::warn!(target: "4da::embeddings", error = %e, "Bundled model copy failed — will download");
+        return false;
+    }
+    true
+}
+
+#[cfg(feature = "fastembed-local")]
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let dest_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_recursive(&entry.path(), &dest_path)?;
+        } else {
+            std::fs::copy(entry.path(), &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(feature = "fastembed-local")]
 fn get_or_init_fastembed(
 ) -> std::result::Result<&'static parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
     FASTEMBED_MODEL.get_or_try_init(|| {
         let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
         ensure_ort_runtime(&cache_dir, None)?;
-        tracing::info!(
-            target: "4da::embeddings",
-            cache = %cache_dir.display(),
-            "Initializing in-process embedding (bge-small-en-v1.5 quantized, ~34MB first download)"
-        );
+        let cached = ensure_embedding_model(&cache_dir);
+        let msg = if cached {
+            "Loading bundled embedding model (bge-small-en-v1.5)"
+        } else {
+            "Downloading embedding model (bge-small-en-v1.5, ~64MB first run)"
+        };
+        tracing::info!(target: "4da::embeddings", cache = %cache_dir.display(), "{msg}");
         let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15Q)
             .with_cache_dir(cache_dir)
-            .with_show_download_progress(true);
+            .with_show_download_progress(!cached);
         fastembed::TextEmbedding::try_new(options)
             .map(parking_lot::Mutex::new)
             .map_err(|e| {
@@ -265,21 +325,27 @@ pub(super) fn init_fastembed_with_progress(
     let _ = FASTEMBED_MODEL.get_or_try_init(|| {
         let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
         ensure_ort_runtime(&cache_dir, progress.as_ref())?;
+        let cached = ensure_embedding_model(&cache_dir);
 
         if let Some(tx) = progress.as_ref() {
+            let msg = if cached {
+                "Loading bundled embedding model...".to_string()
+            } else {
+                "Downloading embedding model (~64MB first run)...".to_string()
+            };
             let _ = tx.send(DownloadProgress {
                 stage: "model-init".into(),
                 percent: 50,
                 bytes_downloaded: 0,
                 bytes_total: 0,
-                message: "Initializing embedding model (~34MB first download)...".into(),
+                message: msg,
                 done: false,
             });
         }
 
         let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15Q)
             .with_cache_dir(cache_dir)
-            .with_show_download_progress(true);
+            .with_show_download_progress(!cached);
         let result = fastembed::TextEmbedding::try_new(options)
             .map(parking_lot::Mutex::new)
             .map_err(|e| {

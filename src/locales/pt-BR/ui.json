@@ -2151,7 +2151,7 @@
   "settings.ai.apiKey": "Chave de API",
   "settings.ai.baseUrl": "URL base",
   "settings.ai.baseUrlRequired": "A URL base é obrigatória para este provedor",
-  "settings.ai.builtInDescription": "Embeddings locais sem configuração. Não requer API key. Roda inteiramente na sua máquina (~34MB de download).",
+  "settings.ai.builtInDescription": "Embeddings locais sem configuração. Não requer API key. Pré-instalado — roda inteiramente na sua máquina.",
   "settings.ai.builtInLocal": "Integrado (Local)",
   "settings.ai.builtInModel": "BGE-Small (384 dimensões)",
   "settings.ai.embeddingSetup.checking": "Verificando ONNX Runtime...",

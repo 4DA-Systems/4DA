@@ -317,7 +317,7 @@
   "settings.streets.tierEnterprise": "Enterprise",
   "settings.ai.builtInLocal": "Встроенный (локальный)",
   "settings.ai.builtInModel": "BGE-Small (384 измерения)",
-  "settings.ai.builtInDescription": "Локальные эмбеддинги без настройки. API-ключ не требуется. Работает полностью на вашем компьютере (~34 МБ загрузка).",
+  "settings.ai.builtInDescription": "Локальные эмбеддинги без настройки. API-ключ не требуется. Предустановлено — работает полностью на вашем компьютере.",
   "settings.ai.embeddingSetup.checking": "Проверка ONNX Runtime...",
   "settings.ai.embeddingSetup.downloading": "Загрузка движка встраивания...",
   "settings.ai.embeddingSetup.extracting": "Распаковка среды выполнения...",
