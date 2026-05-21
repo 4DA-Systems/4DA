@@ -5204,6 +5204,7 @@ mod tests {
                 advisory_ids: vec!["CVE-2026-9999".into()],
                 source_url: Some("https://rustsec.org/advisories/CVE-2026-9999".into()),
                 suggested_actions: vec!["Upgrade serde to 1.0.201".into()],
+                scope: None,
             }],
             blind_spot_score: None,
             labels: None,

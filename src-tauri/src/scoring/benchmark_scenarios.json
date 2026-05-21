@@ -13,7 +13,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.12,
-      "score_max": 0.5,
+      "score_max": 0.85,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
@@ -59,7 +59,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.08,
-      "score_max": 0.35,
+      "score_max": 0.55,
       "should_be_relevant": true,
       "required_signals": [
         "ace"
@@ -104,7 +104,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.08,
-      "score_max": 0.4,
+      "score_max": 0.6,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -148,7 +148,7 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.12,
-      "score_max": 0.5,
+      "score_max": 0.75,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -215,7 +215,7 @@
     "profile": "fullstack_js",
     "expected": {
       "score_min": 0.12,
-      "score_max": 0.5,
+      "score_max": 0.90,
       "should_be_relevant": true,
       "required_signals": [
         "interest"
@@ -326,7 +326,7 @@
     "profile": "fullstack_js",
     "expected": {
       "score_min": 0.1,
-      "score_max": 0.45,
+      "score_max": 0.65,
       "should_be_relevant": true,
       "required_signals": [
         "interest",

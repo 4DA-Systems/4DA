@@ -127,6 +127,23 @@ html, body {
   color: var(--text-secondary);
 }
 
+/* ====================== Staleness ====================== */
+
+.staleness-bar {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  margin-top: -1px;
+  background: rgba(245, 158, 11, 0.06);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.staleness-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-amber);
+  letter-spacing: 0.02em;
+}
+
 /* ====================== Dismiss ====================== */
 
 .dismiss-btn {
@@ -261,6 +278,32 @@ html, body {
 
 .preemption-row:hover {
   background: rgba(239, 68, 68, 0.1);
+}
+
+.preemption-row.scope-primary {
+  background: rgba(239, 68, 68, 0.07);
+  border-left-color: rgba(239, 68, 68, 0.6);
+}
+
+.preemption-row.scope-external {
+  background: rgba(245, 158, 11, 0.04);
+  border-left-color: rgba(245, 158, 11, 0.3);
+}
+
+.preemption-row.scope-dev {
+  background: rgba(255, 255, 255, 0.02);
+  border-left-color: rgba(255, 255, 255, 0.15);
+}
+
+.preemption-scope {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .preemption-header {
