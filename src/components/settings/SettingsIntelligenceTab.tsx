@@ -87,6 +87,35 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
           />
         </PanelErrorBoundary>
 
+        {/* Intelligence Engine — read-only info about built-in models */}
+        <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+              <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-medium text-white">{t('settings.ai.intelligenceEngine')}</h3>
+              <p className="text-xs text-text-muted">{t('settings.ai.intelligenceEngineDesc')}</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
+              <span className="text-xs text-text-muted">{t('settings.ai.engineEmbedding')}</span>
+              <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineEmbeddingValue')}</span>
+            </div>
+            <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
+              <span className="text-xs text-text-muted">{t('settings.ai.engineReranker')}</span>
+              <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineRerankerValue')}</span>
+            </div>
+            <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
+              <span className="text-xs text-text-muted">{t('settings.ai.engineTopics')}</span>
+              <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineTopicsValue', { count: 100 })}</span>
+            </div>
+          </div>
+        </div>
+
         {/* Inline status feedback — always visible near the buttons */}
         {inlineStatus && (
           <div className={`text-sm p-3 rounded-lg border ${

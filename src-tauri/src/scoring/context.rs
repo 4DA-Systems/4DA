@@ -483,7 +483,7 @@ pub(crate) fn synthesize_ace_interests(
             id: None,
             topic: dep_name.clone(),
             weight: 0.3,
-            embedding: None,
+            embedding: topic_embeddings.get(dep_name).cloned(),
             source: crate::context_engine::InterestSource::Inferred,
         });
         existing.insert(lower);

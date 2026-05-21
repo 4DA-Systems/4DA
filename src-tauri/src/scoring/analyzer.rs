@@ -168,6 +168,8 @@ pub(crate) async fn score_items_full(
         }
     }
 
+    crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
+
     scoring::sort_results(&mut results);
     let pre_dedup = results.len();
     scoring::dedup_results(&mut results);
@@ -383,6 +385,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
         ));
     }
 
+    crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut new_results, &scoring_ctx);
     scoring::sort_results(&mut new_results);
 
     let relevant_count = new_results
