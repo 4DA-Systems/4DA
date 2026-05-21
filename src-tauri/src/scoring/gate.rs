@@ -82,17 +82,21 @@ pub(crate) fn count_confirmed_signals(
         || affinity_mult >= scoring_config::AFFINITY_THRESHOLD;
     let dependency_confirmed = dep_match_score >= scoring_config::DEPENDENCY_THRESHOLD;
 
-    // Deduplicate interest + ACE: these axes often fire on the same technology
-    // (e.g. user has interest "React" AND React is in ACE active_topics/detected_tech).
-    // When both fire, count them as a single signal to prevent one technology from
-    // masquerading as two independent signals. If ACE fires via a genuinely independent
-    // path (semantic_boost above threshold or stack_pain_match), count it separately.
-    let ace_independent =
-        ace_confirmed && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD || stack_pain_match);
+    // Deduplicate interest + ACE when ONLY keyword matching drives both axes.
+    // ACE active_topics (from scanning the user's actual project files) ARE genuinely
+    // independent evidence — the user declared an interest AND their code confirms it.
+    // Only dedup when the overlap is purely keyword-level with no project-level backing.
+    let ace_via_active_topics = topics
+        .iter()
+        .any(|t| ace_ctx.active_topics.iter().any(|at| topic_overlaps(t, at)));
+    let ace_independent = ace_confirmed
+        && (semantic_boost >= scoring_config::SEMANTIC_THRESHOLD
+            || stack_pain_match
+            || ace_via_active_topics);
     let deduped_ace = if interest_confirmed && ace_confirmed {
-        ace_independent // only count ACE separately if it has an independent signal path
+        ace_independent
     } else {
-        ace_confirmed // no overlap possible, count normally
+        ace_confirmed
     };
 
     let count = [

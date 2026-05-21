@@ -289,6 +289,10 @@ pub struct BriefingPreemptionAlert {
     /// Human-readable action labels from suggested_actions
     #[serde(default)]
     pub suggested_actions: Vec<String>,
+    /// Where this vulnerability lives relative to the primary project.
+    /// "primary" = the 4DA app itself, "external" = a side project, "dev" = dev-only dependency.
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 impl BriefingPreemptionAlert {
@@ -320,6 +324,7 @@ impl BriefingPreemptionAlert {
             advisory_ids,
             source_url,
             suggested_actions,
+            scope: None,
         }
     }
 }
@@ -602,6 +607,30 @@ pub(crate) fn build_enriched_briefing(
             }
             Err(_) => Vec::new(),
         };
+
+    // Compute project scope for each alert — distinguishes "your shipping code"
+    // from side projects and dev dependencies.
+    let project_root = std::env::current_dir()
+        .ok()
+        .map(|p| p.to_string_lossy().to_lowercase().replace('\\', "/"));
+    let preemption_alerts: Vec<BriefingPreemptionAlert> = preemption_alerts
+        .into_iter()
+        .map(|mut alert| {
+            let scope = if alert.is_dev == Some(true) {
+                "dev"
+            } else if let Some(ref root) = project_root {
+                let is_primary = alert.affected_projects.iter().any(|p| {
+                    let normalized = p.to_lowercase().replace('\\', "/");
+                    normalized.starts_with(root.as_str())
+                });
+                if is_primary { "primary" } else { "external" }
+            } else {
+                "external"
+            };
+            alert.scope = Some(scope.to_string());
+            alert
+        })
+        .collect();
 
     // Minimum quality gate: the briefing only fires when it has genuinely
     // valuable content OR cross-surface intelligence (preemption, chains).
@@ -1449,17 +1478,31 @@ fn extract_topic_from_title(title: &str) -> String {
         "the", "how", "why", "new", "top", "best", "this", "that", "what", "with", "from", "your",
         "will", "for", "are", "was", "has", "have", "not", "all", "can", "get", "use", "now",
         "just", "more", "into", "out", "about", "than", "been", "its", "our", "but", "who",
-        "first", "last", "week", "today", "part",
+        "first", "last", "week", "today", "part", "using", "when", "does", "where", "after",
+        "before", "between", "through", "during", "without", "against", "also", "like",
+        "over", "under", "only", "very", "most", "some", "every", "each", "both", "many",
+        "much", "still", "already", "really", "actually", "here", "there", "then",
+        "replaced", "building", "making", "getting", "going", "doing", "running",
+        "creating", "adding", "moving", "changing", "breaking", "fixing", "missing",
+        "should", "could", "would", "might", "must",
     ];
-    title
+    let candidates: Vec<&str> = title
         .split_whitespace()
-        .find(|w| {
-            w.len() >= 3
-                && w.chars().next().is_some_and(|c| c.is_uppercase())
-                && !STOP_WORDS.contains(&w.to_lowercase().as_str())
+        .filter(|w| {
+            let trimmed = w.trim_end_matches(|c: char| !c.is_alphanumeric());
+            trimmed.len() >= 2
+                && trimmed.chars().next().is_some_and(|c| c.is_uppercase())
+                && !STOP_WORDS.contains(&trimmed.to_lowercase().as_str())
         })
-        .unwrap_or("")
-        .to_string()
+        .take(3)
+        .collect();
+
+    let result = candidates
+        .into_iter()
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(" ");
+    result.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string()
 }
 
 /// Filter briefing items for novelty — items whose titles appeared in the last 3 days
@@ -2173,12 +2216,7 @@ BANNED:
             ungrounded_sample = ?report.ungrounded_terms.iter().take(5).collect::<Vec<_>>(),
             "Morning brief synthesis failed groundedness check — falling back to abstention"
         );
-        return Ok(format!(
-            "Low signal — no noteworthy intelligence overnight.\n\n\
-             ({} items scanned, synthesis skipped: {} ungrounded terms detected)",
-            briefing.items.len(),
-            report.ungrounded_terms.len()
-        ));
+        return Ok("Low signal — no noteworthy intelligence overnight.".to_string());
     }
 
     tracing::info!(
@@ -2676,6 +2714,7 @@ mod tests {
             advisory_ids: vec![],
             source_url: None,
             suggested_actions: vec![],
+            scope: None,
         }
     }
 
@@ -3059,6 +3098,7 @@ mod tests {
             advisory_ids: vec!["CVE-2020-28500".into()],
             source_url: Some("https://nvd.nist.gov/vuln/detail/CVE-2020-28500".into()),
             suggested_actions: vec!["Update lodash to >= 4.17.21".into()],
+            scope: None,
         };
 
         let json = serde_json::to_value(&alert).expect("serialize");

@@ -11,6 +11,7 @@ function cleanSynthesis(text) {
     .replace(/\*\*/g, '')             // Strip markdown bold
     .replace(/^#+\s+/gm, '')         // Strip markdown headers
     .replace(/^[-*]\s+/gm, '')       // Strip bullet markers
+    .replace(/\s*\([\d]+ items scanned[^)]*\)/g, '')  // Strip diagnostic parentheticals
     .replace(/  +/g, ' ')            // Collapse double spaces
     .trim();
 }
@@ -36,6 +37,8 @@ var gapsList = document.getElementById('gaps-list');
 var blindSpotScore = document.getElementById('blind-spot-score');
 var ongoingSection = document.getElementById('ongoing-section');
 var ongoingLine = document.getElementById('ongoing-line');
+var stalenessBar = document.getElementById('staleness-bar');
+var stalenessText = document.getElementById('staleness-text');
 var dismissBtn = document.getElementById('dismiss-btn');
 var openAppBtn = document.getElementById('open-app-btn');
 
@@ -193,11 +196,21 @@ function buildPreemptionHtml(alerts) {
   for (var i = 0; i < alerts.length; i++) {
     var alert = alerts[i];
     var title = escapeHtml(truncate(alert.title, 70));
-    var urgency = escapeHtml(alert.urgency || 'high');
+    var scope = alert.scope || 'external';
     var explanation = escapeHtml(truncate(alert.explanation, 160));
-    html += '<div class="preemption-row urgency-' + urgency + '">'
+
+    // Show which project is affected for external/dev scope
+    var context = '';
+    if (scope !== 'primary' && alert.affected_projects && alert.affected_projects.length > 0) {
+      var proj = alert.affected_projects[0];
+      var projName = proj.split('/').pop() || proj.split('\\').pop() || proj;
+      context = '<span class="preemption-scope">' + escapeHtml(projName) + '</span>';
+    }
+
+    html += '<div class="preemption-row scope-' + escapeHtml(scope) + '">'
       + '<div class="preemption-header">'
       + '<span class="preemption-title">' + title + '</span>'
+      + context
       + '</div>'
       + (explanation ? '<div class="preemption-explanation">' + explanation + '</div>' : '')
       + '</div>';
@@ -223,6 +236,32 @@ function classifyItem(item) {
 function renderBriefing(data) {
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
+
+  // Data staleness indicator
+  if (data.data_freshness) {
+    var df = data.data_freshness;
+    var ageHours = df.newest_item_age_hours;
+    var failingSources = df.failing_sources || 0;
+    var checksLast24h = df.source_checks_last_24h || 0;
+
+    if (ageHours && ageHours > 24) {
+      var ageDays = Math.floor(ageHours / 24);
+      var ageLabel = ageDays >= 2 ? ageDays + 'd old' : Math.floor(ageHours) + 'h old';
+      var parts = ['Data ' + ageLabel];
+      if (failingSources > 5) {
+        parts.push(failingSources + ' sources failing');
+      }
+      stalenessBar.style.display = '';
+      stalenessText.textContent = parts.join(' · ');
+    } else if (checksLast24h === 0 && failingSources > 5) {
+      stalenessBar.style.display = '';
+      stalenessText.textContent = failingSources + ' sources failing · no checks in 24h';
+    } else {
+      stalenessBar.style.display = 'none';
+    }
+  } else {
+    stalenessBar.style.display = 'none';
+  }
 
   // i18n: apply translated labels from payload
   if (data.labels) {
