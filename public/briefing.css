@@ -207,6 +207,20 @@ html, body {
   word-wrap: break-word;
 }
 
+.synthesis-section.abstention {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+  border-left-color: var(--text-muted);
+  text-align: center;
+  padding: 20px 18px;
+}
+
+.synthesis-section.abstention .synthesis-text {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 /* ====================== Section Labels ====================== */
 
 .section { margin-bottom: 6px; }
