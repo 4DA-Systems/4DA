@@ -623,7 +623,11 @@ pub(crate) fn build_enriched_briefing(
                     let normalized = p.to_lowercase().replace('\\', "/");
                     normalized.starts_with(root.as_str())
                 });
-                if is_primary { "primary" } else { "external" }
+                if is_primary {
+                    "primary"
+                } else {
+                    "external"
+                }
             } else {
                 "external"
             };
@@ -1479,12 +1483,11 @@ fn extract_topic_from_title(title: &str) -> String {
         "will", "for", "are", "was", "has", "have", "not", "all", "can", "get", "use", "now",
         "just", "more", "into", "out", "about", "than", "been", "its", "our", "but", "who",
         "first", "last", "week", "today", "part", "using", "when", "does", "where", "after",
-        "before", "between", "through", "during", "without", "against", "also", "like",
-        "over", "under", "only", "very", "most", "some", "every", "each", "both", "many",
-        "much", "still", "already", "really", "actually", "here", "there", "then",
-        "replaced", "building", "making", "getting", "going", "doing", "running",
-        "creating", "adding", "moving", "changing", "breaking", "fixing", "missing",
-        "should", "could", "would", "might", "must",
+        "before", "between", "through", "during", "without", "against", "also", "like", "over",
+        "under", "only", "very", "most", "some", "every", "each", "both", "many", "much", "still",
+        "already", "really", "actually", "here", "there", "then", "replaced", "building", "making",
+        "getting", "going", "doing", "running", "creating", "adding", "moving", "changing",
+        "breaking", "fixing", "missing", "should", "could", "would", "might", "must",
     ];
     let candidates: Vec<&str> = title
         .split_whitespace()
@@ -1497,12 +1500,10 @@ fn extract_topic_from_title(title: &str) -> String {
         .take(3)
         .collect();
 
-    let result = candidates
-        .into_iter()
-        .take(2)
-        .collect::<Vec<_>>()
-        .join(" ");
-    result.trim_end_matches(|c: char| !c.is_alphanumeric()).to_string()
+    let result = candidates.into_iter().take(2).collect::<Vec<_>>().join(" ");
+    result
+        .trim_end_matches(|c: char| !c.is_alphanumeric())
+        .to_string()
 }
 
 /// Filter briefing items for novelty — items whose titles appeared in the last 3 days
