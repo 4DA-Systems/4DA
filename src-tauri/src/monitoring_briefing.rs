@@ -492,6 +492,8 @@ const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
 impl BriefingNotification {
     /// Returns true if any section has meaningful intelligence worth showing.
     /// Used instead of `items.is_empty()` so preemption-only briefings still fire.
+    /// Also returns true for abstention briefings (synthesis set with ongoing topics)
+    /// so the user sees the system is alive and tracking, even when nothing is new.
     pub fn has_meaningful_content(&self) -> bool {
         if !self.items.is_empty() {
             return true;
@@ -500,6 +502,9 @@ impl BriefingNotification {
             return true;
         }
         if !self.escalating_chains.is_empty() {
+            return true;
+        }
+        if self.synthesis.is_some() && !self.ongoing_topics.is_empty() {
             return true;
         }
         self.knowledge_gaps
@@ -627,23 +632,48 @@ pub(crate) fn build_enriched_briefing(
         };
     }
 
-    // Novelty detection: filter items seen in last 3 days, track ongoing topics.
-    // If novelty filter removes ALL items, keep the top 3 as "still relevant"
-    // rather than showing an empty briefing — a repeat signal beats "nothing new."
+    // Novelty detection: filter out items and preemption alerts shown in the
+    // last 3 days. This prevents the briefing from recycling the same content
+    // every morning. Stale items/alerts are surfaced as "ongoing topics" in
+    // the footer so the user knows they're still tracked.
     let today = now.format("%Y-%m-%d").to_string();
-    let (items, ongoing_topics) = if skip_novelty {
+    let (items, mut ongoing_topics) = if skip_novelty {
         (items, vec![])
     } else {
-        let pre_filter = items.clone();
         let (novel, ongoing) = apply_novelty_filter(items, &today);
-        if novel.is_empty() && !pre_filter.is_empty() {
-            // All items were seen recently — keep top 3 so the briefing has content
-            let fallback: Vec<BriefingItem> = pre_filter.into_iter().take(3).collect();
-            (fallback, ongoing)
-        } else {
-            (novel, ongoing)
-        }
+        (novel, ongoing)
     };
+
+    let preemption_alerts = if skip_novelty {
+        preemption_alerts
+    } else {
+        let (novel_alerts, stale_alert_topics) =
+            apply_preemption_novelty_filter(preemption_alerts, &today);
+        ongoing_topics.extend(stale_alert_topics);
+        ongoing_topics.sort();
+        ongoing_topics.dedup();
+        novel_alerts
+    };
+
+    // Abstention: when novelty filtering removed all items AND all preemption
+    // alerts, the briefing has nothing new. Return a "low signal" abstention
+    // with ongoing topics so the user sees the system is alive but quiet.
+    if items.is_empty() && preemption_alerts.is_empty() && !ongoing_topics.is_empty() {
+        return BriefingNotification {
+            title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
+            items: vec![],
+            total_relevant: 0,
+            ongoing_topics,
+            knowledge_gaps: detect_knowledge_gaps(),
+            escalating_chains,
+            synthesis: Some("Low signal — no new intelligence overnight.".to_string()),
+            preemption_alerts: vec![],
+            blind_spot_score: None,
+            labels: Some(build_briefing_labels(lang)),
+            personalization_context: None,
+            data_freshness: compute_data_freshness(),
+        };
+    }
 
     // Topic clustering for corroboration detection.
     // Load embeddings from the DB for the briefing items, then cluster by
@@ -1500,6 +1530,91 @@ fn record_briefing_items(conn: &rusqlite::Connection, items: &[BriefingItem], da
             rusqlite::params![item.title, item.source_type, date],
         ) {
             tracing::warn!(target: "4da::monitor", error = %e, title = %item.title, "Failed to record briefing item history");
+        }
+    }
+}
+
+// ============================================================================
+// Preemption Alert Novelty Filter
+// ============================================================================
+
+/// Filter preemption alerts through the same novelty window as regular items.
+///
+/// Preemption alerts (vulnerability advisories) are persistent — the same GHSA
+/// alerts appear every day until the dependency is updated. Without novelty
+/// filtering, the briefing shows identical preemption cards every morning.
+///
+/// Returns (novel_alerts, stale_topic_names). Novel alerts are shown in the
+/// PREEMPTION section; stale topics are surfaced in the "Still tracking:" footer.
+fn apply_preemption_novelty_filter(
+    alerts: Vec<BriefingPreemptionAlert>,
+    today: &str,
+) -> (Vec<BriefingPreemptionAlert>, Vec<String>) {
+    if alerts.is_empty() {
+        return (vec![], vec![]);
+    }
+
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return (alerts, vec![]),
+    };
+
+    let recent_titles: std::collections::HashSet<String> = {
+        let mut stmt = match conn.prepare(
+            "SELECT LOWER(item_title) FROM briefing_item_history
+             WHERE briefing_date >= date(?1, '-3 days') AND source_type = 'preemption'",
+        ) {
+            Ok(s) => s,
+            Err(_) => return (alerts, vec![]),
+        };
+
+        stmt.query_map(rusqlite::params![today], |row| row.get::<_, String>(0))
+            .ok()
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default()
+    };
+
+    if recent_titles.is_empty() {
+        record_preemption_history(&conn, &alerts, today);
+        return (alerts, vec![]);
+    }
+
+    let mut novel = Vec::new();
+    let mut stale_topics = Vec::new();
+
+    for alert in alerts {
+        if recent_titles.contains(&alert.title.to_lowercase()) {
+            let topic = alert
+                .package_name
+                .clone()
+                .unwrap_or_else(|| extract_topic_from_title(&alert.title));
+            if !topic.is_empty() {
+                stale_topics.push(topic);
+            }
+        } else {
+            novel.push(alert);
+        }
+    }
+
+    stale_topics.sort();
+    stale_topics.dedup();
+
+    record_preemption_history(&conn, &novel, today);
+
+    (novel, stale_topics)
+}
+
+fn record_preemption_history(
+    conn: &rusqlite::Connection,
+    alerts: &[BriefingPreemptionAlert],
+    date: &str,
+) {
+    for alert in alerts {
+        if let Err(e) = conn.execute(
+            "INSERT INTO briefing_item_history (item_title, source_type, briefing_date) VALUES (?1, ?2, ?3)",
+            rusqlite::params![alert.title, "preemption", date],
+        ) {
+            tracing::warn!(target: "4da::monitor", error = %e, title = %alert.title, "Failed to record preemption history");
         }
     }
 }

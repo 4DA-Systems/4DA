@@ -250,8 +250,15 @@ function renderBriefing(data) {
   }
 
   // LLM Synthesis — the hero section. Gets the most real estate.
+  // Abstention messages ("Low signal — no new intelligence overnight") are shown
+  // as a muted single-line message so the user knows the system ran but had nothing new.
   if (data.synthesis && !isAbstention(data.synthesis)) {
     synthesisSection.style.display = '';
+    synthesisSection.classList.remove('abstention');
+    synthesisText.textContent = cleanSynthesis(data.synthesis);
+  } else if (data.synthesis && isAbstention(data.synthesis)) {
+    synthesisSection.style.display = '';
+    synthesisSection.classList.add('abstention');
     synthesisText.textContent = cleanSynthesis(data.synthesis);
   } else {
     synthesisSection.style.display = 'none';
