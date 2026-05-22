@@ -503,6 +503,10 @@ pub struct BriefingNotification {
     /// as "uncorroborated" — the system simply couldn't check.
     #[serde(default)]
     pub corroboration_available: bool,
+    /// True when the system has <7 days of briefing history. Signals the frontend
+    /// to show "building coverage model" instead of implying complete coverage.
+    #[serde(default)]
+    pub coverage_building: bool,
 }
 
 const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
@@ -676,6 +680,7 @@ pub(crate) fn build_enriched_briefing(
             personalization_context: None,
             data_freshness: None,
             corroboration_available: false,
+            coverage_building: false,
         };
     }
 
@@ -720,6 +725,7 @@ pub(crate) fn build_enriched_briefing(
             personalization_context: None,
             data_freshness: compute_data_freshness(),
             corroboration_available: false,
+            coverage_building: false,
         };
     }
 
@@ -774,6 +780,10 @@ pub(crate) fn build_enriched_briefing(
     // generate a context line showing the user their detected stack + interests.
     let personalization_context = build_first_briefing_context();
 
+    // Cold-start detection: <7 distinct briefing days means the system is still
+    // building its coverage model. Prevents false sense of complete coverage.
+    let coverage_building = is_coverage_building();
+
     BriefingNotification {
         title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
         items,
@@ -788,6 +798,7 @@ pub(crate) fn build_enriched_briefing(
         personalization_context,
         data_freshness: compute_data_freshness(),
         corroboration_available,
+        coverage_building,
     }
 }
 
@@ -1305,6 +1316,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 personalization_context: None,
                 data_freshness: freshness,
                 corroboration_available: false,
+                coverage_building: false,
             };
             // Still mark as fired so we don't re-trigger the stale warning all day
             {
@@ -1866,6 +1878,21 @@ fn build_first_briefing_context() -> Option<String> {
         "Based on {}, here's what matters today.",
         parts.join(" and ")
     ))
+}
+
+fn is_coverage_building() -> bool {
+    let conn = match crate::open_db_connection() {
+        Ok(c) => c,
+        Err(_) => return true,
+    };
+    let distinct_days: i64 = conn
+        .query_row(
+            "SELECT COUNT(DISTINCT briefing_date) FROM briefing_item_history",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    distinct_days < 7
 }
 
 // ============================================================================
@@ -2467,6 +2494,7 @@ mod tests {
             personalization_context: None,
             data_freshness: None,
             corroboration_available: false,
+            coverage_building: false,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
@@ -2718,6 +2746,7 @@ mod tests {
             personalization_context: None,
             data_freshness: None,
             corroboration_available: false,
+            coverage_building: false,
         }
     }
 

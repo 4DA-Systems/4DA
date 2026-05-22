@@ -386,6 +386,12 @@ function renderBriefing(data) {
   if (hasGaps) {
     gapsSection.style.display = '';
     gapsList.innerHTML = buildGapsHtml(data.knowledge_gaps);
+  } else if (data.coverage_building) {
+    gapsSection.style.display = '';
+    gapsList.innerHTML = '<div class="gap-row coverage-building">'
+      + '<span class="gap-topic">Building coverage model</span>'
+      + '<span class="gap-days">&lt;7d of data</span>'
+      + '</div>';
   } else {
     gapsSection.style.display = 'none';
   }
