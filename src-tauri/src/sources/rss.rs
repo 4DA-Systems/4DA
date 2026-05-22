@@ -4,6 +4,7 @@
 //! Fetches items from configured RSS and Atom feeds.
 
 use async_trait::async_trait;
+use futures::stream::{self, StreamExt};
 use scraper::{Html, Selector};
 use tracing::{debug, info, warn};
 
@@ -17,6 +18,12 @@ const MAX_ITEM_CONTENT_LEN: usize = 100_000;
 
 /// Maximum RSS response size (10MB) — prevents malicious feed flooding
 const MAX_RSS_RESPONSE: u64 = 10 * 1024 * 1024;
+
+/// Per-feed HTTP timeout (seconds) — prevents slow/dead feeds from blocking the batch
+const FEED_TIMEOUT_SECS: u64 = 10;
+
+/// Maximum concurrent feed fetches
+const MAX_CONCURRENT_FEEDS: usize = 20;
 
 // ============================================================================
 // RSS Feed Entry
@@ -348,91 +355,104 @@ impl Source for RssSource {
             return Ok(Vec::new());
         }
 
-        // Clear per-feed errors from previous run
         *self.feed_errors.lock().unwrap_or_else(|e| e.into_inner()) = Vec::new();
 
         info!(feed_count = self.feed_urls.len(), "Fetching RSS feeds");
 
-        let mut all_items = Vec::new();
+        let feed_timeout = std::time::Duration::from_secs(FEED_TIMEOUT_SECS);
 
-        for feed_url in &self.feed_urls {
-            debug!(url = feed_url, "Fetching feed");
+        let urls: Vec<String> = self.feed_urls.clone();
+        let results: Vec<_> = stream::iter(urls)
+            .map(|url| {
+                let client = self.client.clone();
+                async move {
+                    let mut items = Vec::new();
+                    let mut errors = Vec::new();
 
-            match self
-                .client
-                .get(feed_url)
-                .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/1.0)")
-                .send()
-                .await
-            {
-                Ok(response) => {
+                    let fetch_result = tokio::time::timeout(feed_timeout, async {
+                        client
+                            .get(&url)
+                            .header("User-Agent", "Mozilla/5.0 (compatible; 4DA/1.0)")
+                            .send()
+                            .await
+                    })
+                    .await;
+
+                    let response = match fetch_result {
+                        Ok(Ok(resp)) => resp,
+                        Ok(Err(e)) => {
+                            warn!(url = %url, error = %e, "Failed to fetch feed");
+                            errors.push((url, e.to_string()));
+                            return (items, errors);
+                        }
+                        Err(_) => {
+                            debug!(url = %url, "Feed timed out");
+                            errors.push((url, "timed out".to_string()));
+                            return (items, errors);
+                        }
+                    };
+
                     if !response.status().is_success() {
-                        let err_msg = format!("HTTP {}", response.status());
-                        warn!(url = feed_url, status = %response.status(), "Feed returned error status");
-                        self.feed_errors
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .push((feed_url.clone(), err_msg));
-                        continue;
+                        warn!(url = %url, status = %response.status(), "Feed returned error status");
+                        errors.push((url, format!("HTTP {}", response.status())));
+                        return (items, errors);
                     }
 
-                    // Cap RSS response at 10MB to prevent malicious feed flooding
                     if let Some(len) = response.content_length() {
                         if len > MAX_RSS_RESPONSE {
-                            warn!(
-                                target: "4da::sources::rss",
-                                url = %feed_url,
-                                size = len,
-                                "RSS feed too large — skipping"
-                            );
-                            self.feed_errors
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .push((feed_url.clone(), format!("Feed too large: {} bytes", len)));
-                            continue;
+                            warn!(target: "4da::sources::rss", url = %url, size = len, "RSS feed too large — skipping");
+                            errors.push((url, format!("Feed too large: {} bytes", len)));
+                            return (items, errors);
                         }
                     }
 
                     match response.text().await {
                         Ok(xml) => {
-                            let entries = self.parse_feed(&xml, feed_url);
-                            debug!(url = feed_url, count = entries.len(), "Parsed entries");
-
-                            for entry in entries {
-                                let mut item = SourceItem::new("rss", &entry.id, &entry.title)
-                                    .with_url(Some(entry.link.clone()))
-                                    .with_content(entry.description);
-
-                                // Add metadata
-                                item = item.with_metadata(serde_json::json!({
-                                    "feed_title": entry.feed_title,
-                                    "feed_url": feed_url,
-                                    "pub_date": entry.pub_date,
-                                }));
-
-                                all_items.push(item);
-                            }
+                            // parse_feed takes &self — can't call from this closure.
+                            // Return raw XML for the caller to parse.
+                            items.push((url.clone(), xml));
                         }
                         Err(e) => {
-                            warn!(url = feed_url, error = %e, "Failed to read feed body");
-                            self.feed_errors
-                                .lock()
-                                .unwrap_or_else(|e| e.into_inner())
-                                .push((feed_url.clone(), e.to_string()));
+                            warn!(url = %url, error = %e, "Failed to read feed body");
+                            errors.push((url, e.to_string()));
                         }
                     }
+                    // items here is Vec<(String, String)> for url+xml
+                    // We'll parse below. Re-use the tuple for now.
+                    (items, errors)
                 }
-                Err(e) => {
-                    warn!(url = feed_url, error = %e, "Failed to fetch feed");
-                    self.feed_errors
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .push((feed_url.clone(), e.to_string()));
+            })
+            .buffer_unordered(MAX_CONCURRENT_FEEDS)
+            .collect()
+            .await;
+
+        let mut all_items = Vec::new();
+        let mut all_errors = Vec::new();
+
+        for (feed_xmls, errors) in results {
+            all_errors.extend(errors);
+            for (url, xml) in feed_xmls {
+                let entries = self.parse_feed(&xml, &url);
+                debug!(url = %url, count = entries.len(), "Parsed entries");
+
+                for entry in entries {
+                    let mut item = SourceItem::new("rss", &entry.id, &entry.title)
+                        .with_url(Some(entry.link.clone()))
+                        .with_content(entry.description);
+
+                    item = item.with_metadata(serde_json::json!({
+                        "feed_title": entry.feed_title,
+                        "feed_url": url,
+                        "pub_date": entry.pub_date,
+                    }));
+
+                    all_items.push(item);
                 }
             }
         }
 
-        // Limit total items
+        *self.feed_errors.lock().unwrap_or_else(|e| e.into_inner()) = all_errors;
+
         all_items.truncate(self.config.max_items);
 
         info!(count = all_items.len(), "Fetched RSS items");

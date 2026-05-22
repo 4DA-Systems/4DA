@@ -89,20 +89,19 @@ impl GitHubSource {
     ///
     /// Returns a human-readable query with real spaces. URL encoding is handled
     /// by reqwest's `.query()` when the request is built in `fetch_items`.
+    /// GitHub ORs same-name qualifiers implicitly — `OR` keyword is for text only.
     fn build_search_query(&self) -> String {
         let today = chrono::Utc::now();
         let week_ago = today - chrono::Duration::days(7);
         let week_ago_str = week_ago.format("%Y-%m-%d").to_string();
 
-        // Build language query: "language:rust OR language:typescript"
         let lang_query = self
             .languages
             .iter()
             .map(|lang| format!("language:{lang}"))
             .collect::<Vec<_>>()
-            .join(" OR ");
+            .join(" ");
 
-        // Full query: languages + stars filter + recent activity
         format!("{lang_query} stars:>100 pushed:>{week_ago_str}")
     }
 }
@@ -351,16 +350,13 @@ mod tests {
             GitHubSource::with_languages(vec!["rust".to_string(), "typescript".to_string()]);
         let query = source.build_search_query();
 
-        // Should contain language filters joined with " OR " (spaces, not +)
-        assert!(query.contains("language:rust OR language:typescript"));
-        // Should contain stars filter separated by space
+        // Same-name qualifiers are implicitly ORed — no OR keyword
+        assert!(query.contains("language:rust language:typescript"));
         assert!(query.contains(" stars:>100"));
-        // Should contain date filter separated by space
         assert!(query.contains(" pushed:>"));
-        // Must NOT contain the old + separators (caused HTTP 422)
         assert!(
-            !query.contains("+OR+"),
-            "query must use spaces, not + separators"
+            !query.contains(" OR "),
+            "OR keyword is for text, not qualifiers"
         );
     }
 
