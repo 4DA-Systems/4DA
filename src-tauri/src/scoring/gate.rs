@@ -158,6 +158,16 @@ pub(crate) fn apply_confirmation_gate(
     let idx = (confirmation.count as usize).min(scoring_config::CONFIRMATION_GATE.len() - 1);
     let (conf_mult, score_ceiling) = scoring_config::CONFIRMATION_GATE[idx];
 
+    // Direct dependency gate bypass: raise ceiling for strong dep matches stuck
+    // in single-axis territory (prevents serde/tokio release notes capping at 0.28)
+    let score_ceiling = if confirmation.count <= 1
+        && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE
+    {
+        score_ceiling.max(scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_CEILING)
+    } else {
+        score_ceiling
+    };
+
     let gated = (base_score * conf_mult).min(score_ceiling);
     let names = confirmation.confirmed_names();
 

@@ -1260,6 +1260,7 @@ fn apply_gate_effect(
     domain_relevance: f32,
     ctx: &ScoringContext,
     strength_bonus: f32,
+    dep_match_score: f32,
 ) -> f32 {
     let idx = (signal_count as usize).min(5);
     let (conf_mult, base_ceiling) = scoring_config::CONFIRMATION_GATE[idx];
@@ -1267,6 +1268,18 @@ fn apply_gate_effect(
     // This creates sub-ranking within gate tiers: strong 2-signal items at ~0.73
     // are clearly differentiated from weak 2-signal items capped at 0.65.
     let score_ceiling = (base_ceiling + strength_bonus).min(1.0);
+
+    // Direct dependency gate bypass: if a strong dep match got orphaned into
+    // single-axis territory, raise the ceiling so it isn't capped at 0.28.
+    // Without this, serde/tokio/axum release notes score ~48% instead of 75%+
+    // because dependency is the only confirmed axis for package-specific content.
+    let score_ceiling = if signal_count <= 1
+        && dep_match_score >= scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_MIN_SCORE
+    {
+        score_ceiling.max(scoring_config::DEPENDENCY_GATE_BYPASS_DIRECT_DEP_CEILING)
+    } else {
+        score_ceiling
+    };
 
     let gated = score * conf_mult;
 
@@ -1713,6 +1726,7 @@ pub(crate) fn score_item(
         raw.domain_relevance,
         ctx,
         strength_bonus,
+        raw.dep_match_score,
     );
 
     // ── Phase 8: Final adjustments ────────────────────────────────────

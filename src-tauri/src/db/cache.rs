@@ -171,15 +171,66 @@ impl Database {
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
         {
-            let mut stmt =
-                tx.prepare_cached("UPDATE source_items SET relevance_score = ?1 WHERE id = ?2")?;
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2 WHERE id = ?3",
+            )?;
             for &(id, score) in scores {
-                stmt.execute(params![score as f64, id])?;
+                stmt.execute(params![score as f64, crate::scoring::PIPELINE_VERSION, id])?;
                 count += 1;
             }
         }
         tx.commit()?;
         Ok(count)
+    }
+
+    /// Get items whose scores were computed under an older pipeline version.
+    /// These need re-scoring to reflect current pipeline logic.
+    pub fn get_stale_scored_items(
+        &self,
+        current_version: i32,
+        limit: usize,
+    ) -> SqliteResult<Vec<StoredSourceItem>> {
+        let conn = self.conn.lock();
+        let effective_hours = if crate::settings::is_signal() {
+            i64::MAX
+        } else {
+            super::sources::FREE_HISTORY_LIMIT_HOURS
+        };
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, source_type, source_id, url, title, content, content_hash,
+                    embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
+                    feed_origin, tags
+             FROM source_items
+             WHERE scored_pipeline_version < ?1
+               AND relevance_score IS NOT NULL
+               AND created_at >= datetime('now', '-' || ?2 || ' hours')
+             ORDER BY relevance_score DESC
+             LIMIT ?3",
+        )?;
+        let rows = stmt.query_map(
+            params![current_version, effective_hours, limit as i64],
+            |row| {
+                let embedding_blob: Vec<u8> = row.get(7)?;
+                Ok(StoredSourceItem {
+                    id: row.get(0)?,
+                    source_type: row.get(1)?,
+                    source_id: row.get(2)?,
+                    url: row.get(3)?,
+                    title: row.get(4)?,
+                    content: row.get(5)?,
+                    content_hash: row.get(6)?,
+                    embedding: blob_to_embedding(&embedding_blob),
+                    created_at: parse_datetime(row.get::<_, String>(8)?),
+                    last_seen: parse_datetime(row.get::<_, String>(9)?),
+                    detected_lang: row
+                        .get::<_, String>(10)
+                        .unwrap_or_else(|_| "en".to_string()),
+                    feed_origin: row.get(11).ok().flatten(),
+                    tags: row.get(12).ok().flatten(),
+                })
+            },
+        )?;
+        rows.collect()
     }
 
     /// Record a scoring cycle event for audit trail and recalibration backtesting.

@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 79;
+        const TARGET_VERSION: i64 = 80;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2880,6 +2880,21 @@ impl Database {
                             dim,
                             "Recreated vec0 tables at {dim}d, marked all embeddings for regeneration"
                         );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            if current_version < 80 {
+                Self::run_versioned_migration(
+                    &conn,
+                    79,
+                    80,
+                    "Phase 80: pipeline version tracking for score staleness prevention",
+                    |c| {
+                        c.execute_batch(
+                            "ALTER TABLE source_items ADD COLUMN scored_pipeline_version INTEGER NOT NULL DEFAULT 0;"
+                        )?;
                         Ok(())
                     },
                 )?;

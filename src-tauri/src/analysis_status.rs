@@ -365,43 +365,65 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
         let since = last_completed_at.as_deref().unwrap_or("");
         info!(target: "4da::analysis", since = since, "Differential analysis - checking for new items since last run");
 
-        let new_items = db
+        let mut new_items = db
             .get_items_since_timestamp_tiered(since, 500)
             .map_err(|e| format!("Failed to load new items: {e}"))?;
 
         if new_items.is_empty() {
-            // No new items since last analysis — try re-scoring recent cache (7 days)
-            info!(target: "4da::analysis", "No new items since last analysis, re-scoring existing for freshness");
-            emit_progress(
-                app,
-                "cache",
-                0.5,
-                "No new items, refreshing scores...",
-                0,
-                0,
-            );
+            // Check for items scored under an older pipeline version
+            let stale_items = db
+                .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
+                .unwrap_or_default();
 
-            // Re-score existing items for updated freshness/affinities (7-day window)
-            // Respects free-tier 30-day history gate via get_items_tiered
-            let all_items = db
-                .get_items_tiered(168, 1000)
-                .map_err(|e| format!("Failed to load cached items: {e}"))?;
-
-            if all_items.is_empty() {
-                // Cache is stale — fetch fresh content
-                warn!(target: "4da::analysis", "No items in 7-day window, fetching fresh content");
+            if !stale_items.is_empty() {
+                info!(target: "4da::analysis", stale = stale_items.len(),
+                    "Re-scoring stale items from older pipeline version");
                 emit_progress(
                     app,
-                    "fetch",
-                    0.1,
-                    "Cache stale, fetching fresh items...",
+                    "cache",
+                    0.5,
+                    &format!(
+                        "Re-scoring {} items (pipeline updated)...",
+                        stale_items.len()
+                    ),
+                    0,
+                    stale_items.len(),
+                );
+                new_items = stale_items;
+            } else {
+                // No new items AND no stale items — try re-scoring recent cache (7 days)
+                info!(target: "4da::analysis", "No new items since last analysis, re-scoring existing for freshness");
+                emit_progress(
+                    app,
+                    "cache",
+                    0.5,
+                    "No new items, refreshing scores...",
                     0,
                     0,
                 );
-                return run_multi_source_analysis_impl(app).await;
-            }
 
-            return scoring::score_items_full(app, db, &all_items).await;
+                // Re-score existing items for updated freshness/affinities (7-day window)
+                // Respects free-tier 30-day history gate via get_items_tiered
+                let all_items = db
+                    .get_items_tiered(168, 1000)
+                    .map_err(|e| format!("Failed to load cached items: {e}"))?;
+
+                if all_items.is_empty() {
+                    // Cache is stale — fetch fresh content
+                    warn!(target: "4da::analysis", "No items in 7-day window, fetching fresh content");
+                    emit_progress(
+                        app,
+                        "fetch",
+                        0.1,
+                        "Cache stale, fetching fresh items...",
+                        0,
+                        0,
+                    );
+                    return run_multi_source_analysis_impl(app).await;
+                }
+
+                return scoring::score_items_full(app, db, &all_items).await;
+            }
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");

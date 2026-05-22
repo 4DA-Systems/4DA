@@ -55,6 +55,10 @@ pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use pipeline::{ScoringInput, ScoringOptions};
 pub(crate) use telemetry::ScoringTelemetry;
 pub(crate) use temporal_cluster::temporal_cluster_results;
+/// Bump this whenever the scoring pipeline changes to invalidate stale scores.
+/// Items scored under an older version will be re-scored on the next analysis run.
+pub(crate) const PIPELINE_VERSION: i32 = 1;
+
 // Runtime dispatch: V2 pipeline with 8-phase architecture, fallback to V1
 const USE_V2: bool = true;
 pub(crate) fn score_item(

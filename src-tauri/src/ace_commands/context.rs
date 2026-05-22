@@ -85,6 +85,35 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
         info!(target: "4da::startup", cleaned, "Removed dependency-level inferred interests");
     }
 
+    // Phase 2: Remove secondary-project tech that was incorrectly seeded as interests.
+    // Prior versions didn't filter by tech_weights, allowing secondary-project tech
+    // (e.g., express, next.js from non-primary projects) to pollute interests.
+    let ace_ctx_for_cleanup = get_ace_context();
+    if !ace_ctx_for_cleanup.tech_weights.is_empty() {
+        let existing = context_engine.get_interests().unwrap_or_default();
+        let mut cleaned_secondary = 0;
+        for interest in &existing {
+            if interest.source == InterestSource::Inferred {
+                let weight = ace_ctx_for_cleanup
+                    .tech_weights
+                    .get(&interest.topic)
+                    .copied()
+                    .unwrap_or(0.4);
+                if weight < 0.75 {
+                    if let Err(e) = context_engine.remove_interest(&interest.topic) {
+                        warn!(target: "4da::startup", topic = %interest.topic, error = %e, "Failed to remove polluted interest");
+                    } else {
+                        cleaned_secondary += 1;
+                        debug!(target: "4da::startup", topic = %interest.topic, weight, "Removed secondary-project interest");
+                    }
+                }
+            }
+        }
+        if cleaned_secondary > 0 {
+            info!(target: "4da::startup", cleaned = cleaned_secondary, "Removed secondary-project inferred interests");
+        }
+    }
+
     // Check if interests are already configured
     let existing_interests = context_engine
         .get_interests()
@@ -118,6 +147,13 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
             || tech.contains('/')
             || tech.len() <= 2
         {
+            continue;
+        }
+        // Only seed tech from primary projects (weight >= 0.75).
+        // Secondary-project tech (weight 0.40) creates interest pollution.
+        let tech_weight = ace_ctx.tech_weights.get(tech).copied().unwrap_or(0.4);
+        if tech_weight < 0.75 {
+            debug!(target: "4da::startup", tech = %tech, weight = tech_weight, "Skipping secondary-project tech for interest seeding");
             continue;
         }
         topics_to_seed.push((tech.clone(), 0.8));
