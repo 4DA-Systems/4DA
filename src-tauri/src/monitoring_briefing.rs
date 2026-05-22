@@ -45,6 +45,9 @@ pub struct DataFreshness {
     /// Source adapters with no successful check in more than seven days.
     #[serde(default)]
     pub stale_sources: u32,
+    /// Total registered source adapters (for computing health percentage).
+    #[serde(default)]
+    pub total_sources: u32,
     /// True when neither source items nor successful source checks have appeared in 3 days.
     pub is_stale: bool,
 }
@@ -124,6 +127,9 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
             |row| row.get(0),
         )
         .unwrap_or(0);
+    let total_sources: u32 = conn
+        .query_row("SELECT COUNT(*) FROM feed_health", [], |row| row.get(0))
+        .unwrap_or(0);
 
     DataFreshness {
         newest_item_age_hours: newest_age,
@@ -134,7 +140,9 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         source_checks_last_72h: source_checks_72h,
         failing_sources,
         stale_sources,
-        is_stale: items_72h == 0 && source_checks_72h == 0,
+        total_sources,
+        is_stale: (items_72h == 0 && source_checks_72h == 0)
+            || (total_sources > 0 && failing_sources * 100 / total_sources >= 50),
     }
 }
 
@@ -666,7 +674,7 @@ pub(crate) fn build_enriched_briefing(
     }
 
     // Novelty detection: filter out items and preemption alerts shown in the
-    // last 3 days. This prevents the briefing from recycling the same content
+    // last 14 days. This prevents the briefing from recycling the same content
     // every morning. Stale items/alerts are surfaced as "ongoing topics" in
     // the footer so the user knows they're still tracked.
     let today = now.format("%Y-%m-%d").to_string();
@@ -868,6 +876,11 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
     };
 
     if embedding_data.is_empty() {
+        tracing::info!(
+            target: "4da::clustering",
+            item_count = ids.len(),
+            "No embeddings available — corroboration detection skipped for this briefing"
+        );
         return;
     }
 
@@ -1515,11 +1528,11 @@ fn apply_novelty_filter(items: Vec<BriefingItem>, today: &str) -> (Vec<BriefingI
         Err(_) => return (items, vec![]), // Can't check history, show everything
     };
 
-    // Get titles shown in the last 3 days
+    // Get titles shown in the last 14 days
     let recent_titles: std::collections::HashSet<String> = {
         let mut stmt = match conn.prepare(
             "SELECT LOWER(item_title) FROM briefing_item_history
-             WHERE briefing_date >= date(?1, '-3 days')",
+             WHERE briefing_date >= date(?1, '-14 days')",
         ) {
             Ok(s) => s,
             Err(_) => return (items, vec![]), // Table might not exist yet
@@ -1606,7 +1619,7 @@ fn apply_preemption_novelty_filter(
     let recent_titles: std::collections::HashSet<String> = {
         let mut stmt = match conn.prepare(
             "SELECT LOWER(item_title) FROM briefing_item_history
-             WHERE briefing_date >= date(?1, '-3 days') AND source_type = 'preemption'",
+             WHERE briefing_date >= date(?1, '-14 days') AND source_type = 'preemption'",
         ) {
             Ok(s) => s,
             Err(_) => return (alerts, vec![]),
@@ -2204,9 +2217,9 @@ BANNED:
 
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
-    // The threshold is conservative — require at least 35% of salient terms
-    // to be grounded. Below this, the LLM likely invented content wholesale.
-    const GROUNDEDNESS_THRESHOLD: f32 = 0.35;
+    // Require at least 60% of salient terms to be grounded. This catches subtle
+    // hallucinations (wrong versions, misattributed features), not just wholesale fabrication.
+    const GROUNDEDNESS_THRESHOLD: f32 = 0.60;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
         tracing::warn!(

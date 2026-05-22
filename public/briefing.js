@@ -237,30 +237,52 @@ function renderBriefing(data) {
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
 
-  // Data staleness indicator
+  // Data staleness & source health indicator
   if (data.data_freshness) {
     var df = data.data_freshness;
     var ageHours = df.newest_item_age_hours;
     var failingSources = df.failing_sources || 0;
+    var totalSources = df.total_sources || 0;
     var checksLast24h = df.source_checks_last_24h || 0;
+    var failPct = totalSources > 0 ? Math.round(failingSources * 100 / totalSources) : 0;
+    var showBar = false;
+    var parts = [];
+    var critical = false;
 
-    if (ageHours && ageHours > 24) {
-      var ageDays = Math.floor(ageHours / 24);
-      var ageLabel = ageDays >= 2 ? ageDays + 'd old' : Math.floor(ageHours) + 'h old';
-      var parts = ['Data ' + ageLabel];
-      if (failingSources > 5) {
-        parts.push(failingSources + ' sources failing');
-      }
+    if (df.is_stale || (ageHours && ageHours > 48)) {
+      var ageDays = Math.floor((ageHours || 72) / 24);
+      parts.push('Data ' + ageDays + 'd old');
+      critical = true;
+      showBar = true;
+    } else if (ageHours && ageHours > 24) {
+      parts.push('Data ' + Math.floor(ageHours) + 'h old');
+      showBar = true;
+    }
+
+    if (failPct >= 50) {
+      parts.push(failingSources + '/' + totalSources + ' sources degraded');
+      showBar = true;
+    } else if (failingSources > 5) {
+      parts.push(failingSources + ' sources failing');
+      showBar = true;
+    }
+
+    if (checksLast24h === 0 && totalSources > 0 && !showBar) {
+      parts.push('No source checks in 24h');
+      showBar = true;
+    }
+
+    if (showBar) {
       stalenessBar.style.display = '';
+      stalenessBar.className = critical ? 'staleness-bar staleness-critical' : 'staleness-bar';
       stalenessText.textContent = parts.join(' · ');
-    } else if (checksLast24h === 0 && failingSources > 5) {
-      stalenessBar.style.display = '';
-      stalenessText.textContent = failingSources + ' sources failing · no checks in 24h';
     } else {
       stalenessBar.style.display = 'none';
+      stalenessBar.className = 'staleness-bar';
     }
   } else {
     stalenessBar.style.display = 'none';
+    stalenessBar.className = 'staleness-bar';
   }
 
   // i18n: apply translated labels from payload

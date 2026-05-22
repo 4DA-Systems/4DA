@@ -39,6 +39,10 @@ failing_sources: number,
  */
 stale_sources: number, 
 /**
+ * Total registered source adapters (for computing health percentage).
+ */
+total_sources: number, 
+/**
  * True when neither source items nor successful source checks have appeared in 3 days.
  */
 is_stale: boolean, };
