@@ -527,6 +527,11 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
     // Run post-analysis innovation hooks for background analysis too
     run_post_analysis_hooks(&new_results);
 
+    // Cold-start: seed topic affinities from background analysis results
+    if let Err(e) = crate::ace_commands::seed_topic_affinities_from_analysis(&new_results) {
+        tracing::debug!(target: "4da::analysis", error = %e, "Topic affinity seeding skipped (background)");
+    }
+
     info!(target: "4da::monitor",
         new_items = new_count,
         relevant = relevant_count,

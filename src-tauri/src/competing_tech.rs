@@ -152,13 +152,21 @@ pub(crate) const COMPETING_TECH: &[(&str, &[&str])] = &[
 ];
 
 /// Check if content is primarily about a competing technology.
-/// Returns a multiplier: 1.0 (no competition) or 0.5 (competing tech dominant).
+/// Returns a graduated multiplier:
+///   1.0  — no competition, or user's tech in title (comparative exemption)
+///   0.85 — comparative/migration article (useful framing even without user's tech)
+///   0.80 — competitor mentioned but user's tech appears in content body
+///   0.70 — competitor only in topics, not in title (incidental mention)
+///   0.50 — pure competing content (competitor in title, no user tech anywhere)
 pub fn compute_competing_penalty(
     topics: &[String],
     title: &str,
+    content: &str,
     user_primary_stack: &HashSet<String>,
 ) -> f32 {
     let title_lower = title.to_lowercase();
+    // Limit content scan to first 2000 chars for performance
+    let content_lower = content[..content.len().min(2000)].to_lowercase();
 
     for user_tech in user_primary_stack {
         let user_lower = user_tech.to_lowercase();
@@ -181,7 +189,7 @@ pub fn compute_competing_penalty(
         });
 
         let matched_competitor = match matched_competitor {
-            Some(comp) => comp,
+            Some(comp) => *comp,
             None => continue,
         };
 
@@ -189,19 +197,56 @@ pub fn compute_competing_penalty(
         // A Rust+Go developer should see Go content without penalty.
         if user_primary_stack
             .iter()
-            .any(|t| t.to_lowercase() == *matched_competitor)
+            .any(|t| t.to_lowercase() == matched_competitor)
         {
             continue;
         }
 
-        // If the user's own tech ALSO appears, it's comparative content — allow it.
+        // If the user's own tech ALSO appears in title, it's comparative content — allow it.
         // "Tauri vs Electron" is fine, "Electron 30 released" is not.
         if has_word_boundary(&title_lower, &user_lower) {
             continue;
         }
 
-        // Competing tech is dominant (appears without user's tech) → penalty
-        return 0.5;
+        // --- Graduated penalty (user's tech NOT in title) ---
+
+        // 1. User's tech appears in content body — partial comparative
+        if has_word_boundary(&content_lower, &user_lower) {
+            return 0.80;
+        }
+
+        // 2. Comparative/migration markers in title or early content — useful framing
+        let comparative_markers = [
+            "vs",
+            "versus",
+            "compared to",
+            "comparison",
+            "alternative",
+            "alternatives",
+            "migrate",
+            "migrating",
+            "migration",
+            "switching from",
+            "moving from",
+            "moved from",
+            "switch to",
+            "benchmark",
+        ];
+        let is_comparative = comparative_markers.iter().any(|m| {
+            has_word_boundary(&title_lower, m)
+                || content_lower[..content_lower.len().min(500)].contains(m)
+        });
+        if is_comparative {
+            return 0.85;
+        }
+
+        // 3. Competitor only in topics, not in title — incidental mention
+        if !has_word_boundary(&title_lower, matched_competitor) {
+            return 0.70;
+        }
+
+        // 4. Pure competing content — competitor in title, no user tech anywhere
+        return 0.50;
     }
 
     1.0
@@ -260,6 +305,7 @@ mod tests {
         let mult = compute_competing_penalty(
             &topics(&["electron", "desktop"]),
             "Electron 30 Released with Performance Improvements",
+            "",
             &primary,
         );
         assert_eq!(mult, 0.5);
@@ -271,6 +317,7 @@ mod tests {
         let mult = compute_competing_penalty(
             &topics(&["tauri", "electron"]),
             "Tauri vs Electron: Which Desktop Framework to Choose in 2025",
+            "",
             &primary,
         );
         assert_eq!(mult, 1.0);
@@ -282,6 +329,7 @@ mod tests {
         let mult = compute_competing_penalty(
             &topics(&["react", "hooks"]),
             "React 20 Introduces New Server Components API",
+            "",
             &primary,
         );
         assert_eq!(mult, 1.0);
@@ -293,6 +341,7 @@ mod tests {
         let mult = compute_competing_penalty(
             &topics(&["vue", "frontend"]),
             "Vue 4 Beta: Composition API Improvements",
+            "",
             &primary,
         );
         assert_eq!(mult, 0.5);
@@ -305,6 +354,7 @@ mod tests {
         let mult = compute_competing_penalty(
             &topics(&["python", "django"]),
             "Django 6.0 Released",
+            "",
             &primary,
         );
         assert_eq!(mult, 0.5);
@@ -317,6 +367,7 @@ mod tests {
         let mult = compute_competing_penalty(
             &topics(&["kubernetes", "docker"]),
             "Kubernetes 1.31 Released",
+            "",
             &primary,
         );
         assert_eq!(mult, 1.0);
@@ -337,7 +388,79 @@ mod tests {
     #[test]
     fn test_empty_stack_no_penalty() {
         let primary = stack(&[]);
-        let mult = compute_competing_penalty(&topics(&["electron"]), "Electron Released", &primary);
+        let mult =
+            compute_competing_penalty(&topics(&["electron"]), "Electron Released", "", &primary);
         assert_eq!(mult, 1.0);
+    }
+
+    // --- Graduated penalty tests ---
+
+    #[test]
+    fn test_user_tech_in_content_mild_penalty() {
+        let primary = stack(&["react"]);
+        let mult = compute_competing_penalty(
+            &topics(&["vue"]),
+            "Vue 4 Composition API Deep Dive",
+            "...compared to React hooks, Vue's composition API...",
+            &primary,
+        );
+        assert!(
+            (mult - 0.80).abs() < 0.01,
+            "user tech in content should give mild penalty, got {mult}"
+        );
+    }
+
+    #[test]
+    fn test_comparative_article_very_mild() {
+        let primary = stack(&["tauri"]);
+        let mult = compute_competing_penalty(
+            &topics(&["electron"]),
+            "Electron vs Tauri: Desktop Framework Comparison 2025",
+            "We benchmark both frameworks...",
+            &primary,
+        );
+        assert_eq!(mult, 1.0, "both techs in title should exempt completely");
+    }
+
+    #[test]
+    fn test_comparative_markers_without_user_tech() {
+        let primary = stack(&["react"]);
+        let mult = compute_competing_penalty(
+            &topics(&["vue", "angular"]),
+            "Comparing Vue and Angular for Enterprise Apps",
+            "When migrating from React to Vue, consider...",
+            &primary,
+        );
+        assert!(
+            (mult - 0.80).abs() < 0.01,
+            "user tech in content gives 0.80, got {mult}"
+        );
+    }
+
+    #[test]
+    fn test_incidental_topic_mention() {
+        let primary = stack(&["react"]);
+        let mult = compute_competing_penalty(
+            &topics(&["vue", "state-management"]),
+            "Advanced State Management Patterns for Frontend Apps",
+            "This article covers state management approaches across frameworks.",
+            &primary,
+        );
+        assert!(
+            (mult - 0.70).abs() < 0.01,
+            "competitor only in topics should give 0.70, got {mult}"
+        );
+    }
+
+    #[test]
+    fn test_pure_competing_still_050() {
+        let primary = stack(&["tauri", "rust"]);
+        let mult = compute_competing_penalty(
+            &topics(&["django", "python"]),
+            "Django 6.0 Released with Major Performance Improvements",
+            "Django 6.0 brings significant performance improvements to Python web development.",
+            &primary,
+        );
+        assert_eq!(mult, 0.5, "pure competing content should still be 0.5");
     }
 }

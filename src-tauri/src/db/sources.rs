@@ -1099,6 +1099,27 @@ impl Database {
         Ok(())
     }
 
+    /// Purge adapter-level entries from feed_health where feed_origin = source_type.
+    /// These are phantom records from the cache-fill processor that inflate failing counts.
+    pub fn purge_adapter_level_feed_health(&self) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let deleted = conn.execute(
+            "DELETE FROM feed_health WHERE feed_origin = source_type",
+            [],
+        )?;
+        Ok(deleted)
+    }
+
+    /// Reset all feed health records (clear failures and circuit breakers).
+    pub fn reset_all_feed_health(&self) -> SqliteResult<usize> {
+        let conn = self.conn.lock();
+        let updated = conn.execute(
+            "UPDATE feed_health SET consecutive_failures = 0, circuit_open = 0, circuit_opened_at = NULL, updated_at = datetime('now') WHERE consecutive_failures > 0 OR circuit_open = 1",
+            [],
+        )?;
+        Ok(updated)
+    }
+
     /// Get feedback summary aggregated by topic for scoring boost.
     /// Results are cached until invalidated by a feedback write.
     pub fn get_feedback_topic_summary(&self) -> SqliteResult<Vec<FeedbackTopicSummary>> {

@@ -127,6 +127,13 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Run post-analysis innovation hooks (non-blocking)
                 scoring::run_post_analysis_hooks(&results);
 
+                // Cold-start: seed topic affinities from high-scoring items so
+                // the learned 5th axis fires immediately instead of waiting for
+                // manual engagement. Idempotent — no-ops once affinities exist.
+                if let Err(e) = crate::ace_commands::seed_topic_affinities_from_analysis(&results) {
+                    tracing::debug!(target: "4da::analysis", error = %e, "Topic affinity seeding skipped");
+                }
+
                 // Background content enrichment for ambiguous-zone items.
                 // Fetches page body for title-only items scoring 0.20–0.55,
                 // so the next analysis cycle can re-score with richer signal.
