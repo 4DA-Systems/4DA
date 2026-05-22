@@ -307,8 +307,12 @@ pub(crate) fn initialize_pre_tauri() {
 
             match db.purge_adapter_level_feed_health() {
                 Ok(0) => {}
-                Ok(n) => info!(target: "4da::startup", purged = n, "Purged adapter-level phantom entries from feed_health"),
-                Err(e) => warn!(target: "4da::startup", error = %e, "Failed to purge phantom feed_health entries"),
+                Ok(n) => {
+                    info!(target: "4da::startup", purged = n, "Purged adapter-level phantom entries from feed_health")
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Failed to purge phantom feed_health entries")
+                }
             }
         }
         Err(e) => {

@@ -358,7 +358,10 @@ mod tests {
         // Should contain date filter separated by space
         assert!(query.contains(" pushed:>"));
         // Must NOT contain the old + separators (caused HTTP 422)
-        assert!(!query.contains("+OR+"), "query must use spaces, not + separators");
+        assert!(
+            !query.contains("+OR+"),
+            "query must use spaces, not + separators"
+        );
     }
 
     #[test]

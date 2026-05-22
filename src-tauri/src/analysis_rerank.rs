@@ -425,9 +425,10 @@ pub(crate) async fn apply_llm_reranking(
                 // This is NOT a general override — only fires when LLM confidence < 0.30
                 // (score < 1.5/5) AND the item relies primarily on dependency matching.
                 if !judgment.relevant && judgment.confidence < 0.30 {
-                    let has_strong_user_signal = result.score_breakdown.as_ref().map_or(false, |b| {
-                        b.interest_score > 0.50 || b.context_score > 0.30
-                    });
+                    let has_strong_user_signal = result
+                        .score_breakdown
+                        .as_ref()
+                        .map_or(false, |b| b.interest_score > 0.50 || b.context_score > 0.30);
                     if !has_strong_user_signal {
                         result.relevant = false;
                     }
