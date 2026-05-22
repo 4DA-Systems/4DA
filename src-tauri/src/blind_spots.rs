@@ -5211,6 +5211,7 @@ mod tests {
             personalization_context: None,
             data_freshness: None,
             corroboration_available: false,
+            coverage_building: false,
         };
 
         assert!(

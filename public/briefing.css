@@ -526,6 +526,17 @@ html, body {
   color: var(--text-muted);
 }
 
+.gap-row.coverage-building {
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 2px solid var(--text-muted);
+  padding-left: 8px;
+}
+
+.gap-row.coverage-building .gap-topic {
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .blind-spot-score {
   display: none;
 }
