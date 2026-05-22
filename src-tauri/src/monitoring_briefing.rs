@@ -498,6 +498,11 @@ pub struct BriefingNotification {
     /// show a staleness warning instead of treating silence as "all clear."
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
+    /// Whether corroboration detection ran successfully (embeddings available).
+    /// When false, the frontend should not interpret absence of corroboration badges
+    /// as "uncorroborated" — the system simply couldn't check.
+    #[serde(default)]
+    pub corroboration_available: bool,
 }
 
 const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
@@ -670,6 +675,7 @@ pub(crate) fn build_enriched_briefing(
             labels: Some(build_briefing_labels(lang)),
             personalization_context: None,
             data_freshness: None,
+            corroboration_available: false,
         };
     }
 
@@ -713,6 +719,7 @@ pub(crate) fn build_enriched_briefing(
             labels: Some(build_briefing_labels(lang)),
             personalization_context: None,
             data_freshness: compute_data_freshness(),
+            corroboration_available: false,
         };
     }
 
@@ -721,7 +728,7 @@ pub(crate) fn build_enriched_briefing(
     // cosine similarity. Multi-source clusters get a corroboration bonus
     // and alt_sources metadata for the UI badge.
     let mut items = items;
-    apply_topic_clustering(&mut items);
+    let corroboration_available = apply_topic_clustering(&mut items);
 
     // Split items into action-first sections.
     // Actions (security, breaking changes, etc.) lead the briefing.
@@ -780,6 +787,7 @@ pub(crate) fn build_enriched_briefing(
         labels: Some(labels),
         personalization_context,
         data_freshness: compute_data_freshness(),
+        corroboration_available,
     }
 }
 
@@ -851,12 +859,12 @@ fn is_low_quality_commodity(item: &BriefingItem) -> bool {
 /// the clustering algorithm, then applies corroboration bonuses and populates
 /// `alt_sources` / `corroboration_count` on lead items. Best-effort: if the
 /// DB is unavailable or items lack embeddings, the items pass through unchanged.
-fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
+fn apply_topic_clustering(items: &mut Vec<BriefingItem>) -> bool {
     // Collect item IDs for DB lookup
     let ids: Vec<i64> = items.iter().filter_map(|item| item.item_id).collect();
 
     if ids.is_empty() {
-        return;
+        return false;
     }
 
     // Load embeddings from the DB
@@ -869,10 +877,10 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
                     error = %e,
                     "Failed to load embeddings for clustering — skipping"
                 );
-                return;
+                return false;
             }
         },
-        Err(_) => return,
+        Err(_) => return false,
     };
 
     if embedding_data.is_empty() {
@@ -881,7 +889,7 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
             item_count = ids.len(),
             "No embeddings available — corroboration detection skipped for this briefing"
         );
-        return;
+        return false;
     }
 
     // Build cluster candidates by joining briefing items with their embeddings
@@ -907,7 +915,7 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
         .collect();
 
     if candidates.is_empty() {
-        return;
+        return false;
     }
 
     let clusters = crate::topic_clustering::cluster_items(&candidates);
@@ -941,6 +949,8 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) {
             }
         }
     }
+
+    true
 }
 
 /// Items are assumed to be pre-sorted by priority then score descending.
@@ -1294,6 +1304,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 labels: Some(build_briefing_labels(&user_lang)),
                 personalization_context: None,
                 data_freshness: freshness,
+                corroboration_available: false,
             };
             // Still mark as fired so we don't re-trigger the stale warning all day
             {
@@ -2455,6 +2466,7 @@ mod tests {
             labels: None,
             personalization_context: None,
             data_freshness: None,
+            corroboration_available: false,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
@@ -2705,6 +2717,7 @@ mod tests {
             labels: None,
             personalization_context: None,
             data_freshness: None,
+            corroboration_available: false,
         }
     }
 

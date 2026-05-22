@@ -600,6 +600,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
         labels: None,
         personalization_context: None,
         data_freshness: None,
+        corroboration_available: false,
     };
 
     crate::briefing_window::show_briefing(&app, &preview);

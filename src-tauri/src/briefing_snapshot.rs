@@ -289,6 +289,7 @@ mod tests {
             labels: None,
             personalization_context: None,
             data_freshness: None,
+            corroboration_available: false,
         }
     }
 

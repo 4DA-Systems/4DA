@@ -44,6 +44,7 @@ var openAppBtn = document.getElementById('open-app-btn');
 
 var dismissTimer = null;
 var isHovering = false;
+var corroborationAvailable = false;
 
 // i18n: translatable strings (populated from Rust payload, defaults to English)
 var gapDaysSuffix = 'd since last signal';
@@ -145,7 +146,7 @@ function buildItemHtml(item) {
   }
 
   var corrobHtml = '';
-  if (item.corroboration_count && item.corroboration_count > 1) {
+  if (corroborationAvailable && item.corroboration_count && item.corroboration_count > 1) {
     corrobHtml = '<span class="corrob-badge">' + item.corroboration_count + ' sources</span>';
   }
 
@@ -236,6 +237,9 @@ function classifyItem(item) {
 function renderBriefing(data) {
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
+
+  // Track whether corroboration detection ran (embeddings available)
+  corroborationAvailable = !!data.corroboration_available;
 
   // Data staleness & source health indicator
   if (data.data_freshness) {
