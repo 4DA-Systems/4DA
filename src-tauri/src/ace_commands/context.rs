@@ -306,6 +306,136 @@ pub async fn ace_get_suggested_interests() -> Result<Vec<serde_json::Value>> {
     Ok(suggestions)
 }
 
+/// Bootstrap topic affinities from high-scoring analysis results.
+///
+/// Items that the scoring pipeline rates highly represent implicit user interest —
+/// their topics should seed the learned axis so it can fire on future items.
+/// Only runs when `topic_affinities` is empty (cold-start). Once the user has
+/// real engagement data (clicks, saves, dismissals), this is a no-op.
+///
+/// The seeded rows use `positive_signals = 3, total_exposures = 3` so they clear
+/// the read-path threshold (`total_exposures >= 3`) in `ace_context.rs`. The
+/// affinity score is scaled by the average scoring strength of items containing
+/// that topic, producing a moderate positive signal that real engagement can
+/// override.
+pub(crate) fn seed_topic_affinities_from_analysis(
+    results: &[crate::SourceRelevance],
+) -> Result<usize> {
+    let ace = crate::get_ace_engine()?;
+
+    // Only seed during cold-start — once ANY affinities exist, bail out
+    let existing = ace.get_topic_affinities_min(1).unwrap_or_default();
+    if !existing.is_empty() {
+        return Ok(0);
+    }
+
+    // Collect topics from items scoring above the relevance threshold
+    let threshold = crate::get_relevance_threshold();
+    let high_scoring: Vec<&crate::SourceRelevance> = results
+        .iter()
+        .filter(|r| r.top_score >= threshold && r.relevant && !r.excluded)
+        .collect();
+
+    if high_scoring.is_empty() {
+        return Ok(0);
+    }
+
+    // Extract and count topic frequencies from high-scoring items.
+    // track (occurrence_count, sum_of_top_scores) per lowercased topic.
+    let mut topic_counts: std::collections::HashMap<String, (usize, f32)> =
+        std::collections::HashMap::new();
+
+    // Stop-words and very short tokens that add noise, not signal
+    const STOP_WORDS: &[&str] = &[
+        "the", "and", "for", "with", "how", "what", "why", "from", "that", "this", "are", "was",
+        "has", "its", "can", "not", "but", "all", "new", "you", "your", "will", "use", "using",
+        "about", "more", "into",
+    ];
+
+    for item in &high_scoring {
+        let topics = crate::extract_topics(&item.title, "", &[]);
+        for topic in topics {
+            let topic_lower = topic.to_lowercase();
+            if topic_lower.len() <= 2 || STOP_WORDS.contains(&topic_lower.as_str()) {
+                continue;
+            }
+            let entry = topic_counts.entry(topic_lower).or_insert((0, 0.0));
+            entry.0 += 1;
+            entry.1 += item.top_score;
+        }
+    }
+
+    // Seed topics that appear in 2+ high-scoring items (not one-off noise)
+    let conn = ace.conn.lock();
+    let mut seeded = 0;
+
+    for (topic, (count, total_score)) in &topic_counts {
+        if *count < 2 {
+            continue;
+        }
+
+        let avg_score = total_score / *count as f32;
+
+        // Mirror the formula from update_topic_affinities at 3 exposures:
+        //   affinity_score = (positive - negative) / total * min(total/20, 1)
+        //   confidence = min(total/20, 1)
+        // With 3 positive, 0 negative, total=3:
+        //   raw = 3/3 = 1.0, scale = 3/20 = 0.15
+        //   affinity_score = 1.0 * 0.15 = 0.15
+        //   confidence = 0.15
+        // We modulate by avg_score so stronger-scoring topics get stronger affinities.
+        let scale = 3.0_f32 / 20.0;
+        let affinity_score = avg_score.min(1.0) * scale;
+        let confidence = scale;
+
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO topic_affinities
+                (topic, positive_signals, negative_signals, total_exposures,
+                 affinity_score, confidence, last_interaction, decay_applied)
+             VALUES (?1, 3, 0, 3, ?2, ?3, datetime('now'), 0)",
+            rusqlite::params![topic, affinity_score, confidence],
+        );
+
+        match result {
+            Ok(1) => {
+                seeded += 1;
+                debug!(
+                    target: "4da::analysis",
+                    topic = %topic,
+                    occurrences = count,
+                    avg_score = avg_score,
+                    affinity = affinity_score,
+                    "Seeded topic affinity from high-scoring items"
+                );
+            }
+            Ok(_) => {
+                // INSERT OR IGNORE hit a conflict — topic already exists
+            }
+            Err(e) => {
+                debug!(
+                    target: "4da::analysis",
+                    topic = %topic,
+                    error = %e,
+                    "Failed to seed topic affinity"
+                );
+            }
+        }
+    }
+
+    drop(conn);
+
+    if seeded > 0 {
+        info!(
+            target: "4da::analysis",
+            seeded,
+            high_scoring = high_scoring.len(),
+            "Cold-start: seeded topic affinities from high-scoring analysis results"
+        );
+    }
+
+    Ok(seeded)
+}
+
 #[cfg(test)]
 mod tests {
     /// Helper: build a suggestion entry matching the shape produced by ace_get_suggested_interests

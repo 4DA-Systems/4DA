@@ -304,6 +304,12 @@ pub(crate) fn initialize_pre_tauri() {
             let ctx_count = db.context_count().unwrap_or(0);
             let item_count = db.total_item_count().unwrap_or(0);
             info!(target: "4da::startup", context_chunks = ctx_count, source_items = item_count, "Database ready");
+
+            match db.purge_adapter_level_feed_health() {
+                Ok(0) => {}
+                Ok(n) => info!(target: "4da::startup", purged = n, "Purged adapter-level phantom entries from feed_health"),
+                Err(e) => warn!(target: "4da::startup", error = %e, "Failed to purge phantom feed_health entries"),
+            }
         }
         Err(e) => {
             error!(target: "4da::startup", error = %e, "Database initialization failed");

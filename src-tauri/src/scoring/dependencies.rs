@@ -261,6 +261,48 @@ pub(crate) fn is_ambiguous_dep_name(term: &str) -> bool {
     COMMON_ENGLISH_WORDS.contains(&term)
 }
 
+/// Infrastructure dependencies are ubiquitous ecosystem tools that don't indicate
+/// domain-specific relevance. Matching content against these deps produces noise
+/// because every project has them.
+fn is_infrastructure_dep(name: &str) -> bool {
+    let normalized = normalize_package_name(name);
+
+    // Test infrastructure
+    if normalized.contains("testing-library")
+        || normalized.contains("jest")
+        || normalized.contains("vitest")
+        || normalized.contains("playwright")
+        || normalized.contains("cypress")
+        || normalized == "serial_test"
+        || normalized == "victauri-test"
+        || normalized == "victauri_test"
+    {
+        return true;
+    }
+
+    // TypeScript type declarations (@types/*)
+    if normalized.starts_with("types-") && !normalized.contains("typescript") {
+        return true;
+    }
+
+    // Linting and formatting
+    if normalized.contains("eslint") || normalized.contains("prettier") {
+        return true;
+    }
+
+    // Build tooling (when matched as subterms, these are noise)
+    if normalized == "ts-node" || normalized == "tsx" {
+        return true;
+    }
+
+    // Monitoring/error tracking (infrastructure, not domain signal)
+    if normalized.contains("sentry") && normalized != "sentry" {
+        return true;
+    }
+
+    false
+}
+
 /// Major framework/ecosystem names that are too broad as subterms.
 /// "react" appearing in "sentry-react" should NOT match every React article.
 /// The full compound name ("sentry-react") still matches — only the bare
@@ -560,6 +602,14 @@ pub(crate) fn match_dependencies(
         // `x509-cert` came in via rustls — background noise at half weight.
         if !info.is_direct {
             confidence *= 0.5;
+        }
+
+        // Infrastructure dependencies (test libraries, type declarations, linting,
+        // monitoring) are present in virtually every project of their ecosystem.
+        // Matching "testing" against testing-library-jest-dom doesn't mean the content
+        // is about testing in the user's context. Dampen to prevent false confirmations.
+        if is_infrastructure_dep(&info.package_name) {
+            confidence *= 0.3;
         }
 
         // Version intelligence
@@ -1218,5 +1268,28 @@ mod tests {
             matches[0].confidence
         );
         assert!(score > 0.0, "Score should be positive");
+    }
+
+    #[test]
+    fn test_infrastructure_deps() {
+        assert!(is_infrastructure_dep("@testing-library/jest-dom"));
+        assert!(is_infrastructure_dep("@testing-library/react"));
+        assert!(is_infrastructure_dep("vitest"));
+        assert!(is_infrastructure_dep("@types/node"));
+        assert!(is_infrastructure_dep("@types/jest-axe"));
+        assert!(is_infrastructure_dep("typescript-eslint-parser"));
+        assert!(is_infrastructure_dep("@sentry/react"));
+        assert!(is_infrastructure_dep("@sentry/node"));
+        assert!(is_infrastructure_dep("ts-node"));
+
+        // Should NOT be infrastructure
+        assert!(!is_infrastructure_dep("tokio"));
+        assert!(!is_infrastructure_dep("serde"));
+        assert!(!is_infrastructure_dep("react"));
+        assert!(!is_infrastructure_dep("typescript"));
+        assert!(!is_infrastructure_dep("better-sqlite3"));
+        assert!(!is_infrastructure_dep("sentry")); // standalone sentry is domain-relevant
+        assert!(!is_infrastructure_dep("image"));
+        assert!(!is_infrastructure_dep("i18next-resources-to-backend"));
     }
 }

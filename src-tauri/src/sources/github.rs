@@ -86,6 +86,9 @@ impl GitHubSource {
     }
 
     /// Build GitHub search query string
+    ///
+    /// Returns a human-readable query with real spaces. URL encoding is handled
+    /// by reqwest's `.query()` when the request is built in `fetch_items`.
     fn build_search_query(&self) -> String {
         let today = chrono::Utc::now();
         let week_ago = today - chrono::Duration::days(7);
@@ -97,10 +100,10 @@ impl GitHubSource {
             .iter()
             .map(|lang| format!("language:{lang}"))
             .collect::<Vec<_>>()
-            .join("+OR+");
+            .join(" OR ");
 
         // Full query: languages + stars filter + recent activity
-        format!("{lang_query}+stars:>100+pushed:>{week_ago_str}")
+        format!("{lang_query} stars:>100 pushed:>{week_ago_str}")
     }
 }
 
@@ -153,17 +156,21 @@ impl Source for GitHubSource {
         );
 
         let query = self.build_search_query();
-        let url = format!(
-            "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page={}",
-            query, self.config.max_items
-        );
+        let per_page = self.config.max_items.to_string();
 
         info!(query = %query, "GitHub search query");
 
-        // Fetch search results
+        // Fetch search results — use .query() so reqwest URL-encodes the `>`
+        // characters and spaces properly (raw format! embedding caused HTTP 422).
         let response = self
             .client
-            .get(&url)
+            .get("https://api.github.com/search/repositories")
+            .query(&[
+                ("q", query.as_str()),
+                ("sort", "stars"),
+                ("order", "desc"),
+                ("per_page", per_page.as_str()),
+            ])
             .header("Accept", "application/vnd.github.v3+json")
             .send()
             .await
@@ -344,13 +351,14 @@ mod tests {
             GitHubSource::with_languages(vec!["rust".to_string(), "typescript".to_string()]);
         let query = source.build_search_query();
 
-        // Should contain language filters
-        assert!(query.contains("language:rust"));
-        assert!(query.contains("language:typescript"));
-        // Should contain stars filter
-        assert!(query.contains("stars:>100"));
-        // Should contain date filter
-        assert!(query.contains("pushed:>"));
+        // Should contain language filters joined with " OR " (spaces, not +)
+        assert!(query.contains("language:rust OR language:typescript"));
+        // Should contain stars filter separated by space
+        assert!(query.contains(" stars:>100"));
+        // Should contain date filter separated by space
+        assert!(query.contains(" pushed:>"));
+        // Must NOT contain the old + separators (caused HTTP 422)
+        assert!(!query.contains("+OR+"), "query must use spaces, not + separators");
     }
 
     #[test]

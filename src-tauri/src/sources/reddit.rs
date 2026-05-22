@@ -87,6 +87,7 @@ impl RedditSource {
         let response = self
             .client
             .get(&url)
+            .header("User-Agent", "4DA:com.4da.app:1.0 (by /u/4da-desktop)")
             .send()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;

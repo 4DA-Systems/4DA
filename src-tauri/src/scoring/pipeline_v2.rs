@@ -836,6 +836,7 @@ fn compute_quality_composite(
     let competing_mult = crate::competing_tech::compute_competing_penalty(
         &raw.topics,
         input.title,
+        input.content,
         &ctx.domain_profile.primary_stack,
     );
 

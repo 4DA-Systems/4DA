@@ -113,7 +113,6 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 info!(target: "4da::cache", source = %st, fetched = filtered, "Fetched {name} items (quality-gated)");
                 summary.succeeded += 1;
 
-                db.record_feed_success(&st, &st).ok();
                 db.record_source_health(&st, true, filtered as i64, 0, None)
                     .ok();
 
@@ -143,7 +142,6 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 warn!(target: "4da::cache", source = %st, error = %e, "Fetch failed after retries");
                 summary.failed += 1;
                 let err_msg = e.to_string();
-                db.record_feed_failure(&st, &st, &err_msg).ok();
                 db.record_source_health(&st, false, 0, 0, Some(&err_msg))
                     .ok();
             }

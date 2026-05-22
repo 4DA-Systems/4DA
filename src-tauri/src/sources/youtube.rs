@@ -376,6 +376,9 @@ impl Source for YouTubeSource {
                         .push((channel.channel_id.clone(), e.to_string()));
                 }
             }
+
+            // Delay between channel fetches to avoid YouTube rate-limiting (404s)
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         }
 
         // Limit total items
