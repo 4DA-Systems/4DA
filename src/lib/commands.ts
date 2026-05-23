@@ -775,9 +775,19 @@ interface CommandMap {
   get_ai_cost_estimate: { params: { provider: string; model: string; tokensIn: number; tokensOut: number }; result: AiCostEstimate };
   get_ai_cost_recommendation: { params: Record<string, never>; result: AiCostRecommendation };
 
+  // -- Content Graph --
+  build_content_graph: { params: { days?: number; max_nodes?: number }; result: ContentGraph };
+
   // -- Waitlist --
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
 
+}
+
+interface ContentGraph {
+  nodes: Array<{ id: number; title: string; url: string | null; source_type: string; relevance_score: number; signal_type: string | null; signal_priority: string | null; content_type: string | null; x: number; y: number; cluster_id: number | null }>;
+  edges: Array<{ source: number; target: number; weight: number; edge_type: string }>;
+  clusters: Array<{ id: number; label: string; items: number[]; color_hint: string | null }>;
+  meta: { total_items: number; total_edges: number; period_days: number; built_at: string };
 }
 
 // ============================================================================

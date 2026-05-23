@@ -1300,10 +1300,13 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 .collect()
         } else {
             // Fall back to DB query — now reads real scores and filters by language.
-            // Use a 72-hour window (not 24h) so users returning after a weekend
-            // or vacation still get a briefing from their last active session.
+            // The scheduler runs a fresh fetch+analyze before the briefing fires,
+            // so this path only triggers if analysis_state.results is still None
+            // (e.g. analysis failed). Use a 6-hour window — tight enough to avoid
+            // surfacing yesterday's stale content, wide enough to catch items from
+            // the most recent overnight fetch cycle.
             if let Ok(db) = crate::get_database() {
-                let period_start = chrono::Utc::now() - chrono::Duration::hours(72);
+                let period_start = chrono::Utc::now() - chrono::Duration::hours(6);
                 db.get_relevant_items_since(
                     period_start,
                     BRIEFING_SCORE_FLOOR.into(),
@@ -2009,6 +2012,40 @@ pub(crate) async fn synthesize_morning_briefing(
         (tech, topics)
     };
 
+    // Load actual installed dependencies so the LLM knows what's in the user's stack
+    let deps_summary = match crate::open_db_connection() {
+        Ok(conn) => {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT DISTINCT package_name, language FROM project_dependencies \
+                     WHERE is_dev = 0 \
+                     ORDER BY package_name LIMIT 50",
+                )
+                .unwrap_or_else(|_| {
+                    // Fallback: return a statement that yields no rows (table might not exist)
+                    conn.prepare("SELECT NULL, NULL WHERE 0").unwrap()
+                });
+            let deps: Vec<String> = stmt
+                .query_map(rusqlite::params![], |row| {
+                    let name: String = row.get(0)?;
+                    let lang: String = row.get(1)?;
+                    Ok(format!("{name} ({lang})"))
+                })
+                .ok()
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default();
+            if deps.is_empty() {
+                "None detected".to_string()
+            } else {
+                deps.join(", ")
+            }
+        }
+        Err(e) => {
+            tracing::warn!(target: "4da::briefing", error = %e, "Failed to load deps for briefing");
+            "None detected".to_string()
+        }
+    };
+
     let items_text = briefing
         .items
         .iter()
@@ -2107,6 +2144,7 @@ QUALITY RULES:
 7. NEVER speculate about implications not stated in the signals. "could impact your X" without evidence is hallucination. Stick to what the signals actually say.
 8. If only 1 cluster is strong, write 1 cluster. Don't force a second cluster from weak signals.
 9. NEVER invent numbers, percentages, or statistics not explicitly stated in the signals. "2-3x", "35%", "second this quarter" are claims -- they must come from the input, not your imagination.
+10. ONLY mention technologies that appear in the developer's installed dependencies list or tech stack. If a signal mentions a package NOT in the developer's dependency list, do not claim it "impacts your stack" or "affects your applications". You may still mention it as industry news, but frame it accordingly: "X released Y" not "X affects your stack".
 
 BANNED:
 - Restating signal titles without adding context or connecting dots
@@ -2144,11 +2182,13 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     let full_system_prompt = format!("{system_prompt}{language_instruction}");
 
     let user_prompt = format!(
-        "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\n\
+        "Developer context:\nTech stack: {tech}\nWorking on: {topics}\n\
+         Installed dependencies: {deps}\n\n\
          {count} signals:\n{items}\n{chains}{gaps}\n\
          Synthesize my morning intelligence briefing.",
         tech = tech_summary,
         topics = topics_summary,
+        deps = deps_summary,
         count = briefing.items.len(),
         items = items_text,
         chains = chains_text,

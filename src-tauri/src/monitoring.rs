@@ -67,6 +67,11 @@ pub struct MonitoringState {
     pub last_cve_scan: AtomicU64,
     /// Last dependency health check timestamp (unix seconds)
     pub last_dep_health_check: AtomicU64,
+    /// When true, the briefing is waiting for a fresh analysis before firing.
+    /// Set by the briefing-due check; cleared after the briefing fires.
+    pub briefing_needs_fresh_data: AtomicBool,
+    /// Ticks spent waiting for pre-briefing analysis. Reset when briefing fires.
+    pub briefing_wait_ticks: AtomicU64,
 }
 
 impl Default for MonitoringState {
@@ -86,6 +91,8 @@ impl Default for MonitoringState {
             last_morning_briefing_date: parking_lot::Mutex::new(None),
             last_cve_scan: AtomicU64::new(0),
             last_dep_health_check: AtomicU64::new(0),
+            briefing_needs_fresh_data: AtomicBool::new(false),
+            briefing_wait_ticks: AtomicU64::new(0),
         }
     }
 }
@@ -924,28 +931,46 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
             // Morning briefing notification — fires once per day at the configured time.
             //
-            // Pre-fetch gate: when the briefing is about to fire, run a fresh
-            // fetch+analyze cycle FIRST so the briefing reads today's data instead
-            // of yesterday's stale results. Without this, the scheduler's ordering
-            // (briefing check before scheduled analysis) caused the briefing to
-            // consistently surface 24-72h old content.
+            // Freshness gate: when the briefing is due, check whether analysis
+            // results are stale (no results, or last completed >4h ago). If stale,
+            // force-trigger a fresh fetch+analyze via the scheduled-analysis event
+            // and defer the briefing to the next tick (~60s). This ensures the
+            // briefing always reads today's data, fixing the race condition where
+            // check_morning_briefing fired before run_scheduled_analysis.
+            let mut skip_briefing = false;
             if crate::monitoring_notifications::is_morning_briefing_due(&state) {
-                info!(target: "4da::monitor", "Morning briefing due — running pre-briefing analysis");
-                if let Err(e) = crate::source_fetching::fill_cache_background(&app).await {
-                    warn!(target: "4da::monitor", error = %e, "Pre-briefing cache fill failed, using existing data");
+                let results_are_fresh = {
+                    let analysis_state = crate::get_analysis_state().lock();
+                    analysis_state.last_completed_at.as_ref().map_or(false, |ts| {
+                        chrono::DateTime::parse_from_rfc3339(ts).map_or(false, |completed| {
+                            chrono::Utc::now().signed_duration_since(completed).num_hours() < 4
+                        })
+                    })
+                };
+
+                if !results_are_fresh {
+                    if !state.briefing_needs_fresh_data.swap(true, Ordering::Relaxed) {
+                        info!(target: "4da::monitor", "Morning briefing due but results are stale — triggering fresh analysis");
+                        if !state.is_checking.swap(true, Ordering::SeqCst) {
+                            state.last_check.store(now, Ordering::Relaxed);
+                            state.total_checks.fetch_add(1, Ordering::Relaxed);
+                            let _ = app.emit("scheduled-analysis", ());
+                        }
+                    }
+                    let waited_ticks = state.briefing_wait_ticks.fetch_add(1, Ordering::Relaxed);
+                    if waited_ticks < 5 {
+                        skip_briefing = true;
+                    } else {
+                        info!(target: "4da::monitor", "Pre-briefing analysis timeout after 5 ticks — proceeding with available data");
+                    }
                 }
-                match crate::analysis_status::analyze_cached_content_impl(&app).await {
-                    Ok(results) => {
-                        let relevant = results.iter().filter(|r| r.relevant).count();
-                        info!(target: "4da::monitor", relevant, total = results.len(), "Pre-briefing analysis complete");
-                        let _ = app.emit("analysis-complete", &results);
-                    }
-                    Err(e) => {
-                        warn!(target: "4da::monitor", error = %e, "Pre-briefing analysis failed, using cached results");
-                    }
+                if !skip_briefing {
+                    state.briefing_needs_fresh_data.store(false, Ordering::Relaxed);
+                    state.briefing_wait_ticks.store(0, Ordering::Relaxed);
                 }
             }
 
+            if !skip_briefing {
             if let Some(briefing) = crate::monitoring_notifications::check_morning_briefing(&state)
             {
                 info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
@@ -1009,6 +1034,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     });
                 }
             }
+            } // !skip_briefing
 
             // Suns: tick all enabled suns
             {
