@@ -8,6 +8,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => (
   showSettings: false,
   showSplash: true,
   activeView: 'briefing',
+  signalViewMode: 'list',
   isFirstRun: false,
   firstRunDismissed: false,
   embeddingMode: null,
@@ -18,6 +19,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => (
   setActiveView: (view) => {
     if (VALID_VIEWS.includes(view)) set({ activeView: view });
   },
+  setSignalViewMode: (mode) => set({ signalViewMode: mode }),
   setIsFirstRun: (v) => set({ isFirstRun: v }),
   setFirstRunDismissed: (v) => set({ firstRunDismissed: v }),
   setEmbeddingMode: (mode) => set({ embeddingMode: mode }),

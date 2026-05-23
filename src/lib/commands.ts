@@ -784,10 +784,10 @@ interface CommandMap {
 }
 
 interface ContentGraph {
-  nodes: Array<{ id: number; title: string; url: string | null; source_type: string; relevance_score: number; signal_type: string | null; signal_priority: string | null; content_type: string | null; x: number; y: number; cluster_id: number | null }>;
-  edges: Array<{ source: number; target: number; weight: number; edge_type: string }>;
-  clusters: Array<{ id: number; label: string; items: number[]; color_hint: string | null }>;
-  meta: { total_items: number; total_edges: number; period_days: number; built_at: string };
+  nodes: Array<{ id: number; title: string; url: string | null; source_type: string; relevance_score: number; signal_type: string | null; signal_priority: string | null; created_at: string; primary_topic: string | null; cluster_id: string | null; x: number; y: number }>;
+  edges: Array<{ source: number; target: number; edge_type: 'semantic' | 'chain' | 'concept' | 'convergence' | 'duplicate'; weight: number; label: string | null; methods: string[] }>;
+  clusters: Array<{ id: string; label: string; node_ids: number[]; source_count: number; centroid_x: number; centroid_y: number }>;
+  meta: { total_items: number; total_edges: number; cluster_count: number; time_window_days: number; edge_threshold: string };
 }
 
 // ============================================================================

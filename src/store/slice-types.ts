@@ -46,10 +46,13 @@ export type ActiveView =
   | 'blindspots'
   | 'playbook';
 
+export type SignalViewMode = 'list' | 'graph';
+
 export interface UiSlice {
   showSettings: boolean;
   showSplash: boolean;
   activeView: ActiveView;
+  signalViewMode: SignalViewMode;
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
@@ -57,6 +60,7 @@ export interface UiSlice {
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
   setActiveView: (view: ActiveView) => void;
+  setSignalViewMode: (mode: SignalViewMode) => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
