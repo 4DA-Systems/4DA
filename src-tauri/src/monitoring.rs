@@ -1032,12 +1032,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             state.last_check.store(now, Ordering::Relaxed);
             state.total_checks.fetch_add(1, Ordering::Relaxed);
 
-            // Run analysis directly (silently, with differential scoring)
-            let bg_app = app.clone();
-            let bg_state = state.clone();
-            tauri::async_runtime::spawn(async move {
-                crate::scoring::run_background_analysis(&bg_app, &bg_state).await;
-            });
+            // Emit scheduled-analysis event to trigger fetch-then-analyze pipeline.
+            // This routes through run_scheduled_analysis() which calls
+            // fill_cache_background (fetch new items) before scoring.
+            if let Err(e) = app.emit("scheduled-analysis", ()) {
+                warn!(target: "4da::monitor", error = %e, "Failed to emit scheduled-analysis event");
+                state.is_checking.store(false, Ordering::SeqCst);
+            }
         }
     });
 }
