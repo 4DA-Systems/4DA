@@ -122,7 +122,11 @@ struct RawItem {
     embedding: Vec<f32>,
 }
 
-pub fn build_graph(conn: &rusqlite::Connection, days: u32, max_nodes: usize) -> Result<ContentGraph> {
+pub fn build_graph(
+    conn: &rusqlite::Connection,
+    days: u32,
+    max_nodes: usize,
+) -> Result<ContentGraph> {
     let items = load_scored_items(conn, days, max_nodes)?;
     if items.is_empty() {
         return Ok(ContentGraph {
@@ -152,7 +156,9 @@ pub fn build_graph(conn: &rusqlite::Connection, days: u32, max_nodes: usize) -> 
     let edge_count_per_node = count_edges_per_node(&edges);
     let mut nodes: Vec<GraphNode> = items
         .iter()
-        .filter(|item| edge_count_per_node.get(&item.id).copied().unwrap_or(0) >= MIN_EDGES_TO_APPEAR)
+        .filter(|item| {
+            edge_count_per_node.get(&item.id).copied().unwrap_or(0) >= MIN_EDGES_TO_APPEAR
+        })
         .map(|item| {
             let cluster_id = clusters
                 .iter()
@@ -205,14 +211,23 @@ pub fn build_graph(conn: &rusqlite::Connection, days: u32, max_nodes: usize) -> 
         "Content graph built"
     );
 
-    Ok(ContentGraph { nodes, edges, clusters, meta })
+    Ok(ContentGraph {
+        nodes,
+        edges,
+        clusters,
+        meta,
+    })
 }
 
 // ============================================================================
 // Data Loading
 // ============================================================================
 
-fn load_scored_items(conn: &rusqlite::Connection, days: u32, max_nodes: usize) -> Result<Vec<RawItem>> {
+fn load_scored_items(
+    conn: &rusqlite::Connection,
+    days: u32,
+    max_nodes: usize,
+) -> Result<Vec<RawItem>> {
     let mut stmt = conn.prepare(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.embedding
@@ -292,7 +307,11 @@ fn compute_semantic_edges(items: &[RawItem], edges: &mut Vec<GraphEdge>) {
     }
 }
 
-fn compute_chain_edges(conn: &rusqlite::Connection, id_set: &HashSet<i64>, edges: &mut Vec<GraphEdge>) {
+fn compute_chain_edges(
+    conn: &rusqlite::Connection,
+    id_set: &HashSet<i64>,
+    edges: &mut Vec<GraphEdge>,
+) {
     let chains = match detect_chains(conn) {
         Ok(c) => c,
         Err(e) => {
@@ -457,13 +476,12 @@ fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphCluster]) {
 
 fn extract_title_keywords(title: &str) -> Vec<String> {
     const STOPWORDS: &[&str] = &[
-        "a", "an", "the", "in", "of", "for", "to", "and", "is", "new", "on", "at",
-        "by", "with", "from", "this", "that", "it", "its", "has", "have", "are",
-        "was", "were", "been", "be", "do", "does", "did", "will", "would", "could",
-        "should", "may", "can", "not", "no", "but", "or", "if", "how", "what",
-        "when", "where", "who", "why", "which", "all", "each", "every", "both",
-        "more", "most", "other", "some", "such", "than", "too", "very", "just",
-        "about", "up", "out", "so", "show", "hn", "ask",
+        "a", "an", "the", "in", "of", "for", "to", "and", "is", "new", "on", "at", "by", "with",
+        "from", "this", "that", "it", "its", "has", "have", "are", "was", "were", "been", "be",
+        "do", "does", "did", "will", "would", "could", "should", "may", "can", "not", "no", "but",
+        "or", "if", "how", "what", "when", "where", "who", "why", "which", "all", "each", "every",
+        "both", "more", "most", "other", "some", "such", "than", "too", "very", "just", "about",
+        "up", "out", "so", "show", "hn", "ask",
     ];
 
     title
@@ -526,7 +544,8 @@ fn compute_layout(nodes: &mut [GraphNode], edges: &[GraphEdge], clusters: &mut [
 
         // Attractive forces along edges
         for edge in edges {
-            if let (Some(&i), Some(&j)) = (id_to_idx.get(&edge.source), id_to_idx.get(&edge.target)) {
+            if let (Some(&i), Some(&j)) = (id_to_idx.get(&edge.source), id_to_idx.get(&edge.target))
+            {
                 let dx = positions[i].0 - positions[j].0;
                 let dy = positions[i].1 - positions[j].1;
                 let dist = (dx * dx + dy * dy).sqrt().max(1.0);
@@ -604,7 +623,11 @@ fn title_word_overlap(a: &str, b: &str) -> f32 {
 
     let intersection = set_a.intersection(&set_b).count();
     let union = set_a.union(&set_b).count();
-    if union == 0 { 0.0 } else { intersection as f32 / union as f32 }
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f32 / union as f32
+    }
 }
 
 // ============================================================================
@@ -612,10 +635,7 @@ fn title_word_overlap(a: &str, b: &str) -> f32 {
 // ============================================================================
 
 #[tauri::command]
-pub fn build_content_graph(
-    days: Option<u32>,
-    max_nodes: Option<usize>,
-) -> Result<ContentGraph> {
+pub fn build_content_graph(days: Option<u32>, max_nodes: Option<usize>) -> Result<ContentGraph> {
     let conn = crate::open_db_connection()?;
     let d = days.unwrap_or(DEFAULT_DAYS);
     let m = max_nodes.unwrap_or(DEFAULT_MAX_NODES);
@@ -705,7 +725,10 @@ mod tests {
         let mut edges = Vec::new();
         compute_semantic_edges(&items, &mut edges);
 
-        assert!(edges.is_empty(), "orthogonal embeddings should create no edge");
+        assert!(
+            edges.is_empty(),
+            "orthogonal embeddings should create no edge"
+        );
     }
 
     #[test]
@@ -740,14 +763,43 @@ mod tests {
     #[test]
     fn test_cluster_formation() {
         let items = vec![
-            RawItem { id: 1, title: "A".to_string(), url: None, source_type: "hn".to_string(), relevance_score: 0.8, created_at: "".to_string(), embedding: vec![1.0, 0.0] },
-            RawItem { id: 2, title: "B".to_string(), url: None, source_type: "reddit".to_string(), relevance_score: 0.7, created_at: "".to_string(), embedding: vec![1.0, 0.0] },
-            RawItem { id: 3, title: "C".to_string(), url: None, source_type: "github".to_string(), relevance_score: 0.6, created_at: "".to_string(), embedding: vec![0.0, 1.0] },
+            RawItem {
+                id: 1,
+                title: "A".to_string(),
+                url: None,
+                source_type: "hn".to_string(),
+                relevance_score: 0.8,
+                created_at: "".to_string(),
+                embedding: vec![1.0, 0.0],
+            },
+            RawItem {
+                id: 2,
+                title: "B".to_string(),
+                url: None,
+                source_type: "reddit".to_string(),
+                relevance_score: 0.7,
+                created_at: "".to_string(),
+                embedding: vec![1.0, 0.0],
+            },
+            RawItem {
+                id: 3,
+                title: "C".to_string(),
+                url: None,
+                source_type: "github".to_string(),
+                relevance_score: 0.6,
+                created_at: "".to_string(),
+                embedding: vec![0.0, 1.0],
+            },
         ];
 
-        let edges = vec![
-            GraphEdge { source: 1, target: 2, edge_type: EdgeType::Semantic, weight: 0.9, label: None, methods: vec!["semantic".to_string()] },
-        ];
+        let edges = vec![GraphEdge {
+            source: 1,
+            target: 2,
+            edge_type: EdgeType::Semantic,
+            weight: 0.9,
+            label: None,
+            methods: vec!["semantic".to_string()],
+        }];
 
         let clusters = compute_clusters(&items, &edges);
         assert_eq!(clusters.len(), 1, "connected items should form one cluster");
@@ -758,26 +810,71 @@ mod tests {
     #[test]
     fn test_layout_positions_in_bounds() {
         let mut nodes = vec![
-            GraphNode { id: 1, title: "A".to_string(), url: None, source_type: "hn".to_string(), relevance_score: 0.8, signal_type: None, signal_priority: None, created_at: "".to_string(), primary_topic: None, cluster_id: None, x: 0.0, y: 0.0 },
-            GraphNode { id: 2, title: "B".to_string(), url: None, source_type: "reddit".to_string(), relevance_score: 0.7, signal_type: None, signal_priority: None, created_at: "".to_string(), primary_topic: None, cluster_id: None, x: 0.0, y: 0.0 },
+            GraphNode {
+                id: 1,
+                title: "A".to_string(),
+                url: None,
+                source_type: "hn".to_string(),
+                relevance_score: 0.8,
+                signal_type: None,
+                signal_priority: None,
+                created_at: "".to_string(),
+                primary_topic: None,
+                cluster_id: None,
+                x: 0.0,
+                y: 0.0,
+            },
+            GraphNode {
+                id: 2,
+                title: "B".to_string(),
+                url: None,
+                source_type: "reddit".to_string(),
+                relevance_score: 0.7,
+                signal_type: None,
+                signal_priority: None,
+                created_at: "".to_string(),
+                primary_topic: None,
+                cluster_id: None,
+                x: 0.0,
+                y: 0.0,
+            },
         ];
 
-        let edges = vec![
-            GraphEdge { source: 1, target: 2, edge_type: EdgeType::Semantic, weight: 0.9, label: None, methods: vec![] },
-        ];
+        let edges = vec![GraphEdge {
+            source: 1,
+            target: 2,
+            edge_type: EdgeType::Semantic,
+            weight: 0.9,
+            label: None,
+            methods: vec![],
+        }];
 
         compute_layout(&mut nodes, &edges, &mut []);
 
         for node in &nodes {
-            assert!(node.x >= 0.0 && node.x <= LAYOUT_WIDTH, "x out of bounds: {}", node.x);
-            assert!(node.y >= 0.0 && node.y <= LAYOUT_HEIGHT, "y out of bounds: {}", node.y);
+            assert!(
+                node.x >= 0.0 && node.x <= LAYOUT_WIDTH,
+                "x out of bounds: {}",
+                node.x
+            );
+            assert!(
+                node.y >= 0.0 && node.y <= LAYOUT_HEIGHT,
+                "y out of bounds: {}",
+                node.y
+            );
         }
     }
 
     #[test]
     fn test_title_word_overlap_high() {
-        let overlap = title_word_overlap("React 19 server components released", "React 19 server components update");
-        assert!(overlap > LEXICAL_OVERLAP_MIN, "similar titles should overlap >{LEXICAL_OVERLAP_MIN}, got {overlap}");
+        let overlap = title_word_overlap(
+            "React 19 server components released",
+            "React 19 server components update",
+        );
+        assert!(
+            overlap > LEXICAL_OVERLAP_MIN,
+            "similar titles should overlap >{LEXICAL_OVERLAP_MIN}, got {overlap}"
+        );
     }
 
     #[test]
@@ -799,8 +896,22 @@ mod tests {
     #[test]
     fn test_edge_count_per_node() {
         let edges = vec![
-            GraphEdge { source: 1, target: 2, edge_type: EdgeType::Semantic, weight: 0.9, label: None, methods: vec![] },
-            GraphEdge { source: 1, target: 3, edge_type: EdgeType::Chain, weight: 0.8, label: None, methods: vec![] },
+            GraphEdge {
+                source: 1,
+                target: 2,
+                edge_type: EdgeType::Semantic,
+                weight: 0.9,
+                label: None,
+                methods: vec![],
+            },
+            GraphEdge {
+                source: 1,
+                target: 3,
+                edge_type: EdgeType::Chain,
+                weight: 0.8,
+                label: None,
+                methods: vec![],
+            },
         ];
 
         let counts = count_edges_per_node(&edges);
