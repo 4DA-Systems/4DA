@@ -2015,24 +2015,22 @@ pub(crate) async fn synthesize_morning_briefing(
     // Load actual installed dependencies so the LLM knows what's in the user's stack
     let deps_summary = match crate::open_db_connection() {
         Ok(conn) => {
-            let mut stmt = conn
+            let deps: Vec<String> = conn
                 .prepare(
                     "SELECT DISTINCT package_name, language FROM project_dependencies \
                      WHERE is_dev = 0 \
                      ORDER BY package_name LIMIT 50",
                 )
-                .unwrap_or_else(|_| {
-                    // Fallback: return a statement that yields no rows (table might not exist)
-                    conn.prepare("SELECT NULL, NULL WHERE 0").unwrap()
-                });
-            let deps: Vec<String> = stmt
-                .query_map(rusqlite::params![], |row| {
-                    let name: String = row.get(0)?;
-                    let lang: String = row.get(1)?;
-                    Ok(format!("{name} ({lang})"))
-                })
                 .ok()
-                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .and_then(|mut stmt| {
+                    stmt.query_map(rusqlite::params![], |row| {
+                        let name: String = row.get(0)?;
+                        let lang: String = row.get(1)?;
+                        Ok(format!("{name} ({lang})"))
+                    })
+                    .ok()
+                    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                })
                 .unwrap_or_default();
             if deps.is_empty() {
                 "None detected".to_string()
