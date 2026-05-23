@@ -491,48 +491,33 @@ mod tests {
 
     #[test]
     fn test_educational_awesome_list() {
-        let (ct, _) = classify_content(
-            "sindresorhus/awesome-rust (★42000 • Rust)",
-            "",
-        );
+        let (ct, _) = classify_content("sindresorhus/awesome-rust (★42000 • Rust)", "");
         assert_eq!(ct, ContentType::Tutorial);
     }
 
     #[test]
     fn test_educational_freecodecamp() {
-        let (ct, _) = classify_content(
-            "freecodecamp/freecodecamp (★445282 • TypeScript)",
-            "",
-        );
+        let (ct, _) = classify_content("freecodecamp/freecodecamp (★445282 • TypeScript)", "");
         assert_eq!(ct, ContentType::Tutorial);
     }
 
     #[test]
     fn test_educational_learn_repo() {
-        let (ct, _) = classify_content(
-            "nicolo-ribaudo/learn-typescript (★5000 • TypeScript)",
-            "",
-        );
+        let (ct, _) = classify_content("nicolo-ribaudo/learn-typescript (★5000 • TypeScript)", "");
         assert_eq!(ct, ContentType::Tutorial);
     }
 
     #[test]
     fn test_non_educational_real_tool() {
         // Real tools should NOT be classified as educational
-        let (ct, _) = classify_content(
-            "shadcn-ui/ui (★114864 • TypeScript)",
-            "short",
-        );
+        let (ct, _) = classify_content("shadcn-ui/ui (★114864 • TypeScript)", "short");
         assert_ne!(ct, ContentType::Tutorial);
     }
 
     #[test]
     fn test_non_educational_no_star() {
         // Non-GitHub items with "roadmap" in title should not be affected
-        let (ct, _) = classify_content(
-            "Our Q3 product roadmap update",
-            "short",
-        );
+        let (ct, _) = classify_content("Our Q3 product roadmap update", "short");
         assert_ne!(ct, ContentType::Tutorial);
     }
 
