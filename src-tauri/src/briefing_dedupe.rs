@@ -42,6 +42,10 @@ pub fn dedupe_briefing_items(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
             if is_prefix_duplicate(&cand_norm, &ex_norm) {
                 continue 'outer;
             }
+            // Version-series: "TypeScript 5.9 Beta" vs "TypeScript 7.0 Beta"
+            if is_version_series_duplicate(&cand_norm, &ex_norm) {
+                continue 'outer;
+            }
             let ex_bigrams = title_bigrams(&ex_norm);
             // Threshold tuned against production data. 0.55 merges items
             // that differ by 1-2 filler words ("Rust 1.80 released" vs
@@ -86,6 +90,36 @@ pub(crate) fn is_prefix_duplicate(a: &str, b: &str) -> bool {
     }
     let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
     long.starts_with(short) && (long.len() - short.len() <= 200)
+}
+
+/// Strip version numbers from a normalized title to detect version-series duplicates.
+/// "announcing typescript 59 beta" → "announcing typescript beta"
+/// "react 1923 released" → "react released"
+/// "mikro orm 71 lazy ref" → "mikro orm lazy ref"
+fn strip_version_numbers(normalized: &str) -> String {
+    normalized
+        .split_whitespace()
+        .filter(|word| {
+            // Remove tokens that are purely numeric (version fragments)
+            // After normalize_title, "5.9" becomes "59", "19.2.3" becomes "1923"
+            !word.chars().all(|c| c.is_ascii_digit())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Detect version-series duplicates: titles that are identical except for version numbers.
+/// "announcing typescript 59 beta" vs "announcing typescript 70 beta" → true
+/// "rust 180 released" vs "postgres 17 released" → false
+pub(crate) fn is_version_series_duplicate(a: &str, b: &str) -> bool {
+    let a_stripped = strip_version_numbers(a);
+    let b_stripped = strip_version_numbers(b);
+    // Both must have meaningful content after stripping (at least 2 words)
+    if a_stripped.split_whitespace().count() < 2 || b_stripped.split_whitespace().count() < 2 {
+        return false;
+    }
+    // Must be identical after version stripping
+    a_stripped == b_stripped
 }
 
 /// Word-bigram set for Jaccard similarity.
@@ -330,5 +364,74 @@ mod tests {
         assert_eq!(out.len(), 3);
         assert!(out[0].score >= out[1].score);
         assert!(out[1].score >= out[2].score);
+    }
+
+    // ---- version-series dedup -------------------------------------------------
+
+    #[test]
+    fn strip_version_numbers_removes_numeric_tokens() {
+        assert_eq!(
+            strip_version_numbers("announcing typescript 59 beta"),
+            "announcing typescript beta"
+        );
+        assert_eq!(
+            strip_version_numbers("react 1923 released"),
+            "react released"
+        );
+        assert_eq!(
+            strip_version_numbers("rust 180 released"),
+            "rust released"
+        );
+    }
+
+    #[test]
+    fn strip_version_numbers_preserves_non_version_numbers() {
+        // Words with mixed alpha+digit should survive
+        assert_eq!(
+            strip_version_numbers("i18next released"),
+            "i18next released"
+        );
+        assert_eq!(
+            strip_version_numbers("react19 released"),
+            "react19 released"
+        );
+    }
+
+    #[test]
+    fn version_series_detects_typescript_betas() {
+        let a = normalize_title("Announcing TypeScript 5.9 Beta");
+        let b = normalize_title("Announcing TypeScript 6.0 Beta");
+        let c = normalize_title("Announcing TypeScript 7.0 Beta");
+        assert!(is_version_series_duplicate(&a, &b));
+        assert!(is_version_series_duplicate(&b, &c));
+        assert!(is_version_series_duplicate(&a, &c));
+    }
+
+    #[test]
+    fn version_series_rejects_unrelated_titles() {
+        let a = normalize_title("Announcing TypeScript 5.9 Beta");
+        let b = normalize_title("Announcing React 19.2 Release");
+        assert!(!is_version_series_duplicate(&a, &b));
+    }
+
+    #[test]
+    fn version_series_rejects_short_titles() {
+        let a = normalize_title("v5.9");
+        let b = normalize_title("v6.0");
+        assert!(!is_version_series_duplicate(&a, &b));
+    }
+
+    #[test]
+    fn dedupe_collapses_version_series() {
+        let items = vec![
+            mk_item("Announcing TypeScript 5.9 Beta", "hackernews", 0.75),
+            mk_item("Announcing TypeScript 6.0 Beta", "reddit", 0.70),
+            mk_item("Announcing TypeScript 7.0 Beta", "devto", 0.65),
+            mk_item("Postgres 17 ships pg_logical v2", "hackernews", 0.60),
+        ];
+        let out = dedupe_briefing_items(items);
+        assert_eq!(out.len(), 2, "three TS betas collapse to one, Postgres stays");
+        let ts = out.iter().find(|i| i.title.contains("TypeScript")).unwrap();
+        assert!((ts.score - 0.75).abs() < 0.001, "highest-scoring TS beta kept");
     }
 }

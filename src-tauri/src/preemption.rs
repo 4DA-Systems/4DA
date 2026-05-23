@@ -120,6 +120,7 @@ pub struct PreemptionFeed {
 struct DirectRuntimeDep {
     package_name: String,
     project_path: String,
+    language: String,
 }
 
 // ============================================================================
@@ -170,6 +171,58 @@ fn find_unmet_platform_scope(text_lower: &str, user_context_lower: &str) -> Opti
     None
 }
 
+/// Infer the likely package ecosystem from advisory context.
+/// Returns normalized ecosystem strings matching project_dependencies.language values.
+fn infer_advisory_ecosystem(title_lower: &str, source_type: &str) -> Option<&'static str> {
+    // Source-type hints
+    if source_type == "crates_io" {
+        return Some("rust");
+    }
+    if source_type == "npm" {
+        return Some("javascript");
+    }
+    if source_type == "pypi" {
+        return Some("python");
+    }
+
+    // Title-based hints — check for ecosystem markers
+    if title_lower.contains("npm")
+        || title_lower.contains("node.js")
+        || title_lower.contains("nodejs")
+    {
+        return Some("javascript");
+    }
+    if title_lower.contains("crate")
+        || title_lower.contains("cargo")
+        || title_lower.contains("rustc")
+    {
+        return Some("rust");
+    }
+    if title_lower.contains("pypi")
+        || title_lower.contains("pip ")
+        || title_lower.contains("python")
+    {
+        return Some("python");
+    }
+    if title_lower.contains("nuget")
+        || title_lower.contains(".net")
+        || title_lower.contains("dotnet")
+    {
+        return Some("csharp");
+    }
+    if title_lower.contains("maven") || title_lower.contains("gradle") {
+        return Some("java");
+    }
+    if title_lower.contains("rubygem") || title_lower.contains("ruby") {
+        return Some("ruby");
+    }
+    if title_lower.contains("go module") || title_lower.contains("golang") {
+        return Some("go");
+    }
+
+    None // Can't determine — allow match (conservative)
+}
+
 fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRuntimeDep>> {
     let direct_filter = if has_is_direct_column(conn) {
         "AND is_direct = 1"
@@ -182,7 +235,7 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
         ""
     };
     let sql = format!(
-        "SELECT package_name, project_path
+        "SELECT package_name, project_path, language
          FROM project_dependencies
          WHERE is_dev = 0
            {direct_filter}
@@ -193,6 +246,7 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
         Ok(DirectRuntimeDep {
             package_name: row.get(0)?,
             project_path: row.get(1)?,
+            language: row.get(2)?,
         })
     })?;
     rows.collect::<rusqlite::Result<Vec<_>>>()
@@ -202,7 +256,7 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
 fn matched_direct_runtime_deps(
     deps: &[DirectRuntimeDep],
     title_lower: &str,
-    _source_type: &str,
+    source_type: &str,
     _content_type: Option<&str>,
 ) -> Vec<DirectRuntimeDep> {
     deps.iter()
@@ -219,6 +273,15 @@ fn matched_direct_runtime_deps(
             // Advisory-subject: only match if the dep is the advisory's actual subject
             if !is_advisory_subject_match(title_lower, &pkg_lower) {
                 return None;
+            }
+            // Cross-ecosystem guard: if we can infer the advisory's ecosystem and it
+            // doesn't match the dependency's language, skip — prevents npm advisories
+            // matching Rust crates with the same package name.
+            if let Some(advisory_eco) = infer_advisory_ecosystem(title_lower, source_type) {
+                let dep_lang = dep.language.to_lowercase();
+                if dep_lang != advisory_eco {
+                    return None;
+                }
             }
             Some(dep.clone())
         })
