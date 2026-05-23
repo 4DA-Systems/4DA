@@ -378,10 +378,7 @@ mod tests {
             strip_version_numbers("react 1923 released"),
             "react released"
         );
-        assert_eq!(
-            strip_version_numbers("rust 180 released"),
-            "rust released"
-        );
+        assert_eq!(strip_version_numbers("rust 180 released"), "rust released");
     }
 
     #[test]
@@ -430,8 +427,15 @@ mod tests {
             mk_item("Postgres 17 ships pg_logical v2", "hackernews", 0.60),
         ];
         let out = dedupe_briefing_items(items);
-        assert_eq!(out.len(), 2, "three TS betas collapse to one, Postgres stays");
+        assert_eq!(
+            out.len(),
+            2,
+            "three TS betas collapse to one, Postgres stays"
+        );
         let ts = out.iter().find(|i| i.title.contains("TypeScript")).unwrap();
-        assert!((ts.score - 0.75).abs() < 0.001, "highest-scoring TS beta kept");
+        assert!(
+            (ts.score - 0.75).abs() < 0.001,
+            "highest-scoring TS beta kept"
+        );
     }
 }
