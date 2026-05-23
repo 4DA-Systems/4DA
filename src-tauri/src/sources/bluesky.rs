@@ -113,14 +113,14 @@ impl BlueskySource {
     }
 
     /// Truncate text to a maximum character length at a word boundary
-    fn truncate_title(text: &str, max_chars: usize) -> String {
-        if text.len() <= max_chars {
+    fn truncate_title(text: &str, max_bytes: usize) -> String {
+        if text.len() <= max_bytes {
             return text.to_string();
         }
-        // Find last space before limit
-        match text[..max_chars].rfind(' ') {
+        let boundary = text.floor_char_boundary(max_bytes);
+        match text[..boundary].rfind(' ') {
             Some(pos) => format!("{}...", &text[..pos]),
-            None => format!("{}...", &text[..max_chars]),
+            None => format!("{}...", &text[..boundary]),
         }
     }
 

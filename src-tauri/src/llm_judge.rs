@@ -219,7 +219,7 @@ Output JSON array (one per article):
                     score = score,
                     relevant = %relevant,
                     confidence = confidence,
-                    reason = %&reasoning[..reasoning.len().min(50)],
+                    reason = %&reasoning[..reasoning.floor_char_boundary(50)],
                     "Parsed judgment"
                 );
             }

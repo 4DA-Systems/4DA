@@ -293,7 +293,7 @@ fn evaluate_probe_response(response: &str) -> ModelTier {
         }
         Err(_) => {
             debug!(
-                response_preview = &response[..response.len().min(100)],
+                response_preview = &response[..response.floor_char_boundary(100)],
                 "Probe response was not valid JSON"
             );
         }
