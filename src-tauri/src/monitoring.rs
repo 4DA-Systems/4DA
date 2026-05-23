@@ -922,7 +922,30 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Smart batching (Improvement E) -- save mini-digest when threshold reached
             crate::monitoring_jobs::maybe_save_mini_digest(&state);
 
-            // Morning briefing notification — fires once per day at the configured time
+            // Morning briefing notification — fires once per day at the configured time.
+            //
+            // Pre-fetch gate: when the briefing is about to fire, run a fresh
+            // fetch+analyze cycle FIRST so the briefing reads today's data instead
+            // of yesterday's stale results. Without this, the scheduler's ordering
+            // (briefing check before scheduled analysis) caused the briefing to
+            // consistently surface 24-72h old content.
+            if crate::monitoring_notifications::is_morning_briefing_due(&state) {
+                info!(target: "4da::monitor", "Morning briefing due — running pre-briefing analysis");
+                if let Err(e) = crate::source_fetching::fill_cache_background(&app).await {
+                    warn!(target: "4da::monitor", error = %e, "Pre-briefing cache fill failed, using existing data");
+                }
+                match crate::analysis_status::analyze_cached_content_impl(&app).await {
+                    Ok(results) => {
+                        let relevant = results.iter().filter(|r| r.relevant).count();
+                        info!(target: "4da::monitor", relevant, total = results.len(), "Pre-briefing analysis complete");
+                        let _ = app.emit("analysis-complete", &results);
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::monitor", error = %e, "Pre-briefing analysis failed, using cached results");
+                    }
+                }
+            }
+
             if let Some(briefing) = crate::monitoring_notifications::check_morning_briefing(&state)
             {
                 info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
