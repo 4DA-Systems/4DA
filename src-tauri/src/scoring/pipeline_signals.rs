@@ -272,17 +272,17 @@ fn adjust_dna_for_experience(
     use crate::content_dna::ContentType;
     match level {
         Some("learning") => match content_type {
-            ContentType::Tutorial => base * 1.35,    // 0.80→1.08: tutorials are helpful
-            ContentType::Question => base * 1.30,    // 0.65→0.85: questions resonate
+            ContentType::Tutorial => base * 1.35, // 0.80→1.08: tutorials are helpful
+            ContentType::Question => base * 1.30, // 0.65→0.85: questions resonate
             ContentType::HelpRequest => base * 1.25, // 0.50→0.63: may identify with
-            ContentType::ShowAndTell => base * 1.15,  // 0.85→0.98: inspiring projects
-            ContentType::DeepDive => base * 0.90,    // 1.15→1.04: can be overwhelming
+            ContentType::ShowAndTell => base * 1.15, // 0.85→0.98: inspiring projects
+            ContentType::DeepDive => base * 0.90, // 1.15→1.04: can be overwhelming
             _ => base,
         },
         Some("building") => match content_type {
-            ContentType::Tutorial => base * 1.10,    // 0.80→0.88: occasionally useful
-            ContentType::Question => base * 1.10,    // 0.65→0.72: sometimes useful
-            ContentType::ShowAndTell => base * 1.05,  // 0.85→0.89: somewhat inspiring
+            ContentType::Tutorial => base * 1.10, // 0.80→0.88: occasionally useful
+            ContentType::Question => base * 1.10, // 0.65→0.72: sometimes useful
+            ContentType::ShowAndTell => base * 1.05, // 0.85→0.89: somewhat inspiring
             _ => base,
         },
         // "shipping", "leading", None → current calibration (experienced devs)
