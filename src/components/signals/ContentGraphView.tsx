@@ -23,7 +23,12 @@ import type {
 import ContentGraphNodeComponent, { SOURCE_COLORS, type ContentNode } from './ContentGraphNode';
 import ContentGraphEdgeComponent from './ContentGraphEdge';
 
+const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
+
 function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): Node[] {
+  const lastViewed = localStorage.getItem(LAST_VIEW_KEY);
+  const lastViewedMs = lastViewed ? new Date(lastViewed).getTime() : 0;
+
   const contentNodes: Node[] = graphNodes.map((n) => ({
     id: String(n.id),
     type: 'contentNode' as const,
@@ -37,6 +42,7 @@ function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): 
       signal_priority: n.signal_priority,
       primary_topic: n.primary_topic,
       cluster_id: n.cluster_id,
+      isNew: n.created_at ? new Date(n.created_at).getTime() > lastViewedMs : false,
     },
   }));
 
@@ -172,6 +178,7 @@ export default function ContentGraphView() {
         setEdges(flowEdges);
         setBaseEdges(flowEdges);
         setMeta(graph.meta);
+        localStorage.setItem(LAST_VIEW_KEY, new Date().toISOString());
       })
       .catch((err) => {
         if (!cancelled) console.error('[ContentGraph] Failed to load:', err);
@@ -214,8 +221,13 @@ export default function ContentGraphView() {
   }, [hoveredNodeId, connectedNodeIds, setNodes]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    const url = (node.data as ContentNode['data'])?.url;
-    if (url) openExternal(url);
+    if (node.type === 'clusterLabel') return;
+    const data = node.data as ContentNode['data'];
+    const itemId = Number(node.id);
+    if (!Number.isNaN(itemId)) {
+      cmd('record_interaction', { sourceItemId: itemId, action: 'click' }).catch(() => {});
+    }
+    if (data?.url) openExternal(data.url);
   }, []);
 
   const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {

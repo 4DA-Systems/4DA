@@ -11,6 +11,7 @@ interface ContentNodeData {
   signal_priority: string | null;
   primary_topic: string | null;
   cluster_id: string | null;
+  isNew?: boolean;
   [key: string]: unknown;
 }
 
@@ -79,6 +80,19 @@ const ContentGraphNode = memo(function ContentGraphNode({ data }: NodeProps<Cont
         position={Position.Top}
         style={{ width: 0, height: 0, border: 'none', background: 'transparent' }}
       />
+
+      {data.isNew && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: -4,
+            borderRadius: '50%',
+            border: `2px solid ${color}`,
+            opacity: 0.6,
+            animation: 'graph-node-pulse 2s ease-in-out infinite',
+          }}
+        />
+      )}
 
       <div
         style={{

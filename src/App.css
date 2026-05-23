@@ -243,6 +243,12 @@ body {
   unicode-bidi: plaintext;
 }
 
+/* Content graph: new-node pulse ring */
+@keyframes graph-node-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 0; }
+}
+
 /* Accessibility: Respect user's motion preferences */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

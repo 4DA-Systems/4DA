@@ -2015,12 +2015,20 @@ pub(crate) async fn synthesize_morning_briefing(
     // Load actual installed dependencies so the LLM knows what's in the user's stack
     let deps_summary = match crate::open_db_connection() {
         Ok(conn) => {
+            let has_relevance = conn
+                .prepare("SELECT project_relevance FROM project_dependencies LIMIT 1")
+                .is_ok();
+            let query = if has_relevance {
+                "SELECT DISTINCT package_name, language FROM project_dependencies \
+                 WHERE is_dev = 0 AND project_relevance >= 0.3 \
+                 ORDER BY package_name LIMIT 50"
+            } else {
+                "SELECT DISTINCT package_name, language FROM project_dependencies \
+                 WHERE is_dev = 0 \
+                 ORDER BY package_name LIMIT 50"
+            };
             let deps: Vec<String> = conn
-                .prepare(
-                    "SELECT DISTINCT package_name, language FROM project_dependencies \
-                     WHERE is_dev = 0 \
-                     ORDER BY package_name LIMIT 50",
-                )
+                .prepare(query)
                 .ok()
                 .and_then(|mut stmt| {
                     stmt.query_map(rusqlite::params![], |row| {
@@ -2307,6 +2315,69 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         .collect::<Vec<_>>()
         .join("\n");
 
+    // Strip leaked source-type markers the LLM may echo from the input format
+    // e.g., "[Source_type: rss]", "[arxiv]", "[cve]", "[hackernews]"
+    let source_types = [
+        "arxiv",
+        "papers_with_code",
+        "cve",
+        "osv",
+        "github_advisory",
+        "hackernews",
+        "lobsters",
+        "reddit",
+        "dev_to",
+        "medium",
+        "rss",
+        "github",
+        "npm",
+        "crates_io",
+        "pypi",
+        "huggingface",
+        "stackoverflow",
+        "bluesky",
+        "youtube",
+        "producthunt",
+        "go_modules",
+    ];
+    for st in &source_types {
+        // Case-insensitive removal of [source_type] and [Source_type: X] patterns
+        let patterns = [
+            format!("[{}]", st),
+            format!("[{}: {}]", "Source_type", st),
+            format!("[{}: {}]", "source_type", st),
+            format!("[{}]", st.to_uppercase()),
+        ];
+        for pat in &patterns {
+            synthesis = synthesis.replace(pat, "");
+        }
+    }
+
+    // Strip leaked "(affects: ...)" dependency markers
+    // These come from the items_text formatting: " (affects: react, tokio)"
+    while let Some(start_idx) = synthesis.find("(affects:") {
+        if let Some(end_idx) = synthesis[start_idx..].find(')') {
+            synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
+        } else {
+            break;
+        }
+    }
+    // Also catch [Affecting: ...] variant
+    while let Some(start_idx) = synthesis.find("[Affecting:") {
+        if let Some(end_idx) = synthesis[start_idx..].find(']') {
+            synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
+        } else {
+            break;
+        }
+    }
+    while let Some(start_idx) = synthesis.find("[affecting:") {
+        if let Some(end_idx) = synthesis[start_idx..].find(']') {
+            synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
+        } else {
+            break;
+        }
+    }
+
     // Collapse multiple spaces left by cleanup
     while synthesis.contains("  ") {
         synthesis = synthesis.replace("  ", " ");
@@ -2364,11 +2435,13 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
-    // Require at least 50% of salient terms to be grounded. With the expanded
-    // stopword list filtering out platform names, adjectives, and tech acronyms,
-    // remaining terms are genuine proper nouns — 50% is strict enough to catch
-    // hallucinated products/versions while tolerating legitimate cross-item synthesis.
-    const GROUNDEDNESS_THRESHOLD: f32 = 0.50;
+    // Require at least 65% of salient terms to be grounded. The NLP stopword
+    // list already aggressively filters platform names, adjectives, and generic
+    // tech acronyms, so remaining terms are genuine proper nouns. 0.65 balances
+    // catching hallucinated products/versions while tolerating legitimate
+    // cross-item synthesis. Values below 0.5 should always be rejected per the
+    // GroundednessReport contract.
+    const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
         tracing::warn!(
