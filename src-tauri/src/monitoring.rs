@@ -941,15 +941,24 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             if crate::monitoring_notifications::is_morning_briefing_due(&state) {
                 let results_are_fresh = {
                     let analysis_state = crate::get_analysis_state().lock();
-                    analysis_state.last_completed_at.as_ref().map_or(false, |ts| {
-                        chrono::DateTime::parse_from_rfc3339(ts).map_or(false, |completed| {
-                            chrono::Utc::now().signed_duration_since(completed).num_hours() < 4
+                    analysis_state
+                        .last_completed_at
+                        .as_ref()
+                        .map_or(false, |ts| {
+                            chrono::DateTime::parse_from_rfc3339(ts).map_or(false, |completed| {
+                                chrono::Utc::now()
+                                    .signed_duration_since(completed)
+                                    .num_hours()
+                                    < 4
+                            })
                         })
-                    })
                 };
 
                 if !results_are_fresh {
-                    if !state.briefing_needs_fresh_data.swap(true, Ordering::Relaxed) {
+                    if !state
+                        .briefing_needs_fresh_data
+                        .swap(true, Ordering::Relaxed)
+                    {
                         info!(target: "4da::monitor", "Morning briefing due but results are stale — triggering fresh analysis");
                         if !state.is_checking.swap(true, Ordering::SeqCst) {
                             state.last_check.store(now, Ordering::Relaxed);
@@ -965,75 +974,81 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                 }
                 if !skip_briefing {
-                    state.briefing_needs_fresh_data.store(false, Ordering::Relaxed);
+                    state
+                        .briefing_needs_fresh_data
+                        .store(false, Ordering::Relaxed);
                     state.briefing_wait_ticks.store(0, Ordering::Relaxed);
                 }
             }
 
             if !skip_briefing {
-            if let Some(briefing) = crate::monitoring_notifications::check_morning_briefing(&state)
-            {
-                info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
-
-                // Sovereign Cold Boot — persist this briefing for tomorrow's instant
-                // first paint. Will be re-saved with synthesis text when the LLM
-                // narrative completes (below).
-                crate::briefing_snapshot::save_snapshot(&briefing);
-
-                crate::monitoring_notifications::send_morning_briefing_notification(
-                    &app, &briefing,
-                );
-                // Emit event to frontend so it can show an in-app briefing card
-                if let Err(e) = app.emit(
-                    "morning-briefing-ready",
-                    serde_json::json!({
-                        "title": briefing.title,
-                        "total_relevant": briefing.total_relevant,
-                        "items": briefing.items.iter().map(|i| serde_json::json!({
-                            "title": i.title,
-                            "source_type": i.source_type,
-                            "score": i.score,
-                            "signal_type": i.signal_type,
-                        })).collect::<Vec<_>>(),
-                        "data_freshness": briefing.data_freshness,
-                    }),
-                ) {
-                    tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
-                }
-
-                // Async LLM synthesis — narrative intelligence brief
+                if let Some(briefing) =
+                    crate::monitoring_notifications::check_morning_briefing(&state)
                 {
-                    let app_synth = app.clone();
-                    let briefing_synth = briefing.clone();
-                    tauri::async_runtime::spawn(async move {
-                        match crate::monitoring_briefing::synthesize_morning_briefing(
-                            &briefing_synth,
-                        )
-                        .await
-                        {
-                            Ok(synthesis) => {
-                                info!(target: "4da::briefing", "Morning brief synthesis ready");
-                                let _ =
-                                    app_synth.emit_to("briefing", "briefing-synthesis", &synthesis);
-                                let _ = app_synth.emit(
-                                    "morning-briefing-synthesis",
-                                    serde_json::json!({ "synthesis": synthesis }),
-                                );
+                    info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
 
-                                // Re-save snapshot WITH the LLM synthesis text so the
-                                // next cold boot loads the full briefing including the
-                                // narrative paragraph.
-                                let mut enriched = briefing_synth.clone();
-                                enriched.synthesis = Some(synthesis);
-                                crate::briefing_snapshot::save_snapshot(&enriched);
+                    // Sovereign Cold Boot — persist this briefing for tomorrow's instant
+                    // first paint. Will be re-saved with synthesis text when the LLM
+                    // narrative completes (below).
+                    crate::briefing_snapshot::save_snapshot(&briefing);
+
+                    crate::monitoring_notifications::send_morning_briefing_notification(
+                        &app, &briefing,
+                    );
+                    // Emit event to frontend so it can show an in-app briefing card
+                    if let Err(e) = app.emit(
+                        "morning-briefing-ready",
+                        serde_json::json!({
+                            "title": briefing.title,
+                            "total_relevant": briefing.total_relevant,
+                            "items": briefing.items.iter().map(|i| serde_json::json!({
+                                "title": i.title,
+                                "source_type": i.source_type,
+                                "score": i.score,
+                                "signal_type": i.signal_type,
+                            })).collect::<Vec<_>>(),
+                            "data_freshness": briefing.data_freshness,
+                        }),
+                    ) {
+                        tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
+                    }
+
+                    // Async LLM synthesis — narrative intelligence brief
+                    {
+                        let app_synth = app.clone();
+                        let briefing_synth = briefing.clone();
+                        tauri::async_runtime::spawn(async move {
+                            match crate::monitoring_briefing::synthesize_morning_briefing(
+                                &briefing_synth,
+                            )
+                            .await
+                            {
+                                Ok(synthesis) => {
+                                    info!(target: "4da::briefing", "Morning brief synthesis ready");
+                                    let _ = app_synth.emit_to(
+                                        "briefing",
+                                        "briefing-synthesis",
+                                        &synthesis,
+                                    );
+                                    let _ = app_synth.emit(
+                                        "morning-briefing-synthesis",
+                                        serde_json::json!({ "synthesis": synthesis }),
+                                    );
+
+                                    // Re-save snapshot WITH the LLM synthesis text so the
+                                    // next cold boot loads the full briefing including the
+                                    // narrative paragraph.
+                                    let mut enriched = briefing_synth.clone();
+                                    enriched.synthesis = Some(synthesis);
+                                    crate::briefing_snapshot::save_snapshot(&enriched);
+                                }
+                                Err(e) => {
+                                    info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
+                                }
                             }
-                            Err(e) => {
-                                info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
-                            }
-                        }
-                    });
+                        });
+                    }
                 }
-            }
             } // !skip_briefing
 
             // Suns: tick all enabled suns
