@@ -232,6 +232,11 @@ pub fn classify_content(title: &str, content: &str) -> (ContentType, f32) {
         );
     }
 
+    // 5b. Educational repositories (GitHub roadmaps, awesome-lists, learn-* repos)
+    if is_educational_repo(&title_lower) {
+        return (ContentType::Tutorial, ContentType::Tutorial.multiplier());
+    }
+
     // 6. Generic Help Request (harsher than regular question — low information density)
     if is_generic_help_request(&title_lower) {
         return (
@@ -468,6 +473,67 @@ mod tests {
     fn test_job_posting_marker() {
         let (ct, _) = classify_content("senior rust engineer (m/f/d) - berlin", "");
         assert_eq!(ct, ContentType::Hiring);
+    }
+
+    // ========================================================================
+    // Educational repository detection
+    // ========================================================================
+
+    #[test]
+    fn test_educational_developer_roadmap() {
+        let (ct, mult) = classify_content(
+            "nilbuild/developer-roadmap (★355244 • TypeScript)",
+            "Generic developer roadmap educational...",
+        );
+        assert_eq!(ct, ContentType::Tutorial);
+        assert_eq!(mult, 0.80);
+    }
+
+    #[test]
+    fn test_educational_awesome_list() {
+        let (ct, _) = classify_content(
+            "sindresorhus/awesome-rust (★42000 • Rust)",
+            "",
+        );
+        assert_eq!(ct, ContentType::Tutorial);
+    }
+
+    #[test]
+    fn test_educational_freecodecamp() {
+        let (ct, _) = classify_content(
+            "freecodecamp/freecodecamp (★445282 • TypeScript)",
+            "",
+        );
+        assert_eq!(ct, ContentType::Tutorial);
+    }
+
+    #[test]
+    fn test_educational_learn_repo() {
+        let (ct, _) = classify_content(
+            "nicolo-ribaudo/learn-typescript (★5000 • TypeScript)",
+            "",
+        );
+        assert_eq!(ct, ContentType::Tutorial);
+    }
+
+    #[test]
+    fn test_non_educational_real_tool() {
+        // Real tools should NOT be classified as educational
+        let (ct, _) = classify_content(
+            "shadcn-ui/ui (★114864 • TypeScript)",
+            "short",
+        );
+        assert_ne!(ct, ContentType::Tutorial);
+    }
+
+    #[test]
+    fn test_non_educational_no_star() {
+        // Non-GitHub items with "roadmap" in title should not be affected
+        let (ct, _) = classify_content(
+            "Our Q3 product roadmap update",
+            "short",
+        );
+        assert_ne!(ct, ContentType::Tutorial);
     }
 
     #[test]

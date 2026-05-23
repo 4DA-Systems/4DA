@@ -334,6 +334,37 @@ pub(super) fn is_tutorial(title: &str) -> bool {
     terms.iter().any(|t| title.contains(t))
 }
 
+/// Detect educational/reference repositories — learning resources rather than
+/// actionable tools. GitHub trending repos with names like "developer-roadmap",
+/// "awesome-rust", "learn-typescript" get Tutorial classification. The experience-
+/// level adjustment then determines how much to penalize or boost them.
+pub(super) fn is_educational_repo(title: &str) -> bool {
+    // Only apply to GitHub-style repo titles (contain star count "★")
+    if !title.contains('★') {
+        return false;
+    }
+
+    let patterns = [
+        "roadmap",
+        "awesome-",
+        "learn-",
+        "cheatsheet",
+        "cheat-sheet",
+        "interview-prep",
+        "interview-questions",
+        "coding-interview",
+        "coding-challenges",
+        "free-programming-books",
+        "system-design-",
+        "design-patterns",
+        "freecodecamp",
+        "100-days-of-",
+        "project-based-learning",
+        "build-your-own-",
+    ];
+    patterns.iter().any(|p| title.contains(p))
+}
+
 pub(super) fn is_hiring(title: &str) -> bool {
     let terms = [
         "hiring",

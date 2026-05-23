@@ -259,6 +259,37 @@ pub(super) struct QualityComposite {
     pub stack_competing_mult: f32,
 }
 
+/// Adjust content DNA multiplier based on the user's self-declared experience level.
+///
+/// "learning" users benefit from tutorials and questions — these are useful signals,
+/// not noise. "building" users get a mild lift. Default (None / "shipping" / "leading")
+/// keeps the current calibration which is tuned for experienced developers.
+fn adjust_dna_for_experience(
+    content_type: &crate::content_dna::ContentType,
+    base: f32,
+    level: Option<&str>,
+) -> f32 {
+    use crate::content_dna::ContentType;
+    match level {
+        Some("learning") => match content_type {
+            ContentType::Tutorial => base * 1.35,    // 0.80→1.08: tutorials are helpful
+            ContentType::Question => base * 1.30,    // 0.65→0.85: questions resonate
+            ContentType::HelpRequest => base * 1.25, // 0.50→0.63: may identify with
+            ContentType::ShowAndTell => base * 1.15,  // 0.85→0.98: inspiring projects
+            ContentType::DeepDive => base * 0.90,    // 1.15→1.04: can be overwhelming
+            _ => base,
+        },
+        Some("building") => match content_type {
+            ContentType::Tutorial => base * 1.10,    // 0.80→0.88: occasionally useful
+            ContentType::Question => base * 1.10,    // 0.65→0.72: sometimes useful
+            ContentType::ShowAndTell => base * 1.05,  // 0.85→0.89: somewhat inspiring
+            _ => base,
+        },
+        // "shipping", "leading", None → current calibration (experienced devs)
+        _ => base,
+    }
+}
+
 /// Compute all quality multipliers and combine them into a dampened composite.
 ///
 /// Evaluates competing tech, content quality, content DNA, novelty, ecosystem
@@ -293,6 +324,14 @@ pub(super) fn compute_quality_composite(
     } else {
         content_dna_mult
     };
+
+    // Experience-level DNA adjustment: "learning" users benefit from tutorials,
+    // "building" users get a mild lift, default keeps current calibration.
+    let content_dna_mult = adjust_dna_for_experience(
+        &content_type,
+        content_dna_mult,
+        ctx.experience_level.as_deref(),
+    );
 
     // Novelty: penalize introductory content for known tech, boost releases
     let novelty = crate::novelty::compute_novelty(
