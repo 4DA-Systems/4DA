@@ -2011,3 +2011,554 @@ async fn blind_spots_covered_section_has_compact_view() {
         );
     }
 }
+
+// ── Phase 10: Content Graph ─────────────────────────────────────────────────
+
+#[tokio::test]
+async fn content_graph_command_returns_valid_structure() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 7, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    assert!(graph.get("nodes").is_some(), "graph must have nodes field");
+    assert!(graph.get("edges").is_some(), "graph must have edges field");
+    assert!(
+        graph.get("clusters").is_some(),
+        "graph must have clusters field"
+    );
+    assert!(graph.get("meta").is_some(), "graph must have meta field");
+
+    let meta = &graph["meta"];
+    assert!(
+        meta.get("total_items").is_some(),
+        "meta must have total_items"
+    );
+    assert!(
+        meta.get("total_edges").is_some(),
+        "meta must have total_edges"
+    );
+    assert!(
+        meta.get("cluster_count").is_some(),
+        "meta must have cluster_count"
+    );
+    assert!(
+        meta.get("time_window_days").is_some(),
+        "meta must have time_window_days"
+    );
+    assert!(
+        meta.get("edge_threshold").is_some(),
+        "meta must have edge_threshold"
+    );
+}
+
+#[tokio::test]
+async fn content_graph_nodes_have_required_fields() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 50})),
+        )
+        .await
+        .unwrap();
+
+    let nodes = graph["nodes"].as_array().expect("nodes must be array");
+    if nodes.is_empty() {
+        eprintln!("WARN: no content nodes in graph — database may be empty");
+        return;
+    }
+
+    for (i, node) in nodes.iter().enumerate().take(10) {
+        assert!(node.get("id").is_some(), "node[{i}] must have id");
+        assert!(node.get("title").is_some(), "node[{i}] must have title");
+        assert!(
+            node.get("source_type").is_some(),
+            "node[{i}] must have source_type"
+        );
+        assert!(
+            node.get("relevance_score").is_some(),
+            "node[{i}] must have relevance_score"
+        );
+        assert!(node.get("x").is_some(), "node[{i}] must have x position");
+        assert!(node.get("y").is_some(), "node[{i}] must have y position");
+        assert!(
+            node.get("created_at").is_some(),
+            "node[{i}] must have created_at"
+        );
+
+        let score = node["relevance_score"].as_f64().unwrap_or(-1.0);
+        assert!(
+            (0.0..=1.0).contains(&score),
+            "node[{i}] relevance_score {score} must be in [0, 1]"
+        );
+
+        let title = node["title"].as_str().unwrap_or("");
+        assert!(!title.is_empty(), "node[{i}] title must not be empty");
+    }
+}
+
+#[tokio::test]
+async fn content_graph_edges_have_valid_types() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 100})),
+        )
+        .await
+        .unwrap();
+
+    let edges = graph["edges"].as_array().expect("edges must be array");
+    let nodes = graph["nodes"].as_array().expect("nodes must be array");
+    let node_ids: std::collections::HashSet<i64> =
+        nodes.iter().filter_map(|n| n["id"].as_i64()).collect();
+
+    let valid_types = ["semantic", "chain", "concept", "convergence", "duplicate"];
+
+    for (i, edge) in edges.iter().enumerate().take(20) {
+        assert!(edge.get("source").is_some(), "edge[{i}] must have source");
+        assert!(edge.get("target").is_some(), "edge[{i}] must have target");
+        assert!(
+            edge.get("edge_type").is_some(),
+            "edge[{i}] must have edge_type"
+        );
+        assert!(edge.get("weight").is_some(), "edge[{i}] must have weight");
+        assert!(
+            edge.get("methods").is_some(),
+            "edge[{i}] must have methods array"
+        );
+
+        let edge_type = edge["edge_type"].as_str().unwrap_or("");
+        assert!(
+            valid_types.contains(&edge_type),
+            "edge[{i}] type '{edge_type}' must be one of {valid_types:?}"
+        );
+
+        let weight = edge["weight"].as_f64().unwrap_or(-1.0);
+        assert!(
+            (0.0..=1.0).contains(&weight),
+            "edge[{i}] weight {weight} must be in [0, 1]"
+        );
+
+        let source = edge["source"].as_i64().unwrap_or(-1);
+        let target = edge["target"].as_i64().unwrap_or(-1);
+        assert!(
+            node_ids.contains(&source),
+            "edge[{i}] source {source} must reference existing node"
+        );
+        assert!(
+            node_ids.contains(&target),
+            "edge[{i}] target {target} must reference existing node"
+        );
+
+        assert_ne!(source, target, "edge[{i}] must not be self-referencing");
+
+        let methods = edge["methods"].as_array();
+        assert!(methods.is_some(), "edge[{i}] methods must be an array");
+        let methods = methods.unwrap();
+        assert!(
+            !methods.is_empty(),
+            "edge[{i}] must have at least one method (provenance)"
+        );
+    }
+}
+
+#[tokio::test]
+async fn content_graph_clusters_are_consistent() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    let clusters = graph["clusters"]
+        .as_array()
+        .expect("clusters must be array");
+    let nodes = graph["nodes"].as_array().expect("nodes must be array");
+    let node_ids: std::collections::HashSet<i64> =
+        nodes.iter().filter_map(|n| n["id"].as_i64()).collect();
+
+    let meta = &graph["meta"];
+    let reported_count = meta["cluster_count"].as_u64().unwrap_or(0) as usize;
+    assert_eq!(
+        clusters.len(),
+        reported_count,
+        "meta.cluster_count must match actual clusters length"
+    );
+
+    for (i, cluster) in clusters.iter().enumerate() {
+        assert!(cluster.get("id").is_some(), "cluster[{i}] must have id");
+        assert!(
+            cluster.get("label").is_some(),
+            "cluster[{i}] must have label"
+        );
+        assert!(
+            cluster.get("node_ids").is_some(),
+            "cluster[{i}] must have node_ids"
+        );
+
+        let label = cluster["label"].as_str().unwrap_or("");
+        assert!(!label.is_empty(), "cluster[{i}] label must not be empty");
+
+        let member_ids = cluster["node_ids"]
+            .as_array()
+            .expect("node_ids must be array");
+        assert!(
+            !member_ids.is_empty(),
+            "cluster[{i}] must have at least one member"
+        );
+
+        for nid in member_ids {
+            let id = nid.as_i64().unwrap_or(-1);
+            assert!(
+                node_ids.contains(&id),
+                "cluster[{i}] member {id} must reference an existing node"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn content_graph_meta_counts_are_consistent() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 7, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    let nodes = graph["nodes"].as_array().unwrap();
+    let edges = graph["edges"].as_array().unwrap();
+    let meta = &graph["meta"];
+
+    let total_items = meta["total_items"].as_u64().unwrap_or(0) as usize;
+    let total_edges = meta["total_edges"].as_u64().unwrap_or(0) as usize;
+
+    assert_eq!(
+        nodes.len(),
+        total_items,
+        "meta.total_items must match actual node count"
+    );
+    assert_eq!(
+        edges.len(),
+        total_edges,
+        "meta.total_edges must match actual edge count"
+    );
+
+    let time_window = meta["time_window_days"].as_u64().unwrap_or(0);
+    assert_eq!(
+        time_window, 7,
+        "time_window_days should match requested days=7"
+    );
+}
+
+#[tokio::test]
+async fn content_graph_different_time_windows() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let graph_7 = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 7, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    let graph_30 = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    let nodes_7 = graph_7["nodes"].as_array().unwrap().len();
+    let nodes_30 = graph_30["nodes"].as_array().unwrap().len();
+
+    assert!(
+        nodes_30 >= nodes_7,
+        "30-day window ({nodes_30} nodes) should have >= nodes than 7-day ({nodes_7})"
+    );
+
+    let tw_7 = graph_7["meta"]["time_window_days"].as_u64().unwrap_or(0);
+    let tw_30 = graph_30["meta"]["time_window_days"].as_u64().unwrap_or(0);
+    assert_eq!(tw_7, 7);
+    assert_eq!(tw_30, 30);
+}
+
+#[tokio::test]
+async fn content_graph_no_duplicate_edges() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    let edges = graph["edges"].as_array().unwrap();
+
+    let mut seen = std::collections::HashSet::new();
+    for edge in edges {
+        let src = edge["source"].as_i64().unwrap_or(0);
+        let tgt = edge["target"].as_i64().unwrap_or(0);
+        let etype = edge["edge_type"].as_str().unwrap_or("");
+        let key = format!("{src}-{tgt}-{etype}");
+        assert!(seen.insert(key.clone()), "duplicate edge found: {key}");
+    }
+}
+
+#[tokio::test]
+async fn content_graph_layout_positions_are_finite() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 100})),
+        )
+        .await
+        .unwrap();
+
+    let nodes = graph["nodes"].as_array().unwrap();
+    for (i, node) in nodes.iter().enumerate() {
+        let x = node["x"].as_f64().unwrap_or(f64::NAN);
+        let y = node["y"].as_f64().unwrap_or(f64::NAN);
+        assert!(x.is_finite(), "node[{i}] x={x} must be finite");
+        assert!(y.is_finite(), "node[{i}] y={y} must be finite");
+    }
+
+    let clusters = graph["clusters"].as_array().unwrap();
+    for (i, cluster) in clusters.iter().enumerate() {
+        let cx = cluster["centroid_x"].as_f64().unwrap_or(f64::NAN);
+        let cy = cluster["centroid_y"].as_f64().unwrap_or(f64::NAN);
+        assert!(
+            cx.is_finite(),
+            "cluster[{i}] centroid_x={cx} must be finite"
+        );
+        assert!(
+            cy.is_finite(),
+            "cluster[{i}] centroid_y={cy} must be finite"
+        );
+    }
+}
+
+#[tokio::test]
+async fn content_graph_ui_toggle_exists() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Signal tab
+    let tabs = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let signal_tab = tabs
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t == "Signal")
+        })
+        .expect("Signal tab must exist");
+
+    let ref_id = signal_tab["ref_id"].as_str().unwrap();
+    client.click(ref_id).await.unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+    // Check for List/Graph toggle buttons
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let button_arr = buttons.as_array().unwrap();
+
+    let list_btn = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t == "List")
+    });
+    let graph_btn = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t == "Graph")
+    });
+
+    assert!(
+        list_btn.is_some(),
+        "List toggle button must exist on Signal tab"
+    );
+    assert!(
+        graph_btn.is_some(),
+        "Graph toggle button must exist on Signal tab"
+    );
+}
+
+#[tokio::test]
+async fn content_graph_ui_renders_on_toggle() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Signal tab
+    let tabs = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let signal_tab = tabs
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t == "Signal")
+        })
+        .expect("Signal tab must exist");
+    client
+        .click(signal_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+
+    // Click Graph toggle
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let graph_btn = buttons
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| {
+            b.get("text")
+                .or_else(|| b.get("name"))
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t == "Graph")
+        })
+        .expect("Graph button must exist");
+    client
+        .click(graph_btn["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
+
+    // Wait for graph to load (IPC call + React Flow render)
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+    // Verify React Flow rendered — check for the react-flow container in DOM
+    let dom = client.dom_snapshot().await.unwrap();
+    let dom_str = serde_json::to_string(&dom).unwrap();
+    let has_graph = dom_str.contains("react-flow")
+        || dom_str.contains("reactflow")
+        || dom_str.contains("rf-")
+        || dom_str.contains("No content relationships");
+
+    assert!(
+        has_graph,
+        "Graph view should render React Flow container or empty state after toggle"
+    );
+
+    // Switch back to List view
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let list_btn = buttons
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| {
+            b.get("text")
+                .or_else(|| b.get("name"))
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t == "List")
+        })
+        .expect("List button must exist");
+    client
+        .click(list_btn["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+}
+
+#[tokio::test]
+async fn content_graph_edge_provenance_is_non_empty() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let graph = client
+        .invoke_command(
+            "build_content_graph",
+            Some(serde_json::json!({"days": 30, "max_nodes": 150})),
+        )
+        .await
+        .unwrap();
+
+    let edges = graph["edges"].as_array().unwrap();
+
+    for (i, edge) in edges.iter().enumerate() {
+        let methods = edge["methods"].as_array().unwrap();
+        assert!(
+            !methods.is_empty(),
+            "edge[{i}] must have at least one provenance method — accuracy contract violation"
+        );
+
+        for method in methods {
+            let m = method.as_str().unwrap_or("");
+            assert!(!m.is_empty(), "edge[{i}] method must not be empty string");
+        }
+    }
+}
