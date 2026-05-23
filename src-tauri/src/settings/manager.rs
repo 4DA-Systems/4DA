@@ -225,7 +225,10 @@ impl SettingsManager {
     fn recover_keys_from_keychain(&mut self) {
         let pairs: [(&str, bool); 5] = [
             ("llm_api_key", self.settings.llm.api_key.is_empty()),
-            ("openai_api_key", self.settings.llm.openai_api_key.is_empty()),
+            (
+                "openai_api_key",
+                self.settings.llm.openai_api_key.is_empty(),
+            ),
             ("x_api_key", self.settings.x_api_key.is_empty()),
             ("license_key", self.settings.license.license_key.is_empty()),
             (
