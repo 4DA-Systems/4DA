@@ -16,6 +16,7 @@ const KnowledgeGapsPanel = lazy(() => import('./KnowledgeGapsPanel').then(m => (
 const WhatYouWouldHaveMissed = lazy(() => import('./WhatYouWouldHaveMissed').then(m => ({ default: m.WhatYouWouldHaveMissed })));
 const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
 const BlindSpotsView = lazy(() => import('./blindspots/BlindSpotsView'));
+const ContentGraphView = lazy(() => import('./signals/ContentGraphView'));
 
 const VIEW_LABEL_KEYS: Record<string, string> = {
   briefing: 'nav.briefing.label',
@@ -32,11 +33,13 @@ interface ViewRouterProps {
 
 export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
   const { t } = useTranslation();
-  const { activeView, analysisComplete, relevanceResults } = useAppStore(
+  const { activeView, analysisComplete, relevanceResults, signalViewMode, setSignalViewMode } = useAppStore(
     useShallow(s => ({
       activeView: s.activeView,
       analysisComplete: s.appState.analysisComplete,
       relevanceResults: s.appState.relevanceResults,
+      signalViewMode: s.signalViewMode,
+      setSignalViewMode: s.setSignalViewMode,
     })),
   );
 
@@ -72,17 +75,51 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         </ViewErrorBoundary>
       ) : (
         <ViewErrorBoundary viewName="Signal">
-          {analysisComplete && (
-            <Suspense fallback={null}>
-              <WhatYouWouldHaveMissed />
-              <SignalsPanel results={relevanceResults} />
-              <KnowledgeGapsPanel />
+          <div className="flex justify-end px-4 pt-3 pb-1">
+            <div className="inline-flex rounded-lg border border-border bg-bg-secondary p-0.5">
+              <button
+                onClick={() => setSignalViewMode('list')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  signalViewMode === 'list'
+                    ? 'bg-bg-tertiary text-white'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+                aria-pressed={signalViewMode === 'list'}
+              >
+                {t('signals.viewList', 'List')}
+              </button>
+              <button
+                onClick={() => setSignalViewMode('graph')}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                  signalViewMode === 'graph'
+                    ? 'bg-bg-tertiary text-white'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+                aria-pressed={signalViewMode === 'graph'}
+              >
+                {t('signals.viewGraph', 'Graph')}
+              </button>
+            </div>
+          </div>
+          {signalViewMode === 'graph' ? (
+            <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
+              <ContentGraphView />
             </Suspense>
+          ) : (
+            <>
+              {analysisComplete && (
+                <Suspense fallback={null}>
+                  <WhatYouWouldHaveMissed />
+                  <SignalsPanel results={relevanceResults} />
+                  <KnowledgeGapsPanel />
+                </Suspense>
+              )}
+              <ResultsView
+                newItemIds={newItemIds}
+                focusedIndex={focusedIndex}
+              />
+            </>
           )}
-          <ResultsView
-            newItemIds={newItemIds}
-            focusedIndex={focusedIndex}
-          />
         </ViewErrorBoundary>
       )}
     </Suspense>
