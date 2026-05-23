@@ -50,7 +50,18 @@ pub struct MigrationReport {
 pub fn store_secret(key_name: &str, value: &str) -> Result<bool> {
     match keyring::Entry::new(SERVICE_NAME, key_name) {
         Ok(entry) => match entry.set_password(value) {
-            Ok(()) => Ok(true),
+            Ok(()) => {
+                if verify_round_trip(key_name, value) {
+                    Ok(true)
+                } else {
+                    warn!(
+                        target: "4da::keystore",
+                        key = key_name,
+                        "Keychain write reported success but round-trip verification failed — secret remains in plaintext fallback"
+                    );
+                    Ok(false)
+                }
+            }
             Err(e) => {
                 warn!(
                     target: "4da::keystore",
@@ -343,8 +354,21 @@ mod tests {
 
     #[test]
     fn test_delete_nonexistent_key_is_ok() {
-        // Deleting a key that doesn't exist should not error
         let result = delete_secret("4da_test_delete_nonexistent_zzz");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_store_secret_verifies_round_trip() {
+        let key = "4da_test_store_verify";
+        let val = "store-verify-value";
+        let result = store_secret(key, val);
+        assert!(result.is_ok());
+        let persisted = result.unwrap();
+        if persisted {
+            let readback = get_secret(key);
+            assert!(matches!(readback, Ok(Some(ref v)) if v == val));
+            let _ = delete_secret(key);
+        }
     }
 }
