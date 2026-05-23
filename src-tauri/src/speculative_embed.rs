@@ -84,7 +84,7 @@ async fn run_speculative_batch(trigger_item_id: i64) -> crate::error::Result<()>
             if content.is_empty() {
                 title.clone()
             } else {
-                format!("{} {}", title, &content[..content.len().min(500)])
+                format!("{} {}", title, &content[..content.floor_char_boundary(500)])
             }
         })
         .collect();

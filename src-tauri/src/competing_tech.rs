@@ -166,7 +166,7 @@ pub fn compute_competing_penalty(
 ) -> f32 {
     let title_lower = title.to_lowercase();
     // Limit content scan to first 2000 chars for performance
-    let content_lower = content[..content.len().min(2000)].to_lowercase();
+    let content_lower = content[..content.floor_char_boundary(2000)].to_lowercase();
 
     for user_tech in user_primary_stack {
         let user_lower = user_tech.to_lowercase();
@@ -234,7 +234,7 @@ pub fn compute_competing_penalty(
         ];
         let is_comparative = comparative_markers.iter().any(|m| {
             has_word_boundary(&title_lower, m)
-                || content_lower[..content_lower.len().min(500)].contains(m)
+                || content_lower[..content_lower.floor_char_boundary(500)].contains(m)
         });
         if is_comparative {
             return 0.85;
@@ -462,5 +462,24 @@ mod tests {
             &primary,
         );
         assert_eq!(mult, 0.5, "pure competing content should still be 0.5");
+    }
+
+    #[test]
+    fn test_multibyte_content_does_not_panic() {
+        let primary = stack(&["react"]);
+        // Content with curly quotes, em-dashes, and emoji — multi-byte UTF-8
+        // that would panic if sliced at arbitrary byte boundaries.
+        let content = "it\u{2019}s a small spring boot security SDK called \u{201c}vault SDK\u{201d}. \
+            the basic idea is that you can add it to another spring boot project as a dependency \u{2014} \
+            configure it, and it handles auth for you \u{2728}. "
+            .repeat(20);
+        assert!(content.len() > 2000);
+        let mult = compute_competing_penalty(
+            &topics(&["spring"]),
+            "Spring Boot Security SDK",
+            &content,
+            &primary,
+        );
+        assert!(mult <= 1.0 && mult >= 0.0);
     }
 }

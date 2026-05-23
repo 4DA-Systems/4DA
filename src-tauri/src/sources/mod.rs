@@ -439,7 +439,7 @@ pub fn apply_source_quality_gate(
                 let text = format!(
                     "{} {}",
                     item.title,
-                    &item.content[..item.content.len().min(200)]
+                    &item.content[..item.content.floor_char_boundary(200)]
                 )
                 .to_lowercase();
                 let dev_terms = [

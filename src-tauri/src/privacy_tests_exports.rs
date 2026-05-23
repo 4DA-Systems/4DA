@@ -379,7 +379,7 @@ mod tests {
                 !safe_str.contains(*value),
                 "PRIVACY VIOLATION: {} value '{}' found in safe response",
                 field_name,
-                &value[..value.len().min(10)]
+                &value[..value.floor_char_boundary(10)]
             );
         }
     }
