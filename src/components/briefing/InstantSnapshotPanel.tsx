@@ -62,9 +62,22 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
                   <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
                     {t('briefing.synthesis', 'Synthesis')}
                   </h3>
-                  <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
-                    {snapshot.synthesis}
-                  </p>
+                  {(() => {
+                    const provenanceMatch = snapshot.synthesis?.match(/^([\s\S]*?)\n\n(\(\d+ signals across .+\))$/);
+                    if (provenanceMatch) {
+                      return (
+                        <>
+                          <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{provenanceMatch[1]}</p>
+                          <p className="text-[9px] font-mono text-text-muted/60 mt-1.5">{provenanceMatch[2]}</p>
+                        </>
+                      );
+                    }
+                    return (
+                      <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">
+                        {snapshot.synthesis}
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
               <div>

@@ -140,7 +140,18 @@ export const BriefingView = memo(function BriefingView() {
                   <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
                     {t('briefing.synthesis', 'Synthesis')}
                   </h3>
-                  <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
+                  {(() => {
+                    const provenanceMatch = morningBriefSynthesis?.match(/^([\s\S]*?)\n\n(\(\d+ signals across .+\))$/);
+                    if (provenanceMatch) {
+                      return (
+                        <>
+                          <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{provenanceMatch[1]}</p>
+                          <p className="text-[9px] font-mono text-text-muted/60 mt-1.5">{provenanceMatch[2]}</p>
+                        </>
+                      );
+                    }
+                    return <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>;
+                  })()}
                 </div>
               ) : null}
               <div>
@@ -230,14 +241,31 @@ export const BriefingView = memo(function BriefingView() {
               </div>
             </div>
             <div className="p-5 space-y-4">
-              {morningBriefData.dataFreshness?.is_stale && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded bg-[#EF4444]/10 border border-[#EF4444]/30">
-                  <span className="inline-block w-2 h-2 rounded-full bg-error" />
-                  <p className="text-xs text-error">
-                    {t('briefing.staleData', 'No fresh data — sources may need attention')}
+              {morningBriefData.dataFreshness?.is_stale ? (
+                <div className="flex items-start gap-2 px-3 py-2 rounded bg-[#EF4444]/10 border border-[#EF4444]/30">
+                  <span className="inline-block w-2 h-2 rounded-full bg-error mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-xs text-error">
+                      {t('briefing.staleData', 'Sources offline')}
+                      {morningBriefData.dataFreshness.newest_source_check_age_hours != null && (
+                        <span className="text-error/70">
+                          {' — '}{t('briefing.lastFetch', 'last fetch {{hours}}h ago', { hours: Math.round(morningBriefData.dataFreshness.newest_source_check_age_hours) })}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[10px] text-error/60 mt-0.5">
+                      {t('briefing.staleHint', 'Check Settings → Sources or verify your internet connection')}
+                    </p>
+                  </div>
+                </div>
+              ) : morningBriefData.dataFreshness?.no_recent_fetches ? (
+                <div className="flex items-start gap-2 px-3 py-2 rounded bg-[#D4AF37]/10 border border-[#D4AF37]/30">
+                  <span className="inline-block w-2 h-2 rounded-full bg-[#D4AF37] mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-[#D4AF37]">
+                    {t('briefing.noRecentFetches', 'No source checks in 24h — showing last known intelligence')}
                   </p>
                 </div>
-              )}
+              ) : null}
               {isAbstentionSynthesis(morningBriefSynthesis) ? (
                 <div className="py-6 text-center space-y-2">
                   <p className="text-xs text-text-muted italic">
@@ -249,7 +277,18 @@ export const BriefingView = memo(function BriefingView() {
                   <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
                     {t('briefing.synthesis', 'Synthesis')}
                   </h3>
-                  <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>
+                  {(() => {
+                    const provenanceMatch = morningBriefSynthesis?.match(/^([\s\S]*?)\n\n(\(\d+ signals across .+\))$/);
+                    if (provenanceMatch) {
+                      return (
+                        <>
+                          <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{provenanceMatch[1]}</p>
+                          <p className="text-[9px] font-mono text-text-muted/60 mt-1.5">{provenanceMatch[2]}</p>
+                        </>
+                      );
+                    }
+                    return <p className="text-xs text-text-secondary leading-relaxed whitespace-pre-wrap">{morningBriefSynthesis}</p>;
+                  })()}
                 </div>
               ) : null}
               {morningBriefData.items.length > 0 && (

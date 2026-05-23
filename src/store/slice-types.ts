@@ -267,6 +267,7 @@ export interface DataFreshness {
   failing_sources: number;
   stale_sources: number;
   is_stale: boolean;
+  no_recent_fetches: boolean;
 }
 
 /** Live morning briefing items received from the T+3s startup check.

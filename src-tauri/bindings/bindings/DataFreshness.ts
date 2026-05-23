@@ -7,15 +7,15 @@
  */
 export type DataFreshness = { 
 /**
- * Hours since the newest item was created or refreshed (None if table is empty).
+ * Hours since the newest item was first discovered (None if table is empty).
  */
 newest_item_age_hours: number | null, 
 /**
- * Number of source items created or refreshed in the last 24 hours.
+ * Number of source items first discovered in the last 24 hours.
  */
 items_last_24h: number, 
 /**
- * Number of source items created or refreshed in the last 72 hours.
+ * Number of source items first discovered in the last 72 hours.
  */
 items_last_72h: number, 
 /**
@@ -45,4 +45,9 @@ total_sources: number,
 /**
  * True when neither source items nor successful source checks have appeared in 3 days.
  */
-is_stale: boolean, };
+is_stale: boolean, 
+/**
+ * True when no source adapter has succeeded in the last 24 hours,
+ * even if the system is not fully stale. Signals degraded freshness.
+ */
+no_recent_fetches: boolean, };

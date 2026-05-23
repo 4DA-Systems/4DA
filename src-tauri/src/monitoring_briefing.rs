@@ -24,11 +24,11 @@ use crate::monitoring_notifications::truncate_safe;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ts_rs::TS)]
 #[ts(export, export_to = "bindings/")]
 pub struct DataFreshness {
-    /// Hours since the newest item was created or refreshed (None if table is empty).
+    /// Hours since the newest item was first discovered (None if table is empty).
     pub newest_item_age_hours: Option<f64>,
-    /// Number of source items created or refreshed in the last 24 hours.
+    /// Number of source items first discovered in the last 24 hours.
     pub items_last_24h: u32,
-    /// Number of source items created or refreshed in the last 72 hours.
+    /// Number of source items first discovered in the last 72 hours.
     pub items_last_72h: u32,
     /// Hours since any source adapter last succeeded (None if health has never run).
     #[serde(default)]
@@ -50,6 +50,9 @@ pub struct DataFreshness {
     pub total_sources: u32,
     /// True when neither source items nor successful source checks have appeared in 3 days.
     pub is_stale: bool,
+    /// True when no source adapter has succeeded in the last 24 hours,
+    /// even if the system is not fully stale. Signals degraded freshness.
+    pub no_recent_fetches: bool,
 }
 
 /// Query source_items to compute a DataFreshness snapshot.
@@ -60,8 +63,7 @@ pub(crate) fn compute_data_freshness() -> Option<DataFreshness> {
 }
 
 pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> DataFreshness {
-    let freshest_item_expr =
-        "CASE WHEN COALESCE(last_seen, created_at) > created_at THEN last_seen ELSE created_at END";
+    let freshest_item_expr = "created_at";
     let newest_age: Option<f64> = conn
         .query_row(
             &format!(
@@ -142,7 +144,9 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         stale_sources,
         total_sources,
         is_stale: (items_72h == 0 && source_checks_72h == 0)
-            || (total_sources > 0 && failing_sources * 100 / total_sources >= 50),
+            || (total_sources > 0 && failing_sources * 100 / total_sources >= 50)
+            || (total_sources > 0 && source_checks_72h == 0),
+        no_recent_fetches: total_sources > 0 && source_checks_24h == 0,
     }
 }
 
@@ -1971,7 +1975,15 @@ pub(crate) async fn synthesize_morning_briefing(
             } else {
                 format!(" (affects: {})", item.matched_deps.join(", "))
             };
-            format!("{}. {}{} — {}{}", i + 1, tag, item.title, desc, deps)
+            format!(
+                "{}. [{}] {}{} — {}{}",
+                i + 1,
+                item.source_type,
+                tag,
+                item.title,
+                desc,
+                deps
+            )
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -2056,7 +2068,16 @@ BANNED:
 - Covering more than 2 clusters -- pick the best, skip the rest
 - Horizontal rules (---), separators, or dividers between clusters -- use a blank line only
 - Unicode em dashes or special characters -- use plain ASCII only
-- Fabricated numbers/percentages/statistics not present in the signals"#;
+- Fabricated numbers/percentages/statistics not present in the signals
+
+SOURCE-TYPE CALIBRATION:
+Each signal is prefixed with [source_type]. Calibrate your language accordingly:
+- [arxiv] or [papers_with_code]: "research shows", "findings indicate"
+- [cve], [osv], [github_advisory]: "confirmed vulnerability", "advisory reports"
+- [hackernews], [lobsters], [reddit]: "community discussion suggests", "developers report"
+- [dev_to], [medium]: "the article argues", "one analysis suggests"
+- [rss], [github]: "the project announced", "the changelog notes"
+Never use "research confirms" for blog posts. Never use "developers report" for CVEs."#;
 
     // Append language instruction for non-English users
     let lang = crate::i18n::get_user_language();
@@ -2278,7 +2299,23 @@ BANNED:
         "Groundedness check passed"
     );
 
-    Ok(response.content)
+    // Append provenance line showing source types that fed the synthesis
+    let mut synthesis = response.content;
+    let mut source_types: Vec<&str> = briefing
+        .items
+        .iter()
+        .map(|i| i.source_type.as_str())
+        .collect();
+    source_types.sort();
+    source_types.dedup();
+    let provenance = format!(
+        "\n\n({} signals across {})",
+        briefing.items.len(),
+        source_types.join(", ")
+    );
+    synthesis.push_str(&provenance);
+
+    Ok(synthesis)
 }
 
 // ============================================================================
@@ -2383,6 +2420,78 @@ mod tests {
         assert_eq!(freshness.items_last_72h, 0);
         assert_eq!(freshness.source_checks_last_72h, 0);
         assert_eq!(freshness.stale_sources, 0);
+        assert!(freshness.is_stale);
+    }
+
+    #[test]
+    fn test_data_freshness_reprocessed_items_not_counted_as_fresh() {
+        let conn = freshness_test_db();
+        // Item created 5 days ago but last_seen updated recently (reprocessing)
+        conn.execute(
+            "INSERT INTO source_items (created_at, last_seen)
+             VALUES (datetime('now', '-5 days'), datetime('now'))",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO feed_health (last_success_at, consecutive_failures, circuit_open)
+             VALUES (datetime('now', '-5 days'), 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        let freshness = compute_data_freshness_from_conn(&conn);
+        // items_last_24h must use created_at, NOT last_seen
+        assert_eq!(freshness.items_last_24h, 0);
+        assert_eq!(freshness.items_last_72h, 0);
+        assert!(freshness.is_stale);
+        assert!(freshness.no_recent_fetches);
+    }
+
+    #[test]
+    fn test_data_freshness_no_recent_fetches_amber_warning() {
+        let conn = freshness_test_db();
+        conn.execute(
+            "INSERT INTO source_items (created_at, last_seen)
+             VALUES (datetime('now', '-2 days'), datetime('now', '-2 days'))",
+            [],
+        )
+        .unwrap();
+        // Source checked 2 days ago (within 72h) but not in last 24h
+        conn.execute(
+            "INSERT INTO feed_health (last_success_at, consecutive_failures, circuit_open)
+             VALUES (datetime('now', '-2 days'), 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        let freshness = compute_data_freshness_from_conn(&conn);
+        assert!(!freshness.is_stale);
+        assert!(freshness.no_recent_fetches);
+    }
+
+    #[test]
+    fn test_data_freshness_stale_when_no_checks_72h_despite_items() {
+        let conn = freshness_test_db();
+        // Items exist in recent window (created recently)
+        conn.execute(
+            "INSERT INTO source_items (created_at, last_seen)
+             VALUES (datetime('now', '-1 hours'), datetime('now'))",
+            [],
+        )
+        .unwrap();
+        // But no source checks have succeeded in 72h+
+        conn.execute(
+            "INSERT INTO feed_health (last_success_at, consecutive_failures, circuit_open)
+             VALUES (datetime('now', '-5 days'), 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        let freshness = compute_data_freshness_from_conn(&conn);
+        assert!(freshness.items_last_24h > 0);
+        assert_eq!(freshness.source_checks_last_72h, 0);
+        // Must still be stale — no fetches succeeded even if items exist
         assert!(freshness.is_stale);
     }
 
