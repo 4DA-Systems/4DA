@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -11,6 +11,7 @@ import {
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
 import type {
@@ -92,12 +93,13 @@ function ClusterLabelNode({ data }: { data: { label: string; count: number } }) 
 }
 
 function LoadingState() {
+  const { t } = useTranslation();
   return (
     <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: '#0A0A0A' }}>
       <div className="flex flex-col items-center gap-3">
         <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
         <span style={{ color: '#A0A0A0', fontSize: 13, fontFamily: 'Inter, sans-serif' }}>
-          Building content graph...
+          {t('action.loading')}
         </span>
       </div>
     </div>
@@ -105,6 +107,7 @@ function LoadingState() {
 }
 
 function EmptyState() {
+  const { t } = useTranslation();
   return (
     <div className="h-full min-h-[500px] flex items-center justify-center" style={{ backgroundColor: '#0A0A0A' }}>
       <div className="flex flex-col items-center gap-2">
@@ -120,10 +123,10 @@ function EmptyState() {
           <line x1="14.5" y1="13.5" x2="18.5" y2="15.5" />
         </svg>
         <span style={{ color: '#8A8A8A', fontSize: 14, fontFamily: 'Inter, sans-serif' }}>
-          No content relationships found
+          {t('signals.graphEmpty')}
         </span>
         <span style={{ color: '#6B7280', fontSize: 12, fontFamily: 'Inter, sans-serif' }}>
-          Connections will appear as content is analyzed
+          {t('signals.graphEmptySub')}
         </span>
       </div>
     </div>
@@ -139,19 +142,36 @@ function minimapNodeColor(node: Node): string {
   return SOURCE_COLORS[data.source_type] ?? '#6B7280';
 }
 
+function openExternal(url: string) {
+  import('@tauri-apps/plugin-opener')
+    .then(({ openUrl }) => openUrl(url))
+    .catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
+}
+
+const TIME_WINDOWS = [7, 14, 30] as const;
+
 export default function ContentGraphView() {
+  const { t } = useTranslation();
+  const [days, setDays] = useState(7);
   const [loading, setLoading] = useState(true);
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [meta, setMeta] = useState<ContentGraph['meta'] | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [baseEdges, setBaseEdges] = useState<Edge[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
 
-    cmd('build_content_graph', { days: 7, max_nodes: 150 })
+    cmd('build_content_graph', { days, max_nodes: 150 })
       .then((graph: ContentGraph) => {
         if (cancelled) return;
         setNodes(toFlowNodes(graph.nodes, graph.clusters));
-        setEdges(toFlowEdges(graph.edges));
+        const flowEdges = toFlowEdges(graph.edges);
+        setEdges(flowEdges);
+        setBaseEdges(flowEdges);
+        setMeta(graph.meta);
       })
       .catch((err) => {
         if (!cancelled) console.error('[ContentGraph] Failed to load:', err);
@@ -161,7 +181,50 @@ export default function ContentGraphView() {
       });
 
     return () => { cancelled = true; };
-  }, [setNodes, setEdges]);
+  }, [days, setNodes, setEdges]);
+
+  const connectedNodeIds = useMemo(() => {
+    if (!hoveredNodeId) return new Set<string>();
+    const ids = new Set<string>();
+    for (const e of baseEdges) {
+      if (e.source === hoveredNodeId) ids.add(e.target);
+      if (e.target === hoveredNodeId) ids.add(e.source);
+    }
+    return ids;
+  }, [hoveredNodeId, baseEdges]);
+
+  useEffect(() => {
+    if (!hoveredNodeId) {
+      setEdges(baseEdges);
+      return;
+    }
+    setEdges(baseEdges.map((e) => {
+      const connected = e.source === hoveredNodeId || e.target === hoveredNodeId;
+      return { ...e, animated: connected, style: connected ? { ...((e.style as Record<string, unknown>) ?? {}), opacity: 1 } : undefined };
+    }));
+  }, [hoveredNodeId, baseEdges, setEdges]);
+
+  useEffect(() => {
+    if (!hoveredNodeId) return;
+    setNodes((nds) => nds.map((n) => {
+      if (n.type === 'clusterLabel') return n;
+      const dimmed = n.id !== hoveredNodeId && !connectedNodeIds.has(n.id);
+      return { ...n, style: dimmed ? { opacity: 0.25, transition: 'opacity 200ms ease' } : { opacity: 1, transition: 'opacity 200ms ease' } };
+    }));
+  }, [hoveredNodeId, connectedNodeIds, setNodes]);
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    const url = (node.data as ContentNode['data'])?.url;
+    if (url) openExternal(url);
+  }, []);
+
+  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.type !== 'clusterLabel') setHoveredNodeId(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNodeId(null);
+  }, []);
 
   const onInit = useCallback((instance: { fitView: () => void }) => {
     instance.fitView();
@@ -179,6 +242,9 @@ export default function ContentGraphView() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={onInit}
@@ -208,6 +274,36 @@ export default function ContentGraphView() {
           }}
         />
       </ReactFlow>
+      <div
+        className="flex items-center justify-between px-4 py-2 border-t"
+        style={{ backgroundColor: '#141414', borderColor: '#2A2A2A' }}
+      >
+        <div className="flex gap-4 text-[11px]" style={{ color: '#8A8A8A', fontFamily: 'JetBrains Mono, monospace' }}>
+          {meta && (
+            <>
+              <span>{meta.total_items} {t('signals.graphNodes', 'nodes')}</span>
+              <span>{meta.total_edges} {t('signals.graphEdges', 'edges')}</span>
+              <span>{meta.cluster_count} {t('signals.graphClusters', 'clusters')}</span>
+            </>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {TIME_WINDOWS.map((w) => (
+            <button
+              key={w}
+              onClick={() => setDays(w)}
+              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                days === w
+                  ? 'bg-bg-tertiary text-white'
+                  : 'text-text-muted hover:text-text-secondary'
+              }`}
+              style={{ fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              {w}d
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
