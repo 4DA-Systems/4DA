@@ -173,7 +173,13 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
                 title: format!("[{}] {}", a.cve_id, a.title),
                 url: Some(a.source_url.clone()),
                 content,
-                metadata: serde_json::to_value(&a.affected_packages).ok(),
+                metadata: {
+                    let mut m = serde_json::json!({"source_name": "cve"});
+                    if let Ok(pkgs) = serde_json::to_value(&a.affected_packages) {
+                        m["affected_packages"] = pkgs;
+                    }
+                    Some(m)
+                },
             }
         })
         .collect()

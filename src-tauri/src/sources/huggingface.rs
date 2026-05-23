@@ -132,7 +132,7 @@ impl HuggingFaceSource {
                 let content = content_parts.join(" | ");
 
                 // Build metadata
-                let mut metadata = serde_json::json!({});
+                let mut metadata = serde_json::json!({"source_name": "huggingface"});
                 if let Some(ref author) = model.author {
                     metadata["author"] = serde_json::json!(author);
                 }

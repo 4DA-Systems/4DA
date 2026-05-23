@@ -225,6 +225,7 @@ impl Source for ProductHuntSource {
                 // Build metadata with conditionally added fields
                 let mut metadata = serde_json::json!({
                     "pub_date": ph_item.pub_date,
+                    "source_name": "producthunt",
                 });
 
                 if let Some(upvotes) = ph_item.upvotes {

@@ -183,6 +183,7 @@ impl PypiSource {
         let mut metadata = serde_json::json!({
             "version": info.version,
             "ecosystem": "pypi",
+            "source_name": "pypi",
         });
         if let Some(ref author) = info.author {
             metadata["author"] = serde_json::json!(author);

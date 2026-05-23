@@ -116,6 +116,22 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 db.record_source_health(&st, true, filtered as i64, 0, None)
                     .ok();
 
+                // Record per-feed health so DataFreshness.source_checks_last_24h updates
+                let mut feed_origins_seen = std::collections::HashSet::new();
+                for item in &items {
+                    if let Some(origin) = super::extract_feed_origin(item) {
+                        feed_origins_seen.insert(origin);
+                    }
+                }
+                if feed_origins_seen.is_empty() && !items.is_empty() {
+                    // Source doesn't emit per-feed metadata — record at source level
+                    db.record_feed_success(&st, &st).ok();
+                } else {
+                    for origin in &feed_origins_seen {
+                        db.record_feed_success(origin, &st).ok();
+                    }
+                }
+
                 for item in items {
                     if db
                         .get_source_item(&st, &item.source_id)
@@ -144,6 +160,8 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 let err_msg = e.to_string();
                 db.record_source_health(&st, false, 0, 0, Some(&err_msg))
                     .ok();
+                // Record per-feed failure so circuit breaker and stale detection work
+                db.record_feed_failure(&st, &st, &err_msg).ok();
             }
         }
     }
