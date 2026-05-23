@@ -2276,9 +2276,11 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
-    // Require at least 60% of salient terms to be grounded. This catches subtle
-    // hallucinations (wrong versions, misattributed features), not just wholesale fabrication.
-    const GROUNDEDNESS_THRESHOLD: f32 = 0.60;
+    // Require at least 50% of salient terms to be grounded. With the expanded
+    // stopword list filtering out platform names, adjectives, and tech acronyms,
+    // remaining terms are genuine proper nouns — 50% is strict enough to catch
+    // hallucinated products/versions while tolerating legitimate cross-item synthesis.
+    const GROUNDEDNESS_THRESHOLD: f32 = 0.50;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
         tracing::warn!(

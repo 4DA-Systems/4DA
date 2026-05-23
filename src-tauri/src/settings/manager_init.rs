@@ -281,10 +281,20 @@ impl SettingsManager {
     /// Returns the count of keys successfully hydrated.
     fn hydrate_from_keychain(settings: &mut super::super::types::Settings) -> u32 {
         let mut count = 0u32;
-        if let Ok(Some(key)) = keystore::get_secret("llm_api_key") {
-            if !key.is_empty() {
+        match keystore::get_secret("llm_api_key") {
+            Ok(Some(key)) if !key.is_empty() => {
+                info!(target: "4da::keystore", "Hydrated llm_api_key from keychain");
                 settings.llm.api_key = key;
                 count += 1;
+            }
+            Ok(Some(_)) => {
+                info!(target: "4da::keystore", "llm_api_key in keychain but empty");
+            }
+            Ok(None) => {
+                info!(target: "4da::keystore", "llm_api_key not found in keychain");
+            }
+            Err(e) => {
+                warn!(target: "4da::keystore", error = %e, "Failed to read llm_api_key from keychain");
             }
         }
         if let Ok(Some(key)) = keystore::get_secret("openai_api_key") {
@@ -311,6 +321,13 @@ impl SettingsManager {
                 count += 1;
             }
         }
+        info!(
+            target: "4da::keystore",
+            keys_hydrated = count,
+            provider = %settings.llm.provider,
+            has_llm_key = !settings.llm.api_key.is_empty(),
+            "Keychain hydration complete"
+        );
         count
     }
 }
