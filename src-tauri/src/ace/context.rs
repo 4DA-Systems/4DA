@@ -433,12 +433,20 @@ pub fn store_git_signals(conn: &Arc<Mutex<Connection>>, signals: &[GitSignal]) -
 }
 
 /// Store detected technologies and active topics into ACE tables.
+///
+/// Clears previous manifest-sourced entries before inserting so that
+/// activity-weighted confidence reflects current project state, not
+/// stale maximums from previous scans. Non-manifest entries (explicit,
+/// git_history) are preserved.
 pub fn store_detected_context(
     conn: &Arc<Mutex<Connection>>,
     tech: &[DetectedTech],
     topics: &[ActiveTopic],
 ) -> Result<()> {
     let conn = conn.lock();
+
+    conn.execute("DELETE FROM detected_tech WHERE source = 'manifest'", [])
+        .ok();
 
     for t in tech {
         let source_str = match t.source {
@@ -463,7 +471,8 @@ pub fn store_detected_context(
              VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT(name) DO UPDATE SET
                 confidence = MAX(excluded.confidence, detected_tech.confidence),
-                evidence = excluded.evidence,
+                evidence = CASE WHEN excluded.confidence > detected_tech.confidence
+                    THEN excluded.evidence ELSE detected_tech.evidence END,
                 updated_at = datetime('now')",
             rusqlite::params![
                 t.name,

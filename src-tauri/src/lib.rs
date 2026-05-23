@@ -189,6 +189,7 @@ mod community_intelligence;
 mod competing_tech;
 pub(crate) mod compression_rules;
 mod concept_graph;
+mod content_graph;
 mod content_analysis;
 mod content_commands;
 mod content_dna;
@@ -830,6 +831,8 @@ pub fn run() {
             signal_chains::get_signal_chains,
             signal_chains::get_signal_chains_predicted,
             signal_chains::resolve_signal_chain,
+            // Content Graph
+            content_graph::build_content_graph,
             semantic_diff::get_semantic_shifts,
             project_health::get_project_health,
             developer_dna::get_developer_dna,

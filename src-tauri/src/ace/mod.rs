@@ -257,16 +257,14 @@ impl ACE {
                     for signal in signals {
                         projects_found += 1;
 
-                        // Simple confidence check (was using validator)
-                        // Confidence based on evidence density:
-                        // - Base: 0.5 (manifest exists)
-                        // - +0.1 if project has a name (not anonymous)
-                        // - +0.05 per framework detected (max +0.15)
-                        // - +0.05 per unique language detected (max +0.10)
-                        // - +0.05 if has dev_dependencies (active development indicator)
-                        // Cap at 0.90
-                        let confidence = {
-                            let mut conf = 0.50; // Base: manifest file exists
+                        // Confidence from evidence density × project activity.
+                        // Base (manifest richness): 0.50–0.90
+                        // Then scaled by project_relevance (git recency × path pattern):
+                        //   active (<7d): 1.0, recent (<30d): 0.7, stale (<90d): 0.3, abandoned: 0.1
+                        // This prevents tech from old/abandoned projects from contaminating
+                        // the user's active stack profile.
+                        let base_confidence = {
+                            let mut conf = 0.50_f32;
                             if signal.project_name.is_some() {
                                 conf += 0.10;
                             }
@@ -277,8 +275,9 @@ impl ACE {
                             }
                             conf.min(0.90)
                         };
+                        let confidence = base_confidence * signal.project_relevance;
 
-                        if confidence >= 0.3 {
+                        if base_confidence >= 0.3 {
                             for lang in &signal.languages {
                                 detected_tech.push(DetectedTech {
                                     name: lang.clone(),
@@ -429,11 +428,15 @@ impl ACE {
             avg_confidence.min(0.95)
         };
 
+        let active_count = merged_tech.iter().filter(|t| t.confidence >= 0.5).count();
+        let stale_count = merged_tech.len() - active_count;
         info!(target: "ace::detect",
             tech_count = merged_tech.len(),
+            active = active_count,
+            stale = stale_count,
             projects = projects_found,
             confidence = context_confidence * 100.0,
-            "Context detection complete"
+            "Context detection complete (activity-weighted)"
         );
 
         store_detected_context(&self.conn, &merged_tech, &active_topics)?;
