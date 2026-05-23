@@ -238,29 +238,34 @@ impl SettingsManager {
         }
 
         // --- Hydrate keys from keychain into in-memory settings ---
-        if let Ok(Some(key)) = keystore::get_secret("llm_api_key") {
-            if !key.is_empty() {
-                settings.llm.api_key = key;
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("openai_api_key") {
-            if !key.is_empty() {
-                settings.llm.openai_api_key = key;
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("x_api_key") {
-            if !key.is_empty() {
-                settings.x_api_key = SensitiveString::new(key);
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("license_key") {
-            if !key.is_empty() {
-                settings.license.license_key = key;
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("translation_api_key") {
-            if !key.is_empty() {
-                settings.translation.api_key = key;
+        // Retry once after a short delay if all keychain reads return None.
+        // Handles dev-mode race conditions where the previous process hasn't
+        // fully released the credential store before the new one starts.
+        let hydrated = Self::hydrate_from_keychain(&mut settings);
+        if hydrated == 0 && !has_plaintext_keys {
+            // No keys from keychain AND no plaintext — might be a race condition.
+            // Only retry if we have reason to believe keys should exist (provider
+            // is configured for a cloud LLM that requires an API key).
+            let needs_key = !matches!(
+                settings.llm.provider.as_str(),
+                "none" | "ollama" | "local" | ""
+            );
+            if needs_key {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                let retried = Self::hydrate_from_keychain(&mut settings);
+                if retried == 0 {
+                    warn!(
+                        target: "4da::keystore",
+                        provider = %settings.llm.provider,
+                        "Keychain hydration returned zero keys after retry — provider requires an API key but none available"
+                    );
+                } else {
+                    info!(
+                        target: "4da::keystore",
+                        keys_recovered = retried,
+                        "Keychain hydration succeeded on retry (race condition resolved)"
+                    );
+                }
             }
         }
 
@@ -270,5 +275,42 @@ impl SettingsManager {
             settings_path,
             usage_path,
         }
+    }
+
+    /// Read keychain secrets into the in-memory settings struct.
+    /// Returns the count of keys successfully hydrated.
+    fn hydrate_from_keychain(settings: &mut super::super::types::Settings) -> u32 {
+        let mut count = 0u32;
+        if let Ok(Some(key)) = keystore::get_secret("llm_api_key") {
+            if !key.is_empty() {
+                settings.llm.api_key = key;
+                count += 1;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("openai_api_key") {
+            if !key.is_empty() {
+                settings.llm.openai_api_key = key;
+                count += 1;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("x_api_key") {
+            if !key.is_empty() {
+                settings.x_api_key = super::super::types::SensitiveString::new(key);
+                count += 1;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("license_key") {
+            if !key.is_empty() {
+                settings.license.license_key = key;
+                count += 1;
+            }
+        }
+        if let Ok(Some(key)) = keystore::get_secret("translation_api_key") {
+            if !key.is_empty() {
+                settings.translation.api_key = key;
+                count += 1;
+            }
+        }
+        count
     }
 }

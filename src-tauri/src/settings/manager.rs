@@ -72,7 +72,7 @@ impl SettingsManager {
     ///
     /// API keys are stripped from the on-disk copy -- they live in the
     /// platform keychain. The in-memory `self.settings` remains intact.
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         if let Some(parent) = self.settings_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -80,6 +80,22 @@ impl SettingsManager {
         // Clean up any orphaned temp file from a previous crash
         let tmp_path = self.settings_path.with_extension("json.tmp");
         let _ = fs::remove_file(&tmp_path); // ignore error if doesn't exist
+
+        // Key loss recovery: if an in-memory key is empty but the keychain
+        // still has it, recover into memory before proceeding. This catches
+        // scenarios where hydration at startup failed (dev-mode race, locked
+        // credential store) but the keychain retained the key.
+        self.recover_keys_from_keychain();
+
+        // Re-persist non-empty in-memory keys to keychain before verifying.
+        // Defensive: if the keychain lost a key (OS update, dev-mode race, credential
+        // corruption), this re-writes it from the authoritative in-memory copy.
+        // The subsequent verify_round_trip then confirms persistence.
+        for (name, value) in Self::key_pairs(&self.settings) {
+            if !value.is_empty() {
+                let _ = keystore::store_secret(name, value);
+            }
+        }
 
         // Clone settings and clear SECRET fields that are VERIFIED in the keychain.
         // Uses round-trip verification: only strip a key from disk if reading it
@@ -198,6 +214,58 @@ impl SettingsManager {
         fs::write(&tmp_path, &json)?;
         atomic_replace(&tmp_path, &self.usage_path)?;
         Ok(())
+    }
+
+    /// Recover keys from the keychain into in-memory settings.
+    ///
+    /// Called at the start of every `save()`. If a key is empty in memory but
+    /// present in the keychain, we pull it back. This prevents accidental key
+    /// loss from hydration failures, dev-mode race conditions, or any code path
+    /// that inadvertently clears an in-memory key without explicit intent.
+    fn recover_keys_from_keychain(&mut self) {
+        let pairs: [(&str, bool); 5] = [
+            ("llm_api_key", self.settings.llm.api_key.is_empty()),
+            ("openai_api_key", self.settings.llm.openai_api_key.is_empty()),
+            ("x_api_key", self.settings.x_api_key.is_empty()),
+            ("license_key", self.settings.license.license_key.is_empty()),
+            (
+                "translation_api_key",
+                self.settings.translation.api_key.is_empty(),
+            ),
+        ];
+        for (name, is_empty) in pairs {
+            if !is_empty {
+                continue;
+            }
+            if let Ok(Some(val)) = keystore::get_secret(name) {
+                if !val.is_empty() {
+                    tracing::info!(
+                        target: "4da::keystore",
+                        key = name,
+                        "Recovered key from keychain — was empty in memory"
+                    );
+                    match name {
+                        "llm_api_key" => self.settings.llm.api_key = val,
+                        "openai_api_key" => self.settings.llm.openai_api_key = val,
+                        "x_api_key" => self.settings.x_api_key = SensitiveString::new(val),
+                        "license_key" => self.settings.license.license_key = val,
+                        "translation_api_key" => self.settings.translation.api_key = val,
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+
+    /// Key name / value pairs for all keychain-managed secrets.
+    fn key_pairs(s: &Settings) -> [(&'static str, &str); 5] {
+        [
+            ("llm_api_key", s.llm.api_key.as_str()),
+            ("openai_api_key", s.llm.openai_api_key.as_str()),
+            ("x_api_key", s.x_api_key.as_str()),
+            ("license_key", s.license.license_key.as_str()),
+            ("translation_api_key", s.translation.api_key.as_str()),
+        ]
     }
 
     /// Get current settings
