@@ -2066,15 +2066,15 @@ pub(crate) async fn synthesize_morning_briefing(
             let deps = if item.matched_deps.is_empty() {
                 String::new()
             } else {
-                format!(" (affects: {})", item.matched_deps.join(", "))
+                format!(", touches: {}", item.matched_deps.join(", "))
             };
             format!(
-                "{}. [{}] {}{} — {}{}",
+                "{}. {}{} -- {} (via {}{})",
                 i + 1,
-                item.source_type,
                 tag,
                 item.title,
                 desc,
+                item.source_type,
                 deps
             )
         })
@@ -2163,9 +2163,11 @@ BANNED:
 - Horizontal rules (---), separators, or dividers between clusters -- use a blank line only
 - Unicode em dashes or special characters -- use plain ASCII only
 - Fabricated numbers/percentages/statistics not present in the signals
+- Echoing source-type tags like [rss], [hackernews], [arxiv] from the input -- describe findings naturally
+- Echoing "(affects: ...)" or "(touches: ...)" metadata from the input -- integrate dependency info naturally
 
 SOURCE-TYPE CALIBRATION:
-Each signal is prefixed with [source_type]. Calibrate your language accordingly:
+Each signal is prefixed with its source type. Calibrate your language accordingly:
 - [arxiv] or [papers_with_code]: "research shows", "findings indicate"
 - [cve], [osv], [github_advisory]: "confirmed vulnerability", "advisory reports"
 - [hackernews], [lobsters], [reddit]: "community discussion suggests", "developers report"
