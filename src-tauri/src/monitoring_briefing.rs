@@ -1141,6 +1141,56 @@ fn parse_briefing_time(time_str: &str) -> (u32, u32) {
     }
 }
 
+/// Returns true if the morning briefing is due to fire this tick.
+/// Checks enabled, time window, and already-fired guards — but does NOT build the
+/// briefing or read analysis results. Used by the scheduler to trigger a fresh
+/// fetch+analyze cycle before the briefing reads results.
+pub fn is_morning_briefing_due(state: &MonitoringState) -> bool {
+    let (enabled, briefing_time_str, persisted_date) = {
+        let settings = crate::get_settings_manager().lock();
+        let monitoring = &settings.get().monitoring;
+        let enabled = monitoring.morning_briefing.unwrap_or(true);
+        let time = monitoring
+            .briefing_time
+            .clone()
+            .unwrap_or_else(|| "08:00".to_string());
+        let last = monitoring.last_briefing_date.clone();
+        (enabled, time, last)
+    };
+
+    if !enabled {
+        return false;
+    }
+
+    let now = chrono::Local::now();
+    let today = now.format("%Y-%m-%d").to_string();
+
+    if let Some(ref last) = persisted_date {
+        if last == &today {
+            return false;
+        }
+    }
+    {
+        let last_date = state.last_morning_briefing_date.lock();
+        if let Some(ref last) = *last_date {
+            if last == &today {
+                return false;
+            }
+        }
+    }
+
+    let (target_hour, target_min) = parse_briefing_time(&briefing_time_str);
+    let now_mins = now.hour() * 60 + now.minute();
+    let target_mins = target_hour * 60 + target_min;
+    let mins_since_target = ((now_mins as i32 - target_mins as i32) + 1440) % 1440;
+
+    if mins_since_target > 1410 {
+        return false;
+    }
+
+    true
+}
+
 /// Check if morning briefing should fire and generate notification content.
 /// Returns None if disabled, outside the briefing window, or already fired today.
 /// The last briefing date is persisted to settings.json so a restart doesn't
