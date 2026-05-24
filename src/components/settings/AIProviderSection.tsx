@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
 import { BuiltinModelSection } from './BuiltinModelSection';
+import { ModelEvalSection } from './ModelEvalSection';
 import { ReRankingSection } from './ReRankingSection';
 import { UsageStatsSection } from './UsageStatsSection';
 import { popularEndpoints, getProviderModels, ollamaSynthesisModels, ollamaOtherModels, IDLE_VALIDATION } from './ai-provider-constants';
@@ -344,6 +345,10 @@ export function AIProviderSection({
           )}
         </div>
       </div>
+
+      {(settingsForm.provider === 'ollama' || settingsForm.provider === 'builtin' || settingsForm.provider === 'openai-compatible') && (
+        <ModelEvalSection />
+      )}
 
       <ReRankingSection settingsForm={settingsForm} setSettingsForm={setSettingsForm} />
 

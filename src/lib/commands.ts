@@ -789,7 +789,26 @@ interface CommandMap {
   download_builtin_model: { params: { model_id: string }; result: { model_id: string; path: string; status: string } };
   cancel_builtin_model_download: { params: Record<string, never>; result: string };
   delete_builtin_model: { params: { model_id: string }; result: { model_id: string; status: string } };
+  run_model_eval: { params: Record<string, never>; result: ModelEvalSummary };
 
+}
+
+interface ModelEvalSummary {
+  model_tag: string;
+  provider: string;
+  total_fixtures: number;
+  passed: number;
+  failed: number;
+  critical_violations: number;
+  verdict: 'Pass' | 'PassWithWarnings' | 'Fail';
+  reports: Array<{
+    fixture_name: string;
+    passed: boolean;
+    violations: Array<{ pattern: string; reason: string; severity: string; matched_text: string }>;
+    missing_required: string[];
+    synthesis_text: string;
+    duration_ms: number;
+  }>;
 }
 
 interface ContentGraph {
