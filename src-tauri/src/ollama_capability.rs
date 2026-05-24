@@ -95,9 +95,16 @@ pub(crate) fn parse_param_size(s: &str) -> Option<f64> {
 /// and shows ranked signals without a narrative — accurate over impressive.
 pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> bool {
     match provider.provider.as_str() {
-        "anthropic" | "openai" | "openai-compatible" => {
+        "anthropic" | "openai" => {
             // Cloud models all exceed synthesis floor.
             // Still need a valid API key.
+            !provider.api_key.is_empty()
+        }
+        "openai-compatible" => {
+            warn!(
+                target: "4da::ollama",
+                "openai-compatible provider — synthesis quality is unverified"
+            );
             !provider.api_key.is_empty()
         }
         "ollama" => {
@@ -105,11 +112,14 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
                 .base_url
                 .as_deref()
                 .unwrap_or("http://localhost:11434");
-            let model = if provider.model.is_empty() {
-                "llama3.2"
-            } else {
-                &provider.model
-            };
+            if provider.model.is_empty() {
+                warn!(
+                    target: "4da::ollama",
+                    "No Ollama model configured — skipping synthesis"
+                );
+                return false;
+            }
+            let model = &provider.model;
 
             match get_model_params_billions(model, base_url).await {
                 Some(params) => {
@@ -146,17 +156,27 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
 /// explanations that a senior developer wouldn't laugh at.
 pub(crate) async fn can_explain(provider: &crate::settings::LLMProvider) -> bool {
     match provider.provider.as_str() {
-        "anthropic" | "openai" | "openai-compatible" => !provider.api_key.is_empty(),
+        "anthropic" | "openai" => !provider.api_key.is_empty(),
+        "openai-compatible" => {
+            warn!(
+                target: "4da::ollama",
+                "openai-compatible provider — explanation quality is unverified"
+            );
+            !provider.api_key.is_empty()
+        }
         "ollama" => {
             let base_url = provider
                 .base_url
                 .as_deref()
                 .unwrap_or("http://localhost:11434");
-            let model = if provider.model.is_empty() {
-                "llama3.2"
-            } else {
-                &provider.model
-            };
+            if provider.model.is_empty() {
+                warn!(
+                    target: "4da::ollama",
+                    "No Ollama model configured — skipping explanation"
+                );
+                return false;
+            }
+            let model = &provider.model;
             match get_model_params_billions(model, base_url).await {
                 Some(params) => params >= ANALYSIS_QUALITY_MIN_PARAMS_B,
                 None => false,

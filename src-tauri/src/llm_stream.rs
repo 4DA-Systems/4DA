@@ -8,7 +8,7 @@ use crate::error::{Result, ResultExt};
 use crate::llm::{sanitize_api_error, LLMResponse, Message};
 use crate::settings::LLMProvider;
 use futures::StreamExt;
-use tracing::{debug, warn};
+use tracing::debug;
 
 // ============================================================================
 // SSE / NDJSON Parsing Helpers (pub for testing)
@@ -410,49 +410,6 @@ where
         input_tokens,
         output_tokens,
     })
-}
-
-/// Streaming fallback to local Ollama (when primary provider fails).
-pub(crate) async fn stream_ollama_fallback<F>(
-    system: &str,
-    messages: Vec<Message>,
-    on_token: F,
-) -> Result<LLMResponse>
-where
-    F: Fn(&str) + Send + 'static,
-{
-    let fallback_client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .unwrap_or_else(|e| {
-            warn!("Failed to build HTTP client: {e}, using default");
-            reqwest::Client::new()
-        });
-
-    let fallback_provider = LLMProvider {
-        provider: "ollama".to_string(),
-        api_key: String::new(),
-        model: "llama3".to_string(),
-        base_url: Some("http://localhost:11434".to_string()),
-        openai_api_key: String::new(),
-        embedding_model: crate::reembed::DEFAULT_EMBEDDING_MODEL.to_string(),
-    };
-
-    warn!(
-        target: "4da::llm",
-        model = "llama3",
-        "Falling back to local Ollama for streaming"
-    );
-
-    stream_ollama(
-        &fallback_client,
-        &fallback_provider,
-        system,
-        messages,
-        on_token,
-    )
-    .await
 }
 
 // ============================================================================

@@ -1982,7 +1982,7 @@ pub(crate) async fn synthesize_morning_briefing(
 
     if !crate::ollama::can_synthesize(&llm_settings).await {
         return Err(
-            "Model below synthesis capability threshold (requires 7B+ local or cloud API)".into(),
+            "Model below synthesis capability threshold — configure a 14B+ local model (e.g. qwen3:14b) or a cloud API key".into(),
         );
     }
 

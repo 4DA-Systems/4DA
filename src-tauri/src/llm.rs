@@ -12,16 +12,6 @@ use crate::state::{is_llm_limit_reached, record_llm_cost, record_llm_tokens};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 
-/// Static HTTP client for Ollama fallback — avoids creating a new client per call.
-static OLLAMA_FALLBACK_CLIENT: std::sync::LazyLock<reqwest::Client> =
-    std::sync::LazyLock::new(|| {
-        reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new())
-    });
-
 pub use crate::llm_judge::RelevanceJudge;
 
 /// Sanitize API error response text to prevent leaking secrets.
@@ -148,8 +138,6 @@ impl LLMClient {
 
     /// Send a completion request.
     /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
-    /// When a cloud provider (anthropic/openai) fails with a network or API error,
-    /// transparently falls back to local Ollama at localhost:11434.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
         if is_llm_limit_reached() {
@@ -188,26 +176,9 @@ impl LLMClient {
             _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
 
-        // If a cloud provider failed, attempt Ollama fallback
         let response = match result {
             Ok(resp) => resp,
-            Err(ref err) if self.should_fallback_to_ollama(err) => {
-                warn!(
-                    target: "4da::llm",
-                    provider = %self.provider.provider,
-                    error = %err,
-                    "Cloud LLM failed, falling back to local Ollama"
-                );
-                // Record the cloud failure to error telemetry (fallback may still succeed)
-                crate::telemetry::record_error_async(
-                    "llm",
-                    &format!("{err}"),
-                    Some(&self.provider.provider),
-                );
-                self.complete_ollama_fallback(system, messages).await?
-            }
             Err(err) => {
-                // Record hard LLM failure to error telemetry
                 crate::telemetry::record_error_async(
                     "llm",
                     &format!("{err}"),
@@ -266,26 +237,18 @@ impl LLMClient {
             _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
 
-        // Retry once on transient failure (with Ollama fallback)
         let response = match result {
             Ok(resp) => resp,
-            Err(ref err) if self.should_fallback_to_ollama(err) => {
-                debug!(
-                    target: "4da::i18n",
-                    provider = %self.provider.provider,
-                    error = %err,
-                    "Translation LLM failed, retrying with Ollama"
-                );
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                self.complete_ollama_fallback(system, messages).await?
-            }
             Err(_err) => {
-                // Retry once after backoff
                 debug!(target: "4da::i18n", error = %_err, "Translation LLM failed, retrying after 2s");
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 match self.provider.provider.as_str() {
+                    "anthropic" => self.complete_anthropic(system, messages).await?,
+                    "openai" | "openai-compatible" => {
+                        self.complete_openai(system, messages).await?
+                    }
                     "ollama" => self.complete_ollama(system, messages).await?,
-                    _ => self.complete_ollama_fallback(system, messages).await?,
+                    _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
                 }
             }
         };
@@ -307,104 +270,6 @@ impl LLMClient {
         }
 
         Ok(response)
-    }
-
-    /// Determine whether a failed LLM call should fall back to Ollama.
-    /// Only falls back when:
-    /// - The current provider is NOT already Ollama
-    /// - The error looks like a network/API issue (not a token-limit or budget error)
-    fn should_fallback_to_ollama(&self, error: &crate::error::FourDaError) -> bool {
-        // Never fallback if already using Ollama
-        if self.provider.provider == "ollama" {
-            return false;
-        }
-
-        // Don't fallback for token/budget/cost limit errors (these are intentional caps)
-        let error_str = error.to_string();
-        let is_limit_error = error_str.contains("token limit")
-            || error_str.contains("cost limit")
-            || error_str.contains("rate limit")
-            || error_str.contains("quota")
-            || error_str.contains("billing")
-            || error_str.contains("insufficient_quota");
-
-        !is_limit_error
-    }
-
-    /// Ollama fallback: uses localhost:11434 with a sensible default model.
-    /// This is only called when the primary cloud provider has failed.
-    async fn complete_ollama_fallback(
-        &self,
-        system: &str,
-        messages: Vec<Message>,
-    ) -> Result<LLMResponse> {
-        let fallback_base_url = "http://localhost:11434";
-        let fallback_model = "llama3.2";
-        let url = format!("{fallback_base_url}/api/chat");
-
-        let mut all_messages = vec![serde_json::json!({
-            "role": "system",
-            "content": system
-        })];
-
-        for m in &messages {
-            all_messages.push(serde_json::json!({
-                "role": m.role,
-                "content": m.content
-            }));
-        }
-
-        let body = serde_json::json!({
-            "model": fallback_model,
-            "messages": all_messages,
-            "stream": false
-        });
-
-        let response = OLLAMA_FALLBACK_CLIENT
-            .post(&url)
-            .header("content-type", "application/json")
-            .json(&body)
-            .send()
-            .await
-            .context("Ollama fallback also failed (is Ollama running?)")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(format!(
-                "Ollama fallback error {}: {}",
-                status,
-                sanitize_api_error(&text)
-            )
-            .into());
-        }
-
-        let data: serde_json::Value = response
-            .json()
-            .await
-            .context("Failed to parse Ollama fallback response")?;
-
-        let content = data["message"]["content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        let input_tokens = data["prompt_eval_count"].as_u64().unwrap_or(0);
-        let output_tokens = data["eval_count"].as_u64().unwrap_or(0);
-
-        warn!(
-            target: "4da::llm",
-            model = fallback_model,
-            input_tokens = input_tokens,
-            output_tokens = output_tokens,
-            "Ollama fallback succeeded"
-        );
-
-        Ok(LLMResponse {
-            content,
-            input_tokens,
-            output_tokens,
-        })
     }
 
     /// Anthropic Claude API
@@ -708,20 +573,8 @@ impl LLMClient {
             _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
 
-        // If a cloud provider failed, attempt streaming Ollama fallback
         let response = match result {
             Ok(resp) => resp,
-            Err(ref err) if self.should_fallback_to_ollama(err) => {
-                warn!(
-                    target: "4da::llm",
-                    provider = %self.provider.provider,
-                    error = %err,
-                    "Cloud LLM streaming failed, falling back to local Ollama"
-                );
-                // on_token was consumed by the first attempt; create a no-op for fallback
-                // since partial tokens may have already been emitted
-                crate::llm_stream::stream_ollama_fallback(system, messages, |_| {}).await?
-            }
             Err(err) => return Err(err),
         };
 
@@ -1037,119 +890,6 @@ mod tests {
     fn test_sanitize_api_error_preserves_short_text() {
         let text = "rate limit exceeded";
         assert_eq!(sanitize_api_error(text), text);
-    }
-
-    // ========================================================================
-    // should_fallback_to_ollama — pure logic
-    // ========================================================================
-
-    /// Helper to build an LLMClient with a given provider name.
-    fn client_with_provider(provider_name: &str) -> LLMClient {
-        let provider = LLMProvider {
-            provider: provider_name.to_string(),
-            api_key: "test-key".to_string(),
-            model: "test-model".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-        };
-        LLMClient::new(provider)
-    }
-
-    #[test]
-    fn test_fallback_never_triggers_for_ollama_provider() {
-        let client = client_with_provider("ollama");
-        // Even a generic network error should NOT trigger fallback when already on Ollama
-        let err = crate::error::FourDaError::Config("connection refused".to_string());
-        assert!(
-            !client.should_fallback_to_ollama(&err),
-            "Ollama provider must never fallback to itself"
-        );
-    }
-
-    #[test]
-    fn test_fallback_triggers_for_anthropic_on_network_error() {
-        let client = client_with_provider("anthropic");
-        let err = crate::error::FourDaError::Config("connection refused".to_string());
-        assert!(
-            client.should_fallback_to_ollama(&err),
-            "Anthropic network error should trigger Ollama fallback"
-        );
-    }
-
-    #[test]
-    fn test_fallback_triggers_for_openai_on_generic_error() {
-        let client = client_with_provider("openai");
-        let err =
-            crate::error::FourDaError::Config("API error 500: internal server error".to_string());
-        assert!(
-            client.should_fallback_to_ollama(&err),
-            "OpenAI server error should trigger Ollama fallback"
-        );
-    }
-
-    #[test]
-    fn test_fallback_blocked_for_token_limit_error() {
-        let client = client_with_provider("anthropic");
-        let err = crate::error::FourDaError::Config("Daily token limit exceeded".to_string());
-        assert!(
-            !client.should_fallback_to_ollama(&err),
-            "Token limit error must NOT trigger fallback — user wants budget enforcement"
-        );
-    }
-
-    #[test]
-    fn test_fallback_blocked_for_cost_limit_error() {
-        let client = client_with_provider("openai");
-        let err = crate::error::FourDaError::Config("cost limit reached for today".to_string());
-        assert!(
-            !client.should_fallback_to_ollama(&err),
-            "Cost limit error must NOT trigger fallback"
-        );
-    }
-
-    #[test]
-    fn test_fallback_blocked_for_rate_limit_error() {
-        let client = client_with_provider("anthropic");
-        let err =
-            crate::error::FourDaError::Config("rate limit exceeded, retry after 30s".to_string());
-        assert!(
-            !client.should_fallback_to_ollama(&err),
-            "Rate limit should NOT trigger fallback — it's a temporary condition"
-        );
-    }
-
-    #[test]
-    fn test_fallback_blocked_for_quota_error() {
-        let client = client_with_provider("openai");
-        let err = crate::error::FourDaError::Config(
-            "insufficient_quota: you have exceeded your plan".to_string(),
-        );
-        assert!(
-            !client.should_fallback_to_ollama(&err),
-            "Quota/billing error must NOT trigger fallback"
-        );
-    }
-
-    #[test]
-    fn test_fallback_blocked_for_billing_error() {
-        let client = client_with_provider("anthropic");
-        let err =
-            crate::error::FourDaError::Config("billing issue: payment method required".to_string());
-        assert!(
-            !client.should_fallback_to_ollama(&err),
-            "Billing error must NOT trigger fallback"
-        );
-    }
-
-    #[test]
-    fn test_fallback_triggers_for_openai_compatible_provider() {
-        let client = client_with_provider("openai-compatible");
-        let err = crate::error::FourDaError::Config("server returned 502".to_string());
-        assert!(
-            client.should_fallback_to_ollama(&err),
-            "openai-compatible provider should also fallback on errors"
-        );
     }
 
     // ========================================================================

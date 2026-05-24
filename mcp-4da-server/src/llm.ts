@@ -621,18 +621,18 @@ export async function checkOllamaStatus(
  */
 export const RECOMMENDED_MODELS = {
   "16GB_VRAM": {
-    primary: "qwen2.5:14b-instruct-q5_K_M",
-    fallback: "llama3.1:8b-instruct-q8_0",
-    install: "ollama pull qwen2.5:14b-instruct-q5_K_M",
+    primary: "qwen3:14b",
+    fallback: "gemma3:12b",
+    install: "ollama pull qwen3:14b",
   },
   "12GB_VRAM": {
-    primary: "mistral-nemo:12b-instruct-q5_K_M",
-    fallback: "llama3.1:8b-instruct-q6_K",
-    install: "ollama pull mistral-nemo:12b-instruct-q5_K_M",
+    primary: "gemma3:12b",
+    fallback: "qwen3:8b",
+    install: "ollama pull gemma3:12b",
   },
   "8GB_VRAM": {
-    primary: "llama3.1:8b-instruct-q6_K",
-    fallback: "llama3.2:3b-instruct-q8_0",
-    install: "ollama pull llama3.1:8b-instruct-q6_K",
+    primary: "qwen3:8b",
+    fallback: "gemma3:4b",
+    install: "ollama pull qwen3:8b",
   },
 };
