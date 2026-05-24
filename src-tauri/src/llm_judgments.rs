@@ -120,10 +120,10 @@ struct ItemForJudgment {
 /// (for non-Ollama providers).
 fn get_llm_settings() -> Option<LLMProvider> {
     let mgr = crate::get_settings_manager();
-    let guard = mgr.lock();
+    let mut guard = mgr.lock();
+    guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
 
-    // Ollama doesn't need an API key; cloud providers do
     if provider.provider != "ollama" && provider.api_key.is_empty() {
         return None;
     }

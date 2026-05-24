@@ -86,11 +86,10 @@ pub fn get_content_translation_settings() -> Result<content_translation::Content
     let target_lang = i18n::get_user_language();
 
     let manager = crate::get_settings_manager();
-    let guard = manager.lock();
+    let mut guard = manager.lock();
+    guard.ensure_keys_hydrated();
     let settings = guard.get();
 
-    // Translation is enabled if the user has a non-English language set
-    // and has an LLM provider configured
     let has_llm = !settings.llm.api_key.is_empty() || settings.llm.provider == "ollama";
     let enabled = target_lang != "en" && has_llm;
 

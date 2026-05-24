@@ -20,11 +20,11 @@ static OLLAMA_PULL_ABORT: AtomicBool = AtomicBool::new(false);
 pub async fn test_llm_connection() -> Result<serde_json::Value> {
     let manager = get_settings_manager();
     let settings = {
-        let guard = manager.lock();
+        let mut guard = manager.lock();
+        guard.ensure_keys_hydrated();
         guard.get().clone()
     };
 
-    // Ollama doesn't need an API key
     if settings.llm.provider == "none"
         || (settings.llm.provider != "ollama" && settings.llm.api_key.is_empty())
     {

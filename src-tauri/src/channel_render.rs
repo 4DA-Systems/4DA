@@ -274,10 +274,10 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
         return Ok(render);
     }
 
-    // Check LLM availability -- clone settings out of lock before any await
     let llm_settings = {
-        let settings = crate::get_settings_manager().lock();
-        settings.get().llm.clone()
+        let mut guard = crate::get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
     };
 
     let has_llm = !llm_settings.provider.is_empty()

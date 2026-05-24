@@ -81,11 +81,7 @@ impl SettingsManager {
         let tmp_path = self.settings_path.with_extension("json.tmp");
         let _ = fs::remove_file(&tmp_path); // ignore error if doesn't exist
 
-        // Key loss recovery: if an in-memory key is empty but the keychain
-        // still has it, recover into memory before proceeding. This catches
-        // scenarios where hydration at startup failed (dev-mode race, locked
-        // credential store) but the keychain retained the key.
-        self.recover_keys_from_keychain();
+        self.ensure_keys_hydrated();
 
         // Re-persist non-empty in-memory keys to keychain before verifying.
         // Defensive: if the keychain lost a key (OS update, dev-mode race, credential
@@ -216,13 +212,14 @@ impl SettingsManager {
         Ok(())
     }
 
-    /// Recover keys from the keychain into in-memory settings.
+    /// Ensure all keychain-managed secrets are present in memory.
     ///
-    /// Called at the start of every `save()`. If a key is empty in memory but
-    /// present in the keychain, we pull it back. This prevents accidental key
-    /// loss from hydration failures, dev-mode race conditions, or any code path
-    /// that inadvertently clears an in-memory key without explicit intent.
-    fn recover_keys_from_keychain(&mut self) {
+    /// Called at the start of every `save()` and before any code path that
+    /// gates on `api_key.is_empty()`. If a key is empty in memory but
+    /// present in the keychain, we pull it back. This is the permanent fix
+    /// for the dev-mode hydration race: even if startup hydration fails,
+    /// every consumer re-checks before giving up.
+    pub fn ensure_keys_hydrated(&mut self) {
         let pairs: [(&str, bool); 5] = [
             ("llm_api_key", self.settings.llm.api_key.is_empty()),
             (

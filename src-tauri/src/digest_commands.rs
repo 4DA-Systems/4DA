@@ -61,10 +61,10 @@ pub(crate) async fn generate_briefing_internal(
         info!(target: "4da::briefing", count = batched.len(), "Including batched notifications");
     }
 
-    // Get LLM settings
     let llm_settings = {
-        let settings = get_settings_manager().lock();
-        settings.get().llm.clone()
+        let mut guard = get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
     };
 
     if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {

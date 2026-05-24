@@ -28,10 +28,10 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
         return;
     }
 
-    // Check if LLM is configured
     let has_llm = {
-        let settings = crate::get_settings_manager().lock();
-        let llm = &settings.get().llm;
+        let mut guard = crate::get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        let llm = &guard.get().llm;
         llm.provider == "ollama" || !llm.api_key.is_empty()
     };
     if !has_llm {

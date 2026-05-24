@@ -503,7 +503,8 @@ pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
     // called once on mount, and try_lock() was silently failing during startup
     // when another thread held the mutex, letting the false-positive through.
     {
-        let guard = crate::get_settings_manager().lock();
+        let mut guard = crate::get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
         let has_key = !guard.get().llm.api_key.is_empty();
         if has_key {
             issues.retain(|i| {
