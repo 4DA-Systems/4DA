@@ -4208,3 +4208,526 @@ async fn channel_content_returns_render_for_first_channel() {
         "channel content must be object or null, got: {content}"
     );
 }
+
+// ── Phase 22: LLM Infrastructure — Sidecar, Models, Synthesis ────────────────
+//
+// Tests the llama-server sidecar lifecycle, model catalog, synthesis capability
+// checking, structured output from briefing synthesis, and the model eval harness.
+// These tests exercise the full local inference pipeline without cloud API keys.
+
+#[tokio::test]
+async fn builtin_model_catalog_has_entries() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("list_builtin_models", None)
+        .await
+        .unwrap();
+
+    let models = result
+        .get("models")
+        .and_then(|m| m.as_array())
+        .expect("list_builtin_models must return 'models' array");
+
+    assert!(
+        models.len() >= 3,
+        "catalog should have at least 3 models (primary + 2 fallbacks), got {}",
+        models.len()
+    );
+
+    for (i, model) in models.iter().enumerate() {
+        assert!(
+            model.get("id").and_then(|v| v.as_str()).is_some(),
+            "model[{i}] must have 'id'"
+        );
+        assert!(
+            model.get("display_name").and_then(|v| v.as_str()).is_some(),
+            "model[{i}] must have 'display_name'"
+        );
+        assert!(
+            model.get("size_bytes").and_then(|v| v.as_u64()).is_some(),
+            "model[{i}] must have numeric 'size_bytes'"
+        );
+        assert!(
+            model.get("min_ram_gb").and_then(|v| v.as_f64()).is_some(),
+            "model[{i}] must have 'min_ram_gb'"
+        );
+        assert!(
+            model.get("downloaded").and_then(|v| v.as_bool()).is_some(),
+            "model[{i}] must report 'downloaded' status"
+        );
+    }
+
+    assert!(
+        result
+            .get("ram_total_gb")
+            .and_then(|v| v.as_f64())
+            .is_some(),
+        "response must include 'ram_total_gb'"
+    );
+    assert!(
+        result
+            .get("ram_available_gb")
+            .and_then(|v| v.as_f64())
+            .is_some(),
+        "response must include 'ram_available_gb'"
+    );
+}
+
+#[tokio::test]
+async fn builtin_model_catalog_recommends_based_on_ram() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("list_builtin_models", None)
+        .await
+        .unwrap();
+
+    let ram_total = result
+        .get("ram_total_gb")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+
+    if ram_total >= 7.0 {
+        assert!(
+            result.get("recommended_id").is_some()
+                && !result.get("recommended_id").unwrap().is_null(),
+            "systems with ≥7 GB RAM should get a model recommendation"
+        );
+    }
+
+    let models = result["models"].as_array().unwrap();
+    for model in models {
+        let fits = model["fits_ram"].as_bool().unwrap_or(false);
+        let min_ram = model["min_ram_gb"].as_f64().unwrap_or(f64::MAX);
+        if min_ram <= ram_total {
+            assert!(
+                fits,
+                "model {} should fit in {:.0} GB RAM",
+                model["id"], ram_total
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn synthesis_capability_returns_hardware_info() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("check_synthesis_capability", None)
+        .await
+        .unwrap();
+
+    assert!(
+        result.get("provider").and_then(|v| v.as_str()).is_some(),
+        "must report 'provider'"
+    );
+    assert!(
+        result
+            .get("can_synthesize")
+            .and_then(|v| v.as_bool())
+            .is_some(),
+        "must report 'can_synthesize' boolean"
+    );
+    assert!(
+        result
+            .get("can_explain")
+            .and_then(|v| v.as_bool())
+            .is_some(),
+        "must report 'can_explain' boolean"
+    );
+    assert!(
+        result.get("guidance").and_then(|v| v.as_str()).is_some(),
+        "must provide guidance text"
+    );
+
+    let hw = result
+        .get("hardware")
+        .expect("must include 'hardware' block");
+    assert!(
+        hw.get("ram_total_gb").and_then(|v| v.as_f64()).is_some(),
+        "hardware.ram_total_gb must be numeric"
+    );
+    assert!(
+        hw.get("ram_available_gb")
+            .and_then(|v| v.as_f64())
+            .is_some(),
+        "hardware.ram_available_gb must be numeric"
+    );
+    assert!(
+        hw.get("ram_tier").and_then(|v| v.as_str()).is_some(),
+        "hardware.ram_tier must be a string"
+    );
+}
+
+#[tokio::test]
+async fn synthesis_capability_flags_unverified_providers() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("check_synthesis_capability", None)
+        .await
+        .unwrap();
+
+    assert!(
+        result.get("unverified").and_then(|v| v.as_bool()).is_some(),
+        "must include 'unverified' flag for provider quality signal"
+    );
+
+    let provider = result["provider"].as_str().unwrap_or("");
+    let unverified = result["unverified"].as_bool().unwrap_or(false);
+
+    match provider {
+        "anthropic" | "openai" => {
+            assert!(
+                !unverified,
+                "cloud providers should not be flagged as unverified"
+            );
+        }
+        "openai-compatible" => {
+            assert!(
+                unverified,
+                "openai-compatible must be flagged as unverified"
+            );
+        }
+        _ => {} // builtin, ollama — no assertion needed
+    }
+}
+
+#[tokio::test]
+async fn builtin_llm_status_is_queryable() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("get_builtin_llm_status", None)
+        .await
+        .unwrap();
+
+    assert!(
+        result.get("status").and_then(|v| v.as_str()).is_some(),
+        "status must be a string (stopped/starting/ready/error)"
+    );
+
+    let status = result["status"].as_str().unwrap();
+    assert!(
+        ["stopped", "starting", "ready", "error"].contains(&status),
+        "status must be one of stopped/starting/ready/error, got: {status}"
+    );
+}
+
+#[tokio::test]
+async fn sidecar_starts_with_downloaded_model() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Find a downloaded model from the catalog
+    let catalog = client
+        .invoke_command("list_builtin_models", None)
+        .await
+        .unwrap();
+    let models = catalog["models"].as_array().expect("models array");
+    let downloaded = models.iter().find(|m| {
+        m.get("downloaded")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    });
+
+    let model = match downloaded {
+        Some(m) => m,
+        None => {
+            eprintln!("Skipping sidecar_starts_with_downloaded_model: no model downloaded");
+            return;
+        }
+    };
+
+    let model_path = model["path"]
+        .as_str()
+        .expect("downloaded model must have path");
+
+    let result = client
+        .invoke_command(
+            "start_builtin_llm",
+            Some(serde_json::json!({"model_path": model_path})),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result["status"].as_str().unwrap_or(""),
+        "ready",
+        "sidecar must reach 'ready' status"
+    );
+    assert!(
+        result["port"].as_u64().unwrap_or(0) > 0,
+        "sidecar must return a valid port number"
+    );
+
+    // Verify status reflects running state
+    let status = client
+        .invoke_command("get_builtin_llm_status", None)
+        .await
+        .unwrap();
+    assert_eq!(
+        status["status"].as_str().unwrap_or(""),
+        "ready",
+        "status must reflect running sidecar"
+    );
+
+    // Clean up
+    let _ = client.invoke_command("stop_builtin_llm", None).await;
+}
+
+#[tokio::test]
+async fn sidecar_rejects_nonexistent_model_path() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let result = client
+        .invoke_command(
+            "start_builtin_llm",
+            Some(serde_json::json!({"model_path": "C:\\nonexistent\\fake-model.gguf"})),
+        )
+        .await;
+
+    assert!(
+        result.is_err() || result.as_ref().ok().and_then(|v| v.get("error")).is_some(),
+        "starting with a nonexistent model must fail gracefully"
+    );
+}
+
+#[tokio::test]
+async fn sidecar_stop_returns_stopped() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let result = client
+        .invoke_command("stop_builtin_llm", None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result["status"].as_str().unwrap_or(""),
+        "stopped",
+        "stop command must return 'stopped' status"
+    );
+}
+
+#[tokio::test]
+async fn model_eval_returns_structured_verdict() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Check if synthesis is configured — eval needs a working LLM
+    let cap = client
+        .invoke_command("check_synthesis_capability", None)
+        .await
+        .unwrap();
+    let can_synth = cap["can_synthesize"].as_bool().unwrap_or(false);
+    let provider = cap["provider"].as_str().unwrap_or("");
+
+    if !can_synth && provider != "builtin" {
+        eprintln!("Skipping model_eval: no synthesis-capable provider configured");
+        return;
+    }
+
+    let result = client.invoke_command("run_model_eval", None).await;
+
+    match result {
+        Ok(summary) => {
+            assert!(
+                summary.get("verdict").and_then(|v| v.as_str()).is_some(),
+                "eval summary must have 'verdict' (pass/warnings/fail)"
+            );
+            let verdict = summary["verdict"].as_str().unwrap();
+            assert!(
+                ["pass", "warnings", "fail"].contains(&verdict),
+                "verdict must be pass/warnings/fail, got: {verdict}"
+            );
+
+            assert!(
+                summary
+                    .get("fixtures_run")
+                    .and_then(|v| v.as_u64())
+                    .is_some(),
+                "must report fixtures_run count"
+            );
+            assert!(
+                summary
+                    .get("fixtures_passed")
+                    .and_then(|v| v.as_u64())
+                    .is_some(),
+                "must report fixtures_passed count"
+            );
+
+            if let Some(results) = summary.get("results").and_then(|v| v.as_array()) {
+                for (i, r) in results.iter().enumerate() {
+                    assert!(
+                        r.get("fixture_name").and_then(|v| v.as_str()).is_some(),
+                        "result[{i}] must have 'fixture_name'"
+                    );
+                    assert!(
+                        r.get("passed").and_then(|v| v.as_bool()).is_some(),
+                        "result[{i}] must have 'passed' boolean"
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            let err_str = format!("{e:?}");
+            assert!(
+                err_str.contains("API")
+                    || err_str.contains("connection")
+                    || err_str.contains("sidecar")
+                    || err_str.contains("provider"),
+                "eval failure must be a connection/provider issue, not a crash: {err_str}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn briefing_snapshot_has_synthesis_fields() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let snapshot = client
+        .invoke_command("get_briefing_snapshot", None)
+        .await
+        .unwrap();
+
+    if snapshot.is_null() {
+        return;
+    }
+
+    let briefing = match snapshot.get("briefing").and_then(|v| v.as_str()) {
+        Some(b) if !b.is_empty() => b,
+        _ => return,
+    };
+
+    // Synthesis prose should be substantive, not a raw template
+    assert!(
+        briefing.len() >= 50,
+        "synthesis prose must be ≥50 chars, got {}",
+        briefing.len()
+    );
+    assert!(
+        !briefing.contains("{{") && !briefing.contains("}}"),
+        "synthesis must not contain template markers"
+    );
+    assert!(
+        !briefing.contains("TODO") && !briefing.contains("FIXME"),
+        "synthesis must not contain dev markers"
+    );
+
+    // Check for structured fields added by Phase 4
+    if let Some(clusters) = snapshot.get("clusters").and_then(|v| v.as_array()) {
+        for (i, cluster) in clusters.iter().enumerate() {
+            assert!(
+                cluster.get("insight").and_then(|v| v.as_str()).is_some(),
+                "cluster[{i}] must have 'insight'"
+            );
+            assert!(
+                cluster.get("confidence").is_some(),
+                "cluster[{i}] must have 'confidence'"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn trigger_briefing_returns_status() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let result = client
+        .invoke_command("trigger_morning_briefing", None)
+        .await;
+
+    match result {
+        Ok(val) => {
+            let msg = val.as_str().unwrap_or("");
+            // Either "No items available" (cold start) or a success message with counts
+            assert!(
+                msg.contains("items") || msg.contains("briefing") || msg.contains("No items"),
+                "trigger result must mention items or briefing status, got: {msg}"
+            );
+        }
+        Err(e) => {
+            let err_str = format!("{e:?}");
+            assert!(
+                !err_str.contains("not found") && !err_str.contains("unresolved"),
+                "trigger_morning_briefing must be a registered command: {err_str}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn ipc_commands_include_llm_infrastructure() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let required_commands = [
+        "check_synthesis_capability",
+        "list_builtin_models",
+        "start_builtin_llm",
+        "stop_builtin_llm",
+        "get_builtin_llm_status",
+        "download_builtin_model",
+        "cancel_builtin_model_download",
+        "delete_builtin_model",
+        "run_model_eval",
+        "trigger_morning_briefing",
+    ];
+
+    for cmd_name in &required_commands {
+        let result = client.invoke_command(cmd_name, None).await;
+        match &result {
+            Ok(_) => {}
+            Err(e) => {
+                let err_str = format!("{e:?}");
+                assert!(
+                    !err_str.contains("not found")
+                        && !err_str.contains("unknown command")
+                        && !err_str.contains("unresolved"),
+                    "IPC command '{cmd_name}' must be registered — got: {err_str}"
+                );
+            }
+        }
+    }
+}
