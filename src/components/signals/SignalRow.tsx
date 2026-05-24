@@ -70,7 +70,7 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
               {priority.label}
             </span>
             <span className={`text-[10px] uppercase tracking-wider ${getRelevancePresentation(signal.top_score).colorClass}`}>
-              {getRelevancePresentation(signal.top_score).label}
+              {t(getRelevancePresentation(signal.top_score).labelKey)}
             </span>
             <span className="text-[10px] text-text-muted">{sourceLabel}</span>
             {signal.signal_triggers.length > 0 && (

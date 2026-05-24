@@ -362,7 +362,7 @@ export const BriefingView = memo(function BriefingView() {
                           {item.sourceType}
                         </span>
                         <span className={`text-[9px] font-medium uppercase tracking-wider ${getRelevancePresentation(item.score).colorClass}`}>
-                          {getRelevancePresentation(item.score).label}
+                          {t(getRelevancePresentation(item.score).labelKey)}
                         </span>
                       </div>
                     </div>

@@ -142,7 +142,7 @@ const FeedItem = memo(function FeedItem({
     }`}>
       {/* Relevance */}
       <span className={`flex-shrink-0 text-[10px] font-medium w-14 text-end uppercase tracking-wider ${relevance.colorClass}`}>
-        {relevance.label}
+        {t(relevance.labelKey)}
       </span>
 
       {/* Signal strength micro-dots */}

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import { useTranslation } from 'react-i18next';
 import type { Visualization } from '../../types/personalization';
 import { getRelevancePresentation } from '../../utils/score';
 
@@ -56,6 +57,7 @@ function BarChart({ bars, maxValue, unit }: { bars: { label: string; value: numb
 }
 
 function RankList({ items }: { items: { rank: number; name: string; score: number; matches_stack: boolean }[] }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       {items.map((item) => (
@@ -72,7 +74,7 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
             )}
           </span>
           <span className={`text-[10px] font-medium uppercase tracking-wider w-14 text-end flex-shrink-0 ${getRelevancePresentation(item.score).colorClass}`}>
-            {getRelevancePresentation(item.score).label}
+            {t(getRelevancePresentation(item.score).labelKey)}
           </span>
         </div>
       ))}

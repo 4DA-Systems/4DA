@@ -93,7 +93,7 @@ describe('ResultItem', () => {
     );
 
     expect(screen.getByText('My Great Article')).toBeInTheDocument();
-    expect(screen.getByText('Core')).toBeInTheDocument();
+    expect(screen.getByText('relevance.core')).toBeInTheDocument();
   });
 
   it('hides explanation when collapsed (shown only when expanded)', () => {

@@ -48,28 +48,28 @@ describe('formatScore', () => {
 });
 
 describe('getRelevancePresentation', () => {
-  it('returns Core for scores >= 0.72', () => {
-    expect(getRelevancePresentation(0.72).label).toBe('Core');
-    expect(getRelevancePresentation(0.85).label).toBe('Core');
-    expect(getRelevancePresentation(1.0).label).toBe('Core');
+  it('returns Core key for scores >= 0.72', () => {
+    expect(getRelevancePresentation(0.72).labelKey).toBe('relevance.core');
+    expect(getRelevancePresentation(0.85).labelKey).toBe('relevance.core');
+    expect(getRelevancePresentation(1.0).labelKey).toBe('relevance.core');
   });
 
-  it('returns Strong for scores >= 0.50 and < 0.72', () => {
-    expect(getRelevancePresentation(0.50).label).toBe('Strong');
-    expect(getRelevancePresentation(0.65).label).toBe('Strong');
-    expect(getRelevancePresentation(0.71).label).toBe('Strong');
+  it('returns Strong key for scores >= 0.50 and < 0.72', () => {
+    expect(getRelevancePresentation(0.50).labelKey).toBe('relevance.strong');
+    expect(getRelevancePresentation(0.65).labelKey).toBe('relevance.strong');
+    expect(getRelevancePresentation(0.71).labelKey).toBe('relevance.strong');
   });
 
-  it('returns Match for scores >= 0.35 and < 0.50', () => {
-    expect(getRelevancePresentation(0.35).label).toBe('Match');
-    expect(getRelevancePresentation(0.42).label).toBe('Match');
-    expect(getRelevancePresentation(0.49).label).toBe('Match');
+  it('returns Match key for scores >= 0.35 and < 0.50', () => {
+    expect(getRelevancePresentation(0.35).labelKey).toBe('relevance.match');
+    expect(getRelevancePresentation(0.42).labelKey).toBe('relevance.match');
+    expect(getRelevancePresentation(0.49).labelKey).toBe('relevance.match');
   });
 
-  it('returns Faint for scores below 0.35', () => {
-    expect(getRelevancePresentation(0).label).toBe('Faint');
-    expect(getRelevancePresentation(0.2).label).toBe('Faint');
-    expect(getRelevancePresentation(0.34).label).toBe('Faint');
+  it('returns Faint key for scores below 0.35', () => {
+    expect(getRelevancePresentation(0).labelKey).toBe('relevance.faint');
+    expect(getRelevancePresentation(0.2).labelKey).toBe('relevance.faint');
+    expect(getRelevancePresentation(0.34).labelKey).toBe('relevance.faint');
   });
 
   it('uses correct color classes per tier', () => {

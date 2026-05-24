@@ -111,7 +111,7 @@ describe('ScoreBreakdownDrawer', () => {
   it('close button calls onClose', () => {
     const onClose = vi.fn();
     render(<ScoreBreakdownDrawer {...defaultProps} onClose={onClose} />);
-    const closeBtn = screen.getByLabelText('Close score breakdown');
+    const closeBtn = screen.getByLabelText('scoreDrawer.close');
     fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -291,7 +291,7 @@ describe('ScoreBreakdownDrawer (free tier)', () => {
   it('close button still works on free tier', () => {
     const onClose = vi.fn();
     render(<ScoreBreakdownDrawer {...defaultProps} onClose={onClose} />);
-    const closeBtn = screen.getByLabelText('Close score breakdown');
+    const closeBtn = screen.getByLabelText('scoreDrawer.close');
     fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
