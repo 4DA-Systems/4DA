@@ -2216,6 +2216,114 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         content: user_prompt,
     }];
 
+    // Build groundedness corpus once — shared by both structured and free-text paths
+    let corpus: Vec<String> = briefing
+        .items
+        .iter()
+        .map(|i| {
+            let mut c = i.title.clone();
+            if let Some(d) = &i.description {
+                c.push(' ');
+                c.push_str(d);
+            }
+            for dep in &i.matched_deps {
+                c.push(' ');
+                c.push_str(dep);
+            }
+            c
+        })
+        .collect();
+
+    const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
+
+    // --- Structured output path (Phase 4) -----------------------------------
+    // Try JSON mode first. If the provider supports it and the output validates,
+    // we skip the entire 200+ line post-processing gauntlet. On parse/validation
+    // failure, fall back transparently to the free-text path.
+    let structured_mode = crate::llm::StructuredOutputMode::Grammar {
+        grammar: crate::synthesis_schema::SYNTHESIS_GBNF_GRAMMAR,
+        schema: crate::synthesis_schema::SYNTHESIS_JSON_SCHEMA,
+    };
+
+    let start = std::time::Instant::now();
+    let structured_result = llm_client
+        .complete_structured(&full_system_prompt, messages.clone(), &structured_mode)
+        .await;
+
+    if let Ok(response) = &structured_result {
+        if let Ok(output) =
+            serde_json::from_str::<crate::synthesis_schema::SynthesisOutput>(&response.content)
+        {
+            if output.validate().is_ok() {
+                tracing::info!(
+                    target: "4da::briefing",
+                    tokens = response.input_tokens + response.output_tokens,
+                    elapsed_ms = start.elapsed().as_millis(),
+                    clusters = output.clusters.len(),
+                    "Structured synthesis succeeded"
+                );
+
+                // Per-cluster evidence ID validation
+                let id_warnings = output.validate_evidence_ids(briefing.items.len());
+                for w in &id_warnings {
+                    tracing::warn!(target: "4da::briefing", "{w}");
+                }
+
+                // Per-cluster groundedness check
+                let prose = output.to_prose();
+                let report = crate::briefing_groundedness::validate_groundedness(&prose, &corpus);
+                if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
+                    tracing::warn!(
+                        target: "4da::briefing",
+                        confidence = report.confidence,
+                        total_terms = report.total_terms,
+                        ungrounded_count = report.ungrounded_terms.len(),
+                        "Structured synthesis failed groundedness — abstaining"
+                    );
+                    return Ok("Low signal -- no noteworthy intelligence overnight.".to_string());
+                }
+
+                tracing::info!(
+                    target: "4da::briefing",
+                    confidence = report.confidence,
+                    "Structured synthesis passed groundedness"
+                );
+
+                let mut synthesis = prose;
+                let mut src_types: Vec<&str> = briefing
+                    .items
+                    .iter()
+                    .map(|i| i.source_type.as_str())
+                    .collect();
+                src_types.sort();
+                src_types.dedup();
+                synthesis.push_str(&format!(
+                    "\n\n({} signals across {})",
+                    briefing.items.len(),
+                    src_types.join(", ")
+                ));
+                return Ok(synthesis);
+            } else {
+                tracing::debug!(
+                    target: "4da::briefing",
+                    "Structured output failed validation — falling back to free-text"
+                );
+            }
+        } else {
+            tracing::debug!(
+                target: "4da::briefing",
+                "Structured output JSON parse failed — falling back to free-text"
+            );
+        }
+    } else {
+        tracing::debug!(
+            target: "4da::briefing",
+            error = %structured_result.unwrap_err(),
+            "Structured completion failed — falling back to free-text"
+        );
+    }
+
+    // --- Free-text fallback path (legacy) ------------------------------------
     let start = std::time::Instant::now();
     let response = match llm_client.complete(&full_system_prompt, messages).await {
         Ok(r) => r,
@@ -2229,13 +2337,12 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         target: "4da::briefing",
         tokens = response.input_tokens + response.output_tokens,
         elapsed_ms = start.elapsed().as_millis(),
-        "Morning brief synthesis complete"
+        "Free-text synthesis complete (fallback)"
     );
 
-    // --- Post-synthesis cleanup: strip citations and enforce word limit ------
     let mut synthesis = response.content.clone();
 
-    // Strip citation brackets [1], [2][3], etc. — LLMs add them despite being banned
+    // Strip citation brackets [1], [2][3], etc.
     while let Some(start_bracket) = synthesis.find('[') {
         if let Some(end_bracket) = synthesis[start_bracket..].find(']') {
             let inner = &synthesis[start_bracket + 1..start_bracket + end_bracket];
@@ -2251,27 +2358,23 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         break;
     }
 
-    // Strip markdown bold markers **text** → text
     while synthesis.contains("**") {
         synthesis = synthesis.replacen("**", "", 2);
     }
 
-    // Normalize unicode dashes to plain ASCII (prevents encoding artifacts in display)
-    synthesis = synthesis.replace('\u{2014}', "--"); // em dash
-    synthesis = synthesis.replace('\u{2013}', "--"); // en dash
-    synthesis = synthesis.replace('\u{2018}', "'"); // left single quote
-    synthesis = synthesis.replace('\u{2019}', "'"); // right single quote
-    synthesis = synthesis.replace('\u{201C}', "\""); // left double quote
-    synthesis = synthesis.replace('\u{201D}', "\""); // right double quote
+    synthesis = synthesis.replace('\u{2014}', "--");
+    synthesis = synthesis.replace('\u{2013}', "--");
+    synthesis = synthesis.replace('\u{2018}', "'");
+    synthesis = synthesis.replace('\u{2019}', "'");
+    synthesis = synthesis.replace('\u{201C}', "\"");
+    synthesis = synthesis.replace('\u{201D}', "\"");
 
-    // Strip markdown headers (## Header → Header)
     synthesis = synthesis
         .lines()
         .map(|line| line.trim_start_matches('#').trim_start())
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Strip LLM section labels that leak despite being banned in the prompt
     let label_prefixes = [
         "Top Signal:",
         "Top Signals:",
@@ -2326,7 +2429,6 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         "Observations:",
     ];
     for prefix in &label_prefixes {
-        // Case-insensitive prefix removal at line start
         for line_prefix in [*prefix, &prefix.to_uppercase()] {
             while synthesis.contains(line_prefix) {
                 synthesis = synthesis.replace(line_prefix, "");
@@ -2334,16 +2436,13 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         }
     }
 
-    // Strip horizontal rules (---) that LLMs use as separators
     synthesis = synthesis
         .lines()
         .filter(|line| !line.trim().chars().all(|c| c == '-') || line.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Strip leaked source-type markers the LLM may echo from the input format
-    // e.g., "[Source_type: rss]", "[arxiv]", "[cve]", "[hackernews]"
-    let source_types = [
+    let source_type_tags = [
         "arxiv",
         "papers_with_code",
         "cve",
@@ -2366,12 +2465,11 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         "producthunt",
         "go_modules",
     ];
-    for st in &source_types {
-        // Case-insensitive removal of [source_type] and [Source_type: X] patterns
+    for st in &source_type_tags {
         let patterns = [
             format!("[{}]", st),
-            format!("[{}: {}]", "Source_type", st),
-            format!("[{}: {}]", "source_type", st),
+            format!("[Source_type: {}]", st),
+            format!("[source_type: {}]", st),
             format!("[{}]", st.to_uppercase()),
         ];
         for pat in &patterns {
@@ -2379,8 +2477,6 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         }
     }
 
-    // Strip leaked "(affects: ...)" dependency markers
-    // These come from the items_text formatting: " (affects: react, tokio)"
     while let Some(start_idx) = synthesis.find("(affects:") {
         if let Some(end_idx) = synthesis[start_idx..].find(')') {
             synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
@@ -2388,7 +2484,6 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             break;
         }
     }
-    // Also catch [Affecting: ...] variant
     while let Some(start_idx) = synthesis.find("[Affecting:") {
         if let Some(end_idx) = synthesis[start_idx..].find(']') {
             synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
@@ -2404,12 +2499,10 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         }
     }
 
-    // Collapse multiple spaces left by cleanup
     while synthesis.contains("  ") {
         synthesis = synthesis.replace("  ", " ");
     }
 
-    // Hard word-limit safety net — caps at ~100 words (generous over 80-word prompt budget)
     let words: Vec<&str> = synthesis.split_whitespace().collect();
     if words.len() > 100 {
         tracing::info!(
@@ -2418,7 +2511,6 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             "Synthesis exceeded 100 words — truncating"
         );
         let truncated = words[..100].join(" ");
-        // Find last sentence boundary within the truncated text
         synthesis = if let Some(last_period) = truncated.rfind('.') {
             truncated[..=last_period].to_string()
         } else {
@@ -2426,48 +2518,12 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         };
     }
 
-    // Replace the response content with cleaned version
     let response = crate::llm::LLMResponse {
         content: synthesis,
         ..response
     };
 
-    // --- Post-synthesis groundedness check ---------------------------------
-    // Even with strict prompting, LLMs sometimes hallucinate. This
-    // validator extracts proper nouns / versions from the output and
-    // verifies each appears in the source corpus. If the output is
-    // significantly ungrounded, we fall back to a safe abstention.
-    //
-    // A real production hallucination this catches (Screenshot_1976):
-    //   "Recommend update of your strategy for non-test architecture,
-    //    including a 5+ year migration from VAR and Stripe"
-    // Neither "VAR" nor "Stripe" appeared in any item that day.
-    let corpus: Vec<String> = briefing
-        .items
-        .iter()
-        .map(|i| {
-            let mut c = i.title.clone();
-            if let Some(d) = &i.description {
-                c.push(' ');
-                c.push_str(d);
-            }
-            for dep in &i.matched_deps {
-                c.push(' ');
-                c.push_str(dep);
-            }
-            c
-        })
-        .collect();
-
     let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
-
-    // Require at least 65% of salient terms to be grounded. The NLP stopword
-    // list already aggressively filters platform names, adjectives, and generic
-    // tech acronyms, so remaining terms are genuine proper nouns. 0.65 balances
-    // catching hallucinated products/versions while tolerating legitimate
-    // cross-item synthesis. Values below 0.5 should always be rejected per the
-    // GroundednessReport contract.
-    const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
 
     if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
         tracing::warn!(
@@ -2478,7 +2534,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             ungrounded_sample = ?report.ungrounded_terms.iter().take(5).collect::<Vec<_>>(),
             "Morning brief synthesis failed groundedness check — falling back to abstention"
         );
-        return Ok("Low signal — no noteworthy intelligence overnight.".to_string());
+        return Ok("Low signal -- no noteworthy intelligence overnight.".to_string());
     }
 
     tracing::info!(
@@ -2488,7 +2544,6 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         "Groundedness check passed"
     );
 
-    // Append provenance line showing source types that fed the synthesis
     let mut synthesis = response.content;
     let mut source_types: Vec<&str> = briefing
         .items

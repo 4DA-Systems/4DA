@@ -80,7 +80,7 @@ describe('ResultItem', () => {
   const defaultFeedback: FeedbackGiven = {};
   const noop = vi.fn();
 
-  it('renders title and score', () => {
+  it('renders title and relevance label', () => {
     const item = makeItem({ title: 'My Great Article', top_score: 0.75 });
     render(
       <ResultItem
@@ -93,7 +93,7 @@ describe('ResultItem', () => {
     );
 
     expect(screen.getByText('My Great Article')).toBeInTheDocument();
-    expect(screen.getByText('75%')).toBeInTheDocument();
+    expect(screen.getByText('Core')).toBeInTheDocument();
   });
 
   it('hides explanation when collapsed (shown only when expanded)', () => {
