@@ -6,7 +6,7 @@ import { cmd } from '../../lib/commands';
 import { EmbeddingSetupProgress } from './EmbeddingSetupProgress';
 import { ReRankingSection } from './ReRankingSection';
 import { UsageStatsSection } from './UsageStatsSection';
-import { popularEndpoints, getProviderModels, IDLE_VALIDATION } from './ai-provider-constants';
+import { popularEndpoints, getProviderModels, ollamaSynthesisModels, ollamaOtherModels, IDLE_VALIDATION } from './ai-provider-constants';
 import type { SettingsForm, AIProviderSectionProps } from './ai-provider-types';
 import type { EnvDetection, KeyValidation } from './ai-provider-constants';
 
@@ -253,13 +253,26 @@ export function AIProviderSection({
                 onChange={(e) => setSettingsForm((f) => ({ ...f, model: e.target.value }))}
                 className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-white focus:border-orange-500 focus:outline-none"
               >
-                {(settingsForm.provider === 'ollama' && ollamaModels.length > 0
-                  ? ollamaModels
-                  : getProviderModels(settingsForm.provider, modelRegistry)
-                ).map((m) => {
-                  const name = typeof m === 'string' ? m : (m as Record<string, string>)?.name ?? '';
-                  return name ? <option key={name} value={name}>{name}</option> : null;
-                })}
+                {settingsForm.provider === 'ollama' && ollamaModels.length === 0 ? (
+                  <>
+                    {/* eslint-disable i18next/no-literal-string */}
+                    <optgroup label="Synthesis capable">
+                      {ollamaSynthesisModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </optgroup>
+                    <optgroup label="Other">
+                      {ollamaOtherModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                    </optgroup>
+                    {/* eslint-enable i18next/no-literal-string */}
+                  </>
+                ) : (
+                  (settingsForm.provider === 'ollama' && ollamaModels.length > 0
+                    ? ollamaModels
+                    : getProviderModels(settingsForm.provider, modelRegistry)
+                  ).map((m) => {
+                    const name = typeof m === 'string' ? m : (m as Record<string, string>)?.name ?? '';
+                    return name ? <option key={name} value={name}>{name}</option> : null;
+                  })
+                )}
               </select>
               {settingsForm.provider === 'ollama' && (
                 <div className="flex items-center gap-2 mt-2">

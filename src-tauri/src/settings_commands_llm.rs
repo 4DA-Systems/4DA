@@ -237,7 +237,7 @@ async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<serde_json::Va
                 || text.contains("CUDA")
             {
                 Err(format!(
-                    "Not enough GPU memory for '{model}'. Try a smaller model (e.g., llama3.2:1b or phi3:mini)."
+                    "Not enough GPU memory for '{model}'. Try a smaller model (e.g., gemma3:4b or qwen3:8b)."
                 )
                 .into())
             } else {
@@ -543,8 +543,8 @@ pub async fn cancel_ollama_pull() -> Result<String> {
 /// Check whether the configured LLM can produce accurate briefing synthesis.
 ///
 /// Returns capability info the settings UI uses to show educational guidance
-/// about model requirements. This is where users learn WHY their model choice
-/// matters — not in the briefing itself, which should be pure signal.
+/// about model requirements, hardware-aware model recommendations, and model
+/// tier classification.
 #[tauri::command]
 pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
     let llm_settings = {
@@ -560,11 +560,7 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
             .base_url
             .as_deref()
             .unwrap_or("http://localhost:11434");
-        let model = if llm_settings.model.is_empty() {
-            "llama3.2".to_string()
-        } else {
-            llm_settings.model.clone()
-        };
+        let model = llm_settings.model.clone();
         let params = crate::ollama::get_model_params_billions(&model, base_url).await;
         (model, params, "ollama".to_string())
     } else {
@@ -575,6 +571,38 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
         )
     };
 
+    let hw = crate::hardware_detect::detect_hardware();
+    let tier = crate::hardware_detect::ram_tier(&hw);
+
+    let model_tier = if provider == "ollama" && !model_name.is_empty() {
+        Some(crate::model_allowlist::classify_model(&model_name))
+    } else {
+        None
+    };
+
+    let recommended = crate::model_allowlist::recommend_models(hw.ram_total_gb);
+    let top_recommendation = recommended.first().map(|e| e.family);
+
+    let guidance = if capable {
+        "Your model supports AI-powered briefing synthesis.".to_string()
+    } else if model_name.is_empty() {
+        match top_recommendation {
+            Some(rec) => format!(
+                "No model selected. Based on your hardware ({:.0} GB RAM), we recommend: ollama pull {rec}",
+                hw.ram_total_gb
+            ),
+            None => "No model selected. Configure a cloud API key (Anthropic/OpenAI) — your system RAM is too low for local models.".to_string(),
+        }
+    } else {
+        match top_recommendation {
+            Some(rec) => format!(
+                "Your model is below the synthesis threshold. Based on your hardware ({:.0} GB RAM), try: ollama pull {rec}",
+                hw.ram_total_gb
+            ),
+            None => "Briefing synthesis requires a 7B+ parameter model or a cloud API key (Anthropic/OpenAI).".to_string(),
+        }
+    };
+
     Ok(serde_json::json!({
         "can_synthesize": capable,
         "can_explain": can_explain,
@@ -582,13 +610,15 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
         "model": model_name,
         "params_billions": model_params,
         "min_params_billions": 7.0,
-        "guidance": if capable {
-            "Your model supports AI-powered briefing synthesis."
-        } else {
-            "Briefing synthesis requires a 7B+ parameter model or a cloud API key (Anthropic/OpenAI). \
-             Your briefing shows accurately ranked signals. For AI narrative synthesis, \
-             either pull a larger Ollama model (e.g. ollama pull llama3.1:8b) \
-             or configure a cloud provider in Settings → Intelligence."
-        }
+        "unverified": provider == "openai-compatible",
+        "model_tier": model_tier,
+        "guidance": guidance,
+        "hardware": {
+            "ram_total_gb": hw.ram_total_gb,
+            "ram_available_gb": hw.ram_available_gb,
+            "ram_tier": tier,
+            "gpu": hw.gpu,
+        },
+        "recommended_model": top_recommendation,
     }))
 }

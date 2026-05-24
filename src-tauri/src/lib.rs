@@ -260,6 +260,7 @@ pub mod extractors;
 mod free_briefing;
 /// Intelligence Reconciliation Phase 7 — Cold Start Layer 1.
 mod git_decision_miner;
+mod hardware_detect;
 mod health;
 mod health_commands;
 mod http_client;
@@ -280,6 +281,7 @@ mod llm_judgments;
 mod llm_stream;
 mod local_audit;
 mod log_retention;
+mod model_allowlist;
 pub mod model_registry;
 mod monitoring;
 mod monitoring_briefing;

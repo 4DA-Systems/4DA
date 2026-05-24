@@ -8,8 +8,12 @@ import type { ModelRegistryData } from '../../store/types';
 export const curatedModels: Record<string, string[]> = {
   anthropic: ['claude-haiku-4-5-20251001', 'claude-sonnet-4-6', 'claude-opus-4-6'],
   openai: ['gpt-4.1-nano', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-4o-mini', 'gpt-4o'],
-  ollama: ['llama3.2', 'gemma3', 'qwen2.5', 'deepseek-r1', 'mistral', 'phi4'],
+  ollama: ['qwen3:14b', 'gemma3:12b', 'qwen3:8b', 'gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'],
 };
+
+// Ollama models split by synthesis capability for grouped dropdown.
+export const ollamaSynthesisModels = ['qwen3:14b', 'gemma3:12b', 'qwen3:8b'];
+export const ollamaOtherModels = ['gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'];
 
 // Popular OpenAI-compatible endpoints
 export const popularEndpoints: { name: string; url: string }[] = [

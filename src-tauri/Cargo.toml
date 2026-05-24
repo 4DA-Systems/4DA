@@ -118,6 +118,9 @@ semver = "1"
 # System startup (launch at login)
 tauri-plugin-autostart = "2"
 
+# System hardware detection (RAM, CPU) for model recommendations
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
+
 # AI agent introspection & control (MCP server, zero-cost in release builds)
 victauri-plugin = "0.3.0"
 
