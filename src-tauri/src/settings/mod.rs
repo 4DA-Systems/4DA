@@ -54,7 +54,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).expect("create temp dir");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         let settings = manager.get();
 
         // Should have all defaults since no settings.json exists
@@ -326,7 +326,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&settings).expect("serialize");
         std::fs::write(tmp.join("settings.json"), json).expect("write");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         // Anthropic with no API key should disable rerank
         assert!(!manager.is_rerank_enabled());
 
@@ -343,24 +343,22 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).expect("create temp dir");
 
-        // Create and modify settings
-        let mut manager = SettingsManager::new(&tmp);
-        manager
-            .set_llm_provider(LLMProvider {
-                provider: "anthropic".to_string(),
-                api_key: "test-key-123".to_string(),
-                model: "claude-haiku-4-5-20251001".to_string(),
-                base_url: None,
-                openai_api_key: String::new(),
-                embedding_model: String::new(),
-            })
-            .expect("save provider");
+        // Write settings directly to disk (bypasses keychain to avoid
+        // overwriting the user's real API key — see keystore poisoning
+        // incident where cargo test replaced production credentials).
+        let mut settings = Settings::default();
+        settings.llm.provider = "anthropic".to_string();
+        settings.llm.api_key = "test-key-123".to_string();
+        settings.llm.model = "claude-haiku-4-5-20251001".to_string();
+        let json = serde_json::to_string_pretty(&settings).expect("serialize");
+        std::fs::write(tmp.join("settings.json"), json).expect("write");
 
-        // Reload from disk
-        let manager2 = SettingsManager::new(&tmp);
-        let settings = manager2.get();
-        assert_eq!(settings.llm.provider, "anthropic");
-        assert_eq!(settings.llm.api_key, "test-key-123");
+        // Reload from disk — key should survive because it's in plaintext
+        // (keychain hydration won't find it, so it stays in the JSON).
+        let manager = SettingsManager::new(&tmp);
+        let reloaded = manager.get();
+        assert_eq!(reloaded.llm.provider, "anthropic");
+        assert_eq!(reloaded.llm.api_key, "test-key-123");
 
         let _ = std::fs::remove_dir_all(&tmp);
     }

@@ -10,8 +10,20 @@ use std::fs;
 use tracing::{info, warn};
 
 impl SettingsManager {
-    /// Create a new settings manager, loading from disk if available
+    /// Create a new settings manager, loading from disk if available.
+    /// Hydrates API keys from the platform keychain.
     pub fn new(data_dir: &std::path::Path) -> Self {
+        Self::new_inner(data_dir, true)
+    }
+
+    /// Test-only constructor that skips keychain hydration so tests
+    /// are not polluted by real keys stored on the dev machine.
+    #[cfg(test)]
+    pub fn new_without_keychain(data_dir: &std::path::Path) -> Self {
+        Self::new_inner(data_dir, false)
+    }
+
+    fn new_inner(data_dir: &std::path::Path, hydrate_keychain: bool) -> Self {
         let settings_path = data_dir.join("settings.json");
         let usage_path = data_dir.join("usage.json");
 
@@ -241,34 +253,36 @@ impl SettingsManager {
         // Exponential backoff: the credential store can be briefly locked during
         // dev-mode hot-reloads (old process still releasing handles). A single
         // 150ms retry was insufficient — observed failures up to ~1s after restart.
-        let hydrated = Self::hydrate_from_keychain(&mut settings);
-        if hydrated == 0 && !has_plaintext_keys {
-            let needs_key = !matches!(
-                settings.llm.provider.as_str(),
-                "none" | "ollama" | "local" | ""
-            );
-            if needs_key {
-                let backoff_ms = [200, 500, 1000, 2000];
-                for (attempt, delay) in backoff_ms.iter().enumerate() {
-                    std::thread::sleep(std::time::Duration::from_millis(*delay));
-                    let retried = Self::hydrate_from_keychain(&mut settings);
-                    if retried > 0 {
-                        info!(
-                            target: "4da::keystore",
-                            keys_recovered = retried,
-                            attempt = attempt + 2,
-                            delay_ms = delay,
-                            "Keychain hydration succeeded on retry"
-                        );
-                        break;
-                    }
-                    if attempt == backoff_ms.len() - 1 {
-                        warn!(
-                            target: "4da::keystore",
-                            provider = %settings.llm.provider,
-                            total_attempts = backoff_ms.len() + 1,
-                            "Keychain hydration exhausted all retries — ensure_keys_hydrated() will retry on first use"
-                        );
+        if hydrate_keychain {
+            let hydrated = Self::hydrate_from_keychain(&mut settings);
+            if hydrated == 0 && !has_plaintext_keys {
+                let needs_key = !matches!(
+                    settings.llm.provider.as_str(),
+                    "none" | "ollama" | "local" | ""
+                );
+                if needs_key {
+                    let backoff_ms = [200, 500, 1000, 2000];
+                    for (attempt, delay) in backoff_ms.iter().enumerate() {
+                        std::thread::sleep(std::time::Duration::from_millis(*delay));
+                        let retried = Self::hydrate_from_keychain(&mut settings);
+                        if retried > 0 {
+                            info!(
+                                target: "4da::keystore",
+                                keys_recovered = retried,
+                                attempt = attempt + 2,
+                                delay_ms = delay,
+                                "Keychain hydration succeeded on retry"
+                            );
+                            break;
+                        }
+                        if attempt == backoff_ms.len() - 1 {
+                            warn!(
+                                target: "4da::keystore",
+                                provider = %settings.llm.provider,
+                                total_attempts = backoff_ms.len() + 1,
+                                "Keychain hydration exhausted all retries — ensure_keys_hydrated() will retry on first use"
+                            );
+                        }
                     }
                 }
             }

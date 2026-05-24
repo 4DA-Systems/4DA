@@ -148,7 +148,9 @@ fn test_check_embedding_provider_missing_key() {
     .expect("write settings");
 
     let mut issues = Vec::new();
-    check_embedding_provider(&tmp, &mut issues);
+    // Use inner variant with check_keychain=false so the real platform keychain
+    // (which may hold a live key on dev machines) doesn't mask the missing-key path.
+    check_embedding_provider_inner(&tmp, &mut issues, false);
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].severity, HealthSeverity::Warning);
     assert!(issues[0].message.contains("API key is empty"));

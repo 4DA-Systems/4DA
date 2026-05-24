@@ -232,6 +232,16 @@ pub(crate) fn check_settings(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
 /// Checks both the JSON file and the platform keychain (keys may have been
 /// migrated from plaintext to keychain by SettingsManager).
 pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
+    check_embedding_provider_inner(data_dir, issues, true)
+}
+
+/// Inner implementation with `check_keychain` toggle so tests can bypass the
+/// real platform keychain (which may contain a live key on dev machines).
+pub(crate) fn check_embedding_provider_inner(
+    data_dir: &Path,
+    issues: &mut Vec<HealthIssue>,
+    check_keychain: bool,
+) {
     let settings_path = data_dir.join("settings.json");
     if !settings_path.exists() {
         return; // No settings means no provider configured — that's fine.
@@ -270,11 +280,15 @@ pub(crate) fn check_embedding_provider(data_dir: &Path, issues: &mut Vec<HealthI
     if api_key.is_empty() {
         // Key is empty in JSON — check the platform keychain (keys are migrated
         // there by SettingsManager and stripped from the on-disk JSON).
-        let has_keychain_key = crate::settings::keystore::has_secret("llm_api_key")
-            || match crate::settings::keystore::get_secret("llm_api_key") {
-                Ok(Some(k)) => !k.is_empty(),
-                _ => false,
-            };
+        let has_keychain_key = if check_keychain {
+            crate::settings::keystore::has_secret("llm_api_key")
+                || match crate::settings::keystore::get_secret("llm_api_key") {
+                    Ok(Some(k)) => !k.is_empty(),
+                    _ => false,
+                }
+        } else {
+            false
+        };
 
         if !has_keychain_key {
             issues.push(HealthIssue {

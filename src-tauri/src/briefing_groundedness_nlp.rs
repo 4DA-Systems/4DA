@@ -109,6 +109,11 @@ pub(super) fn extract_salient_terms(text: &str) -> Vec<String> {
             Some(first) => {
                 if first.is_uppercase() && stripped.len() > 1 && !is_stopword(stripped) {
                     cap_run.push(stripped);
+                } else if !cap_run.is_empty() && looks_like_version(stripped) {
+                    // Allow version tokens to continue (not start) a
+                    // capitalized run — "React 19.2" is a meaningful
+                    // compound term even though "19.2" isn't capitalized.
+                    cap_run.push(stripped);
                 } else {
                     flush(&mut cap_run, &mut out, &mut seen);
                 }
@@ -130,6 +135,7 @@ pub(super) fn extract_salient_terms(text: &str) -> Vec<String> {
             if first.is_uppercase()
                 && stripped.len() >= 3
                 && !is_stopword(stripped)
+                && !is_phrase_only_stopword(stripped)
                 && stripped.chars().filter(|c| c.is_alphabetic()).count() >= 3
             {
                 let key = stripped.to_lowercase();
@@ -142,6 +148,33 @@ pub(super) fn extract_salient_terms(text: &str) -> Vec<String> {
     }
 
     out
+}
+
+/// Returns true for tokens that look like version numbers ("19.2", "v2.0",
+/// "1.38.3"). Used by Phase 2 to let versions continue a capitalized run
+/// so that "React 19.2" forms a single phrase.
+fn looks_like_version(token: &str) -> bool {
+    let chars: Vec<char> = token.chars().collect();
+    if chars.is_empty() {
+        return false;
+    }
+    let start =
+        if (chars[0] == 'v' || chars[0] == 'V') && chars.len() > 1 && chars[1].is_ascii_digit() {
+            1
+        } else if chars[0].is_ascii_digit() {
+            0
+        } else {
+            return false;
+        };
+    let mut saw_dot = false;
+    for &c in &chars[start..] {
+        if c == '.' {
+            saw_dot = true;
+        } else if !c.is_ascii_digit() {
+            return false;
+        }
+    }
+    saw_dot
 }
 
 fn looks_like_date(token: &str) -> bool {
@@ -495,44 +528,6 @@ fn is_stopword(word: &str) -> bool {
         "Noteworthy",
         "Recommended",
         "Functional",
-        // Source platform names — the LLM references these as provenance,
-        // not as factual claims about content
-        "Reddit",
-        "GitHub",
-        "Hacker",
-        "Lobsters",
-        "Bluesky",
-        "Twitter",
-        "YouTube",
-        "StackOverflow",
-        "Stack",
-        "Overflow",
-        "Crates",
-        "PyPI",
-        "HuggingFace",
-        "ArXiv",
-        "Rust",
-        "Python",
-        "JavaScript",
-        "TypeScript",
-        "Java",
-        "Golang",
-        "Swift",
-        "Kotlin",
-        "Ruby",
-        "React",
-        "Node",
-        "Deno",
-        "Bun",
-        "Tauri",
-        "Electron",
-        "Docker",
-        "Kubernetes",
-        "Linux",
-        "Windows",
-        "MacOS",
-        "Wasm",
-        "WebAssembly",
         // Common tech acronyms/abbreviations the LLM generates
         "REST",
         "API",
@@ -749,6 +744,60 @@ fn is_stopword(word: &str) -> bool {
         "Itself",
     ];
     STOPWORDS.iter().any(|&s| s.eq_ignore_ascii_case(word))
+}
+
+/// Names that are transparent when building multi-word phrases (Phase 2)
+/// but blocked as standalone single-word extractions (Phase 3).
+/// These are tech/platform names the LLM uses generically — standalone
+/// mentions aren't factual claims worth grounding, but they DO start
+/// meaningful compound terms like "React Server Components" or
+/// "Docker Compose".
+static PHRASE_ONLY_STOPWORDS: &[&str] = &[
+    // Source platforms
+    "Reddit",
+    "GitHub",
+    "Hacker",
+    "Lobsters",
+    "Bluesky",
+    "Twitter",
+    "YouTube",
+    "StackOverflow",
+    "Stack",
+    "Overflow",
+    "Crates",
+    "PyPI",
+    "HuggingFace",
+    "ArXiv",
+    // Languages & runtimes
+    "Rust",
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "Golang",
+    "Swift",
+    "Kotlin",
+    "Ruby",
+    // Frameworks & tools
+    "React",
+    "Node",
+    "Deno",
+    "Bun",
+    "Tauri",
+    "Electron",
+    "Docker",
+    "Kubernetes",
+    "Linux",
+    "Windows",
+    "MacOS",
+    "Wasm",
+    "WebAssembly",
+];
+
+fn is_phrase_only_stopword(word: &str) -> bool {
+    PHRASE_ONLY_STOPWORDS
+        .iter()
+        .any(|&s| s.eq_ignore_ascii_case(word))
 }
 
 // ============================================================================
