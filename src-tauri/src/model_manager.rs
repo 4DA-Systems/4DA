@@ -67,7 +67,7 @@ static CATALOG: &[ModelCatalogEntry] = &[
         id: "qwen3-14b-q4km",
         display_name: "Qwen 3 14B (Q4_K_M)",
         family: "qwen3:14b",
-        size_bytes: 9_145_171_168,
+        size_bytes: 9_001_752_960,
         sha256: "", // populated when binaries are sourced
         url: "https://huggingface.co/Qwen/Qwen3-14B-GGUF/resolve/main/Qwen3-14B-Q4_K_M.gguf",
         filename: "qwen3-14b-q4_k_m.gguf",

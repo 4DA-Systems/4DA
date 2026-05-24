@@ -173,8 +173,8 @@ pub(crate) async fn start_sidecar(model_path: &Path) -> Result<u16> {
         lock_state()?.child = Some(child);
     }
 
-    // Poll /health for up to 30 seconds
-    let ready = wait_for_health(port, 30).await;
+    // Poll /health — 14B model loads in ~25s on fast hardware, allow 120s for slower machines
+    let ready = wait_for_health(port, 120).await;
 
     let mut g = lock_state()?;
     if ready {
@@ -182,7 +182,7 @@ pub(crate) async fn start_sidecar(model_path: &Path) -> Result<u16> {
         info!(port, "llama-server sidecar is ready");
         Ok(port)
     } else {
-        error!("llama-server failed to become healthy within 30s");
+        error!("llama-server failed to become healthy within 120s");
         if let Some(ref mut c) = g.child {
             let _ = c.kill();
             let _ = c.wait();
@@ -190,7 +190,7 @@ pub(crate) async fn start_sidecar(model_path: &Path) -> Result<u16> {
         g.child = None;
         g.status = SidecarStatus::Error;
         Err(FourDaError::Llm(
-            "llama-server did not become healthy within 30 seconds".into(),
+            "llama-server did not become healthy within 120 seconds".into(),
         ))
     }
 }
