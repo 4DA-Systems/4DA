@@ -80,6 +80,9 @@ data/briefing_snapshot.json.tmp
 # Calibration curves (runtime state — fit from user interactions, per-machine)
 data/calibrations/
 
+# Digest cache (generated briefings, machine-local)
+data/digests/
+
 # OSV advisory cache (fetched at runtime, machine-local)
 data/osv-cache/
 
