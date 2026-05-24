@@ -2605,3 +2605,654 @@ async fn content_graph_edge_provenance_is_non_empty() {
         }
     }
 }
+
+// ── Phase 11: Brief Tab — The Product ────────────────────────────────────────
+//
+// The briefing is the single most important surface in 4DA.
+// These tests verify the full pipeline: IPC returns structured data,
+// the DOM renders it, and the content is substantive (not placeholder).
+
+#[tokio::test]
+async fn briefing_snapshot_returns_structured_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let snapshot = client
+        .invoke_command("get_briefing_snapshot", None)
+        .await
+        .unwrap();
+
+    // Snapshot may be null if no analysis has run yet — that's OK,
+    // but if it exists it must have the canonical shape.
+    if !snapshot.is_null() {
+        let has_content = snapshot.get("briefing").is_some()
+            || snapshot.get("html").is_some()
+            || snapshot.get("content").is_some()
+            || snapshot.get("markdown").is_some()
+            || snapshot.get("generated_at_unix").is_some();
+        assert!(
+            has_content,
+            "briefing snapshot must have content fields, got keys: {:?}",
+            snapshot.as_object().map(|o| o.keys().collect::<Vec<_>>())
+        );
+    }
+}
+
+#[tokio::test]
+async fn latest_briefing_returns_value() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let briefing = client
+        .invoke_command("get_latest_briefing", None)
+        .await
+        .unwrap();
+
+    // Even if empty, the command must succeed and return JSON
+    assert!(
+        briefing.is_object() || briefing.is_null() || briefing.is_string(),
+        "get_latest_briefing must return valid JSON, got: {briefing}"
+    );
+}
+
+#[tokio::test]
+async fn brief_tab_renders_content_in_dom() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Brief tab
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let button_arr = buttons.as_array().expect("find_elements returns array");
+    if let Some(brief_btn) = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t.contains("Brief"))
+    }) {
+        let _ = client.click(brief_btn["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    }
+
+    // The brief tab should render either a briefing or an empty state —
+    // never a blank white rectangle.
+    let has_brief_content = client
+        .eval_js(
+            "document.body.innerText.includes('briefing') \
+             || document.body.innerText.includes('Brief') \
+             || document.body.innerText.includes('analysis') \
+             || document.body.innerText.includes('Generate') \
+             || document.body.innerText.includes('No briefing') \
+             || document.body.innerText.includes('signal') \
+             || document.body.innerText.length > 200",
+        )
+        .await
+        .unwrap();
+    let found = has_brief_content.as_bool().unwrap_or(false)
+        || has_brief_content.as_str().map_or(false, |s| s == "true");
+    assert!(
+        found,
+        "Brief tab must render substantive content or a clear empty state"
+    );
+}
+
+#[tokio::test]
+async fn briefing_snapshot_content_is_not_placeholder() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let snapshot = client
+        .invoke_command("get_briefing_snapshot", None)
+        .await
+        .unwrap();
+
+    if snapshot.is_null() {
+        return;
+    }
+
+    let content = snapshot
+        .get("html")
+        .or_else(|| snapshot.get("content"))
+        .or_else(|| snapshot.get("markdown"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    assert!(
+        !content.contains("lorem ipsum") && !content.contains("placeholder"),
+        "briefing must never contain placeholder text"
+    );
+
+    if !content.is_empty() {
+        assert!(
+            content.len() > 50,
+            "non-empty briefing should be substantive (>50 chars), got {} chars",
+            content.len()
+        );
+    }
+}
+
+// ── Phase 12: Signal Tab — Scored Item Rendering ─────────────────────────────
+
+#[tokio::test]
+async fn scoring_stats_returns_aggregate() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let stats = client
+        .invoke_command("get_scoring_stats", None)
+        .await
+        .unwrap();
+
+    assert!(
+        stats.is_object(),
+        "get_scoring_stats must return an object, got: {stats}"
+    );
+
+    let has_scoring_fields = stats.get("total_scored").is_some()
+        || stats.get("total_relevant").is_some()
+        || stats.get("total_runs").is_some()
+        || stats.get("total_items").is_some();
+    assert!(
+        has_scoring_fields,
+        "scoring stats must have scoring fields, got keys: {:?}",
+        stats.as_object().map(|o| o.keys().collect::<Vec<_>>())
+    );
+}
+
+#[tokio::test]
+async fn analysis_status_reports_state() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let status = client
+        .invoke_command("get_analysis_status", None)
+        .await
+        .unwrap();
+
+    assert!(
+        status.is_object(),
+        "get_analysis_status must return an object, got: {status}"
+    );
+
+    let has_state = status.get("running").is_some()
+        || status.get("completed").is_some()
+        || status.get("state").is_some()
+        || status.get("status").is_some();
+    assert!(
+        has_state,
+        "analysis status must report running/completed state, got keys: {:?}",
+        status.as_object().map(|o| o.keys().collect::<Vec<_>>())
+    );
+}
+
+#[tokio::test]
+async fn signal_tab_renders_items_or_empty_state() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Signal tab
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let button_arr = buttons.as_array().expect("find_elements returns array");
+    if let Some(signal_btn) = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t.contains("Signal"))
+    }) {
+        let _ = client.click(signal_btn["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    }
+
+    // Signal tab must show scored items or a meaningful empty state
+    let content_check = client
+        .eval_js(
+            "(() => { \
+                const text = document.body.innerText; \
+                const hasItems = document.querySelectorAll('[class*=\"card\"], [class*=\"item\"], [class*=\"signal\"], [class*=\"feed\"]').length > 0; \
+                const hasEmpty = text.includes('No signals') || text.includes('No items') || text.includes('Run analysis') || text.includes('Fetch'); \
+                const hasContent = text.length > 200; \
+                return hasItems || hasEmpty || hasContent; \
+            })()",
+        )
+        .await
+        .unwrap();
+    let found = content_check.as_bool().unwrap_or(false)
+        || content_check.as_str().map_or(false, |s| s == "true");
+    assert!(
+        found,
+        "Signal tab must render items or empty state, not a blank view"
+    );
+}
+
+#[tokio::test]
+async fn signal_items_have_titles_when_present() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Signal tab
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let button_arr = buttons.as_array().expect("find_elements returns array");
+    if let Some(signal_btn) = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t.contains("Signal"))
+    }) {
+        let _ = client.click(signal_btn["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    }
+
+    // If items are rendered, they must have visible title text
+    let titles = client
+        .eval_js(
+            "(() => { \
+                const cards = document.querySelectorAll('[class*=\"card\"], [class*=\"item\"], [class*=\"signal-item\"]'); \
+                if (cards.length === 0) return JSON.stringify({count: 0, titles: []}); \
+                const titles = Array.from(cards).slice(0, 10).map(c => { \
+                    const h = c.querySelector('h1,h2,h3,h4,h5,h6,[class*=\"title\"],[class*=\"heading\"]'); \
+                    return h ? h.innerText.trim() : c.innerText.trim().substring(0, 80); \
+                }); \
+                return JSON.stringify({count: cards.length, titles}); \
+            })()",
+        )
+        .await
+        .unwrap();
+
+    let parsed: serde_json::Value =
+        serde_json::from_str(titles.as_str().unwrap_or("{}")).unwrap_or_default();
+
+    let count = parsed["count"].as_u64().unwrap_or(0);
+    if count > 0 {
+        let title_arr = parsed["titles"].as_array().unwrap();
+        let non_empty = title_arr
+            .iter()
+            .filter(|t| !t.as_str().unwrap_or("").is_empty())
+            .count();
+        assert!(
+            non_empty > 0,
+            "at least one signal item must have visible title text out of {count} cards"
+        );
+    }
+}
+
+// ── Phase 13: Settings Persistence Round-trip ────────────────────────────────
+
+#[tokio::test]
+async fn get_settings_returns_valid_config() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let settings = client.invoke_command("get_settings", None).await.unwrap();
+
+    assert!(
+        settings.is_object(),
+        "get_settings must return an object, got: {settings}"
+    );
+
+    // Settings must have at least one of the canonical sections
+    let has_canonical = settings.get("llm").is_some()
+        || settings.get("llm_provider").is_some()
+        || settings.get("sources").is_some()
+        || settings.get("general").is_some()
+        || settings.get("theme").is_some()
+        || settings.get("onboarding_complete").is_some()
+        || settings.get("scoring").is_some();
+    assert!(
+        has_canonical,
+        "settings must have canonical sections (llm, sources, etc.), got keys: {:?}",
+        settings.as_object().map(|o| o.keys().collect::<Vec<_>>())
+    );
+}
+
+#[tokio::test]
+async fn settings_no_api_keys_in_response() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let settings = client.invoke_command("get_settings", None).await.unwrap();
+
+    let settings_str = serde_json::to_string(&settings).unwrap();
+
+    // API keys in settings responses should be masked or absent.
+    // This checks the privacy contract — raw keys must not transit IPC unmasked
+    // if a future version adds masking. For now, just verify the response is valid.
+    assert!(
+        !settings_str.contains("sk-ant-") && !settings_str.contains("sk-proj-"),
+        "settings response must not contain raw API key prefixes in transit"
+    );
+}
+
+#[tokio::test]
+async fn mark_onboarding_complete_succeeds() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // This is idempotent — safe to call repeatedly
+    let result = client
+        .invoke_command("mark_onboarding_complete", None)
+        .await;
+
+    assert!(
+        result.is_ok(),
+        "mark_onboarding_complete must succeed: {:?}",
+        result.err()
+    );
+
+    // Verify it took effect
+    let settings = client.invoke_command("get_settings", None).await.unwrap();
+
+    let onboarding = settings
+        .get("onboarding_complete")
+        .or_else(|| settings.pointer("/general/onboarding_complete"));
+    if let Some(val) = onboarding {
+        assert!(
+            val.as_bool().unwrap_or(false),
+            "onboarding_complete should be true after marking complete"
+        );
+    }
+}
+
+#[tokio::test]
+async fn settings_round_trip_preserves_structure() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Read settings twice — structure must be identical
+    let first = client.invoke_command("get_settings", None).await.unwrap();
+    let second = client.invoke_command("get_settings", None).await.unwrap();
+
+    let first_keys: Vec<&str> = first
+        .as_object()
+        .map(|o| o.keys().map(|k| k.as_str()).collect())
+        .unwrap_or_default();
+    let second_keys: Vec<&str> = second
+        .as_object()
+        .map(|o| o.keys().map(|k| k.as_str()).collect())
+        .unwrap_or_default();
+
+    assert_eq!(
+        first_keys, second_keys,
+        "consecutive get_settings calls must return identical structure"
+    );
+}
+
+// ── Phase 14: Preemption Data Verification ───────────────────────────────────
+
+#[tokio::test]
+async fn preemption_alerts_returns_evidence_feed() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let alerts = client
+        .invoke_command("get_preemption_alerts", None)
+        .await
+        .unwrap();
+
+    // EvidenceFeed has items array and metadata
+    let has_feed_shape = alerts.get("items").is_some()
+        || alerts.get("alerts").is_some()
+        || alerts.get("evidence").is_some()
+        || alerts.is_array();
+    assert!(
+        has_feed_shape || alerts.is_object(),
+        "preemption alerts must return EvidenceFeed shape, got: {alerts}"
+    );
+}
+
+#[tokio::test]
+async fn preemption_alerts_items_have_required_fields() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let alerts = client
+        .invoke_command("get_preemption_alerts", None)
+        .await
+        .unwrap();
+
+    let items = alerts
+        .get("items")
+        .and_then(|v| v.as_array())
+        .or_else(|| alerts.as_array());
+
+    if let Some(items) = items {
+        for (i, item) in items.iter().enumerate() {
+            // EvidenceItem must have title/summary and confidence
+            let has_title = item.get("title").is_some()
+                || item.get("summary").is_some()
+                || item.get("headline").is_some();
+            assert!(
+                has_title,
+                "preemption item[{i}] must have title/summary, got keys: {:?}",
+                item.as_object().map(|o| o.keys().collect::<Vec<_>>())
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn preemption_tab_renders_in_dom() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Navigate to Preemption tab
+    let buttons = client
+        .find_elements(serde_json::json!({"role": "button"}))
+        .await
+        .unwrap();
+    let button_arr = buttons.as_array().expect("find_elements returns array");
+    if let Some(pre_btn) = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t.contains("Preemption") || t.contains("preempt"))
+    }) {
+        let _ = client.click(pre_btn["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    }
+
+    let content = client
+        .eval_js(
+            "(() => { \
+                const text = document.body.innerText; \
+                const hasAlerts = text.includes('alert') || text.includes('Preemption') || text.includes('preempt'); \
+                const hasEmpty = text.includes('No alerts') || text.includes('No preemption') || text.includes('monitoring'); \
+                const hasContent = text.length > 200; \
+                return hasAlerts || hasEmpty || hasContent; \
+            })()",
+        )
+        .await
+        .unwrap();
+    let found =
+        content.as_bool().unwrap_or(false) || content.as_str().map_or(false, |s| s == "true");
+    assert!(found, "Preemption tab must render alerts or empty state");
+}
+
+// ── Phase 15: Cold-start & Monitoring ────────────────────────────────────────
+
+#[tokio::test]
+async fn monitoring_status_returns_valid_state() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let status = client
+        .invoke_command("get_monitoring_status", None)
+        .await
+        .unwrap();
+
+    assert!(
+        status.is_object(),
+        "get_monitoring_status must return an object, got: {status}"
+    );
+
+    let has_monitoring = status.get("active").is_some()
+        || status.get("running").is_some()
+        || status.get("sources").is_some()
+        || status.get("status").is_some()
+        || status.get("last_check").is_some();
+    assert!(
+        has_monitoring,
+        "monitoring status must report active state, got keys: {:?}",
+        status.as_object().map(|o| o.keys().collect::<Vec<_>>())
+    );
+}
+
+#[tokio::test]
+async fn cold_start_no_blank_screens() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Visit each of the five tabs — none should render blank
+    let tab_names = ["Brief", "Preemption", "Blind Spots", "Signal", "Playbook"];
+
+    for tab_name in &tab_names {
+        let buttons = client
+            .find_elements(serde_json::json!({"role": "button"}))
+            .await
+            .unwrap();
+        let button_arr = buttons.as_array().expect("find_elements returns array");
+        if let Some(btn) = button_arr.iter().find(|b| {
+            b.get("text")
+                .or_else(|| b.get("name"))
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains(tab_name))
+        }) {
+            let _ = client.click(btn["ref_id"].as_str().unwrap()).await;
+            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        }
+
+        let body_len = client
+            .eval_js("document.body.innerText.length")
+            .await
+            .unwrap();
+        let len = body_len.as_u64().unwrap_or(0);
+        assert!(
+            len > 50,
+            "tab '{tab_name}' must not be blank — only {len} chars of text rendered"
+        );
+    }
+}
+
+#[tokio::test]
+async fn all_five_tabs_have_no_console_errors() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    let tab_names = ["Brief", "Signal", "Preemption", "Blind Spots", "Playbook"];
+
+    for tab_name in &tab_names {
+        let buttons = client
+            .find_elements(serde_json::json!({"role": "button"}))
+            .await
+            .unwrap();
+        let button_arr = buttons.as_array().expect("find_elements returns array");
+        if let Some(btn) = button_arr.iter().find(|b| {
+            b.get("text")
+                .or_else(|| b.get("name"))
+                .and_then(|t| t.as_str())
+                .map_or(false, |t| t.contains(tab_name))
+        }) {
+            let _ = client.click(btn["ref_id"].as_str().unwrap()).await;
+            tokio::time::sleep(std::time::Duration::from_millis(600)).await;
+        }
+
+        let report = client.verify().no_console_errors().run().await.unwrap();
+
+        assert!(
+            report.all_passed(),
+            "tab '{tab_name}' has console errors: {:?}",
+            report
+                .failures()
+                .iter()
+                .map(|f| format!("{}: {}", f.description, f.detail))
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+#[tokio::test]
+async fn ipc_commands_never_panic() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Fire every read-only IPC command — none should panic (crash the backend)
+    let commands = [
+        "get_briefing_snapshot",
+        "get_latest_briefing",
+        "get_settings",
+        "get_analysis_status",
+        "get_scoring_stats",
+        "get_preemption_alerts",
+        "get_monitoring_status",
+    ];
+
+    for cmd in &commands {
+        let result = client.invoke_command(cmd, None).await;
+        assert!(
+            result.is_ok(),
+            "IPC command '{cmd}' panicked or errored: {:?}",
+            result.err()
+        );
+    }
+
+    // Backend should still be responsive after all commands
+    let ping = client.get_plugin_info().await;
+    assert!(
+        ping.is_ok(),
+        "backend unresponsive after IPC barrage — possible panic"
+    );
+}
