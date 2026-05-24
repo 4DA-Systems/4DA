@@ -1023,23 +1023,20 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             )
                             .await
                             {
-                                Ok(synthesis) => {
+                                Ok(result) => {
                                     info!(target: "4da::briefing", "Morning brief synthesis ready");
                                     let _ = app_synth.emit_to(
                                         "briefing",
                                         "briefing-synthesis",
-                                        &synthesis,
+                                        &result.prose,
                                     );
                                     let _ = app_synth.emit(
                                         "morning-briefing-synthesis",
-                                        serde_json::json!({ "synthesis": synthesis }),
+                                        serde_json::json!({ "synthesis": result.prose }),
                                     );
 
-                                    // Re-save snapshot WITH the LLM synthesis text so the
-                                    // next cold boot loads the full briefing including the
-                                    // narrative paragraph.
                                     let mut enriched = briefing_synth.clone();
-                                    enriched.synthesis = Some(synthesis);
+                                    enriched.synthesis = Some(result.prose);
                                     crate::briefing_snapshot::save_snapshot(&enriched);
                                 }
                                 Err(e) => {

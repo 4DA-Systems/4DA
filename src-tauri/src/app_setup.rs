@@ -1148,19 +1148,20 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         )
                         .await
                         {
-                            Ok(synthesis) => {
+                            Ok(result) => {
                                 info!(target: "4da::briefing", "Startup brief synthesis ready");
-                                let _ =
-                                    app_synth.emit_to("briefing", "briefing-synthesis", &synthesis);
+                                let _ = app_synth.emit_to(
+                                    "briefing",
+                                    "briefing-synthesis",
+                                    &result.prose,
+                                );
                                 let _ = app_synth.emit(
                                     "morning-briefing-synthesis",
-                                    serde_json::json!({ "synthesis": synthesis }),
+                                    serde_json::json!({ "synthesis": result.prose }),
                                 );
 
-                                // Re-save the snapshot now that we have the synthesis text,
-                                // so the next cold boot loads the briefing WITH narrative.
                                 let mut enriched = briefing_synth.clone();
-                                enriched.synthesis = Some(synthesis);
+                                enriched.synthesis = Some(result.prose);
                                 crate::briefing_snapshot::save_snapshot(&enriched);
                             }
                             Err(e) => {
