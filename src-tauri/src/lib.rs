@@ -334,6 +334,7 @@ mod standing_queries;
 mod standing_queries_evaluation;
 mod standing_queries_suggestions;
 mod startup_health;
+mod synthesis_schema;
 pub(crate) mod topic_hotness;
 // Wave 5 — universal startup watchdog with crash trail and heartbeat
 mod startup_watchdog;
