@@ -235,7 +235,7 @@ fn default_channels() -> Vec<YouTubeChannel> {
         },
         YouTubeChannel {
             name: "Coding Train".into(),
-            channel_id: "UCvjgXvBlISQQnCVnCBdLMQw".into(),
+            channel_id: "UCvjgXvBlbQiydffZU7m1_aw".into(),
         },
         YouTubeChannel {
             name: "ArjanCodes".into(),

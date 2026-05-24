@@ -109,8 +109,8 @@
     {
       "id": "bun-blog",
       "name": "Bun Blog",
-      "url": "https://bun.sh/blog/rss.xml",
-      "homepage": "https://bun.sh/blog",
+      "url": "https://bun.com/rss.xml",
+      "homepage": "https://bun.com/blog",
       "description": "Bun runtime performance improvements, compatibility updates, new APIs",
       "domains": ["typescript", "javascript"],
       "content_type": "release_notes",
