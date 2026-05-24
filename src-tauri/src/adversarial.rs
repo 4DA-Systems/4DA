@@ -92,7 +92,7 @@ pub(crate) async fn deliberate(
         guard.get().llm.clone()
     };
 
-    if provider.provider != "ollama" && provider.api_key.is_empty() {
+    if !matches!(provider.provider.as_str(), "ollama" | "builtin") && provider.api_key.is_empty() {
         debug!(
             target: "4da::adversarial",
             item_id = %item.id,

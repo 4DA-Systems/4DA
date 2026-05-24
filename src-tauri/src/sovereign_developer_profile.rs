@@ -296,13 +296,14 @@ fn assemble_infrastructure(conn: &Connection) -> InfrastructureDimension {
     let manager = crate::get_settings_manager();
     let guard = manager.lock();
     let llm = &guard.get().llm;
-    dim.llm_tier = if llm.api_key.is_empty() && llm.provider != "ollama" {
-        "none".to_string()
-    } else if llm.provider == "ollama" {
-        "local".to_string()
-    } else {
-        "cloud".to_string()
-    };
+    dim.llm_tier =
+        if llm.api_key.is_empty() && !matches!(llm.provider.as_str(), "ollama" | "builtin") {
+            "none".to_string()
+        } else if matches!(llm.provider.as_str(), "ollama" | "builtin") {
+            "local".to_string()
+        } else {
+            "cloud".to_string()
+        };
 
     dim
 }

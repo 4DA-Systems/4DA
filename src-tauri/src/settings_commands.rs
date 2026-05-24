@@ -123,7 +123,7 @@ pub async fn set_llm_provider(
         }
         // SSRF prevention: block private/internal IPs for non-Ollama providers.
         // Ollama is expected to run on localhost, so skip this check for it.
-        if !url.is_empty() && provider != "ollama" {
+        if !url.is_empty() && !matches!(provider.as_str(), "ollama" | "builtin") {
             crate::url_validation::validate_not_internal(url)?;
         }
     }

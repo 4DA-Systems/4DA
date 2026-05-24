@@ -510,7 +510,7 @@ fn get_llm_client() -> Result<llm::LLMClient> {
     let mut guard = manager.lock();
     guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
-    if provider.api_key.is_empty() && provider.provider != "ollama" {
+    if provider.api_key.is_empty() && !matches!(provider.provider.as_str(), "ollama" | "builtin") {
         let lang = crate::i18n::get_user_language();
         return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
     }

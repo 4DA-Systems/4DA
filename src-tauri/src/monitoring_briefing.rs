@@ -1976,7 +1976,9 @@ pub(crate) async fn synthesize_morning_briefing(
         guard.get().llm.clone()
     };
 
-    if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {
+    if !matches!(llm_settings.provider.as_str(), "ollama" | "builtin")
+        && llm_settings.api_key.is_empty()
+    {
         return Err("No LLM configured".into());
     }
 

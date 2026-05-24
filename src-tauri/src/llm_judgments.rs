@@ -124,7 +124,7 @@ fn get_llm_settings() -> Option<LLMProvider> {
     guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
 
-    if provider.provider != "ollama" && provider.api_key.is_empty() {
+    if !matches!(provider.provider.as_str(), "ollama" | "builtin") && provider.api_key.is_empty() {
         return None;
     }
 

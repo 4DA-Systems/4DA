@@ -249,7 +249,7 @@ fn get_llm_client() -> Result<llm::LLMClient> {
     let mut guard = manager.lock();
     guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
-    if provider.api_key.is_empty() && provider.provider != "ollama" {
+    if provider.api_key.is_empty() && !matches!(provider.provider.as_str(), "ollama" | "builtin") {
         return Err("LLM not configured -- set up your API key in Settings".into());
     }
     Ok(llm::LLMClient::new(provider))
