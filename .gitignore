@@ -106,6 +106,7 @@ src-tauri/models/
 
 # Sidecar binaries (built by CI, not committed)
 src-tauri/binaries/*.exe
+src-tauri/binaries/*.dll
 
 # MCP memory server build
 mcp-memory-server/dist/
