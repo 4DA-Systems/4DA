@@ -108,6 +108,7 @@ mod events;
 pub(crate) mod reembed;
 pub mod state;
 mod utils;
+mod victauri_commands;
 
 // Re-export from embeddings
 pub(crate) use embeddings::embed_texts;
@@ -658,7 +659,17 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
-        .plugin(victauri_plugin::init())
+        .plugin({
+            let commands: Vec<victauri_plugin::CommandInfo> =
+                victauri_commands::REGISTERED_COMMANDS
+                    .iter()
+                    .map(|n| victauri_plugin::CommandInfo::new(*n))
+                    .collect();
+            victauri_plugin::VictauriBuilder::new()
+                .commands(&commands)
+                .build()
+                .expect("Victauri configuration is valid")
+        })
         .invoke_handler(tauri::generate_handler![
             // Context
             context_commands::get_context_files,

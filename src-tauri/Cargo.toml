@@ -119,7 +119,7 @@ semver = "1"
 tauri-plugin-autostart = "2"
 
 # AI agent introspection & control (MCP server, zero-cost in release builds)
-victauri-plugin = "0.2.0"
+victauri-plugin = "0.3.0"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
@@ -179,7 +179,7 @@ required-features = ["ocr"]
 [dev-dependencies]
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
-victauri-test = "0.2.0"
+victauri-test = "0.3.0"
 
 [[bench]]
 name = "db_scale"

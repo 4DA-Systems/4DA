@@ -7660,6 +7660,7 @@ dependencies = [
  "pin-project-lite",
  "sync_wrapper",
  "tokio",
+ "tokio-util",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -8098,9 +8099,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "victauri-core"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2b62a4379067c5f3051cf72a2e7894f705db2a5bc19ff2c9a9f968b17384074"
+checksum = "a973489a5ff9ebcd6784a7a0e166d2509dbffd943cbf1610411904f6e154c795"
 dependencies = [
  "chrono",
  "inventory",
@@ -8114,9 +8115,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-macros"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aeb42d9927d0aa7933f1696346f607aae184f53666df06e20845b5b21e0b3eff"
+checksum = "1faca17a878d5ca9f9966d68263f3b8713dcdd73e9190ac4898da73ca7cc54c7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8125,9 +8126,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-plugin"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a773e501d46cc6d293a217489c49b5a8466421532f88903609429aaf0529631"
+checksum = "7f112d9128df04aad71929333fcba98e6f4c06b047aef25009971fceaf43c09f"
 dependencies = [
  "anyhow",
  "axum",
@@ -8144,6 +8145,7 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "tokio",
+ "tower",
  "tracing",
  "url",
  "uuid",
@@ -8155,9 +8157,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-test"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d671875ed1da7874c8ebddf227f83c3d237c62b5b441dc77af4fd0754ac5ceb"
+checksum = "8517eca9b3dc0e6527fc6535a7473fc4df72f6919cf241350d1f7bcc4aeb23ef"
 dependencies = [
  "base64 0.22.1",
  "png 0.17.16",
