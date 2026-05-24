@@ -693,3 +693,78 @@ pub fn get_builtin_llm_status() -> Result<serde_json::Value> {
         "port": port,
     }))
 }
+
+/// List available models from the built-in catalog with download status.
+#[tauri::command]
+pub fn list_builtin_models() -> Result<serde_json::Value> {
+    let hw = crate::hardware_detect::detect_hardware();
+    let catalog: Vec<serde_json::Value> = crate::model_manager::model_catalog()
+        .iter()
+        .map(|entry| {
+            let downloaded = crate::model_manager::is_model_downloaded(entry);
+            let path = crate::model_manager::model_path(entry);
+            serde_json::json!({
+                "id": entry.id,
+                "display_name": entry.display_name,
+                "family": entry.family,
+                "size_bytes": entry.size_bytes,
+                "size_gb": (entry.size_bytes as f64 / (1024.0 * 1024.0 * 1024.0) * 10.0).round() / 10.0,
+                "min_ram_gb": entry.min_ram_gb,
+                "quantization": entry.quantization,
+                "downloaded": downloaded,
+                "path": path,
+                "fits_ram": entry.min_ram_gb <= hw.ram_total_gb,
+            })
+        })
+        .collect();
+
+    let recommended = crate::model_manager::recommend_model(hw.ram_available_gb);
+
+    Ok(serde_json::json!({
+        "models": catalog,
+        "recommended_id": recommended.map(|e| e.id),
+        "ram_total_gb": hw.ram_total_gb,
+        "ram_available_gb": hw.ram_available_gb,
+    }))
+}
+
+/// Download a model from the built-in catalog.
+#[tauri::command]
+pub async fn download_builtin_model(
+    app_handle: AppHandle,
+    model_id: String,
+) -> Result<serde_json::Value> {
+    let entry = crate::model_manager::find_model(&model_id)
+        .ok_or_else(|| format!("Unknown model: {model_id}"))?;
+
+    let handle = app_handle.clone();
+    let path = crate::model_manager::download_model(entry, move |progress| {
+        let _ = handle.emit("model-download-progress", &progress);
+    })
+    .await?;
+
+    Ok(serde_json::json!({
+        "model_id": model_id,
+        "path": path,
+        "status": "complete",
+    }))
+}
+
+/// Cancel an in-progress model download.
+#[tauri::command]
+pub fn cancel_builtin_model_download() -> Result<String> {
+    crate::model_manager::cancel_download();
+    Ok("Download cancellation requested".into())
+}
+
+/// Delete a downloaded model from disk.
+#[tauri::command]
+pub fn delete_builtin_model(model_id: String) -> Result<serde_json::Value> {
+    let entry = crate::model_manager::find_model(&model_id)
+        .ok_or_else(|| format!("Unknown model: {model_id}"))?;
+    crate::model_manager::delete_model(entry)?;
+    Ok(serde_json::json!({
+        "model_id": model_id,
+        "status": "deleted",
+    }))
+}

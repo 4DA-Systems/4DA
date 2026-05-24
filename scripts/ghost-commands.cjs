@@ -31,10 +31,14 @@ const KNOWN_UNREGISTERED = new Set([]);
 // Commands that are registered but intentionally have no frontend caller yet.
 // Typically: backend-only commands, feature-gated WIP, or commands called via MCP/CLI.
 const KNOWN_GHOST = new Set([
-  'prepare_embedding_engine', // fastembed-local feature — frontend caller coming
-  'start_builtin_llm',        // Phase 3b — sidecar control UI pending
-  'stop_builtin_llm',         // Phase 3b — sidecar control UI pending
-  'get_builtin_llm_status',   // Phase 3b — sidecar control UI pending
+  'prepare_embedding_engine',       // fastembed-local feature — frontend caller coming
+  'start_builtin_llm',              // Phase 3 — sidecar control UI pending
+  'stop_builtin_llm',               // Phase 3 — sidecar control UI pending
+  'get_builtin_llm_status',         // Phase 3 — sidecar control UI pending
+  'list_builtin_models',            // Phase 3 — model catalog UI pending
+  'download_builtin_model',         // Phase 3 — model download UI pending
+  'cancel_builtin_model_download',  // Phase 3 — model download UI pending
+  'delete_builtin_model',           // Phase 3 — model management UI pending
 ]);
 
 // ANSI color codes

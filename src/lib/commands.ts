@@ -785,6 +785,10 @@ interface CommandMap {
   start_builtin_llm: { params: { model_path: string }; result: { status: string; port: number; model_path: string } };
   stop_builtin_llm: { params: Record<string, never>; result: { status: string } };
   get_builtin_llm_status: { params: Record<string, never>; result: { status: string; port: number | null } };
+  list_builtin_models: { params: Record<string, never>; result: { models: Array<{ id: string; display_name: string; family: string; size_bytes: number; size_gb: number; min_ram_gb: number; quantization: string; downloaded: boolean; path: string | null; fits_ram: boolean }>; recommended_id: string | null; ram_total_gb: number; ram_available_gb: number } };
+  download_builtin_model: { params: { model_id: string }; result: { model_id: string; path: string; status: string } };
+  cancel_builtin_model_download: { params: Record<string, never>; result: string };
+  delete_builtin_model: { params: { model_id: string }; result: { model_id: string; status: string } };
 
 }
 
