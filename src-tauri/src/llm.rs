@@ -51,6 +51,23 @@ pub(crate) fn sanitize_api_error(text: &str) -> String {
 // Types
 // ============================================================================
 
+/// Structured output mode for LLM completions.
+///
+/// Controls how the LLM is constrained to produce structured (JSON) output.
+/// Each provider translates this to its native mechanism.
+#[derive(Debug, Clone)]
+pub(crate) enum StructuredOutputMode {
+    /// OpenAI/Ollama: `response_format: { type: "json_object" }` / `format: "json"`.
+    /// Anthropic: schema instruction appended to system prompt.
+    JsonSchema { schema: &'static str },
+    /// llama-server only: GBNF grammar for constrained decoding.
+    /// Falls back to `JsonSchema` for non-llama providers.
+    Grammar {
+        grammar: &'static str,
+        schema: &'static str,
+    },
+}
+
 /// A message in a conversation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
@@ -211,6 +228,96 @@ impl LLMClient {
                 &self.provider.provider,
                 &self.provider.model,
                 "completion",
+                response.input_tokens,
+                response.output_tokens,
+            );
+        }
+
+        Ok(response)
+    }
+
+    /// Send a completion request with structured output constraints.
+    ///
+    /// Identical to `complete()` but instructs the LLM to produce JSON
+    /// conforming to the given schema/grammar. Provider-specific:
+    /// - OpenAI/builtin: `response_format` + optional grammar
+    /// - Anthropic: schema instruction appended to system prompt
+    /// - Ollama: `format: "json"` parameter
+    pub(crate) async fn complete_structured(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+        mode: &StructuredOutputMode,
+    ) -> Result<LLMResponse> {
+        if is_llm_limit_reached() {
+            let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
+            let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
+            warn!(
+                target: "4da::llm",
+                tokens_used, tokens_limit, cost_used_cents = cost_used, cost_limit_cents = cost_limit,
+                "LLM call blocked — daily limit reached"
+            );
+            return Err(
+                Self::format_limit_error(tokens_used, tokens_limit, cost_used, cost_limit).into(),
+            );
+        }
+
+        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
+            if let Some(mut g) = crate::get_settings_manager().try_lock() {
+                if !g.get().privacy.cloud_llm_disclosure_accepted
+                    && !self.provider.api_key.is_empty()
+                {
+                    g.get_mut().privacy.cloud_llm_disclosure_accepted = true;
+                    let _ = g.save();
+                }
+            }
+        }
+
+        let result = match self.provider.provider.as_str() {
+            "anthropic" => {
+                self.complete_anthropic_structured(system, messages.clone(), mode)
+                    .await
+            }
+            "openai" | "openai-compatible" | "builtin" => {
+                self.complete_openai_structured(system, messages.clone(), mode)
+                    .await
+            }
+            "ollama" => {
+                self.complete_ollama_structured(system, messages.clone(), mode)
+                    .await
+            }
+            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+        };
+
+        let response = match result {
+            Ok(resp) => resp,
+            Err(err) => {
+                crate::telemetry::record_error_async(
+                    "llm",
+                    &format!("{err}"),
+                    Some(&self.provider.provider),
+                );
+                return Err(err);
+            }
+        };
+
+        let total_tokens = response.input_tokens + response.output_tokens;
+        if total_tokens > 0 {
+            let tokens_ok = record_llm_tokens(total_tokens);
+            let cost_cents =
+                self.estimate_cost_cents(response.input_tokens, response.output_tokens);
+            let cost_ok = record_llm_cost(cost_cents);
+            if !tokens_ok || !cost_ok {
+                debug!(
+                    target: "4da::llm",
+                    tokens = total_tokens, cost_cents,
+                    "Limit exceeded after this call — future calls will be blocked"
+                );
+            }
+            record_ai_usage(
+                &self.provider.provider,
+                &self.provider.model,
+                "structured_completion",
                 response.input_tokens,
                 response.output_tokens,
             );
@@ -518,9 +625,217 @@ impl LLMClient {
         })
     }
 
+    // ========================================================================
+    // Structured output variants (JSON mode / grammar-constrained)
+    // ========================================================================
+
+    async fn complete_anthropic_structured(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+        mode: &StructuredOutputMode,
+    ) -> Result<LLMResponse> {
+        let schema = match mode {
+            StructuredOutputMode::JsonSchema { schema } => schema,
+            StructuredOutputMode::Grammar { schema, .. } => schema,
+        };
+        let structured_system = format!(
+            "{system}\n\nYou MUST respond with valid JSON matching this schema:\n{schema}\n\nRespond ONLY with the JSON object. No markdown, no explanation, no wrapping."
+        );
+        self.complete_anthropic(&structured_system, messages).await
+    }
+
+    async fn complete_openai_structured(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+        mode: &StructuredOutputMode,
+    ) -> Result<LLMResponse> {
+        let url = if self.provider.provider == "builtin" {
+            let base = crate::llm_engine::sidecar_base_url().ok_or_else(|| {
+                crate::error::FourDaError::Llm("Built-in LLM sidecar is not running".into())
+            })?;
+            format!("{base}/chat/completions")
+        } else if self.provider.provider == "openai-compatible" {
+            let base = self
+                .provider
+                .base_url
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1");
+            let base = base.trim_end_matches('/');
+            if base.ends_with("/chat/completions") {
+                base.to_string()
+            } else {
+                format!("{base}/chat/completions")
+            }
+        } else {
+            self.provider
+                .base_url
+                .as_deref()
+                .unwrap_or("https://api.openai.com/v1/chat/completions")
+                .to_string()
+        };
+
+        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
+            crate::url_validation::validate_not_internal(&url)?;
+        }
+
+        let schema = match mode {
+            StructuredOutputMode::JsonSchema { schema } => schema,
+            StructuredOutputMode::Grammar { schema, .. } => schema,
+        };
+
+        let structured_system =
+            format!("{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}");
+
+        let mut all_messages = vec![serde_json::json!({
+            "role": "system",
+            "content": structured_system
+        })];
+        for m in &messages {
+            all_messages.push(serde_json::json!({
+                "role": m.role,
+                "content": m.content
+            }));
+        }
+
+        let mut body = serde_json::json!({
+            "model": self.provider.model,
+            "max_tokens": 4096,
+            "messages": all_messages,
+            "response_format": { "type": "json_object" }
+        });
+
+        // llama-server supports GBNF grammar for hard-constrained decoding
+        if self.provider.provider == "builtin" {
+            if let StructuredOutputMode::Grammar { grammar, .. } = mode {
+                body["grammar"] = serde_json::Value::String(grammar.to_string());
+            }
+        }
+
+        let response = self
+            .client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", self.provider.api_key))
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .context("OpenAI structured request failed")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(
+                format!("OpenAI API error {}: {}", status, sanitize_api_error(&text)).into(),
+            );
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse OpenAI structured response")?;
+
+        let content = data["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        let input_tokens = data["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
+        let output_tokens = data["usage"]["completion_tokens"].as_u64().unwrap_or(0);
+
+        Ok(LLMResponse {
+            content,
+            input_tokens,
+            output_tokens,
+        })
+    }
+
+    async fn complete_ollama_structured(
+        &self,
+        system: &str,
+        messages: Vec<Message>,
+        mode: &StructuredOutputMode,
+    ) -> Result<LLMResponse> {
+        let base_url = self
+            .provider
+            .base_url
+            .as_deref()
+            .unwrap_or("http://localhost:11434");
+        let url = format!("{base_url}/api/chat");
+
+        let schema = match mode {
+            StructuredOutputMode::JsonSchema { schema } => schema,
+            StructuredOutputMode::Grammar { schema, .. } => schema,
+        };
+
+        let structured_system =
+            format!("{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}");
+
+        let mut all_messages = vec![serde_json::json!({
+            "role": "system",
+            "content": structured_system
+        })];
+        for m in &messages {
+            all_messages.push(serde_json::json!({
+                "role": m.role,
+                "content": m.content
+            }));
+        }
+
+        let body = serde_json::json!({
+            "model": self.provider.model,
+            "messages": all_messages,
+            "stream": false,
+            "format": "json"
+        });
+
+        let response = self
+            .client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                let msg = e.to_string();
+                if msg.contains("connect") || msg.contains("refused") {
+                    format!(
+                        "Cannot connect to Ollama at {base_url}. Make sure Ollama is running (ollama serve)."
+                    )
+                } else {
+                    format!("Ollama structured request failed: {e}")
+                }
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("Ollama error {}: {}", status, sanitize_api_error(&text)).into());
+        }
+
+        let data: serde_json::Value = response
+            .json()
+            .await
+            .context("Failed to parse Ollama structured response")?;
+
+        let content = data["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+
+        let input_tokens = data["prompt_eval_count"].as_u64().unwrap_or(0);
+        let output_tokens = data["eval_count"].as_u64().unwrap_or(0);
+
+        Ok(LLMResponse {
+            content,
+            input_tokens,
+            output_tokens,
+        })
+    }
+
     /// Send a streaming completion request.
     /// Tokens are delivered progressively via `on_token` callback.
-    /// Falls back to local Ollama on cloud provider failure.
     /// Returns the complete `LLMResponse` when finished.
     pub async fn stream_complete<F>(
         &self,
