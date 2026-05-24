@@ -82,6 +82,7 @@ data/calibrations/
 
 # Digest cache (generated briefings, machine-local)
 data/digests/
+src-tauri/data/digests/
 
 # OSV advisory cache (fetched at runtime, machine-local)
 data/osv-cache/
