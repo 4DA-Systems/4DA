@@ -40,12 +40,14 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
   freeBriefing: null,
   freeBriefingLoading: false,
   morningBriefSynthesis: null,
+  morningBriefClusters: null,
   morningBriefData: null,
   // Sovereign Cold Boot: hydrate from the pre-mount fetch in main.tsx so the
   // first render already has yesterday's briefing on screen.
   instantSnapshot: readPreloadedSnapshot(),
 
   setMorningBriefSynthesis: (synthesis) => set({ morningBriefSynthesis: synthesis }),
+  setMorningBriefClusters: (clusters) => set({ morningBriefClusters: clusters }),
   setMorningBriefData: (data) => set({ morningBriefData: data }),
   setAutoBriefingEnabled: (enabled) => set({ autoBriefingEnabled: enabled }),
   setLastBackgroundResultsAt: (date) => set({ lastBackgroundResultsAt: date }),
