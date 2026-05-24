@@ -1966,10 +1966,16 @@ fn strip_control_chars(s: &str) -> String {
 // LLM Morning Brief Synthesis
 // ============================================================================
 
+/// Result of LLM synthesis — prose text with optional structured clusters.
+pub(crate) struct SynthesisResult {
+    pub prose: String,
+    pub clusters: Option<Vec<crate::synthesis_schema::SynthesisCluster>>,
+}
+
 /// Synthesize a narrative morning intelligence briefing using LLM.
 pub(crate) async fn synthesize_morning_briefing(
     briefing: &BriefingNotification,
-) -> std::result::Result<String, String> {
+) -> std::result::Result<SynthesisResult, String> {
     let llm_settings = {
         let mut guard = crate::get_settings_manager().lock();
         guard.ensure_keys_hydrated();
@@ -2280,9 +2286,11 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                             ungrounded_count = report.ungrounded_terms.len(),
                             "Structured synthesis failed groundedness — abstaining"
                         );
-                        return Ok(
-                            "Low signal -- no noteworthy intelligence overnight.".to_string()
-                        );
+                        return Ok(SynthesisResult {
+                            prose: "Low signal -- no noteworthy intelligence overnight."
+                                .to_string(),
+                            clusters: None,
+                        });
                     }
 
                     tracing::info!(
@@ -2304,7 +2312,10 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                         briefing.items.len(),
                         src_types.join(", ")
                     ));
-                    return Ok(synthesis);
+                    return Ok(SynthesisResult {
+                        prose: synthesis,
+                        clusters: Some(output.clusters),
+                    });
                 }
                 Ok(_) => {
                     tracing::debug!(
@@ -2541,7 +2552,10 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             ungrounded_sample = ?report.ungrounded_terms.iter().take(5).collect::<Vec<_>>(),
             "Morning brief synthesis failed groundedness check — falling back to abstention"
         );
-        return Ok("Low signal -- no noteworthy intelligence overnight.".to_string());
+        return Ok(SynthesisResult {
+            prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+            clusters: None,
+        });
     }
 
     tracing::info!(
@@ -2566,7 +2580,10 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     );
     synthesis.push_str(&provenance);
 
-    Ok(synthesis)
+    Ok(SynthesisResult {
+        prose: synthesis,
+        clusters: None,
+    })
 }
 
 // ============================================================================
