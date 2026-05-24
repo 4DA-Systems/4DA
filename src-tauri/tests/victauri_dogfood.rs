@@ -2393,14 +2393,36 @@ async fn content_graph_ui_toggle_exists() {
 
     let mut client = VictauriClient::discover().await.unwrap();
 
-    // Navigate to Signal tab
+    // Clear any modal/overlay left by prior tests
+    let _ = client.press_key("Escape").await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let _ = client.press_key("Escape").await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    // Navigate to Brief first (reset to known tab), then Signal
     let tabs = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
         .unwrap();
-    let signal_tab = tabs
-        .as_array()
-        .unwrap()
+    let tab_arr = tabs.as_array().expect("find_elements returns array");
+
+    let brief_tab = tab_arr.iter().find(|e| {
+        e.get("text")
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t == "Brief")
+    });
+    if let Some(bt) = brief_tab {
+        let _ = client.click(bt["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    }
+
+    // Now navigate to Signal tab
+    let tabs = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let tab_arr = tabs.as_array().expect("find_elements returns array");
+    let signal_tab = tab_arr
         .iter()
         .find(|e| {
             e.get("text")
@@ -2409,8 +2431,10 @@ async fn content_graph_ui_toggle_exists() {
         })
         .expect("Signal tab must exist");
 
-    let ref_id = signal_tab["ref_id"].as_str().unwrap();
-    client.click(ref_id).await.unwrap();
+    client
+        .click(signal_tab["ref_id"].as_str().unwrap())
+        .await
+        .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(800)).await;
 
     // Check for List/Graph toggle buttons
@@ -2418,7 +2442,7 @@ async fn content_graph_ui_toggle_exists() {
         .find_elements(serde_json::json!({"role": "button"}))
         .await
         .unwrap();
-    let button_arr = buttons.as_array().unwrap();
+    let button_arr = buttons.as_array().expect("find_elements returns array");
 
     let list_btn = button_arr.iter().find(|b| {
         b.get("text")
@@ -2451,14 +2475,36 @@ async fn content_graph_ui_renders_on_toggle() {
 
     let mut client = VictauriClient::discover().await.unwrap();
 
-    // Navigate to Signal tab
+    // Clear any modal/overlay left by prior tests
+    let _ = client.press_key("Escape").await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let _ = client.press_key("Escape").await;
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    // Navigate to Brief first (reset to known tab), then Signal
     let tabs = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
         .unwrap();
-    let signal_tab = tabs
-        .as_array()
-        .unwrap()
+    let tab_arr = tabs.as_array().expect("find_elements returns array");
+
+    let brief_tab = tab_arr.iter().find(|e| {
+        e.get("text")
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t == "Brief")
+    });
+    if let Some(bt) = brief_tab {
+        let _ = client.click(bt["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+    }
+
+    // Now navigate to Signal tab
+    let tabs = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let tab_arr = tabs.as_array().expect("find_elements returns array");
+    let signal_tab = tab_arr
         .iter()
         .find(|e| {
             e.get("text")
@@ -2477,9 +2523,8 @@ async fn content_graph_ui_renders_on_toggle() {
         .find_elements(serde_json::json!({"role": "button"}))
         .await
         .unwrap();
-    let graph_btn = buttons
-        .as_array()
-        .unwrap()
+    let button_arr = buttons.as_array().expect("find_elements returns array");
+    let graph_btn = button_arr
         .iter()
         .find(|b| {
             b.get("text")
@@ -2496,7 +2541,7 @@ async fn content_graph_ui_renders_on_toggle() {
     // Wait for graph to load (IPC call + React Flow render)
     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
-    // Verify graph mode is active by checking zustand store state
+    // Verify graph mode is active — check for React Flow DOM or graph stats
     let state = client
         .eval_js("document.querySelector('.react-flow') !== null || document.querySelector('[class*=\"react-flow\"]') !== null || document.querySelector('[data-testid=\"rf\"]') !== null || document.body.innerHTML.includes('No content relationships') || document.body.innerHTML.includes('nodes') || document.body.innerHTML.includes('edges') || document.body.innerHTML.includes('clusters')")
         .await
@@ -2509,27 +2554,21 @@ async fn content_graph_ui_renders_on_toggle() {
         "Graph view should render React Flow or stats bar after toggle: {state}"
     );
 
-    // Switch back to List view
+    // Switch back to List view for clean state
     let buttons = client
         .find_elements(serde_json::json!({"role": "button"}))
         .await
         .unwrap();
-    let list_btn = buttons
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|b| {
-            b.get("text")
-                .or_else(|| b.get("name"))
-                .and_then(|t| t.as_str())
-                .map_or(false, |t| t == "List")
-        })
-        .expect("List button must exist");
-    client
-        .click(list_btn["ref_id"].as_str().unwrap())
-        .await
-        .unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let button_arr = buttons.as_array().expect("find_elements returns array");
+    if let Some(list_btn) = button_arr.iter().find(|b| {
+        b.get("text")
+            .or_else(|| b.get("name"))
+            .and_then(|t| t.as_str())
+            .map_or(false, |t| t == "List")
+    }) {
+        let _ = client.click(list_btn["ref_id"].as_str().unwrap()).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
 }
 
 #[tokio::test]
