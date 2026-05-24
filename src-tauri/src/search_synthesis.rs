@@ -322,10 +322,10 @@ pub async fn synthesize_search(
         return Err("Query cannot be empty".into());
     }
 
-    // Check LLM provider is configured
     let provider = {
         let manager = crate::get_settings_manager();
-        let guard = manager.lock();
+        let mut guard = manager.lock();
+        guard.ensure_keys_hydrated();
         guard.get().llm.clone()
     };
 

@@ -61,7 +61,8 @@ pub fn build_insight_prompt(
 /// Get an LLM client from current settings, if configured.
 fn get_llm_client() -> Option<crate::llm::LLMClient> {
     let manager = crate::get_settings_manager();
-    let guard = manager.lock();
+    let mut guard = manager.lock();
+    guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
     if provider.api_key.is_empty() && provider.provider != "ollama" {
         return None;

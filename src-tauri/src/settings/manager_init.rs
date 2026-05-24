@@ -238,33 +238,38 @@ impl SettingsManager {
         }
 
         // --- Hydrate keys from keychain into in-memory settings ---
-        // Retry once after a short delay if all keychain reads return None.
-        // Handles dev-mode race conditions where the previous process hasn't
-        // fully released the credential store before the new one starts.
+        // Exponential backoff: the credential store can be briefly locked during
+        // dev-mode hot-reloads (old process still releasing handles). A single
+        // 150ms retry was insufficient — observed failures up to ~1s after restart.
         let hydrated = Self::hydrate_from_keychain(&mut settings);
         if hydrated == 0 && !has_plaintext_keys {
-            // No keys from keychain AND no plaintext — might be a race condition.
-            // Only retry if we have reason to believe keys should exist (provider
-            // is configured for a cloud LLM that requires an API key).
             let needs_key = !matches!(
                 settings.llm.provider.as_str(),
                 "none" | "ollama" | "local" | ""
             );
             if needs_key {
-                std::thread::sleep(std::time::Duration::from_millis(150));
-                let retried = Self::hydrate_from_keychain(&mut settings);
-                if retried == 0 {
-                    warn!(
-                        target: "4da::keystore",
-                        provider = %settings.llm.provider,
-                        "Keychain hydration returned zero keys after retry — provider requires an API key but none available"
-                    );
-                } else {
-                    info!(
-                        target: "4da::keystore",
-                        keys_recovered = retried,
-                        "Keychain hydration succeeded on retry (race condition resolved)"
-                    );
+                let backoff_ms = [200, 500, 1000, 2000];
+                for (attempt, delay) in backoff_ms.iter().enumerate() {
+                    std::thread::sleep(std::time::Duration::from_millis(*delay));
+                    let retried = Self::hydrate_from_keychain(&mut settings);
+                    if retried > 0 {
+                        info!(
+                            target: "4da::keystore",
+                            keys_recovered = retried,
+                            attempt = attempt + 2,
+                            delay_ms = delay,
+                            "Keychain hydration succeeded on retry"
+                        );
+                        break;
+                    }
+                    if attempt == backoff_ms.len() - 1 {
+                        warn!(
+                            target: "4da::keystore",
+                            provider = %settings.llm.provider,
+                            total_attempts = backoff_ms.len() + 1,
+                            "Keychain hydration exhausted all retries — ensure_keys_hydrated() will retry on first use"
+                        );
+                    }
                 }
             }
         }

@@ -507,7 +507,8 @@ pub async fn translate_content_batch(
 /// Build an LLM client from the user's current settings.
 fn get_llm_client() -> Result<llm::LLMClient> {
     let manager = crate::get_settings_manager();
-    let guard = manager.lock();
+    let mut guard = manager.lock();
+    guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
     if provider.api_key.is_empty() && provider.provider != "ollama" {
         let lang = crate::i18n::get_user_language();

@@ -85,10 +85,10 @@ pub(crate) async fn deliberate(
         return Ok(None);
     }
 
-    // ---- Gate: provider configured? ----
     let provider = {
         let mgr = crate::get_settings_manager();
-        let guard = mgr.lock();
+        let mut guard = mgr.lock();
+        guard.ensure_keys_hydrated();
         guard.get().llm.clone()
     };
 

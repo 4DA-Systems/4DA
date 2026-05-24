@@ -111,10 +111,10 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
         return Ok(all_embeddings);
     }
 
-    // Get settings to determine provider - clone inside scope so MutexGuard drops before await
     let llm_settings = {
-        let settings = get_settings_manager().lock();
-        settings.get().llm.clone()
+        let mut guard = get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
     };
 
     // Fast-path: if a cloud provider is configured but has no API key, skip it entirely

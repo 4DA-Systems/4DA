@@ -102,10 +102,10 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
 
     let title = db.get_item_title(item_id)?.unwrap_or_default();
 
-    // Get LLM config
     let llm_config = {
-        let settings = get_settings_manager().lock();
-        settings.get().llm.clone()
+        let mut guard = get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
     };
 
     if llm_config.provider.is_empty()

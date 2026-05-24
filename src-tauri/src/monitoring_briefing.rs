@@ -1971,8 +1971,9 @@ pub(crate) async fn synthesize_morning_briefing(
     briefing: &BriefingNotification,
 ) -> std::result::Result<String, String> {
     let llm_settings = {
-        let settings = crate::get_settings_manager().lock();
-        settings.get().llm.clone()
+        let mut guard = crate::get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
     };
 
     if llm_settings.provider != "ollama" && llm_settings.api_key.is_empty() {
