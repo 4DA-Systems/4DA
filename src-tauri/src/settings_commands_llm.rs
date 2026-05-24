@@ -26,7 +26,8 @@ pub async fn test_llm_connection() -> Result<serde_json::Value> {
     };
 
     if settings.llm.provider == "none"
-        || (settings.llm.provider != "ollama" && settings.llm.api_key.is_empty())
+        || (!matches!(settings.llm.provider.as_str(), "ollama" | "builtin")
+            && settings.llm.api_key.is_empty())
     {
         return Err("No LLM provider configured".into());
     }
@@ -36,6 +37,13 @@ pub async fn test_llm_connection() -> Result<serde_json::Value> {
     // Ollama: use dedicated lightweight test (not the heavy judge_batch)
     if settings.llm.provider == "ollama" {
         return test_ollama_connection_impl(&settings.llm).await;
+    }
+
+    // Builtin: check sidecar status then use the standard cloud-style test path
+    if settings.llm.provider == "builtin" {
+        if crate::llm_engine::sidecar_status() != crate::llm_engine::SidecarStatus::Ready {
+            return Err("Built-in LLM sidecar is not running — start it from settings".into());
+        }
     }
 
     // Cloud providers: use a lightweight direct LLM call
@@ -485,6 +493,31 @@ pub async fn list_provider_models(
                 Ok(serde_json::json!({ "models": models }))
             }
         }
+        "builtin" => {
+            // Query the sidecar's /v1/models endpoint if running
+            if let Some(base) = crate::llm_engine::sidecar_base_url() {
+                let models_url = format!("{base}/models");
+                match client.get(&models_url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        let data: serde_json::Value = resp.json().await.unwrap_or_default();
+                        let models: Vec<String> = data["data"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|m| {
+                                        m["id"].as_str().map(std::string::ToString::to_string)
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        Ok(serde_json::json!({ "models": models }))
+                    }
+                    _ => Ok(serde_json::json!({ "models": [] })),
+                }
+            } else {
+                Ok(serde_json::json!({ "models": [], "error": "Sidecar not running" }))
+            }
+        }
         _ => Ok(serde_json::json!({ "models": [] })),
     }
 }
@@ -563,6 +596,8 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
         let model = llm_settings.model.clone();
         let params = crate::ollama::get_model_params_billions(&model, base_url).await;
         (model, params, "ollama".to_string())
+    } else if llm_settings.provider == "builtin" {
+        (llm_settings.model.clone(), None, "builtin".to_string())
     } else {
         (
             llm_settings.model.clone(),
@@ -583,7 +618,13 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
     let recommended = crate::model_allowlist::recommend_models(hw.ram_total_gb);
     let top_recommendation = recommended.first().map(|e| e.family);
 
-    let guidance = if capable {
+    let guidance = if provider == "builtin" {
+        if crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready {
+            "Built-in LLM is running and ready for synthesis.".to_string()
+        } else {
+            "Built-in LLM sidecar is not running — start it from settings.".to_string()
+        }
+    } else if capable {
         "Your model supports AI-powered briefing synthesis.".to_string()
     } else if model_name.is_empty() {
         match top_recommendation {
@@ -620,5 +661,35 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
             "gpu": hw.gpu,
         },
         "recommended_model": top_recommendation,
+    }))
+}
+
+/// Start the built-in LLM sidecar with the specified GGUF model path.
+#[tauri::command]
+pub async fn start_builtin_llm(model_path: String) -> Result<serde_json::Value> {
+    let path = std::path::PathBuf::from(&model_path);
+    let port = crate::llm_engine::start_sidecar(&path).await?;
+    Ok(serde_json::json!({
+        "status": "ready",
+        "port": port,
+        "model_path": model_path,
+    }))
+}
+
+/// Stop the built-in LLM sidecar.
+#[tauri::command]
+pub fn stop_builtin_llm() -> Result<serde_json::Value> {
+    crate::llm_engine::stop_sidecar();
+    Ok(serde_json::json!({ "status": "stopped" }))
+}
+
+/// Get the current status of the built-in LLM sidecar.
+#[tauri::command]
+pub fn get_builtin_llm_status() -> Result<serde_json::Value> {
+    let status = crate::llm_engine::sidecar_status();
+    let port = crate::llm_engine::sidecar_port();
+    Ok(serde_json::json!({
+        "status": status,
+        "port": port,
     }))
 }

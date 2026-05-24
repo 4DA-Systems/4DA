@@ -460,7 +460,7 @@ fn compute_derived(profile: &ProfileData, settings: &SettingsData) -> ComputedFi
     // LLM tier
     let llm_tier = if !settings.has_llm {
         "none"
-    } else if settings.llm_provider == "ollama" {
+    } else if matches!(settings.llm_provider.as_str(), "ollama" | "builtin") {
         "local"
     } else {
         "cloud"

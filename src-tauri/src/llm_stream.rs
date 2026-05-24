@@ -210,7 +210,12 @@ pub(crate) async fn stream_openai<F>(
 where
     F: Fn(&str) + Send + 'static,
 {
-    let url = if provider.provider == "openai-compatible" {
+    let url = if provider.provider == "builtin" {
+        let base = crate::llm_engine::sidecar_base_url().ok_or_else(|| {
+            crate::error::FourDaError::Llm("Built-in LLM sidecar is not running".into())
+        })?;
+        format!("{base}/chat/completions")
+    } else if provider.provider == "openai-compatible" {
         let base = provider
             .base_url
             .as_deref()

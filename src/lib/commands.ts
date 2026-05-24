@@ -781,6 +781,11 @@ interface CommandMap {
   // -- Waitlist --
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
 
+  // -- Built-in LLM Engine --
+  start_builtin_llm: { params: { model_path: string }; result: { status: string; port: number; model_path: string } };
+  stop_builtin_llm: { params: Record<string, never>; result: { status: string } };
+  get_builtin_llm_status: { params: Record<string, never>; result: { status: string; port: number | null } };
+
 }
 
 interface ContentGraph {

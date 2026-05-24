@@ -158,7 +158,7 @@ impl LLMClient {
 
         // Privacy gate: auto-heal disclosure flag for BYOK users.
         // Providing an API key IS consent — no separate acceptance needed.
-        if !matches!(self.provider.provider.as_str(), "ollama") {
+        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
             if let Some(mut g) = crate::get_settings_manager().try_lock() {
                 if !g.get().privacy.cloud_llm_disclosure_accepted
                     && !self.provider.api_key.is_empty()
@@ -171,7 +171,9 @@ impl LLMClient {
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
+            "openai" | "openai-compatible" | "builtin" => {
+                self.complete_openai(system, messages.clone()).await
+            }
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
@@ -232,7 +234,9 @@ impl LLMClient {
         // First attempt — NO limit check (translation is infrastructure)
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
+            "openai" | "openai-compatible" | "builtin" => {
+                self.complete_openai(system, messages.clone()).await
+            }
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
         };
@@ -244,7 +248,7 @@ impl LLMClient {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 match self.provider.provider.as_str() {
                     "anthropic" => self.complete_anthropic(system, messages).await?,
-                    "openai" | "openai-compatible" => {
+                    "openai" | "openai-compatible" | "builtin" => {
                         self.complete_openai(system, messages).await?
                     }
                     "ollama" => self.complete_ollama(system, messages).await?,
@@ -334,9 +338,14 @@ impl LLMClient {
         })
     }
 
-    /// OpenAI API (also used for openai-compatible providers)
+    /// OpenAI API (also used for openai-compatible and builtin providers)
     async fn complete_openai(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
-        let url = if self.provider.provider == "openai-compatible" {
+        let url = if self.provider.provider == "builtin" {
+            let base = crate::llm_engine::sidecar_base_url().ok_or_else(|| {
+                crate::error::FourDaError::Llm("Built-in LLM sidecar is not running".into())
+            })?;
+            format!("{base}/chat/completions")
+        } else if self.provider.provider == "openai-compatible" {
             // OpenAI-compatible: base_url is the API base (e.g. https://api.groq.com/openai/v1)
             let base = self
                 .provider
@@ -358,7 +367,7 @@ impl LLMClient {
         };
 
         // Re-validate URL at use-time to prevent SSRF from tampered settings
-        if self.provider.provider != "ollama" {
+        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
             crate::url_validation::validate_not_internal(&url)?;
         }
 
@@ -550,7 +559,7 @@ impl LLMClient {
                 )
                 .await
             }
-            "openai" | "openai-compatible" => {
+            "openai" | "openai-compatible" | "builtin" => {
                 crate::llm_stream::stream_openai(
                     &self.client,
                     &self.provider,

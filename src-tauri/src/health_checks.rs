@@ -234,8 +234,10 @@ pub(super) fn check_embedding(now: &str) -> ComponentHealth {
     // explicit configuration — Ollama just needs to be running. We can't verify
     // Ollama connectivity synchronously here, but we should not report "degraded"
     // for a config that has a valid fallback path.
-    let provider_has_ollama_fallback =
-        matches!(llm.provider.as_str(), "anthropic" | "none" | "local" | "");
+    let provider_has_ollama_fallback = matches!(
+        llm.provider.as_str(),
+        "anthropic" | "none" | "local" | "builtin" | ""
+    );
 
     if has_openai_key || has_ollama || provider_has_ollama_fallback {
         ComponentHealth {

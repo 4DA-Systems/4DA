@@ -147,6 +147,11 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
                 }
             }
         }
+        "builtin" => {
+            // Built-in sidecar uses verified models from the allowlist.
+            // If the sidecar is running, the model has already been vetted.
+            crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready
+        }
         _ => false,
     }
 }
@@ -182,6 +187,7 @@ pub(crate) async fn can_explain(provider: &crate::settings::LLMProvider) -> bool
                 None => false,
             }
         }
+        "builtin" => crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready,
         _ => false,
     }
 }

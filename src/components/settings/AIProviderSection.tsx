@@ -132,7 +132,7 @@ export function AIProviderSection({
               onChange={(e) => {
                 const newProvider = e.target.value;
                 const registryModels = getProviderModels(newProvider, modelRegistry);
-                const defaultModel = newProvider === 'local'
+                const defaultModel = newProvider === 'builtin'
                   ? 'all-MiniLM-L6-v2'
                   : newProvider === 'openai-compatible'
                     ? ''
@@ -156,14 +156,14 @@ export function AIProviderSection({
             >
               <option value="anthropic">{t('settings.ai.providerAnthropic')} ({t('settings.ai.recommended')})</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
-              <option value="local">{t('settings.ai.builtInLocal')}</option>
+              <option value="builtin">{t('settings.ai.builtInLocal')}</option>
               <option value="openai-compatible">{t('settings.ai.providerOpenAICompatible')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
             </select>
           </div>
 
           {/* BYOK nudge for local/Ollama users */}
-          {(settingsForm.provider === 'ollama' || settingsForm.provider === 'local') && (
+          {(settingsForm.provider === 'ollama' || settingsForm.provider === 'builtin') && (
             <div className="p-3 bg-green-900/15 border border-green-500/30 rounded-lg">
               <p className="text-xs text-green-400 font-medium mb-1">{t('settings.ai.byokNudgeTitle')}</p>
               <p className="text-xs text-text-muted leading-relaxed">{t('settings.ai.byokNudgeBody')}</p>
@@ -187,7 +187,7 @@ export function AIProviderSection({
             </div>
           )}
 
-          {settingsForm.provider === 'local' && (
+          {settingsForm.provider === 'builtin' && (
             <div className="bg-bg-secondary rounded-lg p-3 border border-amber-500/20">
               <p className="text-xs text-amber-400 font-medium mb-1">{t('settings.ai.builtInModel')}</p>
               <p className="text-xs text-text-muted">
@@ -199,7 +199,7 @@ export function AIProviderSection({
             </div>
           )}
 
-          {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'local' && (
+          {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'builtin' && (
             <div>
               <label htmlFor="ai-api-key" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.apiKey')}</label>
               <input
@@ -244,7 +244,7 @@ export function AIProviderSection({
             </div>
           )}
 
-          {settingsForm.provider !== 'local' && settingsForm.provider !== 'openai-compatible' && (
+          {settingsForm.provider !== 'builtin' && settingsForm.provider !== 'openai-compatible' && (
             <div>
               <label htmlFor="ai-model-select" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.model')}</label>
               <select

@@ -1511,6 +1511,8 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
     }
     if let tauri::RunEvent::Exit = event {
         info!(target: "4da::shutdown", "Application shutting down - cleaning up...");
+        // Stop the built-in LLM sidecar if running
+        crate::llm_engine::stop_sidecar();
         // Disable monitoring to stop scheduler
         let state = get_monitoring_state();
         state.set_enabled(false);

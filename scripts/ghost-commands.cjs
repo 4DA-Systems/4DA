@@ -32,6 +32,9 @@ const KNOWN_UNREGISTERED = new Set([]);
 // Typically: backend-only commands, feature-gated WIP, or commands called via MCP/CLI.
 const KNOWN_GHOST = new Set([
   'prepare_embedding_engine', // fastembed-local feature — frontend caller coming
+  'start_builtin_llm',        // Phase 3b — sidecar control UI pending
+  'stop_builtin_llm',         // Phase 3b — sidecar control UI pending
+  'get_builtin_llm_status',   // Phase 3b — sidecar control UI pending
 ]);
 
 // ANSI color codes
