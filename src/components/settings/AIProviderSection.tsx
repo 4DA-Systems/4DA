@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-import { EmbeddingSetupProgress } from './EmbeddingSetupProgress';
+import { BuiltinModelSection } from './BuiltinModelSection';
 import { ReRankingSection } from './ReRankingSection';
 import { UsageStatsSection } from './UsageStatsSection';
 import { popularEndpoints, getProviderModels, ollamaSynthesisModels, ollamaOtherModels, IDLE_VALIDATION } from './ai-provider-constants';
@@ -188,15 +188,7 @@ export function AIProviderSection({
           )}
 
           {settingsForm.provider === 'builtin' && (
-            <div className="bg-bg-secondary rounded-lg p-3 border border-amber-500/20">
-              <p className="text-xs text-amber-400 font-medium mb-1">{t('settings.ai.builtInModel')}</p>
-              <p className="text-xs text-text-muted">
-                {t('settings.ai.localOnlyNote')}
-              </p>
-              <div className="mt-2">
-                <EmbeddingSetupProgress />
-              </div>
-            </div>
+            <BuiltinModelSection />
           )}
 
           {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'builtin' && (
