@@ -134,7 +134,14 @@ pub async fn set_llm_provider(
     }
 
     // Validate provider
-    let valid_providers = ["anthropic", "openai", "openai-compatible", "ollama", "none"];
+    let valid_providers = [
+        "anthropic",
+        "openai",
+        "openai-compatible",
+        "ollama",
+        "builtin",
+        "none",
+    ];
     if !valid_providers.contains(&provider.as_str()) {
         return Err(format!(
             "Invalid provider '{}'. Must be one of: {}",

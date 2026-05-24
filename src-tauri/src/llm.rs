@@ -478,9 +478,17 @@ impl LLMClient {
             crate::url_validation::validate_not_internal(&url)?;
         }
 
+        // Qwen3 defaults to "thinking mode" which wastes tokens on reasoning_content
+        // and leaves content empty. /no_think forces direct response.
+        let system_content = if self.provider.provider == "builtin" {
+            format!("/no_think\n{system}")
+        } else {
+            system.to_string()
+        };
+
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
-            "content": system
+            "content": system_content
         })];
 
         for m in &messages {
@@ -492,7 +500,7 @@ impl LLMClient {
 
         let body = serde_json::json!({
             "model": self.provider.model,
-            "max_tokens": 4096,  // Increased for batch judgments
+            "max_tokens": 4096,
             "messages": all_messages
         });
 
@@ -543,9 +551,16 @@ impl LLMClient {
             .unwrap_or("http://localhost:11434");
         let url = format!("{base_url}/api/chat");
 
+        let is_qwen3 = self.provider.model.to_lowercase().contains("qwen3");
+        let system_content = if is_qwen3 {
+            format!("/no_think\n{system}")
+        } else {
+            system.to_string()
+        };
+
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
-            "content": system
+            "content": system_content
         })];
 
         for m in &messages {
@@ -685,8 +700,14 @@ impl LLMClient {
             StructuredOutputMode::Grammar { schema, .. } => schema,
         };
 
-        let structured_system =
-            format!("{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}");
+        let no_think_prefix = if self.provider.provider == "builtin" {
+            "/no_think\n"
+        } else {
+            ""
+        };
+        let structured_system = format!(
+            "{no_think_prefix}{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}"
+        );
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
@@ -769,8 +790,11 @@ impl LLMClient {
             StructuredOutputMode::Grammar { schema, .. } => schema,
         };
 
-        let structured_system =
-            format!("{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}");
+        let is_qwen3 = self.provider.model.to_lowercase().contains("qwen3");
+        let no_think_prefix = if is_qwen3 { "/no_think\n" } else { "" };
+        let structured_system = format!(
+            "{no_think_prefix}{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}"
+        );
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
