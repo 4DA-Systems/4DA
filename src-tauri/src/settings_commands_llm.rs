@@ -768,3 +768,19 @@ pub fn delete_builtin_model(model_id: String) -> Result<serde_json::Value> {
         "status": "deleted",
     }))
 }
+
+/// Run the model evaluation harness against the currently configured LLM.
+#[tauri::command]
+pub async fn run_model_eval() -> Result<serde_json::Value> {
+    let llm_settings = {
+        let mut guard = crate::get_settings_manager().lock();
+        guard.ensure_keys_hydrated();
+        guard.get().llm.clone()
+    };
+
+    let summary = crate::model_eval::run_eval(&llm_settings.model, &llm_settings.provider)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    serde_json::to_value(&summary).map_err(|e| e.to_string().into())
+}

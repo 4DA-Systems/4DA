@@ -283,6 +283,7 @@ mod llm_stream;
 mod local_audit;
 mod log_retention;
 mod model_allowlist;
+mod model_eval;
 mod model_manager;
 pub mod model_registry;
 mod monitoring;
@@ -710,6 +711,7 @@ pub fn run() {
             settings_commands::download_builtin_model,
             settings_commands::cancel_builtin_model_download,
             settings_commands::delete_builtin_model,
+            settings_commands::run_model_eval,
             settings_commands::get_llm_key_for_mcp,
             settings_commands::detect_environment,
             settings_commands::import_env_key,
