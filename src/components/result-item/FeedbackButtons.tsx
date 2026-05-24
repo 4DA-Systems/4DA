@@ -7,6 +7,7 @@ import { useAppStore } from '../../store';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { cmd } from '../../lib/commands';
 import { extractTechTopics } from '../../lib/known-tech';
+import { getRelevancePresentation } from '../../utils/score';
 
 interface FeedbackButtonsProps {
   item: SourceRelevance;
@@ -140,8 +141,8 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
   const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setMoreOpen(false);
-    const scorePercent = Math.round((item.top_score ?? 0) * 100);
-    const text = `${item.title} — Scored ${scorePercent}% by 4DA (https://4da.ai)`;
+    const relevance = getRelevancePresentation(item.top_score ?? 0);
+    const text = `${item.title} — ${relevance.label} match by 4DA (https://4da.ai)`;
     navigator.clipboard.writeText(text).then(() => {
       useAppStore.getState().addToast('success', t('feedback.shareCopied'));
     }).catch(() => {});

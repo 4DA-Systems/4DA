@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSourceLabel } from '../../config/sources';
+import { getRelevancePresentation } from '../../utils/score';
 import { SIGNAL_CONFIG, PRIORITY_CONFIG, SIGNAL_LABELS } from './signal-config';
 
 export interface SignalItem {
@@ -68,8 +69,8 @@ export const SignalRow = ({ signal }: { signal: SignalItem }) => {
             <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded ${priority.bgColor} ${priority.color}`}>
               {priority.label}
             </span>
-            <span className="text-[10px] text-text-muted">
-              {t('signals.match', { score: Math.round(signal.top_score * 100) })}
+            <span className={`text-[10px] uppercase tracking-wider ${getRelevancePresentation(signal.top_score).colorClass}`}>
+              {getRelevancePresentation(signal.top_score).label}
             </span>
             <span className="text-[10px] text-text-muted">{sourceLabel}</span>
             {signal.signal_triggers.length > 0 && (

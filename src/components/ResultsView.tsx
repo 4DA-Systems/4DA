@@ -8,7 +8,7 @@ import { SmartEmptyState } from './SmartEmptyState';
 import { ContextPanel } from './context-panel';
 import { ResultFiltersBar } from './search/ResultFiltersBar';
 import { useTranslatedContent } from './ContentTranslationProvider';
-import { getStageLabel } from '../utils/score';
+import { getStageLabel, getRelevancePresentation } from '../utils/score';
 import { ALL_SOURCE_IDS } from '../config/sources';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
@@ -274,8 +274,8 @@ export function ResultsView({
                         key={item.id}
                         className="flex items-center gap-3 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-start"
                       >
-                        <span className="text-xs font-mono text-text-muted shrink-0">
-                          {Math.round(item.top_score * 100)}%
+                        <span className={`text-[10px] font-medium uppercase tracking-wider shrink-0 ${getRelevancePresentation(item.top_score).colorClass}`}>
+                          {getRelevancePresentation(item.top_score).label}
                         </span>
                         <span className="text-sm text-text-secondary truncate">
                           {getTranslated(String(item.id), item.title)}

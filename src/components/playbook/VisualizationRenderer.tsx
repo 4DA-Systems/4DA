@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { Visualization } from '../../types/personalization';
+import { getRelevancePresentation } from '../../utils/score';
 
 interface Props {
   viz: Visualization;
@@ -70,8 +71,8 @@ function RankList({ items }: { items: { rank: number; name: string; score: numbe
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8A8A8A" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
             )}
           </span>
-          <span className="text-[10px] text-text-muted w-10 text-end flex-shrink-0">
-            {Math.round(item.score * 100)}%
+          <span className={`text-[10px] font-medium uppercase tracking-wider w-14 text-end flex-shrink-0 ${getRelevancePresentation(item.score).colorClass}`}>
+            {getRelevancePresentation(item.score).label}
           </span>
         </div>
       ))}

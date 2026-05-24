@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
+import { getRelevancePresentation } from '../utils/score';
 import { useLicense } from '../hooks/use-license';
 import { SignalUpgradeCTA } from './SignalUpgradeCTA';
 
@@ -265,13 +266,10 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
               </div>
               <div className="text-end flex-shrink-0">
                 <div
-                  className="text-lg font-bold font-mono"
-                  style={{ color: signalColor }}
+                  className={`text-sm font-medium uppercase tracking-wider ${getRelevancePresentation(criticalSave.top_score).colorClass}`}
                 >
-                  {Math.round(criticalSave.top_score * 100)}
+                  {getRelevancePresentation(criticalSave.top_score).label}
                 </div>
-                {/* eslint-disable-next-line i18next/no-literal-string */}
-                <div className="text-[9px] text-text-muted">score</div>
               </div>
             </div>
           </div>

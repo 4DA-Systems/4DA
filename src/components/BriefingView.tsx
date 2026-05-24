@@ -25,7 +25,7 @@ export const BriefingView = memo(function BriefingView() {
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
     lastBackgroundResultsAt, sourceHealth,
-    freeBriefing, freeBriefingLoading, morningBriefSynthesis, morningBriefData, instantSnapshot,
+    freeBriefing, freeBriefingLoading, morningBriefSynthesis, morningBriefClusters, morningBriefData, instantSnapshot,
   } = useAppStore(
     useShallow((s) => ({
       briefing: s.aiBriefing,
@@ -38,6 +38,7 @@ export const BriefingView = memo(function BriefingView() {
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
       morningBriefSynthesis: s.morningBriefSynthesis,
+      morningBriefClusters: s.morningBriefClusters,
       morningBriefData: s.morningBriefData,
       instantSnapshot: s.instantSnapshot,
     })),
@@ -123,7 +124,7 @@ export const BriefingView = memo(function BriefingView() {
               <h2 className="text-[9px] font-semibold tracking-[0.12em] text-text-muted uppercase">{t('briefing.intelligenceBriefing')}</h2>
             </div>
             <div className="p-5 space-y-4">
-              {/* Synthesis — abstention-aware rendering (see briefing-synthesis-helpers.ts) */}
+              {/* Synthesis — structured clusters when available, prose fallback */}
               {isAbstentionSynthesis(morningBriefSynthesis) ? (
                 <div className="py-6 text-center space-y-2">
                   <p className="text-xs text-text-muted italic">
@@ -134,6 +135,36 @@ export const BriefingView = memo(function BriefingView() {
                       {parseAbstention(morningBriefSynthesis ?? '').telemetry}
                     </p>
                   )}
+                </div>
+              ) : morningBriefClusters && morningBriefClusters.length > 0 ? (
+                <div className="pb-3 mb-1 border-b border-border">
+                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
+                    {t('briefing.synthesis', 'Synthesis')}
+                  </h3>
+                  <div className="space-y-2.5">
+                    {morningBriefClusters.map((cluster, i) => (
+                      <div key={i} className="bg-bg-tertiary rounded-md px-3 py-2.5 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${
+                            cluster.confidence >= 0.8 ? 'bg-success/15 text-success' :
+                            cluster.confidence >= 0.5 ? 'bg-[#D4AF37]/15 text-[#D4AF37]' :
+                            'bg-text-muted/15 text-text-muted'
+                          }`}>
+                            {Math.round(cluster.confidence * 100)}%
+                          </span>
+                          <p className="text-xs text-text-primary leading-snug">{cluster.insight}</p>
+                        </div>
+                        <p className="text-[10px] text-text-muted leading-relaxed pl-[38px]">{cluster.action}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {(() => {
+                    const provenanceMatch = morningBriefSynthesis?.match(/(\(\d+ signals across .+\))$/);
+                    if (provenanceMatch) {
+                      return <p className="text-[9px] font-mono text-text-muted/60 mt-2">{provenanceMatch[1]}</p>;
+                    }
+                    return null;
+                  })()}
                 </div>
               ) : morningBriefSynthesis ? (
                 <div className="pb-3 mb-1 border-b border-border">
@@ -271,6 +302,29 @@ export const BriefingView = memo(function BriefingView() {
                   <p className="text-xs text-text-muted italic">
                     {parseAbstention(morningBriefSynthesis ?? '').headline}
                   </p>
+                </div>
+              ) : morningBriefClusters && morningBriefClusters.length > 0 ? (
+                <div className="pb-3 mb-1 border-b border-border">
+                  <h3 className="text-[9px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase mb-2">
+                    {t('briefing.synthesis', 'Synthesis')}
+                  </h3>
+                  <div className="space-y-2.5">
+                    {morningBriefClusters.map((cluster, i) => (
+                      <div key={i} className="bg-bg-tertiary rounded-md px-3 py-2.5 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${
+                            cluster.confidence >= 0.8 ? 'bg-success/15 text-success' :
+                            cluster.confidence >= 0.5 ? 'bg-[#D4AF37]/15 text-[#D4AF37]' :
+                            'bg-text-muted/15 text-text-muted'
+                          }`}>
+                            {Math.round(cluster.confidence * 100)}%
+                          </span>
+                          <p className="text-xs text-text-primary leading-snug">{cluster.insight}</p>
+                        </div>
+                        <p className="text-[10px] text-text-muted leading-relaxed pl-[38px]">{cluster.action}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : morningBriefSynthesis ? (
                 <div className="pb-3 mb-1 border-b border-border">
