@@ -197,9 +197,10 @@ export function useAnalysis(
           }
         }),
 
-        listen<{ synthesis: string }>('morning-briefing-synthesis', (event) => {
+        listen<{ synthesis: string; clusters?: Array<{ insight: string; evidence_ids: number[]; action: string; confidence: number }> }>('morning-briefing-synthesis', (event) => {
           if (event.payload.synthesis) {
             useAppStore.getState().setMorningBriefSynthesis(event.payload.synthesis);
+            useAppStore.getState().setMorningBriefClusters(event.payload.clusters ?? null);
           }
         }),
 

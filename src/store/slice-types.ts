@@ -289,6 +289,13 @@ export interface MorningBriefData {
   dataFreshness?: DataFreshness | null;
 }
 
+export interface SynthesisCluster {
+  insight: string;
+  evidence_ids: number[];
+  action: string;
+  confidence: number;
+}
+
 export interface BriefingSlice {
   aiBriefing: BriefingState;
   autoBriefingEnabled: boolean;
@@ -297,6 +304,7 @@ export interface BriefingSlice {
   freeBriefing: FreeBriefingData | null;
   freeBriefingLoading: boolean;
   morningBriefSynthesis: string | null;
+  morningBriefClusters: SynthesisCluster[] | null;
   /** Live morning briefing data from the T+3s startup check. Superseded
    *  once analysis completes and freeBriefing or aiBriefing populates. */
   morningBriefData: MorningBriefData | null;
@@ -305,6 +313,7 @@ export interface BriefingSlice {
    *  Naturally superseded by the render waterfall — never explicitly cleared. */
   instantSnapshot: InstantBriefingSnapshot | null;
   setMorningBriefSynthesis: (synthesis: string | null) => void;
+  setMorningBriefClusters: (clusters: SynthesisCluster[] | null) => void;
   setMorningBriefData: (data: MorningBriefData | null) => void;
   setAutoBriefingEnabled: (enabled: boolean) => void;
   setLastBackgroundResultsAt: (date: Date) => void;
