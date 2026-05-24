@@ -82,7 +82,7 @@ mod tests {
         std::fs::write(&settings_path, "{ this is not valid json !!!")
             .expect("write malformed settings");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         let settings = manager.get();
 
         // Should fall back to defaults when JSON is invalid
@@ -103,7 +103,7 @@ mod tests {
         let settings_path = tmp.join("settings.json");
         std::fs::write(&settings_path, "").expect("write empty settings");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         let settings = manager.get();
 
         // Should fall back to defaults
@@ -143,7 +143,7 @@ mod tests {
         )
         .expect("write partial settings");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         let settings = manager.get();
 
         // Explicit fields should be loaded
@@ -177,7 +177,7 @@ mod tests {
         // Write malformed usage.json
         std::fs::write(tmp.join("usage.json"), "NOT JSON {{{").expect("write malformed usage");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         let usage = manager.get_usage();
 
         // Should fall back to default usage
@@ -287,7 +287,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).expect("create temp dir");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         // Default provider is "none", so rerank should be disabled
         assert!(!manager.is_rerank_enabled());
 
@@ -306,7 +306,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&settings).expect("serialize");
         std::fs::write(tmp.join("settings.json"), json).expect("write");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         // Ollama doesn't need an API key, so rerank should work
         assert!(manager.is_rerank_enabled());
 
@@ -353,9 +353,9 @@ mod tests {
         let json = serde_json::to_string_pretty(&settings).expect("serialize");
         std::fs::write(tmp.join("settings.json"), json).expect("write");
 
-        // Reload from disk — key should survive because it's in plaintext
-        // (keychain hydration won't find it, so it stays in the JSON).
-        let manager = SettingsManager::new(&tmp);
+        // Reload from disk — key should survive because we skip keychain
+        // (avoids migrating "test-key-123" into the real credential store).
+        let manager = SettingsManager::new_without_keychain(&tmp);
         let reloaded = manager.get();
         assert_eq!(reloaded.llm.provider, "anthropic");
         assert_eq!(reloaded.llm.api_key, "test-key-123");
@@ -439,7 +439,7 @@ mod tests {
         std::fs::write(tmp.join("settings.json"), json).expect("write settings");
 
         // Load -- migration should fire
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         assert_eq!(manager.get().license.tier, "signal");
 
         // Verify persisted to disk
@@ -463,7 +463,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&settings).expect("serialize");
         std::fs::write(tmp.join("settings.json"), json).expect("write settings");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         assert_eq!(manager.get().license.tier, "signal");
 
         let _ = std::fs::remove_dir_all(&tmp);
@@ -480,7 +480,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&settings).expect("serialize");
         std::fs::write(tmp.join("settings.json"), json).expect("write settings");
 
-        let manager = SettingsManager::new(&tmp);
+        let manager = SettingsManager::new_without_keychain(&tmp);
         assert_eq!(manager.get().license.tier, "free");
 
         let _ = std::fs::remove_dir_all(&tmp);

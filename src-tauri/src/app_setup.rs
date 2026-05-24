@@ -1155,10 +1155,11 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                                     "briefing-synthesis",
                                     &result.prose,
                                 );
-                                let _ = app_synth.emit(
-                                    "morning-briefing-synthesis",
-                                    serde_json::json!({ "synthesis": result.prose }),
-                                );
+                                let mut payload = serde_json::json!({ "synthesis": &result.prose });
+                                if let Some(ref clusters) = result.clusters {
+                                    payload["clusters"] = serde_json::json!(clusters);
+                                }
+                                let _ = app_synth.emit("morning-briefing-synthesis", payload);
 
                                 let mut enriched = briefing_synth.clone();
                                 enriched.synthesis = Some(result.prose);

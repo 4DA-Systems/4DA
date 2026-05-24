@@ -308,7 +308,7 @@ mod tests {
             std::fs::write(tmp.join("settings.json"), "{{{{garbage!!!}}}}")
                 .expect("write corrupt file");
 
-            let manager = SettingsManager::new(&tmp);
+            let manager = SettingsManager::new_without_keychain(&tmp);
             let settings = manager.get();
 
             // Should have safe defaults, not crash
@@ -376,7 +376,7 @@ mod tests {
             let _ = std::fs::remove_dir_all(&tmp);
             std::fs::create_dir_all(&tmp).expect("create temp dir");
 
-            let manager = SettingsManager::new(&tmp);
+            let manager = SettingsManager::new_without_keychain(&tmp);
             assert!(
                 !manager.is_rerank_enabled(),
                 "Rerank should be disabled when provider is 'none'"

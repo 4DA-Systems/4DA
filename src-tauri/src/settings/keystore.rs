@@ -323,22 +323,44 @@ mod tests {
 
     #[test]
     fn test_migrate_from_plaintext_with_keys() {
+        // migrate_from_plaintext writes to the REAL platform keychain using
+        // production key names. To avoid poisoning the developer's actual
+        // credentials, we save/restore any existing value around the test.
+        let saved_llm = get_secret("llm_api_key").ok().flatten();
+        let saved_x = get_secret("x_api_key").ok().flatten();
+
         let mut settings = super::super::Settings::default();
         settings.llm.api_key = "sk-test-anthropic".to_string();
         settings.x_api_key = SensitiveString::new("bearer-test-x".to_string());
-        // openai_api_key and license_key left empty
 
         let report = migrate_from_plaintext(&settings);
         assert!(report.is_ok());
 
         let report = report.unwrap();
-        // Two keys had values — they were either migrated or failed (no panic either way)
         let attempted = report.migrated.len() + report.failed.len();
         assert_eq!(attempted, 2);
         assert_eq!(report.skipped.len(), 3);
         assert!(report.skipped.contains(&"openai_api_key".to_string()));
         assert!(report.skipped.contains(&"license_key".to_string()));
         assert!(report.skipped.contains(&"translation_api_key".to_string()));
+
+        // Restore original keychain state to prevent credential poisoning.
+        match saved_llm {
+            Some(k) => {
+                let _ = store_secret("llm_api_key", &k);
+            }
+            None => {
+                let _ = delete_secret("llm_api_key");
+            }
+        }
+        match saved_x {
+            Some(k) => {
+                let _ = store_secret("x_api_key", &k);
+            }
+            None => {
+                let _ = delete_secret("x_api_key");
+            }
+        }
     }
 
     #[test]
