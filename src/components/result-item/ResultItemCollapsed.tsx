@@ -68,11 +68,11 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         <button
           onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
           aria-expanded={showBreakdown}
-          aria-label={item.score_breakdown ? `${t('scoreDrawer.toggle', 'Toggle score breakdown')}, ${relevance.ariaLabel}` : relevance.ariaLabel}
+          aria-label={item.score_breakdown ? `${t('scoreDrawer.toggle', 'Toggle score breakdown')}, ${t(relevance.ariaLabelKey)}` : t(relevance.ariaLabelKey)}
           title={scoreTooltip}
           className={`flex-shrink-0 w-14 text-center py-0.5 rounded text-[10px] font-medium uppercase tracking-wider cursor-pointer transition-all ${relevance.colorClass} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
         >
-          {relevance.label}
+          {t(relevance.labelKey)}
         </button>
 
         {/* Signal strength: micro-dots showing independent confirmation axes */}

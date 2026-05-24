@@ -7,16 +7,16 @@ export function formatScore(score: number): string {
 }
 
 export interface RelevancePresentation {
-  label: string;
+  labelKey: string;
   colorClass: string;
-  ariaLabel: string;
+  ariaLabelKey: string;
 }
 
 export function getRelevancePresentation(score: number): RelevancePresentation {
-  if (score >= 0.72) return { label: 'Core', colorClass: 'text-accent-gold', ariaLabel: 'Core relevance — directly in your wheelhouse' };
-  if (score >= 0.50) return { label: 'Strong', colorClass: 'text-success', ariaLabel: 'Strong match to your profile' };
-  if (score >= 0.35) return { label: 'Match', colorClass: 'text-text-secondary', ariaLabel: 'Matches your interests' };
-  return { label: 'Faint', colorClass: 'text-text-muted', ariaLabel: 'Faint signal — edge of your interest map' };
+  if (score >= 0.72) return { labelKey: 'relevance.core', colorClass: 'text-accent-gold', ariaLabelKey: 'relevance.coreAria' };
+  if (score >= 0.50) return { labelKey: 'relevance.strong', colorClass: 'text-success', ariaLabelKey: 'relevance.strongAria' };
+  if (score >= 0.35) return { labelKey: 'relevance.match', colorClass: 'text-text-secondary', ariaLabelKey: 'relevance.matchAria' };
+  return { labelKey: 'relevance.faint', colorClass: 'text-text-muted', ariaLabelKey: 'relevance.faintAria' };
 }
 
 /**

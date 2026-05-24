@@ -77,7 +77,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50">
         <div className="flex items-center gap-3">
           <span className={`text-sm font-medium uppercase tracking-wider ${getRelevancePresentation(finalScore).colorClass}`}>
-            {getRelevancePresentation(finalScore).label}
+            {t(getRelevancePresentation(finalScore).labelKey)}
           </span>
           <span className="text-[10px] text-text-muted font-mono">
             {Math.round(finalScore * 100)}%
@@ -96,7 +96,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
         <button
           onClick={onClose}
           className="text-text-muted hover:text-white transition-colors text-sm px-2 py-1"
-          aria-label="Close score breakdown"
+          aria-label={t('scoreDrawer.close')}
         >
           &times;
         </button>
@@ -135,16 +135,22 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
             return (
               <span
                 key={axis}
+                role="status"
                 className={`text-[10px] px-1.5 py-0.5 rounded border ${
                   confirmed
                     ? 'bg-green-500/15 text-green-400 border-green-500/30'
                     : 'bg-bg-tertiary text-text-muted border-border'
                 }`}
-                title={confirmed && strengthVal != null ? `Strength: ${Math.round(strengthVal * 100)}%` : undefined}
+                title={confirmed && strengthVal != null ? t('scoreDrawer.signalStrength', { axis, pct: Math.round(strengthVal * 100) }) : undefined}
+                aria-label={confirmed
+                  ? (strengthVal != null
+                    ? t('scoreDrawer.signalConfirmedStrength', { axis, pct: Math.round(strengthVal * 100) })
+                    : t('scoreDrawer.signalConfirmed', { axis }))
+                  : t('scoreDrawer.signalNotConfirmed', { axis })}
               >
                 {confirmed ? '\u2713' : '\u2717'} {axis}
                 {confirmed && strengthVal != null && (
-                  <span className="text-green-300/60 ms-0.5 font-mono">{Math.round(strengthVal * 100)}</span>
+                  <span className="text-green-300/60 ms-0.5 font-mono" aria-hidden="true">{Math.round(strengthVal * 100)}</span>
                 )}
               </span>
             );
@@ -152,7 +158,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
           <span className="text-[10px] text-text-muted ms-1">
             {signalCount}/5
             {(breakdown.signal_strength_bonus ?? 0) > 0.01 && (
-              <span className="text-green-400 ms-1" title="Signal strength raised the gate ceiling">
+              <span className="text-green-400 ms-1" title={t('scoreDrawer.signalBonusTooltip')}>
                 +{Math.round((breakdown.signal_strength_bonus ?? 0) * 100)}
               </span>
             )}
@@ -220,7 +226,7 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
                 <button
                   onClick={() => setSelectedCompareId(null)}
                   className="text-[10px] text-text-muted hover:text-white px-2 py-1"
-                  aria-label="Clear comparison"
+                  aria-label={t('scoreDrawer.clearComparison')}
                 >
                   &times;
                 </button>

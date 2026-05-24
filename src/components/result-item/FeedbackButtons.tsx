@@ -142,7 +142,7 @@ export const FeedbackButtons = memo(function FeedbackButtons({ item, feedback, o
     e.stopPropagation();
     setMoreOpen(false);
     const relevance = getRelevancePresentation(item.top_score ?? 0);
-    const text = `${item.title} — ${relevance.label} match by 4DA (https://4da.ai)`;
+    const text = `${item.title} — ${t(relevance.labelKey)} match by 4DA (https://4da.ai)`;
     navigator.clipboard.writeText(text).then(() => {
       useAppStore.getState().addToast('success', t('feedback.shareCopied'));
     }).catch(() => {});

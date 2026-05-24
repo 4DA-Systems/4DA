@@ -268,7 +268,7 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                 <div
                   className={`text-sm font-medium uppercase tracking-wider ${getRelevancePresentation(criticalSave.top_score).colorClass}`}
                 >
-                  {getRelevancePresentation(criticalSave.top_score).label}
+                  {t(getRelevancePresentation(criticalSave.top_score).labelKey)}
                 </div>
               </div>
             </div>

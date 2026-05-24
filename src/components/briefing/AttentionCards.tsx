@@ -160,7 +160,7 @@ const AttentionCard = memo(function AttentionCard({
         </span>
         <div ref={fpRef} className="w-6 h-6 rounded flex-shrink-0 ms-auto" aria-hidden="true" />
         <span className={`text-[10px] font-medium uppercase tracking-wider ${relevance.colorClass}`}>
-          {relevance.label}
+          {t(relevance.labelKey)}
         </span>
       </div>
 

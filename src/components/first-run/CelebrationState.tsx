@@ -145,7 +145,7 @@ export function CelebrationState({
               ? t('firstRun.topMatchStack', 'Matches your stack')
               : t('firstRun.topMatch')}
             {topSignal.top_score != null && (
-              <span className={`ms-2 normal-case ${getRelevancePresentation(topSignal.top_score).colorClass}`}>{getRelevancePresentation(topSignal.top_score).label}</span>
+              <span className={`ms-2 normal-case ${getRelevancePresentation(topSignal.top_score).colorClass}`}>{t(getRelevancePresentation(topSignal.top_score).labelKey)}</span>
             )}
             {topSignal.source_type && (
               <span className="ms-2 text-text-muted normal-case">{getSourceFullName(topSignal.source_type)}</span>

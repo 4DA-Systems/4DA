@@ -96,7 +96,7 @@ function InlineTrialStart({ score }: { score: number }) {
       className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ms-auto disabled:opacity-50"
     >
       <ProStar />
-      {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: getRelevancePresentation(score).label })}
+      {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: t(getRelevancePresentation(score).labelKey) })}
     </button>
   );
 }

@@ -264,7 +264,7 @@ export function ResultsView({
                 {!showOnlyRelevant && sourceFilters.size === ALL_SOURCE_IDS.size && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
               </div>
               {state.nearMisses && state.nearMisses.length > 0 && (
-                <div className="mt-8 mx-auto max-w-lg">
+                <section className="mt-8 mx-auto max-w-lg" aria-label={t('results.nearMissesTitle', 'Almost relevant')}>
                   <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
                     {t('results.nearMissesTitle', 'Almost relevant')}
                   </p>
@@ -275,7 +275,7 @@ export function ResultsView({
                         className="flex items-center gap-3 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-start"
                       >
                         <span className={`text-[10px] font-medium uppercase tracking-wider shrink-0 ${getRelevancePresentation(item.top_score).colorClass}`}>
-                          {getRelevancePresentation(item.top_score).label}
+                          {t(getRelevancePresentation(item.top_score).labelKey)}
                         </span>
                         <span className="text-sm text-text-secondary truncate">
                           {getTranslated(String(item.id), item.title)}
@@ -289,7 +289,7 @@ export function ResultsView({
                   <p className="text-[10px] text-text-muted mt-2">
                     {t('results.nearMissesHint', 'These items scored close to your relevance threshold. Adjust interests in Settings to include them.')}
                   </p>
-                </div>
+                </section>
               )}
             </div>
           ) : (
