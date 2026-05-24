@@ -2139,6 +2139,7 @@ BUDGET: maximum 80 words, 1-2 clusters, 2-4 sentences.
 STRUCTURE per cluster: pattern/insight + evidence + action.
 - Connect dots the signal list can't: "second CVE this quarter", "compounds with your current work on X", "three independent teams converging on Y"
 - If two clusters, separate with a line break. Max two.
+- Write PROSE PARAGRAPHS. No headers, no numbered lists, no sections, no labels. Just sentences.
 
 QUALITY RULES:
 1. Add value beyond the signal titles. If your sentence just restates a title, delete it.
@@ -2165,6 +2166,9 @@ BANNED:
 - Fabricated numbers/percentages/statistics not present in the signals
 - Echoing source-type tags like [rss], [hackernews], [arxiv] from the input -- describe findings naturally
 - Echoing "(affects: ...)" or "(touches: ...)" metadata from the input -- integrate dependency info naturally
+- Section headers or structured labels like "Action Required", "Worth Knowing", "Filtered Out" -- write flowing prose, not a report
+- Explaining what you filtered out or why -- the user sees your synthesis, not your process
+- Numbered item lists (1. 2. 3.) -- synthesize into prose clusters, don't enumerate
 
 SOURCE-TYPE CALIBRATION:
 Each signal is prefixed with its source type. Calibrate your language accordingly:
@@ -2300,6 +2304,23 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         "Secondary Cluster:",
         "Top Cluster:",
         "Top Clusters:",
+        "Action Required:",
+        "Action Required",
+        "Worth Knowing:",
+        "Worth Knowing",
+        "Filtered Out:",
+        "Filtered Out",
+        "Unresolved System Anomalies:",
+        "Unresolved System Anomalies",
+        "What to Watch:",
+        "What to Watch",
+        "Key Takeaway:",
+        "Key Takeaways:",
+        "Context:",
+        "Impact:",
+        "Background:",
+        "Observation:",
+        "Observations:",
     ];
     for prefix in &label_prefixes {
         // Case-insensitive prefix removal at line start
