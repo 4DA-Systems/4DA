@@ -2250,77 +2250,84 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         .complete_structured(&full_system_prompt, messages.clone(), &structured_mode)
         .await;
 
-    if let Ok(response) = &structured_result {
-        if let Ok(output) =
-            serde_json::from_str::<crate::synthesis_schema::SynthesisOutput>(&response.content)
-        {
-            if output.validate().is_ok() {
-                tracing::info!(
-                    target: "4da::briefing",
-                    tokens = response.input_tokens + response.output_tokens,
-                    elapsed_ms = start.elapsed().as_millis(),
-                    clusters = output.clusters.len(),
-                    "Structured synthesis succeeded"
-                );
+    match structured_result {
+        Ok(response) => {
+            match serde_json::from_str::<crate::synthesis_schema::SynthesisOutput>(
+                &response.content,
+            ) {
+                Ok(output) if output.validate().is_ok() => {
+                    tracing::info!(
+                        target: "4da::briefing",
+                        tokens = response.input_tokens + response.output_tokens,
+                        elapsed_ms = start.elapsed().as_millis(),
+                        clusters = output.clusters.len(),
+                        "Structured synthesis succeeded"
+                    );
 
-                // Per-cluster evidence ID validation
-                let id_warnings = output.validate_evidence_ids(briefing.items.len());
-                for w in &id_warnings {
-                    tracing::warn!(target: "4da::briefing", "{w}");
-                }
+                    let id_warnings = output.validate_evidence_ids(briefing.items.len());
+                    for w in &id_warnings {
+                        tracing::warn!(target: "4da::briefing", "{w}");
+                    }
 
-                // Per-cluster groundedness check
-                let prose = output.to_prose();
-                let report = crate::briefing_groundedness::validate_groundedness(&prose, &corpus);
-                if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
-                    tracing::warn!(
+                    let prose = output.to_prose();
+                    let report =
+                        crate::briefing_groundedness::validate_groundedness(&prose, &corpus);
+                    if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
+                        tracing::warn!(
+                            target: "4da::briefing",
+                            confidence = report.confidence,
+                            total_terms = report.total_terms,
+                            ungrounded_count = report.ungrounded_terms.len(),
+                            "Structured synthesis failed groundedness — abstaining"
+                        );
+                        return Ok(
+                            "Low signal -- no noteworthy intelligence overnight.".to_string()
+                        );
+                    }
+
+                    tracing::info!(
                         target: "4da::briefing",
                         confidence = report.confidence,
-                        total_terms = report.total_terms,
-                        ungrounded_count = report.ungrounded_terms.len(),
-                        "Structured synthesis failed groundedness — abstaining"
+                        "Structured synthesis passed groundedness"
                     );
-                    return Ok("Low signal -- no noteworthy intelligence overnight.".to_string());
+
+                    let mut synthesis = prose;
+                    let mut src_types: Vec<&str> = briefing
+                        .items
+                        .iter()
+                        .map(|i| i.source_type.as_str())
+                        .collect();
+                    src_types.sort_unstable();
+                    src_types.dedup();
+                    synthesis.push_str(&format!(
+                        "\n\n({} signals across {})",
+                        briefing.items.len(),
+                        src_types.join(", ")
+                    ));
+                    return Ok(synthesis);
                 }
-
-                tracing::info!(
-                    target: "4da::briefing",
-                    confidence = report.confidence,
-                    "Structured synthesis passed groundedness"
-                );
-
-                let mut synthesis = prose;
-                let mut src_types: Vec<&str> = briefing
-                    .items
-                    .iter()
-                    .map(|i| i.source_type.as_str())
-                    .collect();
-                src_types.sort();
-                src_types.dedup();
-                synthesis.push_str(&format!(
-                    "\n\n({} signals across {})",
-                    briefing.items.len(),
-                    src_types.join(", ")
-                ));
-                return Ok(synthesis);
-            } else {
-                tracing::debug!(
-                    target: "4da::briefing",
-                    "Structured output failed validation — falling back to free-text"
-                );
+                Ok(_) => {
+                    tracing::debug!(
+                        target: "4da::briefing",
+                        "Structured output failed validation — falling back to free-text"
+                    );
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        target: "4da::briefing",
+                        error = %e,
+                        "Structured output JSON parse failed — falling back to free-text"
+                    );
+                }
             }
-        } else {
+        }
+        Err(e) => {
             tracing::debug!(
                 target: "4da::briefing",
-                "Structured output JSON parse failed — falling back to free-text"
+                error = %e,
+                "Structured completion failed — falling back to free-text"
             );
         }
-    } else {
-        tracing::debug!(
-            target: "4da::briefing",
-            error = %structured_result.unwrap_err(),
-            "Structured completion failed — falling back to free-text"
-        );
     }
 
     // --- Free-text fallback path (legacy) ------------------------------------
@@ -2479,21 +2486,21 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     while let Some(start_idx) = synthesis.find("(affects:") {
         if let Some(end_idx) = synthesis[start_idx..].find(')') {
-            synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
+            synthesis.replace_range(start_idx..=start_idx + end_idx, "");
         } else {
             break;
         }
     }
     while let Some(start_idx) = synthesis.find("[Affecting:") {
         if let Some(end_idx) = synthesis[start_idx..].find(']') {
-            synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
+            synthesis.replace_range(start_idx..=start_idx + end_idx, "");
         } else {
             break;
         }
     }
     while let Some(start_idx) = synthesis.find("[affecting:") {
         if let Some(end_idx) = synthesis[start_idx..].find(']') {
-            synthesis.replace_range(start_idx..start_idx + end_idx + 1, "");
+            synthesis.replace_range(start_idx..=start_idx + end_idx, "");
         } else {
             break;
         }
@@ -2550,7 +2557,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         .iter()
         .map(|i| i.source_type.as_str())
         .collect();
-    source_types.sort();
+    source_types.sort_unstable();
     source_types.dedup();
     let provenance = format!(
         "\n\n({} signals across {})",
