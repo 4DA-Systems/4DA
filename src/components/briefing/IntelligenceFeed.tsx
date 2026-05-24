@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatScore, getScoreColor, formatRelativeAge } from '../../utils/score';
+import { formatRelativeAge, getRelevancePresentation } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslatedContent } from '../ContentTranslationProvider';
@@ -108,6 +108,7 @@ const FeedItem = memo(function FeedItem({
   const { getTranslated } = useTranslatedContent();
   const displayTitle = getTranslated(String(item.id), item.title);
   const source = item.source_type || 'hackernews';
+  const relevance = getRelevancePresentation(item.top_score);
 
   const handleClick = useCallback(() => {
     onRecordClick(item);
@@ -139,9 +140,9 @@ const FeedItem = memo(function FeedItem({
     <div title={hoverReason} className={`group flex items-center gap-3 px-4 py-2.5 hover:bg-white/[0.02] transition-colors ${
       dimmed ? 'opacity-40' : ''
     }`}>
-      {/* Score */}
-      <span className={`flex-shrink-0 text-xs font-mono font-medium w-10 text-end ${getScoreColor(item.top_score)}`}>
-        {formatScore(item.top_score)}
+      {/* Relevance */}
+      <span className={`flex-shrink-0 text-[10px] font-medium w-14 text-end uppercase tracking-wider ${relevance.colorClass}`}>
+        {relevance.label}
       </span>
 
       {/* Signal strength micro-dots */}

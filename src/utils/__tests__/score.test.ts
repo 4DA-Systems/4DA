@@ -5,7 +5,7 @@
  * Covers formatScore, getScoreColor, getScoreFactorKeys, formatRelativeAge, getStageLabel.
  */
 import { describe, it, expect } from 'vitest';
-import { formatScore, getScoreColor, getScoreFactorKeys, formatRelativeAge, getStageLabel } from '../score';
+import { formatScore, getScoreColor, getScoreFactorKeys, formatRelativeAge, getStageLabel, getRelevancePresentation } from '../score';
 import type { SourceRelevance } from '../../types';
 
 function makeMinimalItem(overrides: Partial<SourceRelevance> = {}): SourceRelevance {
@@ -44,6 +44,39 @@ describe('formatScore', () => {
 
   it('rounds 0.999 to 100%', () => {
     expect(formatScore(0.999)).toBe('100%');
+  });
+});
+
+describe('getRelevancePresentation', () => {
+  it('returns Core for scores >= 0.72', () => {
+    expect(getRelevancePresentation(0.72).label).toBe('Core');
+    expect(getRelevancePresentation(0.85).label).toBe('Core');
+    expect(getRelevancePresentation(1.0).label).toBe('Core');
+  });
+
+  it('returns Strong for scores >= 0.50 and < 0.72', () => {
+    expect(getRelevancePresentation(0.50).label).toBe('Strong');
+    expect(getRelevancePresentation(0.65).label).toBe('Strong');
+    expect(getRelevancePresentation(0.71).label).toBe('Strong');
+  });
+
+  it('returns Match for scores >= 0.35 and < 0.50', () => {
+    expect(getRelevancePresentation(0.35).label).toBe('Match');
+    expect(getRelevancePresentation(0.42).label).toBe('Match');
+    expect(getRelevancePresentation(0.49).label).toBe('Match');
+  });
+
+  it('returns Faint for scores below 0.35', () => {
+    expect(getRelevancePresentation(0).label).toBe('Faint');
+    expect(getRelevancePresentation(0.2).label).toBe('Faint');
+    expect(getRelevancePresentation(0.34).label).toBe('Faint');
+  });
+
+  it('uses correct color classes per tier', () => {
+    expect(getRelevancePresentation(0.80).colorClass).toBe('text-accent-gold');
+    expect(getRelevancePresentation(0.60).colorClass).toBe('text-success');
+    expect(getRelevancePresentation(0.40).colorClass).toBe('text-text-secondary');
+    expect(getRelevancePresentation(0.20).colorClass).toBe('text-text-muted');
   });
 });
 

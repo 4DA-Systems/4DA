@@ -5,6 +5,7 @@ import { useAppStore } from '../../store';
 import { useLicense } from '../../hooks/use-license';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import type { ScoreBreakdown, SourceRelevance } from '../../types';
+import { getRelevancePresentation } from '../../utils/score';
 import { extractFactors, FACTOR_DESCRIPTIONS } from './score-breakdown/factor-utils';
 import { FactorGroup } from './score-breakdown/FactorGroup';
 import { AdvisorPanel } from './AdvisorPanel';
@@ -75,11 +76,14 @@ export const ScoreBreakdownDrawer = memo(function ScoreBreakdownDrawer({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50">
         <div className="flex items-center gap-3">
-          <span className="text-lg font-bold font-mono text-white">
+          <span className={`text-sm font-medium uppercase tracking-wider ${getRelevancePresentation(finalScore).colorClass}`}>
+            {getRelevancePresentation(finalScore).label}
+          </span>
+          <span className="text-[10px] text-text-muted font-mono">
             {Math.round(finalScore * 100)}%
           </span>
           <span className="text-[10px] text-text-muted uppercase tracking-wider">
-            {t('scoreDrawer.title')}
+            {t('scoreDrawer.whyThisAppeared', 'Why this appeared')}
           </span>
           {/* eslint-disable i18next/no-literal-string */}
           {feedbackCount > 0 && (

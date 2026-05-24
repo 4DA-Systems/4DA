@@ -5,7 +5,7 @@ import type { SourceRelevance } from '../../types';
 import { useLicense } from '../../hooks/use-license';
 import { useAppStore } from '../../store';
 import { useTranslatedContent } from '../ContentTranslationProvider';
-import { formatScore } from '../../utils/score';
+import { getRelevancePresentation } from '../../utils/score';
 
 interface ProInsightRowProps {
   item: SourceRelevance;
@@ -69,7 +69,7 @@ export function ProInsightRow({ item }: ProInsightRowProps) {
           className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ms-auto"
         >
           <ProStar />
-          {t('results.seeWhy')} {formatScore(item.top_score)}
+          {t('results.seeWhy')}
         </a>
       )}
     </div>
@@ -96,7 +96,7 @@ function InlineTrialStart({ score }: { score: number }) {
       className="inline-flex items-center gap-0.5 text-[10px] text-accent-gold/50 hover:text-accent-gold transition-colors ms-auto disabled:opacity-50"
     >
       <ProStar />
-      {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: formatScore(score) })}
+      {starting ? t('pro.startingTrial') : t('results.tryProFree', { score: getRelevancePresentation(score).label })}
     </button>
   );
 }

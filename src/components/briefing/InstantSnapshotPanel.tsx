@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatScore } from '../../utils/score';
+import { getRelevancePresentation } from '../../utils/score';
 import { isAbstentionSynthesis, parseAbstention } from './briefing-synthesis-helpers';
 import type { InstantBriefingSnapshot } from '../../store/types';
 
@@ -98,8 +98,8 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
                         <span className="text-[9px] font-mono text-text-muted uppercase tracking-wider">
                           {item.sourceType}
                         </span>
-                        <span className="text-[9px] font-mono text-text-muted">
-                          {formatScore(item.score)}
+                        <span className={`text-[9px] font-medium uppercase tracking-wider ${getRelevancePresentation(item.score).colorClass}`}>
+                          {getRelevancePresentation(item.score).label}
                         </span>
                       </div>
                     </a>

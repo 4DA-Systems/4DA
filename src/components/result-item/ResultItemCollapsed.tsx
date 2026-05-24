@@ -2,7 +2,7 @@
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
-import { formatScore, getScoreColor, formatRelativeAge, getScoreFactorKeys } from '../../utils/score';
+import { formatRelativeAge, getScoreFactorKeys, getRelevancePresentation } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { formatLocalDateTime } from '../../utils/format-date';
@@ -38,6 +38,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   const { getTranslated } = useTranslatedContent();
   const displayTitle = getTranslated(String(item.id), item.title);
   const expandedReason = !item.explanation ? fallbackReason : '';
+  const relevance = getRelevancePresentation(item.top_score);
   const scoreTooltip = useMemo(() => {
     const keys = getScoreFactorKeys(item);
     if (keys.length === 0) return undefined;
@@ -67,13 +68,11 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         <button
           onClick={onToggleBreakdown && item.score_breakdown ? onToggleBreakdown : onToggleExpand}
           aria-expanded={showBreakdown}
-          aria-label={item.score_breakdown ? `${t('scoreDrawer.toggle', 'Toggle score breakdown')}, score ${formatScore(item.top_score)}` : `Score: ${formatScore(item.top_score)}`}
+          aria-label={item.score_breakdown ? `${t('scoreDrawer.toggle', 'Toggle score breakdown')}, ${relevance.ariaLabel}` : relevance.ariaLabel}
           title={scoreTooltip}
-          className={`flex-shrink-0 w-12 text-center py-0.5 rounded font-mono text-xs font-medium cursor-pointer transition-all ${getScoreColor(
-            item.top_score,
-          )} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
+          className={`flex-shrink-0 w-14 text-center py-0.5 rounded text-[10px] font-medium uppercase tracking-wider cursor-pointer transition-all ${relevance.colorClass} ${showBreakdown ? 'ring-1 ring-white/30' : ''} ${item.score_breakdown ? 'hover:ring-1 hover:ring-white/20' : ''}`}
         >
-          {formatScore(item.top_score)}
+          {relevance.label}
         </button>
 
         {/* Signal strength: micro-dots showing independent confirmation axes */}

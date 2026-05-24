@@ -108,6 +108,7 @@ vi.mock('../../hooks', () => ({
 vi.mock('../../utils/score', () => ({
   formatScore: (s: number) => `${Math.round(s * 100)}%`,
   getScoreColor: () => 'text-white',
+  getRelevancePresentation: () => ({ label: 'Strong', colorClass: 'text-success', ariaLabel: 'Strong match' }),
   getStageLabel: (s: string) => s || 'Ready',
 }));
 

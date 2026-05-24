@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
-import { formatScore } from '../../utils/score';
+import { getRelevancePresentation } from '../../utils/score';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useFourdaComponent } from '../../hooks/use-fourda-component';
 import { useTranslatedContent } from '../ContentTranslationProvider';
@@ -115,6 +115,7 @@ const AttentionCard = memo(function AttentionCard({
       : item.signal_priority || 'alert';
   const style = (PRIORITY_STYLES[priority] ?? PRIORITY_STYLES.alert)!;
   const source = item.source_type || 'hackernews';
+  const relevance = getRelevancePresentation(item.top_score);
 
   // GAME score fingerprint — unique visual identity per item
   const { containerRef: fpRef, elementRef: fpElRef } = useFourdaComponent('fourda-score-fingerprint');
@@ -158,8 +159,8 @@ const AttentionCard = memo(function AttentionCard({
           {getSourceLabel(source)}
         </span>
         <div ref={fpRef} className="w-6 h-6 rounded flex-shrink-0 ms-auto" aria-hidden="true" />
-        <span className="text-xs font-mono text-text-muted">
-          {formatScore(item.top_score)}
+        <span className={`text-[10px] font-medium uppercase tracking-wider ${relevance.colorClass}`}>
+          {relevance.label}
         </span>
       </div>
 
