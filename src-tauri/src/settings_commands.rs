@@ -474,7 +474,7 @@ pub async fn set_privacy_config(
 
 // --- Sibling modules ---
 
-#[path = "settings_commands_llm.rs"]
+#[path = "settings_commands_llm/mod.rs"]
 mod settings_commands_llm;
 pub use settings_commands_llm::*;
 
