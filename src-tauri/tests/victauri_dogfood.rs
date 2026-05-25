@@ -4459,9 +4459,7 @@ async fn sidecar_starts_with_downloaded_model() {
         }
     };
 
-    let model_id = model["id"]
-        .as_str()
-        .expect("model must have id");
+    let model_id = model["id"].as_str().expect("model must have id");
 
     let result = client
         .invoke_command(

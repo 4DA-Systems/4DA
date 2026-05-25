@@ -667,9 +667,8 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
 /// Start the built-in LLM sidecar by model ID (resolved from catalog).
 #[tauri::command]
 pub async fn start_builtin_llm(model_id: String) -> Result<serde_json::Value> {
-    let entry = crate::model_manager::find_model(&model_id).ok_or_else(|| {
-        crate::error::FourDaError::Llm(format!("Unknown model: {model_id}"))
-    })?;
+    let entry = crate::model_manager::find_model(&model_id)
+        .ok_or_else(|| crate::error::FourDaError::Llm(format!("Unknown model: {model_id}")))?;
     let path = crate::model_manager::model_path(entry).ok_or_else(|| {
         crate::error::FourDaError::Llm(format!(
             "Model {} is not downloaded yet",
