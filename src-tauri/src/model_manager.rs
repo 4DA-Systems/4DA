@@ -138,6 +138,7 @@ pub(crate) fn model_path(entry: &ModelCatalogEntry) -> Option<PathBuf> {
 }
 
 /// List all downloaded models with their catalog info.
+#[allow(dead_code)] // REMOVE BY 2026-07-01
 pub(crate) fn list_downloaded_models() -> Vec<(&'static ModelCatalogEntry, PathBuf)> {
     let Ok(dir) = models_dir() else {
         return vec![];
@@ -162,10 +163,7 @@ pub(crate) fn find_model(id: &str) -> Option<&'static ModelCatalogEntry> {
 
 /// Recommend the best model for the user's hardware.
 pub(crate) fn recommend_model(available_ram_gb: f64) -> Option<&'static ModelCatalogEntry> {
-    CATALOG
-        .iter()
-        .filter(|e| e.min_ram_gb <= available_ram_gb)
-        .next()
+    CATALOG.iter().find(|e| e.min_ram_gb <= available_ram_gb)
 }
 
 /// Download a model from HuggingFace with resume support.
