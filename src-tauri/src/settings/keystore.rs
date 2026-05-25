@@ -129,10 +129,13 @@ fn get_secret_with_service(service: &str, key_name: &str) -> Result<Option<Strin
 ///
 /// Returns Ok(()) even if the key does not exist or the keychain is unavailable.
 pub fn delete_secret(key_name: &str) -> Result<()> {
-    match keyring::Entry::new(SERVICE_NAME, key_name) {
+    delete_secret_with_service(SERVICE_NAME, key_name)
+}
+
+fn delete_secret_with_service(service: &str, key_name: &str) -> Result<()> {
+    match keyring::Entry::new(service, key_name) {
         Ok(entry) => {
             if let Err(e) = entry.delete_credential() {
-                // NoEntry is fine — the key was already absent
                 if !matches!(e, keyring::Error::NoEntry) {
                     warn!(
                         target: "4da::keystore",
@@ -173,11 +176,14 @@ pub fn has_secret(key_name: &str) -> bool {
 /// credential isn't actually persisted (observed on some Windows setups
 /// where Credential Manager silently drops writes).
 pub fn verify_round_trip(key_name: &str, expected: &str) -> bool {
+    verify_round_trip_with_service(SERVICE_NAME, key_name, expected)
+}
+
+fn verify_round_trip_with_service(service: &str, key_name: &str, expected: &str) -> bool {
     if expected.is_empty() {
         return false;
     }
-    // Use a fresh Entry to avoid any in-memory cache on the same handle.
-    match keyring::Entry::new(SERVICE_NAME, key_name) {
+    match keyring::Entry::new(service, key_name) {
         Ok(entry) => matches!(entry.get_password(), Ok(ref val) if val == expected),
         Err(_) => false,
     }
@@ -263,41 +269,72 @@ pub fn known_key_names() -> &'static [&'static str] {
 }
 
 #[cfg(test)]
+fn migrate_from_plaintext_isolated(
+    settings: &super::Settings,
+    service: &str,
+) -> Result<MigrationReport> {
+    let mut report = MigrationReport {
+        migrated: Vec::new(),
+        failed: Vec::new(),
+        skipped: Vec::new(),
+    };
+
+    let key_values: Vec<(&str, &str)> = vec![
+        ("llm_api_key", &settings.llm.api_key),
+        ("openai_api_key", &settings.llm.openai_api_key),
+        ("x_api_key", settings.x_api_key.as_str()),
+        ("license_key", &settings.license.license_key),
+        ("translation_api_key", &settings.translation.api_key),
+    ];
+
+    for (key_name, value) in key_values {
+        if value.is_empty() {
+            report.skipped.push(key_name.to_string());
+            continue;
+        }
+
+        match keyring::Entry::new(service, key_name) {
+            Ok(entry) => match entry.set_password(value) {
+                Ok(()) => {
+                    report.migrated.push(key_name.to_string());
+                }
+                Err(_) => {
+                    report.failed.push(key_name.to_string());
+                }
+            },
+            Err(_) => {
+                report.failed.push(key_name.to_string());
+            }
+        }
+    }
+
+    Ok(report)
+}
+
+#[cfg(test)]
 mod tests {
     use super::super::types::SensitiveString;
     use super::*;
 
-    /// Test that store/retrieve/delete round-trip works or falls back gracefully.
-    ///
-    /// On CI or headless systems the keychain may not be available, so we accept
-    /// both success and graceful fallback (no panic).
     #[test]
     fn test_store_retrieve_delete_round_trip() {
         let test_key = "4da_test_round_trip";
         let test_value = "test-secret-value-12345";
 
-        // Store — should not panic regardless of keychain availability
-        let store_result = store_secret(test_key, test_value);
+        let store_result = store_secret_with_service(TEST_SERVICE_NAME, test_key, test_value);
         assert!(store_result.is_ok());
 
-        // Retrieve
-        let get_result = get_secret(test_key);
+        let get_result = get_secret_with_service(TEST_SERVICE_NAME, test_key);
         assert!(get_result.is_ok());
         if let Ok(Some(retrieved)) = &get_result {
-            // Keychain was available — verify the value
             assert_eq!(retrieved, test_value);
         }
-        // If Ok(None), keychain was unavailable — that's acceptable
 
-        // Delete — should not panic
-        let delete_result = delete_secret(test_key);
+        let delete_result = delete_secret_with_service(TEST_SERVICE_NAME, test_key);
         assert!(delete_result.is_ok());
 
-        // After delete, get should return None
-        let after_delete = get_secret(test_key);
+        let after_delete = get_secret_with_service(TEST_SERVICE_NAME, test_key);
         assert!(after_delete.is_ok());
-        // On systems with keychain, this should be None now
-        // On systems without keychain, it was already None
     }
 
     #[test]
@@ -334,17 +371,11 @@ mod tests {
 
     #[test]
     fn test_migrate_from_plaintext_with_keys() {
-        // migrate_from_plaintext writes to the REAL platform keychain using
-        // production key names. To avoid poisoning the developer's actual
-        // credentials, we save/restore any existing value around the test.
-        let saved_llm = get_secret("llm_api_key").ok().flatten();
-        let saved_x = get_secret("x_api_key").ok().flatten();
-
         let mut settings = super::super::Settings::default();
         settings.llm.api_key = "sk-test-anthropic".to_string();
         settings.x_api_key = SensitiveString::new("bearer-test-x".to_string());
 
-        let report = migrate_from_plaintext(&settings);
+        let report = migrate_from_plaintext_isolated(&settings, TEST_SERVICE_NAME);
         assert!(report.is_ok());
 
         let report = report.unwrap();
@@ -355,23 +386,9 @@ mod tests {
         assert!(report.skipped.contains(&"license_key".to_string()));
         assert!(report.skipped.contains(&"translation_api_key".to_string()));
 
-        // Restore original keychain state to prevent credential poisoning.
-        match saved_llm {
-            Some(k) => {
-                let _ = store_secret("llm_api_key", &k);
-            }
-            None => {
-                let _ = delete_secret("llm_api_key");
-            }
-        }
-        match saved_x {
-            Some(k) => {
-                let _ = store_secret("x_api_key", &k);
-            }
-            None => {
-                let _ = delete_secret("x_api_key");
-            }
-        }
+        // Clean up test keychain entries
+        let _ = delete_secret_with_service(TEST_SERVICE_NAME, "llm_api_key");
+        let _ = delete_secret_with_service(TEST_SERVICE_NAME, "x_api_key");
     }
 
     #[test]
@@ -395,13 +412,13 @@ mod tests {
     fn test_store_secret_verifies_round_trip() {
         let key = "4da_test_store_verify";
         let val = "store-verify-value";
-        let result = store_secret(key, val);
+        let result = store_secret_with_service(TEST_SERVICE_NAME, key, val);
         assert!(result.is_ok());
         let persisted = result.unwrap();
         if persisted {
-            let readback = get_secret(key);
+            let readback = get_secret_with_service(TEST_SERVICE_NAME, key);
             assert!(matches!(readback, Ok(Some(ref v)) if v == val));
-            let _ = delete_secret(key);
+            let _ = delete_secret_with_service(TEST_SERVICE_NAME, key);
         }
     }
 }
