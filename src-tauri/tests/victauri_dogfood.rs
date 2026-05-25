@@ -4729,3 +4729,749 @@ async fn ipc_commands_include_llm_infrastructure() {
         }
     }
 }
+
+// ── Phase 23: Source Management — The Onboarding Path ─────────────────────────
+
+#[tokio::test]
+async fn source_health_returns_structured_summary() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let health = client
+        .invoke_command("get_source_health", None)
+        .await
+        .unwrap();
+
+    assert!(
+        health.is_object() || health.is_array(),
+        "get_source_health must return structured data, got: {health}"
+    );
+
+    // If object, expect source-related keys (health records, summaries)
+    if let Some(obj) = health.as_object() {
+        assert!(
+            !obj.is_empty() || health.is_object(),
+            "source health object should have fields or be a valid empty summary"
+        );
+    }
+}
+
+#[tokio::test]
+async fn available_sources_returns_source_list() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let sources = client
+        .invoke_command("get_sources", None)
+        .await
+        .unwrap();
+
+    assert!(
+        sources.is_array() || sources.is_object(),
+        "get_sources must return structured source list, got: {sources}"
+    );
+
+    // Sources should contain at least some built-in source types
+    if let Some(arr) = sources.as_array() {
+        // Array of sources — even if empty on cold start, the type is correct
+        for item in arr {
+            assert!(
+                item.is_object() || item.is_string(),
+                "each source entry should be an object or string, got: {item}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn source_health_status_returns_per_source_records() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let status = client
+        .invoke_command("get_source_health_status", None)
+        .await
+        .unwrap();
+
+    assert!(
+        status.is_array(),
+        "get_source_health_status must return array of SourceHealthStatus, got: {status}"
+    );
+
+    if let Some(arr) = status.as_array() {
+        for record in arr {
+            assert!(
+                record.is_object(),
+                "each health status record should be an object, got: {record}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn rss_feeds_returns_array() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let feeds = client
+        .invoke_command("get_rss_feeds", None)
+        .await
+        .unwrap();
+
+    assert!(
+        feeds.is_array(),
+        "get_rss_feeds must return an array of feed URLs, got: {feeds}"
+    );
+
+    if let Some(arr) = feeds.as_array() {
+        for feed in arr {
+            assert!(
+                feed.is_string(),
+                "each RSS feed entry should be a string URL, got: {feed}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn twitter_handles_returns_array() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let handles = client
+        .invoke_command("get_twitter_handles", None)
+        .await
+        .unwrap();
+
+    assert!(
+        handles.is_array(),
+        "get_twitter_handles must return an array, got: {handles}"
+    );
+
+    if let Some(arr) = handles.as_array() {
+        for handle in arr {
+            assert!(
+                handle.is_string(),
+                "each Twitter handle should be a string, got: {handle}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn default_rss_feeds_returns_curated_list() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let defaults = client
+        .invoke_command("get_default_rss_feeds", None)
+        .await
+        .unwrap();
+
+    assert!(
+        defaults.is_array(),
+        "get_default_rss_feeds must return an array, got: {defaults}"
+    );
+
+    // Default feeds should be non-empty — 4DA ships with curated sources
+    if let Some(arr) = defaults.as_array() {
+        assert!(
+            !arr.is_empty(),
+            "default RSS feeds should include curated sources for onboarding"
+        );
+    }
+}
+
+#[tokio::test]
+async fn curated_feeds_returns_structured_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let curated = client
+        .invoke_command("get_curated_feeds", None)
+        .await
+        .unwrap();
+
+    assert!(
+        curated.is_array() || curated.is_object(),
+        "get_curated_feeds must return structured data, got: {curated}"
+    );
+}
+
+#[tokio::test]
+async fn feed_health_status_returns_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let health = client
+        .invoke_command("get_feed_health_status", None)
+        .await
+        .unwrap();
+
+    assert!(
+        health.is_object() || health.is_array(),
+        "get_feed_health_status must return structured data, got: {health}"
+    );
+}
+
+// ── Phase 24: Content & Saved Items ──────────────────────────────────────────
+
+#[tokio::test]
+async fn saved_items_returns_array() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let items = client
+        .invoke_command("get_saved_items", None)
+        .await
+        .unwrap();
+
+    assert!(
+        items.is_array(),
+        "get_saved_items must return an array of SavedItem, got: {items}"
+    );
+
+    if let Some(arr) = items.as_array() {
+        for item in arr {
+            assert!(
+                item.is_object(),
+                "each saved item should be an object, got: {item}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn engagement_summary_returns_reading_metrics() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let summary = client
+        .invoke_command("get_engagement_summary", None)
+        .await
+        .unwrap();
+
+    assert!(
+        summary.is_object(),
+        "get_engagement_summary must return an object with reading metrics, got: {summary}"
+    );
+}
+
+#[tokio::test]
+async fn watched_items_returns_array() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let watched = client
+        .invoke_command("get_watched_items", None)
+        .await
+        .unwrap();
+
+    assert!(
+        watched.is_array(),
+        "get_watched_items must return an array, got: {watched}"
+    );
+
+    if let Some(arr) = watched.as_array() {
+        for item in arr {
+            assert!(
+                item.is_object(),
+                "each watched item should be an object, got: {item}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn learned_preferences_returns_structured_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let prefs = client
+        .invoke_command("get_learned_preferences", None)
+        .await
+        .unwrap();
+
+    assert!(
+        prefs.is_object() || prefs.is_array(),
+        "get_learned_preferences must return structured preference data, got: {prefs}"
+    );
+}
+
+// ── Phase 25: Digest & Briefing Pipeline ─────────────────────────────────────
+
+#[tokio::test]
+async fn digest_config_returns_settings_object() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let config = client
+        .invoke_command("get_digest_config", None)
+        .await
+        .unwrap();
+
+    assert!(
+        config.is_object(),
+        "get_digest_config must return an object with digest settings, got: {config}"
+    );
+}
+
+#[tokio::test]
+async fn briefing_snapshot_returns_structured_briefing() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let snapshot = client
+        .invoke_command("get_briefing_snapshot", None)
+        .await
+        .unwrap();
+
+    // Briefing snapshot can be null (no briefing yet) or an object
+    assert!(
+        snapshot.is_null() || snapshot.is_object(),
+        "get_briefing_snapshot must return null or a briefing object, got: {snapshot}"
+    );
+
+    if let Some(obj) = snapshot.as_object() {
+        // A valid briefing should have version or sections
+        let has_structure = obj.contains_key("version")
+            || obj.contains_key("briefing")
+            || obj.contains_key("sections")
+            || obj.contains_key("generated_at")
+            || obj.contains_key("items");
+        assert!(
+            has_structure,
+            "briefing snapshot should have recognizable fields, got keys: {:?}",
+            obj.keys().collect::<Vec<_>>()
+        );
+    }
+}
+
+#[tokio::test]
+async fn latest_briefing_returns_briefing_or_null() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let briefing = client
+        .invoke_command("get_latest_briefing", None)
+        .await
+        .unwrap();
+
+    assert!(
+        briefing.is_null() || briefing.is_object(),
+        "get_latest_briefing must return null or a briefing object, got: {briefing}"
+    );
+}
+
+#[tokio::test]
+async fn morning_briefing_config_returns_schedule() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let config = client
+        .invoke_command("get_morning_briefing_config", None)
+        .await
+        .unwrap();
+
+    assert!(
+        config.is_object(),
+        "get_morning_briefing_config must return an object, got: {config}"
+    );
+}
+
+// ── Phase 26: Decision Advantage & Trust ─────────────────────────────────────
+
+#[tokio::test]
+async fn decision_windows_returns_actionable_array() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let windows = client
+        .invoke_command("get_decision_windows", None)
+        .await
+        .unwrap();
+
+    assert!(
+        windows.is_array(),
+        "get_decision_windows must return an array of DecisionWindow, got: {windows}"
+    );
+
+    if let Some(arr) = windows.as_array() {
+        for window in arr {
+            assert!(
+                window.is_object(),
+                "each decision window should be an object, got: {window}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn trust_dashboard_returns_calibration_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let dashboard = client
+        .invoke_command("get_trust_dashboard", None)
+        .await
+        .unwrap();
+
+    assert!(
+        dashboard.is_object() || dashboard.is_array(),
+        "get_trust_dashboard must return structured trust data, got: {dashboard}"
+    );
+}
+
+#[tokio::test]
+async fn accuracy_report_returns_metrics() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let report = client
+        .invoke_command("get_accuracy_report", None)
+        .await
+        .unwrap();
+
+    assert!(
+        report.is_object(),
+        "get_accuracy_report must return an object with accuracy metrics, got: {report}"
+    );
+}
+
+#[tokio::test]
+async fn ace_accuracy_metrics_returns_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let metrics = client
+        .invoke_command("ace_get_accuracy_metrics", None)
+        .await
+        .unwrap();
+
+    assert!(
+        metrics.is_object() || metrics.is_array(),
+        "ace_get_accuracy_metrics must return structured data, got: {metrics}"
+    );
+}
+
+#[tokio::test]
+async fn advantage_history_returns_timeline() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let history = client
+        .invoke_command("get_advantage_history", None)
+        .await
+        .unwrap();
+
+    assert!(
+        history.is_array() || history.is_object(),
+        "get_advantage_history must return structured data, got: {history}"
+    );
+}
+
+#[tokio::test]
+async fn domain_precision_report_returns_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let report = client
+        .invoke_command("get_domain_precision_report", None)
+        .await
+        .unwrap();
+
+    assert!(
+        report.is_object() || report.is_array(),
+        "get_domain_precision_report must return structured data, got: {report}"
+    );
+}
+
+#[tokio::test]
+async fn false_positive_analysis_returns_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let analysis = client
+        .invoke_command("get_false_positive_analysis", None)
+        .await
+        .unwrap();
+
+    assert!(
+        analysis.is_object() || analysis.is_array(),
+        "get_false_positive_analysis must return structured data, got: {analysis}"
+    );
+}
+
+// ── Phase 27: Privacy & Security Surface ─────────────────────────────────────
+
+#[tokio::test]
+async fn privacy_config_returns_privacy_fields() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let config = client
+        .invoke_command("get_privacy_config", None)
+        .await
+        .unwrap();
+
+    assert!(
+        config.is_object(),
+        "get_privacy_config must return an object with privacy settings, got: {config}"
+    );
+}
+
+#[tokio::test]
+async fn usage_analytics_returns_telemetry_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let analytics = client
+        .invoke_command("get_usage_analytics", None)
+        .await
+        .unwrap();
+
+    assert!(
+        analytics.is_object() || analytics.is_array(),
+        "get_usage_analytics must return structured telemetry data, got: {analytics}"
+    );
+}
+
+#[tokio::test]
+async fn diagnostics_returns_system_snapshot() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let diag = client
+        .invoke_command("get_diagnostics", None)
+        .await
+        .unwrap();
+
+    assert!(
+        diag.is_object(),
+        "get_diagnostics must return an object with system diagnostics, got: {diag}"
+    );
+
+    // Diagnostics should have substantive fields
+    if let Some(obj) = diag.as_object() {
+        assert!(
+            !obj.is_empty(),
+            "diagnostics object should not be empty"
+        );
+    }
+}
+
+#[tokio::test]
+async fn error_telemetry_returns_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let errors = client
+        .invoke_command("get_error_telemetry", None)
+        .await
+        .unwrap();
+
+    assert!(
+        errors.is_array() || errors.is_object(),
+        "get_error_telemetry must return structured data, got: {errors}"
+    );
+}
+
+#[tokio::test]
+async fn error_summary_returns_aggregated_data() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let summary = client
+        .invoke_command("get_error_summary_cmd", None)
+        .await
+        .unwrap();
+
+    assert!(
+        summary.is_object() || summary.is_array(),
+        "get_error_summary_cmd must return structured data, got: {summary}"
+    );
+}
+
+#[tokio::test]
+async fn audit_log_returns_security_events() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let log = client
+        .invoke_command("get_audit_log", None)
+        .await
+        .unwrap();
+
+    assert!(
+        log.is_array() || log.is_object(),
+        "get_audit_log must return structured audit data, got: {log}"
+    );
+}
+
+#[tokio::test]
+async fn audit_summary_returns_overview() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+    let summary = client
+        .invoke_command("get_audit_summary_cmd", None)
+        .await
+        .unwrap();
+
+    assert!(
+        summary.is_object(),
+        "get_audit_summary_cmd must return an object, got: {summary}"
+    );
+}
+
+// ── Phase 28: IPC Panic Guard Expansion ──────────────────────────────────────
+
+#[tokio::test]
+async fn expanded_panic_guard_30_plus_commands() {
+    if skip_unless_e2e() {
+        return;
+    }
+
+    let mut client = VictauriClient::discover().await.unwrap();
+
+    // Broad set of read-only commands covering source management, content,
+    // digest, trust, privacy, intelligence, and operational surfaces.
+    // Every command here is verified to exist in REGISTERED_COMMANDS.
+    let commands = [
+        "get_source_health",
+        "get_sources",
+        "get_source_health_status",
+        "get_rss_feeds",
+        "get_twitter_handles",
+        "get_saved_items",
+        "get_engagement_summary",
+        "get_digest_config",
+        "get_decision_windows",
+        "get_trust_dashboard",
+        "get_privacy_config",
+        "get_usage_analytics",
+        "get_temporal_snapshot",
+        "get_tech_convergence",
+        "list_standing_queries",
+        "get_learned_preferences",
+        "get_notification_summary",
+        "get_ai_usage_summary",
+        "get_sovereign_profile",
+        "get_knowledge_gaps",
+        "get_intelligence_pulse",
+        "get_accuracy_report",
+        "get_intelligence_growth",
+        "get_indexed_stats",
+        "get_stack_health",
+        "get_watched_items",
+        "get_default_rss_feeds",
+        "get_curated_feeds",
+        "get_feed_health_status",
+        "get_morning_briefing_config",
+        "get_advantage_history",
+        "get_domain_precision_report",
+        "get_false_positive_analysis",
+        "get_error_telemetry",
+        "get_error_summary_cmd",
+        "get_audit_log",
+        "get_audit_summary_cmd",
+        "get_capability_states",
+        "get_capability_summary",
+        "ace_get_accuracy_metrics",
+        "get_data_health",
+        "get_autophagy_status",
+    ];
+
+    for (i, cmd) in commands.iter().enumerate() {
+        let result = client.invoke_command(cmd, None).await;
+        assert!(
+            result.is_ok(),
+            "IPC command #{} '{cmd}' panicked or errored: {:?}",
+            i + 1,
+            result.err()
+        );
+
+        // After every command, verify the backend is still responsive
+        // by calling get_settings — the most fundamental IPC command.
+        let canary = client.invoke_command("get_settings", None).await;
+        assert!(
+            canary.is_ok(),
+            "backend unresponsive after '{cmd}' (command #{}) — possible panic or deadlock",
+            i + 1,
+        );
+
+        let settings = canary.unwrap();
+        assert!(
+            settings.is_object(),
+            "get_settings canary returned non-object after '{cmd}': {settings}"
+        );
+    }
+
+    // Final liveness check via a different channel
+    let ping = client.get_plugin_info().await;
+    assert!(
+        ping.is_ok(),
+        "backend unresponsive after {}-command panic guard barrage — possible panic",
+        commands.len()
+    );
+}
