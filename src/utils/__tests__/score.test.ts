@@ -5,7 +5,7 @@
  * Covers formatScore, getScoreColor, getScoreFactorKeys, formatRelativeAge, getStageLabel.
  */
 import { describe, it, expect } from 'vitest';
-import { formatScore, getScoreColor, getScoreFactorKeys, formatRelativeAge, getStageLabel, getRelevancePresentation } from '../score';
+import { formatScore, getScoreColor, getScoreFactorKeys, getScoreChipKeys, formatRelativeAge, getStageLabel, getRelevancePresentation } from '../score';
 import type { SourceRelevance } from '../../types';
 
 function makeMinimalItem(overrides: Partial<SourceRelevance> = {}): SourceRelevance {
@@ -48,34 +48,34 @@ describe('formatScore', () => {
 });
 
 describe('getRelevancePresentation', () => {
-  it('returns Core key for scores >= 0.72', () => {
-    expect(getRelevancePresentation(0.72).labelKey).toBe('relevance.core');
+  it('returns Core key for scores >= 0.65', () => {
+    expect(getRelevancePresentation(0.65).labelKey).toBe('relevance.core');
     expect(getRelevancePresentation(0.85).labelKey).toBe('relevance.core');
     expect(getRelevancePresentation(1.0).labelKey).toBe('relevance.core');
   });
 
-  it('returns Strong key for scores >= 0.50 and < 0.72', () => {
-    expect(getRelevancePresentation(0.50).labelKey).toBe('relevance.strong');
-    expect(getRelevancePresentation(0.65).labelKey).toBe('relevance.strong');
-    expect(getRelevancePresentation(0.71).labelKey).toBe('relevance.strong');
+  it('returns Strong key for scores >= 0.45 and < 0.65', () => {
+    expect(getRelevancePresentation(0.45).labelKey).toBe('relevance.strong');
+    expect(getRelevancePresentation(0.55).labelKey).toBe('relevance.strong');
+    expect(getRelevancePresentation(0.64).labelKey).toBe('relevance.strong');
   });
 
-  it('returns Match key for scores >= 0.35 and < 0.50', () => {
-    expect(getRelevancePresentation(0.35).labelKey).toBe('relevance.match');
-    expect(getRelevancePresentation(0.42).labelKey).toBe('relevance.match');
-    expect(getRelevancePresentation(0.49).labelKey).toBe('relevance.match');
+  it('returns Match key for scores >= 0.30 and < 0.45', () => {
+    expect(getRelevancePresentation(0.30).labelKey).toBe('relevance.match');
+    expect(getRelevancePresentation(0.37).labelKey).toBe('relevance.match');
+    expect(getRelevancePresentation(0.44).labelKey).toBe('relevance.match');
   });
 
-  it('returns Faint key for scores below 0.35', () => {
+  it('returns Faint key for scores below 0.30', () => {
     expect(getRelevancePresentation(0).labelKey).toBe('relevance.faint');
-    expect(getRelevancePresentation(0.2).labelKey).toBe('relevance.faint');
-    expect(getRelevancePresentation(0.34).labelKey).toBe('relevance.faint');
+    expect(getRelevancePresentation(0.15).labelKey).toBe('relevance.faint');
+    expect(getRelevancePresentation(0.29).labelKey).toBe('relevance.faint');
   });
 
   it('uses correct color classes per tier', () => {
     expect(getRelevancePresentation(0.80).colorClass).toBe('text-accent-gold');
-    expect(getRelevancePresentation(0.60).colorClass).toBe('text-success');
-    expect(getRelevancePresentation(0.40).colorClass).toBe('text-text-secondary');
+    expect(getRelevancePresentation(0.50).colorClass).toBe('text-success');
+    expect(getRelevancePresentation(0.35).colorClass).toBe('text-text-secondary');
     expect(getRelevancePresentation(0.20).colorClass).toBe('text-text-muted');
   });
 });
@@ -142,6 +142,30 @@ describe('getScoreFactorKeys', () => {
   it('includes serendipity when item has serendipity flag', () => {
     const item = makeMinimalItem({ serendipity: true });
     expect(getScoreFactorKeys(item)).toContain('scoreTooltip.serendipity');
+  });
+});
+
+describe('getScoreChipKeys', () => {
+  it('returns empty array when no breakdown', () => {
+    const item = makeMinimalItem();
+    expect(getScoreChipKeys(item)).toEqual([]);
+  });
+
+  it('maps tooltip keys to chip keys', () => {
+    const item = makeMinimalItem({
+      score_breakdown: { context_score: 0.5, interest_score: 0.5, ace_boost: 0, affinity_mult: 1.0, anti_penalty: 0, confidence_by_signal: {} },
+    });
+    const chips = getScoreChipKeys(item);
+    expect(chips).toContain('scoreChip.stackMatch');
+    expect(chips).toContain('scoreChip.interestMatch');
+  });
+
+  it('limits to max chips', () => {
+    const item = makeMinimalItem({
+      score_breakdown: { context_score: 0.5, interest_score: 0.5, ace_boost: 0, affinity_mult: 1.2, anti_penalty: 0, confidence_by_signal: {}, signal_count: 4 },
+    });
+    expect(getScoreChipKeys(item, 1).length).toBe(1);
+    expect(getScoreChipKeys(item).length).toBeLessThanOrEqual(2);
   });
 });
 

@@ -2,7 +2,7 @@
 import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourceRelevance, FeedbackAction } from '../../types';
-import { formatRelativeAge, getScoreFactorKeys, getRelevancePresentation } from '../../utils/score';
+import { formatRelativeAge, getScoreFactorKeys, getScoreChipKeys, getRelevancePresentation } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { formatLocalDateTime } from '../../utils/format-date';
@@ -44,6 +44,7 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
     if (keys.length === 0) return undefined;
     return keys.map(k => t(k)).join('\n');
   }, [item, t]);
+  const chipKeys = useMemo(() => getScoreChipKeys(item), [item]);
 
   const recordTitleClick = useCallback(() => {
     const topics = extractTechTopics(item.title);
@@ -74,6 +75,16 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
         >
           {t(relevance.labelKey)}
         </button>
+
+        {/* Reason chips: top 1-2 scoring factors */}
+        {chipKeys.length > 0 && chipKeys.map(k => (
+          <span
+            key={k}
+            className="flex-shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-white/[0.04] text-text-muted border border-border/40"
+          >
+            {t(k)}
+          </span>
+        ))}
 
         {/* Signal strength: micro-dots showing independent confirmation axes */}
         {item.score_breakdown && (item.score_breakdown.signal_count ?? 0) > 0 && (

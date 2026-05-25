@@ -477,7 +477,7 @@
   "preemption.empty.title": "Votre stack est propre",
   "preemption.empty.subtitle": "Aucune menace vérifiée détectée. La surveillance est active.",
   "preemption.badge.verified": "VÉRIFIÉ",
-  "preemption.badge.ai": "AI",
+  "preemption.badge.ai": "IA",
   "results.title": "Résultats de pertinence",
   "results.new": "{{count}} nouveaux",
   "results.itemsRelevant": "{{items}} éléments, {{relevant}} pertinents",
@@ -2263,6 +2263,18 @@
   "scoreTooltip.highQuality": "Contenu de haute qualité",
   "scoreTooltip.novelContent": "Contenu inédit",
   "scoreTooltip.serendipity": "Découverte fortuite",
+  "scoreChip.stackMatch": "Stack",
+  "scoreChip.partialStackMatch": "Stack partiel",
+  "scoreChip.interestMatch": "Intérêt",
+  "scoreChip.freshContent": "Récent",
+  "scoreChip.multipleSignals": "Multi-signal",
+  "scoreChip.decisionWindow": "Décision",
+  "scoreChip.dependencyMatch": "Dépendance",
+  "scoreChip.calibratedTaste": "Appris",
+  "scoreChip.topicAffinity": "Affinité",
+  "scoreChip.highQuality": "Qualité",
+  "scoreChip.novelContent": "Inédit",
+  "scoreChip.serendipity": "Sérendipité",
   "relevance.core": "Essentiel",
   "relevance.strong": "Fort",
   "relevance.match": "Correspond",
@@ -2517,7 +2529,7 @@
   "comp.nav.approachDesc": "Ce qui rend 4DA différent",
   "comp.nav.privacy": "Modèle de confidentialité",
   "comp.nav.privacyDesc": "Architecture local-first",
-  "comp.nav.scoring": "Scoring",
+  "comp.nav.scoring": "Notation",
   "comp.nav.scoringDesc": "Comment la pertinence fonctionne",
   "comp.nav.context": "Contexte",
   "comp.nav.contextDesc": "Découverte automatique",
@@ -2803,7 +2815,7 @@
   "evidence.thisWeek": "Cette semaine",
   "evidence.thisWeekEmpty": "Rien d’urgent cette semaine. Votre stack est en ordre.",
   "evidence.thisWeekSummary": "4DA a détecté {{preemption}} alertes préventives et {{blindSpots}} angles morts. {{contracts}} contrat{{contractPlural}} d’engagement actifs surveillés.",
-  "evidence.noCommitments": "No active commitments. Accept a Decision Brief (⌘.) to set one.",
+  "evidence.noCommitments": "Aucun engagement actif. Acceptez un Résumé de décision (⌘.) pour en définir un.",
   "evidence.recentIntel": "Intelligence récente",
   "evidence.noIntel": "Pas encore d’éléments d’intelligence. Les sources sont en cours d’analyse.",
   "evidence.decisions": "Vos décisions",
@@ -2821,367 +2833,5 @@
   "evidence.learnedPositive": "Thèmes avec lesquels vous interagissez",
   "evidence.learnedNegative": "Thèmes que vous ignorez systématiquement",
   "results.topMatches": "Meilleures correspondances :",
-  "settings.llm.title": "Fournisseur d'IA",
-  "settings": {
-    "locale": {
-      "feedbackHint": "Avez-vous repéré une erreur de traduction ?",
-      "feedbackLink": "Aidez-nous à l'améliorer"
-    },
-    "translation": {
-      "providerDeepL": "DeepL",
-      "providerGoogle": "Google Cloud",
-      "providerAzure": "Azure Translator",
-      "providerOllama": "Local (Ollama)"
-    },
-    "monitoring": {
-      "notifications": "Notifications",
-      "minutes": "minutes"
-    },
-    "ai": {
-      "providerAnthropic": "Anthropic Claude",
-      "providerOpenAI": "OpenAI",
-      "providerOllama": "Ollama (Local)",
-      "tokens": "Tokens",
-      "builtInModel": "Arctic Embed M (768 dimensions)"
-    },
-    "dataHealth": {
-      "embeddings": "Embeddings"
-    },
-    "personalization": {
-      "exclusions": "Exclusions"
-    },
-    "license": {
-      "tierTeam": "Team",
-      "recovery": {
-        "retrieve": "Récupérer la licence",
-        "placeholder": "votre@email.com"
-      }
-    },
-    "streets": {
-      "tierEnterprise": "Enterprise"
-    },
-    "tabs": {
-      "intelligence": "Intelligence",
-      "sources": "Sources"
-    },
-    "digest": {
-      "port": "Port"
-    }
-  },
-  "nav": {
-    "briefing": "Briefing",
-    "insights": "Momentum",
-    "playbook": "Playbook",
-    "console": "Console",
-    "preemption": {
-      "label": "Prévention",
-      "subtitle": "Ce qui compte avant que ça ne blesse"
-    },
-    "blindspots": {
-      "label": "Points aveugles",
-      "subtitle": "Ce que vous ne surveillez pas"
-    }
-  },
-  "preemption": {
-    "title": "Radar de prévention",
-    "subtitle": "Intelligence prospective pour votre stack",
-    "empty": "Aucune alerte préventive pour le moment. Votre stack semble sain.",
-    "loading": "Analyse des risques émergents...",
-    "summary": "{{critical}} critique, {{high}} haute, {{total}} alertes au total",
-    "evidence": "Preuve",
-    "affected": {
-      "projects": "Projets affectés",
-      "deps": "Dépendances affectées"
-    },
-    "confidence": "Confiance : {{value}}%",
-    "window": "Fenêtre prédite"
-  },
-  "briefing": {
-    "sourcesHealth": "{{healthy}}/{{total}} sources",
-    "viaModel": "via {{model}}",
-    "stack": "Stack"
-  },
-  "search": {
-    "viewSources": "{{count}} sources"
-  },
-  "tier": {
-    "pro": "Signal",
-    "signal": "Signal",
-    "team": "Team",
-    "enterprise": "Enterprise"
-  },
-  "onboarding": {
-    "version": "Version {{version}}",
-    "apiKeys": {
-      "bearerToken": "Bearer Token"
-    },
-    "setup": {
-      "yourExperience": "Niveau d'expérience",
-      "helpsScoring": "Aide à adapter le contenu à votre niveau"
-    },
-    "experience": {
-      "description": "Comment interagissez-vous avec la technologie ? Cela aide 4DA à proposer du contenu à la bonne profondeur.",
-      "learning": {
-        "label": "Apprentissage",
-        "description": "J'apprends de nouvelles technologies et veux des tutoriels"
-      },
-      "building": {
-        "label": "Construction",
-        "description": "Je construis activement des projets et veux du contenu pratique"
-      },
-      "leading": {
-        "label": "Leadership",
-        "description": "Je prends les décisions techniques et veux des perspectives stratégiques"
-      },
-      "architecting": {
-        "label": "Architecture",
-        "description": "Je conçois des systèmes et veux une analyse technique approfondie"
-      }
-    },
-    "setupAi": {
-      "local": "Local",
-      "localLabel": "Local",
-      "cloudLabel": "Cloud",
-      "otherDesc": "Groq, DeepSeek, etc."
-    }
-  },
-  "commandRunner": {
-    "exit": "exit {{code}}"
-  },
-  "documents": {
-    "type": "Type"
-  },
-  "team": {
-    "dashboard": {
-      "sources": "Sources",
-      "intelligence": "Intelligence"
-    },
-    "decisions": {
-      "votes": "votes"
-    },
-    "notifications": {
-      "title": "Notifications"
-    },
-    "intelligence": {
-      "tabs": {
-        "stack": "Stack"
-      }
-    }
-  },
-  "enterprise": {
-    "audit": {
-      "badge": "Enterprise",
-      "colAction": "Action"
-    },
-    "health": {
-      "embeddings": "Embeddings"
-    },
-    "webhooks": {
-      "title": "Webhooks",
-      "enterprise": "Enterprise"
-    },
-    "diagnostics": {
-      "check": {
-        "embeddings": "Embeddings",
-        "sources": "Sources",
-        "relay": "Team Relay",
-        "webhooks": "Webhooks"
-      }
-    },
-    "org": {
-      "enterprise": "Enterprise"
-    }
-  },
-  "intelligence": {
-    "cycles": "{{count}} cycles"
-  },
-  "splash": {
-    "version": "Version {{version}}"
-  },
-  "firstRun": {
-    "sourcesScanned": "sources"
-  },
-  "shortcuts": {
-    "actionsGroup": "Actions"
-  },
-  "about": {
-    "fullName": "4 Dimensional Autonomy",
-    "vision": "Vision",
-    "stackValue": "Rust + React + SQLite",
-    "framework": "Framework",
-    "frameworkValue": "Tauri 2.0",
-    "licenseValue": "FSL-1.1-Apache-2.0",
-    "privacyValue": "Local-First / BYOK",
-    "attributionCreatorName": "4DA Systems",
-    "attributionClaudeName": "Claude",
-    "copyright": "v{{version}} · © 2025–2026 4DA Systems"
-  },
-  "chapters": {
-    "cat": {
-      "social": "Social"
-    },
-    "health": {
-      "healthy": "{{healthy}} sur {{total}} sources actives",
-      "failing": "{{count}} sur {{total}} sources en échec",
-      "idle": "Sources inactives — en attente du prochain fetch",
-      "sourceHealthy": "{{source}} : {{items}} éléments, dernier {{when}}",
-      "sourceFailing": "{{source}} : {{message}}",
-      "sourceIdle": "{{source}} : pas de récupérations récentes"
-    }
-  },
-  "toolkit": {
-    "cronBuilder": {
-      "minute": "Minute"
-    },
-    "decisionLog": {
-      "type": "Type"
-    },
-    "diffViewer": {
-      "original": "Original"
-    },
-    "mockData": {
-      "type": "Type"
-    },
-    "scoringSandbox": {
-      "score": "Score",
-      "sourceHackerNews": "Hacker News",
-      "sourceReddit": "Reddit",
-      "sourceArxiv": "arXiv",
-      "sourceGitHub": "GitHub"
-    }
-  },
-  "agentMemory": {
-    "session": "Session",
-    "type": "Type"
-  },
-  "autophagy": {
-    "cycles": "Cycles"
-  },
-  "digest": {
-    "title": "4DA DIGEST",
-    "topicPython": "Python",
-    "topicAI": "AI/ML",
-    "topicCloud": "Cloud/DevOps"
-  },
-  "signals": {
-    "signalCount": "{{count}} signal"
-  },
-  "techRadar": {
-    "stable": "Stable",
-    "weightStack": "Stack",
-    "movementStable": "Stable"
-  },
-  "results": {
-    "stackBadge": "Stack"
-  },
-  "pro": {
-    "signals": "{{count}} signal"
-  },
-  "channels": {
-    "sources": "sources",
-    "version": "v{{version}}",
-    "descriptionLabel": "Description"
-  },
-  "decisions": {
-    "type": {
-      "architecture": "Architecture"
-    }
-  },
-  "calibration": {
-    "dimension": {
-      "infrastructure": "Infrastructure"
-    },
-    "label": {
-      "ollama": "Ollama",
-      "embeddings": "Embeddings"
-    }
-  },
-  "profile": {
-    "intelligence": "Intelligence"
-  },
-  "dna": {
-    "markdown": "Markdown"
-  },
-  "momentum": {
-    "title": "Momentum",
-    "securityAlertDetail": "{{signal}}",
-    "windowExpiring": "{{title}}"
-  },
-  "wisdom": {
-    "perspective": "Perspective"
-  },
-  "console": {
-    "tab_trust": "Confiance",
-    "tabDesc_trust": "Qualité de l'intelligence et preuve de préemption"
-  },
-  "trust": {
-    "title": "Qualité de l'Intelligence",
-    "subtitle": "Derniers {{days}} jours",
-    "precision": "Précision",
-    "actionRate": "Taux d'action",
-    "fpRate": "Taux de FP",
-    "caughtEarly": "Attrapé tôt",
-    "avgLeadTime": "{{days}}j de temps d'avance moyen",
-    "summary": "{{surfaced}} signaux surfacés, {{acted}} traités, {{dismissed}} rejetés",
-    "falsePositives": "{{count}} faux positif",
-    "trend": {
-      "improving": "Tendance : amélioration",
-      "stable": "Tendance : stable",
-      "declining": "Tendance : déclin"
-    },
-    "empty": "Pas encore de données d'intelligence. Utilisez 4DA pendant quelques jours pour voir les métriques de qualité.",
-    "explanation": {
-      "good": "4DA a correctement identifié les signaux importants {{precision}}% du temps. {{wins}} problèmes ont été détectés avant de devenir urgents.",
-      "building": "4DA établit sa base de référence d'intelligence. Les métriques de qualité deviendront plus significatives à mesure que vous interagirez avec plus de signaux."
-    }
-  },
-  "accuracy": {
-    "thAction": "Action"
-  },
-  "convergence": {
-    "convergence": "Convergence"
-  },
-  "deps": {
-    "total": "Total"
-  },
-  "comp": {
-    "nav": {
-      "scoring": "Notation",
-      "ariaLabel": "Sections"
-    },
-    "privacy": {
-      "embeddingsLabel": "Embeddings"
-    },
-    "scoring": {
-      "colPhase": "Phase"
-    },
-    "context": {
-      "pkgLabel": "package.json / Cargo.toml",
-      "docsLabel": "README / docs"
-    },
-    "tradeoffs": {
-      "localLabel": "Local-first"
-    }
-  },
-  "stack": {
-    "signalCount_one": "{{count}} signal",
-    "dim": {
-      "maintenance": "Maintenance"
-    }
-  },
-  "blindspots": {
-    "title": "Indice des points aveugles",
-    "subtitle": "Ce que vous ne surveillez pas assez bien",
-    "score": {
-      "good": "Bonne couverture",
-      "moderate": "Lacunes modérées",
-      "significant": "Lacunes importantes",
-      "critical": "Points aveugles critiques"
-    },
-    "uncovered": "Dépendances non couvertes",
-    "missed": "Intelligence manquée",
-    "recommendations": "Recommandations",
-    "empty": "Aucun point aveugle détecté. Votre couverture de pile est excellente.",
-    "loading": "Analyse de votre couverture..."
-  }
+  "settings.llm.title": "Fournisseur d'IA"
 }

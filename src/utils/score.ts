@@ -13,9 +13,9 @@ export interface RelevancePresentation {
 }
 
 export function getRelevancePresentation(score: number): RelevancePresentation {
-  if (score >= 0.72) return { labelKey: 'relevance.core', colorClass: 'text-accent-gold', ariaLabelKey: 'relevance.coreAria' };
-  if (score >= 0.50) return { labelKey: 'relevance.strong', colorClass: 'text-success', ariaLabelKey: 'relevance.strongAria' };
-  if (score >= 0.35) return { labelKey: 'relevance.match', colorClass: 'text-text-secondary', ariaLabelKey: 'relevance.matchAria' };
+  if (score >= 0.65) return { labelKey: 'relevance.core', colorClass: 'text-accent-gold', ariaLabelKey: 'relevance.coreAria' };
+  if (score >= 0.45) return { labelKey: 'relevance.strong', colorClass: 'text-success', ariaLabelKey: 'relevance.strongAria' };
+  if (score >= 0.30) return { labelKey: 'relevance.match', colorClass: 'text-text-secondary', ariaLabelKey: 'relevance.matchAria' };
   return { labelKey: 'relevance.faint', colorClass: 'text-text-muted', ariaLabelKey: 'relevance.faintAria' };
 }
 
@@ -85,6 +85,27 @@ export function getScoreFactorKeys(item: SourceRelevance): string[] {
   }
 
   return factors;
+}
+
+const CHIP_KEY_MAP: Record<string, string> = {
+  'scoreTooltip.stackMatch': 'scoreChip.stackMatch',
+  'scoreTooltip.partialStackMatch': 'scoreChip.partialStackMatch',
+  'scoreTooltip.interestMatch': 'scoreChip.interestMatch',
+  'scoreTooltip.freshContent': 'scoreChip.freshContent',
+  'scoreTooltip.multipleSignals': 'scoreChip.multipleSignals',
+  'scoreTooltip.decisionWindow': 'scoreChip.decisionWindow',
+  'scoreTooltip.dependencyMatch': 'scoreChip.dependencyMatch',
+  'scoreTooltip.calibratedTaste': 'scoreChip.calibratedTaste',
+  'scoreTooltip.topicAffinity': 'scoreChip.topicAffinity',
+  'scoreTooltip.highQuality': 'scoreChip.highQuality',
+  'scoreTooltip.novelContent': 'scoreChip.novelContent',
+  'scoreTooltip.serendipity': 'scoreChip.serendipity',
+};
+
+export function getScoreChipKeys(item: SourceRelevance, max = 2): string[] {
+  return getScoreFactorKeys(item)
+    .slice(0, max)
+    .map(k => CHIP_KEY_MAP[k] ?? k);
 }
 
 export function getScoreColor(score: number): string {
