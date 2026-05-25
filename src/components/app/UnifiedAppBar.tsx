@@ -2,13 +2,14 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-import { memo, Suspense, lazy } from 'react';
+import { memo, Suspense, lazy, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandMark } from '../void-engine/BrandMark';
 import { useVoidSignals } from '../../hooks/use-void-signals';
 import { OllamaStatus } from '../OllamaStatus';
 import { SystemHealthDot } from '../SystemHealthDot';
 import { cmd } from '../../lib/commands';
+import { useAppStore } from '../../store';
 import type { AppState } from '../../store/types';
 
 const ProValueBadge = lazy(() => import('../ProValueBadge').then(m => ({ default: m.ProValueBadge })));
@@ -234,11 +235,43 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
 
       {/* AI Briefing Error */}
       {aiBriefing.error && (
-        <div role="alert" className="mx-4 mt-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-md text-red-300 text-xs flex items-center gap-2">
-          <span aria-hidden="true">!</span>
-          {aiBriefing.error}
-        </div>
+        <BriefingErrorBanner error={aiBriefing.error} />
       )}
+    </div>
+  );
+});
+
+const BriefingErrorBanner = memo(function BriefingErrorBanner({ error }: { error: string }) {
+  const { t } = useTranslation();
+  const generateBriefing = useAppStore(s => s.generateBriefing);
+
+  const handleDismiss = useCallback(() => {
+    useAppStore.setState(state => ({
+      aiBriefing: { ...state.aiBriefing, error: null },
+    }));
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    void generateBriefing();
+  }, [generateBriefing]);
+
+  return (
+    <div role="alert" className="mx-4 mt-2 px-3 py-2 bg-red-900/20 border border-red-500/30 rounded-md text-red-300 text-xs flex items-center gap-2">
+      <span aria-hidden="true">!</span>
+      <span className="flex-1">{error}</span>
+      <button
+        onClick={handleRetry}
+        className="px-2 py-0.5 text-[10px] font-medium bg-red-500/20 hover:bg-red-500/30 rounded transition-colors"
+      >
+        {t('action.retry', 'Retry')}
+      </button>
+      <button
+        onClick={handleDismiss}
+        className="p-0.5 hover:bg-red-500/20 rounded transition-colors"
+        aria-label={t('action.dismiss', 'Dismiss')}
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
     </div>
   );
 });
