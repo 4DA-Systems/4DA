@@ -422,11 +422,7 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                 }
                 Err(e) => {
                     info!(target: "4da::briefing", reason = %e, "Manual synthesis skipped");
-                    let _ = app_synth.emit_to(
-                        "briefing",
-                        "briefing-synthesis-hint",
-                        &e,
-                    );
+                    let _ = app_synth.emit_to("briefing", "briefing-synthesis-hint", &e);
                 }
             }
         });

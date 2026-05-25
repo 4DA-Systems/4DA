@@ -1990,16 +1990,15 @@ pub(crate) async fn synthesize_morning_briefing(
         guard.get().llm.clone()
     };
 
-    let llm_settings =
-        match crate::ollama::resolve_synthesis_provider(&configured_settings).await {
-            Some(provider) => provider,
-            None => {
-                return Err(
-                    "No synthesis-capable provider available — add an API key or start a local model"
-                        .into(),
-                );
-            }
-        };
+    let llm_settings = match crate::ollama::resolve_synthesis_provider(&configured_settings).await {
+        Some(provider) => provider,
+        None => {
+            return Err(
+                "No synthesis-capable provider available — add an API key or start a local model"
+                    .into(),
+            );
+        }
+    };
 
     let (tech_summary, topics_summary) = {
         let ace_ctx = crate::scoring::get_ace_context();
