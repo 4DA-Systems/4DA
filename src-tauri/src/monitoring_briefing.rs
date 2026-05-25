@@ -1990,15 +1990,13 @@ pub(crate) async fn synthesize_morning_briefing(
         guard.get().llm.clone()
     };
 
-    let llm_settings = match crate::ollama::resolve_synthesis_provider(&configured_settings).await {
-        Some(provider) => provider,
-        None => {
-            return Err(
-                "No synthesis-capable provider available — add an API key or start a local model"
-                    .into(),
-            );
-        }
-    };
+    let providers = crate::ollama::resolve_synthesis_providers(&configured_settings).await;
+    if providers.is_empty() {
+        return Err(
+            "No synthesis-capable provider available — add an API key or start a local model"
+                .into(),
+        );
+    }
 
     let (tech_summary, topics_summary) = {
         let ace_ctx = crate::scoring::get_ace_context();
@@ -2222,13 +2220,11 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         gaps = gaps_text,
     );
 
-    let llm_client = crate::llm::LLMClient::new(llm_settings);
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),
         content: user_prompt,
     }];
 
-    // Build groundedness corpus once — shared by both structured and free-text paths
     let corpus: Vec<String> = briefing
         .items
         .iter()
@@ -2248,348 +2244,401 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
 
-    // --- Structured output path (Phase 4) -----------------------------------
-    // Try JSON mode first. If the provider supports it and the output validates,
-    // we skip the entire 200+ line post-processing gauntlet. On parse/validation
-    // failure, fall back transparently to the free-text path.
-    let structured_mode = crate::llm::StructuredOutputMode::Grammar {
-        grammar: crate::synthesis_schema::SYNTHESIS_GBNF_GRAMMAR,
-        schema: crate::synthesis_schema::SYNTHESIS_JSON_SCHEMA,
-    };
+    let mut last_error: Option<String> = None;
 
-    let start = std::time::Instant::now();
-    let structured_result = llm_client
-        .complete_structured(&full_system_prompt, messages.clone(), &structured_mode)
-        .await;
+    for (idx, llm_settings) in providers.iter().enumerate() {
+        let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
 
-    match structured_result {
-        Ok(response) => {
-            match serde_json::from_str::<crate::synthesis_schema::SynthesisOutput>(
-                &response.content,
-            ) {
-                Ok(output) if output.validate().is_ok() => {
-                    tracing::info!(
-                        target: "4da::briefing",
-                        tokens = response.input_tokens + response.output_tokens,
-                        elapsed_ms = start.elapsed().as_millis(),
-                        clusters = output.clusters.len(),
-                        "Structured synthesis succeeded"
-                    );
+        // --- Structured output path (Phase 4) -----------------------------------
+        // Try JSON mode first. If the provider supports it and the output validates,
+        // we skip the entire 200+ line post-processing gauntlet. On parse/validation
+        // failure, fall back transparently to the free-text path.
+        let structured_mode = crate::llm::StructuredOutputMode::Grammar {
+            grammar: crate::synthesis_schema::SYNTHESIS_GBNF_GRAMMAR,
+            schema: crate::synthesis_schema::SYNTHESIS_JSON_SCHEMA,
+        };
 
-                    let id_warnings = output.validate_evidence_ids(briefing.items.len());
-                    for w in &id_warnings {
-                        tracing::warn!(target: "4da::briefing", "{w}");
-                    }
+        let start = std::time::Instant::now();
+        let structured_result = llm_client
+            .complete_structured(&full_system_prompt, messages.clone(), &structured_mode)
+            .await;
 
-                    let prose = output.to_prose();
-                    let report =
-                        crate::briefing_groundedness::validate_groundedness(&prose, &corpus);
-                    if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
-                        tracing::warn!(
+        match structured_result {
+            Ok(response) => {
+                match serde_json::from_str::<crate::synthesis_schema::SynthesisOutput>(
+                    &response.content,
+                ) {
+                    Ok(output) if output.validate().is_ok() => {
+                        tracing::info!(
+                            target: "4da::briefing",
+                            tokens = response.input_tokens + response.output_tokens,
+                            elapsed_ms = start.elapsed().as_millis(),
+                            clusters = output.clusters.len(),
+                            "Structured synthesis succeeded"
+                        );
+
+                        let id_warnings = output.validate_evidence_ids(briefing.items.len());
+                        for w in &id_warnings {
+                            tracing::warn!(target: "4da::briefing", "{w}");
+                        }
+
+                        let prose = output.to_prose();
+                        let report =
+                            crate::briefing_groundedness::validate_groundedness(&prose, &corpus);
+                        if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
+                            tracing::warn!(
+                                target: "4da::briefing",
+                                confidence = report.confidence,
+                                total_terms = report.total_terms,
+                                ungrounded_count = report.ungrounded_terms.len(),
+                                "Structured synthesis failed groundedness — abstaining"
+                            );
+                            return Ok(SynthesisResult {
+                                prose: "Low signal -- no noteworthy intelligence overnight."
+                                    .to_string(),
+                                clusters: None,
+                            });
+                        }
+
+                        tracing::info!(
                             target: "4da::briefing",
                             confidence = report.confidence,
-                            total_terms = report.total_terms,
-                            ungrounded_count = report.ungrounded_terms.len(),
-                            "Structured synthesis failed groundedness — abstaining"
+                            "Structured synthesis passed groundedness"
                         );
+
+                        let mut synthesis = prose;
+                        let mut src_types: Vec<&str> = briefing
+                            .items
+                            .iter()
+                            .map(|i| i.source_type.as_str())
+                            .collect();
+                        src_types.sort_unstable();
+                        src_types.dedup();
+                        synthesis.push_str(&format!(
+                            "\n\n({} signals across {})",
+                            briefing.items.len(),
+                            src_types.join(", ")
+                        ));
                         return Ok(SynthesisResult {
-                            prose: "Low signal -- no noteworthy intelligence overnight."
-                                .to_string(),
-                            clusters: None,
+                            prose: synthesis,
+                            clusters: Some(output.clusters),
                         });
                     }
-
+                    Ok(_) => {
+                        tracing::debug!(
+                            target: "4da::briefing",
+                            "Structured output failed validation — falling back to free-text"
+                        );
+                    }
+                    Err(e) => {
+                        tracing::debug!(
+                            target: "4da::briefing",
+                            error = %e,
+                            "Structured output JSON parse failed — falling back to free-text"
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                let err_str = format!("{e}");
+                if is_provider_error(&err_str) && idx + 1 < providers.len() {
                     tracing::info!(
                         target: "4da::briefing",
-                        confidence = report.confidence,
-                        "Structured synthesis passed groundedness"
-                    );
-
-                    let mut synthesis = prose;
-                    let mut src_types: Vec<&str> = briefing
-                        .items
-                        .iter()
-                        .map(|i| i.source_type.as_str())
-                        .collect();
-                    src_types.sort_unstable();
-                    src_types.dedup();
-                    synthesis.push_str(&format!(
-                        "\n\n({} signals across {})",
-                        briefing.items.len(),
-                        src_types.join(", ")
-                    ));
-                    return Ok(SynthesisResult {
-                        prose: synthesis,
-                        clusters: Some(output.clusters),
-                    });
-                }
-                Ok(_) => {
-                    tracing::debug!(
-                        target: "4da::briefing",
-                        "Structured output failed validation — falling back to free-text"
-                    );
-                }
-                Err(e) => {
-                    tracing::debug!(
-                        target: "4da::briefing",
+                        provider = %llm_settings.provider,
                         error = %e,
-                        "Structured output JSON parse failed — falling back to free-text"
+                        next = %providers[idx + 1].provider,
+                        "Provider failed — trying next candidate"
                     );
+                    last_error = Some(err_str);
+                    continue;
                 }
+                tracing::debug!(
+                    target: "4da::briefing",
+                    error = %e,
+                    "Structured completion failed — falling back to free-text"
+                );
             }
         }
-        Err(e) => {
-            tracing::debug!(
-                target: "4da::briefing",
-                error = %e,
-                "Structured completion failed — falling back to free-text"
-            );
-        }
-    }
 
-    // --- Free-text fallback path (legacy) ------------------------------------
-    let start = std::time::Instant::now();
-    let response = match llm_client.complete(&full_system_prompt, messages).await {
-        Ok(r) => r,
-        Err(e) => {
-            tracing::warn!(target: "4da::briefing", error = %e, "Morning brief synthesis failed");
-            return Err(format!("LLM synthesis failed: {e}"));
-        }
-    };
-
-    tracing::info!(
-        target: "4da::briefing",
-        tokens = response.input_tokens + response.output_tokens,
-        elapsed_ms = start.elapsed().as_millis(),
-        "Free-text synthesis complete (fallback)"
-    );
-
-    let mut synthesis = response.content.clone();
-
-    // Strip citation brackets [1], [2][3], etc.
-    while let Some(start_bracket) = synthesis.find('[') {
-        if let Some(end_bracket) = synthesis[start_bracket..].find(']') {
-            let inner = &synthesis[start_bracket + 1..start_bracket + end_bracket];
-            if inner.len() <= 10
-                && inner
-                    .chars()
-                    .all(|c| c.is_ascii_digit() || c == ',' || c == ' ')
-            {
-                synthesis.replace_range(start_bracket..=start_bracket + end_bracket, "");
-                continue;
+        // --- Free-text fallback path (legacy) ------------------------------------
+        let start = std::time::Instant::now();
+        let response = match llm_client
+            .complete(&full_system_prompt, messages.clone())
+            .await
+        {
+            Ok(r) => r,
+            Err(e) => {
+                let err_str = format!("{e}");
+                if is_provider_error(&err_str) && idx + 1 < providers.len() {
+                    tracing::info!(
+                        target: "4da::briefing",
+                        provider = %llm_settings.provider,
+                        error = %e,
+                        next = %providers[idx + 1].provider,
+                        "Provider failed on free-text — trying next candidate"
+                    );
+                    last_error = Some(err_str);
+                    continue;
+                }
+                tracing::warn!(target: "4da::briefing", error = %e, "Morning brief synthesis failed");
+                return Err(format!("LLM synthesis failed: {e}"));
             }
-        }
-        break;
-    }
+        };
 
-    while synthesis.contains("**") {
-        synthesis = synthesis.replacen("**", "", 2);
-    }
-
-    synthesis = synthesis.replace('\u{2014}', "--");
-    synthesis = synthesis.replace('\u{2013}', "--");
-    synthesis = synthesis.replace('\u{2018}', "'");
-    synthesis = synthesis.replace('\u{2019}', "'");
-    synthesis = synthesis.replace('\u{201C}', "\"");
-    synthesis = synthesis.replace('\u{201D}', "\"");
-
-    synthesis = synthesis
-        .lines()
-        .map(|line| line.trim_start_matches('#').trim_start())
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let label_prefixes = [
-        "Top Signal:",
-        "Top Signals:",
-        "Key Signal:",
-        "Key Signals:",
-        "Next Steps:",
-        "Next Step:",
-        "Action:",
-        "Actions:",
-        "Summary:",
-        "Situation:",
-        "Priority:",
-        "Pattern:",
-        "Recommendation:",
-        "Recommendations:",
-        "Note:",
-        "Notes:",
-        "Insight:",
-        "Insights:",
-        "Alert:",
-        "Alerts:",
-        "Cluster 1:",
-        "Cluster 2:",
-        "Cluster:",
-        "Theme 1:",
-        "Theme 2:",
-        "Theme:",
-        "Strongest Cluster:",
-        "Strongest Clusters:",
-        "Strongest Clusters",
-        "Strongest Signal:",
-        "Primary Cluster:",
-        "Secondary Cluster:",
-        "Top Cluster:",
-        "Top Clusters:",
-        "Action Required:",
-        "Action Required",
-        "Worth Knowing:",
-        "Worth Knowing",
-        "Filtered Out:",
-        "Filtered Out",
-        "Unresolved System Anomalies:",
-        "Unresolved System Anomalies",
-        "What to Watch:",
-        "What to Watch",
-        "Key Takeaway:",
-        "Key Takeaways:",
-        "Context:",
-        "Impact:",
-        "Background:",
-        "Observation:",
-        "Observations:",
-    ];
-    for prefix in &label_prefixes {
-        for line_prefix in [*prefix, &prefix.to_uppercase()] {
-            while synthesis.contains(line_prefix) {
-                synthesis = synthesis.replace(line_prefix, "");
-            }
-        }
-    }
-
-    synthesis = synthesis
-        .lines()
-        .filter(|line| !line.trim().chars().all(|c| c == '-') || line.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    let source_type_tags = [
-        "arxiv",
-        "papers_with_code",
-        "cve",
-        "osv",
-        "github_advisory",
-        "hackernews",
-        "lobsters",
-        "reddit",
-        "dev_to",
-        "medium",
-        "rss",
-        "github",
-        "npm",
-        "crates_io",
-        "pypi",
-        "huggingface",
-        "stackoverflow",
-        "bluesky",
-        "youtube",
-        "producthunt",
-        "go_modules",
-    ];
-    for st in &source_type_tags {
-        let patterns = [
-            format!("[{}]", st),
-            format!("[Source_type: {}]", st),
-            format!("[source_type: {}]", st),
-            format!("[{}]", st.to_uppercase()),
-        ];
-        for pat in &patterns {
-            synthesis = synthesis.replace(pat, "");
-        }
-    }
-
-    while let Some(start_idx) = synthesis.find("(affects:") {
-        if let Some(end_idx) = synthesis[start_idx..].find(')') {
-            synthesis.replace_range(start_idx..=start_idx + end_idx, "");
-        } else {
-            break;
-        }
-    }
-    while let Some(start_idx) = synthesis.find("[Affecting:") {
-        if let Some(end_idx) = synthesis[start_idx..].find(']') {
-            synthesis.replace_range(start_idx..=start_idx + end_idx, "");
-        } else {
-            break;
-        }
-    }
-    while let Some(start_idx) = synthesis.find("[affecting:") {
-        if let Some(end_idx) = synthesis[start_idx..].find(']') {
-            synthesis.replace_range(start_idx..=start_idx + end_idx, "");
-        } else {
-            break;
-        }
-    }
-
-    while synthesis.contains("  ") {
-        synthesis = synthesis.replace("  ", " ");
-    }
-
-    let words: Vec<&str> = synthesis.split_whitespace().collect();
-    if words.len() > 100 {
         tracing::info!(
             target: "4da::briefing",
-            word_count = words.len(),
-            "Synthesis exceeded 100 words — truncating"
+            tokens = response.input_tokens + response.output_tokens,
+            elapsed_ms = start.elapsed().as_millis(),
+            "Free-text synthesis complete (fallback)"
         );
-        let truncated = words[..100].join(" ");
-        synthesis = if let Some(last_period) = truncated.rfind('.') {
-            truncated[..=last_period].to_string()
-        } else {
-            format!("{truncated}.")
+
+        let mut synthesis = response.content.clone();
+
+        // Strip citation brackets [1], [2][3], etc.
+        while let Some(start_bracket) = synthesis.find('[') {
+            if let Some(end_bracket) = synthesis[start_bracket..].find(']') {
+                let inner = &synthesis[start_bracket + 1..start_bracket + end_bracket];
+                if inner.len() <= 10
+                    && inner
+                        .chars()
+                        .all(|c| c.is_ascii_digit() || c == ',' || c == ' ')
+                {
+                    synthesis.replace_range(start_bracket..=start_bracket + end_bracket, "");
+                    continue;
+                }
+            }
+            break;
+        }
+
+        while synthesis.contains("**") {
+            synthesis = synthesis.replacen("**", "", 2);
+        }
+
+        synthesis = synthesis.replace('\u{2014}', "--");
+        synthesis = synthesis.replace('\u{2013}', "--");
+        synthesis = synthesis.replace('\u{2018}', "'");
+        synthesis = synthesis.replace('\u{2019}', "'");
+        synthesis = synthesis.replace('\u{201C}', "\"");
+        synthesis = synthesis.replace('\u{201D}', "\"");
+
+        synthesis = synthesis
+            .lines()
+            .map(|line| line.trim_start_matches('#').trim_start())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let label_prefixes = [
+            "Top Signal:",
+            "Top Signals:",
+            "Key Signal:",
+            "Key Signals:",
+            "Next Steps:",
+            "Next Step:",
+            "Action:",
+            "Actions:",
+            "Summary:",
+            "Situation:",
+            "Priority:",
+            "Pattern:",
+            "Recommendation:",
+            "Recommendations:",
+            "Note:",
+            "Notes:",
+            "Insight:",
+            "Insights:",
+            "Alert:",
+            "Alerts:",
+            "Cluster 1:",
+            "Cluster 2:",
+            "Cluster:",
+            "Theme 1:",
+            "Theme 2:",
+            "Theme:",
+            "Strongest Cluster:",
+            "Strongest Clusters:",
+            "Strongest Clusters",
+            "Strongest Signal:",
+            "Primary Cluster:",
+            "Secondary Cluster:",
+            "Top Cluster:",
+            "Top Clusters:",
+            "Action Required:",
+            "Action Required",
+            "Worth Knowing:",
+            "Worth Knowing",
+            "Filtered Out:",
+            "Filtered Out",
+            "Unresolved System Anomalies:",
+            "Unresolved System Anomalies",
+            "What to Watch:",
+            "What to Watch",
+            "Key Takeaway:",
+            "Key Takeaways:",
+            "Context:",
+            "Impact:",
+            "Background:",
+            "Observation:",
+            "Observations:",
+        ];
+        for prefix in &label_prefixes {
+            for line_prefix in [*prefix, &prefix.to_uppercase()] {
+                while synthesis.contains(line_prefix) {
+                    synthesis = synthesis.replace(line_prefix, "");
+                }
+            }
+        }
+
+        synthesis = synthesis
+            .lines()
+            .filter(|line| !line.trim().chars().all(|c| c == '-') || line.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let source_type_tags = [
+            "arxiv",
+            "papers_with_code",
+            "cve",
+            "osv",
+            "github_advisory",
+            "hackernews",
+            "lobsters",
+            "reddit",
+            "dev_to",
+            "medium",
+            "rss",
+            "github",
+            "npm",
+            "crates_io",
+            "pypi",
+            "huggingface",
+            "stackoverflow",
+            "bluesky",
+            "youtube",
+            "producthunt",
+            "go_modules",
+        ];
+        for st in &source_type_tags {
+            let patterns = [
+                format!("[{}]", st),
+                format!("[Source_type: {}]", st),
+                format!("[source_type: {}]", st),
+                format!("[{}]", st.to_uppercase()),
+            ];
+            for pat in &patterns {
+                synthesis = synthesis.replace(pat, "");
+            }
+        }
+
+        while let Some(start_idx) = synthesis.find("(affects:") {
+            if let Some(end_idx) = synthesis[start_idx..].find(')') {
+                synthesis.replace_range(start_idx..=start_idx + end_idx, "");
+            } else {
+                break;
+            }
+        }
+        while let Some(start_idx) = synthesis.find("[Affecting:") {
+            if let Some(end_idx) = synthesis[start_idx..].find(']') {
+                synthesis.replace_range(start_idx..=start_idx + end_idx, "");
+            } else {
+                break;
+            }
+        }
+        while let Some(start_idx) = synthesis.find("[affecting:") {
+            if let Some(end_idx) = synthesis[start_idx..].find(']') {
+                synthesis.replace_range(start_idx..=start_idx + end_idx, "");
+            } else {
+                break;
+            }
+        }
+
+        while synthesis.contains("  ") {
+            synthesis = synthesis.replace("  ", " ");
+        }
+
+        let words: Vec<&str> = synthesis.split_whitespace().collect();
+        if words.len() > 100 {
+            tracing::info!(
+                target: "4da::briefing",
+                word_count = words.len(),
+                "Synthesis exceeded 100 words — truncating"
+            );
+            let truncated = words[..100].join(" ");
+            synthesis = if let Some(last_period) = truncated.rfind('.') {
+                truncated[..=last_period].to_string()
+            } else {
+                format!("{truncated}.")
+            };
+        }
+
+        let response = crate::llm::LLMResponse {
+            content: synthesis,
+            ..response
         };
-    }
 
-    let response = crate::llm::LLMResponse {
-        content: synthesis,
-        ..response
-    };
+        let report =
+            crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
 
-    let report = crate::briefing_groundedness::validate_groundedness(&response.content, &corpus);
+        if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
+            tracing::warn!(
+                target: "4da::briefing",
+                confidence = report.confidence,
+                total_terms = report.total_terms,
+                ungrounded_count = report.ungrounded_terms.len(),
+                ungrounded_sample = ?report.ungrounded_terms.iter().take(5).collect::<Vec<_>>(),
+                "Morning brief synthesis failed groundedness check — falling back to abstention"
+            );
+            return Ok(SynthesisResult {
+                prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+                clusters: None,
+            });
+        }
 
-    if !report.is_acceptable(GROUNDEDNESS_THRESHOLD) {
-        tracing::warn!(
+        tracing::info!(
             target: "4da::briefing",
             confidence = report.confidence,
             total_terms = report.total_terms,
-            ungrounded_count = report.ungrounded_terms.len(),
-            ungrounded_sample = ?report.ungrounded_terms.iter().take(5).collect::<Vec<_>>(),
-            "Morning brief synthesis failed groundedness check — falling back to abstention"
+            "Groundedness check passed"
         );
+
+        let mut synthesis = response.content;
+        let mut source_types: Vec<&str> = briefing
+            .items
+            .iter()
+            .map(|i| i.source_type.as_str())
+            .collect();
+        source_types.sort_unstable();
+        source_types.dedup();
+        let provenance = format!(
+            "\n\n({} signals across {})",
+            briefing.items.len(),
+            source_types.join(", ")
+        );
+        synthesis.push_str(&provenance);
+
         return Ok(SynthesisResult {
-            prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
+            prose: synthesis,
             clusters: None,
         });
-    }
+    } // end provider loop
 
-    tracing::info!(
-        target: "4da::briefing",
-        confidence = report.confidence,
-        total_terms = report.total_terms,
-        "Groundedness check passed"
-    );
+    Err(last_error.unwrap_or_else(|| {
+        "All synthesis providers failed — add an API key or start a local model".into()
+    }))
+}
 
-    let mut synthesis = response.content;
-    let mut source_types: Vec<&str> = briefing
-        .items
-        .iter()
-        .map(|i| i.source_type.as_str())
-        .collect();
-    source_types.sort_unstable();
-    source_types.dedup();
-    let provenance = format!(
-        "\n\n({} signals across {})",
-        briefing.items.len(),
-        source_types.join(", ")
-    );
-    synthesis.push_str(&provenance);
-
-    Ok(SynthesisResult {
-        prose: synthesis,
-        clusters: None,
-    })
+fn is_provider_error(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    lower.contains("401")
+        || lower.contains("403")
+        || lower.contains("authentication")
+        || lower.contains("unauthorized")
+        || lower.contains("invalid api key")
+        || lower.contains("invalid x-api-key")
+        || lower.contains("connection refused")
+        || lower.contains("connection reset")
+        || lower.contains("connect timeout")
+        || lower.contains("dns error")
+        || lower.contains("no route to host")
 }
 
 // ============================================================================

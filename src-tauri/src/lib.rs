@@ -673,6 +673,7 @@ pub fn run() {
                     .collect();
             victauri_plugin::VictauriBuilder::new()
                 .commands(&commands)
+                .auth_disabled()
                 .build()
                 .expect("Victauri configuration is valid")
         })

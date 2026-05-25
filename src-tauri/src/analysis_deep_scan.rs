@@ -60,7 +60,14 @@ pub(crate) async fn run_multi_source_analysis_impl(
         let context_dirs = crate::get_context_dirs();
         if !context_dirs.is_empty() {
             info!(target: "4da::analysis", "No context chunks — triggering inline README indexing");
-            emit_progress(app, "context", 0.06, "Indexing project READMEs for context...", 0, 0);
+            emit_progress(
+                app,
+                "context",
+                0.06,
+                "Indexing project READMEs for context...",
+                0,
+                0,
+            );
             let indexed = crate::ace_commands::index_discovered_readmes(&context_dirs).await;
             if indexed > 0 {
                 cached_context_count = db

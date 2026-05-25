@@ -156,25 +156,25 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
     }
 }
 
-/// Resolve the best available LLM provider for synthesis.
-/// Tries the configured provider first, then falls back to builtin sidecar,
-/// then Ollama. Returns None only if no provider is capable.
-pub(crate) async fn resolve_synthesis_provider(
+/// Resolve all available LLM providers for synthesis, in priority order.
+/// Returns the configured provider first (if it passes the capability check),
+/// then builtin sidecar, then Ollama. The caller should try each in order,
+/// falling through on auth/connection failures.
+pub(crate) async fn resolve_synthesis_providers(
     configured: &crate::settings::LLMProvider,
-) -> Option<crate::settings::LLMProvider> {
-    // 1. Try configured provider
+) -> Vec<crate::settings::LLMProvider> {
+    let mut candidates = Vec::new();
+
+    // 1. Configured provider (if it passes the basic capability check)
     if can_synthesize(configured).await {
-        return Some(configured.clone());
+        candidates.push(configured.clone());
     }
 
-    // 2. Try builtin sidecar
-    if crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready {
-        info!(
-            target: "4da::ollama",
-            configured_provider = %configured.provider,
-            "Configured provider unavailable — falling back to builtin sidecar"
-        );
-        return Some(crate::settings::LLMProvider {
+    // 2. Builtin sidecar (skip if configured is already builtin)
+    if configured.provider != "builtin"
+        && crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready
+    {
+        candidates.push(crate::settings::LLMProvider {
             provider: "builtin".to_string(),
             api_key: String::new(),
             model: String::new(),
@@ -184,34 +184,33 @@ pub(crate) async fn resolve_synthesis_provider(
         });
     }
 
-    // 3. Try Ollama
-    let ollama_url = configured
-        .base_url
-        .as_deref()
-        .unwrap_or("http://localhost:11434");
-    if let Some(model) = find_capable_ollama_model(ollama_url).await {
+    // 3. Ollama (skip if configured is already ollama)
+    if configured.provider != "ollama" {
+        let ollama_url = configured
+            .base_url
+            .as_deref()
+            .unwrap_or("http://localhost:11434");
+        if let Some(model) = find_capable_ollama_model(ollama_url).await {
+            candidates.push(crate::settings::LLMProvider {
+                provider: "ollama".to_string(),
+                api_key: String::new(),
+                model,
+                base_url: Some(ollama_url.to_string()),
+                openai_api_key: String::new(),
+                embedding_model: configured.embedding_model.clone(),
+            });
+        }
+    }
+
+    if candidates.is_empty() {
         info!(
             target: "4da::ollama",
             configured_provider = %configured.provider,
-            fallback_model = %model,
-            "Configured provider unavailable — falling back to Ollama model"
+            "No synthesis-capable provider available — briefing will show signals only"
         );
-        return Some(crate::settings::LLMProvider {
-            provider: "ollama".to_string(),
-            api_key: String::new(),
-            model,
-            base_url: Some(ollama_url.to_string()),
-            openai_api_key: String::new(),
-            embedding_model: configured.embedding_model.clone(),
-        });
     }
 
-    info!(
-        target: "4da::ollama",
-        configured_provider = %configured.provider,
-        "No synthesis-capable provider available — briefing will show signals only"
-    );
-    None
+    candidates
 }
 
 /// Probe Ollama for the first model that meets the synthesis parameter floor.

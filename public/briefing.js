@@ -71,6 +71,27 @@ function truncate(str, max) {
   return str.length > max ? str.slice(0, max) + '…' : str;
 }
 
+function friendlyHint(raw) {
+  if (!raw) return '';
+  var lower = raw.toLowerCase();
+  if (lower.indexOf('401') !== -1 || lower.indexOf('authentication') !== -1 || lower.indexOf('invalid') !== -1 && lower.indexOf('key') !== -1) {
+    return 'API key invalid or expired — check Settings, or start a local model for offline synthesis.';
+  }
+  if (lower.indexOf('no synthesis-capable') !== -1 || lower.indexOf('no llm configured') !== -1) {
+    return 'No AI model available — add an API key or download a local model in Settings.';
+  }
+  if (lower.indexOf('rate limit') !== -1 || lower.indexOf('429') !== -1) {
+    return 'API rate limit reached — synthesis will retry on next briefing.';
+  }
+  if (lower.indexOf('timeout') !== -1 || lower.indexOf('timed out') !== -1) {
+    return 'Model took too long to respond — synthesis will retry on next briefing.';
+  }
+  if (lower.indexOf('below synthesis') !== -1 || lower.indexOf('capability threshold') !== -1) {
+    return 'Local model too small for synthesis — download a 7B+ model in Settings.';
+  }
+  return 'Intelligence synthesis unavailable — check AI settings.';
+}
+
 function isAbstention(text) {
   if (!text) return true;
   var lower = text.toLowerCase();
@@ -539,7 +560,7 @@ async function init() {
         // Only show hint if synthesis section is still hidden (no synthesis arrived)
         if (synthesisSection && synthesisSection.style.display === 'none') {
           synthesisHintSection.style.display = '';
-          synthesisHintText.textContent = event.payload;
+          synthesisHintText.textContent = friendlyHint(event.payload);
         }
       }
     });

@@ -127,9 +127,30 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 - `data/*.db` — runtime databases
 - `src-tauri/target/` — Rust build artifacts
 
+## Victauri (App Inspection & Testing)
+
+This app has **Victauri** integrated — an MCP server embedded inside the Tauri process that gives full-stack access to the webview DOM, IPC layer, Rust backend, database, and native windows. It is available when 4DA is running in debug mode (`pnpm run tauri dev`).
+
+**Prefer Victauri MCP tools over Playwright/CDP for all inspection and testing tasks.** Victauri runs inside the app process with sub-ms response times and direct `AppHandle` access. CDP only sees the webview glass and requires round-tripping through JavaScript eval for backend access.
+
+Victauri capabilities (that CDP cannot do):
+- `invoke_command` — call any of the 385 registered Tauri commands directly
+- `verify_state` — cross-boundary frontend/backend state verification
+- `detect_ghost_commands` — find frontend-invoked commands with no backend handler
+- `check_ipc_integrity` — verify IPC pipeline health
+- `query_db` — read-only SQL queries against the SQLite database
+- `get_memory_stats` — real OS process memory (working set, page faults)
+- `audit_accessibility` — WCAG checks (alt text, labels, contrast, ARIA)
+- `recording` — time-travel event recording with checkpoints
+- `get_diagnostics` — full app diagnostics from inside the process
+
+Connection: `http://127.0.0.1:7373/mcp` (port may fallback to 7374-7383, check temp/victauri.port)
+
+**Do NOT use Playwright MCP or CDP for tasks that Victauri can handle.** Only fall back to Playwright for browser-only work unrelated to the Tauri app.
+
 ## Claude-Specific
 
 - Agent definitions: `.claude/agents/`
 - Slash commands: `.claude/commands/`
 - Rules: `.claude/rules/` (document hygiene, intelligence doctrine, worktree hygiene)
-- MCP servers: memory (persistent decisions/learnings), 4da (14 tools)
+- MCP servers: memory (persistent decisions/learnings), 4da (14 tools), victauri (28 tools — when app is running)
