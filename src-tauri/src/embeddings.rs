@@ -2,7 +2,7 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-#[path = "embeddings_providers.rs"]
+#[path = "embeddings_providers/mod.rs"]
 mod embeddings_providers;
 
 use once_cell::sync::Lazy;
