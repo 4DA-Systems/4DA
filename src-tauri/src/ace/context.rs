@@ -121,7 +121,7 @@ pub fn is_notable_dependency(name: &str) -> bool {
     }
 
     // Unscoped: exact match only
-    notable.iter().any(|n| lower == *n)
+    notable.contains(&lower.as_str())
 }
 
 /// Merge duplicate detected technologies

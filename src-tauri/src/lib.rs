@@ -843,6 +843,7 @@ pub fn run() {
             // Content
             commands::get_sources,
             commands::mcp_score_autopsy,
+            commands::score_tuning_snapshot,
             // Void Engine
             void_commands::get_void_signal,
             // Intelligence panels

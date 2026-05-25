@@ -141,6 +141,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "generate_free_briefing",
     "get_sources",
     "mcp_score_autopsy",
+    "score_tuning_snapshot",
     "get_void_signal",
     "get_attention_report",
     "get_blind_spots",

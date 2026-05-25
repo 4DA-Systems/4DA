@@ -538,6 +538,146 @@ pub(crate) async fn get_diagnostics() -> Result<crate::diagnostics::DiagnosticsS
     Ok(crate::diagnostics::collect_diagnostics(db, &db_path))
 }
 
+// ============================================================================
+// Score Tuning Snapshot (dev-time batch autopsy for LLM-assisted tuning)
+// ============================================================================
+
+#[tauri::command]
+pub(crate) async fn score_tuning_snapshot() -> Result<serde_json::Value> {
+    let state = get_analysis_state();
+    let guard = state.lock();
+    let results = guard
+        .results
+        .as_ref()
+        .ok_or("No analysis results available. Run an analysis first.")?;
+
+    let threshold = get_relevance_threshold();
+
+    let label_for_score = |score: f32| -> &'static str {
+        if score >= 0.72 {
+            "Core"
+        } else if score >= 0.50 {
+            "Strong"
+        } else if score >= 0.35 {
+            "Match"
+        } else {
+            "Faint"
+        }
+    };
+
+    let mut core_count: u32 = 0;
+    let mut strong_count: u32 = 0;
+    let mut match_count: u32 = 0;
+    let mut faint_count: u32 = 0;
+
+    let mut sorted_results: Vec<&SourceRelevance> = results.iter().collect();
+    sorted_results.sort_by(|a, b| {
+        b.top_score
+            .partial_cmp(&a.top_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let items: Vec<serde_json::Value> = sorted_results
+        .iter()
+        .map(|item| {
+            let label = label_for_score(item.top_score);
+            match label {
+                "Core" => core_count += 1,
+                "Strong" => strong_count += 1,
+                "Match" => match_count += 1,
+                _ => faint_count += 1,
+            }
+
+            let (signals, multipliers, gate, matched_deps, content_type) =
+                if let Some(ref bd) = item.score_breakdown {
+                    (
+                        serde_json::json!({
+                            "context": bd.context_score,
+                            "interest": bd.interest_score,
+                            "keyword": bd.keyword_score,
+                            "ace_boost": bd.ace_boost,
+                            "dep_match": bd.dep_match_score,
+                            "feedback_boost": bd.feedback_boost,
+                            "intent_boost": bd.intent_boost,
+                            "stack_boost": bd.stack_boost,
+                            "window_boost": bd.window_boost,
+                            "skill_gap_boost": bd.skill_gap_boost,
+                        }),
+                        serde_json::json!({
+                            "affinity": bd.affinity_mult,
+                            "freshness": bd.freshness_mult,
+                            "content_quality": bd.content_quality_mult,
+                            "novelty": bd.novelty_mult,
+                            "domain_relevance": bd.domain_relevance,
+                            "content_dna": bd.content_dna_mult,
+                            "competing": bd.competing_mult,
+                            "confirmation": bd.confirmation_mult,
+                            "negative_stack": bd.negative_stack_prior,
+                            "ecosystem_shift": bd.ecosystem_shift_mult,
+                            "content_analysis": bd.content_analysis_mult,
+                            "stack_competing": bd.stack_competing_mult,
+                        }),
+                        serde_json::json!({
+                            "signal_count": bd.signal_count,
+                            "confirmed_signals": bd.confirmed_signals,
+                            "signal_strength_bonus": bd.signal_strength_bonus,
+                        }),
+                        serde_json::to_value(&bd.matched_deps).unwrap_or_default(),
+                        bd.content_type.clone().unwrap_or_default(),
+                    )
+                } else {
+                    (
+                        serde_json::json!({}),
+                        serde_json::json!({}),
+                        serde_json::json!({}),
+                        serde_json::json!([]),
+                        String::new(),
+                    )
+                };
+
+            serde_json::json!({
+                "id": item.id,
+                "title": item.title,
+                "source_type": item.source_type,
+                "score": item.top_score,
+                "label": label,
+                "relevant": item.relevant,
+                "signals": signals,
+                "multipliers": multipliers,
+                "gate": gate,
+                "matched_deps": matched_deps,
+                "content_type": content_type,
+            })
+        })
+        .collect();
+
+    let total_items = items.len() as u32;
+
+    let ace_ctx = scoring::get_ace_context();
+    let calibration_deltas_count = crate::open_db_connection()
+        .map(|conn| crate::autophagy::load_calibration_deltas(&conn).len())
+        .unwrap_or(0);
+
+    Ok(serde_json::json!({
+        "snapshot_at": chrono::Utc::now().to_rfc3339(),
+        "relevance_threshold": threshold,
+        "total_items": total_items,
+        "tier_counts": {
+            "core": core_count,
+            "strong": strong_count,
+            "match": match_count,
+            "faint": faint_count,
+        },
+        "scoring_context": {
+            "feedback_interaction_count": ace_ctx.topic_affinities.len(),
+            "calibration_deltas_count": calibration_deltas_count,
+            "detected_tech_count": ace_ctx.detected_tech.len(),
+            "active_topics_count": ace_ctx.active_topics.len(),
+        },
+        "items": items,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
