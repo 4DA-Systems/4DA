@@ -155,10 +155,7 @@ fn embedding_generation_works() {
     ];
 
     let raw = crate::fastembed_sync(&texts).expect("fastembed should work");
-    let embeddings: Vec<Vec<f32>> = raw
-        .into_iter()
-        .map(types::pad_and_normalize)
-        .collect();
+    let embeddings: Vec<Vec<f32>> = raw.into_iter().map(types::pad_and_normalize).collect();
     assert_eq!(embeddings.len(), 3, "Should get one embedding per text");
 
     for (i, emb) in embeddings.iter().enumerate() {
