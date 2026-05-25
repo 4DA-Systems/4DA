@@ -410,6 +410,18 @@ Rules:
             let error_msg = if e_str.contains("Connection refused") || e_str.contains("connect") {
                 "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
                     .to_string()
+            } else if e_str.contains("401")
+                || e_str.contains("authentication_error")
+                || e_str.contains("invalid x-api-key")
+                || e_str.contains("invalid_api_key")
+            {
+                "API key is invalid or expired. Check your key in Settings → AI Provider."
+                    .to_string()
+            } else if e_str.contains("403") || e_str.contains("permission") {
+                "API key lacks permission for this model. Check your plan and key permissions in Settings.".to_string()
+            } else if e_str.contains("429") || e_str.contains("rate_limit") {
+                "Rate limit exceeded. Wait a moment and try again, or check your API plan limits."
+                    .to_string()
             } else if e_str.contains("model") {
                 "The configured model may not be available. Try 'ollama pull llama3.1:8b-instruct-q8_0'.".to_string()
             } else {

@@ -117,7 +117,7 @@ pub fn is_notable_dependency(name: &str) -> bool {
     if let Some(rest) = lower.strip_prefix('@') {
         // Scoped package: match scope root only
         let scope = rest.split('/').next().unwrap_or("");
-        return notable_scopes.iter().any(|s| scope == *s);
+        return notable_scopes.contains(&scope);
     }
 
     // Unscoped: exact match only

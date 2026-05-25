@@ -47,6 +47,7 @@ fn ort_lib_filename() -> &'static str {
 }
 
 #[cfg(feature = "fastembed-local")]
+#[allow(clippy::large_stack_arrays)]
 fn ensure_ort_runtime(
     cache_dir: &std::path::Path,
     progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,

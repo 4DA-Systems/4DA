@@ -9,6 +9,7 @@ pub(crate) enum ModelTier {
     Blocked,
 }
 
+#[allow(dead_code)] // REMOVE BY 2026-07-01
 pub(crate) struct ModelEntry {
     pub family: &'static str,
     pub tier: ModelTier,
@@ -125,6 +126,7 @@ pub(crate) fn classify_model(model_tag: &str) -> ModelTier {
 }
 
 /// Get the full allowlist entry for a model, if one exists.
+#[allow(dead_code)] // REMOVE BY 2026-07-01
 pub(crate) fn get_model_entry(model_tag: &str) -> Option<&'static ModelEntry> {
     find_entry(model_tag)
 }
@@ -158,6 +160,7 @@ pub(crate) fn recommend_models(available_ram_gb: f64) -> Vec<&'static ModelEntry
 }
 
 /// Get all models of a given tier.
+#[allow(dead_code)] // REMOVE BY 2026-07-01
 pub(crate) fn models_by_tier(tier: ModelTier) -> Vec<&'static ModelEntry> {
     ALLOWLIST.iter().filter(|e| e.tier == tier).collect()
 }

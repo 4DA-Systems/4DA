@@ -59,6 +59,7 @@ pub(crate) fn sanitize_api_error(text: &str) -> String {
 pub(crate) enum StructuredOutputMode {
     /// OpenAI/Ollama: `response_format: { type: "json_object" }` / `format: "json"`.
     /// Anthropic: schema instruction appended to system prompt.
+    #[allow(dead_code)] // REMOVE BY 2026-07-01
     JsonSchema { schema: &'static str },
     /// llama-server only: GBNF grammar for constrained decoding.
     /// Falls back to `JsonSchema` for non-llama providers.

@@ -3,6 +3,7 @@ import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { RelativeTimestamp } from './BriefingHelpers';
+import { useAppStore } from '../../store';
 import type { SourceRelevance, SourceHealthStatus } from '../../types';
 import type { BriefingState } from '../../store/types';
 
@@ -26,6 +27,7 @@ export const PulseSummary = memo(function PulseSummary({
   topCount,
 }: PulseSummaryProps) {
   const { t } = useTranslation();
+  const lastAnalyzedAt = useAppStore(s => s.appState.lastAnalyzedAt);
 
   const [diff, setDiff] = useState<{
     new_items: number;
@@ -121,9 +123,9 @@ export const PulseSummary = memo(function PulseSummary({
             {summary}
           </p>
         </div>
-        {briefing.lastGenerated && (
+        {(lastAnalyzedAt || briefing.lastGenerated) && (
           <div className="flex-shrink-0 ms-auto">
-            <RelativeTimestamp date={briefing.lastGenerated} />
+            <RelativeTimestamp date={(lastAnalyzedAt && (!briefing.lastGenerated || lastAnalyzedAt > briefing.lastGenerated)) ? lastAnalyzedAt : briefing.lastGenerated!} />
           </div>
         )}
       </div>

@@ -39,7 +39,7 @@ pub(crate) use ace_context::{check_ace_exclusions, get_ace_context, ACEContext};
 pub(crate) use affinity::{
     compute_affinity_multiplier, compute_anti_penalty, compute_unified_relevance,
 };
-pub(crate) use analyzer::{run_background_analysis, run_post_analysis_hooks, score_items_full};
+pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::{calibrate_score, compute_interest_score};
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::build_scoring_context;

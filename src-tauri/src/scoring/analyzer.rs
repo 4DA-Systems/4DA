@@ -267,6 +267,7 @@ pub(crate) async fn score_items_full(
 
 /// Background analysis for scheduled monitoring
 /// Silently scores new items since last analysis, emits results, sends notifications
+#[allow(dead_code)] // REMOVE BY 2026-07-01
 pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     state: &std::sync::Arc<monitoring::MonitoringState>,
