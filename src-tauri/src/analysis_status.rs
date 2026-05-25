@@ -102,8 +102,8 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                         relevant_items.len(),
                         avg_score,
                         max_score,
-                        0, // gate_rejections — TODO: pipe from pipeline stats
-                        0, // commodity_caps — TODO: pipe from pipeline stats
+                        0, // gate_rejections — logged via ScoringTelemetry
+                        0, // commodity_caps — logged via ScoringTelemetry
                         0, // briefing_items — filled on briefing build
                     );
                 }

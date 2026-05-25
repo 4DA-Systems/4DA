@@ -649,9 +649,9 @@ mod tests {
 
         let result = score_item(&input, &ctx, &db, &no_opts(), None);
         assert!(
-            result.score > 0.3,
+            result.top_score > 0.3,
             "Rust persona should score Rust/Tokio content high, got {}",
-            result.score
+            result.top_score
         );
     }
 
@@ -680,9 +680,9 @@ mod tests {
 
         let result = score_item(&input, &ctx, &db, &no_opts(), None);
         assert!(
-            result.score < 0.3,
+            result.top_score < 0.3,
             "Rust persona should reject crypto/NFT content, got {}",
-            result.score
+            result.top_score
         );
     }
 
@@ -711,9 +711,9 @@ mod tests {
 
         let result = score_item(&input, &ctx, &db, &no_opts(), None);
         assert!(
-            result.score > 0.3,
+            result.top_score > 0.3,
             "ML engineer should score transformer/PyTorch content high, got {}",
-            result.score
+            result.top_score
         );
     }
 
@@ -740,11 +740,12 @@ mod tests {
 
         let react_persona = react_frontend_dev();
         let react_ctx = persona_to_context(&react_persona);
-        let react_score = score_item(&react_item, &react_ctx, &db, &no_opts(), None).score;
+        let react_score = score_item(&react_item, &react_ctx, &db, &no_opts(), None).top_score;
 
         let security_persona = security_engineer();
         let security_ctx = persona_to_context(&security_persona);
-        let security_score = score_item(&react_item, &security_ctx, &db, &no_opts(), None).score;
+        let security_score =
+            score_item(&react_item, &security_ctx, &db, &no_opts(), None).top_score;
 
         assert!(
             react_score > security_score,
