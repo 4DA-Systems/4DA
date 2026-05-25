@@ -13,6 +13,9 @@ use tracing::{info, warn};
 
 const SERVICE_NAME: &str = "com.4da.app";
 
+#[cfg(test)]
+const TEST_SERVICE_NAME: &str = "com.4da.app.test";
+
 /// Key names for secrets stored in the platform keychain.
 const KEY_NAMES: &[&str] = &[
     "llm_api_key",
@@ -48,10 +51,14 @@ pub struct MigrationReport {
 /// Migration helpers and license-activation paths should branch on the
 /// returned bool and update their report/UI accordingly.
 pub fn store_secret(key_name: &str, value: &str) -> Result<bool> {
-    match keyring::Entry::new(SERVICE_NAME, key_name) {
+    store_secret_with_service(SERVICE_NAME, key_name, value)
+}
+
+fn store_secret_with_service(service: &str, key_name: &str, value: &str) -> Result<bool> {
+    match keyring::Entry::new(service, key_name) {
         Ok(entry) => match entry.set_password(value) {
             Ok(()) => {
-                if verify_round_trip(key_name, value) {
+                if verify_round_trip_with_service(service, key_name, value) {
                     Ok(true)
                 } else {
                     warn!(
@@ -88,7 +95,11 @@ pub fn store_secret(key_name: &str, value: &str) -> Result<bool> {
 ///
 /// Returns `Ok(None)` if the key does not exist or if the keychain is unavailable.
 pub fn get_secret(key_name: &str) -> Result<Option<String>> {
-    match keyring::Entry::new(SERVICE_NAME, key_name) {
+    get_secret_with_service(SERVICE_NAME, key_name)
+}
+
+fn get_secret_with_service(service: &str, key_name: &str) -> Result<Option<String>> {
+    match keyring::Entry::new(service, key_name) {
         Ok(entry) => match entry.get_password() {
             Ok(value) => Ok(Some(value)),
             Err(keyring::Error::NoEntry) => Ok(None),
