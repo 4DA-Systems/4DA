@@ -4,15 +4,13 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { ResultItem } from './ResultItem';
-import { SmartEmptyState } from './SmartEmptyState';
+import { LoadingOrEmptyState } from './LoadingOrEmptyState';
+import { NoResultsState } from './NoResultsState';
 import { ContextPanel } from './context-panel';
 import { ResultFiltersBar } from './search/ResultFiltersBar';
 import { useTranslatedContent } from './ContentTranslationProvider';
-import { getStageLabel, getRelevancePresentation } from '../utils/score';
-import { ALL_SOURCE_IDS } from '../config/sources';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
-import { registerFourdaComponent } from '../lib/fourda-components';
 
 interface ResultsViewProps {
   newItemIds: Set<number>;
@@ -25,7 +23,6 @@ export function ResultsView({
 }: ResultsViewProps) {
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
-  useEffect(() => { void registerFourdaComponent('fourda-tetrahedron'); }, []);
   // Data selectors (may change, use useShallow)
   const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
     useShallow((s) => ({
@@ -180,118 +177,24 @@ export function ResultsView({
         </div>
         <div ref={parentRef} className="p-4 max-h-[calc(100vh-380px)] overflow-y-auto">
           {!state.analysisComplete ? (
-            <div className="text-center py-16" role="status" aria-busy={state.loading}>
-              {state.loading ? (
-                <>
-                  <div className="w-16 h-16 mx-auto mb-4 bg-orange-500/20 rounded-full flex items-center justify-center">
-                    <div className="w-8 h-8 border-3 border-orange-500 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                  <p className="text-lg text-white mb-2">{t('action.analyzing')}</p>
-                  <p className="text-sm text-text-muted">{state.progressMessage}</p>
-                  {state.progress > 0 && (
-                    <div className="mt-4 max-w-xs mx-auto">
-                      <div className="flex justify-between text-xs text-text-muted mb-1">
-                        <span>{getStageLabel(state.progressStage)}</span>
-                        <span>{Math.round(state.progress * 100)}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-bg-tertiary rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-300 ease-out rounded-full"
-                          style={{ width: `${state.progress * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
-                    <fourda-tetrahedron style={{ width: '64px', height: '64px', display: 'block' }} />
-                  </div>
-                  <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
-                  <p className="text-sm text-text-muted mb-3">
-                    {t('results.startAnalysis')}
-                  </p>
-                  <p className="text-xs text-text-muted/70 mb-5 max-w-md mx-auto leading-relaxed">
-                    {t('results.howItWorks')}
-                  </p>
-                  <SmartEmptyState detectedStack={discoveredContext?.tech?.map(item => item.name) ?? []} />
-                  <button
-                    onClick={() => { void startAnalysis(); }}
-                    className="mt-5 px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors"
-                  >
-                    {t('results.analyzeNow')}
-                  </button>
-                  {/* eslint-disable-next-line i18next/no-literal-string */}
-                  <p className="text-xs text-text-muted mt-3">
-                    or press <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
-                  </p>
-                  <p className="text-[10px] text-text-muted/50 mt-2">
-                    {t('results.analyzeHint')}
-                  </p>
-                </>
-              )}
-            </div>
+            <LoadingOrEmptyState
+              loading={state.loading}
+              progressMessage={state.progressMessage}
+              progress={state.progress}
+              progressStage={state.progressStage}
+              detectedStack={discoveredContext?.tech?.map(item => item.name) ?? []}
+              onStartAnalysis={() => { void startAnalysis(); }}
+            />
           ) : filteredResults.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 mx-auto mb-4 bg-bg-tertiary rounded-full flex items-center justify-center">
-                <svg className="w-7 h-7 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-              </div>
-              <p className="text-lg text-white mb-2">{t('results.noMatch')}</p>
-              <p className="text-sm text-text-muted mb-5">
-                {t('results.analyzedNoMatch', { count: state.relevanceResults.length })}
-              </p>
-              <div className="flex items-center justify-center gap-3">
-                {showOnlyRelevant && (
-                  <button
-                    onClick={() => setShowOnlyRelevant(false)}
-                    className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
-                  >
-                    {t('results.showAll')}
-                  </button>
-                )}
-                {sourceFilters.size < ALL_SOURCE_IDS.size && (
-                  <button
-                    onClick={() => resetSourceFilters()}
-                    className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
-                  >
-                    {t('results.clearSourceFilters')}
-                  </button>
-                )}
-                {/* eslint-disable-next-line i18next/no-literal-string */}
-                {!showOnlyRelevant && sourceFilters.size === ALL_SOURCE_IDS.size && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
-              </div>
-              {state.nearMisses && state.nearMisses.length > 0 && (
-                <section className="mt-8 mx-auto max-w-lg" aria-label={t('results.nearMissesTitle', 'Almost relevant')}>
-                  <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
-                    {t('results.nearMissesTitle', 'Almost relevant')}
-                  </p>
-                  <div className="space-y-2">
-                    {state.nearMisses.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-3 px-3 py-2 bg-bg-secondary rounded-lg border border-border text-start"
-                      >
-                        <span className={`text-[10px] font-medium uppercase tracking-wider shrink-0 ${getRelevancePresentation(item.top_score).colorClass}`}>
-                          {t(getRelevancePresentation(item.top_score).labelKey)}
-                        </span>
-                        <span className="text-sm text-text-secondary truncate">
-                          {getTranslated(String(item.id), item.title)}
-                        </span>
-                        <span className="text-[10px] text-text-muted shrink-0 ms-auto">
-                          {item.source_type}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-text-muted mt-2">
-                    {t('results.nearMissesHint', 'These items scored close to your relevance threshold. Adjust interests in Settings to include them.')}
-                  </p>
-                </section>
-              )}
-            </div>
+            <NoResultsState
+              totalAnalyzed={state.relevanceResults.length}
+              showOnlyRelevant={showOnlyRelevant}
+              sourceFilters={sourceFilters}
+              nearMisses={state.nearMisses}
+              setShowOnlyRelevant={setShowOnlyRelevant}
+              resetSourceFilters={resetSourceFilters}
+              getTranslated={getTranslated}
+            />
           ) : (
             <div
               role="listbox"

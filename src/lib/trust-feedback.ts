@@ -3,43 +3,25 @@
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
 import { cmd } from './commands';
+import {
+  dedupKey,
+  loadFromSqliteOutbox,
+  mergeQueuedFeedback,
+  persistQueueFallback,
+  syncLocalStorageFallback,
+} from './trust-feedback-persistence';
 
-// ============================================================================
-// Types
-// ============================================================================
+import type { TrustFeedbackEvent, QueuedFeedbackEvent } from './trust-feedback-types';
 
-interface TrustFeedbackEvent {
-  eventType: 'surfaced' | 'acted_on' | 'dismissed' | 'false_positive' | 'validated' | 'missed';
-  signalId?: string;
-  alertId?: string;
-  sourceType?: string;
-  topic?: string;
-  notes?: string;
-  dismissReason?: string;
-  dismissCategory?: string;
-}
-
-/** Queued event with outbox metadata for retry tracking */
-interface QueuedFeedbackEvent {
-  /** SQLite outbox row id (present when persisted to outbox, absent for localStorage-only fallback) */
-  id?: number;
-  event: TrustFeedbackEvent;
-  queuedAt: number;
-  attempts: number;
-}
+// Re-export types for consumers that imported them transitively
+export type { TrustFeedbackEvent, QueuedFeedbackEvent } from './trust-feedback-types';
 
 // ============================================================================
 // Constants
 // ============================================================================
 
-const QUEUE_STORAGE_KEY = '4da_feedback_queue';
 const MAX_QUEUE_SIZE = 100;
 const MAX_RETRY_ATTEMPTS = 5;
-
-/** Composite key for deduplication — two events with the same key are considered identical */
-function dedupKey(event: TrustFeedbackEvent): string {
-  return `${event.eventType}|${event.signalId ?? ''}|${event.alertId ?? ''}|${event.sourceType ?? ''}|${event.topic ?? ''}`;
-}
 
 // ============================================================================
 // Queue State
@@ -146,8 +128,8 @@ export async function flushPendingFeedback(): Promise<void> {
 
     const processed = new Set(toProcess);
     const queuedDuringFlush = pendingQueue.filter(q => !processed.has(q));
-    pendingQueue = mergeQueuedFeedback([...failed, ...queuedDuringFlush]);
-    syncLocalStorageFallback();
+    pendingQueue = mergeQueuedFeedback([...failed, ...queuedDuringFlush], MAX_QUEUE_SIZE);
+    syncLocalStorageFallback(pendingQueue);
   } finally {
     flushInProgress = false;
   }
@@ -192,7 +174,7 @@ function enqueue(event: TrustFeedbackEvent): void {
   pendingQueue.push(queued);
 
   // Persist to localStorage immediately (sync, always available)
-  persistQueueFallback();
+  persistQueueFallback(pendingQueue);
 
   // Persist to SQLite outbox (durable across crashes)
   void cmd('queue_feedback_event', {
@@ -210,117 +192,22 @@ function enqueue(event: TrustFeedbackEvent): void {
       if (typeof rowId === 'number' && rowId > 0) {
         queued.id = rowId;
       }
-      syncLocalStorageFallback();
+      syncLocalStorageFallback(pendingQueue);
     })
     .catch(() => {
       // SQLite outbox failed -- localStorage already has the data, nothing to do
     });
 }
 
-/** Persist the queue to localStorage as last-resort fallback */
-function persistQueueFallback(): void {
-  try {
-    if (pendingQueue.length === 0) {
-      localStorage.removeItem(QUEUE_STORAGE_KEY);
-    } else {
-      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(pendingQueue));
-    }
-  } catch {
-    // localStorage may be unavailable in some contexts -- ignore silently
-  }
-}
-
-/** Clear the localStorage fallback (called when SQLite outbox has the data) */
-function clearLocalStorageFallback(): void {
-  try {
-    localStorage.removeItem(QUEUE_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-function syncLocalStorageFallback(): void {
-  if (pendingQueue.length === 0 || pendingQueue.every(q => q.id != null)) {
-    clearLocalStorageFallback();
-  } else {
-    persistQueueFallback();
-  }
-}
-
-function isQueuedFeedbackEvent(item: unknown): item is QueuedFeedbackEvent {
-  return (
-    typeof item === 'object' &&
-    item !== null &&
-    'event' in item &&
-    'queuedAt' in item &&
-    'attempts' in item
-  );
-}
-
-function loadLocalStorageFallback(): QueuedFeedbackEvent[] {
-  try {
-    const stored = localStorage.getItem(QUEUE_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed.filter(isQueuedFeedbackEvent) : [];
-  } catch {
-    localStorage.removeItem(QUEUE_STORAGE_KEY);
-    return [];
-  }
-}
-
-function mergeQueuedFeedback(items: QueuedFeedbackEvent[]): QueuedFeedbackEvent[] {
-  const byKey = new Map<string, QueuedFeedbackEvent>();
-  for (const item of items) {
-    const key = dedupKey(item.event);
-    const existing = byKey.get(key);
-    if (!existing || (existing.id == null && item.id != null)) {
-      byKey.set(key, item);
-    }
-  }
-  return Array.from(byKey.values()).slice(-MAX_QUEUE_SIZE);
-}
-
-/** Load pending events from SQLite outbox, falling back to localStorage */
-async function loadQueue(): Promise<void> {
-  const fallbackQueue = loadLocalStorageFallback();
-
-  // Primary: load from SQLite outbox
-  try {
-    const rows = await cmd('get_pending_feedback');
-    if (rows && rows.length > 0) {
-      const sqliteQueue = rows.map((row: { id: number; eventType: string; signalId?: string; alertId?: string; sourceType?: string; topic?: string; notes?: string; dismissReason?: string; dismissCategory?: string; queuedAt: number; attempts: number }) => ({
-        id: row.id,
-        event: {
-          eventType: row.eventType as TrustFeedbackEvent['eventType'],
-          signalId: row.signalId ?? undefined,
-          alertId: row.alertId ?? undefined,
-          sourceType: row.sourceType ?? undefined,
-          topic: row.topic ?? undefined,
-          notes: row.notes ?? undefined,
-          dismissReason: row.dismissReason ?? undefined,
-          dismissCategory: row.dismissCategory ?? undefined,
-        },
-        queuedAt: row.queuedAt,
-        attempts: row.attempts,
-      }));
-      pendingQueue = mergeQueuedFeedback([...sqliteQueue, ...fallbackQueue]);
-      syncLocalStorageFallback();
-      return;
-    }
-  } catch {
-    // SQLite outbox unavailable -- fall through to localStorage
-  }
-
-  pendingQueue = mergeQueuedFeedback(fallbackQueue);
-  syncLocalStorageFallback();
-}
-
 // ============================================================================
 // Module init: hydrate queue and flush on load
 // ============================================================================
 
-void loadQueue().then(() => {
+void loadFromSqliteOutbox(
+  () => cmd('get_pending_feedback'),
+  MAX_QUEUE_SIZE,
+).then((loaded) => {
+  pendingQueue = loaded;
   if (pendingQueue.length > 0) {
     // Flush pending events after a short delay to avoid blocking app startup
     setTimeout(() => void flushPendingFeedback(), 2000);
