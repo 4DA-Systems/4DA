@@ -423,7 +423,7 @@ Rules:
                 "Rate limit exceeded. Wait a moment and try again, or check your API plan limits."
                     .to_string()
             } else if e_str.contains("model") {
-                "The configured model may not be available. Try 'ollama pull llama3.1:8b-instruct-q8_0'.".to_string()
+                "The configured model may not be available. Try 'ollama pull qwen3:14b' or 'ollama pull gemma3:12b'.".to_string()
             } else {
                 e_str
             };

@@ -51,14 +51,9 @@ export interface SynthesisResult {
  * Optimized for 16GB VRAM
  */
 export const DEFAULT_OLLAMA_MODELS = {
-  // Simple tasks: summarization, formatting, basic extraction
-  light: "llama3.1:8b-instruct-q8_0",
-
-  // Medium tasks: analysis, recommendations
-  medium: "qwen2.5:14b-instruct-q5_K_M",
-
-  // Complex tasks: reasoning, predictions, pattern recognition
-  heavy: "qwen2.5:14b-instruct-q5_K_M",
+  light: "gemma3:4b",
+  medium: "qwen3:8b",
+  heavy: "qwen3:14b",
 };
 
 /**
