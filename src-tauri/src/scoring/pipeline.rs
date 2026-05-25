@@ -251,8 +251,11 @@ pub(crate) fn score_item(
 
     // Domain relevance: graduated penalty based on technology identity
     // Replaces binary off_domain_penalty with tiered relevance (1.0 primary → 0.15 off-domain)
-    let domain_relevance =
+    let mut domain_relevance =
         crate::domain_profile::compute_domain_relevance(&topics, &ctx.domain_profile);
+    if dep_match_score >= 0.50 && !ctx.domain_profile.is_empty() {
+        domain_relevance = domain_relevance.max(1.0);
+    }
     let off_domain_penalty = if domain_relevance >= 0.85 {
         0.0 // Primary stack or dependency match — no penalty
     } else if domain_relevance >= 0.50 {

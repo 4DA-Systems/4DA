@@ -52,9 +52,24 @@ pub(crate) async fn run_multi_source_analysis_impl(
         0,
         0,
     );
-    let cached_context_count = db
+    let mut cached_context_count = db
         .context_count()
         .map_err(|e| format!("Failed to count context chunks: {e}"))?;
+
+    if cached_context_count == 0 {
+        let context_dirs = crate::get_context_dirs();
+        if !context_dirs.is_empty() {
+            info!(target: "4da::analysis", "No context chunks — triggering inline README indexing");
+            emit_progress(app, "context", 0.06, "Indexing project READMEs for context...", 0, 0);
+            let indexed = crate::ace_commands::index_discovered_readmes(&context_dirs).await;
+            if indexed > 0 {
+                cached_context_count = db
+                    .context_count()
+                    .map_err(|e| format!("Failed to recount context chunks: {e}"))?;
+                info!(target: "4da::analysis", chunks = cached_context_count, "Context indexing complete");
+            }
+        }
+    }
 
     if cached_context_count > 0 {
         info!(target: "4da::analysis", context_chunks = cached_context_count, "Context indexed (using KNN search)");

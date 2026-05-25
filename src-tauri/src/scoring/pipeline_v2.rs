@@ -532,8 +532,14 @@ fn extract_signals(
     let anti_penalty = compute_anti_penalty(&topics, &ctx.ace_ctx);
 
     // Domain relevance: graduated penalty based on technology identity
-    let domain_relevance =
+    let mut domain_relevance =
         crate::domain_profile::compute_domain_relevance(&topics, &ctx.domain_profile);
+
+    // Direct dependencies ARE part of the user's stack — promote to primary
+    // so they receive the domain gate boost instead of neutral treatment.
+    if dep_match_score >= 0.50 && !ctx.domain_profile.is_empty() {
+        domain_relevance = domain_relevance.max(1.0);
+    }
 
     // Taste embedding boost
     let taste_boost = match ctx.taste_embedding {
