@@ -362,22 +362,26 @@ pub fn check_crash_loop(data_dir: &Path, prev_crashed: bool) -> CrashLoopStatus 
         debug!(target: "4da::watchdog", error = %e, "Crash-loop check: could not write history");
     }
 
-    let mut status = classify_crash_loop(&history, now);
+    let status = classify_crash_loop(&history, now);
 
     // In debug builds, Cargo watch kills and restarts the process routinely.
     // These are not real crashes — cap at Warning so safe mode never activates
     // in dev and the crash-loop-critical frontend banner never fires.
     #[cfg(debug_assertions)]
-    if matches!(status, CrashLoopStatus::Critical(n) if n > 0) {
-        if let CrashLoopStatus::Critical(n) = status {
+    let status = if let CrashLoopStatus::Critical(n) = status {
+        if n > 0 {
             info!(
                 target: "4da::watchdog",
                 crashes = n,
                 "Dev-mode: downgrading Critical to Warning (dev restarts are not real crashes)"
             );
-            status = CrashLoopStatus::Warning(n);
+            CrashLoopStatus::Warning(n)
+        } else {
+            status
         }
-    }
+    } else {
+        status
+    };
 
     match status {
         CrashLoopStatus::Critical(n) => {
