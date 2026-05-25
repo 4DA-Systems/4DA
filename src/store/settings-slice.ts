@@ -115,6 +115,18 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
 
       set({ settingsStatus: 'Settings saved!' });
       await loadSettings();
+
+      // Clear stale briefing errors when API key changes — the old error
+      // (e.g. "API key is invalid") no longer applies after a new key is saved.
+      if (trimmedApiKey.length > 0) {
+        set(state => ({
+          aiBriefing: { ...state.aiBriefing, error: null },
+        }));
+        // Auto-retry briefing so the user sees immediate validation
+        const { generateBriefing } = get();
+        void generateBriefing();
+      }
+
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
       set({ settingsStatus: `Error: ${translateError(error)}` });
