@@ -534,24 +534,6 @@ fn set_session_env(key: String, value: String) {
     map.insert(key, value);
 }
 
-// --- Backward-compatible aliases used by tests ---
-
-/// Parse a command string into tokens. Wraps `tokenize` and applies
-/// the export/source builtin checks for backward compatibility.
-#[cfg(test)]
-fn parse_command_tokens(command: &str) -> Result<Vec<String>> {
-    let trimmed = command.trim();
-    // Shell builtins handled at a higher level now, but keep check for direct callers
-    let lower = trimmed.to_lowercase();
-    if lower.starts_with("export ") || lower.starts_with("source ") {
-        return Err(FourDaError::Config(format!(
-            "'{}' is a shell builtin — handled by the session engine.",
-            trimmed.split_whitespace().next().unwrap_or("command")
-        )));
-    }
-    tokenize(trimmed)
-}
-
 // ============================================================================
 // Execution Strategies
 // ============================================================================

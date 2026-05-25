@@ -11,7 +11,7 @@ use super::*;
 // Persona 5: Bootstrap / First-Run User
 // ============================================================================
 
-pub fn bootstrap_enrichment() -> PersonaEnrichment {
+pub(super) fn bootstrap_enrichment() -> PersonaEnrichment {
     // MINIMAL enrichment — tests bootstrap path fidelity
     PersonaEnrichment {
         topic_confidence: confidence_map(&[("typescript", 0.60)]),
@@ -36,7 +36,7 @@ pub fn bootstrap_enrichment() -> PersonaEnrichment {
 // Persona 6: Power User
 // ============================================================================
 
-pub fn power_user_enrichment() -> PersonaEnrichment {
+pub(super) fn power_user_enrichment() -> PersonaEnrichment {
     PersonaEnrichment {
         topic_confidence: confidence_map(&[
             ("rust", 0.90),
@@ -135,7 +135,7 @@ pub fn power_user_enrichment() -> PersonaEnrichment {
 // Persona 7: Context Switcher
 // ============================================================================
 
-pub fn context_switcher_enrichment() -> PersonaEnrichment {
+pub(super) fn context_switcher_enrichment() -> PersonaEnrichment {
     PersonaEnrichment {
         topic_confidence: confidence_map(&[
             ("rust", 0.85),
@@ -198,7 +198,7 @@ pub fn context_switcher_enrichment() -> PersonaEnrichment {
 // Persona 8: Niche Specialist (Haskell/FP)
 // ============================================================================
 
-pub fn niche_specialist_enrichment() -> PersonaEnrichment {
+pub(super) fn niche_specialist_enrichment() -> PersonaEnrichment {
     PersonaEnrichment {
         topic_confidence: confidence_map(&[
             ("haskell", 0.95),

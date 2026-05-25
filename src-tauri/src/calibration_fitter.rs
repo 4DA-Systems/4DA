@@ -936,7 +936,7 @@ mod tests {
     #[test]
     fn e2e_stamp_fit_save_reload_apply_full_pipeline() {
         with_unique_identity(|identity_hash| {
-            use crate::calibration::{CalibratedCore, CalibrationCurve};
+            use crate::calibration::CalibratedCore;
             use crate::calibration_samples;
             use crate::calibration_store;
             use crate::intelligence_core::{IntelligenceCore, JudgeRequest, Validated};

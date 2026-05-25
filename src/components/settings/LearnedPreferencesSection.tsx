@@ -75,11 +75,13 @@ function ChipActions({
     <div className="flex items-center gap-4 px-1 py-2 text-xs animate-in fade-in duration-150">
       <div className="flex-1 min-w-0">
         <span className="text-white font-medium">{facet.value || facet.key}</span>
+        {/* eslint-disable i18next/no-literal-string */}
         <span className="text-text-muted ml-2">
           {facet.evidence_count} signal{facet.evidence_count !== 1 ? 's' : ''}
           {' · '}
           {facet.state}
         </span>
+        {/* eslint-enable i18next/no-literal-string */}
       </div>
       <div className="flex gap-1.5 flex-shrink-0">
         {hasOverride ? (

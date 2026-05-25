@@ -70,6 +70,7 @@ pub(crate) fn build_briefing_from_fixture(
         data_freshness: None,
         corroboration_available: false,
         coverage_building: false,
+        synthesis_hint: None,
     }
 }
 

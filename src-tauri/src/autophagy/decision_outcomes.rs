@@ -240,12 +240,12 @@ mod tests {
         status: &str,
         lead_time_hours: Option<f64>,
     ) {
-        let acted_at = if status == "acted" {
+        let _acted_at = if status == "acted" {
             Some("datetime('now')".to_string())
         } else {
             None
         };
-        let closed_at = if status != "acted" {
+        let _closed_at = if status != "acted" {
             Some("datetime('now')".to_string())
         } else {
             None

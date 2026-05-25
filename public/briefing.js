@@ -30,6 +30,8 @@ var personalizationSection = document.getElementById('personalization-section');
 var personalizationText = document.getElementById('personalization-text');
 var synthesisSection = document.getElementById('synthesis-section');
 var synthesisText = document.getElementById('synthesis-text');
+var synthesisHintSection = document.getElementById('synthesis-hint-section');
+var synthesisHintText = document.getElementById('synthesis-hint-text');
 var preemptionSection = document.getElementById('preemption-section');
 var preemptionList = document.getElementById('preemption-list');
 var gapsSection = document.getElementById('gaps-section');
@@ -321,10 +323,12 @@ function renderBriefing(data) {
     synthesisSection.style.display = '';
     synthesisSection.classList.remove('abstention');
     synthesisText.textContent = cleanSynthesis(data.synthesis);
+    if (synthesisHintSection) synthesisHintSection.style.display = 'none';
   } else if (data.synthesis && isAbstention(data.synthesis)) {
     synthesisSection.style.display = '';
     synthesisSection.classList.add('abstention');
     synthesisText.textContent = cleanSynthesis(data.synthesis);
+    if (synthesisHintSection) synthesisHintSection.style.display = 'none';
   } else {
     synthesisSection.style.display = 'none';
   }
@@ -524,6 +528,19 @@ async function init() {
       if (event.payload && !isAbstention(event.payload) && synthesisSection && synthesisText) {
         synthesisSection.style.display = '';
         synthesisText.textContent = cleanSynthesis(event.payload);
+        // Hide hint since synthesis arrived
+        if (synthesisHintSection) synthesisHintSection.style.display = 'none';
+      }
+    });
+
+    // Synthesis unavailable hint
+    await listen('briefing-synthesis-hint', function (event) {
+      if (event.payload && synthesisHintSection && synthesisHintText) {
+        // Only show hint if synthesis section is still hidden (no synthesis arrived)
+        if (synthesisSection && synthesisSection.style.display === 'none') {
+          synthesisHintSection.style.display = '';
+          synthesisHintText.textContent = event.payload;
+        }
       }
     });
 

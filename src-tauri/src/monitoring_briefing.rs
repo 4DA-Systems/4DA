@@ -511,6 +511,10 @@ pub struct BriefingNotification {
     /// to show "building coverage model" instead of implying complete coverage.
     #[serde(default)]
     pub coverage_building: bool,
+    /// Hint message shown when LLM synthesis is unavailable. Tells the user
+    /// what to configure so the briefing can include intelligence narrative.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthesis_hint: Option<String>,
 }
 
 const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
@@ -685,6 +689,7 @@ pub(crate) fn build_enriched_briefing(
             data_freshness: None,
             corroboration_available: false,
             coverage_building: false,
+            synthesis_hint: None,
         };
     }
 
@@ -730,6 +735,7 @@ pub(crate) fn build_enriched_briefing(
             data_freshness: compute_data_freshness(),
             corroboration_available: false,
             coverage_building: false,
+            synthesis_hint: None,
         };
     }
 
@@ -803,6 +809,7 @@ pub(crate) fn build_enriched_briefing(
         data_freshness: compute_data_freshness(),
         corroboration_available,
         coverage_building,
+        synthesis_hint: None,
     }
 }
 
@@ -1374,6 +1381,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 data_freshness: freshness,
                 corroboration_available: false,
                 coverage_building: false,
+                synthesis_hint: None,
             };
             // Still mark as fired so we don't re-trigger the stale warning all day
             {
@@ -1976,23 +1984,22 @@ pub(crate) struct SynthesisResult {
 pub(crate) async fn synthesize_morning_briefing(
     briefing: &BriefingNotification,
 ) -> std::result::Result<SynthesisResult, String> {
-    let llm_settings = {
+    let configured_settings = {
         let mut guard = crate::get_settings_manager().lock();
         guard.ensure_keys_hydrated();
         guard.get().llm.clone()
     };
 
-    if !matches!(llm_settings.provider.as_str(), "ollama" | "builtin")
-        && llm_settings.api_key.is_empty()
-    {
-        return Err("No LLM configured".into());
-    }
-
-    if !crate::ollama::can_synthesize(&llm_settings).await {
-        return Err(
-            "Model below synthesis capability threshold — configure a 14B+ local model (e.g. qwen3:14b) or a cloud API key".into(),
-        );
-    }
+    let llm_settings =
+        match crate::ollama::resolve_synthesis_provider(&configured_settings).await {
+            Some(provider) => provider,
+            None => {
+                return Err(
+                    "No synthesis-capable provider available — add an API key or start a local model"
+                        .into(),
+                );
+            }
+        };
 
     let (tech_summary, topics_summary) = {
         let ace_ctx = crate::scoring::get_ace_context();

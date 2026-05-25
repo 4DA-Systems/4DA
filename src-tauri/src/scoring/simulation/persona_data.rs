@@ -11,6 +11,7 @@ use super::domain_embeddings::topic_embedding;
 
 #[path = "persona_data_extended.rs"]
 mod persona_data_extended;
+#[allow(unused_imports)]
 pub use persona_data_extended::*;
 
 // ============================================================================

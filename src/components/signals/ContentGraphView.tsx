@@ -311,6 +311,7 @@ export default function ContentGraphView() {
               }`}
               style={{ fontFamily: 'JetBrains Mono, monospace' }}
             >
+              {/* eslint-disable-next-line i18next/no-literal-string */}
               {w}d
             </button>
           ))}

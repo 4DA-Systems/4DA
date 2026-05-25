@@ -36,6 +36,7 @@ pub(super) struct VersionComparison {
     /// v2.top_score - v1.top_score
     pub score_delta: f32,
     /// v1.relevant != v2.relevant
+    #[allow(dead_code)] // REMOVE BY 2026-11-26 — reserved for version comparison reporting
     pub relevance_changed: bool,
 }
 

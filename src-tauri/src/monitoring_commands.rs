@@ -602,6 +602,7 @@ pub async fn trigger_briefing_preview(app: tauri::AppHandle) -> Result<serde_jso
         data_freshness: None,
         corroboration_available: false,
         coverage_building: false,
+        synthesis_hint: None,
     };
 
     crate::briefing_window::show_briefing(&app, &preview);

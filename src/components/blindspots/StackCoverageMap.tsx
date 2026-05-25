@@ -159,7 +159,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
                 <p className="text-xs text-text-muted flex-1">{dep.gap.explanation}</p>
                 {/* eslint-disable i18next/no-literal-string */}
                 {onAddWatch && dep.gap.id.startsWith('bs_uncov_') && (() => {
-                  const parts = dep.gap!.id.replace('bs_uncov_', '').split('_');
+                  const parts = dep.gap.id.replace('bs_uncov_', '').split('_');
                   const ecosystem = parts[0] ?? '';
                   return (
                     <button

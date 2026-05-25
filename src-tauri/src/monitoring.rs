@@ -1043,6 +1043,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                                 }
                                 Err(e) => {
                                     info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
+                                    let _ = app_synth.emit_to(
+                                        "briefing",
+                                        "briefing-synthesis-hint",
+                                        &e,
+                                    );
                                 }
                             }
                         });

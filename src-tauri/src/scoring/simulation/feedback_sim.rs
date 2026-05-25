@@ -18,8 +18,10 @@ use super::{ContentCategory, ExpectedOutcome, LabeledItem};
 // ============================================================================
 
 pub(super) struct FeedbackEvent {
+    #[allow(dead_code)] // REMOVE BY 2026-11-26 — serde-deserialized test fixture fields
     pub item_id: u64,
     pub topic: String,
+    #[allow(dead_code)] // REMOVE BY 2026-11-26 — serde-deserialized test fixture fields
     pub relevant: bool,
     pub delta: f64,
 }

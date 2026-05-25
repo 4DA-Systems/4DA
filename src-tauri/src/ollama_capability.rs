@@ -156,6 +156,102 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
     }
 }
 
+/// Resolve the best available LLM provider for synthesis.
+/// Tries the configured provider first, then falls back to builtin sidecar,
+/// then Ollama. Returns None only if no provider is capable.
+pub(crate) async fn resolve_synthesis_provider(
+    configured: &crate::settings::LLMProvider,
+) -> Option<crate::settings::LLMProvider> {
+    // 1. Try configured provider
+    if can_synthesize(configured).await {
+        return Some(configured.clone());
+    }
+
+    // 2. Try builtin sidecar
+    if crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready {
+        info!(
+            target: "4da::ollama",
+            configured_provider = %configured.provider,
+            "Configured provider unavailable — falling back to builtin sidecar"
+        );
+        return Some(crate::settings::LLMProvider {
+            provider: "builtin".to_string(),
+            api_key: String::new(),
+            model: String::new(),
+            base_url: None,
+            openai_api_key: String::new(),
+            embedding_model: configured.embedding_model.clone(),
+        });
+    }
+
+    // 3. Try Ollama
+    let ollama_url = configured
+        .base_url
+        .as_deref()
+        .unwrap_or("http://localhost:11434");
+    if let Some(model) = find_capable_ollama_model(ollama_url).await {
+        info!(
+            target: "4da::ollama",
+            configured_provider = %configured.provider,
+            fallback_model = %model,
+            "Configured provider unavailable — falling back to Ollama model"
+        );
+        return Some(crate::settings::LLMProvider {
+            provider: "ollama".to_string(),
+            api_key: String::new(),
+            model,
+            base_url: Some(ollama_url.to_string()),
+            openai_api_key: String::new(),
+            embedding_model: configured.embedding_model.clone(),
+        });
+    }
+
+    info!(
+        target: "4da::ollama",
+        configured_provider = %configured.provider,
+        "No synthesis-capable provider available — briefing will show signals only"
+    );
+    None
+}
+
+/// Probe Ollama for the first model that meets the synthesis parameter floor.
+async fn find_capable_ollama_model(base_url: &str) -> Option<String> {
+    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
+    let resp = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .build()
+        .ok()?
+        .get(&url)
+        .send()
+        .await
+        .ok()?;
+
+    if !resp.status().is_success() {
+        return None;
+    }
+
+    #[derive(serde::Deserialize)]
+    struct TagsResponse {
+        models: Option<Vec<TagModel>>,
+    }
+    #[derive(serde::Deserialize)]
+    struct TagModel {
+        name: String,
+    }
+
+    let tags: TagsResponse = resp.json().await.ok()?;
+    let models = tags.models?;
+
+    for m in &models {
+        if let Some(params) = get_model_params_billions(&m.name, base_url).await {
+            if params >= SYNTHESIS_MIN_PARAMS_B {
+                return Some(m.name.clone());
+            }
+        }
+    }
+    None
+}
+
 /// Check whether the configured LLM produces reliable analysis text.
 /// Cloud APIs always qualify. Local models need 14B+ parameters for
 /// explanations that a senior developer wouldn't laugh at.

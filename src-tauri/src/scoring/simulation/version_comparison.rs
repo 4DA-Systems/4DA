@@ -7,7 +7,7 @@
 //!   c. Enriched reality tests (full-fidelity per-persona)
 //!   d. Cross-version score stability
 
-use tracing::{debug, info};
+use tracing::info;
 
 use super::corpus::corpus;
 use super::enrichment::{EnrichmentConfig, EnrichmentField};

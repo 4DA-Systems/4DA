@@ -88,6 +88,7 @@ fn semantic_rust_ctx() -> ScoringContext {
         .build()
 }
 
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — test helper for Python persona context
 fn semantic_python_ctx() -> ScoringContext {
     let interests = vec![
         sem_interest(1, "Machine Learning", 1.0, PI_PYTHON),

@@ -441,6 +441,7 @@ fn corpus_item_spec(item_id: u64) -> &'static EmbeddingSpec {
 
 /// Generate a domain-specific embedding for a persona domain index (0-8).
 /// Backward compatible with the band-based approach.
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — reserved for future domain embedding lookup
 pub(super) fn domain_embedding(domain_idx: usize) -> Vec<f32> {
     interest_embedding(domain_idx)
 }

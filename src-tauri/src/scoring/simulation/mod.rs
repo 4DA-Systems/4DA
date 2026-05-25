@@ -110,6 +110,7 @@ pub(super) enum ExpectedOutcome {
     WeakRelevant,
     MildBorderline,
     NotRelevant,
+    #[allow(dead_code)] // REMOVE BY 2026-11-26 — test outcome variant
     Excluded,
 }
 
@@ -119,6 +120,7 @@ pub(super) struct LabeledItem {
     pub content: &'static str,
     pub category: ContentCategory,
     pub expected: [ExpectedOutcome; 9],
+    #[allow(dead_code)] // REMOVE BY 2026-11-26 — test fixture metadata
     pub source_type: &'static str,
 }
 
@@ -138,8 +140,12 @@ pub(super) const PI_RUST: usize = 0;
 pub(super) const PI_PYTHON: usize = 1;
 pub(super) const PI_TS: usize = 2;
 pub(super) const PI_DEVOPS: usize = 3;
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — persona index constants for future simulation expansion
 pub(super) const PI_MOBILE: usize = 4;
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — persona index constants for future simulation expansion
 pub(super) const PI_BOOTSTRAP: usize = 5;
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — persona index constants for future simulation expansion
 pub(super) const PI_POWER: usize = 6;
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — persona index constants for future simulation expansion
 pub(super) const PI_SWITCHER: usize = 7;
 pub(super) const PI_NICHE: usize = 8;

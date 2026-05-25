@@ -240,20 +240,20 @@ export function useSourceConfig(onStatusChange: (status: string) => void) {
   };
 
   const toggleDefaultRss = useCallback(
-    createToggleDefault(() => disabledDefaultRss, setDisabledDefaultRss,
-      'set_disabled_default_rss_feeds', 'feeds', onStatusChange),
+    (item: string, enabled: boolean) => createToggleDefault(() => disabledDefaultRss, setDisabledDefaultRss,
+      'set_disabled_default_rss_feeds', 'feeds', onStatusChange)(item, enabled),
     [disabledDefaultRss, onStatusChange],
   );
 
   const toggleDefaultYoutube = useCallback(
-    createToggleDefault(() => disabledDefaultYoutube, setDisabledDefaultYoutube,
-      'set_disabled_default_youtube_channels', 'channels', onStatusChange),
+    (item: string, enabled: boolean) => createToggleDefault(() => disabledDefaultYoutube, setDisabledDefaultYoutube,
+      'set_disabled_default_youtube_channels', 'channels', onStatusChange)(item, enabled),
     [disabledDefaultYoutube, onStatusChange],
   );
 
   const toggleDefaultTwitter = useCallback(
-    createToggleDefault(() => disabledDefaultTwitter, setDisabledDefaultTwitter,
-      'set_disabled_default_twitter_handles', 'handles', onStatusChange),
+    (item: string, enabled: boolean) => createToggleDefault(() => disabledDefaultTwitter, setDisabledDefaultTwitter,
+      'set_disabled_default_twitter_handles', 'handles', onStatusChange)(item, enabled),
     [disabledDefaultTwitter, onStatusChange],
   );
 

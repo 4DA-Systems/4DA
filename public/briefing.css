@@ -588,6 +588,20 @@ html, body {
   border-color: rgba(212, 175, 55, 0.35);
 }
 
+/* ====================== Synthesis Hint ====================== */
+
+.synthesis-hint-section {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+.synthesis-hint-text {
+  font-size: 11px;
+  color: var(--text-muted, #606060);
+  line-height: 1.4;
+  font-style: italic;
+}
+
 /* ====================== Accessibility ====================== */
 
 @media (prefers-reduced-motion: reduce) {

@@ -20,6 +20,7 @@ pub struct SimulatedPersona {
     pub interests: Vec<(&'static str, f32)>,
     pub tech_stack: Vec<&'static str>,
     pub dependencies: Vec<&'static str>,
+    #[allow(dead_code)] // REMOVE BY 2026-11-26 — persona metadata for test reporting
     pub role: &'static str,
     pub expected_topics: Vec<&'static str>,
     pub anti_topics: Vec<&'static str>,

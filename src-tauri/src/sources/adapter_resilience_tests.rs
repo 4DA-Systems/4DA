@@ -200,6 +200,7 @@ mod hn_resilience {
 // 3. Reddit — RedditListing serde deserialization
 // ============================================================================
 
+#[allow(dead_code)] // REMOVE BY 2026-11-26 — deserialization test fixtures — fields read by serde not code
 mod reddit_resilience {
     use serde::Deserialize;
 

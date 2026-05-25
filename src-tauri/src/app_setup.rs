@@ -1167,6 +1167,11 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                             }
                             Err(e) => {
                                 info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
+                                let _ = app_synth.emit_to(
+                                    "briefing",
+                                    "briefing-synthesis-hint",
+                                    &e,
+                                );
                             }
                         }
                     });
@@ -1581,6 +1586,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         data_freshness: None,
                         corroboration_available: false,
                         coverage_building: false,
+                        synthesis_hint: None,
                     };
                     drop(analysis_state); // release lock before disk I/O
                     crate::briefing_snapshot::save_snapshot(&briefing);

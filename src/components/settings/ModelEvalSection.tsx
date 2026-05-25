@@ -96,6 +96,7 @@ export function ModelEvalSection() {
             <div key={report.fixture_name} className="p-2 bg-bg-secondary rounded border border-border">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-red-400 font-medium">{report.fixture_name.replace(/_/g, ' ')}</span>
+                {/* eslint-disable-next-line i18next/no-literal-string */}
                 <span className="text-[10px] text-text-muted">{report.duration_ms}ms</span>
               </div>
               {report.violations.length > 0 && (

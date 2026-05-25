@@ -220,9 +220,11 @@ export function BuiltinModelSection() {
                       </span>
                     )}
                   </div>
+                  {/* eslint-disable i18next/no-literal-string */}
                   <p className="text-xs text-text-muted mt-0.5">
                     {model.size_gb} GB &middot; {model.quantization} &middot; {t('settings.ai.minRam', 'Min RAM')}: {model.min_ram_gb} GB
                   </p>
+                  {/* eslint-enable i18next/no-literal-string */}
                 </div>
 
                 <div className="flex items-center gap-1.5 flex-shrink-0">

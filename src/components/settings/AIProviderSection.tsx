@@ -76,7 +76,7 @@ export function AIProviderSection({
         }
       })();
     }, 500);
-  }, []);
+  }, [t]);
 
   const handleImportEnv = async (provider: 'anthropic' | 'openai') => {
     setImporting(true);
@@ -214,14 +214,12 @@ export function AIProviderSection({
               >
                 {settingsForm.provider === 'ollama' && ollamaModels.length === 0 ? (
                   <>
-                    {/* eslint-disable i18next/no-literal-string */}
                     <optgroup label="Synthesis capable">
                       {ollamaSynthesisModels.map((m) => <option key={m} value={m}>{m}</option>)}
                     </optgroup>
                     <optgroup label="Other">
                       {ollamaOtherModels.map((m) => <option key={m} value={m}>{m}</option>)}
                     </optgroup>
-                    {/* eslint-enable i18next/no-literal-string */}
                   </>
                 ) : (
                   (settingsForm.provider === 'ollama' && ollamaModels.length > 0
