@@ -664,15 +664,23 @@ pub async fn check_synthesis_capability() -> Result<serde_json::Value> {
     }))
 }
 
-/// Start the built-in LLM sidecar with the specified GGUF model path.
+/// Start the built-in LLM sidecar by model ID (resolved from catalog).
 #[tauri::command]
-pub async fn start_builtin_llm(model_path: String) -> Result<serde_json::Value> {
-    let path = std::path::PathBuf::from(&model_path);
+pub async fn start_builtin_llm(model_id: String) -> Result<serde_json::Value> {
+    let entry = crate::model_manager::find_model(&model_id).ok_or_else(|| {
+        crate::error::FourDaError::Llm(format!("Unknown model: {model_id}"))
+    })?;
+    let path = crate::model_manager::model_path(entry).ok_or_else(|| {
+        crate::error::FourDaError::Llm(format!(
+            "Model {} is not downloaded yet",
+            entry.display_name
+        ))
+    })?;
     let port = crate::llm_engine::start_sidecar(&path).await?;
     Ok(serde_json::json!({
         "status": "ready",
         "port": port,
-        "model_path": model_path,
+        "model_id": model_id,
     }))
 }
 

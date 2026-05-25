@@ -782,7 +782,7 @@ interface CommandMap {
   save_waitlist_signup: { params: { tier: string; email: string; name?: string | null; teamSize?: string | null; company?: string | null; role?: string | null }; result: { success: boolean; tier: string; email: string } };
 
   // -- Built-in LLM Engine --
-  start_builtin_llm: { params: { model_path: string }; result: { status: string; port: number; model_path: string } };
+  start_builtin_llm: { params: { modelId: string }; result: { status: string; port: number; model_id: string } };
   stop_builtin_llm: { params: Record<string, never>; result: { status: string } };
   get_builtin_llm_status: { params: Record<string, never>; result: { status: string; port: number | null } };
   list_builtin_models: { params: Record<string, never>; result: { models: Array<{ id: string; display_name: string; family: string; size_bytes: number; size_gb: number; min_ram_gb: number; quantization: string; downloaded: boolean; path: string | null; fits_ram: boolean }>; recommended_id: string | null; ram_total_gb: number; ram_available_gb: number } };

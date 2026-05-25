@@ -4459,14 +4459,14 @@ async fn sidecar_starts_with_downloaded_model() {
         }
     };
 
-    let model_path = model["path"]
+    let model_id = model["id"]
         .as_str()
-        .expect("downloaded model must have path");
+        .expect("model must have id");
 
     let result = client
         .invoke_command(
             "start_builtin_llm",
-            Some(serde_json::json!({"model_path": model_path})),
+            Some(serde_json::json!({"model_id": model_id})),
         )
         .await
         .unwrap();
@@ -4497,7 +4497,7 @@ async fn sidecar_starts_with_downloaded_model() {
 }
 
 #[tokio::test]
-async fn sidecar_rejects_nonexistent_model_path() {
+async fn sidecar_rejects_unknown_model_id() {
     if skip_unless_e2e() {
         return;
     }
@@ -4507,13 +4507,13 @@ async fn sidecar_rejects_nonexistent_model_path() {
     let result = client
         .invoke_command(
             "start_builtin_llm",
-            Some(serde_json::json!({"model_path": "C:\\nonexistent\\fake-model.gguf"})),
+            Some(serde_json::json!({"model_id": "nonexistent-model-xyz"})),
         )
         .await;
 
     assert!(
         result.is_err() || result.as_ref().ok().and_then(|v| v.get("error")).is_some(),
-        "starting with a nonexistent model must fail gracefully"
+        "starting with an unknown model ID must fail gracefully"
     );
 }
 

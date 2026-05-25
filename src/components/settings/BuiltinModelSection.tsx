@@ -114,11 +114,11 @@ export function BuiltinModelSection() {
     }
   };
 
-  const handleStartSidecar = async (modelPath: string) => {
+  const handleStartSidecar = async (modelId: string) => {
     setError(null);
     setSidecar({ status: 'starting', port: null });
     try {
-      const result = await cmd('start_builtin_llm', { model_path: modelPath });
+      const result = await cmd('start_builtin_llm', { modelId });
       setSidecar({ status: result.status as SidecarStatus['status'], port: result.port });
     } catch (e) {
       setSidecar({ status: 'error', port: null });
@@ -229,7 +229,7 @@ export function BuiltinModelSection() {
                   {model.downloaded && canStart && (
                     <button
                       type="button"
-                      onClick={() => model.path && void handleStartSidecar(model.path)}
+                      onClick={() => void handleStartSidecar(model.id)}
                       className="text-xs px-2.5 py-1 bg-green-500/20 text-green-300 rounded hover:bg-green-500/30 transition-colors font-medium"
                     >
                       {t('settings.ai.startLLM', 'Start')}
