@@ -4765,10 +4765,7 @@ async fn available_sources_returns_source_list() {
     }
 
     let mut client = VictauriClient::discover().await.unwrap();
-    let sources = client
-        .invoke_command("get_sources", None)
-        .await
-        .unwrap();
+    let sources = client.invoke_command("get_sources", None).await.unwrap();
 
     assert!(
         sources.is_array() || sources.is_object(),
@@ -4821,10 +4818,7 @@ async fn rss_feeds_returns_array() {
     }
 
     let mut client = VictauriClient::discover().await.unwrap();
-    let feeds = client
-        .invoke_command("get_rss_feeds", None)
-        .await
-        .unwrap();
+    let feeds = client.invoke_command("get_rss_feeds", None).await.unwrap();
 
     assert!(
         feeds.is_array(),
@@ -5305,10 +5299,7 @@ async fn diagnostics_returns_system_snapshot() {
 
     // Diagnostics should have substantive fields
     if let Some(obj) = diag.as_object() {
-        assert!(
-            !obj.is_empty(),
-            "diagnostics object should not be empty"
-        );
+        assert!(!obj.is_empty(), "diagnostics object should not be empty");
     }
 }
 
@@ -5355,10 +5346,7 @@ async fn audit_log_returns_security_events() {
     }
 
     let mut client = VictauriClient::discover().await.unwrap();
-    let log = client
-        .invoke_command("get_audit_log", None)
-        .await
-        .unwrap();
+    let log = client.invoke_command("get_audit_log", None).await.unwrap();
 
     assert!(
         log.is_array() || log.is_object(),
