@@ -1167,11 +1167,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                             }
                             Err(e) => {
                                 info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
-                                let _ = app_synth.emit_to(
-                                    "briefing",
-                                    "briefing-synthesis-hint",
-                                    &e,
-                                );
+                                let _ =
+                                    app_synth.emit_to("briefing", "briefing-synthesis-hint", &e);
                             }
                         }
                     });
