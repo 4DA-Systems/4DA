@@ -30,7 +30,7 @@
 //! plausible-sounding tech names to fill a required response slot
 //! — this gate catches cleanly.
 
-#[path = "briefing_groundedness_nlp.rs"]
+#[path = "briefing_groundedness_nlp/mod.rs"]
 mod nlp;
 use nlp::*;
 
