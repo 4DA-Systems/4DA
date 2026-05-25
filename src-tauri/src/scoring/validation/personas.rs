@@ -556,3 +556,201 @@ pub fn all_validation_contexts() -> Vec<(SimulatedPersona, ScoringContext)> {
         })
         .collect()
 }
+
+// ============================================================================
+// Tests — validate persona construction and topic-based scoring judgments
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scoring::pipeline::{score_item, ScoringInput, ScoringOptions};
+    use crate::test_utils::{seed_embedding, test_db};
+
+    fn no_opts() -> ScoringOptions {
+        ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        }
+    }
+
+    #[test]
+    fn all_personas_produce_valid_contexts() {
+        let contexts = all_validation_contexts();
+        assert_eq!(contexts.len(), 10, "should have exactly 10 personas");
+
+        for (persona, ctx) in &contexts {
+            assert!(!persona.name.is_empty(), "persona name must not be empty");
+            assert!(
+                ctx.interest_count > 0,
+                "{}: must have interests",
+                persona.name
+            );
+            assert!(
+                !ctx.interests.is_empty(),
+                "{}: interests vec must not be empty",
+                persona.name
+            );
+            assert!(
+                !ctx.ace_ctx.active_topics.is_empty(),
+                "{}: ACE active_topics must not be empty",
+                persona.name
+            );
+            assert!(
+                !ctx.domain_profile.primary_stack.is_empty(),
+                "{}: domain primary_stack must not be empty",
+                persona.name
+            );
+        }
+    }
+
+    #[test]
+    fn personas_have_distinct_tech_stacks() {
+        let contexts = all_validation_contexts();
+        let stacks: Vec<&HashSet<String>> = contexts
+            .iter()
+            .map(|(_, ctx)| &ctx.domain_profile.primary_stack)
+            .collect();
+
+        for i in 0..stacks.len() {
+            for j in (i + 1)..stacks.len() {
+                assert_ne!(
+                    stacks[i], stacks[j],
+                    "personas {} and {} have identical primary stacks",
+                    contexts[i].0.name, contexts[j].0.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rust_persona_scores_rust_content_high() {
+        let db = test_db();
+        let persona = rust_systems_dev();
+        let ctx = persona_to_context(&persona);
+        let emb = seed_embedding("rust:tokio-async-runtime");
+
+        let input = ScoringInput {
+            id: 1,
+            title: "Tokio 2.0: major async runtime redesign for Rust",
+            url: None,
+            content: "The Rust async ecosystem gets a major upgrade with Tokio 2.0, \
+                      featuring improved task scheduling, better memory safety guarantees, \
+                      and zero-cost abstractions for concurrent programming.",
+            source_type: "hackernews",
+            embedding: &emb,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        };
+
+        let result = score_item(&input, &ctx, &db, &no_opts(), None);
+        assert!(
+            result.score > 0.3,
+            "Rust persona should score Rust/Tokio content high, got {}",
+            result.score
+        );
+    }
+
+    #[test]
+    fn rust_persona_rejects_anti_topics() {
+        let db = test_db();
+        let persona = rust_systems_dev();
+        let ctx = persona_to_context(&persona);
+        let emb = seed_embedding("crypto:nft-marketplace");
+
+        let input = ScoringInput {
+            id: 2,
+            title: "Building an NFT Marketplace with Solidity and React",
+            url: None,
+            content: "Learn how to create a full-stack NFT marketplace using \
+                      Ethereum smart contracts, Solidity, React frontend, \
+                      and cryptocurrency wallet integration.",
+            source_type: "hackernews",
+            embedding: &emb,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        };
+
+        let result = score_item(&input, &ctx, &db, &no_opts(), None);
+        assert!(
+            result.score < 0.3,
+            "Rust persona should reject crypto/NFT content, got {}",
+            result.score
+        );
+    }
+
+    #[test]
+    fn ml_engineer_scores_ml_content_high() {
+        let db = test_db();
+        let persona = ml_engineer();
+        let ctx = persona_to_context(&persona);
+        let emb = seed_embedding("ml:transformer-attention");
+
+        let input = ScoringInput {
+            id: 3,
+            title: "Scaling Transformer Models: Attention Mechanism Optimizations",
+            url: None,
+            content: "New research on efficient attention patterns for large language \
+                      models, including flash attention, multi-query attention, and \
+                      PyTorch implementation with CUDA kernel optimizations.",
+            source_type: "arxiv",
+            embedding: &emb,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        };
+
+        let result = score_item(&input, &ctx, &db, &no_opts(), None);
+        assert!(
+            result.score > 0.3,
+            "ML engineer should score transformer/PyTorch content high, got {}",
+            result.score
+        );
+    }
+
+    #[test]
+    fn cross_persona_discrimination() {
+        let db = test_db();
+        let emb = seed_embedding("react:server-components");
+
+        let react_item = ScoringInput {
+            id: 4,
+            title: "React Server Components: A Deep Dive into Streaming SSR",
+            url: None,
+            content: "Understanding Next.js App Router, React Server Components, \
+                      Suspense boundaries, and TypeScript integration for modern \
+                      full-stack web applications.",
+            source_type: "devto",
+            embedding: &emb,
+            created_at: None,
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+        };
+
+        let react_persona = react_frontend_dev();
+        let react_ctx = persona_to_context(&react_persona);
+        let react_score = score_item(&react_item, &react_ctx, &db, &no_opts(), None).score;
+
+        let security_persona = security_engineer();
+        let security_ctx = persona_to_context(&security_persona);
+        let security_score = score_item(&react_item, &security_ctx, &db, &no_opts(), None).score;
+
+        assert!(
+            react_score > security_score,
+            "React content should score higher for React dev ({}) than Security eng ({})",
+            react_score,
+            security_score
+        );
+    }
+}
