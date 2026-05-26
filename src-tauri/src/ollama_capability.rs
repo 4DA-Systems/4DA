@@ -6,22 +6,6 @@
 
 use tracing::{info, warn};
 
-/// Minimum parameter count (in billions) required for reliable synthesis.
-///
-/// Models below this threshold produce hallucinated narratives, fake
-/// connections between unrelated signals, and confidently wrong project
-/// assessments. Observed with Llama 3.2 (3B): every prompt variant
-/// produced unusable output. The 7B floor is based on testing with
-/// Llama 3.1 8B, Qwen 2.5 7B, and Mistral 7B — all produce usable
-/// single-signal summaries with the constrained briefing prompt.
-pub(crate) const SYNTHESIS_MIN_PARAMS_B: f64 = 7.0;
-
-/// Minimum parameter count for full narrative synthesis.
-/// Below this, the briefing uses a structured extraction prompt instead of
-/// asking the model to write analyst-quality prose. The 32B floor is based
-/// on testing: Qwen 2.5 32B and Llama 3.1 33B produce usable narratives;
-/// 14B models produce correct-but-pedestrian summaries with banned phrases.
-pub(crate) const NARRATIVE_MIN_PARAMS_B: f64 = 32.0;
 
 /// Minimum parameter count for high-quality analysis explanations.
 /// Below this, LLM "Why this matters" text is verbose, hedgy, and
@@ -97,16 +81,13 @@ pub(crate) fn parse_param_size(s: &str) -> Option<f64> {
 /// cloud models exceed the synthesis capability floor.
 ///
 /// Ollama models must have ≥7B parameters. Below that, free-form
-/// generation produces hallucinated narratives and confidently wrong
-/// advice. The briefing skips synthesis entirely for small models
-/// and shows ranked signals without a narrative — accurate over impressive.
+/// Briefing synthesis is BYOK-only: Anthropic, OpenAI, or OpenAI-compatible
+/// with a valid API key. Local models (builtin sidecar, Ollama) are excluded
+/// — testing showed they produce hallucinated narratives, contradictory
+/// clusters, and confidently wrong advice regardless of model size.
 pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> bool {
     match provider.provider.as_str() {
-        "anthropic" | "openai" => {
-            // Cloud models all exceed synthesis floor.
-            // Still need a valid API key.
-            !provider.api_key.is_empty()
-        }
+        "anthropic" | "openai" => !provider.api_key.is_empty(),
         "openai-compatible" => {
             warn!(
                 target: "4da::ollama",
@@ -114,148 +95,39 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
             );
             !provider.api_key.is_empty()
         }
-        "ollama" => {
-            let base_url = provider
-                .base_url
-                .as_deref()
-                .unwrap_or("http://localhost:11434");
-            if provider.model.is_empty() {
-                warn!(
-                    target: "4da::ollama",
-                    "No Ollama model configured — skipping synthesis"
-                );
-                return false;
-            }
-            let model = &provider.model;
-
-            match get_model_params_billions(model, base_url).await {
-                Some(params) => {
-                    let capable = params >= SYNTHESIS_MIN_PARAMS_B;
-                    if !capable {
-                        info!(
-                            target: "4da::ollama",
-                            model,
-                            params_b = params,
-                            min_b = SYNTHESIS_MIN_PARAMS_B,
-                            "Model below synthesis threshold — briefing will show ranked signals only"
-                        );
-                    }
-                    capable
-                }
-                None => {
-                    // Can't determine model size — conservative: skip synthesis.
-                    // A wrong synthesis is worse than no synthesis.
-                    warn!(
-                        target: "4da::ollama",
-                        model,
-                        "Could not determine model parameters — skipping synthesis"
-                    );
-                    false
-                }
-            }
-        }
-        "builtin" => {
-            // Built-in sidecar uses verified models from the allowlist.
-            // If the sidecar is running, the model has already been vetted.
-            crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready
+        "ollama" | "builtin" => {
+            info!(
+                target: "4da::ollama",
+                provider = %provider.provider,
+                "Local models are not used for briefing synthesis — configure a cloud API key"
+            );
+            false
         }
         _ => false,
     }
 }
 
-/// Resolve all available LLM providers for synthesis, in priority order.
-/// Returns the configured provider first (if it passes the capability check),
-/// then builtin sidecar, then Ollama. The caller should try each in order,
-/// falling through on auth/connection failures.
+/// Resolve cloud LLM providers for briefing synthesis (BYOK only).
+/// Only Anthropic, OpenAI, and OpenAI-compatible providers with valid
+/// API keys qualify. Local models (builtin, Ollama) are never used.
 pub(crate) async fn resolve_synthesis_providers(
     configured: &crate::settings::LLMProvider,
 ) -> Vec<crate::settings::LLMProvider> {
     let mut candidates = Vec::new();
 
-    // 1. Configured provider (if it passes the basic capability check)
     if can_synthesize(configured).await {
         candidates.push(configured.clone());
-    }
-
-    // 2. Builtin sidecar (skip if configured is already builtin)
-    if configured.provider != "builtin"
-        && crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready
-    {
-        candidates.push(crate::settings::LLMProvider {
-            provider: "builtin".to_string(),
-            api_key: String::new(),
-            model: String::new(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: configured.embedding_model.clone(),
-        });
-    }
-
-    // 3. Ollama (skip if configured is already ollama)
-    if configured.provider != "ollama" {
-        let ollama_url = configured
-            .base_url
-            .as_deref()
-            .unwrap_or("http://localhost:11434");
-        if let Some(model) = find_capable_ollama_model(ollama_url).await {
-            candidates.push(crate::settings::LLMProvider {
-                provider: "ollama".to_string(),
-                api_key: String::new(),
-                model,
-                base_url: Some(ollama_url.to_string()),
-                openai_api_key: String::new(),
-                embedding_model: configured.embedding_model.clone(),
-            });
-        }
     }
 
     if candidates.is_empty() {
         info!(
             target: "4da::ollama",
             configured_provider = %configured.provider,
-            "No synthesis-capable provider available — briefing will show signals only"
+            "No cloud API key configured — briefing synthesis disabled"
         );
     }
 
     candidates
-}
-
-/// Probe Ollama for the first model that meets the synthesis parameter floor.
-async fn find_capable_ollama_model(base_url: &str) -> Option<String> {
-    let url = format!("{}/api/tags", base_url.trim_end_matches('/'));
-    let resp = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
-        .build()
-        .ok()?
-        .get(&url)
-        .send()
-        .await
-        .ok()?;
-
-    if !resp.status().is_success() {
-        return None;
-    }
-
-    #[derive(serde::Deserialize)]
-    struct TagsResponse {
-        models: Option<Vec<TagModel>>,
-    }
-    #[derive(serde::Deserialize)]
-    struct TagModel {
-        name: String,
-    }
-
-    let tags: TagsResponse = resp.json().await.ok()?;
-    let models = tags.models?;
-
-    for m in &models {
-        if let Some(params) = get_model_params_billions(&m.name, base_url).await {
-            if params >= SYNTHESIS_MIN_PARAMS_B {
-                return Some(m.name.clone());
-            }
-        }
-    }
-    None
 }
 
 /// Check whether the configured LLM produces reliable analysis text.
@@ -294,45 +166,21 @@ pub(crate) async fn can_explain(provider: &crate::settings::LLMProvider) -> bool
     }
 }
 
-/// Synthesis quality tier — determines which prompt strategy to use.
+/// Synthesis quality tier — only Cloud is used (BYOK providers only).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SynthesisTier {
-    /// Cloud APIs or large local models (70B+) — full narrative prompt.
     Cloud,
-    /// Local models 32B+ — can attempt narrative prose.
-    LocalNarrative,
-    /// Local models 7B-31B — structured extraction only.
-    LocalStructured,
 }
 
 impl SynthesisTier {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Self::Cloud => "cloud",
-            Self::LocalNarrative => "local-narrative",
-            Self::LocalStructured => "local-structured",
         }
     }
 }
 
-/// Determine the synthesis quality tier for a given provider.
-pub(crate) async fn synthesis_tier(provider: &crate::settings::LLMProvider) -> SynthesisTier {
-    match provider.provider.as_str() {
-        "anthropic" | "openai" | "openai-compatible" => SynthesisTier::Cloud,
-        "builtin" => SynthesisTier::Cloud,
-        "ollama" => {
-            let base_url = provider
-                .base_url
-                .as_deref()
-                .unwrap_or("http://localhost:11434");
-            if provider.model.is_empty() {
-                return SynthesisTier::LocalStructured;
-            }
-            match get_model_params_billions(&provider.model, base_url).await {
-                Some(params) if params >= NARRATIVE_MIN_PARAMS_B => SynthesisTier::LocalNarrative,
-                _ => SynthesisTier::LocalStructured,
-            }
-        }
-        _ => SynthesisTier::LocalStructured,
-    }
+/// All synthesis providers are cloud-tier (BYOK only).
+pub(crate) async fn synthesis_tier(_provider: &crate::settings::LLMProvider) -> SynthesisTier {
+    SynthesisTier::Cloud
 }
