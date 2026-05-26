@@ -76,21 +76,18 @@ function friendlyHint(raw) {
   if (!raw) return '';
   var lower = raw.toLowerCase();
   if (lower.indexOf('401') !== -1 || lower.indexOf('authentication') !== -1 || lower.indexOf('invalid') !== -1 && lower.indexOf('key') !== -1) {
-    return 'API key invalid or expired — check Settings, or start a local model for offline synthesis.';
+    return 'API key invalid or expired — check your cloud API key in Settings.';
   }
-  if (lower.indexOf('no synthesis-capable') !== -1 || lower.indexOf('no llm configured') !== -1) {
-    return 'No AI model available — add an API key or download a local model in Settings.';
+  if (lower.indexOf('no synthesis-capable') !== -1 || lower.indexOf('no llm configured') !== -1 || lower.indexOf('no cloud api') !== -1) {
+    return 'Configure a cloud AI provider (Anthropic or OpenAI) in Settings to enable briefing synthesis.';
   }
   if (lower.indexOf('rate limit') !== -1 || lower.indexOf('429') !== -1) {
     return 'API rate limit reached — synthesis will retry on next briefing.';
   }
   if (lower.indexOf('timeout') !== -1 || lower.indexOf('timed out') !== -1) {
-    return 'Model took too long to respond — synthesis will retry on next briefing.';
+    return 'Provider took too long to respond — synthesis will retry on next briefing.';
   }
-  if (lower.indexOf('below synthesis') !== -1 || lower.indexOf('capability threshold') !== -1) {
-    return 'Local model too small for synthesis — download a 7B+ model in Settings.';
-  }
-  return 'Intelligence synthesis unavailable — check AI settings.';
+  return 'Intelligence synthesis unavailable — check cloud AI settings.';
 }
 
 function isAbstention(text) {
@@ -108,9 +105,29 @@ function parseDateFromTitle(title) {
   return (parts[parts.length - 1] || '').trim();
 }
 
-/** Human-readable source type label */
-function sourceLabel(sourceType) {
-  var map = {
+/** Human-readable content type badge — prefers content_type over source_type */
+function contentBadge(contentType, sourceType) {
+  if (contentType) {
+    var ctMap = {
+      'security_advisory': 'security',
+      'breaking_change': 'breaking',
+      'release_notes': 'release',
+      'deep_dive': 'deep dive',
+      'curated_digest': 'digest',
+      'expert_analysis': 'analysis',
+      'platform_update': 'update',
+      'tutorial': 'tutorial',
+      'show_and_tell': 'project',
+      'question': 'question',
+      'help_request': 'help',
+      'deprecation_notice': 'deprecated',
+      'migration_guide': 'migration',
+      'vulnerability_report': 'security',
+      'discussion': 'discussion'
+    };
+    if (ctMap[contentType]) return ctMap[contentType];
+  }
+  var srcMap = {
     'arxiv': 'paper',
     'papers_with_code': 'paper',
     'hackernews': 'discussion',
@@ -124,7 +141,7 @@ function sourceLabel(sourceType) {
     'twitter': 'post',
     'x': 'post'
   };
-  return map[sourceType] || sourceType || '';
+  return srcMap[sourceType] || sourceType || '';
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +175,7 @@ function invokeTauri(command, args) {
 
 function buildItemHtml(item) {
   var title = escapeHtml(truncate(item.title, 90));
-  var source = escapeHtml(sourceLabel(item.source_type));
+  var source = escapeHtml(contentBadge(item.content_type, item.source_type));
   var itemId = item.item_id != null ? item.item_id : '';
   var url = item.url || '';
 
@@ -357,6 +374,13 @@ function renderBriefing(data) {
     synthesisSection.classList.add('abstention');
     synthesisText.textContent = cleanSynthesis(data.synthesis);
     if (synthesisHintSection) synthesisHintSection.style.display = 'none';
+  } else if (data.synthesis_hint) {
+    // No cloud API configured — show honest empty state
+    synthesisSection.style.display = 'none';
+    if (synthesisHintSection && synthesisHintText) {
+      synthesisHintSection.style.display = '';
+      synthesisHintText.textContent = friendlyHint(data.synthesis_hint);
+    }
   } else {
     // No synthesis in initial data — show loading indicator
     // (synthesis may arrive async from startup/manual trigger paths)
@@ -571,19 +595,10 @@ async function init() {
     await listen('briefing-synthesis-meta', function (event) {
       if (event.payload && synthesisProvenance) {
         var p = event.payload;
-        var tier = p.tier || '';
         var provider = p.provider || '';
         var model = provider.split('/').pop() || provider;
-        var label = '';
-        if (tier === 'local-structured') {
-          label = 'Local model (' + model + ') -- structured extraction';
-        } else if (tier === 'local-narrative') {
-          label = 'Local model (' + model + ')';
-        } else if (tier === 'cloud') {
-          label = model;
-        }
-        if (label) {
-          synthesisProvenance.textContent = label;
+        if (model) {
+          synthesisProvenance.textContent = model;
           synthesisProvenance.style.display = '';
         }
       }

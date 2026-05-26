@@ -44,18 +44,17 @@ fn parse_param_size_invalid() {
 }
 
 #[test]
-fn small_model_below_synthesis_floor() {
-    assert!(3.2 < SYNTHESIS_MIN_PARAMS_B);
-    assert!(1.0 < SYNTHESIS_MIN_PARAMS_B);
-    assert!(0.5 < SYNTHESIS_MIN_PARAMS_B);
+fn small_model_below_explanation_floor() {
+    assert!(3.2 < ANALYSIS_QUALITY_MIN_PARAMS_B);
+    assert!(1.0 < ANALYSIS_QUALITY_MIN_PARAMS_B);
+    assert!(7.0 < ANALYSIS_QUALITY_MIN_PARAMS_B);
 }
 
 #[test]
-fn capable_model_above_synthesis_floor() {
-    assert!(7.0 >= SYNTHESIS_MIN_PARAMS_B);
-    assert!(8.0 >= SYNTHESIS_MIN_PARAMS_B);
-    assert!(14.0 >= SYNTHESIS_MIN_PARAMS_B);
-    assert!(70.0 >= SYNTHESIS_MIN_PARAMS_B);
+fn capable_model_above_explanation_floor() {
+    assert!(14.0 >= ANALYSIS_QUALITY_MIN_PARAMS_B);
+    assert!(32.0 >= ANALYSIS_QUALITY_MIN_PARAMS_B);
+    assert!(70.0 >= ANALYSIS_QUALITY_MIN_PARAMS_B);
 }
 
 #[test]

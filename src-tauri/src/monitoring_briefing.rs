@@ -809,7 +809,18 @@ pub(crate) fn build_enriched_briefing(
         data_freshness: compute_data_freshness(),
         corroboration_available,
         coverage_building,
-        synthesis_hint: None,
+        synthesis_hint: {
+            let llm = crate::get_settings_manager().lock().get().llm.clone();
+            let is_cloud = matches!(
+                llm.provider.as_str(),
+                "anthropic" | "openai" | "openai-compatible"
+            );
+            if !is_cloud || llm.api_key.is_empty() {
+                Some("No cloud API key configured — configure Anthropic or OpenAI in Settings to enable intelligence synthesis".to_string())
+            } else {
+                None
+            }
+        },
     }
 }
 
@@ -1982,17 +1993,6 @@ pub(crate) struct SynthesisResult {
     pub synthesis_tier: String,
 }
 
-const LOCAL_STRUCTURED_PROMPT: &str = r#"You are a signal classifier for a developer intelligence briefing. Group related signals into 1-2 clusters. Each cluster has an insight (what the pattern means) and an action (what the developer should do).
-
-RULES:
-1. Maximum 2 clusters. Pick the strongest connections.
-2. Each insight: one sentence, under 30 words. State the pattern, not the title.
-3. Each action: one sentence, under 20 words. Specific to this developer's stack.
-4. Only mention technologies in the developer's dependency list or tech stack.
-5. Never invent numbers, percentages, or statistics not in the signals.
-6. If fewer than 2 signals are noteworthy: output one cluster with insight "Low signal overnight" and action "No action required."
-7. Do not use phrases: "is crucial", "is important", "it is essential", "it is recommended".
-8. Use plain ASCII dashes (--) not unicode em dashes."#;
 
 /// Synthesize a narrative morning intelligence briefing using LLM.
 pub(crate) async fn synthesize_morning_briefing(
@@ -2007,7 +2007,7 @@ pub(crate) async fn synthesize_morning_briefing(
     let providers = crate::ollama::resolve_synthesis_providers(&configured_settings).await;
     if providers.is_empty() {
         return Err(
-            "No synthesis-capable provider available — add an API key or start a local model"
+            "No synthesis-capable provider — configure a cloud AI provider (Anthropic or OpenAI) in Settings"
                 .into(),
         );
     }
@@ -2273,12 +2273,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             }
         );
 
-        let active_system_prompt = match tier {
-            crate::ollama::SynthesisTier::LocalStructured => {
-                format!("{LOCAL_STRUCTURED_PROMPT}{language_instruction}")
-            }
-            _ => full_system_prompt.clone(),
-        };
+        let active_system_prompt = full_system_prompt.clone();
 
         // --- Structured output path (Phase 4) -----------------------------------
         // Try JSON mode first. If the provider supports it and the output validates,
@@ -2661,7 +2656,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     } // end provider loop
 
     Err(last_error.unwrap_or_else(|| {
-        "All synthesis providers failed — add an API key or start a local model".into()
+        "All synthesis providers failed — check your cloud API key in Settings".into()
     }))
 }
 
@@ -2966,6 +2961,7 @@ mod tests {
             data_freshness: None,
             corroboration_available: false,
             coverage_building: false,
+            synthesis_hint: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
@@ -3218,6 +3214,7 @@ mod tests {
             data_freshness: None,
             corroboration_available: false,
             coverage_building: false,
+            synthesis_hint: None,
         }
     }
 

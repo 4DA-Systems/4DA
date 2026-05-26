@@ -124,12 +124,7 @@ pub struct LLMClient {
 
 impl LLMClient {
     pub fn new(provider: LLMProvider) -> Self {
-        // Local models need generous timeouts — ~3 tok/s means a 2000-token
-        // response takes ~11 minutes. Cloud APIs are much faster.
-        let timeout_secs = match provider.provider.as_str() {
-            "ollama" | "builtin" => 600,
-            _ => 120,
-        };
+        let timeout_secs: u64 = 120;
         Self {
             provider,
             client: reqwest::Client::builder()
