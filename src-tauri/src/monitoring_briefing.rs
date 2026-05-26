@@ -1993,7 +1993,6 @@ pub(crate) struct SynthesisResult {
     pub synthesis_tier: String,
 }
 
-
 /// Synthesize a narrative morning intelligence briefing using LLM.
 pub(crate) async fn synthesize_morning_briefing(
     briefing: &BriefingNotification,

@@ -6,7 +6,6 @@
 
 use tracing::{info, warn};
 
-
 /// Minimum parameter count for high-quality analysis explanations.
 /// Below this, LLM "Why this matters" text is verbose, hedgy, and
 /// sometimes hallucinates article content. The frontend hides the
