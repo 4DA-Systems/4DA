@@ -982,14 +982,47 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             }
 
             if !skip_briefing {
-                if let Some(briefing) =
+                if let Some(mut briefing) =
                     crate::monitoring_notifications::check_morning_briefing(&state)
                 {
                     info!(target: "4da::monitor", items = briefing.total_relevant, "Morning briefing triggered");
 
-                    // Sovereign Cold Boot — persist this briefing for tomorrow's instant
-                    // first paint. Will be re-saved with synthesis text when the LLM
-                    // narrative completes (below).
+                    // Pre-generate synthesis before showing the briefing.
+                    // On local models this takes 1-3 minutes — acceptable for a
+                    // scheduled background task.  The user sees a complete briefing
+                    // with synthesis already populated.
+                    let synthesis_meta =
+                        match crate::monitoring_briefing::synthesize_morning_briefing(&briefing)
+                            .await
+                        {
+                            Ok(result) => {
+                                info!(
+                                    target: "4da::briefing",
+                                    provider = %result.provider_used,
+                                    tier = %result.synthesis_tier,
+                                    "Scheduled synthesis ready"
+                                );
+                                briefing.synthesis = Some(result.prose.clone());
+                                // Emit the enriched synthesis to the main app
+                                let mut payload = serde_json::json!({ "synthesis": &result.prose });
+                                if let Some(ref clusters) = result.clusters {
+                                    payload["clusters"] = serde_json::json!(clusters);
+                                }
+                                payload["provider"] = serde_json::json!(&result.provider_used);
+                                payload["tier"] = serde_json::json!(&result.synthesis_tier);
+                                let _ = app.emit("morning-briefing-synthesis", payload);
+                                Some(serde_json::json!({
+                                    "provider": &result.provider_used,
+                                    "tier": &result.synthesis_tier,
+                                }))
+                            }
+                            Err(e) => {
+                                info!(target: "4da::briefing", reason = %e, "Scheduled synthesis skipped");
+                                None
+                            }
+                        };
+
+                    // Persist briefing (now includes synthesis if it succeeded)
                     crate::briefing_snapshot::save_snapshot(&briefing);
 
                     crate::monitoring_notifications::send_morning_briefing_notification(
@@ -1013,44 +1046,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
                     }
 
-                    // Async LLM synthesis — narrative intelligence brief
-                    {
-                        let app_synth = app.clone();
-                        let briefing_synth = briefing.clone();
-                        tauri::async_runtime::spawn(async move {
-                            match crate::monitoring_briefing::synthesize_morning_briefing(
-                                &briefing_synth,
-                            )
-                            .await
-                            {
-                                Ok(result) => {
-                                    info!(target: "4da::briefing", "Morning brief synthesis ready");
-                                    let _ = app_synth.emit_to(
-                                        "briefing",
-                                        "briefing-synthesis",
-                                        &result.prose,
-                                    );
-                                    let mut payload =
-                                        serde_json::json!({ "synthesis": &result.prose });
-                                    if let Some(ref clusters) = result.clusters {
-                                        payload["clusters"] = serde_json::json!(clusters);
-                                    }
-                                    let _ = app_synth.emit("morning-briefing-synthesis", payload);
-
-                                    let mut enriched = briefing_synth.clone();
-                                    enriched.synthesis = Some(result.prose);
-                                    crate::briefing_snapshot::save_snapshot(&enriched);
-                                }
-                                Err(e) => {
-                                    info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
-                                    let _ = app_synth.emit_to(
-                                        "briefing",
-                                        "briefing-synthesis-hint",
-                                        &e,
-                                    );
-                                }
-                            }
-                        });
+                    // Emit provenance meta if synthesis succeeded
+                    if let Some(meta) = synthesis_meta {
+                        let _ = app.emit_to("briefing", "briefing-synthesis-meta", &meta);
+                    } else {
+                        let _ = app.emit_to(
+                            "briefing",
+                            "briefing-synthesis-hint",
+                            "Synthesis unavailable \u{2014} briefing shows signals only",
+                        );
                     }
                 }
             } // !skip_briefing
