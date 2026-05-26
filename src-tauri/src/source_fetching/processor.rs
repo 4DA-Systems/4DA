@@ -5,6 +5,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use futures::FutureExt;
+
 use tauri::AppHandle;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
@@ -224,13 +226,24 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                     // Non-blocking: translation warms cache asynchronously.
                     // Content displays immediately; next view hits warm cache.
                     tokio::spawn(async move {
-                        let results = crate::content_translation::translate_content_batch(
-                            &translation_requests,
-                            &lang,
+                        let result = std::panic::AssertUnwindSafe(
+                            crate::content_translation::translate_content_batch(
+                                &translation_requests,
+                                &lang,
+                            ),
                         )
+                        .catch_unwind()
                         .await;
-                        let translated = results.iter().filter(|r| r.provider != "none").count();
-                        info!(target: "4da::cache", translated, total = count, lang = %lang, "Background ingest translation complete");
+                        match result {
+                            Ok(results) => {
+                                let translated =
+                                    results.iter().filter(|r| r.provider != "none").count();
+                                info!(target: "4da::cache", translated, total = count, lang = %lang, "Background ingest translation complete");
+                            }
+                            Err(_) => {
+                                warn!(target: "4da::cache", "Background translation panicked — caught and ignored");
+                            }
+                        }
                     });
                 } else {
                     debug!(target: "4da::cache", "Ingest translation budget exhausted - skipping until tomorrow");

@@ -8133,9 +8133,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "victauri-core"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a973489a5ff9ebcd6784a7a0e166d2509dbffd943cbf1610411904f6e154c795"
+checksum = "787d691aab856258dd0cc618498084350cd7bb307f079dab169039f8cea2ce79"
 dependencies = [
  "chrono",
  "inventory",
@@ -8149,9 +8149,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-macros"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1faca17a878d5ca9f9966d68263f3b8713dcdd73e9190ac4898da73ca7cc54c7"
+checksum = "7e5342ef065f97492f5891e53dedd88be563306218efe88f20cca4d450e5e042"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8160,9 +8160,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-plugin"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f112d9128df04aad71929333fcba98e6f4c06b047aef25009971fceaf43c09f"
+checksum = "fecd284a6f3f2dcc8a1f7ecacf0c90a99535bc691fbcf361ccd2dd894a53e84f"
 dependencies = [
  "anyhow",
  "axum",
@@ -8172,6 +8172,7 @@ dependencies = [
  "raw-window-handle",
  "regex",
  "rmcp",
+ "rusqlite",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -8191,9 +8192,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-test"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8517eca9b3dc0e6527fc6535a7473fc4df72f6919cf241350d1f7bcc4aeb23ef"
+checksum = "a0513923d7bbfff4f6144066b56d815ec18029f62219b61b48cb678c23f4643b"
 dependencies = [
  "base64 0.22.1",
  "png 0.17.16",

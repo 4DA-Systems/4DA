@@ -2900,6 +2900,32 @@ impl Database {
                 )?;
             }
 
+            if current_version < 81 {
+                Self::run_versioned_migration(
+                    &conn,
+                    80,
+                    81,
+                    "Phase 81: error telemetry table",
+                    |c| {
+                        c.execute_batch(
+                            "CREATE TABLE IF NOT EXISTS error_telemetry (
+                                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                category TEXT NOT NULL,
+                                message TEXT NOT NULL,
+                                context TEXT,
+                                count INTEGER NOT NULL DEFAULT 1,
+                                first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+                                last_seen TEXT NOT NULL DEFAULT (datetime('now')),
+                                UNIQUE(category, message)
+                            );
+                            CREATE INDEX IF NOT EXISTS idx_error_telemetry_category ON error_telemetry(category);
+                            CREATE INDEX IF NOT EXISTS idx_error_telemetry_last_seen ON error_telemetry(last_seen);",
+                        )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
