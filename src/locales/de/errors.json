@@ -35,6 +35,7 @@
   "errorMsg.ipc": "Fehler in der App-Kommunikation. Bitte starte die App neu.",
   "errorMsg.limitAdjust": "Anpassen unter Einstellungen > Intelligenz, oder warte bis zum Mitternachts-Reset.",
   "errorMsg.network": "Netzwerkanfrage fehlgeschlagen. Überprüfe deine Internetverbindung.",
+  "errorMsg.sidecarNotRunning": "Das integrierte Modell läuft nicht. Starte es in den Einstellungen oder konfiguriere einen Cloud-API-Schlüssel.",
   "errorMsg.ollamaNotRunning": "Ollama läuft nicht. Starte Ollama oder trage einen API-Schlüssel in den Einstellungen ein.",
   "errorMsg.parse": "Datenformatfehler. Versuche es erneut oder starte die App neu.",
   "errorMsg.permission": "Zugriff verweigert. Überprüfe die Dateiberechtigungen.",

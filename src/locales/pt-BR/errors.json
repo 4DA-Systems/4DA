@@ -35,6 +35,7 @@
   "errorMsg.ipc": "Erro de comunicação do aplicativo. Reinicie o aplicativo.",
   "errorMsg.limitAdjust": "Ajuste em Configurações > Inteligência, ou aguarde a redefinição à meia-noite.",
   "errorMsg.network": "Falha na requisição de rede. Verifique sua conexão com a internet.",
+  "errorMsg.sidecarNotRunning": "O modelo integrado não está em execução. Inicie-o em Configurações ou configure uma chave de API na nuvem.",
   "errorMsg.ollamaNotRunning": "Ollama não está rodando. Inicie o Ollama ou configure uma chave API em Configurações.",
   "errorMsg.parse": "Erro no formato dos dados. Tente novamente ou reinicie o aplicativo.",
   "errorMsg.permission": "Permissão negada. Verifique as permissões dos arquivos.",
