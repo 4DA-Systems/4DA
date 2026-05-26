@@ -117,6 +117,13 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
         ));
     }
 
+    if llm_config.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        return Err(FourDaError::Llm(
+            "Built-in model is not running. Start it from Settings or configure a cloud API key."
+                .to_string(),
+        ));
+    }
+
     debug!(target: "4da::content", item_id = item_id, "Generating AI summary");
 
     let client = LLMClient::new(llm_config);

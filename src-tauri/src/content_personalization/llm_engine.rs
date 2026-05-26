@@ -67,6 +67,9 @@ fn get_llm_client() -> Option<crate::llm::LLMClient> {
     if provider.api_key.is_empty() && !matches!(provider.provider.as_str(), "ollama" | "builtin") {
         return None;
     }
+    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        return None;
+    }
     Some(crate::llm::LLMClient::new(provider))
 }
 

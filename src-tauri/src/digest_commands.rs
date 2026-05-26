@@ -77,6 +77,14 @@ pub(crate) async fn generate_briefing_internal(
         }));
     }
 
+    if llm_settings.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        return Ok(serde_json::json!({
+            "success": false,
+            "error": "Built-in model is not running. Start it from Settings or configure a cloud API key.",
+            "briefing": null
+        }));
+    }
+
     // Get items from analysis state or DB
     let (mem_items, explanations): (
         Vec<crate::db::DigestSourceItem>,

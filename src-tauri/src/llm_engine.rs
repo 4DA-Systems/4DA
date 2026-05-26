@@ -276,6 +276,13 @@ pub(crate) fn sidecar_base_url() -> Option<String> {
     sidecar_port().map(|p| format!("http://127.0.0.1:{p}/v1"))
 }
 
+/// Whether the builtin sidecar is ready to handle LLM requests.
+/// Use this to skip LLM operations early when the sidecar isn't running
+/// instead of letting them fail deep in the HTTP call path.
+pub(crate) fn is_builtin_available() -> bool {
+    sidecar_status() == SidecarStatus::Ready
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

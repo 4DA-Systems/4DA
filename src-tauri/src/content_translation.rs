@@ -514,6 +514,10 @@ fn get_llm_client() -> Result<llm::LLMClient> {
         let lang = crate::i18n::get_user_language();
         return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
     }
+    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        let lang = crate::i18n::get_user_language();
+        return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
+    }
     Ok(llm::LLMClient::new(provider))
 }
 

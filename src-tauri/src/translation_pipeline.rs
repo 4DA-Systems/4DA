@@ -252,6 +252,9 @@ fn get_llm_client() -> Result<llm::LLMClient> {
     if provider.api_key.is_empty() && !matches!(provider.provider.as_str(), "ollama" | "builtin") {
         return Err("LLM not configured -- set up your API key in Settings".into());
     }
+    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        return Err("Built-in model is not running".into());
+    }
     Ok(llm::LLMClient::new(provider))
 }
 

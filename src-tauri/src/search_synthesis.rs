@@ -336,6 +336,13 @@ pub async fn synthesize_search(
         );
     }
 
+    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        return Err(
+            "Built-in model is not running. Start it from Settings or configure a cloud API key."
+                .into(),
+        );
+    }
+
     debug!(target: "4da::synthesis", query = %query_text, "Starting search synthesis");
 
     // Gather deep context from DB

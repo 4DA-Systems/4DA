@@ -22,6 +22,7 @@ const ERROR_PATTERNS: ErrorPattern[] = [
   { test: /timeout|timed?\s*out|deadline.*exceeded/i, key: 'errors:errorMsg.timeout', fallback: 'Request timed out. Try again in a moment.' },
   { test: /api\s*key|unauthorized|401|403|invalid.*key/i, key: 'errors:errorMsg.auth', fallback: 'Authentication failed. Check your API key in Settings.' },
   { test: /rate\s*limit|429|too many requests/i, key: 'errors:errorMsg.rateLimit', fallback: 'Rate limit reached. Please wait a moment and try again.' },
+  { test: /sidecar.*not.*running|built-?in.*not.*running|built-?in model/i, key: 'errors:errorMsg.sidecarNotRunning', fallback: 'Built-in model is not running. Start it from Settings or configure a cloud API key.' },
   { test: /ollama.*not.*running|ollama.*connect|(?=.*connection refused)(?=.*ollama)|(?=.*ECONNREFUSED)(?=.*ollama)/i, key: 'errors:errorMsg.ollamaNotRunning', fallback: 'Ollama is not running. Start Ollama or set an API key in Settings.' },
   { test: /ollama|embedding.*fail|model.*not.*found/i, key: 'errors:errorMsg.embedding', fallback: 'Embedding service unavailable. Check that Ollama is running.' },
   { test: /connection refused|ECONNREFUSED/i, key: 'errors:errorMsg.connectionRefused', fallback: 'Network request failed. Check your internet connection.' },

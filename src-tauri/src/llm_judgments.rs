@@ -128,6 +128,10 @@ fn get_llm_settings() -> Option<LLMProvider> {
         return None;
     }
 
+    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        return None;
+    }
+
     Some(provider)
 }
 

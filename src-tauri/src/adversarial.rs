@@ -102,6 +102,15 @@ pub(crate) async fn deliberate(
         return Ok(None);
     }
 
+    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
+        debug!(
+            target: "4da::adversarial",
+            item_id = %item.id,
+            "Skipping deliberation -- builtin sidecar not running"
+        );
+        return Ok(None);
+    }
+
     // ---- Build the combined prompt ----
     let system_prompt = build_system_prompt();
     let user_message = build_user_message(item, user_context);
