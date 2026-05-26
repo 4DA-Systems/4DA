@@ -1978,7 +1978,21 @@ fn strip_control_chars(s: &str) -> String {
 pub(crate) struct SynthesisResult {
     pub prose: String,
     pub clusters: Option<Vec<crate::synthesis_schema::SynthesisCluster>>,
+    pub provider_used: String,
+    pub synthesis_tier: String,
 }
+
+const LOCAL_STRUCTURED_PROMPT: &str = r#"You are a signal classifier for a developer intelligence briefing. Group related signals into 1-2 clusters. Each cluster has an insight (what the pattern means) and an action (what the developer should do).
+
+RULES:
+1. Maximum 2 clusters. Pick the strongest connections.
+2. Each insight: one sentence, under 30 words. State the pattern, not the title.
+3. Each action: one sentence, under 20 words. Specific to this developer's stack.
+4. Only mention technologies in the developer's dependency list or tech stack.
+5. Never invent numbers, percentages, or statistics not in the signals.
+6. If fewer than 2 signals are noteworthy: output one cluster with insight "Low signal overnight" and action "No action required."
+7. Do not use phrases: "is crucial", "is important", "it is essential", "it is recommended".
+8. Use plain ASCII dashes (--) not unicode em dashes."#;
 
 /// Synthesize a narrative morning intelligence briefing using LLM.
 pub(crate) async fn synthesize_morning_briefing(
@@ -2248,6 +2262,23 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     for (idx, llm_settings) in providers.iter().enumerate() {
         let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
+        let tier = crate::ollama::synthesis_tier(llm_settings).await;
+        let provider_label = format!(
+            "{}/{}",
+            llm_settings.provider,
+            if llm_settings.model.is_empty() {
+                "default"
+            } else {
+                &llm_settings.model
+            }
+        );
+
+        let active_system_prompt = match tier {
+            crate::ollama::SynthesisTier::LocalStructured => {
+                format!("{LOCAL_STRUCTURED_PROMPT}{language_instruction}")
+            }
+            _ => full_system_prompt.clone(),
+        };
 
         // --- Structured output path (Phase 4) -----------------------------------
         // Try JSON mode first. If the provider supports it and the output validates,
@@ -2260,7 +2291,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
         let start = std::time::Instant::now();
         let structured_result = llm_client
-            .complete_structured(&full_system_prompt, messages.clone(), &structured_mode)
+            .complete_structured(&active_system_prompt, messages.clone(), &structured_mode)
             .await;
 
         match structured_result {
@@ -2297,6 +2328,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                                 prose: "Low signal -- no noteworthy intelligence overnight."
                                     .to_string(),
                                 clusters: None,
+                                provider_used: provider_label.clone(),
+                                synthesis_tier: tier.as_str().to_string(),
                             });
                         }
 
@@ -2322,6 +2355,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                         return Ok(SynthesisResult {
                             prose: synthesis,
                             clusters: Some(output.clusters),
+                            provider_used: provider_label.clone(),
+                            synthesis_tier: tier.as_str().to_string(),
                         });
                     }
                     Ok(_) => {
@@ -2363,7 +2398,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         // --- Free-text fallback path (legacy) ------------------------------------
         let start = std::time::Instant::now();
         let response = match llm_client
-            .complete(&full_system_prompt, messages.clone())
+            .complete(&active_system_prompt, messages.clone())
             .await
         {
             Ok(r) => r,
@@ -2590,6 +2625,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
             return Ok(SynthesisResult {
                 prose: "Low signal -- no noteworthy intelligence overnight.".to_string(),
                 clusters: None,
+                provider_used: provider_label.clone(),
+                synthesis_tier: tier.as_str().to_string(),
             });
         }
 
@@ -2618,6 +2655,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         return Ok(SynthesisResult {
             prose: synthesis,
             clusters: None,
+            provider_used: provider_label.clone(),
+            synthesis_tier: tier.as_str().to_string(),
         });
     } // end provider loop
 

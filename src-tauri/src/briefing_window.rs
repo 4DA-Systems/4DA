@@ -417,8 +417,18 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         tauri::async_runtime::spawn(async move {
             match crate::monitoring_briefing::synthesize_morning_briefing(&briefing_synth).await {
                 Ok(result) => {
-                    info!(target: "4da::briefing", "Manual briefing synthesis ready");
+                    info!(
+                        target: "4da::briefing",
+                        provider = %result.provider_used,
+                        tier = %result.synthesis_tier,
+                        "Manual briefing synthesis ready"
+                    );
                     let _ = app_synth.emit_to("briefing", "briefing-synthesis", &result.prose);
+                    let meta = serde_json::json!({
+                        "provider": &result.provider_used,
+                        "tier": &result.synthesis_tier,
+                    });
+                    let _ = app_synth.emit_to("briefing", "briefing-synthesis-meta", &meta);
                 }
                 Err(e) => {
                     info!(target: "4da::briefing", reason = %e, "Manual synthesis skipped");
