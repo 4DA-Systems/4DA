@@ -1149,16 +1149,29 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                         .await
                         {
                             Ok(result) => {
-                                info!(target: "4da::briefing", "Startup brief synthesis ready");
+                                info!(
+                                    target: "4da::briefing",
+                                    provider = %result.provider_used,
+                                    tier = %result.synthesis_tier,
+                                    "Startup brief synthesis ready"
+                                );
                                 let _ = app_synth.emit_to(
                                     "briefing",
                                     "briefing-synthesis",
                                     &result.prose,
                                 );
+                                let meta = serde_json::json!({
+                                    "provider": &result.provider_used,
+                                    "tier": &result.synthesis_tier,
+                                });
+                                let _ =
+                                    app_synth.emit_to("briefing", "briefing-synthesis-meta", &meta);
                                 let mut payload = serde_json::json!({ "synthesis": &result.prose });
                                 if let Some(ref clusters) = result.clusters {
                                     payload["clusters"] = serde_json::json!(clusters);
                                 }
+                                payload["provider"] = serde_json::json!(&result.provider_used);
+                                payload["tier"] = serde_json::json!(&result.synthesis_tier);
                                 let _ = app_synth.emit("morning-briefing-synthesis", payload);
 
                                 let mut enriched = briefing_synth.clone();

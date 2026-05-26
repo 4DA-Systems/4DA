@@ -16,6 +16,13 @@ use tracing::{info, warn};
 /// single-signal summaries with the constrained briefing prompt.
 pub(crate) const SYNTHESIS_MIN_PARAMS_B: f64 = 7.0;
 
+/// Minimum parameter count for full narrative synthesis.
+/// Below this, the briefing uses a structured extraction prompt instead of
+/// asking the model to write analyst-quality prose. The 32B floor is based
+/// on testing: Qwen 2.5 32B and Llama 3.1 33B produce usable narratives;
+/// 14B models produce correct-but-pedestrian summaries with banned phrases.
+pub(crate) const NARRATIVE_MIN_PARAMS_B: f64 = 32.0;
+
 /// Minimum parameter count for high-quality analysis explanations.
 /// Below this, LLM "Why this matters" text is verbose, hedgy, and
 /// sometimes hallucinates article content. The frontend hides the
@@ -284,5 +291,48 @@ pub(crate) async fn can_explain(provider: &crate::settings::LLMProvider) -> bool
         }
         "builtin" => crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready,
         _ => false,
+    }
+}
+
+/// Synthesis quality tier — determines which prompt strategy to use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SynthesisTier {
+    /// Cloud APIs or large local models (70B+) — full narrative prompt.
+    Cloud,
+    /// Local models 32B+ — can attempt narrative prose.
+    LocalNarrative,
+    /// Local models 7B-31B — structured extraction only.
+    LocalStructured,
+}
+
+impl SynthesisTier {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            Self::Cloud => "cloud",
+            Self::LocalNarrative => "local-narrative",
+            Self::LocalStructured => "local-structured",
+        }
+    }
+}
+
+/// Determine the synthesis quality tier for a given provider.
+pub(crate) async fn synthesis_tier(provider: &crate::settings::LLMProvider) -> SynthesisTier {
+    match provider.provider.as_str() {
+        "anthropic" | "openai" | "openai-compatible" => SynthesisTier::Cloud,
+        "builtin" => SynthesisTier::Cloud,
+        "ollama" => {
+            let base_url = provider
+                .base_url
+                .as_deref()
+                .unwrap_or("http://localhost:11434");
+            if provider.model.is_empty() {
+                return SynthesisTier::LocalStructured;
+            }
+            match get_model_params_billions(&provider.model, base_url).await {
+                Some(params) if params >= NARRATIVE_MIN_PARAMS_B => SynthesisTier::LocalNarrative,
+                _ => SynthesisTier::LocalStructured,
+            }
+        }
+        _ => SynthesisTier::LocalStructured,
     }
 }

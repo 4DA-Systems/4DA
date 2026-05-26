@@ -32,6 +32,7 @@ var synthesisSection = document.getElementById('synthesis-section');
 var synthesisText = document.getElementById('synthesis-text');
 var synthesisHintSection = document.getElementById('synthesis-hint-section');
 var synthesisHintText = document.getElementById('synthesis-hint-text');
+var synthesisProvenance = document.getElementById('synthesis-provenance');
 var preemptionSection = document.getElementById('preemption-section');
 var preemptionList = document.getElementById('preemption-list');
 var gapsSection = document.getElementById('gaps-section');
@@ -258,6 +259,12 @@ function classifyItem(item) {
 }
 
 function renderBriefing(data) {
+  // Reset provenance from any previous render
+  if (synthesisProvenance) {
+    synthesisProvenance.textContent = '';
+    synthesisProvenance.style.display = 'none';
+  }
+
   // Header date
   briefingDate.textContent = parseDateFromTitle(data.title);
 
@@ -351,7 +358,11 @@ function renderBriefing(data) {
     synthesisText.textContent = cleanSynthesis(data.synthesis);
     if (synthesisHintSection) synthesisHintSection.style.display = 'none';
   } else {
-    synthesisSection.style.display = 'none';
+    // No synthesis in initial data — show loading indicator
+    // (synthesis may arrive async from startup/manual trigger paths)
+    synthesisSection.style.display = '';
+    synthesisSection.classList.add('synthesizing');
+    synthesisText.textContent = 'Synthesizing intelligence…';
   }
 
   // Preemption alerts
@@ -547,6 +558,8 @@ async function init() {
     // Async synthesis arrives after initial briefing
     await listen('briefing-synthesis', function (event) {
       if (event.payload && !isAbstention(event.payload) && synthesisSection && synthesisText) {
+        synthesisSection.classList.remove('synthesizing');
+        synthesisSection.classList.remove('abstention');
         synthesisSection.style.display = '';
         synthesisText.textContent = cleanSynthesis(event.payload);
         // Hide hint since synthesis arrived
@@ -554,14 +567,37 @@ async function init() {
       }
     });
 
+    // Synthesis provenance metadata
+    await listen('briefing-synthesis-meta', function (event) {
+      if (event.payload && synthesisProvenance) {
+        var p = event.payload;
+        var tier = p.tier || '';
+        var provider = p.provider || '';
+        var model = provider.split('/').pop() || provider;
+        var label = '';
+        if (tier === 'local-structured') {
+          label = 'Local model (' + model + ') -- structured extraction';
+        } else if (tier === 'local-narrative') {
+          label = 'Local model (' + model + ')';
+        } else if (tier === 'cloud') {
+          label = model;
+        }
+        if (label) {
+          synthesisProvenance.textContent = label;
+          synthesisProvenance.style.display = '';
+        }
+      }
+    });
+
     // Synthesis unavailable hint
     await listen('briefing-synthesis-hint', function (event) {
+      if (synthesisSection) {
+        synthesisSection.classList.remove('synthesizing');
+        synthesisSection.style.display = 'none';
+      }
       if (event.payload && synthesisHintSection && synthesisHintText) {
-        // Only show hint if synthesis section is still hidden (no synthesis arrived)
-        if (synthesisSection && synthesisSection.style.display === 'none') {
-          synthesisHintSection.style.display = '';
-          synthesisHintText.textContent = friendlyHint(event.payload);
-        }
+        synthesisHintSection.style.display = '';
+        synthesisHintText.textContent = friendlyHint(event.payload);
       }
     });
 

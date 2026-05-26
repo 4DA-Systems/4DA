@@ -247,6 +247,24 @@ html, body {
   color: var(--text-muted);
 }
 
+.synthesis-section.synthesizing {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.06);
+  border-left-color: var(--text-muted);
+}
+
+.synthesis-section.synthesizing .synthesis-text {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-muted);
+  animation: pulse-opacity 2s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 /* ====================== Section Labels ====================== */
 
 .section { margin-bottom: 6px; }
@@ -586,6 +604,17 @@ html, body {
 .open-app-btn:hover {
   background: rgba(212, 175, 55, 0.22);
   border-color: rgba(212, 175, 55, 0.35);
+}
+
+/* ====================== Synthesis Provenance ====================== */
+
+.synthesis-provenance {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  text-align: right;
+  margin-top: 8px;
+  letter-spacing: 0.02em;
 }
 
 /* ====================== Synthesis Hint ====================== */

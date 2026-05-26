@@ -154,7 +154,7 @@ pub(crate) async fn start_sidecar(model_path: &Path) -> Result<u16> {
         "--host",
         "127.0.0.1",
         "--ctx-size",
-        "4096",
+        "16384",
         "--threads",
         &threads.to_string(),
         "--log-disable",
