@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect } from 'react';
-import { cmd } from '../lib/commands';
+import { useAppStore } from '../store';
 
 /**
  * Persistent system health indicator — tiny colored dot in the header.
@@ -15,23 +15,22 @@ import { cmd } from '../lib/commands';
 export function SystemHealthDot({ onClick }: { onClick?: () => void }) {
   const [status, setStatus] = useState<'healthy' | 'warning' | 'error' | null>(null);
   const [issueCount, setIssueCount] = useState(0);
+  const loadStartupHealth = useAppStore(s => s.loadStartupHealth);
+  const startupIssues = useAppStore(s => s.startupHealthIssues);
 
   useEffect(() => {
-    void cmd('get_startup_health')
-      .then(issues => {
-        if (!issues || issues.length === 0) {
-          setStatus('healthy');
-          return;
-        }
-        const hasErrors = issues.some((i: { severity: string }) => i.severity === 'error');
-        setStatus(hasErrors ? 'error' : 'warning');
-        setIssueCount(issues.length);
-      })
-      .catch(() => {
-        // Don't show anything if health check itself fails
-        setStatus(null);
-      });
-  }, []);
+    if (startupIssues === null) {
+      void loadStartupHealth();
+      return;
+    }
+    if (startupIssues.length === 0) {
+      setStatus('healthy');
+      return;
+    }
+    const hasErrors = startupIssues.some(i => i.severity === 'error');
+    setStatus(hasErrors ? 'error' : 'warning');
+    setIssueCount(startupIssues.length);
+  }, [startupIssues, loadStartupHealth]);
 
   if (status === null || status === 'healthy') return null;
 

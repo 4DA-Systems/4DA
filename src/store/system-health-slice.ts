@@ -7,8 +7,18 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
   systemHealth: null,
   similarTopicQuery: '',
   similarTopicResults: [],
+  startupHealthIssues: null,
 
   setSimilarTopicQuery: (q) => set({ similarTopicQuery: q }),
+
+  loadStartupHealth: async () => {
+    try {
+      const issues = await cmd('get_startup_health');
+      set({ startupHealthIssues: issues && issues.length > 0 ? issues : [] });
+    } catch {
+      set({ startupHealthIssues: [] });
+    }
+  },
 
   loadSystemHealth: async () => {
     const [anomalyResult, embeddingResult, rateLimitResult, accuracyResult] =

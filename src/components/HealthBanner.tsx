@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 
 interface HealthIssue {
@@ -29,19 +28,19 @@ const FIX_HINTS: Record<string, string> = {
 export function HealthBanner() {
   const { t } = useTranslation();
   const setShowSettings = useAppStore(s => s.setShowSettings);
+  const loadStartupHealth = useAppStore(s => s.loadStartupHealth);
+  const startupIssues = useAppStore(s => s.startupHealthIssues);
   const [issues, setIssues] = useState<HealthIssue[]>([]);
   const [dismissed, setDismissed] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    void cmd('get_startup_health')
-      .then((result) => {
-        if (result && result.length > 0) {
-          setIssues(result);
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (startupIssues === null) {
+      void loadStartupHealth();
+    } else if (startupIssues.length > 0) {
+      setIssues(startupIssues);
+    }
+  }, [startupIssues, loadStartupHealth]);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);

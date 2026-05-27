@@ -10,8 +10,6 @@ import { OllamaStatus } from '../OllamaStatus';
 import { SystemHealthDot } from '../SystemHealthDot';
 import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
-import type { AppState } from '../../store/types';
-
 const ProValueBadge = lazy(() => import('../ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
 // ============================================================================
@@ -19,7 +17,7 @@ const ProValueBadge = lazy(() => import('../ProValueBadge').then(m => ({ default
 // ============================================================================
 
 interface UnifiedAppBarProps {
-  state: AppState;
+  state: { loading: boolean; analysisComplete: boolean };
   monitoring: { enabled: boolean } | null;
   settingsFormProvider: string;
   isPro: boolean;
@@ -51,6 +49,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
 }: UnifiedAppBarProps) {
   const { t } = useTranslation();
   const voidSignal = useVoidSignals();
+  const progress = useAppStore(s => s.appState.progress);
 
   const isLoading = state.loading;
   const isComplete = state.analysisComplete && !isLoading;
@@ -219,16 +218,16 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
       </div>
 
       {/* Progress line — 2px, full width, only during analysis */}
-      {isLoading && state.progress > 0 && (
+      {isLoading && progress > 0 && (
         <div className="h-0.5 w-full bg-bg-secondary">
           <div
             role="progressbar"
-            aria-valuenow={Math.round(state.progress * 100)}
+            aria-valuenow={Math.round(progress * 100)}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label={t('action.analyzing')}
             className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-300 ease-out"
-            style={{ width: `${state.progress * 100}%` }}
+            style={{ width: `${progress * 100}%` }}
           />
         </div>
       )}

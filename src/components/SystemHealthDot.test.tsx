@@ -9,9 +9,13 @@ vi.mock('../lib/commands', () => ({
   cmd: (...args: unknown[]) => mockCmd(...args),
 }));
 
+// Reset store between tests so cached startupHealthIssues doesn't leak
+import { useAppStore } from '../store';
+
 describe('SystemHealthDot', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useAppStore.setState({ startupHealthIssues: null });
   });
 
   it('renders nothing when health check returns no issues', async () => {

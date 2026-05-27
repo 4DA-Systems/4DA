@@ -5,6 +5,8 @@ import { listen } from '@tauri-apps/api/event';
 
 import type { SourceRelevance, AnalysisProgress } from '../types';
 import { useAppStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import type { AppState } from '../store/types';
 import type { NarrationEvent } from './analysis-utils';
 import {
   handleAnalysisProgress,
@@ -38,7 +40,16 @@ export function useAnalysis(
   _addToast?: (type: 'success' | 'error' | 'warning' | 'info', message: string) => void,
   onBackgroundItems?: (itemIds: number[]) => void,
 ) {
-  const state = useAppStore(s => s.appState);
+  const state = useAppStore(
+    useShallow(s => ({
+      contextFiles: s.appState.contextFiles,
+      relevanceResults: s.appState.relevanceResults,
+      nearMisses: s.appState.nearMisses,
+      loading: s.appState.loading,
+      analysisComplete: s.appState.analysisComplete,
+      lastAnalyzedAt: s.appState.lastAnalyzedAt,
+    }))
+  );
   const expandedItem = useAppStore(s => s.expandedItem);
   const isBrowserMode = useAppStore(s => s.isBrowserMode);
   const setExpandedItem = useAppStore(s => s.setExpandedItem);
@@ -103,7 +114,7 @@ export function useAnalysis(
   }, []);
 
   // setState wrapper for App.tsx compatibility (accepts updater function)
-  const setState = useCallback((updater: ((s: typeof state) => typeof state) | Partial<typeof state>) => {
+  const setState = useCallback((updater: ((s: AppState) => AppState) | Partial<AppState>) => {
     if (typeof updater === 'function') {
       useAppStore.getState().setAppStateFull(updater);
     } else {

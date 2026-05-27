@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import { useKeyboardShortcuts } from './use-keyboard-shortcuts';
 import { useAppStore } from '../store';
-import type { AppState, ActiveView } from '../store/types';
+import type { ActiveView } from '../store/types';
 import type { SourceRelevance } from '../types/analysis';
 
 interface AppShortcutDeps {
@@ -16,7 +16,7 @@ interface AppShortcutDeps {
   setShowKeyboardHelp: (v: boolean) => void;
   expandedItem: number | null;
   setExpandedItem: (v: number | null) => void;
-  state: AppState;
+  state: { loading: boolean; analysisComplete: boolean };
   startAnalysis: () => Promise<void>;
   showOnlyRelevant: boolean;
   setShowOnlyRelevant: (v: boolean) => void;
