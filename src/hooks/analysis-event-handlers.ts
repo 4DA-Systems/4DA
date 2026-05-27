@@ -9,8 +9,13 @@ import { useAppStore } from '../store';
 import { extractNearMisses, scrollToAndHighlightItem } from './analysis-utils';
 import type { NarrationEvent } from './analysis-utils';
 
-export function handleAnalysisProgress(event: Event<AnalysisProgress>): void {
-  const { stage, progress, message, items_processed, items_total } = event.payload;
+let _lastProgressFlush = 0;
+let _pendingProgress: AnalysisProgress | null = null;
+let _progressTimer: ReturnType<typeof setTimeout> | null = null;
+const PROGRESS_THROTTLE_MS = 250;
+
+function flushProgress(p: AnalysisProgress): void {
+  const { stage, progress, message, items_processed, items_total } = p;
   useAppStore.getState().setAppStateFull((s) => ({
     ...s,
     progress,
@@ -20,6 +25,31 @@ export function handleAnalysisProgress(event: Event<AnalysisProgress>): void {
       ? `${message} (${items_processed}/${items_total})`
       : message,
   }));
+  _lastProgressFlush = Date.now();
+  _pendingProgress = null;
+}
+
+export function handleAnalysisProgress(event: Event<AnalysisProgress>): void {
+  const p = event.payload;
+  // Always flush immediately at 100% so the UI never stalls at 99%
+  if (p.progress >= 1) {
+    if (_progressTimer) { clearTimeout(_progressTimer); _progressTimer = null; }
+    flushProgress(p);
+    return;
+  }
+  const now = Date.now();
+  if (now - _lastProgressFlush >= PROGRESS_THROTTLE_MS) {
+    if (_progressTimer) { clearTimeout(_progressTimer); _progressTimer = null; }
+    flushProgress(p);
+  } else {
+    _pendingProgress = p;
+    if (!_progressTimer) {
+      _progressTimer = setTimeout(() => {
+        _progressTimer = null;
+        if (_pendingProgress) flushProgress(_pendingProgress);
+      }, PROGRESS_THROTTLE_MS - (now - _lastProgressFlush));
+    }
+  }
 }
 
 export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 
-import { lazy, Suspense } from 'react';
+import { lazy, memo, Suspense } from 'react';
 import { ViewErrorBoundary } from '../ViewErrorBoundary';
 import { ZoomIndicator } from '../ZoomIndicator';
 import { FeedbackMilestone } from '../FeedbackMilestone';
@@ -36,7 +36,7 @@ interface AppModalsProps {
  * All overlay/modal components rendered at the bottom of the App JSX tree.
  * Extracted from App.tsx to reduce its line count.
  */
-export function AppModals({
+export const AppModals = memo(function AppModals({
   toasts, removeToast,
   zoom, showZoomIndicator,
   feedbackCount,
@@ -95,4 +95,4 @@ export function AppModals({
       )}
     </>
   );
-}
+});

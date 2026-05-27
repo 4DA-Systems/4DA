@@ -4,7 +4,6 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { listen } from '@tauri-apps/api/event';
 
 import type { SourceRelevance, AnalysisProgress } from '../types';
-import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 import type { NarrationEvent } from './analysis-utils';
 import {
@@ -96,22 +95,8 @@ export function useAnalysis(
     void loadContextFiles();
   }, [loadContextFiles]);
 
-  // Hydrate from backend cache — catches results from analysis that ran before mount
-  useEffect(() => {
-    const store = useAppStore.getState();
-    if (store.appState.relevanceResults.length > 0) return; // Already have results
-    void cmd('get_analysis_status').then((status) => {
-      const s = status as { results?: SourceRelevance[]; completed?: boolean };
-      if (s.results && s.results.length > 0) {
-        useAppStore.getState().setAppStateFull((prev) => ({
-          ...prev,
-          relevanceResults: s.results!,
-          analysisComplete: true,
-          loading: false,
-        }));
-      }
-    }).catch(() => { /* Silent — analysis may not have run yet */ });
-  }, []);
+  // Hydration from backend cache is handled by useAppListeners (use-app-listeners.ts)
+  // which also handles the auto-analysis fallback — no duplicate fetch needed here.
 
   const setStatus = useCallback((status: string) => {
     useAppStore.getState().setAppState({ status });
