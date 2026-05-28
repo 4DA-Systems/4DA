@@ -24,7 +24,7 @@ use crate::error::Result;
 pub struct AdapterStatus {
     pub source_type: String,
     pub feed_origin: String,
-    /// One of: "healthy", "failing", "circuit_open", "stale"
+    /// One of: "healthy", "failing", "circuit_open", "stale", "never_fetched"
     pub status: String,
     pub consecutive_failures: i64,
     pub last_success_at: Option<String>,
@@ -52,11 +52,13 @@ pub struct SourceHealthSummary {
 /// 1. `circuit_open` if the circuit breaker is tripped
 /// 2. `failing` if consecutive_failures > 0 (not yet tripped)
 /// 3. `stale` if last_success_at is >7 days ago
-/// 4. `healthy` otherwise
+/// 4. `never_fetched` if last_success_at is None AND feed registered >24h ago
+/// 5. `healthy` otherwise
 pub fn classify_adapter_status(
     circuit_open: bool,
     consecutive_failures: i64,
     last_success_at: Option<&str>,
+    created_at: Option<&str>,
 ) -> &'static str {
     if circuit_open {
         return "circuit_open";
@@ -68,8 +70,27 @@ pub fn classify_adapter_status(
         if is_stale(ts) {
             return "stale";
         }
+    } else if is_old_enough_to_be_suspect(created_at) {
+        // Feed has NEVER succeeded and has been registered for >24 hours
+        return "never_fetched";
     }
     "healthy"
+}
+
+/// Returns true if the feed was created more than 24 hours ago (or if we can't
+/// determine the creation time, assume it's old enough).
+fn is_old_enough_to_be_suspect(created_at: Option<&str>) -> bool {
+    let Some(ts) = created_at else {
+        // No created_at timestamp available — assume it's been around long enough
+        return true;
+    };
+    let now = chrono::Utc::now().naive_utc();
+    if let Ok(parsed) = chrono::NaiveDateTime::parse_from_str(ts, "%Y-%m-%d %H:%M:%S") {
+        let diff = now - parsed;
+        return diff.num_hours() > 24;
+    }
+    // Can't parse — treat as old enough (conservative)
+    true
 }
 
 /// Returns true if the given ISO timestamp is more than 7 days ago.
@@ -91,7 +112,8 @@ fn is_stale(iso_timestamp: &str) -> bool {
 pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummary> {
     let mut stmt = conn.prepare(
         "SELECT feed_origin, source_type, consecutive_failures, \
-                last_success_at, last_failure_at, last_error, circuit_open \
+                last_success_at, last_failure_at, last_error, circuit_open, \
+                created_at \
          FROM feed_health ORDER BY source_type, feed_origin",
     )?;
 
@@ -105,11 +127,13 @@ pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummar
             let last_error: Option<String> = row.get(5)?;
             let circuit_open_int: i64 = row.get(6)?;
             let circuit_open = circuit_open_int != 0;
+            let created_at: Option<String> = row.get(7)?;
 
             let status = classify_adapter_status(
                 circuit_open,
                 consecutive_failures,
                 last_success_at.as_deref(),
+                created_at.as_deref(),
             )
             .to_string();
 
@@ -131,7 +155,10 @@ pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummar
         .iter()
         .filter(|a| a.status == "failing" || a.status == "circuit_open")
         .count();
-    let total_disabled = adapters.iter().filter(|a| a.status == "stale").count();
+    let total_disabled = adapters
+        .iter()
+        .filter(|a| a.status == "stale" || a.status == "never_fetched")
+        .count();
 
     Ok(SourceHealthSummary {
         adapters,
@@ -186,29 +213,48 @@ mod tests {
 
     #[test]
     fn test_classify_status_priority() {
-        // circuit_open takes highest priority
-        assert_eq!(
-            classify_adapter_status(true, 5, Some("2020-01-01 00:00:00")),
-            "circuit_open"
-        );
-        // failing takes priority over stale
-        assert_eq!(
-            classify_adapter_status(false, 3, Some("2020-01-01 00:00:00")),
-            "failing"
-        );
-        // stale when no failures but last success >7 days ago
-        assert_eq!(
-            classify_adapter_status(false, 0, Some("2020-01-01 00:00:00")),
-            "stale"
-        );
-        // healthy when no failures and recent success
+        let old_created = Some("2020-01-01 00:00:00");
         let recent = chrono::Utc::now()
             .naive_utc()
             .format("%Y-%m-%d %H:%M:%S")
             .to_string();
-        assert_eq!(classify_adapter_status(false, 0, Some(&recent)), "healthy");
-        // healthy when no failures and no success timestamp (fresh entry)
-        assert_eq!(classify_adapter_status(false, 0, None), "healthy");
+        let recent_created = Some(recent.as_str());
+
+        // circuit_open takes highest priority
+        assert_eq!(
+            classify_adapter_status(true, 5, Some("2020-01-01 00:00:00"), old_created),
+            "circuit_open"
+        );
+        // failing takes priority over stale
+        assert_eq!(
+            classify_adapter_status(false, 3, Some("2020-01-01 00:00:00"), old_created),
+            "failing"
+        );
+        // stale when no failures but last success >7 days ago
+        assert_eq!(
+            classify_adapter_status(false, 0, Some("2020-01-01 00:00:00"), old_created),
+            "stale"
+        );
+        // healthy when no failures and recent success
+        assert_eq!(
+            classify_adapter_status(false, 0, Some(&recent), recent_created),
+            "healthy"
+        );
+        // healthy when no failures, no success, and RECENTLY created (<24h)
+        assert_eq!(
+            classify_adapter_status(false, 0, None, recent_created),
+            "healthy"
+        );
+        // never_fetched when no failures, no success, and created >24h ago
+        assert_eq!(
+            classify_adapter_status(false, 0, None, old_created),
+            "never_fetched"
+        );
+        // never_fetched when no created_at available and no success
+        assert_eq!(
+            classify_adapter_status(false, 0, None, None),
+            "never_fetched"
+        );
     }
 
     #[test]
@@ -271,11 +317,19 @@ mod tests {
         )
         .unwrap();
 
+        // Never-fetched adapter (no success, registered >24h ago)
+        conn.execute(
+            "INSERT INTO feed_health (feed_origin, source_type, consecutive_failures, circuit_open, created_at) \
+             VALUES (?1, ?2, 0, 0, ?3)",
+            params!["UCnever456", "youtube", "2020-01-01 00:00:00"],
+        )
+        .unwrap();
+
         let summary = get_source_health_summary(&conn).unwrap();
-        assert_eq!(summary.adapters.len(), 4);
+        assert_eq!(summary.adapters.len(), 5);
         assert_eq!(summary.total_active, 1, "one healthy");
         assert_eq!(summary.total_failing, 2, "one failing + one circuit_open");
-        assert_eq!(summary.total_disabled, 1, "one stale");
+        assert_eq!(summary.total_disabled, 2, "one stale + one never_fetched");
 
         // Verify individual statuses
         let hn = summary
@@ -301,22 +355,31 @@ mod tests {
         assert_eq!(rss.status, "circuit_open");
         assert_eq!(rss.consecutive_failures, 5);
 
-        let yt = summary
+        let yt_stale = summary
             .adapters
             .iter()
-            .find(|a| a.source_type == "youtube")
+            .find(|a| a.feed_origin == "UCtest123")
             .unwrap();
-        assert_eq!(yt.status, "stale");
+        assert_eq!(yt_stale.status, "stale");
+
+        let yt_never = summary
+            .adapters
+            .iter()
+            .find(|a| a.feed_origin == "UCnever456")
+            .unwrap();
+        assert_eq!(yt_never.status, "never_fetched");
     }
 
     #[test]
     fn test_stale_boundary() {
+        let old_created = Some("2020-01-01 00:00:00");
+
         // Exactly 7 days ago should NOT be stale (>7 required)
         let seven_days_ago = (chrono::Utc::now().naive_utc() - chrono::Duration::days(7))
             .format("%Y-%m-%d %H:%M:%S")
             .to_string();
         assert_eq!(
-            classify_adapter_status(false, 0, Some(&seven_days_ago)),
+            classify_adapter_status(false, 0, Some(&seven_days_ago), old_created),
             "healthy",
             "exactly 7 days should be healthy, stale requires >7"
         );
@@ -326,7 +389,7 @@ mod tests {
             .format("%Y-%m-%d %H:%M:%S")
             .to_string();
         assert_eq!(
-            classify_adapter_status(false, 0, Some(&eight_days_ago)),
+            classify_adapter_status(false, 0, Some(&eight_days_ago), old_created),
             "stale",
             "8 days old should be stale"
         );

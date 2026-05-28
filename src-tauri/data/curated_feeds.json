@@ -733,7 +733,7 @@
     {
       "id": "netflix-tech-blog",
       "name": "Netflix Tech Blog",
-      "url": "https://netflixtechblog.com/feed",
+      "url": "https://medium.com/feed/netflix-techblog",
       "homepage": "https://netflixtechblog.com",
       "description": "Streaming at scale — microservices, chaos engineering, data pipelines, ML infrastructure",
       "domains": ["infrastructure", "systems"],

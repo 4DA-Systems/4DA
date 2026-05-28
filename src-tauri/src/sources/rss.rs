@@ -71,7 +71,7 @@ impl RssSource {
                 "https://techcrunch.com/feed/".to_string(),
                 "https://blog.rust-lang.org/feed.xml".to_string(),
                 "https://engineering.fb.com/feed/".to_string(),
-                "https://netflixtechblog.com/feed".to_string(),
+                "https://medium.com/feed/netflix-techblog".to_string(),
                 "https://github.blog/feed/".to_string(),
                 "https://blog.cloudflare.com/rss/".to_string(),
                 "https://martinfowler.com/feed.atom".to_string(),
