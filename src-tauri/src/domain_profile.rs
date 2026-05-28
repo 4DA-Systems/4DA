@@ -1209,6 +1209,7 @@ mod tests {
             interest_topics: HashSet::from(["security".to_string()]),
             domain_concerns: HashSet::from(["packaging".to_string(), "installer".to_string()]),
             ace_promoted_tech: HashSet::new(),
+            domains: HashSet::new(),
         }
     }
 

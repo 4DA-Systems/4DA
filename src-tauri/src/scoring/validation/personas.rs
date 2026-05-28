@@ -72,6 +72,7 @@ fn make_domain(
             .collect(),
         domain_concerns: HashSet::new(),
         ace_promoted_tech: HashSet::new(),
+        domains: HashSet::new(),
     }
 }
 

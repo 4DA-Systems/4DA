@@ -70,8 +70,8 @@ mod manager_init;
 impl SettingsManager {
     /// Save settings to disk (excludes usage -- that's saved separately).
     ///
-    /// API keys are stripped from the on-disk copy -- they live in the
-    /// platform keychain. The in-memory `self.settings` remains intact.
+    /// API keys are written to disk AND mirrored to the platform keychain.
+    /// The on-disk file is the authoritative source; the keychain is secondary.
     pub fn save(&mut self) -> Result<()> {
         if let Some(parent) = self.settings_path.parent() {
             fs::create_dir_all(parent)?;
@@ -83,48 +83,29 @@ impl SettingsManager {
 
         self.ensure_keys_hydrated();
 
-        // Re-persist non-empty in-memory keys to keychain before verifying.
-        // Defensive: if the keychain lost a key (OS update, dev-mode race, credential
-        // corruption), this re-writes it from the authoritative in-memory copy.
-        // The subsequent verify_round_trip then confirms persistence.
+        // Mirror keys to the platform keychain as a secondary store.
+        // The on-disk settings.json is the authoritative source — the keychain
+        // is best-effort for OS-level integration (autofill, credential managers).
+        // Previous versions stripped keys from disk after keychain migration,
+        // which caused permanent key loss when the keychain became temporarily
+        // inaccessible (Windows Credential Manager race, dev-mode restarts, OS
+        // updates). Keys now always persist on disk; the file is already
+        // gitignored and permission-restricted to owner-only.
         for (name, value) in Self::key_pairs(&self.settings) {
             if !value.is_empty() {
                 let _ = keystore::store_secret(name, value);
             }
         }
 
-        // Clone settings and clear SECRET fields that are VERIFIED in the keychain.
-        // Uses round-trip verification: only strip a key from disk if reading it
-        // back from the keychain returns the exact same value. This prevents data
-        // loss on platforms where the keychain reports write-success but silently
-        // drops the credential (observed on some Windows configurations).
         let mut disk_settings = self.settings.clone();
-        if keystore::verify_round_trip("llm_api_key", &self.settings.llm.api_key) {
-            disk_settings.llm.api_key = String::new();
-        }
-        if keystore::verify_round_trip("openai_api_key", &self.settings.llm.openai_api_key) {
-            disk_settings.llm.openai_api_key = String::new();
-        }
-        if keystore::verify_round_trip("x_api_key", self.settings.x_api_key.as_str()) {
-            disk_settings.x_api_key = SensitiveString::default();
-        }
-        if keystore::verify_round_trip("license_key", &self.settings.license.license_key) {
-            disk_settings.license.license_key = String::new();
-        }
-        if keystore::verify_round_trip("translation_api_key", &self.settings.translation.api_key) {
-            disk_settings.translation.api_key = String::new();
-        }
-        // Team relay auth_token is a JWT — always strip from disk.
+
+        // Team relay auth_token is a JWT — strip from disk (re-obtained on connect).
         if let Some(ref mut relay) = disk_settings.team_relay {
             relay.auth_token = None;
         }
 
         // License tier invariant: if a valid self-signed key is present, the tier
-        // written to disk MUST match the key's embedded tier. This single guard
-        // makes tier corruption structurally impossible — no code path, present or
-        // future, can persist a wrong tier. The check is cheap (no I/O, no network).
-        // Uses the in-memory key (self.settings) since disk_settings may have it
-        // stripped for keychain-migrated users.
+        // written to disk MUST match the key's embedded tier.
         if self.settings.license.license_key.starts_with("4DA-") {
             if let Ok(payload) =
                 crate::settings::verify_license_key(&self.settings.license.license_key)
@@ -294,8 +275,7 @@ impl SettingsManager {
 
     /// Update LLM provider settings.
     ///
-    /// Keys are persisted to the platform keychain (if available) and stripped
-    /// from the on-disk JSON. The in-memory `settings.llm` retains the keys.
+    /// Keys are persisted to disk AND mirrored to the platform keychain.
     pub fn set_llm_provider(&mut self, provider: LLMProvider) -> Result<()> {
         if !provider.api_key.is_empty() {
             if let Ok(false) = keystore::store_secret("llm_api_key", &provider.api_key) {

@@ -168,6 +168,7 @@ fn rust_developer_ctx() -> ScoringContext {
         ),
         domain_concerns: std::collections::HashSet::new(),
         ace_promoted_tech: std::collections::HashSet::new(),
+        domains: std::collections::HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
@@ -258,6 +259,7 @@ fn fullstack_js_ctx() -> ScoringContext {
         ),
         domain_concerns: std::collections::HashSet::new(),
         ace_promoted_tech: std::collections::HashSet::new(),
+        domains: std::collections::HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["fullstack_js".to_string()]);
@@ -345,6 +347,7 @@ fn python_data_scientist_ctx() -> ScoringContext {
         ),
         domain_concerns: std::collections::HashSet::new(),
         ace_promoted_tech: std::collections::HashSet::new(),
+        domains: std::collections::HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["python_ml".to_string()]);

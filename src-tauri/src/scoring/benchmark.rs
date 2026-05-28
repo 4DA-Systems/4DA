@@ -123,6 +123,7 @@ fn rust_dev_ctx() -> ScoringContext {
         ),
         domain_concerns: HashSet::new(),
         ace_promoted_tech: HashSet::new(),
+        domains: HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
@@ -212,6 +213,7 @@ fn python_ml_ctx() -> ScoringContext {
         ),
         domain_concerns: HashSet::new(),
         ace_promoted_tech: HashSet::new(),
+        domains: HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["python_ml".to_string()]);

@@ -156,7 +156,9 @@ impl SettingsManager {
             }
         }
 
-        // --- Keychain migration: move plaintext keys to platform keychain ---
+        // --- Mirror keys to platform keychain (secondary store) ---
+        // Keys always stay on disk (the authoritative source). The keychain
+        // is a best-effort mirror for OS-level credential integration.
         let has_plaintext_keys = !settings.llm.api_key.is_empty()
             || !settings.llm.openai_api_key.is_empty()
             || !settings.x_api_key.is_empty()
@@ -167,83 +169,19 @@ impl SettingsManager {
             match keystore::migrate_from_plaintext(&settings) {
                 Ok(report) => {
                     if !report.migrated.is_empty() {
-                        // Only clear keys that survive a round-trip verification.
-                        // The migration may report success but the credential may
-                        // not actually persist (observed on some Windows setups).
-                        let mut clean_settings = settings.clone();
-                        let mut verified_count = 0u32;
-                        if report.migrated.contains(&"llm_api_key".to_string())
-                            && keystore::verify_round_trip("llm_api_key", &settings.llm.api_key)
-                        {
-                            clean_settings.llm.api_key = String::new();
-                            verified_count += 1;
-                        }
-                        if report.migrated.contains(&"openai_api_key".to_string())
-                            && keystore::verify_round_trip(
-                                "openai_api_key",
-                                &settings.llm.openai_api_key,
-                            )
-                        {
-                            clean_settings.llm.openai_api_key = String::new();
-                            verified_count += 1;
-                        }
-                        if report.migrated.contains(&"x_api_key".to_string())
-                            && keystore::verify_round_trip("x_api_key", settings.x_api_key.as_str())
-                        {
-                            clean_settings.x_api_key = SensitiveString::default();
-                            verified_count += 1;
-                        }
-                        if report.migrated.contains(&"translation_api_key".to_string())
-                            && keystore::verify_round_trip(
-                                "translation_api_key",
-                                &settings.translation.api_key,
-                            )
-                        {
-                            clean_settings.translation.api_key = String::new();
-                            verified_count += 1;
-                        }
-                        if report.migrated.contains(&"license_key".to_string())
-                            && keystore::verify_round_trip(
-                                "license_key",
-                                &settings.license.license_key,
-                            )
-                        {
-                            clean_settings.license.license_key = String::new();
-                            verified_count += 1;
-                        }
-
-                        if verified_count > 0 {
-                            if let Some(parent) = settings_path.parent() {
-                                let _ = fs::create_dir_all(parent);
-                            }
-                            if let Ok(json) = serde_json::to_string_pretty(&clean_settings) {
-                                let tmp_path = settings_path.with_extension("json.tmp");
-                                if fs::write(&tmp_path, &json).is_ok() {
-                                    let _ = atomic_replace(&tmp_path, &settings_path);
-                                }
-                            }
-                            info!(
-                                target: "4da::keystore",
-                                verified = verified_count,
-                                reported = report.migrated.len(),
-                                "Cleared verified keys from settings.json after keychain migration"
-                            );
-                        }
-                        if verified_count < report.migrated.len() as u32 {
-                            warn!(
-                                target: "4da::keystore",
-                                reported = report.migrated.len(),
-                                verified = verified_count,
-                                "Keychain round-trip verification failed for some keys — keeping plaintext fallback"
-                            );
-                        }
+                        info!(
+                            target: "4da::keystore",
+                            mirrored = report.migrated.len(),
+                            failed = report.failed.len(),
+                            "Mirrored keys to platform keychain (disk remains authoritative)"
+                        );
                     }
                 }
                 Err(e) => {
                     warn!(
                         target: "4da::keystore",
                         error = %e,
-                        "Keychain migration failed -- keys remain in plaintext"
+                        "Keychain mirroring failed — keys safe on disk"
                     );
                 }
             }
