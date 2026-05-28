@@ -76,7 +76,7 @@ sqlite-vec = "0.1"
 
 # Hashing for deduplication
 sha2 = "0.10"
-hmac = "0.12"
+hmac = "0.13"
 hex = "0.4"
 getrandom = "0.2"
 
