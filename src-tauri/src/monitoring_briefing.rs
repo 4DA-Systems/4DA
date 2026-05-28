@@ -522,8 +522,6 @@ const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
 impl BriefingNotification {
     /// Returns true if any section has meaningful intelligence worth showing.
     /// Used instead of `items.is_empty()` so preemption-only briefings still fire.
-    /// Also returns true for abstention briefings (synthesis set with ongoing topics)
-    /// so the user sees the system is alive and tracking, even when nothing is new.
     pub fn has_meaningful_content(&self) -> bool {
         if !self.items.is_empty() {
             return true;
@@ -534,13 +532,16 @@ impl BriefingNotification {
         if !self.escalating_chains.is_empty() {
             return true;
         }
-        if self.synthesis.is_some() && !self.ongoing_topics.is_empty() {
-            return true;
-        }
         self.knowledge_gaps
             .iter()
             .any(|g| g.days_since_last > KNOWLEDGE_GAP_HIGH_URGENCY_DAYS)
     }
+}
+
+/// Returns true if the synthesis text is a "nothing to report" abstention.
+pub(crate) fn is_abstention_synthesis(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.starts_with("low signal") || lower.contains("no noteworthy")
 }
 
 // ============================================================================

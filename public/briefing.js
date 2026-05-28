@@ -473,6 +473,12 @@ function renderBriefing(data) {
 // ---------------------------------------------------------------------------
 
 function showBriefing(data) {
+  var hasItems = data.items && data.items.length > 0;
+  var hasPreemption = data.preemption_alerts && data.preemption_alerts.length > 0;
+  var hasChains = data.escalating_chains && data.escalating_chains.length > 0;
+  if (!hasItems && !hasPreemption && !hasChains && isAbstention(data.synthesis)) {
+    return;
+  }
   renderBriefing(data);
   card.classList.remove('visible', 'exiting');
   requestAnimationFrame(function () {
@@ -591,18 +597,8 @@ async function init() {
       }
     });
 
-    // Synthesis provenance metadata
-    await listen('briefing-synthesis-meta', function (event) {
-      if (event.payload && synthesisProvenance) {
-        var p = event.payload;
-        var provider = p.provider || '';
-        var model = provider.split('/').pop() || provider;
-        if (model) {
-          synthesisProvenance.textContent = model;
-          synthesisProvenance.style.display = '';
-        }
-      }
-    });
+    // Synthesis provenance metadata — consumed for logging only, never shown
+    await listen('briefing-synthesis-meta', function () {});
 
     // Synthesis unavailable hint
     await listen('briefing-synthesis-hint', function (event) {

@@ -1025,36 +1025,52 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     // Persist briefing (now includes synthesis if it succeeded)
                     crate::briefing_snapshot::save_snapshot(&briefing);
 
-                    crate::monitoring_notifications::send_morning_briefing_notification(
-                        &app, &briefing,
-                    );
-                    // Emit event to frontend so it can show an in-app briefing card
-                    if let Err(e) = app.emit(
-                        "morning-briefing-ready",
-                        serde_json::json!({
-                            "title": briefing.title,
-                            "total_relevant": briefing.total_relevant,
-                            "items": briefing.items.iter().map(|i| serde_json::json!({
-                                "title": i.title,
-                                "source_type": i.source_type,
-                                "score": i.score,
-                                "signal_type": i.signal_type,
-                            })).collect::<Vec<_>>(),
-                            "data_freshness": briefing.data_freshness,
-                        }),
-                    ) {
-                        tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
-                    }
-
-                    // Emit provenance meta if synthesis succeeded
-                    if let Some(meta) = synthesis_meta {
-                        let _ = app.emit_to("briefing", "briefing-synthesis-meta", &meta);
-                    } else {
-                        let _ = app.emit_to(
-                            "briefing",
-                            "briefing-synthesis-hint",
-                            "Synthesis unavailable \u{2014} briefing shows signals only",
+                    // Suppress the briefing window when synthesis says "nothing
+                    // noteworthy" and there are no items/alerts to display.
+                    let is_abstention = briefing.synthesis.as_ref().map_or(false, |s| {
+                        crate::monitoring_briefing::is_abstention_synthesis(s)
+                    });
+                    if is_abstention
+                        && briefing.items.is_empty()
+                        && briefing.preemption_alerts.is_empty()
+                        && briefing.escalating_chains.is_empty()
+                    {
+                        info!(
+                            target: "4da::briefing",
+                            "Suppressing abstention-only briefing — nothing actionable"
                         );
+                    } else {
+                        crate::monitoring_notifications::send_morning_briefing_notification(
+                            &app, &briefing,
+                        );
+                        // Emit event to frontend so it can show an in-app briefing card
+                        if let Err(e) = app.emit(
+                            "morning-briefing-ready",
+                            serde_json::json!({
+                                "title": briefing.title,
+                                "total_relevant": briefing.total_relevant,
+                                "items": briefing.items.iter().map(|i| serde_json::json!({
+                                    "title": i.title,
+                                    "source_type": i.source_type,
+                                    "score": i.score,
+                                    "signal_type": i.signal_type,
+                                })).collect::<Vec<_>>(),
+                                "data_freshness": briefing.data_freshness,
+                            }),
+                        ) {
+                            tracing::warn!("Failed to emit 'morning-briefing-ready': {e}");
+                        }
+
+                        // Emit provenance meta if synthesis succeeded
+                        if let Some(meta) = synthesis_meta {
+                            let _ = app.emit_to("briefing", "briefing-synthesis-meta", &meta);
+                        } else {
+                            let _ = app.emit_to(
+                                "briefing",
+                                "briefing-synthesis-hint",
+                                "Synthesis unavailable \u{2014} briefing shows signals only",
+                            );
+                        }
                     }
                 }
             } // !skip_briefing
