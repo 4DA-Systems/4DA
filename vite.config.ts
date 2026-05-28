@@ -46,6 +46,9 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
+      // Only source files (src/, public/, index.html) should trigger HMR.
+      // Any dir with runtime writes MUST be listed here or it creates an
+      // infinite reload loop: write → Vite reload → React mount → write.
       ignored: [
         "**/src-tauri/**",
         "**/data/**",

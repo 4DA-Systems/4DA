@@ -9,7 +9,10 @@
 
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tracing::{info, warn};
+
+static STARTUP_HEALTH_CACHE: OnceLock<Vec<HealthIssue>> = OnceLock::new();
 
 #[path = "startup_health_platform.rs"]
 mod startup_health_platform;
@@ -506,26 +509,36 @@ fn check_keychain_functional() {
 // ============================================================================
 
 /// Returns startup health issues for the frontend to optionally display.
+///
+/// Cached per process lifetime — the disk probe, keychain round-trip, and
+/// platform checks only run once. HMR reloads in dev mode can call this
+/// dozens of times; without the cache each call writes a probe file to
+/// `data/`, which can trigger Vite's file watcher and create an infinite
+/// reload loop.
 #[tauri::command]
 pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
-    let mut issues = run_startup_health_check();
+    STARTUP_HEALTH_CACHE
+        .get_or_init(|| {
+            let mut issues = run_startup_health_check();
 
-    // Filter out false-positive "API key is empty" when the in-memory settings
-    // (hydrated from keychain on startup) DO have the key. The disk-based check
-    // reads settings.json directly, which has keys stripped after keychain
-    // migration. Use lock() instead of try_lock() — this is a non-hot path
-    // called once on mount, and try_lock() was silently failing during startup
-    // when another thread held the mutex, letting the false-positive through.
-    {
-        let mut guard = crate::get_settings_manager().lock();
-        guard.ensure_keys_hydrated();
-        let has_key = !guard.get().llm.api_key.is_empty();
-        if has_key {
-            issues.retain(|i| {
-                !(i.component == "embedding" && i.message.contains("API key is empty"))
-            });
-        }
-    }
+            // Filter out false-positive "API key is empty" when the in-memory settings
+            // (hydrated from keychain on startup) DO have the key. The disk-based check
+            // reads settings.json directly, which has keys stripped after keychain
+            // migration. Use lock() instead of try_lock() — this is a non-hot path
+            // called once on mount, and try_lock() was silently failing during startup
+            // when another thread held the mutex, letting the false-positive through.
+            {
+                let mut guard = crate::get_settings_manager().lock();
+                guard.ensure_keys_hydrated();
+                let has_key = !guard.get().llm.api_key.is_empty();
+                if has_key {
+                    issues.retain(|i| {
+                        !(i.component == "embedding" && i.message.contains("API key is empty"))
+                    });
+                }
+            }
 
-    issues
+            issues
+        })
+        .clone()
 }
