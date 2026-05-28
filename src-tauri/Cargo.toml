@@ -130,12 +130,12 @@ ed25519-dalek = { version = "2.2.0", features = ["rand_core"] }
 tauri-plugin-deep-link = "2.4.7"
 
 # SSO cryptographic verification (enterprise feature)
-jsonwebtoken = { version = "9", optional = true }
-# SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) — no fix available as of 2026-04.
+jsonwebtoken = { version = "10", features = ["rust_crypto"], optional = true }
+# SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) addressed in 0.10.0-pre.
 # Only compiled when enterprise feature is enabled (SSO crypto). Monitor: https://rustsec.org/advisories/RUSTSEC-2023-0071
-rsa = { version = "0.9", features = ["sha2"], optional = true }
-pkcs8 = { version = "0.10", features = ["pem"], optional = true }
-x509-cert = { version = "0.2", optional = true }
+rsa = { version = "0.10.0-pre", features = ["sha2"], optional = true }
+pkcs8 = { version = "0.11", features = ["pem"], optional = true }
+x509-cert = { version = "0.3.0-pre", optional = true }
 
 # Team sync — E2E encrypted metadata relay (AD-023)
 chacha20poly1305 = "0.10"

@@ -13,8 +13,8 @@ use base64::Engine as _;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation};
 use parking_lot::Mutex;
 use rsa::pkcs1v15::VerifyingKey;
+use rsa::sha2::Sha256;
 use rsa::signature::Verifier;
-use sha2::Sha256;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use tracing::{info, warn};
@@ -253,7 +253,7 @@ static SAML_CERT_CACHE: LazyLock<Mutex<Option<(String, rsa::RsaPublicKey)>>> =
 
 /// Parse a PEM-encoded X.509 certificate and extract the RSA public key.
 fn parse_certificate_pem(cert_pem: &str) -> crate::error::Result<rsa::RsaPublicKey> {
-    use sha2::Digest;
+    use rsa::sha2::Digest;
 
     // Compute cache key (SHA-256 of PEM text)
     let pem_hash = {
@@ -286,8 +286,8 @@ fn parse_certificate_pem(cert_pem: &str) -> crate::error::Result<rsa::RsaPublicK
         .map_err(|e| format!("Failed to parse X.509 certificate: {e}"))?;
 
     let spki_der = cert
-        .tbs_certificate
-        .subject_public_key_info
+        .tbs_certificate()
+        .subject_public_key_info()
         .to_der()
         .map_err(|e| format!("Failed to encode SPKI: {e}"))?;
 
@@ -352,7 +352,7 @@ pub(crate) fn verify_saml_signature(xml: &str, certificate_pem: &str) -> crate::
         let canonical_body = sso_xml::canonicalize_xml(&assertion_body);
 
         // Compute SHA-256 digest
-        use sha2::Digest;
+        use rsa::sha2::Digest;
         let mut hasher = Sha256::new();
         hasher.update(canonical_body.as_bytes());
         let actual_digest = hasher.finalize();
