@@ -2076,7 +2076,11 @@ BUNDLED WITH
         let signals = scanner.scan_directory(dir.path()).unwrap();
 
         // Should find the real project but NOT the worktree copy
-        assert_eq!(signals.len(), 1, "Should only find 1 project, not the worktree copy");
+        assert_eq!(
+            signals.len(),
+            1,
+            "Should only find 1 project, not the worktree copy"
+        );
         assert_eq!(
             signals[0].manifest_type,
             ManifestType::CargoToml,
