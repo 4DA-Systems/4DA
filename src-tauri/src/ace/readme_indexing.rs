@@ -65,6 +65,18 @@ fn discover_projects_recursive(
             return;
         }
 
+        // Skip known non-project paths (agent worktrees, git worktree metadata)
+        {
+            let path_str = dir.to_string_lossy();
+            if path_str.contains(".claude/worktrees/")
+                || path_str.contains(".claude\\worktrees\\")
+                || path_str.contains(".git/worktrees/")
+                || path_str.contains(".git\\worktrees\\")
+            {
+                return;
+            }
+        }
+
         // Check if this directory is a project
         if has_manifest(dir) {
             projects.push(dir.clone());

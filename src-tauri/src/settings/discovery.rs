@@ -227,6 +227,22 @@ pub fn find_project_directories(base_dirs: &[String], max_depth: usize) -> Vec<S
         ".cargo",
     ];
 
+    /// Check if a path contains known non-project subdirectory patterns.
+    fn is_excluded_path(path: &std::path::Path) -> bool {
+        let path_str = path.to_string_lossy();
+        for pattern in &[
+            ".claude/worktrees/",
+            ".claude\\worktrees\\",
+            ".git/worktrees/",
+            ".git\\worktrees\\",
+        ] {
+            if path_str.contains(pattern) {
+                return true;
+            }
+        }
+        false
+    }
+
     fn scan_recursive(
         path: &std::path::Path,
         depth: usize,
@@ -238,6 +254,11 @@ pub fn find_project_directories(base_dirs: &[String], max_depth: usize) -> Vec<S
     ) {
         // Bound check: stop if we've hit the limit
         if results.len() >= max_results || depth > max_depth || !path.is_dir() {
+            return;
+        }
+
+        // Skip known non-project paths (agent worktrees, git worktree metadata)
+        if is_excluded_path(path) {
             return;
         }
 
