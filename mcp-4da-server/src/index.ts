@@ -112,18 +112,8 @@ function getDatabase(): FourDADatabase {
           `[4DA]   Detected: ${detected.join(", ")} | ${scan.dependencies.length} deps, ${scan.devDependencies.length} dev deps`
         );
 
-        // Initialize live intelligence with resolved versions
-        const primaryLang = scan.languages.includes("typescript") || scan.languages.includes("javascript")
-          ? "npm"
-          : scan.languages.includes("rust")
-            ? "rust"
-            : scan.languages.includes("python")
-              ? "python"
-              : scan.languages.includes("go")
-                ? "go"
-                : "npm";
-
-        liveIntel.initFromProject(cwd, scan.dependencies, scan.devDependencies, primaryLang);
+        // Initialize live intelligence with per-ecosystem resolved versions
+        liveIntel.initFromMultiEcosystem(cwd, scan.depsByEcosystem);
 
         if (liveIntel.isEnabled()) {
           console.error(`[4DA]   Live intelligence: enabled (OSV.dev + HN)`);
@@ -142,24 +132,31 @@ function getDatabase(): FourDADatabase {
         );
       }
     } else {
-      // Full 4DA database mode — still initialize live intel from project_dependencies
+      // Full 4DA database mode — initialize live intel grouped by ecosystem
       try {
         const rawDb = db.getRawDb();
-        const deps = rawDb.prepare(
+        const prodDeps = rawDb.prepare(
           "SELECT DISTINCT package_name, language FROM project_dependencies WHERE is_dev = 0 LIMIT 200",
         ).all() as Array<{ package_name: string; language: string }>;
         const devDeps = rawDb.prepare(
-          "SELECT DISTINCT package_name FROM project_dependencies WHERE is_dev = 1 LIMIT 100",
-        ).all() as Array<{ package_name: string }>;
+          "SELECT DISTINCT package_name, language FROM project_dependencies WHERE is_dev = 1 LIMIT 100",
+        ).all() as Array<{ package_name: string; language: string }>;
 
-        if (deps.length > 0) {
-          const primaryLang = deps[0].language || "npm";
-          liveIntel.initFromProject(
-            process.cwd(),
-            deps.map((d) => d.package_name),
-            devDeps.map((d) => d.package_name),
-            primaryLang,
-          );
+        // Group deps by language for correct per-ecosystem resolution
+        const depsByLang: Record<string, { deps: string[]; devDeps: string[] }> = {};
+        for (const dep of prodDeps) {
+          const lang = dep.language || "npm";
+          if (!depsByLang[lang]) depsByLang[lang] = { deps: [], devDeps: [] };
+          depsByLang[lang].deps.push(dep.package_name);
+        }
+        for (const dd of devDeps) {
+          const lang = dd.language || "npm";
+          if (!depsByLang[lang]) depsByLang[lang] = { deps: [], devDeps: [] };
+          depsByLang[lang].devDeps.push(dd.package_name);
+        }
+
+        if (Object.keys(depsByLang).length > 0) {
+          liveIntel.initFromMultiEcosystem(process.cwd(), depsByLang);
         }
       } catch {
         // Non-fatal — live intel just won't have version data

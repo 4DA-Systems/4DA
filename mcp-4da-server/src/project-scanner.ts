@@ -27,6 +27,8 @@ export interface ProjectScanResult {
   topics: string[];
   projectName: string;
   projectPath: string;
+  /** Per-ecosystem deps (correct ecosystem per manifest). Keys: "npm", "rust", "python", "go". */
+  depsByEcosystem: Record<string, { deps: string[]; devDeps: string[] }>;
 }
 
 // =============================================================================
@@ -93,6 +95,30 @@ const RUST_FRAMEWORK_MAP: Record<string, string> = {
 };
 
 // =============================================================================
+// Node Built-in Modules (filtered from npm deps)
+// =============================================================================
+
+/** Node.js built-in modules — never belong in dependency lists. */
+const NODE_BUILTINS = new Set([
+  "assert", "buffer", "child_process", "cluster", "console", "crypto",
+  "dgram", "dns", "domain", "events", "fs", "http", "http2", "https",
+  "inspector", "module", "net", "os", "path", "perf_hooks", "process",
+  "punycode", "querystring", "readline", "repl", "stream", "string_decoder",
+  "sys", "timers", "tls", "tty", "url", "util", "v8", "vm", "wasi",
+  "worker_threads", "zlib",
+  // node: prefixed variants
+  "node:assert", "node:buffer", "node:child_process", "node:cluster",
+  "node:console", "node:crypto", "node:dgram", "node:dns", "node:domain",
+  "node:events", "node:fs", "node:http", "node:http2", "node:https",
+  "node:inspector", "node:module", "node:net", "node:os", "node:path",
+  "node:perf_hooks", "node:process", "node:punycode", "node:querystring",
+  "node:readline", "node:repl", "node:stream", "node:string_decoder",
+  "node:sys", "node:timers", "node:tls", "node:tty", "node:url",
+  "node:util", "node:v8", "node:vm", "node:wasi", "node:worker_threads",
+  "node:zlib",
+]);
+
+// =============================================================================
 // Scanner
 // =============================================================================
 
@@ -109,6 +135,7 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
     topics: [],
     projectName: path.basename(cwd),
     projectPath: cwd,
+    depsByEcosystem: {},
   };
 
   const langSet = new Set<string>();
@@ -127,9 +154,9 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
         result.projectName = pkg.name;
       }
 
-      // Production dependencies
+      // Production dependencies (filter Node.js built-ins)
       if (pkg.dependencies && typeof pkg.dependencies === "object") {
-        const depNames = Object.keys(pkg.dependencies);
+        const depNames = Object.keys(pkg.dependencies).filter(d => !NODE_BUILTINS.has(d));
         result.dependencies.push(...depNames);
 
         for (const dep of depNames) {
@@ -139,9 +166,9 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
         }
       }
 
-      // Dev dependencies
+      // Dev dependencies (filter Node.js built-ins)
       if (pkg.devDependencies && typeof pkg.devDependencies === "object") {
-        const devDepNames = Object.keys(pkg.devDependencies);
+        const devDepNames = Object.keys(pkg.devDependencies).filter(d => !NODE_BUILTINS.has(d));
         result.devDependencies.push(...devDepNames);
 
         for (const dep of devDepNames) {
@@ -158,6 +185,17 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
             fwSet.add(NPM_FRAMEWORK_MAP[dep]);
           }
         }
+      }
+
+      // Populate per-ecosystem tracking for npm
+      const npmDeps = (pkg.dependencies && typeof pkg.dependencies === "object")
+        ? Object.keys(pkg.dependencies).filter(d => !NODE_BUILTINS.has(d))
+        : [];
+      const npmDevDeps = (pkg.devDependencies && typeof pkg.devDependencies === "object")
+        ? Object.keys(pkg.devDependencies).filter(d => !NODE_BUILTINS.has(d))
+        : [];
+      if (npmDeps.length > 0 || npmDevDeps.length > 0) {
+        result.depsByEcosystem["npm"] = { deps: npmDeps, devDeps: npmDevDeps };
       }
     } catch {
       // Malformed package.json — skip
@@ -180,9 +218,20 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
       }
 
       // Parse [dependencies] and [dev-dependencies] sections
-      parseTOMLDependencies(content, "[dependencies]", result.dependencies, fwSet, RUST_FRAMEWORK_MAP);
-      parseTOMLDependencies(content, "[dev-dependencies]", result.devDependencies, fwSet, RUST_FRAMEWORK_MAP);
-      parseTOMLDependencies(content, "[build-dependencies]", result.devDependencies, fwSet, RUST_FRAMEWORK_MAP);
+      const rustDeps: string[] = [];
+      const rustDevDeps: string[] = [];
+      parseTOMLDependencies(content, "[dependencies]", rustDeps, fwSet, RUST_FRAMEWORK_MAP);
+      parseTOMLDependencies(content, "[dev-dependencies]", rustDevDeps, fwSet, RUST_FRAMEWORK_MAP);
+      parseTOMLDependencies(content, "[build-dependencies]", rustDevDeps, fwSet, RUST_FRAMEWORK_MAP);
+
+      // Add to flat arrays for backward compat
+      result.dependencies.push(...rustDeps);
+      result.devDependencies.push(...rustDevDeps);
+
+      // Populate per-ecosystem tracking for rust
+      if (rustDeps.length > 0 || rustDevDeps.length > 0) {
+        result.depsByEcosystem["rust"] = { deps: rustDeps, devDeps: rustDevDeps };
+      }
     } catch {
       // Malformed Cargo.toml — skip
     }
@@ -197,6 +246,7 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
 
   if (fs.existsSync(pyprojectPath)) {
     langSet.add("python");
+    const pyDeps: string[] = [];
     try {
       const content = fs.readFileSync(pyprojectPath, "utf-8");
       // Extract dependencies from pyproject.toml
@@ -207,6 +257,7 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
           for (const dep of deps) {
             const name = dep.replace(/^"/, "");
             result.dependencies.push(name);
+            pyDeps.push(name);
             detectPythonFramework(name, fwSet);
           }
         }
@@ -214,8 +265,12 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
     } catch {
       // Skip
     }
+    if (pyDeps.length > 0) {
+      result.depsByEcosystem["python"] = { deps: pyDeps, devDeps: [] };
+    }
   } else if (fs.existsSync(requirementsPath)) {
     langSet.add("python");
+    const pyDeps: string[] = [];
     try {
       const content = fs.readFileSync(requirementsPath, "utf-8");
       for (const line of content.split("\n")) {
@@ -224,12 +279,16 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
           const name = trimmed.split(/[>=<!\[]/)[0].trim();
           if (name) {
             result.dependencies.push(name);
+            pyDeps.push(name);
             detectPythonFramework(name, fwSet);
           }
         }
       }
     } catch {
       // Skip
+    }
+    if (pyDeps.length > 0) {
+      result.depsByEcosystem["python"] = { deps: pyDeps, devDeps: [] };
     }
   } else if (fs.existsSync(setupPyPath)) {
     langSet.add("python");
@@ -241,6 +300,7 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
   const goModPath = path.join(cwd, "go.mod");
   if (fs.existsSync(goModPath)) {
     langSet.add("go");
+    const goDeps: string[] = [];
     try {
       const content = fs.readFileSync(goModPath, "utf-8");
       // Extract module name
@@ -257,12 +317,16 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
           if (depMatch && !depMatch[1].startsWith("//")) {
             const dep = depMatch[1];
             result.dependencies.push(dep);
+            goDeps.push(dep);
             detectGoFramework(dep, fwSet);
           }
         }
       }
     } catch {
       // Skip
+    }
+    if (goDeps.length > 0) {
+      result.depsByEcosystem["go"] = { deps: goDeps, devDeps: [] };
     }
   }
 

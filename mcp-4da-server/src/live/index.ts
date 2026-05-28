@@ -59,6 +59,7 @@ export class LiveIntelligence {
 
   /**
    * Initialize with project data. Call once after project scan.
+   * @deprecated Use initFromMultiEcosystem for correct per-ecosystem resolution.
    */
   initFromProject(
     projectPath: string,
@@ -67,6 +68,23 @@ export class LiveIntelligence {
     language: string,
   ): void {
     this.resolvedDeps = resolveVersions(projectPath, deps, devDeps, language);
+    this.initialized = true;
+  }
+
+  /**
+   * Initialize with per-ecosystem project data. Resolves versions per language
+   * so Rust crates go to crates.io, npm packages to npm, etc.
+   * Call once after project scan.
+   */
+  initFromMultiEcosystem(
+    projectPath: string,
+    depsByEcosystem: Record<string, { deps: string[]; devDeps: string[] }>,
+  ): void {
+    const allResolved: ResolvedDependency[] = [];
+    for (const [language, { deps, devDeps }] of Object.entries(depsByEcosystem)) {
+      allResolved.push(...resolveVersions(projectPath, deps, devDeps, language));
+    }
+    this.resolvedDeps = allResolved;
     this.initialized = true;
   }
 

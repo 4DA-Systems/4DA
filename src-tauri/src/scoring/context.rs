@@ -226,7 +226,7 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
 
     // Compute taste embedding from topic affinities + topic embeddings
     // In bootstrap mode, use lower exposure threshold for faster learning
-    let affinity_min_exposures = if effective_feedback_count < 10 { 2 } else { 5 };
+    let affinity_min_exposures = if effective_feedback_count < 10 { 1 } else { 3 };
     let taste_embedding = {
         let affinities: Vec<(String, f32, f32)> = match crate::get_ace_engine() {
             Ok(ace) => ace

@@ -152,7 +152,23 @@ pub(crate) fn get_ace_context() -> ACEContext {
                 let primary_normalized = primary_dir.replace('\\', "/");
                 ev_lower.contains(&primary_normalized)
             });
-            let weight: f32 = if is_primary { 0.85 } else { 0.40 };
+
+            // Subproject penalty: MCP servers, editors, tools are support infrastructure
+            let is_subproject = t.evidence.iter().any(|ev| {
+                let ev_lower = ev.to_lowercase().replace('\\', "/");
+                ev_lower.contains("/mcp-")
+                    || ev_lower.contains("/editors/")
+                    || ev_lower.contains("/tools/")
+                    || ev_lower.contains("/scripts/")
+            });
+
+            let weight: f32 = if is_subproject {
+                0.10
+            } else if is_primary {
+                0.85
+            } else {
+                0.40
+            };
             let existing = ctx
                 .tech_weights
                 .get(&name_lower)

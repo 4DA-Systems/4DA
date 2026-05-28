@@ -634,36 +634,23 @@ export class FourDADatabase {
         insertTopic.run(fw, 0.7, 0.85, "project_scan");
       }
 
-      // Determine primary ecosystem for dependency labeling.
-      // For multi-language projects, we use the primary ecosystem;
-      // this is a simplification — the desktop app's ACE engine handles
-      // per-manifest tracking more precisely.
-      const ecosystem = scan.languages.includes("typescript") || scan.languages.includes("javascript")
-        ? "npm"
-        : scan.languages.includes("rust")
-          ? "rust"
-          : scan.languages.includes("python")
-            ? "python"
-            : scan.languages.includes("go")
-              ? "go"
-              : "unknown";
+      // Per-ecosystem dependency insertion (fixes multi-language projects like
+      // Tauri apps where Rust crates were previously mislabeled as "npm").
+      const ecosystemManifestMap: Record<string, string> = {
+        npm: "package.json",
+        rust: "Cargo.toml",
+        python: "pyproject.toml",
+        go: "go.mod",
+      };
 
-      const manifestType = ecosystem === "rust"
-        ? "Cargo.toml"
-        : ecosystem === "python"
-          ? "pyproject.toml"
-          : ecosystem === "go"
-            ? "go.mod"
-            : "package.json";
-
-      // Production dependencies
-      for (const dep of scan.dependencies) {
-        insertDep.run(scan.projectPath, manifestType, dep, null, 0, ecosystem);
-      }
-
-      // Dev dependencies
-      for (const dep of scan.devDependencies) {
-        insertDep.run(scan.projectPath, manifestType, dep, null, 1, ecosystem);
+      for (const [eco, { deps: ecoDeps, devDeps: ecoDevDeps }] of Object.entries(scan.depsByEcosystem)) {
+        const manifestType = ecosystemManifestMap[eco] || "package.json";
+        for (const dep of ecoDeps) {
+          insertDep.run(scan.projectPath, manifestType, dep, null, 0, eco);
+        }
+        for (const dep of ecoDevDeps) {
+          insertDep.run(scan.projectPath, manifestType, dep, null, 1, eco);
+        }
       }
 
       // Topics -> active_topics + explicit_interests (so get_context returns them)

@@ -255,13 +255,13 @@ impl ACE {
                             -1.0 * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
                         WHEN total_exposures >= 3 THEN
                             (CAST(positive_signals AS REAL) - CAST(negative_signals AS REAL)) / CAST(total_exposures AS REAL)
-                            * MIN(CAST(total_exposures AS REAL) / 20.0, 1.0)
+                            * MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
                         ELSE 0.0
                     END,
                     confidence = CASE
                         WHEN negative_signals > 0 AND positive_signals = 0 THEN
                             MAX(0.3, MIN(CAST(total_exposures AS REAL) / 10.0, 1.0))
-                        ELSE MIN(CAST(total_exposures AS REAL) / 20.0, 1.0)
+                        ELSE MIN(CAST(total_exposures AS REAL) / 10.0, 1.0)
                     END
                  WHERE topic = ?1",
                 rusqlite::params![topic],

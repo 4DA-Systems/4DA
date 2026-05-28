@@ -360,6 +360,55 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             continue;
         }
 
+        // Skip Node.js builtins and internal modules — not real packages
+        static NODE_BUILTINS: &[&str] = &[
+            "child_process",
+            "crypto",
+            "dgram",
+            "domain",
+            "events",
+            "http",
+            "http2",
+            "https",
+            "module",
+            "net",
+            "os",
+            "path",
+            "perf_hooks",
+            "process",
+            "querystring",
+            "readline",
+            "repl",
+            "stream",
+            "string_decoder",
+            "timers",
+            "tls",
+            "tty",
+            "url",
+            "util",
+            "v8",
+            "vm",
+            "wasi",
+            "worker_threads",
+            "zlib",
+            "assert",
+            "buffer",
+            "cluster",
+            "console",
+            "dns",
+            "inspector",
+            "punycode",
+            "sys",
+        ];
+        if dep.package_name.starts_with("node:")
+            || NODE_BUILTINS.contains(&dep.package_name.as_str())
+            || dep.package_name.starts_with("content_") // internal 4DA modules
+            || dep.package_name == "fourda-macros"
+            || dep.package_name == "nlp"
+        {
+            continue;
+        }
+
         // Domain filter: only show gaps for deps relevant to user's tech stack
         if !is_dep_in_domain(&dep.package_name, &domain) {
             continue;
