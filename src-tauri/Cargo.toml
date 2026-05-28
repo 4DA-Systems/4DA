@@ -122,7 +122,7 @@ tauri-plugin-autostart = "2"
 sysinfo = { version = "0.38", default-features = false, features = ["system"] }
 
 # AI agent introspection & control (MCP server, zero-cost in release builds)
-victauri-plugin = "=0.5.3"
+victauri-plugin = "=0.5.6"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
@@ -182,7 +182,7 @@ required-features = ["ocr"]
 [dev-dependencies]
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
-victauri-test = "=0.5.3"
+victauri-test = "=0.5.6"
 
 [[bench]]
 name = "db_scale"
