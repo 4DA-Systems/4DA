@@ -100,7 +100,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   if (error) {
     const isTimeoutError = /timed?\s*out|deadline/i.test(error);
     return (
-      <div className="space-y-4" role="tabpanel" id="view-panel-blindspots">
+      <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
         <header className="mb-2">
           <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
           <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
@@ -151,7 +151,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const dataFreshness = report.data_freshness;
 
   return (
-    <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots">
+    <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
       <header className="mb-2">
         <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>

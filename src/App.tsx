@@ -277,6 +277,7 @@ function App() {
         )}
 
         <main id="main-content">
+        <h1 className="sr-only">{t('app.title', '4DA')}</h1>
         {/* License recovery — non-dismissible until tier restored */}
         <LicenseRecoveryBanner />
         {/* Critical security alerts — persistent until acknowledged */}

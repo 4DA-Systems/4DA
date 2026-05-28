@@ -59,7 +59,9 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
     <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
       {activeView === 'briefing' ? (
         <ViewErrorBoundary viewName="Briefing">
-          <BriefingView />
+          <div role="tabpanel" id="view-panel-briefing" aria-labelledby="tab-briefing">
+            <BriefingView />
+          </div>
         </ViewErrorBoundary>
       ) : activeView === 'preemption' ? (
         <ViewErrorBoundary viewName="Preemption">
@@ -71,10 +73,13 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
         </ViewErrorBoundary>
       ) : activeView === 'playbook' ? (
         <ViewErrorBoundary viewName="Playbook">
-          <PlaybookView />
+          <div role="tabpanel" id="view-panel-playbook" aria-labelledby="tab-playbook">
+            <PlaybookView />
+          </div>
         </ViewErrorBoundary>
       ) : (
         <ViewErrorBoundary viewName="Signal">
+          <div role="tabpanel" id="view-panel-results" aria-labelledby="tab-results">
           <div className="flex justify-end px-4 pt-3 pb-1">
             <div className="inline-flex rounded-lg border border-border bg-bg-secondary p-0.5">
               <button
@@ -120,6 +125,7 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
               />
             </>
           )}
+          </div>
         </ViewErrorBoundary>
       )}
     </Suspense>

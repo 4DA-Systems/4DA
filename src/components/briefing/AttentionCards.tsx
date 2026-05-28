@@ -232,6 +232,7 @@ const AttentionCard = memo(function AttentionCard({
             {item.url && isSafeUrl(item.url) && (
               <button
                 onClick={handleOpen}
+                aria-label={t('briefing.read', 'Read') + ': ' + item.title}
                 className="px-2.5 py-1 text-xs bg-bg-tertiary text-text-secondary border border-border rounded hover:bg-border transition-all"
               >
                 {t('briefing.read', 'Read')}
