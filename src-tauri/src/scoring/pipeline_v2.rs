@@ -1711,6 +1711,30 @@ pub(crate) fn score_item(
     };
     let boosted_score = (boosted_score + trend_boost).clamp(0.0, 1.0);
 
+    // Primary stack title boost: direct mention of user's primary tech in the
+    // title is a high-confidence signal. "Tauri right-click menu" for a Tauri
+    // dev should outscore a tangential multi-language comparison.
+    let primary_title_boost = if !ctx.domain_profile.primary_stack.is_empty() {
+        let title_lower = input.title.to_lowercase();
+        let hits = ctx
+            .domain_profile
+            .primary_stack
+            .iter()
+            .filter(|tech| {
+                tech.len() >= 4
+                    && crate::knowledge_decay::has_word_boundary_match(&title_lower, tech)
+            })
+            .count();
+        match hits {
+            0 => 0.0_f32,
+            1 => 0.06,
+            _ => 0.10,
+        }
+    } else {
+        0.0
+    };
+    let boosted_score = (boosted_score + primary_title_boost).clamp(0.0, 1.0);
+
     // ── Signal strength bonus (pre-gate) ─────────────────────────────
     let strength_bonus = compute_signal_strength_bonus(
         signal_count,

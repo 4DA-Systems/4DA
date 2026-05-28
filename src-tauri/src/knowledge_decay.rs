@@ -544,7 +544,7 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
 }
 
 /// Check if `text` contains `term` at a word boundary (not embedded in a larger word)
-fn has_word_boundary_match(text: &str, term: &str) -> bool {
+pub(crate) fn has_word_boundary_match(text: &str, term: &str) -> bool {
     let lower = text.to_lowercase();
     let mut search_from = 0;
     while let Some(pos) = lower[search_from..].find(term) {
