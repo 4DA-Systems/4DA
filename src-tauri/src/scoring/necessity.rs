@@ -298,7 +298,11 @@ fn try_breaking_change_path(
     let is_breaking = inputs
         .signal_type
         .as_deref()
-        .is_some_and(|s| s == "breaking_change");
+        .is_some_and(|s| s == "breaking_change")
+        || inputs
+            .content_type
+            .as_deref()
+            .is_some_and(|ct| ct == "breaking_change");
 
     if !is_breaking {
         return None;
