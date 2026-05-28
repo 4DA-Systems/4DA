@@ -144,6 +144,30 @@ impl ProjectScanner {
     #[cfg(not(target_os = "windows"))]
     const MAX_PATH_LEN: usize = 4096;
 
+    /// Check if a path contains known non-project subdirectory patterns that
+    /// should be excluded from scanning. These are multi-segment path patterns
+    /// that can't be caught by the single-name `skip_dirs` check.
+    fn is_excluded_path(path: &Path) -> bool {
+        // Normalize to forward slashes for consistent matching on all platforms
+        let path_str = path.to_string_lossy();
+
+        // Patterns that indicate this is NOT a real project directory:
+        // - .claude/worktrees/ — Claude Code agent worktrees (temporary repo copies)
+        // - .git/worktrees/   — git's internal worktree metadata
+        for pattern in &[
+            ".claude/worktrees/",
+            ".claude\\worktrees\\",
+            ".git/worktrees/",
+            ".git\\worktrees\\",
+        ] {
+            if path_str.contains(pattern) {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Scan a directory for project manifests
     pub fn scan_directory(&self, path: &Path) -> Result<Vec<ProjectSignal>> {
         let mut signals = Vec::new();
@@ -197,6 +221,15 @@ impl ProjectScanner {
             if self.skip_dirs.contains(dir_name) {
                 return Ok(());
             }
+        }
+
+        // Skip paths that contain known non-project subdirectory patterns.
+        // These are multi-segment paths that can't be caught by the single-name
+        // skip_dirs check above:
+        // - .claude/worktrees/  — orphaned Claude Code agent worktrees (copies of the same repo)
+        // - .git/worktrees/     — git's own worktree metadata
+        if Self::is_excluded_path(path) {
+            return Ok(());
         }
 
         // Check for manifests in this directory
@@ -1972,5 +2005,82 @@ BUNDLED WITH
     fn test_parse_composer_lock_empty() {
         assert!(ProjectScanner::parse_composer_lock("{}").is_empty());
         assert!(ProjectScanner::parse_composer_lock("invalid").is_empty());
+    }
+
+    // ─── Path exclusion tests ─────────────────────────────────────
+
+    #[test]
+    fn test_excluded_path_claude_worktrees() {
+        // Unix-style
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/project/.claude/worktrees/agent-abc123/src"
+        )));
+        // Windows-style
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            r"D:\4DA\.claude\worktrees\agent-abc123"
+        )));
+    }
+
+    #[test]
+    fn test_excluded_path_git_worktrees() {
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/project/.git/worktrees/feature-branch"
+        )));
+        assert!(ProjectScanner::is_excluded_path(Path::new(
+            r"D:\4DA\.git\worktrees\feature-branch"
+        )));
+    }
+
+    #[test]
+    fn test_excluded_path_normal_dirs_not_excluded() {
+        assert!(!ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/project/src"
+        )));
+        assert!(!ProjectScanner::is_excluded_path(Path::new(
+            r"D:\4DA\src-tauri\src"
+        )));
+        assert!(!ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/worktrees/my-project"
+        )));
+        // .claude directory itself is fine — only .claude/worktrees/ is excluded
+        assert!(!ProjectScanner::is_excluded_path(Path::new(
+            "/home/user/project/.claude/plans"
+        )));
+    }
+
+    #[test]
+    fn test_scan_skips_claude_worktree_manifests() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Create a real project at root
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"real-project\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+
+        // Create a fake worktree project that should be skipped
+        let worktree_dir = dir
+            .path()
+            .join(".claude")
+            .join("worktrees")
+            .join("agent-abc123");
+        std::fs::create_dir_all(&worktree_dir).unwrap();
+        std::fs::write(
+            worktree_dir.join("package.json"),
+            r#"{"name": "worktree-copy", "dependencies": {"express": "4.0"}}"#,
+        )
+        .unwrap();
+
+        let scanner = ProjectScanner::new();
+        let signals = scanner.scan_directory(dir.path()).unwrap();
+
+        // Should find the real project but NOT the worktree copy
+        assert_eq!(signals.len(), 1, "Should only find 1 project, not the worktree copy");
+        assert_eq!(
+            signals[0].manifest_type,
+            ManifestType::CargoToml,
+            "Should find the real Cargo.toml, not the worktree package.json"
+        );
     }
 }
