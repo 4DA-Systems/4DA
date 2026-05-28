@@ -113,7 +113,7 @@ const PreemptionView = memo(function PreemptionView() {
   const totalVisible = verifiedItems.length + assessedItems.length + developingItems.length;
 
   return (
-    <div className="space-y-5" role="tabpanel" id="view-panel-preemption">
+    <div className="space-y-5" role="tabpanel" id="view-panel-preemption" aria-labelledby="tab-preemption">
       <header>
         <h1 className="text-xl font-semibold text-white tracking-tight">{t('preemption.title')}</h1>
         <p className="text-sm text-text-muted mt-1">{t('preemption.subtitle')}</p>

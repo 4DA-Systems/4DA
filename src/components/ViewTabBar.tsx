@@ -45,6 +45,7 @@ export const ViewTabBar = memo(function ViewTabBar() {
         return (
           <button
             key={tab.id}
+            id={`tab-${tab.id}`}
             role="tab"
             aria-selected={activeView === tab.id}
             aria-controls={`view-panel-${tab.id}`}

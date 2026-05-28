@@ -143,6 +143,7 @@ export const BriefingView = memo(function BriefingView() {
   // Main view: Intelligence Hierarchy (3 zones)
   return (
     <section aria-label={t('briefing.intelligenceBriefing')} className="bg-bg-primary rounded-lg space-y-5">
+      <h2 className="sr-only">{t('briefing.intelligenceBriefing')}</h2>
       {showPersonalizeNudge && (
         <PersonalizeNudge
           onOpenSettings={() => setShowSettings(true)}
