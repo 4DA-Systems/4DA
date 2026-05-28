@@ -8460,9 +8460,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "victauri-core"
-version = "0.5.2"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d21c4b6dc88c194e4613b7ce081fc0fe8b48d998fac4494b7278ae749bd2a858"
+checksum = "fb5bddf691c4ce992a91dced4bb7aa9054b2f3e12a832a1d3d34f365fc93fd79"
 dependencies = [
  "chrono",
  "inventory",
@@ -8476,9 +8476,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-macros"
-version = "0.5.2"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b44e4b09ab0db85f9c5fd3ba6d2107d7c56470e38762be8ed3d4d918b5c207e"
+checksum = "d45a4d386620e341226bd88f901e11bdb49c80bbe547e9685f45f4684a389367"
 dependencies = [
  "proc-macro2",
  "quote",
