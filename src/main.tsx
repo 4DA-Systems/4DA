@@ -2,6 +2,15 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
+// ============================================================================
+// Prototype hardening — freeze built-in prototypes before any library code runs.
+// Tauri's freezePrototype config only covers Object.prototype. This closes the
+// remaining prototype-pollution vectors on Array, Map, and Set.
+// ============================================================================
+Object.freeze(Array.prototype);
+Object.freeze(Map.prototype);
+Object.freeze(Set.prototype);
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '@fontsource-variable/inter';
