@@ -18,11 +18,27 @@ use tracing::{info, warn};
 /// Label used for the notification window throughout the module.
 const WINDOW_LABEL: &str = "notification";
 
-/// Notification window dimensions (logical pixels).
-const WINDOW_WIDTH: u32 = 440;
-const WINDOW_HEIGHT: u32 = 160;
+/// Visible card dimensions (logical pixels) — must match `.notification-card`
+/// in `public/notification.css`.
+const CARD_WIDTH: u32 = 408;
+const CARD_HEIGHT: u32 = 134;
 
-/// Margin from screen edges (pixels).
+/// Transparent padding around the card so its drop shadow is never clipped by
+/// the (overflow-hidden) window edge. The card is centered in the window.
+const SHADOW_PAD: u32 = 60;
+
+/// Full (transparent) notification window dimensions (logical pixels):
+/// the visible card plus shadow padding on every side.
+const WINDOW_WIDTH: u32 = CARD_WIDTH + SHADOW_PAD * 2;
+const WINDOW_HEIGHT: u32 = CARD_HEIGHT + SHADOW_PAD * 2;
+
+/// Distance from the window origin to the centered card's far edge
+/// (= half the window plus half the card). Used to anchor the card's
+/// bottom-right corner to the screen corner regardless of shadow padding.
+const CARD_EDGE_X: u32 = (WINDOW_WIDTH + CARD_WIDTH) / 2;
+const CARD_EDGE_Y: u32 = (WINDOW_HEIGHT + CARD_HEIGHT) / 2;
+
+/// Margin from screen edges to the visible card (pixels).
 const MARGIN_RIGHT: i32 = 16;
 /// Bottom margin to clear the OS taskbar.
 const MARGIN_BOTTOM: i32 = 64;
@@ -162,12 +178,17 @@ pub fn show_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData)
             let screen = monitor.size();
             let monitor_pos = monitor.position();
 
-            // Physical pixel coordinates for the window origin.
+            // Physical pixel coordinates for the window origin. The window is
+            // larger than the card (shadow padding) and the card is centered,
+            // so anchor on the card's far edge, not the window edge — this keeps
+            // the visible card MARGIN_RIGHT/MARGIN_BOTTOM from the screen corner.
+            // The transparent shadow padding may overhang the screen edge; the
+            // OS clips it harmlessly.
             let px = monitor_pos.x + (screen.width as i32)
-                - ((WINDOW_WIDTH as f64 * scale) as i32)
+                - ((f64::from(CARD_EDGE_X) * scale) as i32)
                 - ((MARGIN_RIGHT as f64 * scale) as i32);
             let py = monitor_pos.y + (screen.height as i32)
-                - ((WINDOW_HEIGHT as f64 * scale) as i32)
+                - ((f64::from(CARD_EDGE_Y) * scale) as i32)
                 - ((MARGIN_BOTTOM as f64 * scale) as i32);
 
             window.set_position(PhysicalPosition::new(px, py))?;

@@ -1,6 +1,11 @@
 // 4DA Custom Notification Window
 // Standalone vanilla JS — no React, no bundler dependency.
 // Uses window.__TAURI__ globals (withGlobalTauri: true in tauri.conf.json).
+//
+// Design: a SOLID card that floats above the desktop. The priority-colored
+// "sweep" border (a slowly rotating conic gradient) is pure CSS and always
+// renders — there is no GPU/transparent-card path, which previously left the
+// card see-through whenever the GPU atmosphere failed to paint.
 
 const DISMISS_DURATIONS = {
   critical: 8000,
@@ -14,7 +19,6 @@ const DISMISS_DURATIONS = {
 // ---------------------------------------------------------------------------
 
 const card = document.getElementById('card');
-const atmosphereLayer = document.getElementById('atmosphere-layer');
 const priorityDot = document.getElementById('priority-dot');
 const typeLabel = document.getElementById('type-label');
 const sourceBadge = document.getElementById('source-badge');
@@ -39,7 +43,7 @@ let currentItemId = null;
 /** Truncate a string to `max` characters, appending ellipsis if needed. */
 function truncate(str, max) {
   if (!str) return '';
-  return str.length > max ? str.slice(0, max) + '\u2026' : str;
+  return str.length > max ? str.slice(0, max) + '…' : str;
 }
 
 /** Map variant / signal_type to a display label for the header. */
@@ -102,122 +106,6 @@ function escapeHtml(str) {
 }
 
 // ---------------------------------------------------------------------------
-// GPU rendering (progressive enhancement over CSS)
-// ---------------------------------------------------------------------------
-
-/** Card components — full GPU-rendered card with occlude blend. */
-var NOTIF_CARD_TAGS = {
-  critical: 'fourda-notif-card-critical',
-  high: 'fourda-notif-card-high',
-  medium: 'fourda-notif-card-medium',
-  low: 'fourda-notif-card-low',
-};
-var NOTIF_CARD_SCRIPTS = {
-  critical: '/notif-card-critical.js',
-  high: '/notif-card-high.js',
-  medium: '/notif-card-medium.js',
-  low: '/notif-card-low.js',
-};
-var loadedScripts = {};
-var runtimeLoaded = false;
-var currentGameEl = null;
-var gpuAvailable = null; // null = untested, true/false after detection
-
-/** Detect if GPU rendering is available (WebGL2 as minimum). */
-function detectGPU() {
-  if (gpuAvailable !== null) return gpuAvailable;
-  try {
-    var canvas = document.createElement('canvas');
-    var gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
-    gpuAvailable = !!gl;
-    if (gl) {
-      // Clean up the test context
-      var ext = gl.getExtension('WEBGL_lose_context');
-      if (ext) ext.loseContext();
-    }
-    canvas.remove();
-  } catch (e) {
-    gpuAvailable = false;
-  }
-  console.log('[4DA Notification] GPU available:', gpuAvailable);
-  return gpuAvailable;
-}
-
-/** Load the shared 4DA component runtime (renderer classes) once. Returns a promise. */
-function ensureGameRuntime() {
-  if (runtimeLoaded) return Promise.resolve();
-  return new Promise(function (resolve) {
-    runtimeLoaded = true;
-    var script = document.createElement('script');
-    script.src = '/fourda-runtime.js';
-    script.onload = resolve;
-    script.onerror = function () {
-      runtimeLoaded = false; // Allow retry
-      resolve(); // Don't block — component will fail gracefully
-    };
-    document.head.appendChild(script);
-  });
-}
-
-/** Lazy-load a card component script (only loaded once per priority).
- *  Loads the shared runtime first, then the lightweight component. */
-function ensureGameScript(priority) {
-  if (loadedScripts[priority]) return;
-  loadedScripts[priority] = true;
-  var src = NOTIF_CARD_SCRIPTS[priority];
-  if (!src) return;
-  ensureGameRuntime().then(function () {
-    var script = document.createElement('script');
-    script.type = 'module';
-    script.src = src;
-    document.head.appendChild(script);
-  });
-}
-
-/** Upgrade from CSS card to GPU-rendered card.
- *  CSS card stays visible until GPU render is confirmed working.
- *  If GPU render fails, CSS card remains — user sees no difference. */
-function upgradeToGameCard(priority) {
-  if (!detectGPU()) return; // No GPU — CSS card stays
-
-  var tagName = NOTIF_CARD_TAGS[priority] || NOTIF_CARD_TAGS.low;
-
-  // Skip if already showing the correct component
-  if (currentGameEl && currentGameEl.tagName.toLowerCase() === tagName) return;
-
-  // Remove current atmosphere element
-  destroyGameComponent();
-
-  // Check if the custom element is registered yet
-  if (!customElements.get(tagName)) return;
-
-  // Only create if visible (non-zero size)
-  var rect = atmosphereLayer.getBoundingClientRect();
-  if (rect.width < 1 || rect.height < 1) return;
-
-  // Create atmosphere element behind the CSS card
-  currentGameEl = document.createElement(tagName);
-  currentGameEl.style.cssText = 'position:absolute;inset:0;display:block;z-index:0;';
-  atmosphereLayer.appendChild(currentGameEl);
-
-  // Atmosphere renders the full card — hide CSS card background so text floats on it
-  card.classList.add('atmosphere-active');
-  atmosphereLayer.classList.add('active');
-  atmosphereLayer.style.setProperty('--atmosphere-opacity', '1');
-}
-
-/** Destroy atmosphere component when notification hides (stops GPU rendering). */
-function destroyGameComponent() {
-  if (currentGameEl) {
-    currentGameEl.remove();
-    currentGameEl = null;
-  }
-  // Restore CSS card background
-  card.classList.remove('atmosphere-active');
-  atmosphereLayer.classList.remove('active');
-}
-
-// ---------------------------------------------------------------------------
 // Content update
 // ---------------------------------------------------------------------------
 
@@ -227,8 +115,8 @@ function updateContent(data) {
   currentItemId = data.item_id || null;
 
   // Swap priority classes on card and dot
-  card.classList.remove('critical', 'high', 'medium', 'low');
-  priorityDot.classList.remove('critical', 'high', 'medium', 'low');
+  card.classList.remove('critical', 'high', 'medium', 'low', 'alert', 'advisory', 'watch');
+  priorityDot.classList.remove('critical', 'high', 'medium', 'low', 'alert', 'advisory', 'watch');
   card.classList.add(currentPriority);
   priorityDot.classList.add(currentPriority);
 
@@ -241,20 +129,6 @@ function updateContent(data) {
     'aria-live',
     currentPriority === 'critical' ? 'assertive' : 'polite'
   );
-
-  // Atmosphere — subtle living texture, not the main event
-  var gameOpacity = { critical: 0.12, high: 0.09, medium: 0.06, low: 0.04 };
-  atmosphereLayer.style.setProperty(
-    '--atmosphere-opacity',
-    String(gameOpacity[currentPriority] || 0.05)
-  );
-
-  // Progressive enhancement: try to upgrade CSS card to GPU-rendered card
-  if (detectGPU()) {
-    ensureGameScript(currentPriority);
-    // Defer upgrade to allow script to register the custom element
-    setTimeout(function () { upgradeToGameCard(currentPriority); }, 150);
-  }
 
   // -- Header --
   typeLabel.textContent = getTypeLabel(data.variant, data.signal_type);
@@ -293,7 +167,7 @@ function updateContent(data) {
       if (existing) existing.remove();
       var sourcesEl = document.createElement('span');
       sourcesEl.className = 'chain-sources';
-      sourcesEl.textContent = data.chain_sources.join(' \u2192 ');
+      sourcesEl.textContent = data.chain_sources.join(' → ');
       chainContainer.appendChild(sourcesEl);
     }
   } else {
@@ -364,10 +238,6 @@ function showNotification(data) {
   // Trigger enter animation on next frame so CSS transition fires
   requestAnimationFrame(function () {
     card.classList.add('visible');
-    // Atmosphere fades in slightly after card appears
-    setTimeout(function () {
-      atmosphereLayer.classList.add('active');
-    }, 200);
   });
 
   startDismissTimer();
@@ -393,13 +263,11 @@ function hideNotification(reason) {
   } else {
     card.classList.add('exiting');
   }
-  atmosphereLayer.classList.remove('active');
 
-  // After animation completes, clean up atmosphere + signal Rust to hide
+  // After animation completes, signal Rust to hide the window
   var delay = reason === 'dismiss' ? 150 : 400;
   setTimeout(function () {
     card.classList.remove('visible', 'exiting', 'dismissing');
-    destroyGameComponent(); // Stop GPU rendering when hidden
     emitTauri('notification-hidden');
   }, delay);
 }
