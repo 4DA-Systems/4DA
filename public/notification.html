@@ -5,16 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>4DA Notification</title>
   <link rel="stylesheet" href="/notification.css">
-  <!-- Shared 4DA component runtime (preloaded for speed) -->
-  <link rel="preload" href="/fourda-runtime.js" as="script">
-  <!-- Card components loaded lazily by notification.js when first needed -->
 </head>
 <body>
   <div id="notification" class="notification-window" role="status" aria-live="polite">
-    <!-- Atmosphere layer -->
-    <div id="atmosphere-layer" class="atmosphere-layer"></div>
-
-    <!-- Content card -->
+    <!-- Content card (solid, floats above the desktop) -->
     <div id="card" class="notification-card">
       <!-- Header -->
       <div class="notification-header">

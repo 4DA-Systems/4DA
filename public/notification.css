@@ -24,31 +24,14 @@ html, body {
    ======================================================================== */
 
 .notification-window {
-  width: 440px;
-  height: 160px;
+  /* Fill the whole (transparent) OS window and center the card so its drop
+     shadow has room on all sides and never clips against the window edge. */
+  width: 100vw;
+  height: 100vh;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* ========================================================================
-   Atmosphere Layer — subtle living texture behind the card
-   ======================================================================== */
-
-.atmosphere-layer {
-  position: absolute;
-  inset: 0;
-  border-radius: 0;
-  overflow: hidden;
-  opacity: 0;
-  transition: opacity 0.4s ease-out;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.atmosphere-layer.active {
-  opacity: var(--atmosphere-opacity, 1);
 }
 
 /* ========================================================================
@@ -60,7 +43,7 @@ html, body {
   z-index: 1;
   width: 408px;
   height: 134px;
-  background: #0E0E0E;
+  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
   border-radius: 14px;
   padding: 14px 16px 14px 20px;
   display: flex;
@@ -89,45 +72,34 @@ html, body {
   position: absolute;
   inset: -1px;
   border-radius: 15px;
-  /* Conic gradient: colored sweep fading to transparent */
+  /* Conic gradient: a slim colored highlight that travels around the hairline
+     border. Keep the bright arc narrow so it reads as a moving point of light,
+     not a wide smear. */
   background: conic-gradient(
     from 0deg,
     var(--sweep-color, rgba(255,255,255,0.15)) 0deg,
-    var(--sweep-color, rgba(255,255,255,0.15)) 40deg,
-    transparent 120deg,
-    rgba(255,255,255,0.03) 240deg,
+    var(--sweep-color, rgba(255,255,255,0.15)) 10deg,
+    transparent 50deg,
+    rgba(255,255,255,0.02) 330deg,
     var(--sweep-color, rgba(255,255,255,0.15)) 360deg
   );
-  animation: border-sweep 4s linear infinite;
+  animation: border-sweep 8s linear infinite;
   z-index: -1;
 }
 
-/* Inner fill masks center — only border is visible */
+/* Inner fill masks center — only the border sweep is visible */
 .notification-card::after {
   content: '';
   position: absolute;
   inset: 1px;
   border-radius: 13px;
-  background: #0E0E0E;
+  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
   z-index: -1;
 }
 
 .notification-card.visible {
   opacity: 1;
   transform: scale(1) translateY(0);
-}
-
-/* When atmospheric effect is rendering, make CSS card transparent.
-   The effect handles the card body, border, and sweep via GPU.
-   CSS card becomes a transparent text container only. */
-.notification-card.atmosphere-active {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-.notification-card.atmosphere-active::before,
-.notification-card.atmosphere-active::after {
-  display: none !important;
 }
 
 .notification-card.exiting {
@@ -150,21 +122,21 @@ html, body {
 .notification-card.critical {
   --sweep-color: rgba(220, 50, 50, 0.7);
   box-shadow:
-    0 0 18px rgba(200, 50, 50, 0.1),
+    0 0 7px rgba(200, 50, 50, 0.10),
     0 8px 32px rgba(0, 0, 0, 0.55),
     0 2px 8px rgba(0, 0, 0, 0.3);
 }
-.notification-card.critical::before { animation-duration: 3s; }
+.notification-card.critical::before { animation-duration: 6s; }
 
 /* Alert: orange sweep, medium rotation */
 .notification-card.alert {
   --sweep-color: rgba(230, 130, 40, 0.6);
   box-shadow:
-    0 0 14px rgba(220, 120, 30, 0.07),
+    0 0 6px rgba(220, 120, 30, 0.07),
     0 8px 32px rgba(0, 0, 0, 0.55),
     0 2px 8px rgba(0, 0, 0, 0.3);
 }
-.notification-card.alert::before { animation-duration: 4s; }
+.notification-card.alert::before { animation-duration: 8s; }
 
 /* Advisory: white sweep, slow */
 .notification-card.advisory {
@@ -173,7 +145,7 @@ html, body {
     0 8px 32px rgba(0, 0, 0, 0.55),
     0 2px 8px rgba(0, 0, 0, 0.3);
 }
-.notification-card.advisory::before { animation-duration: 6s; }
+.notification-card.advisory::before { animation-duration: 11s; }
 
 /* Watch: barely-there white sweep, very slow */
 .notification-card.watch {
@@ -182,7 +154,7 @@ html, body {
     0 8px 32px rgba(0, 0, 0, 0.5),
     0 2px 8px rgba(0, 0, 0, 0.25);
 }
-.notification-card.watch::before { animation-duration: 8s; }
+.notification-card.watch::before { animation-duration: 14s; }
 
 /* ========================================================================
    Hover States
