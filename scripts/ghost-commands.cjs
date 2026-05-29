@@ -39,6 +39,7 @@ const KNOWN_GHOST = new Set([
   'download_builtin_model',         // Phase 3 — model download UI pending
   'cancel_builtin_model_download',  // Phase 3 — model download UI pending
   'delete_builtin_model',           // Phase 3 — model management UI pending
+  'get_learning_stats',             // diagnostic/observability — invoked via dev tools, not a UI panel
 ]);
 
 // ANSI color codes

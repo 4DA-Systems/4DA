@@ -383,8 +383,132 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
     }))
 }
 
+/// Diagnostic snapshot of the compound-learning loop. Surfaces the state that
+/// proves "4DA gets sharper every day": how many topics have been learned, how
+/// many have crossed the confidence-building exposure threshold, the strongest
+/// learned likes and dislikes, and the total interaction volume feeding it.
+/// Pairs with the "4da::learning" tracing stream emitted on every affinity update.
+#[tauri::command]
+pub async fn get_learning_stats() -> Result<serde_json::Value> {
+    let ace = get_ace_engine()?;
+    let conn = ace.get_conn().lock();
+    Ok(learning_stats_json(&conn))
+}
+
+/// Build the learning-stats snapshot from a behavior connection. Split out from
+/// the command so it can be exercised against an in-memory ACE in tests.
+pub(crate) fn learning_stats_json(conn: &rusqlite::Connection) -> serde_json::Value {
+    let total_topics: i64 = conn
+        .query_row("SELECT COUNT(*) FROM topic_affinities", [], |row| {
+            row.get(0)
+        })
+        .unwrap_or(0);
+
+    // Topics with enough exposures that their affinity is confidence-weighted
+    // rather than provisional (the SQL affinity formula gains confidence past 3).
+    let topics_above_threshold: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM topic_affinities WHERE total_exposures > 3",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let total_interactions: i64 = conn
+        .query_row("SELECT COUNT(*) FROM interactions", [], |row| row.get(0))
+        .unwrap_or(0);
+
+    let read_affinities = |sql: &str| -> Vec<serde_json::Value> {
+        let mut stmt = match conn.prepare(sql) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                warn!("get_learning_stats query prepare failed: {e}");
+                return Vec::new();
+            }
+        };
+        let rows = stmt.query_map([], |row| {
+            Ok(serde_json::json!({
+                "topic": row.get::<_, String>(0)?,
+                "affinity_score": row.get::<_, f32>(1)?,
+                "confidence": row.get::<_, f32>(2)?,
+                "total_exposures": row.get::<_, i64>(3)?,
+            }))
+        });
+        match rows {
+            Ok(iter) => iter.filter_map(std::result::Result::ok).collect(),
+            Err(e) => {
+                warn!("get_learning_stats query_map failed: {e}");
+                Vec::new()
+            }
+        }
+    };
+
+    let top_positive = read_affinities(
+        "SELECT topic, affinity_score, confidence, total_exposures FROM topic_affinities
+         WHERE affinity_score > 0 ORDER BY affinity_score DESC LIMIT 5",
+    );
+    let top_negative = read_affinities(
+        "SELECT topic, affinity_score, confidence, total_exposures FROM topic_affinities
+         WHERE affinity_score < 0 ORDER BY affinity_score ASC LIMIT 5",
+    );
+
+    serde_json::json!({
+        "total_topics_tracked": total_topics,
+        "topics_above_exposure_threshold": topics_above_threshold,
+        "total_interactions_processed": total_interactions,
+        "top_positive_affinities": top_positive,
+        "top_negative_affinities": top_negative,
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::ace::{create_test_ace, BehaviorAction};
+
+    /// The learning-stats observability surface must reflect real recorded
+    /// feedback: topic counts, interaction volume, and the strongest learned
+    /// likes/dislikes. Guards against the stats command silently reporting zeros.
+    #[test]
+    fn learning_stats_reflects_recorded_feedback() {
+        let ace = create_test_ace();
+        for item_id in 1..=3 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::Save,
+                vec!["rust".to_string()],
+                "hackernews".to_string(),
+            )
+            .expect("record save");
+        }
+        for item_id in 4..=5 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::MarkIrrelevant,
+                vec!["java".to_string()],
+                "reddit".to_string(),
+            )
+            .expect("record irrelevant");
+        }
+
+        let conn = ace.get_conn().lock();
+        let stats = super::learning_stats_json(&conn);
+
+        assert_eq!(stats["total_interactions_processed"].as_i64().unwrap(), 5);
+        assert!(stats["total_topics_tracked"].as_i64().unwrap() >= 2);
+        assert_eq!(
+            stats["top_positive_affinities"][0]["topic"]
+                .as_str()
+                .unwrap(),
+            "rust"
+        );
+        assert_eq!(
+            stats["top_negative_affinities"][0]["topic"]
+                .as_str()
+                .unwrap(),
+            "java"
+        );
+    }
+
     #[test]
     fn test_engagement_summary_shape() {
         // Verify the JSON shape returned by ace_get_engagement_summary

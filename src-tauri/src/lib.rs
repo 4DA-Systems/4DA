@@ -800,6 +800,7 @@ pub fn run() {
             ace_commands::ace_get_accuracy_metrics,
             ace_commands::ace_record_accuracy_feedback,
             ace_commands::get_engagement_summary,
+            ace_commands::get_learning_stats,
             ace_commands::ace_get_single_affinity,
             // Source config
             source_config::get_rss_feeds,

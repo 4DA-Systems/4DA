@@ -43,10 +43,24 @@ pub(crate) fn compute_affinity_multiplier(topics: &[String], ace_ctx: &ACEContex
     // High confidence (1.0) + high affinity (0.8) -> effect = 0.8 -> mult = 1.56
     // Low confidence (0.3) + high affinity (0.8) -> effect = 0.24 -> mult = 1.17
     let avg_effect = effect_sum / match_count as f32;
-    (1.0 + avg_effect * scoring_config::AFFINITY_EFFECT).clamp(
+    let multiplier = (1.0 + avg_effect * scoring_config::AFFINITY_EFFECT).clamp(
         scoring_config::AFFINITY_MULT_RANGE.0,
         scoring_config::AFFINITY_MULT_RANGE.1,
-    )
+    );
+
+    // Learning-loop observability: record when learned affinities actually move a
+    // score. Logged at debug (not info) because this runs once per scored item —
+    // info would flood every analysis cycle. The aggregate snapshot lives in the
+    // get_learning_stats command; this is the per-item trace for deep debugging.
+    tracing::debug!(
+        target: "4da::learning",
+        matched_topics = match_count,
+        avg_effect,
+        multiplier,
+        "Affinity multiplier applied to item score"
+    );
+
+    multiplier
 }
 
 /// Compute anti-topic penalty as a multiplicative factor

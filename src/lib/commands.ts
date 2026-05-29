@@ -322,6 +322,7 @@ interface CommandMap {
   ace_get_topic_affinities: { params: Record<string, never>; result: { affinities: Array<{ topic: string; positive_signals: number; negative_signals: number; affinity_score: number }>; count: number } };
   ace_get_anti_topics: { params: { min_rejections: number }; result: { anti_topics: Array<{ topic: string; rejection_count: number; last_rejected: string }>; count: number } };
   ace_get_single_affinity: { params: { topic: string }; result: { affinity: { topic: string; positive_signals: number; negative_signals: number; affinity_score: number } | null } };
+  get_learning_stats: { params: Record<string, never>; result: { total_topics_tracked: number; topics_above_exposure_threshold: number; total_interactions_processed: number; top_positive_affinities: Array<{ topic: string; affinity_score: number; confidence: number; total_exposures: number }>; top_negative_affinities: Array<{ topic: string; affinity_score: number; confidence: number; total_exposures: number }> } };
   ace_get_suggested_interests: { params: Record<string, never>; result: SuggestedInterest[] };
   ace_get_detected_tech: { params: Record<string, never>; result: { detected_tech: Array<{ name: string; category: string; confidence: number }> } };
   ace_get_active_topics: { params: Record<string, never>; result: { topics: Array<{ topic: string; weight: number }> } };
