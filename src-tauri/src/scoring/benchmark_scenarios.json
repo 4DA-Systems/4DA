@@ -36,13 +36,13 @@
     "profile": "rust_developer",
     "expected": {
       "score_min": 0.1,
-      "score_max": 0.45,
+      "score_max": 0.90,
       "should_be_relevant": true,
       "required_signals": [
         "interest",
         "ace"
       ],
-      "notes": "Direct match on Tauri — primary stack technology"
+      "notes": "Direct match on Tauri — primary stack technology (primary_title_boost applies)"
     }
   },
   {
@@ -1302,6 +1302,345 @@
         "interest"
       ],
       "notes": "Direct Rust content — should pass even in bootstrap mode"
+    }
+  },
+  {
+    "id": "reg_tauri_title_boost",
+    "category": "true_positive",
+    "description": "Regression: primary stack name in title gets title boost",
+    "item": {
+      "title": "Tauri 2 right-click menu replacement on Windows",
+      "content": "A practical guide to replacing the default right-click context menu in Tauri 2 desktop apps on Windows. Covers custom menu rendering, native integration via the tauri-plugin-context-menu crate, and handling platform-specific quirks.",
+      "source_type": "hackernews",
+      "tags_json": "[\"tauri\", \"desktop\", \"windows\"]",
+      "created_hours_ago": 12
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.40,
+      "score_max": 1.0,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Direct framework name in title should boost via primary_title_boost"
+    }
+  },
+  {
+    "id": "reg_multi_stack_title",
+    "category": "true_positive",
+    "description": "Regression: multiple primary stack names in title get +0.10 boost",
+    "item": {
+      "title": "Building offline-first apps with React, SQLite, and Tauri",
+      "content": "End-to-end tutorial on building offline-capable desktop applications using React for the UI, SQLite for local persistence, and Tauri as the native shell. Covers sync strategies, conflict resolution, and packaging for macOS, Windows, and Linux.",
+      "source_type": "hackernews",
+      "tags_json": "[\"tauri\", \"react\", \"sqlite\", \"offline\"]",
+      "created_hours_ago": 18
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.50,
+      "score_max": 1.0,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Multiple primary stack names in title should get +0.10 boost"
+    }
+  },
+  {
+    "id": "reg_express_subproject",
+    "category": "true_negative",
+    "description": "Regression: Express from MCP subproject should not dominate rust_developer feed",
+    "item": {
+      "title": "Express 5 middleware patterns for Node.js APIs",
+      "content": "Deep dive into Express 5 middleware composition including error-handling middleware, async middleware wrappers, and the new router.param() API. Covers practical patterns for authentication, rate limiting, and request validation in production Node.js services.",
+      "source_type": "hackernews",
+      "tags_json": "[\"express\", \"nodejs\", \"backend\"]",
+      "created_hours_ago": 14
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.40,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Express is from MCP subproject (weight 0.10), should not dominate rust_developer feed"
+    }
+  },
+  {
+    "id": "reg_express_fullstack",
+    "category": "true_positive",
+    "description": "Regression: Express IS primary stack for fullstack_js profile",
+    "item": {
+      "title": "Express 5 middleware patterns for Node.js APIs",
+      "content": "Deep dive into Express 5 middleware composition including error-handling middleware, async middleware wrappers, and the new router.param() API. Covers practical patterns for authentication, rate limiting, and request validation in production Node.js services.",
+      "source_type": "hackernews",
+      "tags_json": "[\"express\", \"nodejs\", \"backend\"]",
+      "created_hours_ago": 14
+    },
+    "profile": "fullstack_js",
+    "expected": {
+      "score_min": 0.20,
+      "score_max": 0.90,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "Express IS primary stack for fullstack_js profile"
+    }
+  },
+  {
+    "id": "reg_ruby_rails_offstack",
+    "category": "true_negative",
+    "description": "Regression: Ruby/Rails completely off-stack for Rust developer",
+    "item": {
+      "title": "Ruby on Rails 8 active record query improvements",
+      "content": "Rails 8 introduces async query execution in Active Record, composable query scopes with automatic index hints, and a new strict_loading mode that prevents N+1 queries at the model level. Migration tooling now supports zero-downtime schema changes.",
+      "source_type": "hackernews",
+      "tags_json": "[\"ruby\", \"rails\", \"database\"]",
+      "created_hours_ago": 20
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.20,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Ruby/Rails completely off-stack for Rust developer"
+    }
+  },
+  {
+    "id": "reg_django_offstack",
+    "category": "true_negative",
+    "description": "Regression: Django/Python completely off-stack for Rust developer",
+    "item": {
+      "title": "Django REST framework authentication patterns and best practices",
+      "content": "Comprehensive guide to Django REST Framework authentication: JWT tokens, session auth, OAuth2 with django-allauth, and custom authentication backends. Covers permission classes, throttling, and security hardening for production API deployments.",
+      "source_type": "devto",
+      "tags_json": "[\"django\", \"python\", \"api\", \"authentication\"]",
+      "created_hours_ago": 24
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.20,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Django/Python completely off-stack for Rust developer"
+    }
+  },
+  {
+    "id": "reg_java_spring_offstack",
+    "category": "true_negative",
+    "description": "Regression: Java/Spring completely off-stack for Rust developer",
+    "item": {
+      "title": "Spring Boot 4 microservices with Kubernetes deployment",
+      "content": "Step-by-step guide to building and deploying Spring Boot 4 microservices on Kubernetes. Covers service discovery with Eureka, circuit breaking with Resilience4j, distributed tracing with Micrometer, and Helm charts for production deployment.",
+      "source_type": "hackernews",
+      "tags_json": "[\"java\", \"spring\", \"kubernetes\", \"microservices\"]",
+      "created_hours_ago": 16
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.20,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Java/Spring completely off-stack for Rust developer"
+    }
+  },
+  {
+    "id": "reg_multilang_comparison",
+    "category": "edge_case",
+    "description": "Regression: multi-language comparison where only TypeScript partially matches",
+    "item": {
+      "title": "Ruby vs Java vs TypeScript: building the same CRUD app in three languages",
+      "content": "We built identical CRUD applications in Ruby (Sinatra), Java (Spring Boot), and TypeScript (Express) to compare developer experience, performance, and code complexity. Each implementation uses an ORM, REST endpoints, and basic auth.",
+      "source_type": "hackernews",
+      "tags_json": "[\"ruby\", \"java\", \"typescript\", \"comparison\"]",
+      "created_hours_ago": 30
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.50,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Only TypeScript partially matches. Should NOT be top-scored item anymore."
+    }
+  },
+  {
+    "id": "reg_crates_tokio_update",
+    "category": "true_positive",
+    "description": "Regression: crates.io direct dependency update for tokio",
+    "item": {
+      "title": "crates.io: tokio v1.53.0 — async runtime bugfix release",
+      "content": "tokio v1.53.0 fixes a race condition in the io_uring driver on Linux 6.8+ kernels, resolves a rare deadlock in the multi-threaded scheduler under high task churn, and improves timer wheel efficiency for applications with thousands of active timeouts.",
+      "source_type": "crates_io",
+      "tags_json": "[\"rust\", \"tokio\", \"async\"]",
+      "created_hours_ago": 4
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.30,
+      "score_max": 1.0,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "tokio is a direct dependency, crates.io source gets high authority"
+    }
+  },
+  {
+    "id": "reg_npm_react_update",
+    "category": "true_positive",
+    "description": "Regression: npm registry update for React (primary stack)",
+    "item": {
+      "title": "npm: react v19.3.0 — concurrent rendering improvements",
+      "content": "react v19.3.0 improves concurrent rendering heuristics, reduces unnecessary re-renders in Suspense boundaries, and fixes a memory leak in useEffect cleanup when components unmount during transitions. Upgrade recommended for all React 19 users.",
+      "source_type": "npm_registry",
+      "tags_json": "[\"react\", \"javascript\", \"frontend\"]",
+      "created_hours_ago": 6
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.20,
+      "score_max": 0.90,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest",
+        "ace"
+      ],
+      "notes": "React is primary stack, npm update from registry source"
+    }
+  },
+  {
+    "id": "reg_cve_reqwest",
+    "category": "security",
+    "description": "Regression: CVE for reqwest — a direct dependency",
+    "item": {
+      "title": "[CVE-2026-99999] reqwest: HTTP header injection via crafted URL",
+      "content": "reqwest versions before 0.12.15 are vulnerable to HTTP header injection when the URL path contains encoded CRLF sequences. An attacker can inject arbitrary headers including Host and Authorization. Severity: CVSS_V3: 8.1. Upgrade to reqwest >= 0.12.15.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"reqwest\", \"rust\"]",
+      "created_hours_ago": 3
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.50,
+      "score_max": 1.0,
+      "should_be_relevant": true,
+      "required_signals": [
+        "interest"
+      ],
+      "notes": "reqwest is a direct dependency, CVE should trigger critical alert path"
+    }
+  },
+  {
+    "id": "reg_cve_unrelated",
+    "category": "security",
+    "description": "Regression: PHP CVE has zero relevance to Rust stack",
+    "item": {
+      "title": "[CVE-2026-88888] php-curl: remote code execution in cURL wrapper",
+      "content": "php-curl versions before 8.3.5 allow remote code execution when processing specially crafted URLs with the CURLOPT_POSTFIELDS option. Severity: CVSS_V3: 9.8. All PHP applications using curl_exec should upgrade immediately.",
+      "source_type": "cve",
+      "tags_json": "[\"security\", \"cve\", \"php\", \"curl\"]",
+      "created_hours_ago": 8
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.25,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "PHP CVE has zero relevance to Rust stack"
+    }
+  },
+  {
+    "id": "reg_builtin_crypto",
+    "category": "edge_case",
+    "description": "Regression: Node builtin 'crypto' should be filtered from deps, not match",
+    "item": {
+      "title": "Node.js crypto module performance improvements",
+      "content": "Node.js 22 LTS brings significant performance improvements to the built-in crypto module. AES-GCM encryption is 3x faster through OpenSSL 3.2 integration, and the new Web Crypto API surface now covers all common algorithms without external dependencies.",
+      "source_type": "hackernews",
+      "tags_json": "[\"nodejs\", \"crypto\", \"performance\"]",
+      "created_hours_ago": 20
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.25,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "crypto is a Node builtin, should be filtered from deps — no false positive match"
+    }
+  },
+  {
+    "id": "reg_sharp_shapley",
+    "category": "edge_case",
+    "description": "Regression: 'Shapley' should NOT match 'sharp' dep via word boundary check",
+    "item": {
+      "title": "Efficient Shapley-Based Influence Attribution in Social Networks",
+      "content": "We propose a polynomial-time approximation algorithm for computing Shapley values in large-scale social network influence games. Our method reduces computational complexity from exponential to O(n log n) through a novel sampling strategy with provable error bounds.",
+      "source_type": "arxiv",
+      "tags_json": "[\"machine-learning\", \"game-theory\", \"social-networks\"]",
+      "created_hours_ago": 48
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.0,
+      "score_max": 0.20,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Should NOT match 'sharp' dep — word boundary check prevents collision"
+    }
+  },
+  {
+    "id": "reg_desktop_packaging",
+    "category": "true_positive",
+    "description": "Regression: desktop app domain concern match for Tauri developer",
+    "item": {
+      "title": "Cross-platform desktop app packaging with code signing for macOS and Windows",
+      "content": "A comprehensive guide to packaging desktop applications for distribution. Covers code signing certificates for macOS (Developer ID) and Windows (EV certificates), notarization workflows, auto-update mechanisms, and installer creation with NSIS and DMG.",
+      "source_type": "hackernews",
+      "tags_json": "[\"desktop\", \"packaging\", \"code-signing\"]",
+      "created_hours_ago": 22
+    },
+    "profile": "rust_developer",
+    "expected": {
+      "score_min": 0.20,
+      "score_max": 0.80,
+      "should_be_relevant": true,
+      "required_signals": [
+        "ace"
+      ],
+      "notes": "Domain concern match for desktop app developer — packaging/installer keywords"
+    }
+  },
+  {
+    "id": "reg_cold_start_popular",
+    "category": "cold_start",
+    "description": "Regression: cold start with no stack to match against",
+    "item": {
+      "title": "Show HN: Open source tool for building AI apps",
+      "content": "We built an open source framework for building AI-powered applications with a visual workflow editor. Supports OpenAI, Anthropic, and local models. Includes pre-built templates for chatbots, document Q&A, and code generation.",
+      "source_type": "hackernews",
+      "tags_json": "[\"ai\", \"open-source\", \"tools\"]",
+      "created_hours_ago": 8
+    },
+    "profile": "minimal",
+    "expected": {
+      "score_min": 0.02,
+      "score_max": 0.35,
+      "should_be_relevant": false,
+      "required_signals": [],
+      "notes": "Cold start — no stack to match against, generic HN content"
     }
   }
 ]

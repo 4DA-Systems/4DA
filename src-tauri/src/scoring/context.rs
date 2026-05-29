@@ -44,8 +44,13 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
         .map(|t| t.to_lowercase())
         .collect();
 
-    // User's professional role from onboarding
-    let user_role = static_identity.role.clone();
+    // User's professional role — infer from tech stack if not explicitly set.
+    // "backend_developer" was a bad default from early onboarding; override it
+    // when the domain profile provides stronger evidence.
+    let user_role = match static_identity.role.as_deref() {
+        Some("backend_developer") | None => None, // treat bad default as unset
+        other => other.map(String::from),
+    };
 
     // User's experience level (safe query — column may not exist yet)
     let experience_level: Option<String> = {
@@ -194,6 +199,24 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
             tracing::info!(target: "4da::scoring", promoted, "ACE auto-enrichment: promoted detected tech into domain profile");
         }
     }
+
+    // ── Infer role from domain profile when not explicitly set ──
+    let user_role = user_role.or_else(|| {
+        let stack = &domain_profile.primary_stack;
+        if stack.contains("tauri") || stack.contains("electron") || stack.contains("wails") {
+            Some("desktop_app_developer".to_string())
+        } else if (stack.contains("react") || stack.contains("vue") || stack.contains("svelte"))
+            && (stack.contains("express") || stack.contains("axum") || stack.contains("django"))
+        {
+            Some("fullstack_developer".to_string())
+        } else if stack.contains("react") || stack.contains("vue") || stack.contains("svelte") {
+            Some("frontend_developer".to_string())
+        } else if stack.contains("rust") || stack.contains("go") || stack.contains("python") {
+            Some("backend_developer".to_string())
+        } else {
+            Some("developer".to_string())
+        }
+    });
 
     // ── Synthesize implicit interests from ACE-discovered context ──
     let mut interests = static_identity.interests;
