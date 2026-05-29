@@ -115,7 +115,11 @@ export const PlaybookLanguageSelector = memo(function PlaybookLanguageSelector({
               onClick={() => {
                 void i18n.changeLanguage(lang.code);
                 localStorage.setItem('4da_language', lang.code);
-                void cmd('set_locale', { country: '', language: lang.code, currency: '' }).catch(() => {});
+                // Sync language only — preserve the user's country/currency.
+                // (ContentTranslationProvider also syncs on i18n.language change,
+                // but set here too so the backend updates even if that effect is
+                // debounced/unmounted.)
+                void cmd('set_language', { language: lang.code }).catch(() => {});
                 setShowPicker(false);
                 void useAppStore.getState().reloadForLanguage();
                 onLanguageChange?.();

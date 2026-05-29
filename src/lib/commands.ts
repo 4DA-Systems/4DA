@@ -564,6 +564,7 @@ interface CommandMap {
   // -- Locale & i18n --
   get_locale: { params: Record<string, never>; result: { country: string; language: string; currency: string } };
   set_locale: { params: { country: string; language: string; currency: string }; result: void };
+  set_language: { params: { language: string }; result: void };
   format_currency: { params: { amount: number }; result: string };
   get_translation_status: { params: { lang: string }; result: TranslationStatus };
   get_all_translations: { params: { lang: string }; result: Record<string, TranslationEntry> };

@@ -674,6 +674,16 @@ pub fn run() {
             victauri_plugin::VictauriBuilder::new()
                 .commands(&commands)
                 .auth_disabled()
+                // 4DA stores its SQLite DB in the project `data/` dir, not the OS
+                // app-data dir. The app runs from `src-tauri/`, so the DB lives at
+                // `../data`. Register both that and an absolute fallback so
+                // query_db / db_health can reach the real database.
+                .db_search_paths([
+                    std::path::PathBuf::from("../data"),
+                    std::env::current_dir()
+                        .map(|d| d.join("../data"))
+                        .unwrap_or_else(|_| std::path::PathBuf::from("../data")),
+                ])
                 .build()
                 .expect("Victauri configuration is valid")
         })
@@ -736,6 +746,7 @@ pub fn run() {
             settings_commands::recover_license_by_email,
             settings_commands::get_locale,
             settings_commands::set_locale,
+            settings_commands::set_language,
             settings_commands::get_pro_value_report,
             settings_commands::get_user_context,
             settings_commands::set_user_role,

@@ -493,6 +493,25 @@ pub async fn set_locale(country: String, language: String, currency: String) -> 
     Ok(())
 }
 
+/// Update only the UI language, preserving the user's country and currency.
+///
+/// The frontend i18next instance is the source of truth for language; this
+/// command keeps the backend `locale.language` (used by `crate::i18n::t()` for
+/// all Rust-generated strings) in sync without clobbering region/currency.
+/// Used by language pickers that change language alone — region/currency are
+/// configured separately via `set_locale`.
+#[tauri::command]
+pub async fn set_language(language: String) -> Result<()> {
+    let manager = get_settings_manager();
+    let mut guard = manager.lock();
+    guard.get_mut().locale.language = language;
+    guard
+        .save()
+        .map_err(|e| FourDaError::Config(format!("Failed to save language: {e}")))?;
+    info!(target: "4da::settings", "Language updated");
+    Ok(())
+}
+
 /// Get context engine statistics
 #[tauri::command]
 pub async fn get_context_stats() -> Result<serde_json::Value> {

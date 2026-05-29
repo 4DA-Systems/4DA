@@ -59,14 +59,18 @@ export const ContentTranslationProvider = memo(function ContentTranslationProvid
 
   // Detect if content translation should be active
   useEffect(() => {
+    // Always keep the backend UI language in sync with i18next — including
+    // 'en'. The backend renders Rust-generated strings (action labels, relative
+    // times, empty states) via this setting, so failing to push 'en' would
+    // leave the backend frozen on the last non-English language. Uses
+    // set_language (not set_locale) so the user's country/currency are preserved.
+    void cmd('set_language', { language: i18n.language }).catch(() => {});
+
     if (i18n.language === 'en') {
       setIsActive(false);
       setInactiveReason('');
       return;
     }
-
-    // Sync language to backend settings
-    void cmd('set_locale', { country: '', language: i18n.language, currency: '' }).catch(() => {});
 
     void cmd('get_content_translation_settings')
       .then((settings) => {
