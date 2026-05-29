@@ -370,3 +370,9 @@ src/types/i18n-resources.d.ts
 /! codex audits/
 data/i18n-quality-report.json
 victauri-gauntlet/
+
+# Runtime/working artifacts (never committed): screenshots, verification scratch,
+# captured dev-server stderr. Previously untracked-but-not-ignored, so the
+# git-hygiene hook flagged them on every prompt.
+temp/
+4da-stderr.txt
