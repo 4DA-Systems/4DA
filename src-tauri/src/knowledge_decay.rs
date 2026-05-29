@@ -303,8 +303,62 @@ fn normalize_gap_title(title: &str) -> String {
         .join(" ")
 }
 
+/// Node.js builtin / internal module names that are not real packages and must
+/// never surface as knowledge gaps. Shared by the embedding pre-pass and the
+/// per-dependency loop.
+const NODE_BUILTINS: &[&str] = &[
+    "child_process",
+    "crypto",
+    "dgram",
+    "domain",
+    "events",
+    "http",
+    "http2",
+    "https",
+    "module",
+    "net",
+    "os",
+    "path",
+    "perf_hooks",
+    "process",
+    "querystring",
+    "readline",
+    "repl",
+    "stream",
+    "string_decoder",
+    "timers",
+    "tls",
+    "tty",
+    "url",
+    "util",
+    "v8",
+    "vm",
+    "wasi",
+    "worker_threads",
+    "zlib",
+    "assert",
+    "buffer",
+    "cluster",
+    "console",
+    "dns",
+    "inspector",
+    "punycode",
+    "sys",
+];
+
+/// Max L2 distance for the embedding-similarity recall path. Embeddings are
+/// L2-normalized (unit vectors), so cosine_sim = 1 - dist²/2; a cosine-similarity
+/// floor of 0.40 maps to dist² < 1.2, i.e. dist < ~1.0954. This catches items
+/// semantically related to a dependency (e.g. "async runtime performance" for
+/// tokio) that never name it in the title.
+const GAP_EMBED_MAX_DISTANCE: f64 = 1.0954;
+
+/// How many nearest neighbours to pull from source_vec before quality filtering.
+const GAP_EMBED_KNN_K: i64 = 25;
+
 /// Detect knowledge gaps across all tracked dependencies
 pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>> {
+    let start = std::time::Instant::now();
     // Get all tracked dependencies
     let deps = crate::temporal::get_all_dependencies(conn)?;
     if deps.is_empty() {
@@ -338,6 +392,33 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         "Processing dependencies for knowledge gaps"
     );
 
+    // Pre-compute embeddings for candidate dependency names in ONE batched
+    // fastembed call, so the per-dependency semantic recall (source_vec KNN) adds
+    // no per-dep embedding cost. Names are deduped and filtered the same way the
+    // loop filters them (length, builtins) and capped at the same 50. Degrades to
+    // keyword-only matching when fastembed-local is unavailable (map stays empty).
+    let dep_embeddings: std::collections::HashMap<String, Vec<f32>> = {
+        let mut names: Vec<String> = Vec::new();
+        let mut seen_names = std::collections::HashSet::new();
+        for dep in &deps {
+            let n = &dep.package_name;
+            if n.len() >= 5
+                && !n.starts_with("node:")
+                && !n.starts_with("content_")
+                && !NODE_BUILTINS.contains(&n.as_str())
+                && seen_names.insert(n.clone())
+            {
+                names.push(n.clone());
+            }
+            if names.len() >= 50 {
+                break;
+            }
+        }
+        crate::embeddings::try_embed_texts_sync(&names)
+            .map(|vecs| names.into_iter().zip(vecs).collect())
+            .unwrap_or_default()
+    };
+
     // Hard cap: only process first 50 unique deps to avoid scanning thousands.
     // The deps are already ordered by project_path so active projects come first.
     let mut processed_count: usize = 0;
@@ -361,45 +442,6 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         }
 
         // Skip Node.js builtins and internal modules — not real packages
-        static NODE_BUILTINS: &[&str] = &[
-            "child_process",
-            "crypto",
-            "dgram",
-            "domain",
-            "events",
-            "http",
-            "http2",
-            "https",
-            "module",
-            "net",
-            "os",
-            "path",
-            "perf_hooks",
-            "process",
-            "querystring",
-            "readline",
-            "repl",
-            "stream",
-            "string_decoder",
-            "timers",
-            "tls",
-            "tty",
-            "url",
-            "util",
-            "v8",
-            "vm",
-            "wasi",
-            "worker_threads",
-            "zlib",
-            "assert",
-            "buffer",
-            "cluster",
-            "console",
-            "dns",
-            "inspector",
-            "punycode",
-            "sys",
-        ];
         if dep.package_name.starts_with("node:")
             || NODE_BUILTINS.contains(&dep.package_name.as_str())
             || dep.package_name.starts_with("content_") // internal 4DA modules
@@ -428,8 +470,12 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             continue;
         }
 
-        // Search source items for mentions of this dependency (title only)
-        let missed = find_missed_items(conn, &dep.package_name)?;
+        // Search source items: title keyword fast-path + embedding semantic recall
+        let missed = find_missed_items(
+            conn,
+            &dep.package_name,
+            dep_embeddings.get(&dep.package_name).map(Vec::as_slice),
+        )?;
 
         if missed.is_empty() {
             continue;
@@ -474,11 +520,31 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
 
     // Cap at 10 gaps — quality over quantity
     gaps.truncate(10);
-    info!(target: "4da::knowledge_decay", gaps = gaps.len(), "Knowledge gap detection complete");
+    info!(
+        target: "4da::knowledge_decay",
+        gaps = gaps.len(),
+        semantic_recall = !dep_embeddings.is_empty(),
+        elapsed_ms = start.elapsed().as_millis() as u64,
+        "Knowledge gap detection complete"
+    );
     Ok(gaps)
 }
 
-fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<Vec<MissedItem>> {
+/// content_type categories treated as noise for knowledge-gap surfacing.
+const GAP_NOISE_CONTENT_TYPES: &[&str] = &[
+    "show_and_tell",
+    "tutorial",
+    "question",
+    "help_request",
+    "hiring",
+    "clickbait",
+];
+
+fn find_missed_items(
+    conn: &rusqlite::Connection,
+    package_name: &str,
+    dep_embedding: Option<&[f32]>,
+) -> Result<Vec<MissedItem>> {
     // Title-only matching (content LIKE is too noisy for short dep names).
     // content_type filtering: drop noise categories at the DB level using the
     // classification already computed at ingestion by content_dna. Items with
@@ -527,7 +593,7 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
 
     // Deduplicate by normalized title (first 10 words, lowercased, stripped punctuation)
     let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let items: Vec<MissedItem> = candidates
+    let mut items: Vec<MissedItem> = candidates
         .into_iter()
         .filter(|(item, _ct)| has_word_boundary_match(&item.title, &dep_lower))
         .filter(|(item, _ct)| {
@@ -540,7 +606,109 @@ fn find_missed_items(conn: &rusqlite::Connection, package_name: &str) -> Result<
         .take(5)
         .collect();
 
+    // Embedding semantic recall: the keyword fast path only finds items that name
+    // the dependency in the title. When it leaves room, fill the remaining slots
+    // with items semantically related to the dependency (e.g. "async runtime
+    // performance" for tokio) via source_vec KNN. Best-effort and additive — any
+    // failure leaves the keyword results untouched.
+    if items.len() < 5 {
+        if let Some(embedding) = dep_embedding {
+            let needed = 5 - items.len();
+            append_semantic_misses(conn, embedding, &mut items, &mut seen_titles, needed);
+        }
+    }
+
     Ok(items)
+}
+
+/// Append items semantically near `embedding` (dependency name) via source_vec
+/// KNN, applying the same recency / feedback / quality filters as the keyword
+/// path and skipping titles already collected. Best-effort: query errors are
+/// logged and the already-collected keyword results are preserved.
+fn append_semantic_misses(
+    conn: &rusqlite::Connection,
+    embedding: &[f32],
+    items: &mut Vec<MissedItem>,
+    seen_titles: &mut std::collections::HashSet<String>,
+    needed: usize,
+) {
+    let blob = crate::db::embedding_to_blob(embedding);
+
+    // Recency cutoff resolved once so it can be compared in Rust — sqlite-vec KNN
+    // does not compose cleanly with extra WHERE predicates, so we over-fetch the
+    // K nearest (join is fine) and filter afterward.
+    let cutoff: String = conn
+        .query_row("SELECT datetime('now','-30 days')", [], |r| r.get(0))
+        .unwrap_or_default();
+
+    let mut stmt = match conn.prepare(
+        "SELECT sv.distance, si.id, si.title, si.url, si.source_type, si.created_at, si.content_type,
+                (SELECT 1 FROM feedback f WHERE f.source_item_id = si.id LIMIT 1) AS has_feedback
+         FROM source_vec sv
+         JOIN source_items si ON si.id = sv.rowid
+         WHERE sv.embedding MATCH ?1 AND k = ?2
+         ORDER BY sv.distance",
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::debug!(target: "4da::knowledge_decay", error = %e, "source_vec KNN unavailable; keyword results only");
+            return;
+        }
+    };
+
+    let rows = stmt.query_map(params![blob, GAP_EMBED_KNN_K], |row| {
+        Ok((
+            row.get::<_, f64>(0)?,            // distance
+            row.get::<_, i64>(1)?,            // id
+            row.get::<_, String>(2)?,         // title
+            row.get::<_, Option<String>>(3)?, // url
+            row.get::<_, String>(4)?,         // source_type
+            row.get::<_, String>(5)?,         // created_at
+            row.get::<_, Option<String>>(6)?, // content_type
+            row.get::<_, Option<i64>>(7)?,    // has_feedback
+        ))
+    });
+
+    let rows = match rows {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::debug!(target: "4da::knowledge_decay", error = %e, "source_vec KNN query failed");
+            return;
+        }
+    };
+
+    let mut added = 0usize;
+    for row in rows.flatten() {
+        if added >= needed {
+            break;
+        }
+        let (distance, id, title, url, source_type, created_at, content_type, has_feedback) = row;
+        if distance > GAP_EMBED_MAX_DISTANCE {
+            break; // ordered by distance — nothing further qualifies
+        }
+        if has_feedback.is_some() {
+            continue; // user already engaged with this item
+        }
+        if !cutoff.is_empty() && created_at < cutoff {
+            continue; // older than the 30-day window
+        }
+        match &content_type {
+            Some(ct) if GAP_NOISE_CONTENT_TYPES.contains(&ct.as_str()) => continue,
+            None if is_low_quality_signal(&title) => continue, // legacy item heuristic
+            _ => {}
+        }
+        if !seen_titles.insert(normalize_gap_title(&title)) {
+            continue; // dedup against keyword results and prior KNN hits
+        }
+        items.push(MissedItem {
+            item_id: id,
+            title,
+            url,
+            source_type,
+            created_at,
+        });
+        added += 1;
+    }
 }
 
 /// Check if `text` contains `term` at a word boundary (not embedded in a larger word)
@@ -1042,6 +1210,93 @@ pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a 768-d embedding with the given non-zero components.
+    #[cfg(feature = "fastembed-local")]
+    fn vec768(pairs: &[(usize, f32)]) -> Vec<f32> {
+        let mut v = vec![0.0f32; crate::embeddings::EMBEDDING_DIMS];
+        for &(i, x) in pairs {
+            v[i] = x;
+        }
+        v
+    }
+
+    /// End-to-end proof of the embedding semantic-recall path: an item that does
+    /// NOT name the dependency in its title but is semantically near it (within
+    /// the cosine-0.40 / L2-1.0954 threshold) must be recalled, while a distant
+    /// item must not. This is the core of Phase 2.1 — recall beyond keyword match.
+    #[cfg(feature = "fastembed-local")]
+    #[test]
+    fn embedding_recall_surfaces_near_items_and_rejects_far() {
+        crate::register_sqlite_vec_extension();
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(&format!(
+            "CREATE TABLE source_items (id INTEGER PRIMARY KEY, title TEXT, url TEXT,
+                 source_type TEXT, created_at TEXT, content_type TEXT);
+             CREATE TABLE feedback (id INTEGER PRIMARY KEY, source_item_id INTEGER);
+             CREATE VIRTUAL TABLE source_vec USING vec0(embedding float[{dim}]);",
+            dim = crate::embeddings::EMBEDDING_DIMS
+        ))
+        .expect("schema");
+
+        // Query (dependency) direction e0. near: cosine 0.8 -> L2 0.63 (recalled).
+        // far: orthogonal, cosine 0 -> L2 1.41 (rejected, above 1.0954 ceiling).
+        let query = vec768(&[(0, 1.0)]);
+        let near = vec768(&[(0, 0.8), (1, 0.6)]);
+        let far = vec768(&[(1, 1.0)]);
+
+        let insert = |id: i64, title: &str, emb: &[f32]| {
+            conn.execute(
+                "INSERT INTO source_items (id, title, url, source_type, created_at, content_type)
+                 VALUES (?1, ?2, 'http://x', 'hackernews', datetime('now'), 'news')",
+                rusqlite::params![id, title],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
+                rusqlite::params![id, crate::db::embedding_to_blob(emb)],
+            )
+            .unwrap();
+        };
+        // Titles deliberately omit the dependency name so only the embedding path can find them.
+        insert(1, "Async runtime performance deep dive", &near);
+        insert(2, "CSS grid layout tricks for modern web", &far);
+
+        // Keyword fast path finds nothing (no title contains "tokio"); embedding
+        // recall must surface the semantically-near async-runtime item only.
+        let items = find_missed_items(&conn, "tokio", Some(&query)).expect("find");
+        let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+        assert!(
+            titles.iter().any(|t| t.contains("Async runtime")),
+            "near semantic item should be recalled, got {titles:?}"
+        );
+        assert!(
+            !titles.iter().any(|t| t.contains("CSS grid")),
+            "far item must be rejected by the distance threshold, got {titles:?}"
+        );
+
+        // Without an embedding, the keyword path is unchanged — no title match, no items.
+        let keyword_only = find_missed_items(&conn, "tokio", None).expect("find none");
+        assert!(
+            keyword_only.is_empty(),
+            "keyword-only path must not match titles lacking the dep name, got {keyword_only:?}"
+        );
+    }
+
+    #[test]
+    fn gap_embed_threshold_matches_cosine_floor() {
+        // source_items embeddings are L2-normalized, and source_vec uses L2
+        // distance, so dist² = 2(1 - cosine). The embedding recall path is
+        // specified as "cosine similarity > 0.40"; this guards that the
+        // configured L2 distance ceiling actually encodes that floor (and that
+        // nobody mistakes it for a raw cosine value, which would be far too tight).
+        let cosine_floor = 0.40_f64;
+        let expected = (2.0 * (1.0 - cosine_floor)).sqrt();
+        assert!(
+            (GAP_EMBED_MAX_DISTANCE - expected).abs() < 0.001,
+            "GAP_EMBED_MAX_DISTANCE {GAP_EMBED_MAX_DISTANCE} should equal {expected} for a {cosine_floor} cosine floor"
+        );
+    }
 
     #[test]
     fn test_normalize_gap_title() {
