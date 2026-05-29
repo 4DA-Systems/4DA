@@ -101,6 +101,14 @@ fn load_primary_stack(conn: &rusqlite::Connection) -> std::collections::HashSet<
 }
 
 /// Get project paths the user has actively committed to in the last 30 days
+/// Normalize a filesystem path for cross-source comparison: lowercase + forward
+/// slashes. git_signals stores OS-native paths ("D:\4DA"); project_dependencies
+/// stores already-normalized paths ("d:/4da/src-tauri"). Both must pass through
+/// this before any `contains` comparison.
+fn normalize_project_path(p: &str) -> String {
+    p.replace('\\', "/").to_lowercase()
+}
+
 fn get_active_project_paths(conn: &rusqlite::Connection) -> std::collections::HashSet<String> {
     let mut paths = std::collections::HashSet::new();
     if let Ok(mut stmt) = conn.prepare(
@@ -372,8 +380,15 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
     let primary_stack = load_primary_stack(conn);
     let anti_deps = crate::competing_tech::get_anti_dependencies(&primary_stack);
 
-    // Get active project paths (committed to in last 30 days)
-    let active_projects = get_active_project_paths(conn);
+    // Get active project paths (committed to in last 30 days), normalized for
+    // comparison. git_signals stores OS-native paths (e.g. "D:\4DA") while
+    // project_dependencies stores lowercase forward-slash paths (e.g.
+    // "d:/4da/src-tauri"); comparing them raw silently scoped out EVERY
+    // dependency as "dormant" and zeroed the entire Coverage Gaps surface.
+    let active_projects: Vec<String> = get_active_project_paths(conn)
+        .iter()
+        .map(|p| normalize_project_path(p))
+        .collect();
 
     // Deduplicate deps by package name (same dep across projects → one gap)
     let mut seen_deps: std::collections::HashMap<String, Vec<String>> =
@@ -461,11 +476,16 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             continue;
         }
 
-        // Active project scoping: skip deps from dormant projects
+        // Active project scoping: skip deps from dormant projects. Both sides are
+        // normalized (lowercase, forward slashes) so OS-native vs stored path
+        // formats compare correctly.
         if !active_projects.is_empty()
-            && !active_projects
-                .iter()
-                .any(|ap| paths.iter().any(|dp| dp.contains(ap) || ap.contains(dp)))
+            && !active_projects.iter().any(|ap| {
+                paths.iter().any(|dp| {
+                    let dp = normalize_project_path(dp);
+                    dp.contains(ap) || ap.contains(&dp)
+                })
+            })
         {
             continue;
         }
@@ -1280,6 +1300,27 @@ mod tests {
         assert!(
             keyword_only.is_empty(),
             "keyword-only path must not match titles lacking the dep name, got {keyword_only:?}"
+        );
+    }
+
+    #[test]
+    fn active_project_scoping_matches_across_path_formats() {
+        // git_signals stores "D:\4DA" (OS-native); project_dependencies stores
+        // "d:/4da/src-tauri" (lowercase, forward slash). Raw .contains() across
+        // these silently scoped out every dependency as dormant and zeroed the
+        // Coverage Gaps surface. After normalization they must match.
+        let active = normalize_project_path("D:\\4DA");
+        assert_eq!(active, "d:/4da");
+        let dep = normalize_project_path("d:/4da/src-tauri");
+        assert!(
+            dep.contains(&active) || active.contains(&dep),
+            "active project {active} should match dependency project {dep}"
+        );
+        // An unrelated project must still be scoped out.
+        let other = normalize_project_path("C:/Users/dev/kairos-mvp");
+        assert!(
+            !(other.contains(&active) || active.contains(&other)),
+            "unrelated project must not match"
         );
     }
 
