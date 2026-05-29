@@ -75,10 +75,17 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // Downstream operations all take &[SourceRelevance] — use references
                 // Persist relevance scores to DB for briefing fallback path
                 if let Ok(db) = get_database() {
-                    let score_data: Vec<(i64, f32)> = results
+                    let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = results
                         .iter()
                         .filter(|r| r.top_score > 0.0)
-                        .map(|r| (r.id as i64, r.top_score))
+                        .map(|r| {
+                            (
+                                r.id as i64,
+                                r.top_score,
+                                r.signal_type.clone(),
+                                r.signal_priority.clone(),
+                            )
+                        })
                         .collect();
                     if !score_data.is_empty() {
                         if let Err(e) = db.persist_analysis_scores(&score_data) {

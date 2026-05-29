@@ -497,10 +497,17 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
 
     // Persist relevance scores to DB so the briefing fallback path has real data
     {
-        let score_data: Vec<(i64, f32)> = new_results
+        let score_data: Vec<(i64, f32, Option<String>, Option<String>)> = new_results
             .iter()
             .filter(|r| r.top_score > 0.0)
-            .map(|r| (r.id as i64, r.top_score))
+            .map(|r| {
+                (
+                    r.id as i64,
+                    r.top_score,
+                    r.signal_type.clone(),
+                    r.signal_priority.clone(),
+                )
+            })
             .collect();
         if !score_data.is_empty() {
             if let Err(e) = db.persist_analysis_scores(&score_data) {

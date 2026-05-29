@@ -45,6 +45,10 @@ export interface RelevantItem {
   necessity_category: string | null;
   /** Necessity urgency: immediate, this_week, awareness, none */
   necessity_urgency: string | null;
+  /** Pipeline-computed signal classification (security_alert, breaking_change, etc.) */
+  signal_type: string | null;
+  /** Pipeline-computed signal priority (critical, high, medium, low) */
+  signal_priority: string | null;
 }
 
 // =============================================================================

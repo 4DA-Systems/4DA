@@ -738,7 +738,8 @@ export class FourDADatabase {
   ): RelevantItem[] {
     let query = `
       SELECT id, source_type, source_id, url, title, content, content_hash,
-             created_at, last_seen, relevance_score, content_type
+             created_at, last_seen, relevance_score, content_type,
+             signal_type, signal_priority
       FROM source_items
       WHERE relevance_score >= ?
         AND datetime(created_at) >= datetime(?)
@@ -754,7 +755,7 @@ export class FourDADatabase {
     params.push(limit);
 
     const stmt = this.db.prepare(query);
-    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null }>;
+    const items = stmt.all(...params) as Array<SourceItem & { relevance_score: number; content_type: string | null; signal_type: string | null; signal_priority: string | null }>;
 
     const now = Date.now();
     return items.map((item) => {
@@ -783,6 +784,8 @@ export class FourDADatabase {
         necessity_reason: necessity.reason,
         necessity_category: necessity.category,
         necessity_urgency: necessity.urgency,
+        signal_type: item.signal_type ?? null,
+        signal_priority: item.signal_priority ?? null,
       };
     });
   }
@@ -848,6 +851,8 @@ export class FourDADatabase {
           necessity_reason: necessity.reason,
           necessity_category: necessity.category,
           necessity_urgency: necessity.urgency,
+          signal_type: null,
+          signal_priority: null,
         });
       }
     }

@@ -166,16 +166,25 @@ impl Database {
 
     /// Persist relevance scores from in-memory analysis back to the database.
     /// Called after scoring completes so the DB fallback path has real scores.
-    pub fn persist_analysis_scores(&self, scores: &[(i64, f32)]) -> SqliteResult<usize> {
+    pub fn persist_analysis_scores(
+        &self,
+        scores: &[(i64, f32, Option<String>, Option<String>)],
+    ) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
         {
             let mut stmt = tx.prepare_cached(
-                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2 WHERE id = ?3",
+                "UPDATE source_items SET relevance_score = ?1, scored_pipeline_version = ?2, signal_type = ?3, signal_priority = ?4 WHERE id = ?5",
             )?;
-            for &(id, score) in scores {
-                stmt.execute(params![score as f64, crate::scoring::PIPELINE_VERSION, id])?;
+            for (id, score, signal_type, signal_priority) in scores {
+                stmt.execute(params![
+                    *score as f64,
+                    crate::scoring::PIPELINE_VERSION,
+                    signal_type,
+                    signal_priority,
+                    id
+                ])?;
                 count += 1;
             }
         }

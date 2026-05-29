@@ -600,7 +600,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 81;
+        const TARGET_VERSION: i64 = 82;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -2920,6 +2920,25 @@ impl Database {
                             );
                             CREATE INDEX IF NOT EXISTS idx_error_telemetry_category ON error_telemetry(category);
                             CREATE INDEX IF NOT EXISTS idx_error_telemetry_last_seen ON error_telemetry(last_seen);",
+                        )?;
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 82: signal_type + signal_priority persistence on source_items
+            // for MCP server to read pipeline-computed signals instead of
+            // re-classifying with keywords.
+            if current_version < 82 {
+                Self::run_versioned_migration(
+                    &conn,
+                    81,
+                    82,
+                    "Phase 82: signal_type + signal_priority columns on source_items",
+                    |c| {
+                        c.execute_batch(
+                            "ALTER TABLE source_items ADD COLUMN signal_type TEXT;
+                             ALTER TABLE source_items ADD COLUMN signal_priority TEXT;",
                         )?;
                         Ok(())
                     },

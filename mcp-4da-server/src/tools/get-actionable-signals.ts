@@ -346,6 +346,32 @@ export function executeGetActionableSignals(
   const signals: ClassifiedSignal[] = [];
 
   for (const item of items) {
+    // Prefer pipeline-computed signals from DB over keyword re-classification
+    if (item.signal_type && item.signal_priority) {
+      const storedType = item.signal_type as SignalType;
+      const storedPriority = item.signal_priority as SignalPriority;
+
+      // Apply filters
+      if (params.priority_filter && storedPriority !== params.priority_filter) continue;
+      if (params.signal_type && storedType !== params.signal_type) continue;
+
+      signals.push({
+        id: item.id,
+        title: item.title,
+        url: item.url,
+        source_type: item.source_type,
+        relevance_score: item.relevance_score,
+        signal_type: storedType,
+        signal_priority: storedPriority,
+        action: `${storedType}: ${item.title.substring(0, 60)}`,
+        triggers: [],
+        confidence: 0.90,
+        discovered_ago: item.discovered_ago,
+      });
+      continue;
+    }
+
+    // Fallback: keyword classification for items without pipeline signals
     const result = classify(
       item.title,
       item.content || "",
