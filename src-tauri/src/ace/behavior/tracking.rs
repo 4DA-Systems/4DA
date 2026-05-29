@@ -266,6 +266,33 @@ impl ACE {
                  WHERE topic = ?1",
                 rusqlite::params![topic],
             )?;
+
+            // Structured observability for the compound-learning loop. This is the
+            // single source of truth for the "4DA gets sharper every day" promise —
+            // every affinity change is traceable. Emitted on the "4da::learning"
+            // target so it can be filtered independently of the noisier
+            // ace::behavior debug stream and aggregated by get_learning_stats.
+            if let Ok((score, confidence, exposures)) = conn.query_row(
+                "SELECT affinity_score, confidence, total_exposures FROM topic_affinities WHERE topic = ?1",
+                rusqlite::params![topic],
+                |row| {
+                    Ok((
+                        row.get::<_, f32>(0)?,
+                        row.get::<_, f32>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                },
+            ) {
+                tracing::info!(
+                    target: "4da::learning",
+                    topic = %topic,
+                    affinity_score = score,
+                    confidence = confidence,
+                    total_exposures = exposures,
+                    signal_strength = signal.signal_strength,
+                    "Topic affinity updated"
+                );
+            }
         }
 
         Ok(())
@@ -310,5 +337,134 @@ impl ACE {
         )?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod learning_loop_tests {
+    use super::*;
+    use crate::ace::create_test_ace;
+    use crate::scoring::{compute_unified_relevance, ACEContext};
+
+    /// End-to-end proof of the compound-learning loop: positive feedback on a
+    /// topic must raise its affinity, negative feedback must lower it, and those
+    /// learned affinities must then shift downstream scoring. This is the
+    /// testable form of the "4DA gets sharper every day" promise — if it breaks,
+    /// learning has silently stopped influencing the feed.
+    #[test]
+    fn feedback_shifts_affinities_and_scoring() {
+        let ace = create_test_ace();
+
+        // Positive feedback on three Rust items, negative on two Java items.
+        for item_id in 1..=3 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::Save,
+                vec!["rust".to_string()],
+                "hackernews".to_string(),
+            )
+            .expect("record rust save");
+        }
+        for item_id in 4..=5 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::MarkIrrelevant,
+                vec!["java".to_string()],
+                "reddit".to_string(),
+            )
+            .expect("record java irrelevant");
+        }
+
+        // Read affinities through the same bootstrap path scoring uses
+        // (min_exposures = 1 while feedback is sparse).
+        let affinities = ace.get_topic_affinities_min(1).expect("read affinities");
+        let rust = affinities
+            .iter()
+            .find(|a| a.topic == "rust")
+            .expect("rust affinity present");
+        let java = affinities
+            .iter()
+            .find(|a| a.topic == "java")
+            .expect("java affinity present");
+
+        assert!(
+            rust.affinity_score > 0.05,
+            "positive feedback should yield positive rust affinity, got {}",
+            rust.affinity_score
+        );
+        assert!(
+            java.affinity_score < -0.05,
+            "negative feedback should yield negative java affinity, got {}",
+            java.affinity_score
+        );
+
+        // Those learned affinities must move downstream scoring: a Rust item
+        // should outscore an otherwise-identical Java item by a meaningful margin.
+        let mut ctx = ACEContext::default();
+        ctx.topic_affinities
+            .insert("rust".to_string(), (rust.affinity_score, rust.confidence));
+        ctx.topic_affinities
+            .insert("java".to_string(), (java.affinity_score, java.confidence));
+
+        let base = 0.5;
+        let rust_score = compute_unified_relevance(base, &["rust".to_string()], &ctx);
+        let java_score = compute_unified_relevance(base, &["java".to_string()], &ctx);
+
+        assert!(
+            rust_score > java_score,
+            "learned affinity should rank rust above java ({rust_score} vs {java_score})"
+        );
+        assert!(
+            rust_score - java_score >= 0.03,
+            "learning effect should be meaningful, got margin {}",
+            rust_score - java_score
+        );
+    }
+
+    /// Saving a topic, then marking it irrelevant, should pull its affinity back
+    /// down — the loop must respond to reversed feedback, not just accumulate.
+    #[test]
+    fn reversed_feedback_reverses_affinity() {
+        let ace = create_test_ace();
+
+        for item_id in 1..=3 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::Save,
+                vec!["kubernetes".to_string()],
+                "hackernews".to_string(),
+            )
+            .expect("record save");
+        }
+        let positive = ace
+            .get_topic_affinities_min(1)
+            .expect("read")
+            .into_iter()
+            .find(|a| a.topic == "kubernetes")
+            .expect("present")
+            .affinity_score;
+        assert!(positive > 0.0, "should start positive, got {positive}");
+
+        for item_id in 4..=8 {
+            ace.record_interaction(
+                item_id,
+                BehaviorAction::MarkIrrelevant,
+                vec!["kubernetes".to_string()],
+                "hackernews".to_string(),
+            )
+            .expect("record irrelevant");
+        }
+        let after = ace
+            .get_topic_affinities_min(1)
+            .expect("read")
+            .into_iter()
+            .find(|a| a.topic == "kubernetes")
+            .expect("present")
+            .affinity_score;
+
+        assert!(
+            after < positive,
+            "reversed feedback should lower affinity ({after} should be < {positive})"
+        );
     }
 }

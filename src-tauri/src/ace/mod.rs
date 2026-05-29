@@ -750,6 +750,30 @@ pub fn is_rust_package(name: &str) -> bool {
 // Tests
 // ============================================================================
 
+/// Create an in-memory ACE instance for testing.
+/// Loads the sqlite-vec extension so vec0 virtual tables work.
+/// Shared across ACE submodule test suites (behavior, scanner, etc.).
+#[cfg(test)]
+pub(crate) fn create_test_ace() -> ACE {
+    // Load sqlite-vec extension for vec0 virtual tables
+    crate::register_sqlite_vec_extension();
+
+    let conn = Arc::new(Mutex::new(
+        Connection::open_in_memory().expect("in-memory DB"),
+    ));
+    db::migrate(&conn).expect("ACE migration");
+    ACE {
+        conn,
+        scanner: ProjectScanner::new(),
+        git_analyzer: GitAnalyzer::default(),
+        watcher: None,
+        watcher_persistence: None,
+        embedding_service: None,
+        rate_limiter: InteractionRateLimiter::new(1000, 100, 60),
+        peak_hours: Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -794,28 +818,6 @@ mod tests {
     // ========================================================================
     // Active Work Window tests
     // ========================================================================
-
-    /// Helper: create an in-memory ACE instance for testing.
-    /// Loads the sqlite-vec extension so vec0 virtual tables work.
-    fn create_test_ace() -> ACE {
-        // Load sqlite-vec extension for vec0 virtual tables
-        crate::register_sqlite_vec_extension();
-
-        let conn = Arc::new(Mutex::new(
-            Connection::open_in_memory().expect("in-memory DB"),
-        ));
-        db::migrate(&conn).expect("ACE migration");
-        ACE {
-            conn,
-            scanner: ProjectScanner::new(),
-            git_analyzer: GitAnalyzer::default(),
-            watcher: None,
-            watcher_persistence: None,
-            embedding_service: None,
-            rate_limiter: InteractionRateLimiter::new(1000, 100, 60),
-            peak_hours: Vec::new(),
-        }
-    }
 
     // ========================================================================
     // Session-aware work topics tests
