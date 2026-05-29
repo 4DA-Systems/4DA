@@ -144,6 +144,99 @@ pub fn detect_language_with_content(title: &str, content: &str) -> String {
     "en".to_string()
 }
 
+/// True if `c` is a letter belonging to a non-Latin script that a Latin-script
+/// (e.g. English) reader cannot read: CJK, kana, Hangul, Cyrillic, Hebrew,
+/// Arabic, Devanagari, Thai.
+fn is_non_latin_letter(c: char) -> bool {
+    matches!(c as u32,
+        0x3400..=0x4DBF | 0x4E00..=0x9FFF |   // CJK (incl. ext-A)
+        0x3040..=0x30FF |                      // Hiragana + Katakana
+        0x1100..=0x11FF | 0xAC00..=0xD7AF |    // Hangul Jamo + syllables
+        0x0400..=0x04FF |                      // Cyrillic
+        0x0590..=0x05FF |                      // Hebrew
+        0x0600..=0x06FF |                      // Arabic
+        0x0900..=0x097F |                      // Devanagari
+        0x0E00..=0x0E7F                        // Thai
+    )
+}
+
+/// Fraction (0.0–1.0) of a string's letters that belong to a non-Latin script.
+/// Digits, punctuation, emoji, and whitespace are ignored. Returns 0.0 for text
+/// with no letters.
+pub fn non_latin_script_ratio(text: &str) -> f32 {
+    let mut letters: u32 = 0;
+    let mut non_latin: u32 = 0;
+    for c in text.chars() {
+        if is_non_latin_letter(c) {
+            letters += 1;
+            non_latin += 1;
+        } else if c.is_alphabetic() {
+            letters += 1;
+        }
+    }
+    if letters == 0 {
+        return 0.0;
+    }
+    non_latin as f32 / letters as f32
+}
+
+/// Whether `text` is predominantly a non-Latin script (≥ 35% of its letters).
+///
+/// Used to filter foreign-language items at ingestion that an English reader
+/// cannot read — catching items even when `detect_language` misclassifies a
+/// mostly-foreign title (e.g. a CJK title with a couple of ASCII tokens). A
+/// mostly-English title containing a few foreign characters stays below the
+/// threshold and is retained.
+pub fn is_predominantly_non_latin(text: &str) -> bool {
+    non_latin_script_ratio(text) >= 0.35
+}
+
+#[cfg(test)]
+mod script_ratio_tests {
+    use super::*;
+
+    #[test]
+    fn pure_english_is_not_foreign() {
+        assert!(!is_predominantly_non_latin(
+            "React hooks tutorial for beginners"
+        ));
+        assert!(!is_predominantly_non_latin(
+            "simd-bp128 integer compression library"
+        ));
+    }
+
+    #[test]
+    fn mostly_english_with_a_few_cjk_is_kept() {
+        // "Mina the Hollower 攻略 Wiki" — 2 CJK chars among ~19 Latin letters.
+        assert!(!is_predominantly_non_latin(
+            "Mina the Hollower \u{653b}\u{7565} Wiki"
+        ));
+    }
+
+    #[test]
+    fn predominantly_chinese_is_foreign() {
+        // Even with ASCII tokens (AI, agent, context) the title is mostly CJK.
+        assert!(is_predominantly_non_latin(
+            "\u{4f60}\u{7684} AI agent \u{4e0d}\u{7b28}\u{ff0c}\u{662f}\u{4f60}\u{9905}\u{7684} context \u{4e0d}\u{884c}"
+        ));
+    }
+
+    #[test]
+    fn cyrillic_and_arabic_are_foreign() {
+        assert!(is_predominantly_non_latin(
+            "\u{041f}\u{0440}\u{0438}\u{0432}\u{0435}\u{0442} \u{043c}\u{0438}\u{0440}"
+        ));
+        assert!(is_predominantly_non_latin(
+            "\u{0645}\u{0631}\u{062d}\u{0628}\u{0627} \u{0628}\u{0627}\u{0644}\u{0639}\u{0627}\u{0644}\u{0645}"
+        ));
+    }
+
+    #[test]
+    fn no_letters_is_not_foreign() {
+        assert!(!is_predominantly_non_latin("v2.0.1 — 1234 !!!"));
+    }
+}
+
 #[cfg(test)]
 mod content_fallback_tests {
     use super::*;

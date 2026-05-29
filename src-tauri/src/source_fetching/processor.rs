@@ -201,8 +201,40 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
             })
             .collect();
 
-        // Pre-translate titles for non-English users (warms translation cache)
+        // Drop foreign-language items that won't be translated into the user's
+        // language. Two signals are combined: the detected language, and a
+        // script-ratio check that catches predominantly non-Latin titles the
+        // detector misclassifies as English (e.g. a mostly-CJK title with a few
+        // ASCII tokens). Non-English users have foreign titles translated below,
+        // so those are retained for them.
         let user_lang = crate::i18n::get_user_language();
+        let auto_translate = crate::get_settings_manager()
+            .lock()
+            .get()
+            .translation
+            .auto_translate;
+        let before_filter = new_items_to_embed.len();
+        let new_items_to_embed: Vec<_> = new_items_to_embed
+            .into_iter()
+            .filter(|(st, _, _, title, _, detected, _)| {
+                let foreign_by_detect = detected != &user_lang;
+                let foreign_by_script =
+                    user_lang == "en" && crate::language_detect::is_predominantly_non_latin(title);
+                // Non-English users get foreign-detected titles translated.
+                let will_translate = auto_translate && user_lang != "en" && foreign_by_detect;
+                let keep = (!foreign_by_detect && !foreign_by_script) || will_translate;
+                if !keep {
+                    debug!(target: "4da::ingest", source = %st, lang = %detected, "Filtered foreign-language item at ingestion");
+                }
+                keep
+            })
+            .collect();
+        let filtered_out = before_filter - new_items_to_embed.len();
+        if filtered_out > 0 {
+            info!(target: "4da::ingest", filtered_out, user_lang = %user_lang, "Dropped foreign-language items at ingestion");
+        }
+
+        // Pre-translate titles for non-English users (warms translation cache)
         if user_lang != "en" {
             let translation_requests: Vec<crate::content_translation::TranslationRequest> =
                 new_items_to_embed
