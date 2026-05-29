@@ -639,3 +639,82 @@ pub fn export_sovereign_profile_json() -> crate::error::Result<String> {
     let profile = assemble_profile(&conn);
     Ok(serde_json::to_string_pretty(&profile)?)
 }
+
+#[cfg(test)]
+mod skill_gap_tests {
+    use super::*;
+
+    fn stack_with_deps(deps: &[&str]) -> StackDimension {
+        StackDimension {
+            dependencies: deps.iter().map(|d| (*d).to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    fn skills_with_affinities(topics: &[&str]) -> SkillsDimension {
+        SkillsDimension {
+            top_affinities: topics
+                .iter()
+                .map(|t| AffinityEntry {
+                    topic: (*t).to_string(),
+                    score: 0.8,
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    /// The blind-spot necessity path is fed by detect_skill_gaps. This is the
+    /// linchpin: if it silently returns empty, blind_spot necessity dies app-wide
+    /// without any error. A dependency the user has but has not engaged with must
+    /// surface as a gap.
+    #[test]
+    fn unengaged_dependency_becomes_a_skill_gap() {
+        let gaps = detect_skill_gaps(
+            &stack_with_deps(&["tokio", "axum"]),
+            &skills_with_affinities(&[]),
+        );
+        let names: Vec<&str> = gaps.iter().map(|g| g.dependency.as_str()).collect();
+        assert!(
+            names.contains(&"tokio"),
+            "tokio should be a gap, got {names:?}"
+        );
+        assert!(
+            names.contains(&"axum"),
+            "axum should be a gap, got {names:?}"
+        );
+    }
+
+    /// A dependency the user actively engages with is NOT a gap — engagement
+    /// closes the loop, so the blind-spot signal must not keep firing for it.
+    #[test]
+    fn engaged_dependency_is_not_a_skill_gap() {
+        let gaps = detect_skill_gaps(
+            &stack_with_deps(&["tokio", "axum"]),
+            &skills_with_affinities(&["tokio"]),
+        );
+        let names: Vec<&str> = gaps.iter().map(|g| g.dependency.as_str()).collect();
+        assert!(
+            !names.contains(&"tokio"),
+            "engaged tokio should not be a gap"
+        );
+        assert!(
+            names.contains(&"axum"),
+            "unengaged axum should still be a gap"
+        );
+    }
+
+    /// Very short dependency names are skipped to avoid false-positive gaps from
+    /// noisy two/three-letter tokens.
+    #[test]
+    fn short_dependency_names_are_skipped() {
+        let gaps = detect_skill_gaps(
+            &stack_with_deps(&["ws", "rs"]),
+            &skills_with_affinities(&[]),
+        );
+        assert!(
+            gaps.is_empty(),
+            "short names should not produce gaps, got {gaps:?}"
+        );
+    }
+}
