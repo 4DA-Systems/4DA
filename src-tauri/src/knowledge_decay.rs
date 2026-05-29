@@ -407,37 +407,21 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         "Processing dependencies for knowledge gaps"
     );
 
-    // Pre-compute embeddings for candidate dependency names in ONE batched
-    // fastembed call, so the per-dependency semantic recall (source_vec KNN) adds
-    // no per-dep embedding cost. Names are deduped and filtered the same way the
-    // loop filters them (length, builtins) and capped at the same 50. Degrades to
-    // keyword-only matching when fastembed-local is unavailable (map stays empty).
-    let dep_embeddings: std::collections::HashMap<String, Vec<f32>> = {
-        let mut names: Vec<String> = Vec::new();
-        let mut seen_names = std::collections::HashSet::new();
-        for dep in &deps {
-            let n = &dep.package_name;
-            if n.len() >= 5
-                && !n.starts_with("node:")
-                && !n.starts_with("content_")
-                && !NODE_BUILTINS.contains(&n.as_str())
-                && seen_names.insert(n.clone())
-            {
-                names.push(n.clone());
-            }
-            if names.len() >= 50 {
-                break;
-            }
-        }
-        crate::embeddings::try_embed_texts_sync(&names)
-            .map(|vecs| names.into_iter().zip(vecs).collect())
-            .unwrap_or_default()
-    };
-
-    // Hard cap: only process first 50 unique deps to avoid scanning thousands.
-    // The deps are already ordered by project_path so active projects come first.
+    // ── Pass 1: filter dependencies, then run the keyword (title) match ──
+    // Embedding is deferred until after filtering so the fastembed cost is paid
+    // ONLY for dependencies that survive the domain/anti/active-project filters
+    // AND whose keyword match left room (< 5 hits). The previous version embedded
+    // every candidate up front, before filtering — almost all of it wasted (e.g.
+    // a dep with 188 title matches needs no embedding at all).
+    struct GapCandidate {
+        name: String,
+        version: Option<String>,
+        paths: Vec<String>,
+        items: Vec<MissedItem>,
+    }
+    let mut candidates: Vec<GapCandidate> = Vec::new();
+    let mut need_embed: Vec<String> = Vec::new();
     let mut processed_count: usize = 0;
-    let mut gaps = Vec::new();
 
     for dep in &deps {
         // Skip if we already processed this dependency name
@@ -451,7 +435,7 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             break; // Hard cap: don't scan more than 50 unique deps
         }
 
-        // Skip deps with very short names — too generic for LIKE matching
+        // Skip deps with very short names — too generic for matching
         if dep.package_name.len() < 5 {
             continue;
         }
@@ -490,39 +474,72 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             continue;
         }
 
-        // Search source items: title keyword fast-path + embedding semantic recall
-        let missed = find_missed_items(
-            conn,
-            &dep.package_name,
-            dep_embeddings.get(&dep.package_name).map(Vec::as_slice),
-        )?;
+        // Keyword (title) match — the fast, exact path.
+        let items = find_keyword_misses(conn, &dep.package_name)?;
+        if items.len() < 5 {
+            need_embed.push(dep.package_name.clone());
+        }
+        candidates.push(GapCandidate {
+            name: dep.package_name.clone(),
+            version: dep.version.clone(),
+            paths,
+            items,
+        });
+    }
 
-        if missed.is_empty() {
+    // ── Batch-embed ONLY the surviving dependencies whose keyword match left room
+    // (< 5 hits). One fastembed call; degrades to keyword-only when fastembed-local
+    // is unavailable (map stays empty). ──
+    let dep_embeddings: std::collections::HashMap<String, Vec<f32>> = if need_embed.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        crate::embeddings::try_embed_texts_sync(&need_embed)
+            .map(|vecs| need_embed.iter().cloned().zip(vecs).collect())
+            .unwrap_or_default()
+    };
+
+    // ── Pass 2: semantic fill (where needed), severity, gap construction ──
+    let mut gaps = Vec::new();
+    for mut cand in candidates {
+        // Embedding semantic recall fills remaining slots from source_vec KNN.
+        if cand.items.len() < 5 {
+            if let Some(embedding) = dep_embeddings.get(&cand.name) {
+                let mut seen_titles: std::collections::HashSet<String> = cand
+                    .items
+                    .iter()
+                    .map(|i| normalize_gap_title(&i.title))
+                    .collect();
+                let needed = 5 - cand.items.len();
+                append_semantic_misses(conn, embedding, &mut cand.items, &mut seen_titles, needed);
+            }
+        }
+
+        if cand.items.is_empty() {
             continue;
         }
 
         // Check if user has engaged with any items about this dep
-        let days_since = days_since_last_engagement(conn, &dep.package_name)?;
+        let days_since = days_since_last_engagement(conn, &cand.name)?;
 
         // Classify severity
-        let severity = classify_severity(&missed, days_since, &dep.package_name);
+        let severity = classify_severity(&cand.items, days_since, &cand.name);
 
         if severity == GapSeverity::Low && days_since < 14 {
             continue; // Skip low-severity recent items
         }
 
         // Merge project paths for display
-        let project_display = if paths.len() == 1 {
-            paths[0].clone()
+        let project_display = if cand.paths.len() == 1 {
+            cand.paths[0].clone()
         } else {
-            format!("{} (+{} more)", paths[0], paths.len() - 1)
+            format!("{} (+{} more)", cand.paths[0], cand.paths.len() - 1)
         };
 
         gaps.push(KnowledgeGap {
-            dependency: dep.package_name.clone(),
-            version: dep.version.clone(),
+            dependency: cand.name,
+            version: cand.version,
             project_path: project_display,
-            missed_items: missed,
+            missed_items: cand.items,
             gap_severity: severity,
             days_since_last_engagement: days_since,
         });
@@ -560,11 +577,10 @@ const GAP_NOISE_CONTENT_TYPES: &[&str] = &[
     "clickbait",
 ];
 
-fn find_missed_items(
-    conn: &rusqlite::Connection,
-    package_name: &str,
-    dep_embedding: Option<&[f32]>,
-) -> Result<Vec<MissedItem>> {
+/// Keyword (title) matches for a dependency: SQL LIKE + word-boundary + dedup +
+/// quality filter, capped at 5. The fast, exact path — items that name the
+/// dependency in their title.
+fn find_keyword_misses(conn: &rusqlite::Connection, package_name: &str) -> Result<Vec<MissedItem>> {
     // Title-only matching (content LIKE is too noisy for short dep names).
     // content_type filtering: drop noise categories at the DB level using the
     // classification already computed at ingestion by content_dna. Items with
@@ -613,7 +629,7 @@ fn find_missed_items(
 
     // Deduplicate by normalized title (first 10 words, lowercased, stripped punctuation)
     let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut items: Vec<MissedItem> = candidates
+    let items: Vec<MissedItem> = candidates
         .into_iter()
         .filter(|(item, _ct)| has_word_boundary_match(&item.title, &dep_lower))
         .filter(|(item, _ct)| {
@@ -625,18 +641,6 @@ fn find_missed_items(
         .map(|(item, _ct)| item)
         .take(5)
         .collect();
-
-    // Embedding semantic recall: the keyword fast path only finds items that name
-    // the dependency in the title. When it leaves room, fill the remaining slots
-    // with items semantically related to the dependency (e.g. "async runtime
-    // performance" for tokio) via source_vec KNN. Best-effort and additive — any
-    // failure leaves the keyword results untouched.
-    if items.len() < 5 {
-        if let Some(embedding) = dep_embedding {
-            let needed = 5 - items.len();
-            append_semantic_misses(conn, embedding, &mut items, &mut seen_titles, needed);
-        }
-    }
 
     Ok(items)
 }
@@ -1282,9 +1286,21 @@ mod tests {
         insert(1, "Async runtime performance deep dive", &near);
         insert(2, "CSS grid layout tricks for modern web", &far);
 
-        // Keyword fast path finds nothing (no title contains "tokio"); embedding
-        // recall must surface the semantically-near async-runtime item only.
-        let items = find_missed_items(&conn, "tokio", Some(&query)).expect("find");
+        // Keyword path finds nothing (no title contains "tokio") — same two-phase
+        // flow detect_knowledge_gaps uses: keyword first, then embedding fill.
+        let mut items = find_keyword_misses(&conn, "tokio").expect("keyword");
+        assert!(
+            items.is_empty(),
+            "keyword path must not match titles lacking the dep name, got {items:?}"
+        );
+
+        // Embedding recall must surface the semantically-near async-runtime item
+        // and reject the distant one.
+        let mut seen: std::collections::HashSet<String> = items
+            .iter()
+            .map(|i| normalize_gap_title(&i.title))
+            .collect();
+        append_semantic_misses(&conn, &query, &mut items, &mut seen, 5);
         let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
         assert!(
             titles.iter().any(|t| t.contains("Async runtime")),
@@ -1293,13 +1309,6 @@ mod tests {
         assert!(
             !titles.iter().any(|t| t.contains("CSS grid")),
             "far item must be rejected by the distance threshold, got {titles:?}"
-        );
-
-        // Without an embedding, the keyword path is unchanged — no title match, no items.
-        let keyword_only = find_missed_items(&conn, "tokio", None).expect("find none");
-        assert!(
-            keyword_only.is_empty(),
-            "keyword-only path must not match titles lacking the dep name, got {keyword_only:?}"
         );
     }
 
