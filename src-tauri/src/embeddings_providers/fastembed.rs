@@ -304,13 +304,21 @@ fn get_or_init_fastembed(
     })
 }
 
+/// Embedding batch size. Same OOM class as the cross-encoder reranker
+/// (findings #3 antibody): passing `None` embeds ALL texts in a single ONNX
+/// batch, spiking activation memory on large batches (e.g. re-embedding ~1000
+/// items). An explicit batch keeps peak memory bounded; fastembed still
+/// processes the full input, just in chunks.
+#[cfg(feature = "fastembed-local")]
+const EMBED_BATCH_SIZE: usize = 32;
+
 #[cfg(feature = "fastembed-local")]
 pub(in crate::embeddings) fn embed_texts_fastembed_sync(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     let model_mutex = get_or_init_fastembed()?;
     let mut model = model_mutex.lock();
     let str_refs: Vec<&str> = texts.iter().map(String::as_str).collect();
     model
-        .embed(str_refs, None)
+        .embed(str_refs, Some(EMBED_BATCH_SIZE))
         .map_err(|e| FourDaError::from(format!("fastembed embed: {e}")))
 }
 
