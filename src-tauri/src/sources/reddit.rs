@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
@@ -172,7 +172,15 @@ impl RedditSource {
                     all_items.extend(items);
                 }
                 Err(e) => {
-                    warn!(subreddit, error = ?e, "Failed to fetch subreddit");
+                    // Missing creds / rate limits (403/401/429) are expected for
+                    // local dev without Reddit API keys — log at debug so they
+                    // don't flood the console (findings #8). Genuine errors warn.
+                    match e {
+                        SourceError::Forbidden(_) | SourceError::RateLimited(_) => {
+                            debug!(subreddit, error = ?e, "Skipped subreddit (auth/rate-limit)");
+                        }
+                        _ => warn!(subreddit, error = ?e, "Failed to fetch subreddit"),
+                    }
                 }
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
