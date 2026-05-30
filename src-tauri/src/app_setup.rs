@@ -1232,11 +1232,20 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
         let shown = Arc::new(AtomicBool::new(false));
 
+        // Durable frontend-ready flag — registered ONCE here, before any
+        // navigate, so a `frontend-ready` emitted at ANY point (Phase A or B)
+        // is captured. (Findings #2: Phase B previously registered its own
+        // listener only AFTER Phase A had navigated, missing early signals and
+        // then re-navigating the webview every 3s for 5 minutes.)
+        let frontend_ready_flag = Arc::new(AtomicBool::new(false));
+
         // Layer 1: Frontend signals readiness via event (happy path)
         {
             let show_handle = app_handle.clone();
             let shown_event = shown.clone();
+            let ready_flag = frontend_ready_flag.clone();
             app.listen("frontend-ready", move |_| {
+                ready_flag.store(true, Ordering::SeqCst);
                 if !shown_event.swap(true, Ordering::SeqCst) {
                     if let Some(w) = show_handle.get_webview_window("main") {
                         let _ = w.show();
@@ -1265,6 +1274,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         {
             let ready_handle = app_handle.clone();
             let shown_poll = shown.clone();
+            let ready_flag = frontend_ready_flag.clone();
             tauri::async_runtime::spawn(async move {
                 let client = reqwest::Client::builder()
                     .timeout(std::time::Duration::from_secs(2))
@@ -1276,12 +1286,11 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     url::Url::parse("http://localhost:4444/").expect("hardcoded dev URL is valid");
 
                 let mut window_shown_locally = false;
-                let mut last_navigate_attempt: Option<std::time::Instant> = None;
 
                 // Phase A: aggressive poll every 500ms for the first 30s.
                 // Most cold boots resolve here (dev server is up within ~5s).
                 for attempt in 1..=60u32 {
-                    if shown_poll.load(Ordering::SeqCst) {
+                    if shown_poll.load(Ordering::SeqCst) || ready_flag.load(Ordering::SeqCst) {
                         // Frontend-ready fired. The window is visible AND React
                         // mounted successfully — we're done with phase A.
                         window_shown_locally = true;
@@ -1292,7 +1301,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                             info!(target: "4da::startup", attempt, "Dev server ready — navigating webview");
                             if let Some(w) = ready_handle.get_webview_window("main") {
                                 let _ = w.navigate(dev_url.clone());
-                                last_navigate_attempt = Some(std::time::Instant::now());
                             }
                             // Give the navigation up to 2s to trigger frontend-ready.
                             // main.tsx emits frontend-ready before React mounts
@@ -1323,60 +1331,69 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 // a navigate. This rescues users from the "stale error page"
                 // scenario in screenshot 1900.
                 if window_shown_locally {
-                    let frontend_ready_listener = ready_handle.clone();
-                    let frontend_did_ready = Arc::new(AtomicBool::new(false));
-                    let did_ready_clone = frontend_did_ready.clone();
-                    frontend_ready_listener.listen("frontend-ready", move |_| {
-                        did_ready_clone.store(true, Ordering::SeqCst);
-                    });
-
+                    // Phase B: BOUNDED recovery (findings #2). Uses the durable
+                    // frontend_ready_flag (registered before any navigate), a
+                    // positive page probe that self-heals a loaded-but-event-
+                    // missed page, and exponential backoff capped at a small
+                    // number of navigates — instead of thrashing the webview
+                    // every 3s for 5 minutes.
                     let recovery_began = std::time::Instant::now();
-                    let recovery_max = std::time::Duration::from_secs(300); // 5 min ceiling
+                    let recovery_max = std::time::Duration::from_secs(120);
+                    let max_navigates = 4_u32;
                     let mut consecutive_navigates = 0_u32;
-                    while recovery_began.elapsed() < recovery_max {
-                        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    let mut backoff = std::time::Duration::from_secs(3);
 
-                        if frontend_did_ready.load(Ordering::SeqCst) {
+                    while recovery_began.elapsed() < recovery_max
+                        && consecutive_navigates < max_navigates
+                    {
+                        tokio::time::sleep(backoff).await;
+                        if ready_flag.load(Ordering::SeqCst) {
                             debug!(target: "4da::startup", "Recovery loop: frontend-ready fired, exiting");
                             break;
                         }
 
-                        // Frontend still hasn't signaled ready. Probe the dev server.
+                        // Positive readiness probe: if the page actually loaded
+                        // (React mounted into #root) but the event was missed,
+                        // self-heal by re-emitting frontend-ready. eval is
+                        // fire-and-forget; the durable Layer-1 listener catches it.
+                        if let Some(w) = ready_handle.get_webview_window("main") {
+                            let _ = w.eval(
+                                "if(document.querySelector('#root')?.childElementCount>0){try{window.__TAURI__&&window.__TAURI__.event&&window.__TAURI__.event.emit('frontend-ready')}catch(e){}}",
+                            );
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+                        if ready_flag.load(Ordering::SeqCst) {
+                            debug!(target: "4da::startup", "Recovery loop: page already loaded (probe), exiting");
+                            break;
+                        }
+
+                        // Genuinely not ready — re-navigate if the dev server is up.
                         let server_up = client
                             .get(dev_url.as_str())
                             .send()
                             .await
                             .map(|r| r.status().is_success())
                             .unwrap_or(false);
-
                         if server_up {
-                            // Avoid hammering the webview: only re-navigate if the
-                            // last attempt was at least 5 seconds ago.
-                            let should_navigate = match last_navigate_attempt {
-                                Some(t) => t.elapsed() >= std::time::Duration::from_secs(5),
-                                None => true,
-                            };
-                            if should_navigate {
-                                consecutive_navigates += 1;
-                                warn!(
-                                    target: "4da::startup",
-                                    consecutive_navigates,
-                                    "Recovery: dev server reachable but frontend not ready — re-navigating webview"
-                                );
-                                if let Some(w) = ready_handle.get_webview_window("main") {
-                                    let _ = w.navigate(dev_url.clone());
-                                    last_navigate_attempt = Some(std::time::Instant::now());
-                                }
-                                // After 3 consecutive failed re-navigates, log a
-                                // hard error so it shows up in diagnostics.
-                                if consecutive_navigates >= 3 {
-                                    warn!(
-                                        target: "4da::startup",
-                                        "Recovery: 3 consecutive re-navigates failed — frontend may be broken"
-                                    );
-                                }
+                            consecutive_navigates += 1;
+                            warn!(
+                                target: "4da::startup",
+                                consecutive_navigates,
+                                "Recovery: dev server reachable but frontend not ready — re-navigating webview"
+                            );
+                            if let Some(w) = ready_handle.get_webview_window("main") {
+                                let _ = w.navigate(dev_url.clone());
                             }
+                            // Exponential backoff, capped — stop thrashing the webview.
+                            backoff = (backoff * 2).min(std::time::Duration::from_secs(24));
                         }
+                    }
+                    if consecutive_navigates >= max_navigates {
+                        warn!(
+                            target: "4da::startup",
+                            max_navigates,
+                            "Recovery: gave up re-navigating — frontend likely broken (see findings #1/#3)"
+                        );
                     }
                     debug!(target: "4da::startup", "Recovery loop exited");
                 }
