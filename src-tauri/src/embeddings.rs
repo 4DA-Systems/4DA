@@ -19,36 +19,6 @@ pub(crate) fn fastembed_sync(texts: &[String]) -> crate::error::Result<Vec<Vec<f
     embed_texts_fastembed_sync(texts)
 }
 
-/// Synchronous in-process embedding for sync call chains that cannot await
-/// (knowledge-gap detection runs on a bare `Connection`). Returns `None` when
-/// fastembed-local is unavailable or fails, so callers degrade gracefully to
-/// keyword matching. Output is L2-normalized to match the stored source_items
-/// embeddings, so cosine similarity maps cleanly onto the `source_vec` L2 metric.
-#[cfg(feature = "fastembed-local")]
-pub(crate) fn try_embed_texts_sync(texts: &[String]) -> Option<Vec<Vec<f32>>> {
-    if texts.is_empty() {
-        return Some(Vec::new());
-    }
-    match embed_texts_fastembed_sync(texts) {
-        Ok(embeddings) => Some(
-            validate_embeddings(embeddings)
-                .into_iter()
-                .map(truncate_and_normalize)
-                .collect(),
-        ),
-        Err(e) => {
-            tracing::debug!(target: "4da::embeddings", error = %e, "Sync fastembed unavailable; degrading to keyword matching");
-            None
-        }
-    }
-}
-
-/// No-op when fastembed-local is compiled out — callers fall back to keyword matching.
-#[cfg(not(feature = "fastembed-local"))]
-pub(crate) fn try_embed_texts_sync(_texts: &[String]) -> Option<Vec<Vec<f32>>> {
-    None
-}
-
 use embeddings_providers::{embed_texts_ollama, embed_texts_openai, retry_with_backoff};
 
 /// Shared HTTP client for embedding API calls (reused across requests)
