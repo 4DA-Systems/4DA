@@ -566,7 +566,7 @@ class GameRenderer {
     const h = this.canvas.height || 1;
     const desc = {
       size: { width: w, height: h },
-      format,
+      format: this.format,
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST
     };
     this._memTex = [this.device.createTexture(desc), this.device.createTexture(desc)];
