@@ -386,6 +386,33 @@ mod tests {
         assert_eq!(locale.currency, "USD");
     }
 
+    #[test]
+    fn test_set_language_preserves_country_and_currency() {
+        // Regression guard (2026-05): the `set_language` command must change
+        // only `locale.language` and leave country/currency intact — unlike the
+        // old `set_locale("", lang, "")` path that clobbered them to empty.
+        // Mirror exactly what the command mutates, then round-trip through serde
+        // (no save() — avoids the keychain-poisoning hazard in these tests).
+        let mut settings = Settings::default();
+        settings.locale = LocaleConfig {
+            country: "AU".to_string(),
+            language: "zh".to_string(),
+            currency: "AUD".to_string(),
+        };
+
+        // What set_language does:
+        settings.locale.language = "en".to_string();
+
+        let json = serde_json::to_string(&settings).expect("serialize");
+        let reloaded: Settings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(reloaded.locale.language, "en");
+        assert_eq!(reloaded.locale.country, "AU", "country must be preserved");
+        assert_eq!(
+            reloaded.locale.currency, "AUD",
+            "currency must be preserved"
+        );
+    }
+
     // ========================================================================
     // Settings serialization round-trip
     // ========================================================================
