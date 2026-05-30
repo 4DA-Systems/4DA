@@ -96,8 +96,23 @@ pub fn collect_diagnostics(db: &Database, db_path: &std::path::Path) -> Diagnost
     }
 }
 
+/// Log current process RSS at a named scoring/analysis stage. Used to bisect
+/// the background-analysis native crash (Victauri findings #3): a large spike
+/// across a stage points at OOM; a flat curve before death points at a native
+/// fault (sqlite-vec / ONNX). Cheap — safe to call on the hot path.
+pub(crate) fn log_rss(stage: &str) {
+    let mb = get_process_memory() / (1024 * 1024);
+    // Debug-level by default (enable with RUST_LOG=4da::rss=debug to bisect
+    // memory). Only a genuinely dangerous level warns — above the normal
+    // cross-encoder reranker peak (~1.7 GB on capable machines).
+    tracing::debug!(target: "4da::rss", stage, rss_mb = mb, "scoring memory checkpoint");
+    if mb > 2500 {
+        tracing::warn!(target: "4da::rss", stage, rss_mb = mb, "HIGH RSS — possible OOM approaching");
+    }
+}
+
 /// Get approximate process RSS memory in bytes
-fn get_process_memory() -> u64 {
+pub(crate) fn get_process_memory() -> u64 {
     #[cfg(target_os = "windows")]
     {
         get_process_memory_windows()
