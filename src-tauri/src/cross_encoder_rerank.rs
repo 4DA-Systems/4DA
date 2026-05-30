@@ -28,6 +28,15 @@ static RERANKER_INIT_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 /// Maximum number of candidates to rerank (keeps latency under 200ms on 4-core CPU).
 const MAX_RERANK_CANDIDATES: usize = 50;
 
+/// Batch size for cross-encoder inference. CRITICAL: passing `None` to
+/// `TextRerank::rerank` runs all candidates through the ONNX model in a single
+/// batch, which materializes one giant activation tensor — measured at ~1.85 GB
+/// for 50 candidates, the native-OOM abort that killed background analysis
+/// ~2.5 min after launch (Victauri findings #3). Batching keeps peak activation
+/// memory bounded (a few hundred MB) at negligible latency cost.
+#[cfg(feature = "fastembed-local")]
+const RERANK_BATCH_SIZE: usize = 8;
+
 /// A candidate for cross-encoder reranking.
 #[derive(Debug, Clone)]
 pub(crate) struct RerankCandidate {
@@ -100,10 +109,42 @@ fn build_rerank_query(ctx: &scoring::ScoringContext) -> String {
 
 /// Initialize the cross-encoder reranker (lazy, first call only).
 /// Returns true if the reranker is available, false if init failed.
+/// Minimum free system RAM (MB) required to load the cross-encoder model.
+/// The bge-reranker-base ONNX model + Runtime arena need ~1.5-2 GB resident
+/// (measured); attempting that load on a memory-constrained machine was the
+/// native OOM abort that killed background analysis ~2.5 min after launch
+/// (Victauri findings #3). Below this threshold we skip the reranker entirely
+/// and fall back to PASIFA-only ranking — the precision boost is not worth
+/// crashing the app. Re-checked until the model loads, so it self-enables once
+/// memory frees up.
+#[cfg(feature = "fastembed-local")]
+const RERANKER_MIN_AVAILABLE_MB: u64 = 2560;
+
+#[cfg(feature = "fastembed-local")]
+fn available_memory_mb() -> u64 {
+    use sysinfo::{MemoryRefreshKind, RefreshKind};
+    let mut sys = sysinfo::System::new_with_specifics(
+        RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()),
+    );
+    sys.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+    sys.available_memory() / (1024 * 1024)
+}
+
 #[cfg(feature = "fastembed-local")]
 fn ensure_reranker() -> bool {
     if RERANKER_AVAILABLE.load(Ordering::Relaxed) {
         return true;
+    }
+    // RAM gate (checked before the heavy load, re-checked until it succeeds).
+    let available_mb = available_memory_mb();
+    if available_mb < RERANKER_MIN_AVAILABLE_MB {
+        warn!(
+            target: "4da::reranker",
+            available_mb,
+            threshold_mb = RERANKER_MIN_AVAILABLE_MB,
+            "Insufficient free RAM for cross-encoder reranker — using PASIFA-only ranking (findings #3 OOM guard)"
+        );
+        return false;
     }
     if RERANKER_INIT_ATTEMPTED.swap(true, Ordering::SeqCst) {
         // Another thread already attempted init — return whatever it decided.
@@ -183,7 +224,9 @@ pub(crate) fn rerank_candidates(query: &str, candidates: &[RerankCandidate]) -> 
 
         let rerank_result = {
             let mut model = reranker.lock();
-            model.rerank(query, doc_refs.as_slice(), false, None)
+            // Some(batch_size) — NOT None. None batches all candidates at once,
+            // spiking activation memory to ~1.85 GB → native OOM (findings #3).
+            model.rerank(query, doc_refs.as_slice(), false, Some(RERANK_BATCH_SIZE))
         };
 
         match rerank_result {

@@ -55,12 +55,14 @@ pub(crate) async fn score_items_full(
         total_cached,
     );
 
+    crate::diagnostics::log_rss("scoring:before_build_context");
     let scoring_ctx = tokio::time::timeout(
         std::time::Duration::from_secs(10),
         scoring::build_scoring_context(db),
     )
     .await
     .map_err(|_| String::from("Scoring context build timed out after 10s"))??;
+    crate::diagnostics::log_rss("scoring:after_build_context");
     let trend_topics = crate::detect_trend_topics(keep_indices.iter().map(|&i| {
         (
             cached_items[i].title.as_str(),
@@ -90,6 +92,10 @@ pub(crate) async fn score_items_full(
         if crate::get_analysis_abort().load(Ordering::SeqCst) {
             info!(target: "4da::analysis", scored = idx, "Cached analysis aborted by user");
             return Err("Analysis cancelled".into());
+        }
+
+        if idx % 200 == 0 {
+            crate::diagnostics::log_rss(&format!("scoring:loop@{idx}/{total_cached}"));
         }
 
         if idx % 50 == 0 {
@@ -168,7 +174,9 @@ pub(crate) async fn score_items_full(
         }
     }
 
+    crate::diagnostics::log_rss("scoring:loop_done_before_cross_encoder");
     crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
+    crate::diagnostics::log_rss("scoring:after_cross_encoder");
 
     scoring::sort_results(&mut results);
     let pre_dedup = results.len();
@@ -208,6 +216,7 @@ pub(crate) async fn score_items_full(
     }
 
     telemetry.log_summary();
+    crate::diagnostics::log_rss("scoring:after_dedup_diversity");
 
     // LLM Reranking (if enabled and within daily limits)
     // 120s timeout: LLM API calls can hang on provider outages
@@ -231,6 +240,7 @@ pub(crate) async fn score_items_full(
             warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
         }
     }
+    crate::diagnostics::log_rss("scoring:after_llm_rerank");
 
     emit_progress(
         app,

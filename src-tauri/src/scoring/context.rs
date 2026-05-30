@@ -115,7 +115,9 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     };
     let has_active_work = !work_topics.is_empty();
 
+    crate::diagnostics::log_rss("ctx:before_topic_embeddings");
     let topic_embeddings = get_topic_embeddings(&ace_ctx).await;
+    crate::diagnostics::log_rss("ctx:after_topic_embeddings");
 
     // Load feedback-derived topic boosts (Phase 9: feedback learning loop)
     let mut feedback_boosts: HashMap<String, f64> = db
