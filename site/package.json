@@ -12,5 +12,10 @@
   },
   "devDependencies": {
     "@11ty/eleventy": "3"
+  },
+  "pnpm": {
+    "overrides": {
+      "liquidjs": ">=10.26.0"
+    }
   }
 }

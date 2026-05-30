@@ -13,15 +13,36 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other", "Linters"],
-  "keywords": ["developer intelligence", "security", "dependencies", "signals", "privacy", "local-first"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other",
+    "Linters"
+  ],
+  "keywords": [
+    "developer intelligence",
+    "security",
+    "dependencies",
+    "signals",
+    "privacy",
+    "local-first"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      { "command": "4da.showSignals", "title": "4DA: Show Signals" },
-      { "command": "4da.refreshSignals", "title": "4DA: Refresh Signals" },
-      { "command": "4da.openApp", "title": "4DA: Open Desktop App" }
+      {
+        "command": "4da.showSignals",
+        "title": "4DA: Show Signals"
+      },
+      {
+        "command": "4da.refreshSignals",
+        "title": "4DA: Refresh Signals"
+      },
+      {
+        "command": "4da.openApp",
+        "title": "4DA: Open Desktop App"
+      }
     ],
     "viewsContainers": {
       "activitybar": [
@@ -74,5 +95,8 @@
     "@types/node": "^20.0.0",
     "typescript": "^6.0.3",
     "@vscode/vsce": "^2.24.0"
+  },
+  "overrides": {
+    "tmp": ">=0.2.6"
   }
 }
