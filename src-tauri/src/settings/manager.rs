@@ -276,7 +276,12 @@ impl SettingsManager {
     /// Update LLM provider settings.
     ///
     /// Keys are persisted to disk AND mirrored to the platform keychain.
-    pub fn set_llm_provider(&mut self, provider: LLMProvider) -> Result<()> {
+    pub fn set_llm_provider(&mut self, mut provider: LLMProvider) -> Result<()> {
+        // Trim keys before storage: a trailing newline/space from a paste is
+        // stored verbatim and later rejected by the provider as an invalid
+        // key, which looks like a "saved but broken" key to the user.
+        provider.api_key = provider.api_key.trim().to_string();
+        provider.openai_api_key = provider.openai_api_key.trim().to_string();
         if !provider.api_key.is_empty() {
             if let Ok(false) = keystore::store_secret("llm_api_key", &provider.api_key) {
                 tracing::warn!(target: "4da::keystore", "Keychain unavailable for llm_api_key — plaintext fallback");

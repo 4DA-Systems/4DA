@@ -402,7 +402,10 @@ impl LLMClient {
         let response = self
             .client
             .post(url)
-            .header("x-api-key", &self.provider.api_key)
+            // Trim defensively: a pasted key with a trailing newline/space is
+            // sent verbatim and rejected by Anthropic as "invalid x-api-key",
+            // which is indistinguishable from a genuinely bad key to the user.
+            .header("x-api-key", self.provider.api_key.trim())
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
             .json(&body)

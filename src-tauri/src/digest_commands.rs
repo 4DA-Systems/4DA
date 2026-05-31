@@ -423,7 +423,7 @@ Rules:
                 || e_str.contains("invalid x-api-key")
                 || e_str.contains("invalid_api_key")
             {
-                "API key is invalid or expired. Check your key in Settings → AI Provider."
+                "Your API key was rejected by the provider (invalid or expired). A saved key isn't verified until it's used — re-enter it in Settings → AI Provider, or switch to a local Ollama model."
                     .to_string()
             } else if e_str.contains("403") || e_str.contains("permission") {
                 "API key lacks permission for this model. Check your plan and key permissions in Settings.".to_string()

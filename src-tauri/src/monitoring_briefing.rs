@@ -2196,6 +2196,7 @@ BANNED:
 - Section headers or structured labels like "Action Required", "Worth Knowing", "Filtered Out" -- write flowing prose, not a report
 - Explaining what you filtered out or why -- the user sees your synthesis, not your process
 - Numbered item lists (1. 2. 3.) -- synthesize into prose clusters, don't enumerate
+- Referring to signals by their position ("Index 2", "item 3", "the first signal") -- name the finding/project itself; the reader never sees the numbered input list
 
 SOURCE-TYPE CALIBRATION:
 Each signal is prefixed with its source type. Calibrate your language accordingly:
