@@ -346,6 +346,19 @@ impl Database {
         Ok(())
     }
 
+    /// Count source items with a usable embedding — the pool the candidate
+    /// selector draws from. Used for pre-score coverage instrumentation: the
+    /// gap between this and the per-pass candidate count is what gets dropped
+    /// BEFORE scoring, so selection (not the scorer) is the true recall lever.
+    pub fn count_embedded_source_items(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        conn.query_row(
+            "SELECT COUNT(*) FROM source_items WHERE embedding_status = 'complete'",
+            [],
+            |row| row.get(0),
+        )
+    }
+
     /// Get items eligible for background content enrichment.
     ///
     /// Returns `(id, url)` pairs for items with empty/short content that scored

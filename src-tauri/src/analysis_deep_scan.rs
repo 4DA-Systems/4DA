@@ -344,6 +344,11 @@ pub(crate) async fn run_multi_source_analysis_impl(
     );
     analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx).await;
 
+    // Final ceiling on the persisted score — after every rerank stage, before
+    // composition floors reorder. Without this the cross-encoder/reconciler
+    // persist ~0.99 in this path too. The single authoritative score boundary.
+    scoring::finalize_scores(&mut results);
+
     // Feed composition floors — Intelligence Mesh Gap 3. Reorders the
     // top-N items to guarantee minimum stretch + horizon representation
     // (prevents filter-bubble collapse). Pure reordering, no score

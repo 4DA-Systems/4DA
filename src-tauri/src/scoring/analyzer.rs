@@ -147,6 +147,28 @@ pub(crate) async fn score_items_full(
         ));
     }
 
+    // Pre-score coverage instrumentation (#3 scale lever): this pass scored
+    // `total_cached` candidates out of the embedded corpus. A low ratio means
+    // the candidate SELECTOR — not the scorer — governs recall: items not
+    // selected here are never scored and so never surface. Logged so the
+    // selection prefilter can be tuned against real drop numbers at scale.
+    if let Ok(corpus) = db.count_embedded_source_items() {
+        let not_scored = (corpus - total_cached as i64).max(0);
+        let coverage_pct = if corpus > 0 {
+            (total_cached as f64 / corpus as f64) * 100.0
+        } else {
+            0.0
+        };
+        info!(
+            target: "4da::analysis",
+            candidates_scored = total_cached,
+            corpus_embedded = corpus,
+            not_scored = not_scored,
+            coverage_pct = format!("{coverage_pct:.1}"),
+            "Pre-score coverage — items not selected this pass were never scored"
+        );
+    }
+
     // Collect scoring telemetry
     let mut telemetry = scoring::ScoringTelemetry {
         total_scored: results.len(),
@@ -248,9 +270,7 @@ pub(crate) async fn score_items_full(
     // ~0.99 and tie. Re-apply the canonical cap here, downstream of every score
     // mutation, so relevance_score honors the 0.95 invariant and the top stays
     // rankable. Re-sort since values shifted (stable order preserved).
-    for r in results.iter_mut() {
-        r.top_score = scoring::apply_final_soft_ceiling(r.top_score);
-    }
+    scoring::finalize_scores(&mut results);
     scoring::sort_results(&mut results);
 
     emit_progress(
@@ -408,6 +428,7 @@ pub(crate) async fn run_background_analysis<R: tauri::Runtime>(
     }
 
     crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut new_results, &scoring_ctx);
+    scoring::finalize_scores(&mut new_results);
     scoring::sort_results(&mut new_results);
 
     let relevant_count = new_results

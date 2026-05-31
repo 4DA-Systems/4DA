@@ -115,8 +115,15 @@ fn build_rerank_query(ctx: &scoring::ScoringContext) -> String {
 /// and fall back to PASIFA-only ranking — the precision boost is not worth
 /// crashing the app. Re-checked until the model loads, so it self-enables once
 /// memory frees up.
+///
+/// Raised 2560 -> 3072: live testing showed `fourda` still OOM-aborting
+/// (0xffffffff) during load under memory contention — the load + first
+/// inference transiently spikes ABOVE resident size, and free RAM can drop
+/// between this gate check and the load. ~1 GB headroom over the ~2 GB peak
+/// absorbs that race; machines below 3 GB free skip the reranker (graceful
+/// PASIFA-only) rather than risk the crash.
 #[cfg(feature = "fastembed-local")]
-const RERANKER_MIN_AVAILABLE_MB: u64 = 2560;
+const RERANKER_MIN_AVAILABLE_MB: u64 = 3072;
 
 #[cfg(feature = "fastembed-local")]
 fn available_memory_mb() -> u64 {

@@ -1461,6 +1461,18 @@ pub(crate) fn apply_final_soft_ceiling(score: f32) -> f32 {
     )
 }
 
+/// THE single authoritative score-shaping boundary. Applies the final ceiling
+/// to every result's persisted `top_score`, exactly once, after all rerank
+/// stages and before persistence. Call this at the end of EVERY analysis path
+/// (cached, fresh, deep-scan) so `relevance_score` honors the ceiling no matter
+/// which reranker last overwrote `top_score`. Does NOT reorder — each path keeps
+/// its own sort / composition-floor logic, which must run after this.
+pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
+    for r in results.iter_mut() {
+        r.top_score = apply_final_soft_ceiling(r.top_score);
+    }
+}
+
 // ============================================================================
 // Signal classification (mirrors V1 logic)
 // ============================================================================
