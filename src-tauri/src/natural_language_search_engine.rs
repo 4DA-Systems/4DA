@@ -53,16 +53,23 @@ pub(crate) async fn execute_hybrid_search(
         return Ok(Vec::new());
     }
 
-    // 4. Normalize RRF scores to [0, 1] relative to top result
-    let max_score = results[0].rrf_score;
-
-    Ok(results
+    // 4. Compute an ABSOLUTE relevance per item.
+    //    Hybrid RRF still determines recall/ranking inside `hybrid_search`, but the
+    //    DISPLAYED relevance must be a real, query-stable measure — not the old
+    //    `rrf_score / max_score`, which pinned the top hit to exactly 1.00 on every
+    //    query and rounded the tightly-clustered runners-up to 1.00 as well.
+    //    Vector matches → cosine similarity from the L2 distance (embeddings are
+    //    L2-normalized, so cos = 1 - d^2/2), clamped to [0,1]. Keyword-only matches
+    //    (no vector distance) → a gentle rank-based score so they read sensibly.
+    let mut items: Vec<QueryResultItem> = results
         .into_iter()
         .map(|r| {
-            let relevance = if max_score > 0.0 {
-                (r.rrf_score / max_score).clamp(0.0, 1.0)
-            } else {
-                0.0
+            let relevance = match r.vec_distance {
+                Some(d) if d.is_finite() => (1.0 - d * d / 2.0).clamp(0.0, 1.0),
+                _ => {
+                    let rank = r.bm25_rank.unwrap_or(20) as f64;
+                    (0.78 / (1.0 + 0.12 * (rank - 1.0))).clamp(0.0, 0.85)
+                }
             };
             let match_reason = match (r.bm25_rank, r.vec_rank) {
                 (Some(_), Some(_)) => format!("keyword + semantic ({:.0}%)", relevance * 100.0),
@@ -86,7 +93,16 @@ pub(crate) async fn execute_hybrid_search(
                 match_reason,
             }
         })
-        .collect())
+        .collect();
+
+    // Order by the displayed relevance so the percentages read monotonically.
+    items.sort_by(|a, b| {
+        b.relevance
+            .partial_cmp(&a.relevance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    Ok(items)
 }
 
 // ============================================================================

@@ -21,6 +21,10 @@ pub struct HybridSearchResult {
     pub rrf_score: f64,
     pub bm25_rank: Option<usize>,
     pub vec_rank: Option<usize>,
+    /// Raw L2 distance from the vector KNN leg (None for keyword-only matches).
+    /// Used to compute an absolute semantic-relevance score instead of a
+    /// rank-ratio that always saturates the top hit at 1.0.
+    pub vec_distance: Option<f64>,
 }
 
 /// RRF smoothing constant (Cormack et al. 2009). Higher values dampen rank differences.
@@ -93,9 +97,11 @@ impl Database {
             Option<String>,
             usize,
         )> = Vec::new();
+        // item_id -> raw L2 distance from the KNN leg, for absolute relevance scoring.
+        let mut vec_distances: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
         if has_real_embedding {
             if let Ok(mut stmt) = conn.prepare(
-                "SELECT sv.rowid, si.title, si.content, si.source_type, si.url, si.created_at
+                "SELECT sv.rowid, si.title, si.content, si.source_type, si.url, si.created_at, sv.distance
                  FROM source_vec sv
                  JOIN source_items si ON si.id = sv.rowid
                  WHERE sv.embedding MATCH ?1 AND k = ?2
@@ -109,9 +115,11 @@ impl Database {
                         row.get::<_, String>(3).unwrap_or_default(),
                         row.get::<_, Option<String>>(4)?,
                         row.get::<_, Option<String>>(5)?,
+                        row.get::<_, f64>(6).unwrap_or(f64::MAX),
                     ))
                 }) {
                     for (rank, row) in rows.flatten().enumerate() {
+                        vec_distances.insert(row.0, row.6);
                         vec_results.push((row.0, row.1, row.2, row.3, row.4, row.5, rank + 1));
                     }
                 }
@@ -182,6 +190,7 @@ impl Database {
                         rrf_score: score,
                         bm25_rank,
                         vec_rank,
+                        vec_distance: vec_distances.get(&id).copied(),
                     }
                 },
             )
