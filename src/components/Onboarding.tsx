@@ -151,7 +151,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const showProgress = step !== 'choice';
 
   return (
-    <div ref={modalRef} className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-bg-primary p-8" role="dialog" aria-modal="true" aria-label="Setup wizard">
+    <div ref={modalRef} className="fixed inset-0 z-50 overflow-y-auto bg-bg-primary" role="dialog" aria-modal="true" aria-label="Setup wizard">
+      {/* Inner wrapper centers the step when it fits and scrolls when it
+          overflows. A fixed flex+justify-center container clips overflow and
+          has no scrollbar, so on a short window the Welcome step's Skip link
+          collided with the absolute version footer. min-h-full keeps the
+          centered look; the extra vertical padding keeps content clear of the
+          absolute progress (top) and version (bottom). */}
+      <div className="relative min-h-full flex flex-col items-center justify-center p-8 py-20">
       {/* Progress indicator — hidden during choice gate */}
       {showProgress && (
         <div className="absolute top-8 flex flex-col items-center gap-2">
@@ -247,6 +254,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
       {/* Version */}
       <p className="absolute bottom-6 text-xs text-text-muted">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
+      </div>
     </div>
   );
 }
