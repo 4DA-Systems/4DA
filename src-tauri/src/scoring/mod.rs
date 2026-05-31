@@ -53,6 +53,7 @@ pub(crate) use explanation::{
 };
 pub(crate) use gate::apply_confirmation_gate;
 pub(crate) use pipeline::{ScoringInput, ScoringOptions};
+pub(crate) use pipeline_v2::apply_final_soft_ceiling;
 pub(crate) use telemetry::ScoringTelemetry;
 pub(crate) use temporal_cluster::temporal_cluster_results;
 /// Bump this whenever the scoring pipeline changes to invalidate stale scores.

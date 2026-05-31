@@ -242,6 +242,17 @@ pub(crate) async fn score_items_full(
     }
     crate::diagnostics::log_rss("scoring:after_llm_rerank");
 
+    // Final top-end de-saturation on the PERSISTED score. The cross-encoder
+    // (and LLM reconciler) overwrite `top_score` AFTER score_item, so its
+    // soft-ceiling no longer governs the stored value — top matches land near
+    // ~0.99 and tie. Re-apply the canonical cap here, downstream of every score
+    // mutation, so relevance_score honors the 0.95 invariant and the top stays
+    // rankable. Re-sort since values shifted (stable order preserved).
+    for r in results.iter_mut() {
+        r.top_score = scoring::apply_final_soft_ceiling(r.top_score);
+    }
+    scoring::sort_results(&mut results);
+
     emit_progress(
         app,
         "complete",

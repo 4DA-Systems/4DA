@@ -1448,6 +1448,19 @@ fn soft_ceiling(score: f32, knee: f32, cap: f32) -> f32 {
     }
 }
 
+/// Canonical final-score de-saturation. Applied both mid-pipeline (on
+/// `combined_score` inside `score_item`) AND at the analysis boundary on the
+/// persisted `top_score` after the cross-encoder / reconciler overwrite it —
+/// so the stored `relevance_score` honors the `final_ceiling.absolute_max`
+/// invariant end-to-end and the top tier never piles up at a hard ceiling.
+pub(crate) fn apply_final_soft_ceiling(score: f32) -> f32 {
+    soft_ceiling(
+        score,
+        SOFT_CEILING_KNEE,
+        scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+    )
+}
+
 // ============================================================================
 // Signal classification (mirrors V1 logic)
 // ============================================================================
@@ -1849,11 +1862,7 @@ pub(crate) fn score_item(
     // "no item displays 100%" invariant. Post-gate boosts otherwise clamp many
     // distinct items onto an identical 1.0; this spreads them monotonically
     // just below the absolute ceiling. Only affects scores above the knee.
-    let combined_score = soft_ceiling(
-        combined_score,
-        SOFT_CEILING_KNEE,
-        scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
-    );
+    let combined_score = apply_final_soft_ceiling(combined_score);
 
     // ── Relevance determination ───────────────────────────────────────
     let bootstrap_mode = ctx.feedback_interaction_count < 10;
