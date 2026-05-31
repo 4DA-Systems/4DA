@@ -16,6 +16,8 @@ impl Database {
         ecosystem: &str,
         title: &str,
     ) -> SqliteResult<bool> {
+        // Match against the canonical ecosystem so pre-checks align with stored rows.
+        let ecosystem = crate::sources::cve_matching::normalize_ecosystem(ecosystem);
         let conn = self.conn.lock();
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM dependency_alerts WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3 AND resolved_at IS NULL",
@@ -28,12 +30,20 @@ impl Database {
     /// Store a new dependency alert, skipping duplicates.
     /// Returns the row ID if inserted, or 0 if the alert already exists.
     pub fn store_dependency_alert(&self, alert: &DependencyAlert) -> SqliteResult<i64> {
+        // Normalize on the write path so dependency_alerts keeps a single
+        // canonical form: severity uppercase (CRITICAL/HIGH/MEDIUM/LOW) and
+        // ecosystem canonicalized (e.g. "rust" -> "crates.io"). Without this,
+        // CVE rows (uppercase, "rust") and local-audit rows (lowercase,
+        // "crates.io") fragment grouping, dedup, and the severity sort.
+        let ecosystem =
+            crate::sources::cve_matching::normalize_ecosystem(&alert.ecosystem).to_string();
+        let severity = alert.severity.trim().to_uppercase();
         let conn = self.conn.lock();
         // Check for existing unresolved alert with same package/ecosystem/title
         let exists: bool = conn
             .query_row(
                 "SELECT COUNT(*) FROM dependency_alerts WHERE package_name = ?1 AND ecosystem = ?2 AND title = ?3 AND resolved_at IS NULL",
-                params![alert.package_name, alert.ecosystem, alert.title],
+                params![alert.package_name, ecosystem, alert.title],
                 |row| row.get::<_, i64>(0).map(|c| c > 0),
             )
             .unwrap_or(false);
@@ -47,9 +57,9 @@ impl Database {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 alert.package_name,
-                alert.ecosystem,
+                ecosystem,
                 alert.alert_type,
-                alert.severity,
+                severity,
                 alert.title,
                 alert.description,
                 alert.affected_versions,
@@ -69,11 +79,11 @@ impl Database {
              FROM dependency_alerts
              WHERE resolved_at IS NULL
              ORDER BY
-                CASE severity
-                    WHEN 'critical' THEN 0
-                    WHEN 'high' THEN 1
-                    WHEN 'medium' THEN 2
-                    WHEN 'low' THEN 3
+                CASE UPPER(severity)
+                    WHEN 'CRITICAL' THEN 0
+                    WHEN 'HIGH' THEN 1
+                    WHEN 'MEDIUM' THEN 2
+                    WHEN 'LOW' THEN 3
                     ELSE 4
                 END,
                 detected_at DESC",
