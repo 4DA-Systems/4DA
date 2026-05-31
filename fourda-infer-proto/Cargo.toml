@@ -1,0 +1,15 @@
+# Inference sidecar wire protocol — Phase 0 of the inference-sidecar plan
+# (.claude/plans/reranker-embedding-sidecar-design.md). Standalone crate (no
+# parent workspace) so it builds/tests independently and adds zero risk to the
+# main app until the sidecar is wired up in a later phase.
+[package]
+name = "fourda-infer-proto"
+version = "0.1.0"
+edition = "2021"
+license = "FSL-1.1-Apache-2.0"
+description = "Wire protocol (framing + request/response types) for the 4DA inference sidecar."
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
