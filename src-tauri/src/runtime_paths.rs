@@ -60,6 +60,31 @@ impl RuntimePaths {
 
         let dev_data = dev_root.join("data");
 
+        // Explicit data-dir override (cold-start testing, CI, multi-profile runs).
+        // Redirects ONLY the data + cache dirs to an isolated location; bundled
+        // resources (locales, models, docs) still resolve from the dev tree or
+        // next to the exe. This lets us exercise a true empty-data first run
+        // without ever touching the live `data/` directory.
+        if let Ok(override_dir) = std::env::var("FOURDA_DATA_DIR") {
+            let trimmed = override_dir.trim();
+            if !trimmed.is_empty() {
+                let data_dir = PathBuf::from(trimmed);
+                let _ = std::fs::create_dir_all(&data_dir);
+                let cache_dir = data_dir.join("cache");
+                let _ = std::fs::create_dir_all(&cache_dir);
+                let resource_dir = if dev_data.exists() {
+                    dev_root.clone()
+                } else {
+                    Self::resolve_resource_dir(&data_dir)
+                };
+                return RuntimePaths {
+                    data_dir,
+                    cache_dir,
+                    resource_dir,
+                };
+            }
+        }
+
         // If the dev data dir exists, we're in development mode
         if dev_data.exists() {
             return RuntimePaths {
