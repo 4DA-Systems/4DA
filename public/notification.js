@@ -233,11 +233,17 @@ function showNotification(data) {
   playNotificationSound(currentPriority);
 
   // Reset animation state
-  card.classList.remove('visible', 'exiting', 'dismissing');
+  card.classList.remove('visible', 'exiting', 'dismissing', 'sweeping');
+
+  // Restart the one-lap border sweep. Removing the class, forcing a reflow,
+  // then re-adding it re-triggers the CSS animation every time a notification
+  // is shown — otherwise the sweep would only play on the first page load and
+  // never replay when the already-open window just receives new data.
+  void card.offsetWidth; // force reflow so the removal is committed
 
   // Trigger enter animation on next frame so CSS transition fires
   requestAnimationFrame(function () {
-    card.classList.add('visible');
+    card.classList.add('visible', 'sweeping');
   });
 
   startDismissTimer();

@@ -51,7 +51,7 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
   // Adapt i18next's TFunction to the providers' simple (key, fallback?) => string contract.
   const translate = useCallback(
     (key: string, fallback?: string): string =>
-      (fallback === undefined ? t(key) : t(key, fallback)) as string,
+      fallback === undefined ? t(key) : t(key, fallback),
     [t],
   );
 

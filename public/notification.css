@@ -49,52 +49,74 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: none;
+  /* Hairline border keeps the card crisp against any wallpaper */
+  border: 1px solid rgba(255, 255, 255, 0.06);
   /* Depth: card floats above desktop */
   box-shadow:
     0 12px 48px rgba(0, 0, 0, 0.7),
     0 4px 16px rgba(0, 0, 0, 0.4);
+  /* visible so the border-sweep ring (inset -1px) isn't clipped */
   overflow: visible;
-  /* Enter animation */
+  /* Enter animation — subtle settle, ease-out, ~260ms (see .visible) */
   opacity: 0;
-  transform: scale(0.97) translateY(4px);
-  transition: opacity 0.2s ease-out, transform 0.2s ease-out, box-shadow 0.3s ease;
+  transform: scale(0.98) translateY(6px);
+  transition:
+    opacity 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.26s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.3s ease;
 }
 
-/* Clockwise sweeping border — rotating conic gradient */
-@keyframes border-sweep {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+/* Border glide — a comet streak of the priority color travels along the card's
+   actual rounded-rectangle border PATH (via offset-path), so it hugs every edge
+   and corner at uniform speed. This is the geometrically-correct fix for a wide
+   rectangle: a rotating conic gradient emanates from the centre and smears
+   unevenly on a 3:1 card; offset-path follows the perimeter precisely.
+   It runs a few laps then fades — present, professional, and finite. */
+@keyframes border-glide {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
+}
+@keyframes glide-fade {
+  0%   { opacity: 0; }
+  8%   { opacity: 1; }
+  72%  { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .notification-card::before {
   content: '';
   position: absolute;
-  inset: -1px;
-  border-radius: 15px;
-  /* Conic gradient: a slim colored highlight that travels around the hairline
-     border. Keep the bright arc narrow so it reads as a moving point of light,
-     not a wide smear. */
-  background: conic-gradient(
-    from 0deg,
-    var(--sweep-color, rgba(255,255,255,0.15)) 0deg,
-    var(--sweep-color, rgba(255,255,255,0.15)) 10deg,
-    transparent 50deg,
-    rgba(255,255,255,0.02) 330deg,
-    var(--sweep-color, rgba(255,255,255,0.15)) 360deg
+  /* The comet streak: a short, soft, tangent-aligned light. */
+  width: 64px;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    var(--sweep-color, rgba(255, 255, 255, 0.6)) 78%,
+    #ffffff 100%
   );
-  animation: border-sweep 8s linear infinite;
-  z-index: -1;
+  box-shadow: 0 0 9px 1px var(--sweep-color, rgba(255, 255, 255, 0.5));
+  /* Ride the card's border-box perimeter. Coords are the padding-box-local
+     rounded rect (~406x132, r13); the glow's blur covers the 1px border. */
+  offset-path: path('M 13 0 H 393 A 13 13 0 0 1 406 13 V 119 A 13 13 0 0 1 393 132 H 13 A 13 13 0 0 1 0 119 V 13 A 13 13 0 0 1 13 0 Z');
+  offset-rotate: auto;        /* stay tangent to the path -> reads as a trail */
+  offset-anchor: 100% 50%;    /* bright leading tip sits on the path point */
+  offset-distance: 0%;
+  /* Invisible at rest — the glide only runs while `.sweeping` is set. JS re-adds
+     `.sweeping` on every notification so it replays each time, not just on load. */
+  opacity: 0;
+  z-index: 2;
+  pointer-events: none;
+  will-change: offset-distance, opacity;
 }
 
-/* Inner fill masks center — only the border sweep is visible */
-.notification-card::after {
-  content: '';
-  position: absolute;
-  inset: 1px;
-  border-radius: 13px;
-  background: linear-gradient(180deg, #161616 0%, #0d0d0d 100%);
-  z-index: -1;
+/* A few laps, then fade out. One lap = --lap; total run = --lap * --laps.
+   Capped so it always finishes before the shortest auto-dismiss (watch, 4s). */
+.notification-card.sweeping::before {
+  animation:
+    border-glide var(--lap, 1.2s) linear var(--laps, 3),
+    glide-fade calc(var(--lap, 1.2s) * var(--laps, 3)) ease-in 1 forwards;
 }
 
 .notification-card.visible {
@@ -118,43 +140,41 @@ html, body {
    Priority Variants (border + CSS glow fallback)
    ======================================================================== */
 
-/* Critical: red sweep, fast rotation, red outer glow */
+/* Critical: bright red glide, 3 brisk laps (1.2s x 3 = 3.6s), faint red glow */
 .notification-card.critical {
-  --sweep-color: rgba(220, 50, 50, 0.7);
+  --sweep-color: rgba(235, 70, 70, 0.98);
+  --lap: 1.2s;
+  --laps: 3;
   box-shadow:
-    0 0 7px rgba(200, 50, 50, 0.10),
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+    0 0 16px rgba(200, 50, 50, 0.10),
+    0 12px 48px rgba(0, 0, 0, 0.7),
+    0 4px 16px rgba(0, 0, 0, 0.4);
 }
-.notification-card.critical::before { animation-duration: 6s; }
 
-/* Alert: orange sweep, medium rotation */
+/* Alert: orange glide, 3 laps (1.25s x 3 = 3.75s) */
 .notification-card.alert {
-  --sweep-color: rgba(230, 130, 40, 0.6);
+  --sweep-color: rgba(235, 140, 50, 0.95);
+  --lap: 1.25s;
+  --laps: 3;
   box-shadow:
-    0 0 6px rgba(220, 120, 30, 0.07),
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+    0 0 14px rgba(220, 120, 30, 0.07),
+    0 12px 48px rgba(0, 0, 0, 0.7),
+    0 4px 16px rgba(0, 0, 0, 0.4);
 }
-.notification-card.alert::before { animation-duration: 8s; }
 
-/* Advisory: white sweep, slow */
+/* Advisory: amber glide, 3 laps (1.3s x 3 = 3.9s, under the 5s dismiss) */
 .notification-card.advisory {
-  --sweep-color: rgba(255, 255, 255, 0.12);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.55),
-    0 2px 8px rgba(0, 0, 0, 0.3);
+  --sweep-color: rgba(245, 170, 40, 0.85);
+  --lap: 1.3s;
+  --laps: 3;
 }
-.notification-card.advisory::before { animation-duration: 11s; }
 
-/* Watch: barely-there white sweep, very slow */
+/* Watch: cool blue glide, 2 calm laps (1.5s x 2 = 3.0s, under the 4s dismiss) */
 .notification-card.watch {
-  --sweep-color: rgba(255, 255, 255, 0.06);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.5),
-    0 2px 8px rgba(0, 0, 0, 0.25);
+  --sweep-color: rgba(95, 155, 245, 0.8);
+  --lap: 1.5s;
+  --laps: 2;
 }
-.notification-card.watch::before { animation-duration: 14s; }
 
 /* ========================================================================
    Hover States
@@ -164,19 +184,19 @@ html, body {
   cursor: pointer;
 }
 
-/* On hover, intensify the sweep */
+/* On hover, lift the card slightly and deepen the depth glow */
 .notification-card.critical:hover {
-  --sweep-color: rgba(220, 50, 50, 0.85);
   box-shadow:
     0 0 22px rgba(200, 50, 50, 0.14),
-    0 8px 32px rgba(0, 0, 0, 0.55);
+    0 14px 52px rgba(0, 0, 0, 0.72),
+    0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .notification-card.alert:hover {
-  --sweep-color: rgba(230, 130, 40, 0.75);
   box-shadow:
-    0 0 18px rgba(220, 120, 30, 0.1),
-    0 8px 32px rgba(0, 0, 0, 0.55);
+    0 0 18px rgba(220, 120, 30, 0.10),
+    0 14px 52px rgba(0, 0, 0, 0.72),
+    0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* ========================================================================
@@ -416,7 +436,10 @@ html, body {
   .priority-dot.alert {
     animation: none !important;
   }
-  .notification-card::before {
+  /* No border sweep for reduced-motion — hide the arc entirely (no frozen state) */
+  .notification-card::before,
+  .notification-card.sweeping::before {
     animation: none !important;
+    opacity: 0 !important;
   }
 }
