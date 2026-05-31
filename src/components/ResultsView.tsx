@@ -60,6 +60,7 @@ export function ResultsView({
     toggleSourceFilter,
     resetSourceFilters,
     filteredResults,
+    profileEmpty,
     dismissAllBelow,
     saveAllAbove,
   } = useResultFilters();
@@ -163,14 +164,16 @@ export function ResultsView({
                 </div>
                 <p className="text-xs text-text-muted" aria-live="polite">
                   {state.analysisComplete
-                    ? <>
-                        {showOnlyRelevant
-                          ? t('results.countFiltered', { filtered: filteredResults.length, total: totalCount })
-                          : t('results.countAll', { count: filteredResults.length })
-                        }
-                        {topPicksCount > 0 && ` · ${t('results.topPicks', { count: topPicksCount })}`}
-                        {criticalCount > 0 && ` · ${t('results.criticalCount', { count: criticalCount })}`}
-                      </>
+                    ? (profileEmpty
+                        ? <>{filteredResults.length} {t('results.freshPicksSubtext', 'fresh picks · ranked by recency & quality. Add a project folder or interests to personalize.')}</>
+                        : <>
+                            {showOnlyRelevant
+                              ? t('results.countFiltered', { filtered: filteredResults.length, total: totalCount })
+                              : t('results.countAll', { count: filteredResults.length })
+                            }
+                            {topPicksCount > 0 && ` · ${t('results.topPicks', { count: topPicksCount })}`}
+                            {criticalCount > 0 && ` · ${t('results.criticalCount', { count: criticalCount })}`}
+                          </>)
                     : t('results.clickAnalyze')}
                 </p>
               </div>
@@ -230,7 +233,11 @@ export function ResultsView({
                 const idx = virtualRow.index;
                 // Score group headers (only when sorting by score)
                 let groupHeader: string | null = null;
-                if (sortBy === 'score' && idx > 0) {
+                if (sortBy === 'score' && profileEmpty) {
+                  // Cold start: one honest header — these are fresh, not personalized.
+                  // No "Top picks"/"Relevant" labels (would imply ranking we can't do yet).
+                  if (idx === 0) groupHeader = t('results.freshPicksGroup', 'Fresh picks — not yet personalized');
+                } else if (sortBy === 'score' && idx > 0) {
                   const prev = filteredResults[idx - 1]!;
                   if (prev.top_score >= 0.72 && item.top_score < 0.72) {
                     groupHeader = t('results.relevantGroup');

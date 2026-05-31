@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useMemo, useCallback } from 'react';
 import { useAppStore } from '../store';
+import { isProfileEmpty } from '../utils/profile-empty';
 
 /** Run promise-returning tasks with bounded concurrency (prevents IPC queue saturation) */
 async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Promise<PromiseSettledResult<T>[]> {
@@ -45,6 +46,8 @@ function normalizeUrl(url: string | null | undefined): string | null {
  */
 export const useResultFilters = () => {
   const relevanceResults = useAppStore(s => s.appState.relevanceResults);
+  const detectedTech = useAppStore(s => s.discoveredContext?.tech);
+  const interests = useAppStore(s => s.userContext?.interests);
   const feedbackGiven = useAppStore(s => s.feedbackGiven);
   const recordInteraction = useAppStore(s => s.recordInteraction);
   const setSettingsStatus = useAppStore(s => s.setSettingsStatus);
@@ -61,6 +64,16 @@ export const useResultFilters = () => {
   const setShowSavedOnly = useAppStore(s => s.setShowSavedOnly);
   const setSearchQuery = useAppStore(s => s.setSearchQuery);
 
+  // Cold-start signal — shared with the first-run celebration via profile-empty.ts
+  // so the two never disagree. With no profile, 0 items are relevant, so the
+  // default "show only relevant" filter would render an empty list and the
+  // "Browse fresh picks" CTA leads nowhere; instead we relax that filter and
+  // fall back to an honest recency/quality ranking (see the sort branch below).
+  const profileEmpty = useMemo(
+    () => isProfileEmpty(detectedTech?.length ?? 0, interests?.length ?? 0, relevanceResults.some(r => r.relevant)),
+    [detectedTech, interests, relevanceResults],
+  );
+
   const filteredResults = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
 
@@ -68,7 +81,7 @@ export const useResultFilters = () => {
     const filtered = relevanceResults.filter(item => {
       const source = item.source_type || 'hackernews';
       if (!sourceFilters.has(source)) return false;
-      if (showOnlyRelevant && !item.relevant) return false;
+      if (showOnlyRelevant && !profileEmpty && !item.relevant) return false;
       if (showSavedOnly && feedbackGiven[item.id] !== 'save') return false;
       // Search filter: match against title, explanation, source type
       if (query) {
@@ -125,6 +138,20 @@ export const useResultFilters = () => {
     };
 
     deduped.sort((a, b) => {
+      if (sortBy === 'score' && profileEmpty) {
+        // Cold start: top_score is meaningless (the gate caps every item ~0.1
+        // with no profile), so rank by a profile-free quality prior — content
+        // quality × freshness, newest first as tiebreak. This is honest "fresh
+        // picks", NOT a personalization claim, and only runs while profileEmpty.
+        const prior = (r: typeof a) =>
+          (r.score_breakdown?.content_quality_mult ?? 1) *
+          (r.score_breakdown?.freshness_mult ?? 1);
+        const dp = prior(b) - prior(a);
+        if (Math.abs(dp) > 1e-6) return dp;
+        const aFresh = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bFresh = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return bFresh - aFresh;
+      }
       if (sortBy === 'score') {
         const aN = a.score_breakdown?.necessity_score ?? 0;
         const bN = b.score_breakdown?.necessity_score ?? 0;
@@ -156,7 +183,7 @@ export const useResultFilters = () => {
     });
 
     return deduped;
-  }, [relevanceResults, sourceFilters, showOnlyRelevant, showSavedOnly, sortBy, searchQuery, feedbackGiven]);
+  }, [relevanceResults, profileEmpty, sourceFilters, showOnlyRelevant, showSavedOnly, sortBy, searchQuery, feedbackGiven]);
 
   const dismissAllBelow = useCallback(async (threshold: number) => {
     const itemsToDismiss = filteredResults.filter(
@@ -205,6 +232,7 @@ export const useResultFilters = () => {
     toggleSourceFilter,
     resetSourceFilters,
     filteredResults,
+    profileEmpty,
     dismissAllBelow,
     saveAllAbove,
   };

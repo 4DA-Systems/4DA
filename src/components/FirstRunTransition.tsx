@@ -6,6 +6,7 @@ import { cmd } from '../lib/commands';
 
 import { useAppStore } from '../store';
 import { getSourceNarration } from '../utils/first-run-messages';
+import { isProfileEmpty } from '../utils/profile-empty';
 import { ErrorState } from './first-run/ErrorState';
 import { CelebrationState } from './first-run/CelebrationState';
 import { LoadingState } from './first-run/LoadingState';
@@ -73,9 +74,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   // ranking" framing instead of a banned vanity "0 RELEVANT" headline
   // (intelligence-doctrine rules 3 + 6).
   const profileEmpty = useMemo(
-    () => (detectedTech?.length ?? 0) === 0
-      && (userContext?.interests?.length ?? 0) === 0
-      && relevantCount === 0,
+    () => isProfileEmpty(detectedTech?.length ?? 0, userContext?.interests?.length ?? 0, relevantCount > 0),
     [detectedTech, userContext, relevantCount],
   );
 
