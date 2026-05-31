@@ -34,7 +34,13 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
     [t],
   );
 
-  const search = useCommandSearch({ t: translate, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId });
+  // Live check (read at click time, not render time) of whether an item is in the current feed.
+  const isItemInFeed = useCallback(
+    (id: number) => useAppStore.getState().appState.relevanceResults.some(r => r.id === id),
+    [],
+  );
+
+  const search = useCommandSearch({ t: translate, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed });
   const { query, setQuery, results, loading, activeId, setActiveId, moveActive, reset } = search;
 
   const [open, setOpen] = useState(false);
