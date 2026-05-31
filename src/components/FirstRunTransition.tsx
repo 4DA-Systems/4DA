@@ -66,6 +66,19 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
     [appState.analysisComplete, appState.relevanceResults, scanSummary],
   );
 
+  // A profileless first run (setup skipped, no project folder, no ACE context)
+  // has NO signal to rank against, so the confirmation gate caps every item
+  // below the relevance threshold — 0 relevant is structurally guaranteed, not a
+  // failure. Detect it so the celebration shows an honest "add a signal to start
+  // ranking" framing instead of a banned vanity "0 RELEVANT" headline
+  // (intelligence-doctrine rules 3 + 6).
+  const profileEmpty = useMemo(
+    () => (detectedTech?.length ?? 0) === 0
+      && (userContext?.interests?.length ?? 0) === 0
+      && relevantCount === 0,
+    [detectedTech, userContext, relevantCount],
+  );
+
   // Fetch scan summary and trigger analysis on mount
   useEffect(() => {
     if (startedRef.current) return;
@@ -76,7 +89,10 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
       try {
         const sources = await cmd('get_sources') as Array<{ enabled: boolean }>;
         const enabledCount = sources.filter(s => s.enabled).length;
-        setEstimatedSeconds(120 + enabledCount * 10);
+        // Sources are fetched concurrently, so the cost scales sub-linearly.
+        // The old 120 + n*10 over-promised (~5 min for ~11 sources when real
+        // runs land near 2). Bias the estimate toward observed reality.
+        setEstimatedSeconds(75 + enabledCount * 6);
       } catch { /* default 240s */ }
 
       // Fetch scan summary BEFORE starting analysis
@@ -205,6 +221,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           stackInsights={stackInsights}
           embeddingMode={embeddingMode}
           detectedTech={detectedTech}
+          profileEmpty={profileEmpty}
           onDismiss={handleDismiss}
         />
       );

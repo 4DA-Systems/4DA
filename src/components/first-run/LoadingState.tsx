@@ -262,6 +262,18 @@ export function LoadingState({
         </div>
       )}
 
+      {/* Live item counter — the hero of the scanning wait. A running tally
+          that ticks up as each source returns turns a dead progress bar into
+          something visibly alive. */}
+      {(phase === 'fetching' || phase === 'analyzing') && itemCount > 0 && (
+        <div className="mb-5" aria-live="polite">
+          <span className="text-4xl font-bold text-white tabular-nums">{itemCount}</span>
+          <p className="text-[11px] text-text-muted uppercase tracking-wider mt-0.5">
+            {t('firstRun.itemsFlowingIn', 'items flowing in')}
+          </p>
+        </div>
+      )}
+
       {/* Progress bar (fetching/analyzing) */}
       {(phase === 'fetching' || phase === 'analyzing') && (
         <div className="max-w-xs mx-auto mb-4">
@@ -271,25 +283,30 @@ export function LoadingState({
               style={{ width: `${Math.max(progress * 100, 5)}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-text-muted mt-1.5">
-            <span>{itemCount > 0 ? t('firstRun.itemsFound', { count: itemCount }) : ''}</span>
+          <div className="flex justify-end text-xs text-text-muted mt-1.5">
             <span>{Math.round(progress * 100)}%</span>
           </div>
         </div>
       )}
 
-      {/* Source-by-source narration (fetching phase) */}
+      {/* Source-by-source ticker (fetching phase) — a growing live feed of what
+          each source returned, each row led by a pulse dot. */}
       {phase === 'fetching' && sourceMessages.length > 0 && (
-        <div className="space-y-1 max-w-xs mx-auto">
-          {sourceMessages.slice(-3).map((msg, i, arr) => (
-            <p
+        <div className="space-y-1.5 max-w-xs mx-auto text-start">
+          {sourceMessages.slice(-4).map((msg, i, arr) => (
+            <div
               key={`${msg}-${i}`}
-              className={`text-xs transition-opacity ${
+              className={`flex items-center gap-2 text-xs transition-opacity ${
                 i === arr.length - 1 ? 'text-text-secondary' : 'text-text-muted'
               }`}
             >
+              <span
+                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  i === arr.length - 1 ? 'bg-orange-400 animate-pulse' : 'bg-text-muted/40'
+                }`}
+              />
               {msg}
-            </p>
+            </div>
           ))}
         </div>
       )}

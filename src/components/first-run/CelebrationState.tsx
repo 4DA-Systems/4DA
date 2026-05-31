@@ -5,6 +5,7 @@ import { BrandMark } from '../void-engine/BrandMark';
 import { getCelebrationMessage } from '../../utils/first-run-messages';
 import { getSourceFullName } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
+import { useAppStore } from '../../store';
 
 interface TopSignal {
   title: string;
@@ -28,6 +29,10 @@ interface CelebrationStateProps {
   stackInsights: string[];
   embeddingMode: string | null;
   detectedTech?: Array<{ name: string; category: string; confidence: number }>;
+  /** True when there is no profile signal to rank against (setup skipped, no
+   *  project folder, no ACE context). 0 relevant is then structural, not a
+   *  failure — show an honest "add a signal" framing, not a vanity "0". */
+  profileEmpty?: boolean;
   onDismiss: (view: 'briefing' | 'results' | 'playbook') => void;
 }
 
@@ -58,10 +63,18 @@ export function CelebrationState({
   stackInsights,
   embeddingMode,
   detectedTech,
+  profileEmpty = false,
   onDismiss,
 }: CelebrationStateProps) {
   const { t } = useTranslation();
+  const setShowSettings = useAppStore(s => s.setShowSettings);
   const matchReason = topSignal ? buildMatchReason(topSignal, t) : null;
+
+  // Open Settings (where context folders + stack live) then drop into results.
+  const handleAddSignal = () => {
+    setShowSettings(true);
+    onDismiss('results');
+  };
 
   // Count items matching active dependencies
   const depMatchCount = sourceBreakdown.reduce((sum, [, count]) => sum + count, 0);
@@ -85,13 +98,17 @@ export function CelebrationState({
             {t('firstRun.itemsAnalyzed', 'analyzed')}
           </p>
         </div>
-        <div className="text-center">
-          <span className="text-3xl font-bold text-white tabular-nums">{relevantCount}</span>
-          <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
-            {t('firstRun.relevantToYou', 'relevant')}
-          </p>
-        </div>
-        {depMatchCount > 0 && depMatchCount !== totalCount && (
+        {/* "Relevant" is hidden on a profileless first run — showing a giant
+            "0" is a banned vanity zero (doctrine rule 3) and reads as failure. */}
+        {!profileEmpty && (
+          <div className="text-center">
+            <span className="text-3xl font-bold text-white tabular-nums">{relevantCount}</span>
+            <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
+              {t('firstRun.relevantToYou', 'relevant')}
+            </p>
+          </div>
+        )}
+        {((profileEmpty && sourceBreakdown.length > 0) || (depMatchCount > 0 && depMatchCount !== totalCount)) && (
           <div className="text-center">
             <span className="text-3xl font-bold text-white tabular-nums">{sourceBreakdown.length}</span>
             <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
@@ -134,7 +151,7 @@ export function CelebrationState({
 
       {/* Celebration message */}
       <p className="text-sm text-text-secondary mb-6">
-        {getCelebrationMessage(relevantCount, totalCount)}
+        {getCelebrationMessage(relevantCount, totalCount, profileEmpty)}
       </p>
 
       {/* Top signal highlight with match reasoning */}
@@ -205,22 +222,44 @@ export function CelebrationState({
         </div>
       )}
 
-      {/* CTAs */}
+      {/* CTAs — a profileless first run leads with the one action that unlocks
+          ranking (add a signal), then offers the fresh picks. */}
       <div className="flex flex-col items-center gap-3">
-        <button
-          onClick={() => onDismiss('briefing')}
-          aria-label={t('firstRun.ariaSeeBriefing')}
-          className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
-        >
-          {t('firstRun.seeBriefing')}
-        </button>
-        <button
-          onClick={() => onDismiss('results')}
-          aria-label={t('firstRun.ariaBrowseResults', { count: totalCount })}
-          className="text-sm text-text-muted hover:text-text-secondary transition-colors"
-        >
-          {t('firstRun.browseResults', { count: totalCount })}
-        </button>
+        {profileEmpty ? (
+          <>
+            <button
+              onClick={handleAddSignal}
+              aria-label={t('firstRun.addSignalAria', 'Add your stack or a project folder in Settings')}
+              className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
+            >
+              {t('firstRun.addSignalCta', 'Add your stack to start ranking')}
+            </button>
+            <button
+              onClick={() => onDismiss('results')}
+              aria-label={t('firstRun.ariaBrowseResults', { count: totalCount })}
+              className="text-sm text-text-muted hover:text-text-secondary transition-colors"
+            >
+              {t('firstRun.browseFreshPicks', 'Browse the fresh picks')}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => onDismiss('briefing')}
+              aria-label={t('firstRun.ariaSeeBriefing')}
+              className="px-8 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 hover:scale-105 active:scale-95 transition-all"
+            >
+              {t('firstRun.seeBriefing')}
+            </button>
+            <button
+              onClick={() => onDismiss('results')}
+              aria-label={t('firstRun.ariaBrowseResults', { count: totalCount })}
+              className="text-sm text-text-muted hover:text-text-secondary transition-colors"
+            >
+              {t('firstRun.browseResults', { count: totalCount })}
+            </button>
+          </>
+        )}
       </div>
 
       {/* STREETS nudge */}
