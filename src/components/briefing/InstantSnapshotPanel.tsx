@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo } from 'react';
+import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslation } from 'react-i18next';
 import { getRelevancePresentation } from '../../utils/score';
 import { isAbstentionSynthesis, parseAbstention } from './briefing-synthesis-helpers';
@@ -88,9 +89,9 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
                   {snapshot.items.map((item, i) => (
                     <a
                       key={i}
-                      href={item.url ?? '#'}
-                      target={item.url ? '_blank' : undefined}
-                      rel={item.url ? 'noopener noreferrer' : undefined}
+                      href={item.url && isSafeUrl(item.url) ? item.url : '#'}
+                      target={item.url && isSafeUrl(item.url) ? '_blank' : undefined}
+                      rel={item.url && isSafeUrl(item.url) ? 'noopener noreferrer' : undefined}
                       className="block pl-2 border-l-2 border-border hover:border-[#D4AF37] py-1 transition-colors"
                     >
                       <p className="text-xs text-text-primary leading-snug line-clamp-2">{item.title}</p>

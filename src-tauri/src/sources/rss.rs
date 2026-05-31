@@ -134,7 +134,7 @@ impl RssSource {
 
             // Cap per-item content to prevent memory abuse
             let description = if description.len() > MAX_ITEM_CONTENT_LEN {
-                description[..MAX_ITEM_CONTENT_LEN].to_string()
+                description[..description.floor_char_boundary(MAX_ITEM_CONTENT_LEN)].to_string()
             } else {
                 description
             };
@@ -195,7 +195,7 @@ impl RssSource {
 
             // Cap per-item content to prevent memory abuse
             let description = if description.len() > MAX_ITEM_CONTENT_LEN {
-                description[..MAX_ITEM_CONTENT_LEN].to_string()
+                description[..description.floor_char_boundary(MAX_ITEM_CONTENT_LEN)].to_string()
             } else {
                 description
             };
