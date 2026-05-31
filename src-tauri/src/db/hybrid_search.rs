@@ -98,7 +98,8 @@ impl Database {
             usize,
         )> = Vec::new();
         // item_id -> raw L2 distance from the KNN leg, for absolute relevance scoring.
-        let mut vec_distances: std::collections::HashMap<i64, f64> = std::collections::HashMap::new();
+        let mut vec_distances: std::collections::HashMap<i64, f64> =
+            std::collections::HashMap::new();
         if has_real_embedding {
             if let Ok(mut stmt) = conn.prepare(
                 "SELECT sv.rowid, si.title, si.content, si.source_type, si.url, si.created_at, sv.distance

@@ -393,8 +393,7 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
             .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
             .unwrap_or_default();
         if !stale_items.is_empty() {
-            let existing: std::collections::HashSet<i64> =
-                new_items.iter().map(|i| i.id).collect();
+            let existing: std::collections::HashSet<i64> = new_items.iter().map(|i| i.id).collect();
             let added: Vec<_> = stale_items
                 .into_iter()
                 .filter(|s| !existing.contains(&s.id))
