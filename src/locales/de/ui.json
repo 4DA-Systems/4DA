@@ -3158,5 +3158,18 @@
     "recommendations": "Empfehlungen",
     "empty": "Keine Blindflecken erkannt. Ihre Stack-Abdeckung ist hervorragend.",
     "loading": "Analysiere deine Abdeckung..."
-  }
+  },
+  "cmdk.placeholder": "Alles durchsuchen, was 4DA gelesen hat…",
+  "cmdk.ariaLabel": "4DA durchsuchen",
+  "cmdk.groupGoto": "Gehe zu",
+  "cmdk.groupAction": "Aktionen",
+  "cmdk.groupIntelligence": "Intelligenz",
+  "cmdk.goToPrefix": "Gehe zu",
+  "cmdk.actionPrefix": "Aktion",
+  "cmdk.loading": "Suche…",
+  "cmdk.empty": "Keine Treffer",
+  "cmdk.emptyHint": "Versuche ein Thema, eine Ansicht oder eine Aktion",
+  "cmdk.ghostUnlock": "{{count}} weitere Treffer – mit Signal freischalten",
+  "cmdk.untitledItem": "Unbenanntes Element",
+  "cmdk.clear": "Löschen"
 }

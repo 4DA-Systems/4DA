@@ -2833,5 +2833,18 @@
   "evidence.learnedPositive": "Thèmes avec lesquels vous interagissez",
   "evidence.learnedNegative": "Thèmes que vous ignorez systématiquement",
   "results.topMatches": "Meilleures correspondances :",
-  "settings.llm.title": "Fournisseur d'IA"
+  "settings.llm.title": "Fournisseur d'IA",
+  "cmdk.placeholder": "Rechercher dans tout ce que 4DA a lu…",
+  "cmdk.ariaLabel": "Rechercher dans 4DA",
+  "cmdk.groupGoto": "Aller à",
+  "cmdk.groupAction": "Actions",
+  "cmdk.groupIntelligence": "Intelligence",
+  "cmdk.goToPrefix": "Aller à",
+  "cmdk.actionPrefix": "Action",
+  "cmdk.loading": "Recherche…",
+  "cmdk.empty": "Aucun résultat",
+  "cmdk.emptyHint": "Essayez un sujet, une vue ou une action",
+  "cmdk.ghostUnlock": "{{count}} autres résultats — débloquez avec Signal",
+  "cmdk.untitledItem": "Élément sans titre",
+  "cmdk.clear": "Effacer"
 }

@@ -3123,5 +3123,18 @@
   "weekly.interestFailed": "Falha ao adicionar interesse",
   "weekly.suggestions": "Interesses sugeridos",
   "weekly.title": "Resumo de inteligência semanal",
-  "weekly.topTopics": "Principais tópicos aprendidos"
+  "weekly.topTopics": "Principais tópicos aprendidos",
+  "cmdk.placeholder": "Pesquise tudo o que o 4DA leu…",
+  "cmdk.ariaLabel": "Pesquisar no 4DA",
+  "cmdk.groupGoto": "Ir para",
+  "cmdk.groupAction": "Ações",
+  "cmdk.groupIntelligence": "Inteligência",
+  "cmdk.goToPrefix": "Ir para",
+  "cmdk.actionPrefix": "Ação",
+  "cmdk.loading": "Pesquisando…",
+  "cmdk.empty": "Nenhuma correspondência",
+  "cmdk.emptyHint": "Tente um tópico, uma visualização ou uma ação",
+  "cmdk.ghostUnlock": "Mais {{count}} resultados — desbloqueie com o Signal",
+  "cmdk.untitledItem": "Item sem título",
+  "cmdk.clear": "Limpar"
 }

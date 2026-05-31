@@ -3053,5 +3053,18 @@
   "validation.found": "발견: {{label}} — {{count}} {{unit}}",
   "validation.items": "항목",
   "validation.source": "소스",
-  "validation.videos": "동영상"
+  "validation.videos": "동영상",
+  "cmdk.placeholder": "4DA가 읽은 모든 것을 검색…",
+  "cmdk.ariaLabel": "4DA 검색",
+  "cmdk.groupGoto": "이동",
+  "cmdk.groupAction": "작업",
+  "cmdk.groupIntelligence": "인텔리전스",
+  "cmdk.goToPrefix": "이동",
+  "cmdk.actionPrefix": "작업",
+  "cmdk.loading": "검색 중…",
+  "cmdk.empty": "일치 항목 없음",
+  "cmdk.emptyHint": "주제, 보기 또는 작업을 시도해 보세요",
+  "cmdk.ghostUnlock": "{{count}}개 더 — Signal로 잠금 해제",
+  "cmdk.untitledItem": "제목 없는 항목",
+  "cmdk.clear": "지우기"
 }

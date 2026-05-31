@@ -3085,5 +3085,18 @@
   "weekly.interestFailed": "İlgi alanı eklenemedi",
   "weekly.suggestions": "Önerilen ilgi alanları",
   "weekly.title": "Haftalık İstihbarat Özeti",
-  "weekly.topTopics": "Üst öğrenilen konular"
+  "weekly.topTopics": "Üst öğrenilen konular",
+  "cmdk.placeholder": "4DA'nın okuduğu her şeyde ara…",
+  "cmdk.ariaLabel": "4DA'da ara",
+  "cmdk.groupGoto": "Git",
+  "cmdk.groupAction": "Eylemler",
+  "cmdk.groupIntelligence": "İstihbarat",
+  "cmdk.goToPrefix": "Git",
+  "cmdk.actionPrefix": "Eylem",
+  "cmdk.loading": "Aranıyor…",
+  "cmdk.empty": "Eşleşme yok",
+  "cmdk.emptyHint": "Bir konu, görünüm veya eylem deneyin",
+  "cmdk.ghostUnlock": "{{count}} eşleşme daha — Signal ile kilidi aç",
+  "cmdk.untitledItem": "Başlıksız öğe",
+  "cmdk.clear": "Temizle"
 }

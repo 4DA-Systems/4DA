@@ -3205,5 +3205,18 @@
   "validation.found": "تم العثور على: {{label}} — {{count}} {{unit}}",
   "validation.items": "عناصر",
   "validation.source": "المصدر",
-  "validation.videos": "مقاطع فيديو"
+  "validation.videos": "مقاطع فيديو",
+  "cmdk.placeholder": "ابحث في كل ما قرأه 4DA…",
+  "cmdk.ariaLabel": "البحث في 4DA",
+  "cmdk.groupGoto": "الانتقال إلى",
+  "cmdk.groupAction": "الإجراءات",
+  "cmdk.groupIntelligence": "الذكاء",
+  "cmdk.goToPrefix": "الانتقال إلى",
+  "cmdk.actionPrefix": "إجراء",
+  "cmdk.loading": "جارٍ البحث…",
+  "cmdk.empty": "لا توجد نتائج",
+  "cmdk.emptyHint": "جرّب موضوعًا أو عرضًا أو إجراءً",
+  "cmdk.ghostUnlock": "{{count}} نتائج إضافية — افتحها مع Signal",
+  "cmdk.untitledItem": "عنصر بدون عنوان",
+  "cmdk.clear": "مسح"
 }

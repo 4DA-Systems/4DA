@@ -3021,5 +3021,18 @@
   "validation.found": "发现：{{label}} — {{count}} {{unit}}",
   "validation.items": "项",
   "validation.source": "来源",
-  "validation.videos": "视频"
+  "validation.videos": "视频",
+  "cmdk.placeholder": "搜索 4DA 已读取的所有内容…",
+  "cmdk.ariaLabel": "搜索 4DA",
+  "cmdk.groupGoto": "前往",
+  "cmdk.groupAction": "操作",
+  "cmdk.groupIntelligence": "智能",
+  "cmdk.goToPrefix": "前往",
+  "cmdk.actionPrefix": "操作",
+  "cmdk.loading": "搜索中…",
+  "cmdk.empty": "无匹配项",
+  "cmdk.emptyHint": "试试主题、视图或操作",
+  "cmdk.ghostUnlock": "还有 {{count}} 条匹配 — 使用 Signal 解锁",
+  "cmdk.untitledItem": "无标题项",
+  "cmdk.clear": "清除"
 }
