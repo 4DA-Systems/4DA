@@ -70,13 +70,14 @@ const defaultAppState = {
 };
 
 let currentAppState = { ...defaultAppState };
+let currentUserContext: { interests?: Array<{ topic: string }> } | null = null;
 
 vi.mock('../store', () => ({
   useAppStore: (selector: (s: Record<string, unknown>) => unknown) => {
     const store = {
       appState: currentAppState,
       embeddingMode: null as string | null,
-      userContext: null as { interests?: Array<{ topic: string }> } | null,
+      userContext: currentUserContext,
       startAnalysis: mockStartAnalysis,
     };
     return selector(store);
@@ -117,6 +118,7 @@ describe('FirstRunTransition', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     currentAppState = { ...defaultAppState };
+    currentUserContext = null;
     mockStartAnalysis.mockClear();
     mockOnComplete.mockClear();
     vi.mocked(invoke).mockResolvedValue({ has_data: false });
@@ -542,7 +544,7 @@ describe('FirstRunTransition', () => {
     });
 
     // Should show narration for fetch stage
-    expect(screen.getByText('Connecting to 11 intelligence sources...')).toBeDefined();
+    expect(screen.getByText('Reading the developer internet — pulling from your intelligence sources...')).toBeDefined();
 
     // Should show progress percentage
     expect(screen.getByText('30%')).toBeDefined();
@@ -574,7 +576,10 @@ describe('FirstRunTransition', () => {
   // -------------------------------------------------------------------------
   // 18. Zero relevant items shows appropriate celebration message
   // -------------------------------------------------------------------------
-  it('shows profile learning message when zero relevant items', async () => {
+  it('shows honest fresh-picks message (no vanity 0) when profile is empty', async () => {
+    // No detected tech, no interests, 0 relevant -> profileEmpty: the celebration
+    // must NOT show a "0 relevant" vanity stat and must frame it honestly.
+    currentUserContext = null;
     currentAppState = {
       ...defaultAppState,
       analysisComplete: true,
@@ -592,10 +597,35 @@ describe('FirstRunTransition', () => {
       await vi.runAllTimersAsync();
     });
 
-    // Should show "0" as relevant count
-    expect(screen.getByText('0')).toBeDefined();
+    // Honest message + the "add a signal" nudge instead of "profile is learning"
+    expect(screen.getByText((content) => content.includes('ranks by what matters to you'))).toBeDefined();
+    expect(screen.getByText('Add your stack to start ranking')).toBeDefined();
+    // The vanity "relevant" stat label must be gone for a profileless run
+    expect(screen.queryByText('relevant')).toBeNull();
+  });
 
-    // Should show the profile learning message
+  it('shows profile-learning message when a profile exists but 0 relevant', async () => {
+    // Has an interest (profile not empty) yet 0 relevant -> the "learning"
+    // message is still correct (this path is NOT the cold-start fresh-picks one).
+    currentUserContext = { interests: [{ topic: 'rust' }] };
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: false, title: 'Item 1', url: 'https://test.com/1', final_score: 0.1 },
+        { relevant: false, title: 'Item 2', url: 'https://test.com/2', final_score: 0.05 },
+      ],
+    };
+
+    await act(async () => {
+      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    });
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(screen.getByText('0')).toBeDefined();
     expect(screen.getByText((content) => content.includes('Your profile is learning'))).toBeDefined();
   });
 });
