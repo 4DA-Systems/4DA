@@ -204,7 +204,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       {/* Step content */}
       <div className="max-w-2xl w-full">
         {step === 'welcome' && (
-          <WelcomeStep isAnimating={isAnimating} onNext={nextStep} onSkip={() => void handleSkipToContent()} />
+          // "Skip" routes to the choice gate — the honest decision point that
+          // surfaces provider status and the "keyword matching only" tradeoff —
+          // rather than bypassing straight to a silently keyword-only app. The
+          // gate still offers a one-click exit, so power users lose nothing.
+          <WelcomeStep isAnimating={isAnimating} onNext={nextStep} onSkip={() => setStep('choice')} />
         )}
 
         {step === 'taste' && (
