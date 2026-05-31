@@ -811,6 +811,110 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
             }
 
+            // ── Append-only telemetry / audit / learning tables ──────────────
+            // These accumulate one row per scoring cycle / AI artifact / trust
+            // event and previously had NO retention (unbounded growth). Windows
+            // are deliberately generous and consumer-verified so compound-learning
+            // data is never pruned before it is consumed. All non-fatal.
+
+            // scoring_events: per-cycle scoring telemetry. 90 days of trend history.
+            match conn.execute(
+                "DELETE FROM scoring_events WHERE cycle_ts < datetime('now', '-90 days')",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old scoring_events");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: scoring_events failed");
+                }
+            }
+
+            // glyph_audit: GEP debug/audit envelopes — debug-only, 14 days.
+            match conn.execute(
+                "DELETE FROM glyph_audit WHERE created_at < datetime('now', '-14 days')",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old glyph_audit");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: glyph_audit failed");
+                }
+            }
+
+            // provenance: AI-artifact traceability. 90 days — exceeds the longest
+            // realistic unprocessed-calibration age, so the fitter's LEFT JOIN to
+            // provenance for provider/model labels is never starved.
+            match conn.execute(
+                "DELETE FROM provenance WHERE created_at < datetime('now', '-90 days')",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old provenance");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: provenance failed");
+                }
+            }
+
+            // calibration_samples: ML calibration training data. ONLY prune rows
+            // already folded into a curve (processed_at IS NOT NULL). The fitter
+            // reads exclusively `processed_at IS NULL`, so pruning by time alone
+            // would silently delete samples still awaiting labels and break
+            // calibration. 90-day window on processed rows keeps curve audits intact.
+            match conn.execute(
+                "DELETE FROM calibration_samples WHERE processed_at IS NOT NULL AND created_at < datetime('now', '-90 days')",
+                [],
+            ) {
+                Ok(n) => { total_deleted += n; if n > 0 { info!(target: "4da::startup", deleted = n, "Startup cleanup: processed calibration_samples"); } }
+                Err(e) => { warn!(target: "4da::startup", error = %e, "Startup cleanup: calibration_samples failed"); }
+            }
+
+            // trust_events: trust ledger. Every consumer reads <=30-day windows and
+            // weekly precision is pre-aggregated into precision_stats, so raw events
+            // older than 180 days feed nothing downstream.
+            match conn.execute(
+                "DELETE FROM trust_events WHERE created_at < datetime('now', '-180 days')",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old trust_events");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: trust_events failed");
+                }
+            }
+
+            // accuracy_history: one row per period (UNIQUE), so growth is already
+            // slow — cap at a year of period rows for tidiness.
+            match conn.execute(
+                "DELETE FROM accuracy_history WHERE created_at < datetime('now', '-365 days')",
+                [],
+            ) {
+                Ok(n) => {
+                    total_deleted += n;
+                    if n > 0 {
+                        info!(target: "4da::startup", deleted = n, "Startup cleanup: old accuracy_history");
+                    }
+                }
+                Err(e) => {
+                    warn!(target: "4da::startup", error = %e, "Startup cleanup: accuracy_history failed");
+                }
+            }
+
             if total_deleted > 0 {
                 info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
                 // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,
