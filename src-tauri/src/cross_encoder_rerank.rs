@@ -12,18 +12,16 @@ use tracing::{debug, info, warn};
 use crate::scoring;
 
 #[cfg(feature = "fastembed-local")]
-use crate::error::FourDaError;
-
-#[cfg(feature = "fastembed-local")]
-use once_cell::sync::OnceCell;
-#[cfg(feature = "fastembed-local")]
 use parking_lot::Mutex;
 
+/// Loaded lazily and UNLOADED after each rerank pass (`unload_reranker`) to
+/// reclaim the ~1.5-2 GB ONNX arena. `Mutex<Option<_>>` (not `OnceCell`) so the
+/// model can be dropped and re-initialized; the lock serializes load/use/unload.
 #[cfg(feature = "fastembed-local")]
-static RERANKER_MODEL: OnceCell<Mutex<fastembed::TextRerank>> = OnceCell::new();
+static RERANKER_MODEL: Mutex<Option<fastembed::TextRerank>> = Mutex::new(None);
 
+/// True while the model is resident (drives `is_reranker_available`).
 static RERANKER_AVAILABLE: AtomicBool = AtomicBool::new(false);
-static RERANKER_INIT_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 
 /// Maximum number of candidates to rerank (keeps latency under 200ms on 4-core CPU).
 const MAX_RERANK_CANDIDATES: usize = 50;
@@ -130,12 +128,12 @@ fn available_memory_mb() -> u64 {
     sys.available_memory() / (1024 * 1024)
 }
 
+/// Load the cross-encoder model, RAM-gated. Returns `None` if free RAM is below
+/// the threshold or init fails — caller then falls back to PASIFA-only ranking.
+/// Caller holds the `RERANKER_MODEL` lock; this only constructs the model.
 #[cfg(feature = "fastembed-local")]
-fn ensure_reranker() -> bool {
-    if RERANKER_AVAILABLE.load(Ordering::Relaxed) {
-        return true;
-    }
-    // RAM gate (checked before the heavy load, re-checked until it succeeds).
+fn load_reranker() -> Option<fastembed::TextRerank> {
+    // RAM gate (re-checked on every (re)load, so it self-enables once RAM frees).
     let available_mb = available_memory_mb();
     if available_mb < RERANKER_MIN_AVAILABLE_MB {
         warn!(
@@ -144,46 +142,51 @@ fn ensure_reranker() -> bool {
             threshold_mb = RERANKER_MIN_AVAILABLE_MB,
             "Insufficient free RAM for cross-encoder reranker — using PASIFA-only ranking (findings #3 OOM guard)"
         );
-        return false;
-    }
-    if RERANKER_INIT_ATTEMPTED.swap(true, Ordering::SeqCst) {
-        // Another thread already attempted init — return whatever it decided.
-        return RERANKER_AVAILABLE.load(Ordering::Relaxed);
+        return None;
     }
 
-    let result = RERANKER_MODEL.get_or_try_init(|| {
-        let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
-        info!(
-            target: "4da::reranker",
-            cache = %cache_dir.display(),
-            "Initializing cross-encoder reranker (bge-reranker-base, ~85MB first download)"
-        );
+    let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
+    info!(
+        target: "4da::reranker",
+        cache = %cache_dir.display(),
+        "Initializing cross-encoder reranker (bge-reranker-base, ~85MB first download)"
+    );
 
-        let options = fastembed::RerankInitOptions::new(fastembed::RerankerModel::BGERerankerBase)
-            .with_cache_dir(cache_dir)
-            .with_show_download_progress(true);
+    let options = fastembed::RerankInitOptions::new(fastembed::RerankerModel::BGERerankerBase)
+        .with_cache_dir(cache_dir)
+        .with_show_download_progress(true);
 
-        fastembed::TextRerank::try_new(options)
-            .map(Mutex::new)
-            .map_err(|e| {
-                warn!(
-                    target: "4da::reranker",
-                    error = %e,
-                    "Cross-encoder reranker init failed — falling back to PASIFA-only ranking"
-                );
-                FourDaError::from(format!("reranker init: {e}"))
-            })
-    });
+    match fastembed::TextRerank::try_new(options) {
+        Ok(model) => {
+            RERANKER_AVAILABLE.store(true, Ordering::Relaxed);
+            Some(model)
+        }
+        Err(e) => {
+            warn!(
+                target: "4da::reranker",
+                error = %e,
+                "Cross-encoder reranker init failed — falling back to PASIFA-only ranking"
+            );
+            None
+        }
+    }
+}
 
-    let available = result.is_ok();
-    RERANKER_AVAILABLE.store(available, Ordering::Relaxed);
-    available
+/// Drop the cross-encoder model, reclaiming its ~1.5-2 GB ONNX arena. Called at
+/// the end of every rerank pass: the model is not touched again until the next
+/// analysis, and on a desktop sharing the user's RAM, idle-reclaim beats keeping
+/// it resident. Re-loads lazily (disk-cached, ~1-2s) on the next pass.
+#[cfg(feature = "fastembed-local")]
+pub(crate) fn unload_reranker() {
+    let mut guard = RERANKER_MODEL.lock();
+    if guard.take().is_some() {
+        RERANKER_AVAILABLE.store(false, Ordering::Relaxed);
+        info!(target: "4da::reranker", "Cross-encoder reranker unloaded — ONNX arena reclaimed until next pass");
+    }
 }
 
 #[cfg(not(feature = "fastembed-local"))]
-fn ensure_reranker() -> bool {
-    false
-}
+pub(crate) fn unload_reranker() {}
 
 /// Rerank candidates using the cross-encoder model.
 ///
@@ -199,15 +202,6 @@ pub(crate) fn rerank_candidates(query: &str, candidates: &[RerankCandidate]) -> 
 
     #[cfg(feature = "fastembed-local")]
     {
-        if !ensure_reranker() {
-            return passthrough(candidates);
-        }
-
-        let reranker = match RERANKER_MODEL.get() {
-            Some(m) => m,
-            None => return passthrough(candidates),
-        };
-
         let capped = candidates.len().min(MAX_RERANK_CANDIDATES);
         let documents: Vec<String> = candidates[..capped]
             .iter()
@@ -223,10 +217,19 @@ pub(crate) fn rerank_candidates(query: &str, candidates: &[RerankCandidate]) -> 
         let doc_refs: Vec<&str> = documents.iter().map(String::as_str).collect();
 
         let rerank_result = {
-            let mut model = reranker.lock();
-            // Some(batch_size) — NOT None. None batches all candidates at once,
-            // spiking activation memory to ~1.85 GB → native OOM (findings #3).
-            model.rerank(query, doc_refs.as_slice(), false, Some(RERANK_BATCH_SIZE))
+            // Lock, lazily (re)load if not resident, then rerank under the lock.
+            let mut guard = RERANKER_MODEL.lock();
+            if guard.is_none() {
+                *guard = load_reranker();
+            }
+            match guard.as_mut() {
+                // Some(batch_size) — NOT None. None batches all candidates at once,
+                // spiking activation memory to ~1.85 GB → native OOM (findings #3).
+                Some(model) => {
+                    model.rerank(query, doc_refs.as_slice(), false, Some(RERANK_BATCH_SIZE))
+                }
+                None => return passthrough(candidates),
+            }
         };
 
         match rerank_result {
@@ -363,6 +366,9 @@ pub(crate) fn apply_cross_encoder_reranking(
         query_len = query.len(),
         "Cross-encoder reranking applied to analysis results"
     );
+
+    // Pass complete — reclaim the model's ~1.5-2 GB ONNX arena until next time.
+    unload_reranker();
 }
 
 /// Check if the cross-encoder reranker is available (without initializing it).
