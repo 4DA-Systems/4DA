@@ -86,9 +86,9 @@ export const InstantSnapshotPanel = memo(function InstantSnapshotPanel({
                   {t('briefing.sourceItems', 'Source items')}
                 </h3>
                 <div className="space-y-2">
-                  {snapshot.items.map((item, i) => (
+                  {snapshot.items.slice(0, 8).map((item) => (
                     <a
-                      key={i}
+                      key={`${item.sourceType}:${item.title}`}
                       href={item.url && isSafeUrl(item.url) ? item.url : '#'}
                       target={item.url && isSafeUrl(item.url) ? '_blank' : undefined}
                       rel={item.url && isSafeUrl(item.url) ? 'noopener noreferrer' : undefined}

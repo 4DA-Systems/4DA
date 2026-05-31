@@ -108,10 +108,10 @@ export const FreeBriefingPanel = memo(function FreeBriefingPanel({
           <div>
             <h3 className="text-[9px] font-semibold tracking-[0.1em] text-text-muted uppercase mb-2">{t('briefing.sectionSignals')}</h3>
             <div className="space-y-1">
-              {freeBriefing.top_items?.map((item, i) => {
+              {freeBriefing.top_items?.slice(0, 8).map((item, i) => {
                 const pc = 'bg-text-muted';
                 return (
-                  <div key={i} className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-white/[0.02] transition-colors">
+                  <div key={`${item.source}:${item.title}`} className="flex items-start gap-2.5 py-1.5 px-2 rounded hover:bg-white/[0.02] transition-colors">
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5 ${pc}`} />
                     <div className="min-w-0 flex-1">
                       {item.url && isSafeUrl(item.url) ? (
@@ -138,8 +138,8 @@ export const FreeBriefingPanel = memo(function FreeBriefingPanel({
           {freeBriefing.stack_alerts && freeBriefing.stack_alerts.length > 0 && (
             <div>
               <h3 className="text-[9px] font-semibold tracking-[0.1em] text-amber-400 uppercase mb-2">{t('briefing.stackAlerts')}</h3>
-              {freeBriefing.stack_alerts.map((alert, i) => (
-                <div key={i} className="text-xs text-text-secondary py-0.5 pl-2">{getTranslated(`alert_${i}`, alert.title)}</div>
+              {freeBriefing.stack_alerts.slice(0, 5).map((alert, i) => (
+                <div key={`alert:${alert.title}`} className="text-xs text-text-secondary py-0.5 pl-2">{getTranslated(`alert_${i}`, alert.title)}</div>
               ))}
             </div>
           )}
@@ -147,8 +147,8 @@ export const FreeBriefingPanel = memo(function FreeBriefingPanel({
             <div>
               <h3 className="text-[9px] font-semibold tracking-[0.1em] text-amber-400 uppercase mb-2">{t('briefing.sectionBlindSpots')}</h3>
               <div className="space-y-1">
-                {freeBriefing.knowledge_gaps.map((gap, i) => (
-                  <div key={i} className="flex items-center justify-between px-2 py-1 rounded bg-amber-500/[0.03]">
+                {freeBriefing.knowledge_gaps.slice(0, 5).map((gap) => (
+                  <div key={gap.topic} className="flex items-center justify-between px-2 py-1 rounded bg-amber-500/[0.03]">
                     <span className="text-[11px] font-medium text-text-secondary">{gap.topic}</span>
                     <span className="text-[10px] font-mono text-text-muted">{t('briefing.daysSilent', { days: gap.days_since_last })}</span>
                   </div>

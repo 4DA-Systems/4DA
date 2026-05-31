@@ -40,8 +40,8 @@ export function FeedEchoBlock({ block }: Props) {
         )}
       </div>
       <div className="space-y-2">
-        {items.map((item, i) => (
-          <FeedEchoRow key={i} item={item} />
+        {items.slice(0, 15).map((item) => (
+          <FeedEchoRow key={`${item.source_type}:${item.matched_topic}:${item.title}`} item={item} />
         ))}
       </div>
     </div>
