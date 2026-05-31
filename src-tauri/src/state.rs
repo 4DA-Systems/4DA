@@ -55,16 +55,29 @@ pub(crate) fn get_analysis_abort() -> &'static Arc<AtomicBool> {
 /// Single source of truth — all connection opens should use this.
 ///
 /// Resolution order:
-/// 1. FOURDA_DB_PATH env var (explicit override)
-/// 2. data/4da.db relative to CARGO_MANIFEST_DIR (development builds)
-/// 3. Platform-specific app data directory (deployed builds)
+/// 1. FOURDA_DB_PATH env var (explicit db-file override)
+/// 2. FOURDA_DATA_DIR env var (data-dir override — keeps the DB co-located with
+///    the rest of the redirected data dir; mirrors `RuntimePaths::resolve`)
+/// 3. data/4da.db relative to CARGO_MANIFEST_DIR (development builds)
+/// 4. Platform-specific app data directory (deployed builds)
 pub(crate) fn get_db_path() -> PathBuf {
-    // 1. Explicit override via environment variable
+    // 1. Explicit db-file override via environment variable
     if let Ok(path) = std::env::var("FOURDA_DB_PATH") {
         return PathBuf::from(path);
     }
 
-    // 2. Development: relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
+    // 2. Data-dir override (isolated/cold-start/CI runs). The DB must follow the
+    //    same redirect as RuntimePaths (cache/logs/settings) or an override
+    //    silently splits state across two directories — the exact bug that made
+    //    a cold-start run read live data while writing logs to the throwaway dir.
+    if let Ok(dir) = std::env::var("FOURDA_DATA_DIR") {
+        let trimmed = dir.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed).join("4da.db");
+        }
+    }
+
+    // 3. Development: relative to project root (CARGO_MANIFEST_DIR = src-tauri/)
     let dev_path = {
         let mut base = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         base.pop(); // up from src-tauri/ to project root
