@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fuzzyScore } from './command-search-types';
 import { buildProviders, type ProviderDeps } from './command-search-providers';
 import type { CommandResult } from './command-search-types';
+import { openExternalUrl } from '../../lib/open-url';
 
 // Route `cmd` through a plain, swappable implementation rather than a vi.fn.
 // Vitest 3.x's vi.fn tracks the settled result of returned promises, which
@@ -20,6 +21,8 @@ vi.mock('../../lib/commands', () => ({
   },
 }));
 
+vi.mock('../../lib/open-url', () => ({ openExternalUrl: vi.fn() }));
+
 const t = (key: string, fallback?: string) => fallback ?? key;
 
 function deps(overrides: Partial<ProviderDeps> = {}): ProviderDeps {
@@ -29,6 +32,7 @@ function deps(overrides: Partial<ProviderDeps> = {}): ProviderDeps {
     onAnalyze: vi.fn(),
     onOpenSettings: vi.fn(),
     setSearchFocusItemId: vi.fn(),
+    isItemInFeed: () => false,
     ...overrides,
   };
 }
@@ -39,6 +43,7 @@ function run(provider: { query: (c: { query: string; signal: AbortSignal }) => u
 
 beforeEach(() => {
   cmdCalls.length = 0;
+  vi.mocked(openExternalUrl).mockClear();
   cmdImpl = () => Promise.resolve({ items: [], ghost_preview: null, is_pro: true, total_count: 0 });
 });
 
@@ -99,18 +104,34 @@ describe('intelligence provider', () => {
     expect(out.some(r => r.id === 'nlq-ghost')).toBe(true);
   });
 
-  it('deep-links an intelligence pick to the Signal view', async () => {
+  it('deep-links an in-feed pick to the Signal view', async () => {
     cmdImpl = () => Promise.resolve({
       items: [{ id: 42, file_path: null, file_name: 'X', preview: '', relevance: 0.5, source_type: 'hn', timestamp: null, match_reason: '' }],
       ghost_preview: null, is_pro: true, total_count: 1,
     });
     const setActiveView = vi.fn();
     const setSearchFocusItemId = vi.fn();
-    const intel = buildProviders(deps({ setActiveView, setSearchFocusItemId })).find(p => p.id === 'intelligence')!;
+    const intel = buildProviders(deps({ setActiveView, setSearchFocusItemId, isItemInFeed: () => true }))
+      .find(p => p.id === 'intelligence')!;
     const out = await run(intel, 'thing') as CommandResult[];
     out[0]!.run();
     expect(setSearchFocusItemId).toHaveBeenCalledWith(42);
     expect(setActiveView).toHaveBeenCalledWith('results');
+  });
+
+  it('opens the source URL for an off-feed pick (the inspect-bug fix)', async () => {
+    cmdImpl = () => Promise.resolve({
+      items: [{ id: 7, file_path: 'https://example.com/article', file_name: 'X', preview: '', relevance: 0.6, source_type: 'hn', timestamp: null, match_reason: '' }],
+      ghost_preview: null, is_pro: true, total_count: 1,
+    });
+    const setActiveView = vi.fn();
+    const setSearchFocusItemId = vi.fn();
+    const intel = buildProviders(deps({ setActiveView, setSearchFocusItemId, isItemInFeed: () => false }))
+      .find(p => p.id === 'intelligence')!;
+    const out = await run(intel, 'thing') as CommandResult[];
+    out[0]!.run();
+    expect(openExternalUrl).toHaveBeenCalledWith('https://example.com/article');
+    expect(setSearchFocusItemId).not.toHaveBeenCalled();
   });
 
   it('degrades to empty (never throws) when the backend errors', async () => {

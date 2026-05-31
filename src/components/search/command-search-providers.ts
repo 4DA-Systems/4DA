@@ -19,6 +19,7 @@
 
 import { cmd } from '../../lib/commands';
 import type { NLQResult } from '../../lib/commands';
+import { openExternalUrl } from '../../lib/open-url';
 import type { ActiveView } from '../../store/types';
 import {
   type CommandResult,
@@ -34,6 +35,8 @@ export interface ProviderDeps {
   onOpenSettings: () => void;
   /** Ask the Signal view to scroll to + expand a specific item after navigating to it. */
   setSearchFocusItemId: (id: number | null) => void;
+  /** True if the item is present in the current Signal feed (so the deep-link can land on it). */
+  isItemInFeed: (id: number) => boolean;
 }
 
 /** Minimum query length before the async intelligence backend is queried. */
@@ -184,9 +187,19 @@ function intelligenceProvider(deps: ProviderDeps): SearchProvider {
         score: item.relevance,
         badge: item.relevance.toFixed(2),
         run: () => {
-          // Deep-link: jump to the Signal view and ask it to scroll to + expand this item.
-          deps.setSearchFocusItemId(item.id);
-          deps.setActiveView('results');
+          // Search spans the whole indexed corpus, but the Signal feed only holds the
+          // current analysis results. Pick the action that actually works for THIS item:
+          if (deps.isItemInFeed(item.id)) {
+            // In the feed → deep-link: navigate and scroll to + expand it in context.
+            deps.setSearchFocusItemId(item.id);
+            deps.setActiveView('results');
+          } else if (item.file_path) {
+            // Off-feed (the common case) → open the source, like clicking a feed/brief item.
+            openExternalUrl(item.file_path);
+          } else {
+            // No source URL and not in the feed → best-effort navigate to Signal.
+            deps.setActiveView('results');
+          }
         },
       }));
 
