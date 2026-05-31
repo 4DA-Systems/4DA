@@ -1422,6 +1422,32 @@ fn normalize_score_offset(score: f32) -> f32 {
     }
 }
 
+/// Knee above which scores are soft-compressed toward the absolute ceiling.
+/// Below this, scores pass through untouched (mid/low calibration unaffected).
+const SOFT_CEILING_KNEE: f32 = 0.80;
+
+/// Soft-compress scores approaching the absolute ceiling so the top tier stays
+/// rankable instead of piling up at a hard clamp. Monotonic — preserves order.
+///
+/// Post-gate additive boosts (the score offset, topic-attention) push strong
+/// items past `final_ceiling.absolute_max`, where a hard `.min(1.0)` then
+/// flattened dozens of distinct items onto an identical 1.0 — destroying the
+/// ranking exactly where it matters most (the Brief's top slots) and breaking
+/// the design invariant that no heuristic item should display 100%.
+///
+/// This maps `(knee, +inf)` smoothly onto `(knee, cap)`: at the knee the output
+/// equals the input; above it the output asymptotically approaches `cap` while
+/// preserving relative order. Only scores above `knee` are affected.
+fn soft_ceiling(score: f32, knee: f32, cap: f32) -> f32 {
+    if score <= knee || cap <= knee {
+        score.min(cap)
+    } else {
+        let span = cap - knee;
+        let over = score - knee;
+        knee + span * (1.0 - (-over / span).exp())
+    }
+}
+
 // ============================================================================
 // Signal classification (mirrors V1 logic)
 // ============================================================================
@@ -1786,7 +1812,9 @@ pub(crate) fn score_item(
         } else {
             let avg_gap = matching_gaps.iter().sum::<f32>() / matching_gaps.len() as f32;
             let boost = ((avg_gap - 48.0) / (168.0 - 48.0)).clamp(0.0, 1.0) * 0.05;
-            (combined_score + boost).min(1.0)
+            // No hard clamp here — the final soft_ceiling handles the top end
+            // while preserving the differentiation this boost just added.
+            combined_score + boost
         }
     } else {
         combined_score
@@ -1815,6 +1843,17 @@ pub(crate) fn score_item(
         } else {
             combined_score
         };
+
+    // ── Final top-end de-saturation ───────────────────────────────────
+    // Keep the strongest items rankable (the Brief's top slots) and honor the
+    // "no item displays 100%" invariant. Post-gate boosts otherwise clamp many
+    // distinct items onto an identical 1.0; this spreads them monotonically
+    // just below the absolute ceiling. Only affects scores above the knee.
+    let combined_score = soft_ceiling(
+        combined_score,
+        SOFT_CEILING_KNEE,
+        scoring_config::FINAL_CEILING_ABSOLUTE_MAX,
+    );
 
     // ── Relevance determination ───────────────────────────────────────
     let bootstrap_mode = ctx.feedback_interaction_count < 10;
