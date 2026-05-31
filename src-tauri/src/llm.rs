@@ -506,7 +506,7 @@ impl LLMClient {
         let response = self
             .client
             .post(url)
-            .header("Authorization", format!("Bearer {}", self.provider.api_key))
+            .header("Authorization", format!("Bearer {}", self.provider.api_key.trim()))
             .header("content-type", "application/json")
             .json(&body)
             .send()
@@ -736,7 +736,7 @@ impl LLMClient {
         let response = self
             .client
             .post(url)
-            .header("Authorization", format!("Bearer {}", self.provider.api_key))
+            .header("Authorization", format!("Bearer {}", self.provider.api_key.trim()))
             .header("content-type", "application/json")
             .json(&body)
             .send()

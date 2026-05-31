@@ -26,7 +26,7 @@ pub(in crate::embeddings) async fn embed_texts_openai(
 
     let response = EMBEDDING_CLIENT
         .post("https://api.openai.com/v1/embeddings")
-        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Authorization", format!("Bearer {}", api_key.trim()))
         .json(&body)
         .send()
         .await
