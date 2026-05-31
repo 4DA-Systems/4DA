@@ -3056,5 +3056,18 @@
   "validation.found": "検出: {{label}} — {{count}} {{unit}}",
   "validation.items": "件",
   "validation.source": "ソース",
-  "validation.videos": "動画"
+  "validation.videos": "動画",
+  "cmdk.placeholder": "4DA が読み込んだすべてを検索…",
+  "cmdk.ariaLabel": "4DA を検索",
+  "cmdk.groupGoto": "移動",
+  "cmdk.groupAction": "アクション",
+  "cmdk.groupIntelligence": "インテリジェンス",
+  "cmdk.goToPrefix": "移動",
+  "cmdk.actionPrefix": "アクション",
+  "cmdk.loading": "検索中…",
+  "cmdk.empty": "一致なし",
+  "cmdk.emptyHint": "トピック、ビュー、またはアクションを試してください",
+  "cmdk.ghostUnlock": "他に {{count}} 件 — Signal でロック解除",
+  "cmdk.untitledItem": "無題の項目",
+  "cmdk.clear": "クリア"
 }

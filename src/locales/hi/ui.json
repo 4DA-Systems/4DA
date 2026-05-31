@@ -3093,5 +3093,18 @@
   "validation.found": "मिला: {{label}} — {{count}} {{unit}}",
   "validation.items": "आइटम",
   "validation.source": "स्रोत",
-  "validation.videos": "वीडियो"
+  "validation.videos": "वीडियो",
+  "cmdk.placeholder": "4DA ने जो कुछ पढ़ा है, सब खोजें…",
+  "cmdk.ariaLabel": "4DA खोजें",
+  "cmdk.groupGoto": "यहाँ जाएँ",
+  "cmdk.groupAction": "क्रियाएँ",
+  "cmdk.groupIntelligence": "इंटेलिजेंस",
+  "cmdk.goToPrefix": "यहाँ जाएँ",
+  "cmdk.actionPrefix": "क्रिया",
+  "cmdk.loading": "खोज रहे हैं…",
+  "cmdk.empty": "कोई मिलान नहीं",
+  "cmdk.emptyHint": "कोई विषय, व्यू या क्रिया आज़माएँ",
+  "cmdk.ghostUnlock": "{{count}} और मिलान — Signal के साथ अनलॉक करें",
+  "cmdk.untitledItem": "बिना शीर्षक वाला आइटम",
+  "cmdk.clear": "साफ़ करें"
 }

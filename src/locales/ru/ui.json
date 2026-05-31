@@ -3142,5 +3142,18 @@
   "validation.found": "Найдено: {{label}} — {{count}} {{unit}}",
   "validation.items": "элементов",
   "validation.source": "Источник",
-  "validation.videos": "видео"
+  "validation.videos": "видео",
+  "cmdk.placeholder": "Искать во всём, что прочитал 4DA…",
+  "cmdk.ariaLabel": "Поиск в 4DA",
+  "cmdk.groupGoto": "Перейти",
+  "cmdk.groupAction": "Действия",
+  "cmdk.groupIntelligence": "Аналитика",
+  "cmdk.goToPrefix": "Перейти",
+  "cmdk.actionPrefix": "Действие",
+  "cmdk.loading": "Поиск…",
+  "cmdk.empty": "Нет совпадений",
+  "cmdk.emptyHint": "Попробуйте тему, раздел или действие",
+  "cmdk.ghostUnlock": "Ещё {{count}} совпадений — откройте с Signal",
+  "cmdk.untitledItem": "Без названия",
+  "cmdk.clear": "Очистить"
 }

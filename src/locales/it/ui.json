@@ -3173,5 +3173,18 @@
     "recommendations": "Raccomandazioni",
     "empty": "Nessun punto cieco rilevato. La copertura del tuo stack è eccellente.",
     "loading": "Analisi della tua copertura in corso..."
-  }
+  },
+  "cmdk.placeholder": "Cerca in tutto ciò che 4DA ha letto…",
+  "cmdk.ariaLabel": "Cerca in 4DA",
+  "cmdk.groupGoto": "Vai a",
+  "cmdk.groupAction": "Azioni",
+  "cmdk.groupIntelligence": "Intelligence",
+  "cmdk.goToPrefix": "Vai a",
+  "cmdk.actionPrefix": "Azione",
+  "cmdk.loading": "Ricerca…",
+  "cmdk.empty": "Nessun risultato",
+  "cmdk.emptyHint": "Prova un argomento, una vista o un'azione",
+  "cmdk.ghostUnlock": "Altri {{count}} risultati — sblocca con Signal",
+  "cmdk.untitledItem": "Elemento senza titolo",
+  "cmdk.clear": "Cancella"
 }

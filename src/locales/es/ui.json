@@ -3119,5 +3119,18 @@
     "recommendations": "Recomendaciones",
     "empty": "No se detectaron puntos ciegos. Tu cobertura de stack es excelente.",
     "loading": "Analizando tu cobertura..."
-  }
+  },
+  "cmdk.placeholder": "Busca todo lo que 4DA ha leído…",
+  "cmdk.ariaLabel": "Buscar en 4DA",
+  "cmdk.groupGoto": "Ir a",
+  "cmdk.groupAction": "Acciones",
+  "cmdk.groupIntelligence": "Inteligencia",
+  "cmdk.goToPrefix": "Ir a",
+  "cmdk.actionPrefix": "Acción",
+  "cmdk.loading": "Buscando…",
+  "cmdk.empty": "Sin coincidencias",
+  "cmdk.emptyHint": "Prueba un tema, una vista o una acción",
+  "cmdk.ghostUnlock": "{{count}} coincidencias más: desbloquéalas con Signal",
+  "cmdk.untitledItem": "Elemento sin título",
+  "cmdk.clear": "Borrar"
 }
