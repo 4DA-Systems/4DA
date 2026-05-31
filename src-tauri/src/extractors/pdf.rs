@@ -18,13 +18,58 @@ impl PdfExtractor {
         Self
     }
 
-    /// Extract text from a PDF file using pdf-extract
+    /// Extract text from a PDF file using pdf-extract.
+    ///
+    /// `pdf_extract` (and the `lopdf` it builds on) can *panic* — not merely
+    /// return `Err` — on malformed, encrypted, or otherwise hostile PDFs.
+    /// Extraction runs synchronously inside the file-watcher callback
+    /// (`ace::process_file_changes`), so an unguarded panic would unwind into
+    /// and kill that thread, silently stopping file monitoring for the session.
+    /// We contain the panic with `catch_unwind` and degrade to a normal `Err`,
+    /// so a single bad PDF can never crash extraction.
     fn extract_text(&self, path: &Path) -> Result<String> {
-        pdf_extract::extract_text(path).context("Failed to extract text from PDF")
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            pdf_extract::extract_text(path)
+        }));
+        match outcome {
+            Ok(result) => result.context("Failed to extract text from PDF"),
+            Err(_) => {
+                tracing::warn!(
+                    target: "4da::extractors",
+                    path = %sanitize_path(&path.to_string_lossy()),
+                    "PDF text extraction panicked (malformed/encrypted PDF) — skipping file"
+                );
+                Err("PDF text extraction panicked (malformed or unsupported PDF)".into())
+            }
+        }
     }
 
-    /// Extract metadata from a PDF using lopdf
+    /// Extract metadata from a PDF using lopdf.
+    ///
+    /// `lopdf` can panic anywhere across `load` / `get_pages` / `get_object` on
+    /// corrupt input, so the entire best-effort block is contained in a single
+    /// `catch_unwind`. Metadata is non-essential: on any panic we return empty
+    /// metadata rather than aborting extraction.
     fn extract_metadata(&self, path: &Path) -> HashMap<String, String> {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            Self::extract_metadata_inner(path)
+        }));
+        match outcome {
+            Ok(metadata) => metadata,
+            Err(_) => {
+                tracing::warn!(
+                    target: "4da::extractors",
+                    path = %sanitize_path(&path.to_string_lossy()),
+                    "PDF metadata extraction panicked — returning empty metadata"
+                );
+                HashMap::new()
+            }
+        }
+    }
+
+    /// The lopdf-backed metadata extraction body. Separated so the whole block
+    /// can be wrapped in `catch_unwind` by [`Self::extract_metadata`].
+    fn extract_metadata_inner(path: &Path) -> HashMap<String, String> {
         let mut metadata = HashMap::new();
 
         // Try to load PDF with lopdf for metadata
@@ -237,6 +282,33 @@ mod tests {
 
         assert_eq!(pages.len(), 1);
         assert_eq!(pages[0].page_number, 1);
+    }
+
+    /// A file with a valid PDF header but a garbage body must surface as an
+    /// `Err`, never a panic — this exercises the `catch_unwind` guards around
+    /// the third-party `pdf_extract` / `lopdf` calls.
+    #[test]
+    fn test_corrupt_pdf_does_not_panic() {
+        let extractor = PdfExtractor::new();
+        let dir = std::env::temp_dir().join("4da_pdf_corrupt_test");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("corrupt.pdf");
+        // Looks like a PDF (header) but the body is hostile binary garbage.
+        fs::write(
+            &path,
+            b"%PDF-1.7\n\xff\xff\xde\xad\xbe\xef\x00\x01 not a real pdf body \xc0\xc1",
+        )
+        .unwrap();
+
+        // Must return Err (or empty-text Err), never unwind into the caller.
+        let result = extractor.extract(&path);
+        assert!(result.is_err(), "corrupt PDF should error, not panic");
+
+        // Metadata extraction on the same garbage must also stay contained.
+        let metadata = extractor.extract_metadata(&path);
+        let _ = metadata; // empty or partial is fine; the point is no panic
+
+        let _ = fs::remove_file(&path);
     }
 
     #[test]
