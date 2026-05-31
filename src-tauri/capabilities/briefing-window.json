@@ -9,6 +9,7 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-close",
-    "opener:default"
+    "opener:default",
+    "victauri:default"
   ]
 }
