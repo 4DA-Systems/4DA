@@ -122,7 +122,7 @@ where
 
     let response = client
         .post(url)
-        .header("x-api-key", &provider.api_key)
+        .header("x-api-key", provider.api_key.trim())
         .header("anthropic-version", "2023-06-01")
         .header("content-type", "application/json")
         .json(&body)
@@ -254,7 +254,7 @@ where
 
     let response = client
         .post(url)
-        .header("Authorization", format!("Bearer {}", provider.api_key))
+        .header("Authorization", format!("Bearer {}", provider.api_key.trim()))
         .header("content-type", "application/json")
         .json(&body)
         .send()
