@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useState, useRef, useEffect } from 'react';
+import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslation } from 'react-i18next';
 import type { RenderProvenance } from '../../types/channels';
 
@@ -58,7 +59,7 @@ export function ProvenanceTooltip({ provenance, children }: Props) {
               <p className="text-white text-sm font-medium leading-tight">
                 {title}
               </p>
-              {provenance.source_urls[i] && (
+              {provenance.source_urls[i] && isSafeUrl(provenance.source_urls[i]) && (
                 <a
                   href={provenance.source_urls[i]}
                   target="_blank"

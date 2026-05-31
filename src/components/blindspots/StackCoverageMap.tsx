@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useState, useCallback } from 'react';
+import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { recordTrustEvent } from '../../lib/trust-feedback';
@@ -32,7 +33,7 @@ const SignalRow = memo(function SignalRow({
       <div className="flex items-start gap-2.5">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-0.5">
-            {cite?.url ? (
+            {cite?.url && isSafeUrl(cite.url) ? (
               <a
                 href={cite.url}
                 target="_blank"
