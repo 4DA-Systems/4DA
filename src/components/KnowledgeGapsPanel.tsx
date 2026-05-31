@@ -33,14 +33,17 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const isColdStart = useColdStartGate();
   const [items, setItems] = useState<EvidenceItem[]>([]);
   const [expanded, setExpanded] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
         const feed = await cmd('get_knowledge_gaps');
         setItems(feed.items);
+        setLoaded(true);
       } catch {
-        // Knowledge gaps are optional
+        // Knowledge gaps are optional — leave `loaded` false so a FAILED fetch
+        // never masquerades as the "no gaps — you're current" success state.
       }
     };
     void load();
@@ -50,8 +53,10 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
     (it) => it.urgency === 'critical' || it.urgency === 'high',
   ).length;
 
-  // Intelligence Doctrine Rule 6: silent until data arrives
-  if (isColdStart && items.length === 0) return null;
+  // Intelligence Doctrine Rule 6: silent until data arrives. Also silent until a
+  // SUCCESSFUL load (loaded) — a failed/pending fetch must not render the
+  // "no gaps — your knowledge is current" assurance with an empty list.
+  if ((isColdStart || !loaded) && items.length === 0) return null;
 
   return (
     <ProGate feature={t('knowledgeGaps.feature')}>

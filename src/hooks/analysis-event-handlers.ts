@@ -70,6 +70,12 @@ export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
   }));
   useAppStore.getState().addToast('success', i18n.t('analysis.complete', { count: relevantCount }));
 
+  // Re-sync source health so the cold-start gate reflects the data THIS analysis
+  // just fetched. It is loaded once at mount and would otherwise stay stale —
+  // leaving the confident-negative panels either falsely "all clear" or stuck
+  // silent after the system is genuinely warm.
+  void useAppStore.getState().loadSourceHealth();
+
   // Auto-enable monitoring after first successful analysis
   const { monitoring } = useAppStore.getState();
   if (monitoring && !monitoring.enabled && relevantCount > 0) {
