@@ -304,11 +304,14 @@ fn get_or_init_fastembed(
     })
 }
 
-/// Embedding batch size. Same OOM class as the cross-encoder reranker
-/// (findings #3 antibody): passing `None` embeds ALL texts in a single ONNX
-/// batch, spiking activation memory on large batches (e.g. re-embedding ~1000
-/// items). An explicit batch keeps peak memory bounded; fastembed still
-/// processes the full input, just in chunks.
+/// Embedding chunk size. Same OOM class as the cross-encoder reranker
+/// (findings #3 antibody): embedding ALL texts in a single ONNX batch spikes
+/// activation memory on large inputs (e.g. re-embedding ~1000 items). We bound
+/// peak memory by chunking the input HERE, then pass `None` to fastembed's own
+/// batching — which is incompatible with the dynamically-quantized model
+/// (SnowflakeArcticEmbedMQ): `model.embed(.., Some(n))` errors with "Dynamic
+/// quantization cannot be used with batching." Chunking at this layer keeps the
+/// memory guard without tripping that constraint, regardless of the caller.
 #[cfg(feature = "fastembed-local")]
 const EMBED_BATCH_SIZE: usize = 32;
 
@@ -316,10 +319,17 @@ const EMBED_BATCH_SIZE: usize = 32;
 pub(in crate::embeddings) fn embed_texts_fastembed_sync(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     let model_mutex = get_or_init_fastembed()?;
     let mut model = model_mutex.lock();
-    let str_refs: Vec<&str> = texts.iter().map(String::as_str).collect();
-    model
-        .embed(str_refs, Some(EMBED_BATCH_SIZE))
-        .map_err(|e| FourDaError::from(format!("fastembed embed: {e}")))
+    let mut out = Vec::with_capacity(texts.len());
+    for chunk in texts.chunks(EMBED_BATCH_SIZE) {
+        let str_refs: Vec<&str> = chunk.iter().map(String::as_str).collect();
+        // `None`: bound memory via the chunk above, not fastembed's internal
+        // batching (which the quantized model rejects).
+        let embedded = model
+            .embed(str_refs, None)
+            .map_err(|e| FourDaError::from(format!("fastembed embed: {e}")))?;
+        out.extend(embedded);
+    }
+    Ok(out)
 }
 
 #[cfg(feature = "fastembed-local")]
