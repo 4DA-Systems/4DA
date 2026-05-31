@@ -11,7 +11,7 @@ const DISMISS_DURATIONS = {
   critical: 8000,
   alert: 6000,
   advisory: 5000,
-  watch: 4000,
+  watch: 6000, // was 4000 — give the ~4.8s border glide room to finish
 };
 
 // ---------------------------------------------------------------------------
