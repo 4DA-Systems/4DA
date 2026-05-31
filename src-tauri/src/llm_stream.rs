@@ -254,7 +254,10 @@ where
 
     let response = client
         .post(url)
-        .header("Authorization", format!("Bearer {}", provider.api_key.trim()))
+        .header(
+            "Authorization",
+            format!("Bearer {}", provider.api_key.trim()),
+        )
         .header("content-type", "application/json")
         .json(&body)
         .send()
