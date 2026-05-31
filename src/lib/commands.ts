@@ -1294,10 +1294,53 @@ interface ProfileCompleteness {
   missing_keys: string[];
 }
 
+/** One matched item from `natural_language_query` (mirrors Rust `QueryResultItem`). */
+interface NlqQueryItem {
+  id: number;
+  file_path: string | null;
+  file_name: string | null;
+  preview: string;
+  relevance: number;
+  source_type: string;
+  timestamp: string | null;
+  match_reason: string;
+}
+
+/** Free-tier ghost preview (mirrors Rust `GhostPreview`). */
+interface NlqGhostPreview {
+  total_results: number;
+  hidden_results: number;
+  decision_count: number;
+  gap_count: number;
+  synthesis_available: boolean;
+}
+
+/**
+ * Result of `natural_language_query` — mirrors the Rust `QueryResult` struct as
+ * serde serializes it (snake_case). The previous shape ({ results, interpretation })
+ * never matched the backend payload; corrected 2026-05-31 when the command gained
+ * its first frontend consumer (the global command search).
+ */
 interface NLQResult {
   query: string;
-  results: SourceRelevance[];
-  interpretation: string;
+  intent: string;
+  items: NlqQueryItem[];
+  total_count: number;
+  execution_ms: number;
+  summary: string | null;
+  parsed: {
+    keywords: string[];
+    entities: string[];
+    time_range: { start: string; end: string; relative: string | null } | null;
+    file_types: string[];
+    sentiment: string | null;
+    confidence: number;
+  };
+  stack_context: Array<{ name: string; category: string; relevant: boolean }>;
+  related_decisions: Array<{ id: number; subject: string; decision: string; relation: string }>;
+  knowledge_gaps: Array<{ technology: string; days_stale: number; severity: string }>;
+  ghost_preview: NlqGhostPreview | null;
+  is_pro: boolean;
 }
 
 interface ScoreAutopsyResult {

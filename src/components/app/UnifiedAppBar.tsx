@@ -10,6 +10,7 @@ import { OllamaStatus } from '../OllamaStatus';
 import { SystemHealthDot } from '../SystemHealthDot';
 import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
+import { CommandSearch } from '../search/CommandSearch';
 const ProValueBadge = lazy(() => import('../ProValueBadge').then(m => ({ default: m.ProValueBadge })));
 
 // ============================================================================
@@ -97,8 +98,10 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         {/* Divider */}
         <div className="w-px h-6 bg-border flex-shrink-0" aria-hidden="true" />
 
-        {/* Spacer */}
-        <div className="flex-1" />
+        {/* Center: global command search (fills the formerly-empty spacer) */}
+        <div className="flex-1 flex justify-center min-w-0 px-2">
+          <CommandSearch onAnalyze={onAnalyze} onOpenSettings={onOpenSettings} />
+        </div>
 
         {/* Right: badges + actions */}
         <div className="flex items-center gap-2 flex-shrink-0">
