@@ -198,7 +198,10 @@ export function handleMorningBriefingReady(
     useAppStore.getState().setMorningBriefData({
       title,
       totalRelevant: total_relevant,
-      items: items.map(i => ({
+      // Cap at the data boundary so the store can never hold a flood — the
+      // backend payload size is not guaranteed (cf. the 2026-05-19 200-item
+      // UI-flood incident). The panel renders fewer (top 8) than this bound.
+      items: items.slice(0, 12).map(i => ({
         title: i.title,
         sourceType: i.source_type,
         score: i.score,

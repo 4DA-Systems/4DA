@@ -111,9 +111,9 @@ export const MorningBriefPanel = memo(function MorningBriefPanel({
               {t('briefing.sourceItems', 'Source items')}
             </h3>
             <div className="space-y-2">
-              {morningBriefData.items.map((item, i) => (
+              {morningBriefData.items.slice(0, 8).map((item) => (
                 <div
-                  key={i}
+                  key={`${item.sourceType}:${item.title}`}
                   className="block pl-2 border-l-2 border-border py-1"
                 >
                   <p className="text-xs text-text-primary leading-snug line-clamp-2">{item.title}</p>
