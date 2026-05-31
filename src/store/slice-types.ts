@@ -100,6 +100,10 @@ export interface SettingsSlice {
   settingsForm: SettingsForm;
   settingsStatus: string;
   showOnboarding: boolean;
+  /** True once the initial loadSettings() resolves (success OR failure). Gates
+   *  the splash so the app shell never flashes before the onboarding decision
+   *  is known on a slow first-run IPC. */
+  settingsLoaded: boolean;
   ollamaStatus: OllamaStatus | null;
   ollamaModels: string[];
   modelRegistry: ModelRegistryData | null;

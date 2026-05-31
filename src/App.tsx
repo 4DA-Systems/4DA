@@ -54,7 +54,12 @@ function App() {
   const { t } = useTranslation();
   const { zoom, showIndicator } = useUiZoom();
   // Local UI state
-  const [showSplash, setShowSplash] = useState(true);
+  const [splashMinElapsed, setSplashMinElapsed] = useState(false);
+  const settingsLoaded = useAppStore(s => s.settingsLoaded);
+  // Keep the splash up until BOTH the min display time elapsed AND the initial
+  // settings load resolved — otherwise the bare app shell flashes before the
+  // onboarding decision is known on a slow first-run IPC (audit H3).
+  const showSplash = !(splashMinElapsed && settingsLoaded);
   const showSettings = useAppStore(s => s.showSettings);
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
@@ -213,7 +218,7 @@ function App() {
       <ViewErrorBoundary viewName="First Run">
         {/* Splash Screen */}
         {showSplash && (
-          <SplashScreen onComplete={() => setShowSplash(false)} minimumDisplayTime={800} />
+          <SplashScreen onComplete={() => setSplashMinElapsed(true)} minimumDisplayTime={800} />
         )}
 
         {/* Onboarding Flow (first run) — lazy-loaded */}
