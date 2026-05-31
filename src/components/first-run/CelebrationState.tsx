@@ -68,10 +68,13 @@ export function CelebrationState({
 }: CelebrationStateProps) {
   const { t } = useTranslation();
   const setShowSettings = useAppStore(s => s.setShowSettings);
+  const setSettingsInitialTab = useAppStore(s => s.setSettingsInitialTab);
   const matchReason = topSignal ? buildMatchReason(topSignal, t) : null;
 
-  // Open Settings (where context folders + stack live) then drop into results.
+  // Deep-link straight to the Projects tab (folders + stack discovery) — not the
+  // General tab — then drop into results so Settings is the visible surface.
   const handleAddSignal = () => {
+    setSettingsInitialTab('projects');
     setShowSettings(true);
     onDismiss('results');
   };

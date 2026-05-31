@@ -254,7 +254,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         phase === 'intelligence' ? 'Showing project intelligence' :
         phase === 'fetching' ? 'Scanning sources' :
         phase === 'analyzing' ? 'Analyzing results' :
-        phase === 'celebrating' ? `Analysis complete: ${relevantCount} relevant items found` :
+        phase === 'celebrating' ? (profileEmpty ? `Scan complete: ${totalCount} items analyzed` : `Analysis complete: ${relevantCount} relevant items found`) :
         'Completing'
       }
       className={`fixed inset-0 z-40 bg-bg-primary flex flex-col items-center justify-center transition-opacity duration-300 ${

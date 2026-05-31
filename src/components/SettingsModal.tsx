@@ -41,6 +41,8 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const tier = useAppStore(s => s.tier);
   const showTeamInviteDialog = useAppStore(s => s.showTeamInviteDialog);
   const setShowTeamInviteDialog = useAppStore(s => s.setShowTeamInviteDialog);
+  const settingsInitialTab = useAppStore(s => s.settingsInitialTab);
+  const setSettingsInitialTab = useAppStore(s => s.setSettingsInitialTab);
   const isTeamOrEnterprise = tier === 'team' || tier === 'enterprise';
 
   // Dynamically add Team tab only for Team/Enterprise tiers
@@ -115,6 +117,17 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   }, [initialized]);
 
   const handleTabChange = (tab: SettingsTab) => { setActiveTab(tab); initTab(tab); };
+
+  // Honor a one-shot deep link (e.g. the first-run "Add your stack" CTA opens
+  // straight to Projects, where folders/stack are added — General is useless
+  // for that and nobody finds the Projects tab on their own).
+  useEffect(() => {
+    if (settingsInitialTab && TAB_IDS.includes(settingsInitialTab as SettingsTab)) {
+      handleTabChange(settingsInitialTab as SettingsTab);
+      setSettingsInitialTab(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run when the deep link is set
+  }, [settingsInitialTab]);
 
   // Focus trap
   useEffect(() => {

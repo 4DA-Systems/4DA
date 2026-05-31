@@ -50,6 +50,9 @@ export type SignalViewMode = 'list' | 'graph';
 
 export interface UiSlice {
   showSettings: boolean;
+  /** One-shot deep link: the Settings tab to open on next show (e.g. 'projects'
+   *  from the first-run "Add your stack" CTA). Consumed + cleared on open. */
+  settingsInitialTab: string | null;
   showSplash: boolean;
   activeView: ActiveView;
   signalViewMode: SignalViewMode;
@@ -60,6 +63,7 @@ export interface UiSlice {
   /** Item id the command search asked the Signal view to scroll to + expand; null when none pending. */
   searchFocusItemId: number | null;
   setShowSettings: (show: boolean) => void;
+  setSettingsInitialTab: (tab: string | null) => void;
   setShowSplash: (show: boolean) => void;
   setActiveView: (view: ActiveView) => void;
   setSignalViewMode: (mode: SignalViewMode) => void;

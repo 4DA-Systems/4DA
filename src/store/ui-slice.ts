@@ -6,6 +6,7 @@ const VALID_VIEWS: ActiveView[] = ['briefing', 'results', 'preemption', 'blindsp
 
 export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => ({
   showSettings: false,
+  settingsInitialTab: null,
   showSplash: true,
   activeView: 'briefing',
   signalViewMode: 'list',
@@ -16,6 +17,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => (
   searchFocusItemId: null,
 
   setShowSettings: (show) => set({ showSettings: show }),
+  setSettingsInitialTab: (tab) => set({ settingsInitialTab: tab }),
   setShowSplash: (show) => set({ showSplash: show }),
   setActiveView: (view) => {
     if (VALID_VIEWS.includes(view)) set({ activeView: view });
