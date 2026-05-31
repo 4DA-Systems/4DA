@@ -12,9 +12,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { buildProviders, type ProviderDeps } from './command-search-providers';
 import { GROUP_ORDER, type CommandGroup, type CommandResult } from './command-search-types';
+import { frecencyBoost } from '../../lib/frecency';
 
 const DEBOUNCE_MS = 180;
 const ASYNC_MIN_CHARS = 2;
+const ASYNC_CACHE_MAX = 24;
 
 function orderResults(all: CommandResult[]): CommandResult[] {
   const byGroup = new Map<CommandGroup, CommandResult[]>();
@@ -44,10 +46,10 @@ export interface UseCommandSearch {
 }
 
 export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
-  const { t, setActiveView, onAnalyze, onOpenSettings } = deps;
+  const { t, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId } = deps;
   const providers = useMemo(
-    () => buildProviders({ t, setActiveView, onAnalyze, onOpenSettings }),
-    [t, setActiveView, onAnalyze, onOpenSettings],
+    () => buildProviders({ t, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId }),
+    [t, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId],
   );
 
   const [query, setQueryState] = useState('');
@@ -59,6 +61,9 @@ export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
   const reqIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // LRU cache of async (intelligence) results, keyed by trimmed query, so
+  // backspacing or re-running a recent query is instant and skips the backend.
+  const asyncCacheRef = useRef<Map<string, CommandResult[]>>(new Map());
 
   const runProviders = useCallback((rawQuery: string) => {
     const trimmed = rawQuery.trim();
@@ -92,6 +97,17 @@ export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
       setLoading(false);
       return;
     }
+    // LRU cache hit — serve instantly, no debounce, no backend round-trip.
+    const cache = asyncCacheRef.current;
+    const cached = cache.get(trimmed);
+    if (cached) {
+      cache.delete(trimmed);
+      cache.set(trimmed, cached); // bump recency
+      setAsyncResults(cached);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     debounceRef.current = setTimeout(() => {
       void Promise.allSettled(
@@ -101,6 +117,12 @@ export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
         if (reqId !== reqIdRef.current || controller.signal.aborted) return;
         const out: CommandResult[] = [];
         for (const s of settled) if (s.status === 'fulfilled') out.push(...s.value);
+        // Store in the LRU, evicting the oldest entry past capacity.
+        cache.set(trimmed, out);
+        if (cache.size > ASYNC_CACHE_MAX) {
+          const oldest = cache.keys().next().value;
+          if (oldest !== undefined) cache.delete(oldest);
+        }
         setAsyncResults(out);
         setLoading(false);
       });
@@ -117,10 +139,15 @@ export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
     if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
-  const results = useMemo(
-    () => orderResults([...syncResults, ...asyncResults]),
-    [syncResults, asyncResults],
-  );
+  const results = useMemo(() => {
+    // Apply the frecency boost before ordering so frequently/recently chosen
+    // results float up within their group — the palette learns your habits.
+    const merged = [...syncResults, ...asyncResults].map(r => ({
+      ...r,
+      score: r.score + frecencyBoost(r.id),
+    }));
+    return orderResults(merged);
+  }, [syncResults, asyncResults]);
 
   // Maintain a valid active selection, defaulting to the first row.
   useEffect(() => {

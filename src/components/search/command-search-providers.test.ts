@@ -28,6 +28,7 @@ function deps(overrides: Partial<ProviderDeps> = {}): ProviderDeps {
     setActiveView: vi.fn(),
     onAnalyze: vi.fn(),
     onOpenSettings: vi.fn(),
+    setSearchFocusItemId: vi.fn(),
     ...overrides,
   };
 }
@@ -96,6 +97,20 @@ describe('intelligence provider', () => {
     expect(out[0]!.title).toBe('tokio 1.40');
     expect(out[0]!.badge).toBe('0.92');
     expect(out.some(r => r.id === 'nlq-ghost')).toBe(true);
+  });
+
+  it('deep-links an intelligence pick to the Signal view', async () => {
+    cmdImpl = () => Promise.resolve({
+      items: [{ id: 42, file_path: null, file_name: 'X', preview: '', relevance: 0.5, source_type: 'hn', timestamp: null, match_reason: '' }],
+      ghost_preview: null, is_pro: true, total_count: 1,
+    });
+    const setActiveView = vi.fn();
+    const setSearchFocusItemId = vi.fn();
+    const intel = buildProviders(deps({ setActiveView, setSearchFocusItemId })).find(p => p.id === 'intelligence')!;
+    const out = await run(intel, 'thing') as CommandResult[];
+    out[0]!.run();
+    expect(setSearchFocusItemId).toHaveBeenCalledWith(42);
+    expect(setActiveView).toHaveBeenCalledWith('results');
   });
 
   it('degrades to empty (never throws) when the backend errors', async () => {

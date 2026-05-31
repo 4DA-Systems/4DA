@@ -24,17 +24,19 @@ export function ResultsView({
   const { t } = useTranslation();
   const { getTranslated, requestTranslation } = useTranslatedContent();
   // Data selectors (may change, use useShallow)
-  const { state, feedbackGiven, discoveredContext, expandedItem } = useAppStore(
+  const { state, feedbackGiven, discoveredContext, expandedItem, searchFocusItemId } = useAppStore(
     useShallow((s) => ({
       state: s.appState,
       feedbackGiven: s.feedbackGiven,
       discoveredContext: s.discoveredContext,
       expandedItem: s.expandedItem,
+      searchFocusItemId: s.searchFocusItemId,
     })),
   );
 
   // Action selectors (stable references)
   const setExpandedItem = useAppStore(s => s.setExpandedItem);
+  const setSearchFocusItemId = useAppStore(s => s.setSearchFocusItemId);
   const startAnalysis = useAppStore(s => s.startAnalysis);
   const loadContextFiles = useAppStore(s => s.loadContextFiles);
   const clearContext = useAppStore(s => s.clearContext);
@@ -93,6 +95,26 @@ export function ResultsView({
     }
     return starts;
   }, [filteredResults, sortBy]);
+
+  // Deep-link from the command search: scroll to + expand a specific item.
+  useEffect(() => {
+    if (searchFocusItemId == null) return;
+    const idx = filteredResults.findIndex(r => r.id === searchFocusItemId);
+    if (idx >= 0) {
+      const id = searchFocusItemId;
+      requestAnimationFrame(() => virtualizer.scrollToIndex(idx, { align: 'center' }));
+      setExpandedItem(id);
+      setSearchFocusItemId(null);
+      return;
+    }
+    // Hidden by the relevance filter but present in the full set — reveal and re-run.
+    if (showOnlyRelevant && state.relevanceResults.some(r => r.id === searchFocusItemId)) {
+      setShowOnlyRelevant(false);
+      return;
+    }
+    // Off-feed corpus item not in this list — clear; the user is already on Signal.
+    setSearchFocusItemId(null);
+  }, [searchFocusItemId, filteredResults, virtualizer, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
 
   useEffect(() => {
     const items = [

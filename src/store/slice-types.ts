@@ -57,6 +57,8 @@ export interface UiSlice {
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
   embeddingStatus: EmbeddingStatus | undefined;
+  /** Item id the command search asked the Signal view to scroll to + expand; null when none pending. */
+  searchFocusItemId: number | null;
   setShowSettings: (show: boolean) => void;
   setShowSplash: (show: boolean) => void;
   setActiveView: (view: ActiveView) => void;
@@ -65,6 +67,7 @@ export interface UiSlice {
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;
   setEmbeddingStatus: (status: EmbeddingStatus | undefined) => void;
+  setSearchFocusItemId: (id: number | null) => void;
 }
 
 export interface ToolkitSlice {

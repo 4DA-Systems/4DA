@@ -32,6 +32,8 @@ export interface ProviderDeps {
   setActiveView: (view: ActiveView) => void;
   onAnalyze: () => void;
   onOpenSettings: () => void;
+  /** Ask the Signal view to scroll to + expand a specific item after navigating to it. */
+  setSearchFocusItemId: (id: number | null) => void;
 }
 
 /** Minimum query length before the async intelligence backend is queried. */
@@ -181,7 +183,11 @@ function intelligenceProvider(deps: ProviderDeps): SearchProvider {
         subtitle: item.match_reason?.trim() || item.source_type,
         score: item.relevance,
         badge: item.relevance.toFixed(2),
-        run: () => deps.setActiveView('results'),
+        run: () => {
+          // Deep-link: jump to the Signal view and ask it to scroll to + expand this item.
+          deps.setSearchFocusItemId(item.id);
+          deps.setActiveView('results');
+        },
       }));
 
       // Ghost upsell row — free tier sees how much more Signal unlocks.

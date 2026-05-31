@@ -13,6 +13,7 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => (
   firstRunDismissed: false,
   embeddingMode: null,
   embeddingStatus: undefined,
+  searchFocusItemId: null,
 
   setShowSettings: (show) => set({ showSettings: show }),
   setShowSplash: (show) => set({ showSplash: show }),
@@ -24,4 +25,5 @@ export const createUiSlice: StateCreator<AppStore, [], [], UiSlice> = (set) => (
   setFirstRunDismissed: (v) => set({ firstRunDismissed: v }),
   setEmbeddingMode: (mode) => set({ embeddingMode: mode }),
   setEmbeddingStatus: (status) => set({ embeddingStatus: status }),
+  setSearchFocusItemId: (id) => set({ searchFocusItemId: id }),
 });
