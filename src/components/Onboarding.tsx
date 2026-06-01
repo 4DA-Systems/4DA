@@ -52,7 +52,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       void cmd('get_settings')
         .then((settings) => {
           const llm = settings.llm;
-          const configured = llm.has_api_key || llm.provider === 'ollama';
+          // Provider-driven, mirroring the backend compute_has_llm: a leftover/env
+          // api_key with provider "none" must NOT read as configured (otherwise the
+          // gate shows a false "AI Provider configured" with no provider selected).
+          const configured =
+            llm.provider === 'ollama' ||
+            llm.provider === 'builtin' ||
+            (llm.has_api_key && llm.provider !== 'none' && llm.provider !== '');
           setHasProviderConfigured(configured);
         })
         .catch(() => {

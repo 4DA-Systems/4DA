@@ -19,6 +19,17 @@ interface PullProgress {
   done: boolean;
 }
 
+// Friendly labels for the scoring signal axes (backend IDs from probes_engine.rs:
+// context/interest/ace/learned/dependency). Used as i18n fallbacks so the calibrate
+// screen never surfaces the raw internal axis IDs to the user.
+const axisFallback: Record<string, string> = {
+  context: 'Project context',
+  interest: 'Your interests',
+  ace: 'Auto-discovery',
+  learned: 'Learned signals',
+  dependency: 'Dependencies',
+};
+
 export function CalibrationStep({ isAnimating, onComplete, onBack }: CalibrationStepProps) {
   const { t } = useTranslation();
   const embeddingMode = useAppStore(s => s.embeddingMode);
@@ -197,7 +208,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               {result.active_signal_axes.length > 0 && (
                 <div style={{ display: 'flex', gap: 3, marginTop: 6, flexWrap: 'wrap' }}>
                   {result.active_signal_axes.map(a => (
-                    <span key={a} style={{ padding: '1px 6px', background: '#1F1F1F', borderRadius: 8, fontSize: 9, color: '#22C55E', fontFamily: 'JetBrains Mono, monospace' }}>{a}</span>
+                    <span key={a} style={{ padding: '1px 6px', background: '#1F1F1F', borderRadius: 8, fontSize: 9, color: '#22C55E' }}>
+                      {t(`calibration.axis.${a}`, axisFallback[a] ?? a)}
+                    </span>
                   ))}
                 </div>
               )}
@@ -218,8 +231,10 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               {result.recommendations.filter(r => r.action_type && r.priority !== 'P2').map((rec, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? '1px solid #1F1F1F' : 'none' }}>
                   <div>
+                    {/* A colored dot conveys urgency without leaking the internal
+                        "P0"/"P1" priority code to the user. */}
+                    <span aria-hidden="true" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: rec.priority === 'P0' ? '#EF4444' : '#F59E0B', marginRight: 6, verticalAlign: 'middle' }} />
                     <span style={{ fontSize: 12, color: '#FFFFFF', fontWeight: 500 }}>{rec.title}</span>
-                    <span style={{ fontSize: 10, color: rec.priority === 'P0' ? '#EF4444' : '#F59E0B', marginLeft: 6, fontFamily: 'JetBrains Mono, monospace' }}>{rec.priority}</span>
                   </div>
                   {rec.action_type && ONBOARDING_ACTIONABLE.includes(rec.action_type) && (
                     <button

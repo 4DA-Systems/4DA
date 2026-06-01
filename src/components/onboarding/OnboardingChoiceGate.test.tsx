@@ -94,10 +94,13 @@ describe('OnboardingChoiceGate', () => {
     expect(wrapper.className).toContain('scale-95');
   });
 
-  it('shows AI Provider status indicator', () => {
-    renderGate();
+  it('hides the provider status chip when no provider is configured', () => {
+    renderGate(false);
 
-    expect(screen.getByText('AI Provider')).toBeInTheDocument();
+    // A bare "AI Provider" chip on the path-choice screen read as a stray heading;
+    // it is suppressed until a provider is actually configured.
+    expect(screen.queryByText('AI Provider configured')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
   it('makes "Scan my projects" the primary recommended action', () => {
@@ -114,5 +117,6 @@ describe('OnboardingChoiceGate', () => {
 
     const status = screen.getByRole('status');
     expect(status.className).toContain('text-green-400');
+    expect(screen.getByText('AI Provider configured')).toBeInTheDocument();
   });
 });
