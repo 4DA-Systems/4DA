@@ -46,33 +46,24 @@ export function OnboardingChoiceGate({
         )}
       </p>
 
-      {/* Configuration status checklist */}
-      <div className="flex items-center justify-center gap-2 mb-6">
-        <span
-          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${
-            hasProviderConfigured
-              ? 'bg-green-500/10 text-green-400'
-              : 'bg-bg-tertiary text-text-muted'
-          }`}
-          role="status"
-          aria-label={
-            hasProviderConfigured
-              ? t('onboarding.choice.providerReady', 'AI Provider configured')
-              : t('onboarding.choice.providerPending', 'AI Provider not configured')
-          }
-        >
-          {hasProviderConfigured ? (
+      {/* Provider status — shown ONLY once a provider is actually configured.
+          A bare "AI Provider" pill on a path-choice screen read as a stray heading
+          (configuring a provider is one of the offered paths below), so we suppress
+          it in the common not-yet-configured case and only surface the affirmative
+          green "configured" confirmation when it's true. */}
+      {hasProviderConfigured && (
+        <div className="flex items-center justify-center gap-2 mb-6">
+          <span
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400"
+            role="status"
+          >
             <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm3.78 5.22a.75.75 0 0 0-1.06 0L7 8.94 5.28 7.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0l4.25-4.25a.75.75 0 0 0 0-1.06Z" />
             </svg>
-          ) : (
-            <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13Z" />
-            </svg>
-          )}
-          {t('onboarding.choice.aiProvider', 'AI Provider')}
-        </span>
-      </div>
+            {t('onboarding.choice.providerReady', 'AI Provider configured')}
+          </span>
+        </div>
+      )}
 
       {scanning ? (
         /* Inline scanning state — everything stays on the user's device */

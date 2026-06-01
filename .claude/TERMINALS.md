@@ -9,27 +9,40 @@
 
 ## Active Terminals
 
-### Terminal: opus-p1-false-state (started 2026-06-02)
-Working on: the 5 P1 "false-state lies" on the first-run setup/calibrate screens
-(documented in memory project_first_run_signal_trial.md, "OPEN ISSUES"):
-(1) "AI provider configured" green-check shown for bundled embeddings w/ provider=none
-→ honest "Private semantic search active"; (2) calibrate "Setup complete" fabricated
-tech/interest counts → fetch authoritative get_user_context; (3) get_personalization_context_summary
-has_llm:true/llm_tier:cloud with no provider → provider-driven has_llm; (4) AI models
-auto-download during "optional" setup → gate behind explicit button; (5) provider not
-mutually exclusive (Anthropic key field stays after Built-in) → !builtinSelected guards.
+### Terminal: opus-p2-polish (started 2026-06-02, continues opus-p1-false-state)
+Working on: the 3 P2 polish items from the first-run cold-start review + the pending AOS immune scan.
+(1) stray "AI Provider" status chip on the choice gate → hide when no provider configured;
+(2) calibrate leaks internal IDs — map active_signal_axes (context/interest/ace/learned/dependency)
+to friendly labels + drop the raw P0/P1 priority-code badge; (3) stack match-% badges "only 2/12" is
+HONEST (only detected stacks get a %) — leaving as-is, NOT fabricating. Then run the immune pass on 36f82fbb.
 **Claims:**
-- src-tauri/src/content_personalization/context.rs (assemble_settings has_llm honesty + test)
-- src/components/onboarding/CalibrationStep.tsx (authoritative counts + honest AI line)
-- src/components/onboarding/setup-ai-provider.tsx (mutual-exclusivity + download-models button)
-- src/components/onboarding/use-quick-setup.ts (no auto-pull; expose downloadLocalModels)
-- src/components/onboarding/QuickSetupStep.tsx (wire onDownloadModels prop)
-- src/locales/*/ui.json (summaryAI rewording across 13 locales)
-- src/types/i18n-resources.d.ts (regen if keys change)
-**Commit Lock**: HELD (opus-p1-false-state) — committing the 5 P1 false-state fixes
-(context.rs + 4 onboarding components + 13 locales). Staging explicit paths only; NOT touching
-the pre-existing Cargo.lock or untracked fourda-infer-proto/.gitignore (not mine).
-Prior terminal entries below are stale/done — HEAD already includes their work.
+- src/components/onboarding/OnboardingChoiceGate.tsx (+test) (gate status chip)
+- src/components/onboarding/CalibrationStep.tsx (axis labels + remove priority code)
+- src/components/Onboarding.tsx (BONUS: hasProviderConfigured was has_api_key||ollama — same
+  stale-key false-positive as P1 #3; now provider-driven. Caught by live verify.)
+- src/locales/*/ui.json (5 axis-label keys ×13) + src/types/i18n-resources.d.ts (regen)
+**Commit Lock**: HELD (opus-p2-polish) — committing P2 polish + the bonus gate-state fix.
+Staging explicit paths only; NOT touching pre-existing Cargo.lock / untracked .gitignore.
+
+<!-- opus-p1-false-state (2026-06-02): DONE — committed + PUSHED (origin/main @ 36f82fbb,
+     0f46a3d9..36f82fbb, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     The 5 P1 first-run "false-state lies" are fixed and COLD-START VERIFIED LIVE (fresh
+     FOURDA_DATA_DIR throwaway instance, Victauri REST :7373):
+     (1) calibrate "Setup complete" now says "Private semantic search active" (was the lie
+         "AI provider configured" driven by embeddingMode) — screenshot-confirmed, old string gone.
+     (2) Setup-complete tech/interest counts now from authoritative get_user_context (was
+         optimistic store state); fresh profile correctly shows "No technologies / Default interests".
+     (3) get_personalization_context_summary returns has_llm:false/llm_tier:"none" on no-provider
+         (was true/"cloud" from a stale key) — live-invoke confirmed + unit test compute_has_llm.
+     (4) removed the silent auto-pull of ollama models on "optional" setup mount; added explicit
+         "Download required models" button (this machine's ollama was fully provisioned so the
+         missing-model branch couldn't re-fire, but no auto-pull UI appears + path is gone).
+     (5) provider mutual-exclusivity: Anthropic→1 key field, click Built-in→0 (key field hidden) — verified.
+     Touched: context.rs, CalibrationStep.tsx, setup-ai-provider.tsx, use-quick-setup.ts,
+     QuickSetupStep.tsx, locales/*/ui.json (13). Did NOT touch pre-existing Cargo.lock /
+     untracked fourda-infer-proto/.gitignore. P2 polish (stray "AI Provider" gate heading,
+     "P1" internal-ID leak on calibrate rec, stack %-badges) still open — see memory. -->
+
 
 <!-- opus-calibration-honesty (2026-06-02): DONE — committed + pushed (origin/main @ 8c88032e,
      b03e19bf..8c88032e). Calibration "System Health" honesty fixes shipped + verified.
