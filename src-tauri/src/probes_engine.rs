@@ -551,4 +551,64 @@ mod tests {
         // Empty context might still fire interest axis via keyword matching
         assert!(audit.axes.len() <= 5);
     }
+
+    /// Regression guard for the calibration-honesty fix: discrimination/audit
+    /// probes are scored with REAL embeddings, not zero vectors. A probe whose
+    /// embedding matches the user's interest must score strictly higher than the
+    /// same probe scored with a zero vector (the previous behavior). Content
+    /// shares no keyword with the interest, so the embedding is the only signal
+    /// that can move the score.
+    #[test]
+    fn probe_scoring_honors_supplied_embedding() {
+        use crate::context_engine::{Interest, InterestSource};
+        use crate::scoring::{ScoringInput, ScoringOptions};
+
+        let db = crate::test_utils::test_db();
+
+        let mut interest_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        interest_emb[0] = 1.0;
+        let ctx = ScoringContext::builder()
+            .interest_count(1)
+            .interests(vec![Interest {
+                id: Some(1),
+                topic: "rust".to_string(),
+                weight: 1.0,
+                embedding: Some(interest_emb.clone()),
+                source: InterestSource::Explicit,
+            }])
+            .build();
+
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let opts = ScoringOptions {
+            apply_freshness: false,
+            apply_signals: false,
+            trend_topics: vec![],
+        };
+        fn probe_input(emb: &[f32]) -> ScoringInput<'_> {
+            ScoringInput {
+                id: 1,
+                title: "Quarterly almanac of orchard irrigation",
+                url: Some("https://probe.test"),
+                content: "Seasonal notes on watering schedules for fruit trees and soil moisture.",
+                source_type: "hackernews",
+                embedding: emb,
+                created_at: None,
+                detected_lang: "en",
+                source_tags: &[],
+                tags_json: None,
+                feed_origin: None,
+            }
+        }
+
+        let matched = score_item(&probe_input(&interest_emb), &ctx, &db, &opts, None);
+        let blind = score_item(&probe_input(&zero), &ctx, &db, &opts, None);
+
+        assert!(
+            matched.top_score > blind.top_score,
+            "embedding-matched score {} should exceed zero-vector score {} — \
+             discrimination must use the supplied embedding, not a zero vector",
+            matched.top_score,
+            blind.top_score
+        );
+    }
 }
