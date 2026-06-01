@@ -113,7 +113,7 @@ function NarrationFeed({ events }: { events: NarrationFeedEvent[] }) {
     <div className="space-y-1.5 max-h-40 overflow-hidden max-w-xs mx-auto mt-4">
       {visible.map((event, i) => (
         <div
-          key={event.timestamp}
+          key={`${event.timestamp}-${i}`}
           className="text-xs text-text-secondary animate-fade-in"
           style={{ opacity: i === visible.length - 1 ? 1 : 0.5 + (i * 0.1) }}
         >

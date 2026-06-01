@@ -255,9 +255,44 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     }))
 }
 
+/// Single-flight guard for ACE auto-discovery. Concurrent runs double the work
+/// (duplicate context_dirs) and can contend with the analysis pipeline — which
+/// stalled first-run scoring at 92%; only one discovery runs at a time.
+static ACE_DISCOVERY_RUNNING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// RAII reset so the flag clears on every exit path (including `?` errors).
+struct AceDiscoveryGuard;
+impl Drop for AceDiscoveryGuard {
+    fn drop(&mut self) {
+        ACE_DISCOVERY_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
 /// Trigger autonomous context discovery - finds dev directories and projects automatically
 #[tauri::command]
 pub async fn ace_auto_discover() -> Result<serde_json::Value> {
+    // Single-flight: skip if a discovery is already in progress. Concurrent
+    // runs doubled context_dirs and contended with the analysis pipeline,
+    // stalling first-run scoring at 92%.
+    if ACE_DISCOVERY_RUNNING
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_err()
+    {
+        info!(target: "4da::ace", "Auto-discovery already running — skipping concurrent run");
+        return Ok(serde_json::json!({
+            "success": false,
+            "message": "Discovery already in progress",
+            "status": "already_running"
+        }));
+    }
+    let _discovery_guard = AceDiscoveryGuard;
+
     info!(target: "4da::ace", "Starting autonomous context discovery");
 
     // Phase 1: Discover common dev directories
