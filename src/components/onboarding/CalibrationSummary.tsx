@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-/* eslint-disable i18next/no-literal-string */
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+
 import { cmd } from '../../lib/commands';
 
 interface PersonaWeight {
@@ -23,6 +24,7 @@ interface CalibrationSummaryProps {
 }
 
 export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryProps) {
+  const { t } = useTranslation();
   const confidencePct = Math.round(summary.confidence * 100);
 
   // Detected interests are editable: the taste test is a guess, and users
@@ -48,16 +50,16 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="text-center">
-        <h2 className="text-xl font-semibold text-white mb-2">Your feed is calibrated</h2>
+        <h2 className="text-xl font-semibold text-white mb-2">{t('onboarding.calib.title')}</h2>
         <p className="text-text-secondary text-sm">
-          Based on {summary.itemsShown} responses, {confidencePct}% confidence
+          {t('onboarding.calib.basedOn', { count: summary.itemsShown, confidence: confidencePct })}
         </p>
       </div>
 
       {/* Dominant persona */}
       <div className="bg-bg-secondary border border-border rounded-lg p-5">
         <div className="text-xs text-text-muted uppercase tracking-wider mb-2">
-          Your developer profile
+          {t('onboarding.calib.developerProfile')}
         </div>
         <h3 className="text-white font-medium text-lg mb-1">{summary.dominantPersonaName}</h3>
         <p className="text-text-secondary text-sm">{summary.dominantPersonaDescription}</p>
@@ -66,7 +68,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       {/* Persona blend bar chart */}
       {summary.personaWeights.length > 1 && (
         <div className="bg-bg-secondary border border-border rounded-lg p-5">
-          <div className="text-xs text-text-muted uppercase tracking-wider mb-3">Persona blend</div>
+          <div className="text-xs text-text-muted uppercase tracking-wider mb-3">{t('onboarding.calib.personaBlend')}</div>
           <div className="space-y-2">
             {summary.personaWeights
               .sort((a, b) => b.weight - a.weight)
@@ -91,15 +93,15 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       {/* Detected interests — editable (remove what doesn't fit, add your own) */}
       <div className="bg-bg-secondary border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
-          <div className="text-xs text-text-muted uppercase tracking-wider">Detected interests</div>
-          <span className="text-[10px] text-text-muted/70">Remove or add — make it yours</span>
+          <div className="text-xs text-text-muted uppercase tracking-wider">{t('onboarding.calib.detectedInterests')}</div>
+          <span className="text-[10px] text-text-muted/70">{t('onboarding.calib.makeItYours')}</span>
         </div>
         <p className="text-[11px] text-text-muted mb-3">
-          These came from your responses. Correct anything that doesn&apos;t fit.
+          {t('onboarding.calib.interestsHint')}
         </p>
         <div className="flex flex-wrap gap-2 mb-3">
           {interests.length === 0 && (
-            <span className="text-xs text-text-muted">No interests yet — add a few below.</span>
+            <span className="text-xs text-text-muted">{t('onboarding.calib.noInterests')}</span>
           )}
           {interests.map((interest) => (
             <span
@@ -109,10 +111,10 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
               {interest}
               <button
                 onClick={() => removeInterest(interest)}
-                aria-label={`Remove ${interest}`}
+                aria-label={t('onboarding.calib.removeAria', { interest })}
                 className="text-text-muted hover:text-error transition-colors leading-none text-sm"
               >
-                &#10005;
+                <span aria-hidden="true">{'✕'}</span>
               </button>
             </span>
           ))}
@@ -128,7 +130,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
                 addInterest();
               }
             }}
-            placeholder="Add an interest…"
+            placeholder={t('onboarding.calib.addPlaceholder')}
             className="flex-1 bg-bg-primary border border-border rounded-md px-2.5 py-1.5 text-xs text-white placeholder-text-muted focus:border-orange-500 focus:outline-none"
           />
           <button
@@ -136,7 +138,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
             disabled={!draft.trim()}
             className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-md hover:text-white hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Add
+            {t('onboarding.calib.add')}
           </button>
         </div>
       </div>
@@ -146,7 +148,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         onClick={onContinue}
         className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 rounded-lg transition-colors"
       >
-        Continue
+        {t('onboarding.nav.continue')}
       </button>
     </div>
   );
