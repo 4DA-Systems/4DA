@@ -110,6 +110,9 @@ function extractZipLib(buffer, libName, destPath) {
     if (process.platform === 'win32') {
       execSync(
         `powershell -NoProfile -Command "` +
+        // Windows PowerShell 5.1 does not auto-load this assembly — load it
+        // explicitly or ZipFile/ZipFileExtensions resolve to TypeNotFound.
+        `Add-Type -AssemblyName System.IO.Compression.FileSystem; ` +
         `$zip = [System.IO.Compression.ZipFile]::OpenRead('${tmpZip.replace(/'/g, "''")}'); ` +
         `$entry = $zip.Entries | Where-Object { $_.Name -eq '${libName}' } | Select-Object -First 1; ` +
         `[System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, '${destPath.replace(/'/g, "''")}', $true); ` +

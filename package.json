@@ -75,6 +75,8 @@
     "generate:types": "node -e \"const{execSync:x}=require('child_process'),fs=require('fs'),p=require('path');try{x('cargo test export_bindings --lib',{cwd:p.join(__dirname,'src-tauri'),stdio:'ignore'})}catch{}const b=p.join(__dirname,'src-tauri','bindings');if(fs.existsSync(b)){const d=p.join(__dirname,'src','generated');fs.mkdirSync(d,{recursive:true});fs.readdirSync(b).filter(f=>f.endsWith('.ts')).forEach(f=>fs.copyFileSync(p.join(b,f),p.join(d,f)))}\"",
     "guardian": "node scripts/build-guardian.cjs",
     "bundle:ort": "node scripts/download-ort.cjs",
+    "bundle:model": "node scripts/download-embedding-model.cjs",
+    "bundle:resources": "node scripts/download-ort.cjs && node scripts/download-embedding-model.cjs",
     "quality": "node scripts/compound-quality-check.cjs",
     "size": "size-limit",
     "size:check": "size-limit --check",

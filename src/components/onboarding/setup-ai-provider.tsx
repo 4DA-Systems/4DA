@@ -79,6 +79,28 @@ export function SetupAIProvider({
 
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
+      {/* Built-in private semantic search reassurance — calm, prominent, top of step */}
+      <div className="flex items-start gap-3 p-3 bg-bg-secondary border border-border rounded-lg">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="w-4 h-4 mt-0.5 shrink-0 text-text-secondary"
+          aria-hidden="true"
+        >
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <div>
+          <p className="text-sm font-medium text-text-primary">{t('onboarding.setupAi.builtInSemanticTitle')}</p>
+          <p className="text-xs text-text-secondary mt-0.5">{t('onboarding.setupAi.builtInSemanticBody')}</p>
+        </div>
+      </div>
+
       {/* Environment key detection banner */}
       {envDetection && (envDetection.has_anthropic_env || envDetection.has_openai_env) && (
         <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg space-y-2">
