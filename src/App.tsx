@@ -211,6 +211,19 @@ function App() {
     startAnalysis: () => { void startAnalysis(); },
   });
 
+  // Lock the document scrollbar while a full-screen first-run overlay is open.
+  // Splash and Onboarding are `fixed inset-0` with their own `overflow-y-auto`,
+  // so they scroll internally. Without this, the documentElement also overflows
+  // the viewport (#root's min-height), producing a second, dead scrollbar beside
+  // the working one. Suppressing the root scrollbar leaves only the overlay's.
+  useEffect(() => {
+    if (!(showSplash || showOnboarding)) return;
+    const root = document.documentElement;
+    const prev = root.style.overflow;
+    root.style.overflow = 'hidden';
+    return () => { root.style.overflow = prev; };
+  }, [showSplash, showOnboarding]);
+
   return (
     <>
       {/* First-run flow — wrapped in error boundary to contain crashes
