@@ -183,9 +183,22 @@ pub fn discover_dev_directories() -> Vec<String> {
         }
     }
 
-    // Deduplicate
-    discovered.sort();
-    discovered.dedup();
+    // Deduplicate. On Windows the filesystem is case-insensitive, so the probe
+    // above finds the SAME directory under both "Documents" and "documents"
+    // (etc.), and a plain exact-string dedup keeps both — which then doubles
+    // every later scan (dirs=12 for 6 real directories). Sort + dedup
+    // case-insensitively on Windows; keep exact behavior on case-sensitive
+    // filesystems (Linux/macOS), where casing distinguishes real directories.
+    #[cfg(windows)]
+    {
+        discovered.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        discovered.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
+    }
+    #[cfg(not(windows))]
+    {
+        discovered.sort();
+        discovered.dedup();
+    }
 
     info!(target: "4da::discovery", count = discovered.len(), "Total directories discovered");
     discovered

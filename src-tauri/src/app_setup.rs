@@ -627,6 +627,21 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     // Uses cache-first approach: fetch to fill cache, then analyze cached items
     let app_handle_scheduled = app_handle.clone();
     app.listen("scheduled-analysis", move |_| {
+        // Do not start a scheduled (background) analysis while a foreground
+        // analysis already owns the pipeline. `run_scheduled_analysis` calls
+        // `analyze_cached_content_impl` directly, bypassing the
+        // `run_cached_analysis` guard — without this check a scheduler tick that
+        // fires ~90s into the first run resets first-run progress to 8% and races
+        // the shared analysis state, looping the first-run transition forever.
+        if crate::get_analysis_state().lock().running {
+            info!(target: "4da::monitor", "Scheduled analysis skipped — a foreground analysis is already running");
+            // Clear the scheduler's in-flight flag so the next tick can retry
+            // once the foreground run completes.
+            crate::get_monitoring_state()
+                .is_checking
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            return;
+        }
         info!(target: "4da::monitor", "Scheduled analysis starting (cache-first)");
         let handle = app_handle_scheduled.clone();
         tauri::async_runtime::spawn(async move {
