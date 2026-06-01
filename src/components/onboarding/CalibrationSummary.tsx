@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+/* eslint-disable i18next/no-literal-string */
+import { useState } from 'react';
+import { cmd } from '../../lib/commands';
+
 interface PersonaWeight {
   name: string;
   weight: number;
@@ -21,50 +25,54 @@ interface CalibrationSummaryProps {
 export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryProps) {
   const confidencePct = Math.round(summary.confidence * 100);
 
+  // Detected interests are editable: the taste test is a guess, and users
+  // should be able to correct what was surfaced before it shapes their feed.
+  // Each change persists immediately via add_interest/remove_interest.
+  const [interests, setInterests] = useState<string[]>(summary.topInterests);
+  const [draft, setDraft] = useState('');
+
+  const removeInterest = (topic: string) => {
+    setInterests((prev) => prev.filter((i) => i !== topic));
+    void cmd('remove_interest', { topic }).catch(() => {});
+  };
+
+  const addInterest = () => {
+    const topic = draft.trim();
+    setDraft('');
+    if (!topic || interests.some((i) => i.toLowerCase() === topic.toLowerCase())) return;
+    setInterests((prev) => [...prev, topic]);
+    void cmd('add_interest', { topic }).catch(() => {});
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="text-center">
-        {/* eslint-disable-next-line i18next/no-literal-string */}
-        <h2 className="text-xl font-semibold text-white mb-2">
-          Your feed is calibrated
-        </h2>
-        {/* eslint-disable i18next/no-literal-string */}
+        <h2 className="text-xl font-semibold text-white mb-2">Your feed is calibrated</h2>
         <p className="text-text-secondary text-sm">
           Based on {summary.itemsShown} responses, {confidencePct}% confidence
         </p>
-        {/* eslint-enable i18next/no-literal-string */}
       </div>
 
       {/* Dominant persona */}
       <div className="bg-bg-secondary border border-border rounded-lg p-5">
-        {/* eslint-disable-next-line i18next/no-literal-string */}
         <div className="text-xs text-text-muted uppercase tracking-wider mb-2">
           Your developer profile
         </div>
-        <h3 className="text-white font-medium text-lg mb-1">
-          {summary.dominantPersonaName}
-        </h3>
-        <p className="text-text-secondary text-sm">
-          {summary.dominantPersonaDescription}
-        </p>
+        <h3 className="text-white font-medium text-lg mb-1">{summary.dominantPersonaName}</h3>
+        <p className="text-text-secondary text-sm">{summary.dominantPersonaDescription}</p>
       </div>
 
       {/* Persona blend bar chart */}
       {summary.personaWeights.length > 1 && (
         <div className="bg-bg-secondary border border-border rounded-lg p-5">
-          {/* eslint-disable-next-line i18next/no-literal-string */}
-          <div className="text-xs text-text-muted uppercase tracking-wider mb-3">
-            Persona blend
-          </div>
+          <div className="text-xs text-text-muted uppercase tracking-wider mb-3">Persona blend</div>
           <div className="space-y-2">
             {summary.personaWeights
               .sort((a, b) => b.weight - a.weight)
               .map((pw) => (
                 <div key={pw.name} className="flex items-center gap-3">
-                  <span className="text-xs text-text-secondary w-40 truncate">
-                    {pw.name}
-                  </span>
+                  <span className="text-xs text-text-secondary w-40 truncate">{pw.name}</span>
                   <div className="flex-1 bg-bg-tertiary rounded-full h-2 overflow-hidden">
                     <div
                       className="bg-white h-full rounded-full transition-all duration-500"
@@ -80,34 +88,65 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         </div>
       )}
 
-      {/* Detected interests */}
-      {summary.topInterests.length > 0 && (
-        <div className="bg-bg-secondary border border-border rounded-lg p-5">
-          {/* eslint-disable-next-line i18next/no-literal-string */}
-          <div className="text-xs text-text-muted uppercase tracking-wider mb-3">
-            Detected interests
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {summary.topInterests.map((interest) => (
-              <span
-                key={interest}
-                className="text-xs bg-bg-tertiary text-text-secondary px-2.5 py-1 rounded-md"
-              >
-                {interest}
-              </span>
-            ))}
-          </div>
+      {/* Detected interests — editable (remove what doesn't fit, add your own) */}
+      <div className="bg-bg-secondary border border-border rounded-lg p-5">
+        <div className="flex items-center justify-between mb-1">
+          <div className="text-xs text-text-muted uppercase tracking-wider">Detected interests</div>
+          <span className="text-[10px] text-text-muted/70">Remove or add — make it yours</span>
         </div>
-      )}
+        <p className="text-[11px] text-text-muted mb-3">
+          These came from your responses. Correct anything that doesn&apos;t fit.
+        </p>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {interests.length === 0 && (
+            <span className="text-xs text-text-muted">No interests yet — add a few below.</span>
+          )}
+          {interests.map((interest) => (
+            <span
+              key={interest}
+              className="inline-flex items-center gap-1.5 text-xs bg-bg-tertiary text-text-secondary px-2.5 py-1 rounded-md"
+            >
+              {interest}
+              <button
+                onClick={() => removeInterest(interest)}
+                aria-label={`Remove ${interest}`}
+                className="text-text-muted hover:text-error transition-colors leading-none text-sm"
+              >
+                &#10005;
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addInterest();
+              }
+            }}
+            placeholder="Add an interest…"
+            className="flex-1 bg-bg-primary border border-border rounded-md px-2.5 py-1.5 text-xs text-white placeholder-text-muted focus:border-orange-500 focus:outline-none"
+          />
+          <button
+            onClick={addInterest}
+            disabled={!draft.trim()}
+            className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-md hover:text-white hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add
+          </button>
+        </div>
+      </div>
 
       {/* Continue button */}
       <button
         onClick={onContinue}
         className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-3 rounded-lg transition-colors"
       >
-        {/* eslint-disable i18next/no-literal-string */}
         Continue
-        {/* eslint-enable i18next/no-literal-string */}
       </button>
     </div>
   );
