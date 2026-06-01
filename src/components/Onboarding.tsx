@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 
+import { LanguageSwitcher } from './LanguageSwitcher';
 import type { Step } from './onboarding/types';
 import { WelcomeStep } from './onboarding/WelcomeStep';
 import { TasteTestStep } from './onboarding/TasteTestStep';
@@ -177,6 +178,14 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           overflow-y-auto keep it centered when it fits and scrollable when it
           doesn't. */}
       <div className="relative min-h-full flex flex-col items-center p-8 pb-12">
+      {/* Persistent language switcher — pinned top-LEFT, floats above EVERY
+          step (including the choice gate). The progress header is centered-top
+          and the version is bottom, so top-left is free and never overlaps
+          either. Uses the shared canonical change+persist path. */}
+      <div className="absolute top-4 start-4 z-50">
+        <LanguageSwitcher />
+      </div>
+
       {/* Progress indicator — hidden during choice gate */}
       {showProgress && (
         <div className="shrink-0 mt-2 mb-10 flex flex-col items-center gap-2">

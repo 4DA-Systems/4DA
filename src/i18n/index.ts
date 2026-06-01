@@ -6,15 +6,32 @@ import resourcesToBackend from 'i18next-resources-to-backend';
 // Supported languages — must match locale directories in src/locales/
 // Ship 10 languages — ar/hi/it deferred (RTL untested / insufficient market demand)
 // Locale files preserved in repo for future activation.
-const SUPPORTED_LANGS = new Set([
-  'en', 'de', 'es', 'fr', 'ja', 'ko', 'pt-BR', 'ru', 'tr', 'zh',
-]);
+// Single source of truth for shipped languages, in display order, with native
+// names. Used by i18n init AND every language picker so the offered set can
+// never diverge from what the app actually ships (see LanguageSwitcher).
+export const SUPPORTED_LANGUAGES: ReadonlyArray<{ code: string; native: string }> = [
+  { code: 'en', native: 'English' },
+  { code: 'de', native: 'Deutsch' },
+  { code: 'es', native: 'Español' },
+  { code: 'fr', native: 'Français' },
+  { code: 'ja', native: '日本語' },
+  { code: 'ko', native: '한국어' },
+  { code: 'pt-BR', native: 'Português' },
+  { code: 'ru', native: 'Русский' },
+  { code: 'tr', native: 'Türkçe' },
+  { code: 'zh', native: '中文' },
+];
+
+/** localStorage key i18n reads on init and every picker must write to. */
+export const LANGUAGE_STORAGE_KEY = '4da_language';
+
+const SUPPORTED_LANGS = new Set(SUPPORTED_LANGUAGES.map((l) => l.code));
 
 // Detect saved language preference or system locale.
 // Handles regional variants: navigator.language "pt-BR" → match "pt-BR" directly,
 // "pt-PT" → fall back to "en" (no generic pt), "zh-TW" → fall back to "zh".
 const savedLang = typeof localStorage !== 'undefined'
-  ? localStorage.getItem('4da_language')
+  ? localStorage.getItem(LANGUAGE_STORAGE_KEY)
   : null;
 
 function detectSystemLang(): string {

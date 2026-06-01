@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { LANGUAGE_STORAGE_KEY } from '../../i18n';
 
 interface SetupLocaleProps {
   onLocaleChange: (country: string, language: string, currency: string) => void;
@@ -58,7 +59,7 @@ function getLanguageName(code: string): string {
 }
 
 export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [country, setCountry] = useState('US');
   const [language, setLanguage] = useState('en');
   const [currency, setCurrency] = useState('USD');
@@ -97,6 +98,13 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
     }
   }, [onLocaleChange, t]);
 
+  // When the country picker derives a language, mirror it into i18n/localStorage
+  // too — otherwise picking "Japan" changes region but leaves the UI in English.
+  const applyDerivedLanguage = useCallback((code: string) => {
+    void i18n.changeLanguage(code);
+    try { localStorage.setItem(LANGUAGE_STORAGE_KEY, code); } catch { /* noop */ }
+  }, [i18n]);
+
   const handleCountryChange = useCallback((code: string) => {
     userInteracted.current = true;
     setCountry(code);
@@ -104,17 +112,24 @@ export function SetupLocale({ onLocaleChange }: SetupLocaleProps) {
     if (match) {
       setLanguage(match.lang);
       setCurrency(match.currency);
+      applyDerivedLanguage(match.lang);
       void saveLocale(code, match.lang, match.currency);
     } else {
       void saveLocale(code, language, currency);
     }
-  }, [language, currency, saveLocale]);
+  }, [language, currency, saveLocale, applyDerivedLanguage]);
 
   const handleLanguageChange = useCallback((code: string) => {
     userInteracted.current = true;
     setLanguage(code);
+    // Apply the UI language immediately and persist via the canonical path so
+    // i18n (which reads LANGUAGE_STORAGE_KEY on boot) and the rendered UI stay
+    // in sync with the backend locale — previously this only wrote the backend
+    // locale, leaving i18n/localStorage stale (split-brain language state).
+    void i18n.changeLanguage(code);
+    try { localStorage.setItem(LANGUAGE_STORAGE_KEY, code); } catch { /* noop */ }
     void saveLocale(country, code, currency);
-  }, [country, currency, saveLocale]);
+  }, [country, currency, i18n, saveLocale]);
 
   const handleCurrencyChange = useCallback((cur: string) => {
     userInteracted.current = true;
