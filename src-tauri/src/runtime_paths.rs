@@ -253,4 +253,21 @@ impl RuntimePaths {
             self.resource_dir.join("models")
         }
     }
+
+    /// Bundled models root (ONNX runtime + embedding model) — shipped with the app.
+    ///
+    /// In dev, `resource_dir` is the project root (`D:\4DA`) but the bundled
+    /// models live under `src-tauri/models` (`CARGO_MANIFEST_DIR/models`), so a
+    /// plain `resource_dir.join("models")` misses them and forces a ~125MB
+    /// download (ORT + embedding model) on every fresh/cold-start instance.
+    /// In production, `tauri.conf.json` maps `src-tauri/models` -> `<exe>/models`
+    /// and `resource_dir` is the exe dir, so `resource_dir/models` is correct.
+    /// Mirrors `ocr_models_dir()`'s dev/prod resolution.
+    pub fn bundled_models_dir(&self) -> PathBuf {
+        if cfg!(debug_assertions) {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("models")
+        } else {
+            self.resource_dir.join("models")
+        }
+    }
 }

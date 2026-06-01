@@ -53,8 +53,7 @@ fn ensure_ort_runtime(
     }
 
     let bundled_path = crate::runtime_paths::RuntimePaths::get()
-        .resource_dir
-        .join("models")
+        .bundled_models_dir()
         .join("ort")
         .join(lib_name);
     if bundled_path.exists() {
@@ -238,8 +237,7 @@ fn ensure_embedding_model(cache_dir: &std::path::Path) -> bool {
     }
 
     let bundled_dir = crate::runtime_paths::RuntimePaths::get()
-        .resource_dir
-        .join("models")
+        .bundled_models_dir()
         .join("embeddings")
         .join(EMBEDDING_CACHE_DIR_NAME);
 
