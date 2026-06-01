@@ -2153,8 +2153,8 @@
   "calibration.onboarding.summaryDefaultInterests": "Интересы по умолчанию — настройте в Параметрах",
   "calibration.onboarding.summaryInterests": "{{count}} интересов задано",
   "calibration.onboarding.summaryKeyword": "Режим ключевых слов — добавьте ключ ИИ в Параметрах",
-  "calibration.onboarding.summaryNoProjects": "Проекты не найдены — добавьте директории в Параметрах",
-  "calibration.onboarding.summaryProjects": "{{count}} проектов обнаружено",
+  "calibration.onboarding.summaryNoProjects": "Технологии не обнаружены — добавьте каталоги проектов в настройках",
+  "calibration.onboarding.summaryProjects": "Обнаружено технологий: {{count}}",
   "calibration.action.working": "Работает...",
   "health.issueCount": "Обнаружено {{count}} системных проблем",
   "health.openSettings": "Открыть настройки",
@@ -3178,5 +3178,7 @@
   "validation.found": "Найдено: {{label}} — {{count}} {{unit}}",
   "validation.items": "элементов",
   "validation.source": "Источник",
-  "validation.videos": "видео"
+  "validation.videos": "видео",
+  "calibration.onboarding.gradeStartingPoint": "Это ваш начальный балл — он растёт по мере того, как 4DA узнаёт, что вам важно.",
+  "language.change": "Сменить язык"
 }

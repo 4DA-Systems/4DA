@@ -2169,8 +2169,8 @@
   "calibration.onboarding.summaryDefaultInterests": "Interessi predefiniti — personalizza nelle Impostazioni",
   "calibration.onboarding.summaryInterests": "{{count}} interessi impostati",
   "calibration.onboarding.summaryKeyword": "Modalità parole chiave — aggiungi chiave AI nelle Impostazioni",
-  "calibration.onboarding.summaryNoProjects": "Nessun progetto trovato — aggiungi directory nelle Impostazioni",
-  "calibration.onboarding.summaryProjects": "{{count}} progetti rilevati",
+  "calibration.onboarding.summaryNoProjects": "Nessuna tecnologia rilevata — aggiungi le cartelle dei progetti nelle Impostazioni",
+  "calibration.onboarding.summaryProjects": "{{count}} tecnologie rilevate",
   "calibration.action.working": "In elaborazione...",
   "health.issueCount": "{{count}} problemi di sistema rilevati",
   "health.openSettings": "Apri impostazioni",
@@ -3209,5 +3209,7 @@
     "recommendations": "Raccomandazioni",
     "empty": "Nessun punto cieco rilevato. La copertura del tuo stack è eccellente.",
     "loading": "Analisi della tua copertura in corso..."
-  }
+  },
+  "calibration.onboarding.gradeStartingPoint": "Questo è il tuo punteggio iniziale: cresce man mano che 4DA impara ciò che ti interessa.",
+  "language.change": "Cambia lingua"
 }

@@ -400,8 +400,8 @@
   "calibration.onboarding.summaryDefaultInterests": "डिफ़ॉल्ट रुचियाँ — सेटिंग्स में अनुकूलित करें",
   "calibration.onboarding.summaryInterests": "{{count}} रुचियाँ सेट",
   "calibration.onboarding.summaryKeyword": "कीवर्ड मोड — सेटिंग्स में AI कुंजी जोड़ें",
-  "calibration.onboarding.summaryNoProjects": "कोई प्रोजेक्ट नहीं मिला — सेटिंग्स में डायरेक्टरी जोड़ें",
-  "calibration.onboarding.summaryProjects": "{{count}} प्रोजेक्ट पहचाने गए",
+  "calibration.onboarding.summaryNoProjects": "कोई तकनीक नहीं मिली — सेटिंग्स में प्रोजेक्ट निर्देशिकाएँ जोड़ें",
+  "calibration.onboarding.summaryProjects": "{{count}} तकनीकें पहचानी गईं",
   "calibration.pullDone": "पूर्ण",
   "calibration.pulling": "{{model}} खींच रहा है...",
   "calibration.reCalibrate": "पुनः कैलिब्रेट",
@@ -3129,5 +3129,7 @@
   "validation.found": "मिला: {{label}} — {{count}} {{unit}}",
   "validation.items": "आइटम",
   "validation.source": "स्रोत",
-  "validation.videos": "वीडियो"
+  "validation.videos": "वीडियो",
+  "calibration.onboarding.gradeStartingPoint": "यह आपका शुरुआती स्कोर है — जैसे-जैसे 4DA आपकी पसंद सीखता है, यह बढ़ता है।",
+  "language.change": "भाषा बदलें"
 }

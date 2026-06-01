@@ -2153,8 +2153,8 @@
   "calibration.onboarding.summaryDefaultInterests": "デフォルトの興味 — 設定でカスタマイズ",
   "calibration.onboarding.summaryInterests": "{{count}} 件の興味を設定",
   "calibration.onboarding.summaryKeyword": "キーワードモード — 設定でAIキーを追加",
-  "calibration.onboarding.summaryNoProjects": "プロジェクトが見つかりません — 設定でディレクトリを追加",
-  "calibration.onboarding.summaryProjects": "{{count}} 件のプロジェクトを検出",
+  "calibration.onboarding.summaryNoProjects": "技術が検出されませんでした — 設定でプロジェクトのディレクトリを追加してください",
+  "calibration.onboarding.summaryProjects": "{{count}} 件の技術を検出",
   "calibration.action.working": "処理中...",
   "health.issueCount": "{{count}}件のシステム問題を検出",
   "health.openSettings": "設定を開く",
@@ -3092,5 +3092,7 @@
   "validation.found": "検出: {{label}} — {{count}} {{unit}}",
   "validation.items": "件",
   "validation.source": "ソース",
-  "validation.videos": "動画"
+  "validation.videos": "動画",
+  "calibration.onboarding.gradeStartingPoint": "これは開始スコアです。4DA があなたの関心を学ぶほど上がっていきます。",
+  "language.change": "言語を変更"
 }

@@ -98,6 +98,12 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
     }
   };
 
+  // Recommendation action_types this onboarding step can actually perform.
+  // Others (e.g. give_feedback, open_settings_*) have no meaning yet — there's no
+  // content to act on mid-onboarding — so we show them as guidance without a
+  // button that would silently do nothing.
+  const ONBOARDING_ACTIONABLE = ['pull_embedding_model', 'auto_detect_stacks'];
+
   const gradeColor = (grade: string) => {
     if (grade.startsWith('A')) return '#22C55E';
     if (grade.startsWith('B')) return '#D4AF37';
@@ -181,6 +187,14 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
             </div>
           </div>
 
+          {/* Honest day-one framing: some signals (learned/dependency) can't fire until
+              you've used 4DA, so a fresh setup grades lower by design. Say so. */}
+          {result.grade_score < 70 && (
+            <p style={{ fontSize: 11, color: '#8A8A8A', textAlign: 'center', marginBottom: 16, marginTop: -4 }}>
+              {t('calibration.onboarding.gradeStartingPoint')}
+            </p>
+          )}
+
           {/* Actionable recommendations (only P0/P1) */}
           {result.recommendations.filter(r => r.action_type && r.priority !== 'P2').length > 0 && (
             <div style={{ background: '#141414', border: '1px solid #2A2A2A', borderRadius: 8, padding: 12, marginBottom: 16 }}>
@@ -190,7 +204,7 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
                     <span style={{ fontSize: 12, color: '#FFFFFF', fontWeight: 500 }}>{rec.title}</span>
                     <span style={{ fontSize: 10, color: rec.priority === 'P0' ? '#EF4444' : '#F59E0B', marginLeft: 6, fontFamily: 'JetBrains Mono, monospace' }}>{rec.priority}</span>
                   </div>
-                  {rec.action_type && (
+                  {rec.action_type && ONBOARDING_ACTIONABLE.includes(rec.action_type) && (
                     <button
                       onClick={() => { void handleAction(rec); }}
                       disabled={!!actionInProgress}

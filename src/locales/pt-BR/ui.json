@@ -409,8 +409,8 @@
   "calibration.onboarding.summaryDefaultInterests": "Interesses padrão — personalize nas Configurações",
   "calibration.onboarding.summaryInterests": "{{count}} interesses definidos",
   "calibration.onboarding.summaryKeyword": "Modo palavras-chave — adicione chave AI nas Configurações",
-  "calibration.onboarding.summaryNoProjects": "Nenhum projeto encontrado — adicione diretórios nas Configurações",
-  "calibration.onboarding.summaryProjects": "{{count}} projetos detectados",
+  "calibration.onboarding.summaryNoProjects": "Nenhuma tecnologia detectada — adicione diretórios de projetos nas Configurações",
+  "calibration.onboarding.summaryProjects": "{{count}} tecnologias detectadas",
   "calibration.pullDone": "Pronto",
   "calibration.pulling": "Baixando {{model}}...",
   "calibration.reCalibrate": "Recalibrar",
@@ -3159,5 +3159,7 @@
   "weekly.interestFailed": "Falha ao adicionar interesse",
   "weekly.suggestions": "Interesses sugeridos",
   "weekly.title": "Resumo de inteligência semanal",
-  "weekly.topTopics": "Principais tópicos aprendidos"
+  "weekly.topTopics": "Principais tópicos aprendidos",
+  "calibration.onboarding.gradeStartingPoint": "Esta é sua pontuação inicial — ela sobe conforme o 4DA aprende o que importa para você.",
+  "language.change": "Alterar idioma"
 }

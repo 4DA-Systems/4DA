@@ -2176,8 +2176,8 @@
   "calibration.onboarding.summaryDefaultInterests": "Standard-Interessen — in den Einstellungen anpassen",
   "calibration.onboarding.summaryInterests": "{{count}} Interessen festgelegt",
   "calibration.onboarding.summaryKeyword": "Stichwort-Modus — KI-Schlüssel in den Einstellungen hinzufügen",
-  "calibration.onboarding.summaryNoProjects": "Keine Projekte gefunden — Verzeichnisse in den Einstellungen hinzufügen",
-  "calibration.onboarding.summaryProjects": "{{count}} Projekte erkannt",
+  "calibration.onboarding.summaryNoProjects": "Keine Technologien erkannt – Projektverzeichnisse in den Einstellungen hinzufügen",
+  "calibration.onboarding.summaryProjects": "{{count}} Technologien erkannt",
   "calibration.action.working": "In Arbeit...",
   "health.issueCount": "{{count}} Systemprobleme erkannt",
   "health.openSettings": "Einstellungen öffnen",
@@ -3194,5 +3194,7 @@
     "recommendations": "Empfehlungen",
     "empty": "Keine Blindflecken erkannt. Ihre Stack-Abdeckung ist hervorragend.",
     "loading": "Analysiere deine Abdeckung..."
-  }
+  },
+  "calibration.onboarding.gradeStartingPoint": "Das ist dein Startwert – er steigt, während 4DA lernt, was dir wichtig ist.",
+  "language.change": "Sprache ändern"
 }

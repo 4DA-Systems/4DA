@@ -2153,8 +2153,8 @@
   "calibration.onboarding.summaryDefaultInterests": "默认兴趣 — 在设置中自定义",
   "calibration.onboarding.summaryInterests": "已设置 {{count}} 个兴趣",
   "calibration.onboarding.summaryKeyword": "关键词模式 — 在设置中添加 AI 密钥",
-  "calibration.onboarding.summaryNoProjects": "未找到项目 — 在设置中添加目录",
-  "calibration.onboarding.summaryProjects": "检测到 {{count}} 个项目",
+  "calibration.onboarding.summaryNoProjects": "未检测到技术 — 在设置中添加项目目录",
+  "calibration.onboarding.summaryProjects": "检测到 {{count}} 项技术",
   "calibration.action.working": "处理中...",
   "health.issueCount": "检测到{{count}}个系统问题",
   "health.openSettings": "打开设置",
@@ -3057,5 +3057,7 @@
   "validation.found": "发现：{{label}} — {{count}} {{unit}}",
   "validation.items": "项",
   "validation.source": "来源",
-  "validation.videos": "视频"
+  "validation.videos": "视频",
+  "calibration.onboarding.gradeStartingPoint": "这是你的初始评分 — 随着 4DA 了解你的关注点，它会不断提升。",
+  "language.change": "切换语言"
 }

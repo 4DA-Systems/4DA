@@ -13,7 +13,8 @@ use crate::scoring::ScoringContext;
 // Re-export items used by calibration_commands.rs at runtime
 pub(crate) use crate::probes_corpus::domain_name;
 pub(crate) use crate::probes_engine::{
-    audit_signal_axes, detect_user_domain, run_probe_calibration, ProbeResults, SignalAudit,
+    audit_signal_axes, detect_user_domain, run_probe_calibration, select_probes_for_user,
+    ProbeResults, SignalAudit, AUDIT_PROBE_CONTENT, AUDIT_PROBE_TITLE,
 };
 
 // ============================================================================
@@ -22,23 +23,34 @@ pub(crate) use crate::probes_engine::{
 
 pub(crate) fn compute_infrastructure_score(rig: &RigRequirements) -> u32 {
     let mut score = 0u32;
-    if rig.ollama_running {
-        score += 8;
-    }
+    // Working semantic embeddings are the dominant infrastructure signal — and they
+    // count regardless of provider (built-in fastembed, Ollama, or cloud). Without
+    // them scoring falls back to keyword matching. This is provider-agnostic on
+    // purpose: the previous logic only credited Ollama, so a user on 4DA's bundled
+    // local model scored zero here despite having fully working embeddings.
     if rig.embedding_available {
-        score += 12;
+        score += 18;
     }
+    // A real GPU (detected via hardware probe, not a model-count proxy) accelerates
+    // local models.
     if rig.gpu_detected {
-        score += 5;
+        score += 4;
+    }
+    // A local Ollama engine running is a privacy/offline bonus on top of the above.
+    if rig.ollama_running {
+        score += 3;
     }
     score.min(25)
 }
 
 pub(crate) fn compute_context_score(ctx: &ScoringContext) -> u32 {
     let mut score = 0.0_f64;
-    // Interests: min(count, 5) * 2.5
-    let interest_pts = (ctx.interest_count.min(5) as f64) * 2.5;
-    score += interest_pts;
+    // Interests: first 5 at 2.5 each (12.5), interests 6-10 at 0.5 each (diminishing,
+    // +2.5 max). Credits power users with many interests instead of silently ignoring
+    // everything past the 5th — without letting interest count dominate the dimension.
+    let core_interest_pts = (ctx.interest_count.min(5) as f64) * 2.5;
+    let extra_interest_pts = (ctx.interest_count.saturating_sub(5).min(5) as f64) * 0.5;
+    score += core_interest_pts + extra_interest_pts;
     // Stack profiles active
     if ctx.composed_stack.active {
         score += 5.0;

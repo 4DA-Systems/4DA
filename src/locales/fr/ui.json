@@ -2176,8 +2176,8 @@
   "calibration.onboarding.summaryDefaultInterests": "Intérêts par défaut — personnaliser dans les Paramètres",
   "calibration.onboarding.summaryInterests": "{{count}} intérêts définis",
   "calibration.onboarding.summaryKeyword": "Mode mots-clés — ajoutez une clé IA dans les Paramètres",
-  "calibration.onboarding.summaryNoProjects": "Aucun projet trouvé — ajoutez des répertoires dans les Paramètres",
-  "calibration.onboarding.summaryProjects": "{{count}} projets détectés",
+  "calibration.onboarding.summaryNoProjects": "Aucune technologie détectée — ajoutez des dossiers de projet dans les Paramètres",
+  "calibration.onboarding.summaryProjects": "{{count}} technologies détectées",
   "calibration.action.working": "En cours...",
   "health.issueCount": "{{count}} problèmes système détectés",
   "health.openSettings": "Ouvrir les paramètres",
@@ -2869,5 +2869,7 @@
   "evidence.learnedPositive": "Thèmes avec lesquels vous interagissez",
   "evidence.learnedNegative": "Thèmes que vous ignorez systématiquement",
   "results.topMatches": "Meilleures correspondances :",
-  "settings.llm.title": "Fournisseur d'IA"
+  "settings.llm.title": "Fournisseur d'IA",
+  "calibration.onboarding.gradeStartingPoint": "C’est votre score de départ : il augmente à mesure que 4DA apprend ce qui compte pour vous.",
+  "language.change": "Changer de langue"
 }

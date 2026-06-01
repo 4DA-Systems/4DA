@@ -662,6 +662,7 @@
   "onboarding.welcome.quickSetupHint": "Quick setup — most steps are automatic",
   "onboarding.welcome.skipToContent": "Skip to Content",
   "onboarding.welcome.skipHint": "You can configure later in Settings",
+  "language.change": "Change language",
   "onboarding.choice.title": "You're ready to go",
   "onboarding.choice.description": "4DA is already learning about your projects in the background. You can start exploring now or fine-tune your setup first.",
   "onboarding.choice.startUsing": "Start using 4DA",
@@ -2176,8 +2177,8 @@
   "calibration.onboarding.summaryDefaultInterests": "Default interests — customize in Settings",
   "calibration.onboarding.summaryInterests": "{{count}} interests set",
   "calibration.onboarding.summaryKeyword": "Keyword matching with context synthesis",
-  "calibration.onboarding.summaryNoProjects": "No projects found — add directories in Settings",
-  "calibration.onboarding.summaryProjects": "{{count}} projects detected",
+  "calibration.onboarding.summaryNoProjects": "No technologies detected — add project directories in Settings",
+  "calibration.onboarding.summaryProjects": "{{count}} technologies detected",
   "calibration.action.working": "Working...",
   "health.issueCount": "{{count}} system issues detected",
   "health.openSettings": "Open Settings",
@@ -2867,5 +2868,6 @@
   "evidence.learned": "What 4DA Learned About You",
   "evidence.learnedEmpty": "Save and dismiss items in the feed to help 4DA learn your preferences. After a few interactions, your topic affinities will appear here.",
   "evidence.learnedPositive": "Topics you engage with",
-  "evidence.learnedNegative": "Topics you consistently skip"
+  "evidence.learnedNegative": "Topics you consistently skip",
+  "calibration.onboarding.gradeStartingPoint": "This is your starting score — it climbs as 4DA learns what you care about."
 }

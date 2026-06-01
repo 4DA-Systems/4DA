@@ -421,8 +421,8 @@
   "calibration.onboarding.summaryDefaultInterests": "اهتمامات افتراضية — خصصها في الإعدادات",
   "calibration.onboarding.summaryInterests": "{{count}} اهتمام محدد",
   "calibration.onboarding.summaryKeyword": "وضع الكلمات المفتاحية — أضف مفتاح AI في الإعدادات",
-  "calibration.onboarding.summaryNoProjects": "لم يتم العثور على مشاريع — أضف مجلدات في الإعدادات",
-  "calibration.onboarding.summaryProjects": "تم اكتشاف {{count}} مشروع",
+  "calibration.onboarding.summaryNoProjects": "لم يتم رصد أي تقنية — أضف مجلدات المشاريع في الإعدادات",
+  "calibration.onboarding.summaryProjects": "تم رصد {{count}} تقنية",
   "calibration.pullDone": "تم",
   "calibration.pulling": "جارٍ سحب {{model}}...",
   "calibration.reCalibrate": "إعادة المعايرة",
@@ -3241,5 +3241,7 @@
   "validation.found": "تم العثور على: {{label}} — {{count}} {{unit}}",
   "validation.items": "عناصر",
   "validation.source": "المصدر",
-  "validation.videos": "مقاطع فيديو"
+  "validation.videos": "مقاطع فيديو",
+  "calibration.onboarding.gradeStartingPoint": "هذه نقطة انطلاقك — وترتفع كلما تعلّم 4DA ما يهمّك.",
+  "language.change": "تغيير اللغة"
 }

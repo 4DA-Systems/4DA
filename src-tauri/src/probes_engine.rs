@@ -256,11 +256,20 @@ pub(crate) struct ProbeResults {
     pub failures: Vec<String>,
 }
 
+/// Run the domain-aware probe battery.
+///
+/// `probes` is the caller-selected probe set (see [`select_probes_for_user`]).
+/// `embeddings`, when supplied, must be aligned 1:1 with `probes` and carry the
+/// REAL embedding of each probe (title+content) from the same pipeline the
+/// scorer uses. Passing `Some(..)` measures discrimination with the engine's
+/// actual semantic layer; passing `None` (or a zero vector for a given index)
+/// falls back to keyword-only scoring for that probe.
 pub(crate) fn run_probe_calibration(
     ctx: &ScoringContext,
     db: &crate::db::Database,
+    probes: &[&'static CalibrProbe],
+    embeddings: Option<&[Vec<f32>]>,
 ) -> ProbeResults {
-    let (probes, _domain) = select_probes_for_user(ctx);
     let opts = ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
@@ -279,13 +288,17 @@ pub(crate) fn run_probe_calibration(
     let mut failures = Vec::new();
 
     for (i, probe) in probes.iter().enumerate() {
+        let embedding: &[f32] = embeddings
+            .and_then(|e| e.get(i))
+            .map(Vec::as_slice)
+            .unwrap_or(zero_emb.as_slice());
         let input = ScoringInput {
             id: 90000 + i as u64,
             title: probe.title,
             url: Some("https://probe.test"),
             content: probe.content,
             source_type: "hackernews",
-            embedding: &zero_emb,
+            embedding,
             created_at: None,
             detected_lang: "en",
             source_tags: &[],
@@ -378,9 +391,22 @@ pub(crate) struct SignalAudit {
     pub dependency_fires: bool,
 }
 
-pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) -> SignalAudit {
-    // Score a single domain-relevant probe and inspect the breakdown
+/// The single generic dev probe used to audit which signal axes fire. Lifted to
+/// constants so the calibration command can embed it with the real pipeline and
+/// pass the vector back in via `audit_embedding`.
+pub(crate) const AUDIT_PROBE_TITLE: &str = "Critical CVE in widely-used open source library";
+pub(crate) const AUDIT_PROBE_CONTENT: &str = "A critical remote code execution vulnerability has been discovered in a popular dependency. All developers should update immediately.";
+
+pub(crate) fn audit_signal_axes(
+    ctx: &ScoringContext,
+    db: &crate::db::Database,
+    audit_embedding: Option<&[f32]>,
+) -> SignalAudit {
+    // Score a single domain-relevant probe and inspect the breakdown. Use the
+    // real embedding when available so the `context`/`interest`/`ace` axes are
+    // judged against the engine's semantic layer, not zero vectors.
     let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let embedding = audit_embedding.unwrap_or(zero_emb.as_slice());
     let opts = ScoringOptions {
         apply_freshness: false,
         apply_signals: false,
@@ -390,11 +416,11 @@ pub(crate) fn audit_signal_axes(ctx: &ScoringContext, db: &crate::db::Database) 
     // Use a generic dev probe that should score for most contexts
     let input = ScoringInput {
         id: 99999,
-        title: "Critical CVE in widely-used open source library",
-        content: "A critical remote code execution vulnerability has been discovered in a popular dependency. All developers should update immediately.",
+        title: AUDIT_PROBE_TITLE,
+        content: AUDIT_PROBE_CONTENT,
         source_type: "hackernews",
         url: Some("https://probe.test"),
-        embedding: &zero_emb,
+        embedding,
         created_at: None,
         detected_lang: "en",
         source_tags: &[],
@@ -521,7 +547,7 @@ mod tests {
     fn signal_audit_empty_context() {
         let db = crate::test_utils::test_db();
         let ctx = crate::test_utils::empty_scoring_context();
-        let audit = audit_signal_axes(&ctx, &db);
+        let audit = audit_signal_axes(&ctx, &db, None);
         // Empty context might still fire interest axis via keyword matching
         assert!(audit.axes.len() <= 5);
     }

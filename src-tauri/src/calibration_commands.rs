@@ -113,7 +113,51 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
         .context("Context build failed")?;
 
     // Check Ollama/embedding status
-    let rig = check_rig_requirements().await;
+    let mut rig = check_rig_requirements().await;
+
+    // Select the user's domain-aware probes, then embed them with the REAL embedding
+    // pipeline (the same provider the scorer uses). Discrimination and signal-axis
+    // coverage MUST be measured with the engine's actual semantic layer — not zero
+    // vectors — or they understate a rig whose embeddings are working. The first text
+    // is the signal-audit probe; the rest are the discrimination probes, aligned 1:1.
+    // The non-zero result also gives us a provider-agnostic ground truth for
+    // `embedding_available` that credits built-in fastembed and cloud, not just Ollama.
+    let (probes, _probe_domain) = calibration_probes::select_probes_for_user(&ctx);
+    let mut probe_texts = Vec::with_capacity(probes.len() + 1);
+    probe_texts.push(format!(
+        "{}\n{}",
+        calibration_probes::AUDIT_PROBE_TITLE,
+        calibration_probes::AUDIT_PROBE_CONTENT
+    ));
+    for p in &probes {
+        probe_texts.push(format!("{}\n{}", p.title, p.content));
+    }
+    let embeddings = crate::embeddings::embed_texts(&probe_texts)
+        .await
+        .unwrap_or_default();
+    let embeddings_are_real = embeddings
+        .first()
+        .is_some_and(|v| v.iter().any(|x| *x != 0.0));
+
+    // Provider-agnostic embedding truth: if embeddings actually came back, the engine
+    // has working semantic scoring no matter the provider. Reconcile the rig (which
+    // only probed Ollama) so built-in/cloud users aren't told to install Ollama.
+    if embeddings_are_real {
+        rig.embedding_available = true;
+        rig.can_reach_grade_a = true;
+        if rig.embedding_model.is_none() {
+            rig.embedding_model = Some("built-in (fastembed)".to_string());
+        }
+        rig.grade_a_requirements
+            .retain(|r| !r.contains("Ollama") && !r.starts_with("Embedding ready"));
+    }
+
+    let audit_embedding = embeddings.first().map(Vec::as_slice);
+    let probe_embeddings: Option<&[Vec<f32>]> = if embeddings.len() > 1 {
+        Some(&embeddings[1..])
+    } else {
+        None
+    };
 
     // === 4-Dimension Scoring ===
 
@@ -123,12 +167,13 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
     // Dimension 2: Context Richness
     let context_score = calibration_probes::compute_context_score(&ctx);
 
-    // Dimension 3: Signal Coverage (audit which axes fire)
-    let audit = calibration_probes::audit_signal_axes(&ctx, db);
+    // Dimension 3: Signal Coverage (audit which axes fire — with real embedding)
+    let audit = calibration_probes::audit_signal_axes(&ctx, db, audit_embedding);
     let signal_score = calibration_probes::compute_signal_score(&audit);
 
-    // Dimension 4: Discrimination (run domain-aware probes)
-    let probe_results = calibration_probes::run_probe_calibration(&ctx, db);
+    // Dimension 4: Discrimination (domain-aware probes, scored with real embeddings)
+    let probe_results =
+        calibration_probes::run_probe_calibration(&ctx, db, &probes, probe_embeddings);
     let disc_score = calibration_probes::compute_discrimination_score(&probe_results);
 
     // Compute grade from 4 dimensions
@@ -146,21 +191,18 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
     // === Build Recommendations (with action_type) ===
     let mut recommendations = Vec::new();
 
-    if !rig.ollama_running {
+    // Only surface an embedding fix when semantic scoring genuinely isn't working.
+    // `embedding_available` is now provider-agnostic, so a user on the bundled
+    // local model (or a cloud key) is never told to install Ollama.
+    if !rig.embedding_available {
         recommendations.push(Recommendation {
             priority: "P0".into(),
-            title: "Install and run Ollama".into(),
-            description: "Ollama provides local embeddings that dramatically improve scoring accuracy. Without it, scoring relies on keyword matching only.".into(),
-            action: Some("Built-in embedding available. For Ollama: ollama pull nomic-embed-text".into()),
-            action_type: Some("install_ollama".into()),
-        });
-    } else if !rig.embedding_available {
-        recommendations.push(Recommendation {
-            priority: "P0".into(),
-            title: "Pull an embedding model".into(),
-            description: "Ollama is running but no embedding model is available. Pull one to enable semantic scoring.".into(),
+            title: "Enable semantic scoring".into(),
+            description: "Scoring is running on keyword matching only — no embedding model is available. 4DA ships with a built-in local model; if it didn't load, install Ollama and pull nomic-embed-text, or add an API key in Settings.".into(),
             action: Some("ollama pull nomic-embed-text".into()),
-            action_type: Some("pull_embedding_model".into()),
+            action_type: Some(
+                if rig.ollama_running { "pull_embedding_model" } else { "install_ollama" }.into(),
+            ),
         });
     }
 
@@ -274,7 +316,7 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         .build()
         .map(|c| c.get(format!("{ollama_url}/api/tags")));
 
-    let (ollama_running, embedding_model, models_list) = match ollama_check {
+    let (ollama_running, embedding_model, _models_list) = match ollama_check {
         Ok(req) => match req.send().await {
             Ok(resp) if resp.status().is_success() => {
                 let body: serde_json::Value = resp.json().await.unwrap_or_default();
@@ -300,15 +342,17 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
     };
 
     let embedding_available = embedding_model.is_some();
-    let gpu_detected = models_list.len() > 2;
+
+    // Real hardware probe (nvidia-smi / wmic / system_profiler / lspci), cached and
+    // best-effort — never the old "3+ Ollama models installed" proxy, which had nothing
+    // to do with whether a GPU exists.
+    let hw = crate::hardware_detect::detect_hardware();
+    let gpu_detected = hw.gpu.is_some();
 
     let mut grade_a_requirements = Vec::new();
-    if !ollama_running {
-        grade_a_requirements.push("Install and run Ollama (https://ollama.com)".into());
-    }
     if !embedding_available {
         grade_a_requirements
-            .push("Embedding ready (built-in). For Ollama: ollama pull nomic-embed-text".into());
+            .push("Enable semantic scoring (built-in model, Ollama, or an API key)".into());
     }
     grade_a_requirements.push("Add 3+ interests in Settings".into());
     grade_a_requirements.push("Give 10+ feedback interactions (thumbs up/down)".into());
@@ -321,8 +365,16 @@ pub(crate) async fn check_rig_requirements() -> RigRequirements {
         embedding_available,
         gpu_detected,
         recommended_model: "snowflake-arctic-embed-m".into(),
-        estimated_ram_gb: if gpu_detected { 8.0 } else { 4.0 },
-        can_reach_grade_a: ollama_running && embedding_available,
+        estimated_ram_gb: if hw.ram_total_gb > 0.0 {
+            hw.ram_total_gb
+        } else if gpu_detected {
+            8.0
+        } else {
+            4.0
+        },
+        // Grade A is gated on working embeddings (any provider), not Ollama specifically.
+        // run_calibration re-affirms this once the live embed test confirms the engine.
+        can_reach_grade_a: embedding_available,
         grade_a_requirements,
     }
 }
