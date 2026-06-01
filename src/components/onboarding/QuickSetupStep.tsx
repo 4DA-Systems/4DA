@@ -50,6 +50,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     handleApiKeyChange,
     handleContinue,
     handleSkipDownload,
+    downloadLocalModels,
     setNewInterest,
   } = useQuickSetup({ isAnimating, onComplete, onBack });
 
@@ -143,6 +144,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                 pullProgress={pullProgress}
                 onProviderChange={handleProviderChange}
                 onApiKeyChange={handleApiKeyChange}
+                onDownloadModels={downloadLocalModels}
               />
               {apiKeyHint && (
                 <p className="mt-1 px-4 text-xs text-amber-400">{apiKeyHint}</p>

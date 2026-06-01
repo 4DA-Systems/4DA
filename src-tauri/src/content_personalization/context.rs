@@ -423,9 +423,21 @@ fn assemble_settings() -> SettingsData {
     let llm = &guard.get().llm;
 
     SettingsData {
-        has_llm: !llm.api_key.is_empty() || llm.provider == "ollama",
+        has_llm: compute_has_llm(&llm.provider, &llm.api_key),
         llm_provider: llm.provider.clone(),
         llm_model: llm.model.clone(),
+    }
+}
+
+/// Honest LLM availability: a provider must actually be selected AND usable.
+/// A stale/leftover api_key with provider "none" must NOT read as has_llm — that
+/// produced the first-run lie `has_llm:true` / `llm_tier:"cloud"` with no provider.
+/// Local providers (ollama/builtin) need no key; cloud providers need one.
+fn compute_has_llm(provider: &str, api_key: &str) -> bool {
+    match provider {
+        "none" | "" => false,
+        "ollama" | "builtin" => true,
+        _ => !api_key.is_empty(),
     }
 }
 
@@ -546,6 +558,23 @@ mod tests {
         let h2 = context_hash(&ctx);
         assert_eq!(h1, h2);
         assert_eq!(h1.len(), 64); // SHA-256 hex
+    }
+
+    #[test]
+    fn test_compute_has_llm_is_provider_driven() {
+        // The first-run lie: a leftover api_key with provider "none" must NOT
+        // read as has_llm (it previously surfaced has_llm:true / llm_tier:"cloud"
+        // with no provider configured).
+        assert!(!compute_has_llm("none", "sk-ant-leftover-key"));
+        assert!(!compute_has_llm("", "sk-ant-leftover-key"));
+        assert!(!compute_has_llm("none", ""));
+        // Local providers need no key.
+        assert!(compute_has_llm("ollama", ""));
+        assert!(compute_has_llm("builtin", ""));
+        // Cloud providers require a key.
+        assert!(!compute_has_llm("anthropic", ""));
+        assert!(compute_has_llm("anthropic", "sk-ant-real"));
+        assert!(compute_has_llm("openai", "sk-real"));
     }
 
     #[test]

@@ -22,8 +22,10 @@ interface PullProgress {
 export function CalibrationStep({ isAnimating, onComplete, onBack }: CalibrationStepProps) {
   const { t } = useTranslation();
   const embeddingMode = useAppStore(s => s.embeddingMode);
-  const discoveredContext = useAppStore(s => s.discoveredContext);
-  const userContext = useAppStore(s => s.userContext);
+  // Setup-complete counts come from the persisted backend profile (the same
+  // source Settings reads) — NOT optimistic frontend store state, which drifted
+  // and produced fabricated counts (e.g. "16 interests" with 0 persisted).
+  const [setupCounts, setSetupCounts] = useState<{ tech: number; interests: number } | null>(null);
   const [result, setResult] = useState<CalibrationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,21 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       void runCalibration();
     }
   }, [runCalibration]);
+
+  // Pull the real, persisted profile counts for the "Setup complete" summary.
+  useEffect(() => {
+    let cancelled = false;
+    void cmd('get_user_context')
+      .then((ctx) => {
+        if (cancelled) return;
+        setSetupCounts({
+          tech: ctx?.tech_stack?.length ?? 0,
+          interests: ctx?.interests?.length ?? 0,
+        });
+      })
+      .catch(() => { if (!cancelled) setSetupCounts({ tech: 0, interests: 0 }); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -253,9 +270,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               {/* eslint-disable-next-line i18next/no-literal-string */}
               <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
-                {(discoveredContext?.tech?.length ?? 0) > 0
+                {(setupCounts?.tech ?? 0) > 0
                   ? t('calibration.onboarding.summaryProjects', {
-                      count: discoveredContext.tech.length,
+                      count: setupCounts!.tech,
                     })
                   : t('calibration.onboarding.summaryNoProjects')
                 }
@@ -265,9 +282,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
               {/* eslint-disable-next-line i18next/no-literal-string */}
               <span style={{ color: '#22C55E', fontSize: 12 }}>&#10003;</span>
               <span style={{ fontSize: 11, color: '#A0A0A0' }}>
-                {(userContext?.interests?.length ?? 0) > 0
+                {(setupCounts?.interests ?? 0) > 0
                   ? t('calibration.onboarding.summaryInterests', {
-                      count: userContext!.interests.length,
+                      count: setupCounts!.interests,
                     })
                   : t('calibration.onboarding.summaryDefaultInterests')
                 }

@@ -33,6 +33,7 @@ interface SetupAIProviderProps {
   pullProgress: Record<string, PullProgress>;
   onProviderChange: (provider: ProviderType) => void;
   onApiKeyChange: (key: string) => void;
+  onDownloadModels?: () => void;
 }
 
 export function SetupAIProvider({
@@ -43,6 +44,7 @@ export function SetupAIProvider({
   pullProgress,
   onProviderChange,
   onApiKeyChange,
+  onDownloadModels,
 }: SetupAIProviderProps) {
   const { t } = useTranslation();
   const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
@@ -206,7 +208,7 @@ export function SetupAIProvider({
                   key={p}
                   onClick={() => { setBuiltinSelected(false); onProviderChange(p); }}
                   className={`p-3 rounded-lg text-center transition-all ${
-                    provider === p
+                    provider === p && !builtinSelected
                       ? 'bg-green-500/15 border-2 border-green-500/50'
                       : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                   }`}
@@ -289,7 +291,7 @@ export function SetupAIProvider({
           )}
 
           {/* API key input for cloud providers */}
-          {(provider === 'anthropic' || provider === 'openai') && (
+          {(provider === 'anthropic' || provider === 'openai') && !builtinSelected && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs text-text-muted">
@@ -317,7 +319,7 @@ export function SetupAIProvider({
           )}
 
           {/* OpenAI-compatible provider input */}
-          {provider === 'openai-compatible' && (
+          {provider === 'openai-compatible' && !builtinSelected && (
             <div className="space-y-2">
               <label className="text-xs text-text-muted">{t('onboarding.setupAi.otherProviderHint')}</label>
               <input
@@ -351,9 +353,23 @@ export function SetupAIProvider({
           )}
 
           {/* Cloud provider without key — basic mode hint */}
-          {(provider === 'anthropic' || provider === 'openai') && !apiKey.trim() && (
+          {(provider === 'anthropic' || provider === 'openai') && !apiKey.trim() && !builtinSelected && (
             <div className="text-xs text-text-muted p-3 bg-bg-tertiary rounded-lg border border-border">
               {t('onboarding.setupAi.noKeyHint')}
+            </div>
+          )}
+
+          {/* Ollama running but missing models — explicit, consented download
+              (never auto-pulled; downloading GBs unprompted is a false-state surprise) */}
+          {provider === 'ollama' && ollamaStatus?.running && !ollamaReady && !builtinSelected && (
+            <div className="text-text-secondary text-sm p-3 bg-bg-tertiary rounded-lg border border-border space-y-2">
+              <p className="text-xs text-text-muted">{t('onboarding.setupAi.modelsNeeded')}</p>
+              <button
+                onClick={() => onDownloadModels?.()}
+                className="px-3 py-1.5 text-xs font-medium bg-orange-500/15 text-orange-300 border border-orange-500/30 rounded-lg hover:bg-orange-500/25 transition-colors"
+              >
+                {t('onboarding.setupAi.downloadModels')}
+              </button>
             </div>
           )}
         </>

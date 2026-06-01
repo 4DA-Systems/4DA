@@ -109,8 +109,11 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
           setAiOpen(false);
           setProjectsOpen(true);
         } else if (status.running) {
+          // Ollama is running but missing model(s). Do NOT auto-pull — silently
+          // downloading ~GBs of models during an "optional" setup step is a
+          // false-state surprise. Select the provider and let the user trigger
+          // the download explicitly via downloadLocalModels().
           setProvider('ollama');
-          void pullMissingModels(status);
         }
       } catch {
         setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' } as OllamaStatus);
@@ -202,6 +205,12 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     );
   };
 
+  // Explicit, user-initiated local-model download. Replaces the old silent
+  // auto-pull on mount — models only download when the user asks.
+  const downloadLocalModels = useCallback(() => {
+    if (ollamaStatus?.running) void pullMissingModels(ollamaStatus);
+  }, [ollamaStatus, pullMissingModels]);
+
   const handleProviderChange = (p: ProviderType) => {
     setProvider(p);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
@@ -274,5 +283,6 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     error, setError, isSaving, apiKeyHint, skippedDownload,
     removeTag, addInterest, toggleInterest,
     handleProviderChange, handleApiKeyChange, handleContinue, handleSkipDownload,
+    downloadLocalModels,
   };
 }
