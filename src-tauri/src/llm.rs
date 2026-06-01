@@ -188,7 +188,7 @@ impl LLMClient {
                 self.complete_openai(system, messages.clone()).await
             }
             "ollama" => self.complete_ollama(system, messages.clone()).await,
-            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+            _ => return Err(self.provider_error_message().into()),
         };
 
         let response = match result {
@@ -282,7 +282,7 @@ impl LLMClient {
                 self.complete_ollama_structured(system, messages.clone(), mode)
                     .await
             }
-            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+            _ => return Err(self.provider_error_message().into()),
         };
 
         let response = match result {
@@ -341,7 +341,7 @@ impl LLMClient {
                 self.complete_openai(system, messages.clone()).await
             }
             "ollama" => self.complete_ollama(system, messages.clone()).await,
-            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+            _ => return Err(self.provider_error_message().into()),
         };
 
         let response = match result {
@@ -355,7 +355,7 @@ impl LLMClient {
                         self.complete_openai(system, messages).await?
                     }
                     "ollama" => self.complete_ollama(system, messages).await?,
-                    _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+                    _ => return Err(self.provider_error_message().into()),
                 }
             }
         };
@@ -377,6 +377,23 @@ impl LLMClient {
         }
 
         Ok(response)
+    }
+
+    /// Build a clean, actionable message for an unconfigured or unsupported
+    /// provider. Never leaks a raw "Unknown provider: none" string to the UI —
+    /// `provider = "none"` is the normal skip-setup state, not an error condition.
+    fn provider_error_message(&self) -> String {
+        let p = self.provider.provider.as_str();
+        if p.is_empty() || p == "none" {
+            "No AI provider configured yet. Open Settings → AI Provider to add a key, \
+             or start the built-in local model, to enable semantic ranking and AI briefings."
+                .to_string()
+        } else {
+            format!(
+                "Unsupported AI provider \"{p}\". Choose Anthropic, OpenAI, Ollama, \
+                 or the built-in local model in Settings."
+            )
+        }
     }
 
     /// Anthropic Claude API
@@ -923,7 +940,7 @@ impl LLMClient {
                 )
                 .await
             }
-            _ => return Err(format!("Unknown provider: {}", self.provider.provider).into()),
+            _ => return Err(self.provider_error_message().into()),
         };
 
         let response = match result {
