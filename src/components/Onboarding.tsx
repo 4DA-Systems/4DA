@@ -147,21 +147,39 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     onComplete();
   };
 
+  // Consented, recommended local scan: run the same project discovery the
+  // setup step awaits, then finish onboarding. Nothing leaves the machine.
+  const handleScanAndComplete = async () => {
+    try {
+      await cmd('ace_auto_discover');
+    } catch {
+      // Non-critical — proceed even if discovery fails
+    }
+    try {
+      await cmd('mark_onboarding_complete');
+    } catch {
+      // Non-critical — continue anyway
+    }
+    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
+    onComplete();
+  };
+
   // Hide progress indicator on the choice gate — it's a decision point, not a step
   const showProgress = step !== 'choice';
 
   return (
     <div ref={modalRef} className="fixed inset-0 z-50 overflow-y-auto bg-bg-primary" role="dialog" aria-modal="true" aria-label="Setup wizard">
-      {/* Inner wrapper centers the step when it fits and scrolls when it
-          overflows. A fixed flex+justify-center container clips overflow and
-          has no scrollbar, so on a short window the Welcome step's Skip link
-          collided with the absolute version footer. min-h-full keeps the
-          centered look; the extra vertical padding keeps content clear of the
-          absolute progress (top) and version (bottom). */}
-      <div className="relative min-h-full flex flex-col items-center justify-center p-8 py-20">
+      {/* Inner wrapper: progress is an in-flow HEADER, the step content is
+          centered in the flex-1 region below it, and the version is an in-flow
+          FOOTER. Keeping progress/version in normal flow (not absolute)
+          guarantees tall steps (Welcome's logo, Quick Setup's heading) can
+          never overlap the step circles. min-h-full + the parent's
+          overflow-y-auto keep it centered when it fits and scrollable when it
+          doesn't. */}
+      <div className="relative min-h-full flex flex-col items-center p-8 pb-12">
       {/* Progress indicator — hidden during choice gate */}
       {showProgress && (
-        <div className="absolute top-8 flex flex-col items-center gap-2">
+        <div className="shrink-0 mt-2 mb-10 flex flex-col items-center gap-2">
           {/* Step X of Y text */}
           <p className="text-xs text-text-muted">
             {t('onboarding.stepProgress', { current: displayIndex + 1, total: displaySteps.length })}
@@ -208,7 +226,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         </div>
       )}
 
-      {/* Step content */}
+      {/* Step content — centered between the in-flow progress header and the
+          version footer, so tall steps (Welcome's logo, Quick Setup's heading)
+          never overlap the step circles above them. */}
+      <div className="flex-1 w-full flex items-center justify-center">
       <div className="max-w-2xl w-full">
         {step === 'welcome' && (
           // "Skip" routes to the choice gate — the honest decision point that
@@ -232,6 +253,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             hasProviderConfigured={hasProviderConfigured}
             onStartUsing={() => void handleSkipToContent()}
             onContinueSetup={nextStep}
+            onScanProjects={handleScanAndComplete}
           />
         )}
 
@@ -251,9 +273,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           />
         )}
       </div>
+      </div>
 
       {/* Version */}
-      <p className="absolute bottom-6 text-xs text-text-muted">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
+      <p className="shrink-0 mt-8 text-xs text-text-muted">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // i18n mock — return key as text (with defaultValue fallback)
 vi.mock('react-i18next', () => ({
@@ -14,78 +14,80 @@ import { OnboardingChoiceGate } from './OnboardingChoiceGate';
 describe('OnboardingChoiceGate', () => {
   const mockStartUsing = vi.fn();
   const mockContinueSetup = vi.fn();
+  const mockScanProjects = vi.fn();
 
   beforeEach(() => {
     mockStartUsing.mockClear();
     mockContinueSetup.mockClear();
+    mockScanProjects.mockClear();
   });
 
-  it('renders both choice buttons', () => {
+  const renderGate = (hasProviderConfigured = false, isAnimating = false) =>
     render(
       <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={false}
+        isAnimating={isAnimating}
+        hasProviderConfigured={hasProviderConfigured}
         onStartUsing={mockStartUsing}
         onContinueSetup={mockContinueSetup}
+        onScanProjects={mockScanProjects}
       />,
     );
 
-    expect(screen.getByText(/skip for now/i)).toBeInTheDocument();
-    expect(screen.getByText('Continue setup')).toBeInTheDocument();
+  it('renders all three choice paths', () => {
+    renderGate();
+
+    expect(screen.getByText('Scan my projects')).toBeInTheDocument();
+    expect(screen.getByText('Continue full setup')).toBeInTheDocument();
+    expect(screen.getByText(/keyword matching only/i)).toBeInTheDocument();
   });
 
-  it('calls onStartUsing when start button is clicked', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={true}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
+  it('calls onScanProjects when the scan button is clicked', () => {
+    mockScanProjects.mockResolvedValue(undefined);
+    renderGate();
 
-    fireEvent.click(screen.getByText('Start using 4DA'));
-    expect(mockStartUsing).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText('Scan my projects'));
+    expect(mockScanProjects).toHaveBeenCalledTimes(1);
     expect(mockContinueSetup).not.toHaveBeenCalled();
-  });
-
-  it('calls onContinueSetup when continue button is clicked', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={false}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
-
-    fireEvent.click(screen.getByText('Continue setup'));
-    expect(mockContinueSetup).toHaveBeenCalledTimes(1);
     expect(mockStartUsing).not.toHaveBeenCalled();
   });
 
-  it('shows skip hint text when no provider configured', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={false}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
+  it('shows an inline scanning state while the scan runs', async () => {
+    // Never-resolving promise keeps the scanning state visible.
+    mockScanProjects.mockReturnValue(new Promise(() => {}));
+    renderGate();
 
-    expect(screen.getByText(/add an AI provider later/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Scan my projects'));
+    await waitFor(() => {
+      expect(screen.getByText(/Scanning your projects/i)).toBeInTheDocument();
+    });
+    // The choice buttons are replaced by the scanning state.
+    expect(screen.queryByText('Continue full setup')).not.toBeInTheDocument();
+  });
+
+  it('calls onContinueSetup when the continue button is clicked', () => {
+    renderGate();
+
+    fireEvent.click(screen.getByText('Continue full setup'));
+    expect(mockContinueSetup).toHaveBeenCalledTimes(1);
+    expect(mockScanProjects).not.toHaveBeenCalled();
+  });
+
+  it('calls onStartUsing when the keyword-only button is clicked', () => {
+    renderGate();
+
+    fireEvent.click(screen.getByText(/keyword matching only/i));
+    expect(mockStartUsing).toHaveBeenCalledTimes(1);
+    expect(mockScanProjects).not.toHaveBeenCalled();
+  });
+
+  it('shows the keyword-only hint text', () => {
+    renderGate();
+
+    expect(screen.getByText(/scan or add a provider anytime/i)).toBeInTheDocument();
   });
 
   it('applies animation classes when isAnimating is true', () => {
-    const { container } = render(
-      <OnboardingChoiceGate
-        isAnimating={true}
-        hasProviderConfigured={false}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
+    const { container } = renderGate(false, true);
 
     const wrapper = container.firstChild as HTMLElement;
     expect(wrapper.className).toContain('opacity-0');
@@ -93,72 +95,22 @@ describe('OnboardingChoiceGate', () => {
   });
 
   it('shows AI Provider status indicator', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={false}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
+    renderGate();
 
     expect(screen.getByText('AI Provider')).toBeInTheDocument();
   });
 
-  it('shows recommendation hint when provider is not configured', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={false}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
+  it('makes "Scan my projects" the primary recommended action', () => {
+    renderGate();
 
-    expect(
-      screen.getByText(/understands meaning.*surfaces.*more relevant/i),
-    ).toBeInTheDocument();
-  });
-
-  it('makes "Continue setup" primary when provider is not configured', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={false}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
-
-    const continueBtn = screen.getByText('Continue setup').closest('button')!;
-    expect(continueBtn.className).toContain('bg-orange-500');
-    expect(continueBtn.className).toContain('text-lg');
-  });
-
-  it('makes "Start using 4DA" primary when provider is configured', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={true}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
-
-    const startBtn = screen.getByText('Start using 4DA').closest('button')!;
-    expect(startBtn.className).toContain('bg-orange-500');
-    expect(startBtn.className).toContain('text-lg');
+    const scanBtn = screen.getByText('Scan my projects').closest('button')!;
+    expect(scanBtn.className).toContain('bg-orange-500');
+    expect(scanBtn.className).toContain('text-lg');
+    expect(screen.getByText('Recommended')).toBeInTheDocument();
   });
 
   it('shows green status for configured provider', () => {
-    render(
-      <OnboardingChoiceGate
-        isAnimating={false}
-        hasProviderConfigured={true}
-        onStartUsing={mockStartUsing}
-        onContinueSetup={mockContinueSetup}
-      />,
-    );
+    renderGate(true);
 
     const status = screen.getByRole('status');
     expect(status.className).toContain('text-green-400');

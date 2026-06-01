@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface OnboardingChoiceGateProps {
@@ -6,6 +7,7 @@ interface OnboardingChoiceGateProps {
   hasProviderConfigured: boolean;
   onStartUsing: () => void;
   onContinueSetup: () => void;
+  onScanProjects: () => void | Promise<void>;
 }
 
 export function OnboardingChoiceGate({
@@ -13,8 +15,19 @@ export function OnboardingChoiceGate({
   hasProviderConfigured,
   onStartUsing,
   onContinueSetup,
+  onScanProjects,
 }: OnboardingChoiceGateProps) {
   const { t } = useTranslation();
+  const [scanning, setScanning] = useState(false);
+
+  const handleScan = () => {
+    if (scanning) return;
+    setScanning(true);
+    void Promise.resolve(onScanProjects()).catch(() => {
+      // The scan handler proceeds on error; reset state defensively.
+      setScanning(false);
+    });
+  };
 
   return (
     <div
@@ -61,85 +74,76 @@ export function OnboardingChoiceGate({
         </span>
       </div>
 
-      <div className="flex flex-col items-center gap-4 max-w-sm mx-auto">
-        {hasProviderConfigured ? (
-          <>
-            {/* Provider configured: "Start using 4DA" is primary */}
-            <button
-              onClick={onStartUsing}
-              className="w-full px-8 py-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-semibold text-lg hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {t('onboarding.choice.startUsing', 'Start using 4DA')}
-            </button>
-            <p className="text-xs text-text-muted -mt-2">
-              {t(
-                'onboarding.choice.startHint',
-                'Analysis continues in the background',
-              )}
-            </p>
-
-            {/* Separator */}
-            <div className="flex items-center gap-3 w-full my-1" role="separator">
-              <div className="flex-1 h-px bg-border" aria-hidden="true" />
-              <span className="text-xs text-text-muted">
-                {t('onboarding.choice.or', 'or')}
+      {scanning ? (
+        /* Inline scanning state — everything stays on the user's device */
+        <div className="flex flex-col items-center gap-3 max-w-sm mx-auto py-4" role="status" aria-live="polite">
+          <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+          <p className="text-sm text-text-secondary">
+            {t('onboarding.choice.scanning', 'Scanning your projects… this stays on your device')}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-4 max-w-sm mx-auto">
+          {/* Primary, recommended path: a fully-local project scan */}
+          <button
+            onClick={handleScan}
+            disabled={scanning}
+            className="w-full px-8 py-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-semibold text-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+          >
+            <span className="inline-flex items-center justify-center gap-2">
+              {t('onboarding.choice.scanProjects', 'Scan my projects')}
+              <span className="text-[10px] px-1.5 py-0.5 bg-white/20 text-white rounded font-medium uppercase tracking-wide">
+                {t('onboarding.choice.scanRecommended', 'Recommended')}
               </span>
-              <div className="flex-1 h-px bg-border" aria-hidden="true" />
-            </div>
+            </span>
+          </button>
+          <p className="text-xs text-orange-400/80 -mt-2">
+            {t(
+              'onboarding.choice.scanProjectsDesc',
+              '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack in about a minute.',
+            )}
+          </p>
 
-            <button
-              onClick={onContinueSetup}
-              className="w-full px-8 py-2.5 bg-bg-secondary text-text-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm"
-            >
-              {t('onboarding.choice.continueSetup', 'Continue setup')}
-            </button>
-            <p className="text-xs text-text-muted -mt-2">
-              {t(
-                'onboarding.choice.continueHint',
-                'Configure AI provider, stack, interests',
-              )}
-            </p>
-          </>
-        ) : (
-          <>
-            {/* No provider: "Continue setup" is primary */}
-            <button
-              onClick={onContinueSetup}
-              className="w-full px-8 py-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-semibold text-lg hover:scale-[1.02] active:scale-[0.98]"
-            >
-              {t('onboarding.choice.continueSetup', 'Continue setup')}
-            </button>
-            <p className="text-xs text-orange-400/80 -mt-2">
-              {t(
-                'onboarding.choice.recommendProvider',
-                'AI understands meaning, not just keywords — surfaces 3× more relevant content',
-              )}
-            </p>
+          {/* Separator */}
+          <div className="flex items-center gap-3 w-full my-1" role="separator">
+            <div className="flex-1 h-px bg-border" aria-hidden="true" />
+            <span className="text-xs text-text-muted">
+              {t('onboarding.choice.or', 'or')}
+            </span>
+            <div className="flex-1 h-px bg-border" aria-hidden="true" />
+          </div>
 
-            {/* Separator */}
-            <div className="flex items-center gap-3 w-full my-1" role="separator">
-              <div className="flex-1 h-px bg-border" aria-hidden="true" />
-              <span className="text-xs text-text-muted">
-                {t('onboarding.choice.or', 'or')}
-              </span>
-              <div className="flex-1 h-px bg-border" aria-hidden="true" />
-            </div>
+          {/* Secondary path: manual full setup */}
+          <button
+            onClick={onContinueSetup}
+            disabled={scanning}
+            className="w-full px-8 py-2.5 bg-bg-secondary text-text-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm disabled:opacity-50"
+          >
+            {t('onboarding.choice.continueSetup', 'Continue full setup')}
+          </button>
+          <p className="text-xs text-text-muted -mt-2">
+            {t(
+              'onboarding.choice.continueHint',
+              'Configure AI provider, stack, interests',
+            )}
+          </p>
 
-            <button
-              onClick={onStartUsing}
-              className="w-full px-8 py-2.5 bg-bg-secondary text-text-muted rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm"
-            >
-              {t('onboarding.choice.skipForNow', 'Skip for now — keyword matching only')}
-            </button>
-            <p className="text-xs text-text-muted/60 -mt-2">
-              {t(
-                'onboarding.choice.skipHint',
-                'You can add an AI provider later in Settings',
-              )}
-            </p>
-          </>
-        )}
-      </div>
+          {/* Tertiary, muted path: keyword matching only */}
+          <button
+            onClick={onStartUsing}
+            disabled={scanning}
+            className="w-full px-8 py-2 bg-transparent text-text-muted rounded-lg border border-transparent hover:text-text-secondary transition-all text-sm disabled:opacity-50"
+          >
+            {t('onboarding.choice.keywordOnly', 'Not now — keyword matching only')}
+          </button>
+          <p className="text-xs text-text-muted/60 -mt-2">
+            {t(
+              'onboarding.choice.keywordOnlyHint',
+              'You can scan or add a provider anytime in Settings.',
+            )}
+          </p>
+        </div>
+      )}
 
       <p className="text-[10px] text-text-muted mt-6" aria-live="polite">
         {t('onboarding.keyboardHint', 'Pro tip: Press R to analyze, / to search, ? for all shortcuts')}
