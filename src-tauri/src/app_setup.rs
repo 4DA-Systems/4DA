@@ -148,7 +148,7 @@ pub(crate) fn initialize_pre_tauri() {
             "libonnxruntime.so"
         };
         let candidates = [
-            paths.resource_dir.join("models").join("ort").join(ort_lib),
+            paths.bundled_models_dir().join("ort").join(ort_lib),
             paths.model_cache_dir().join("ort").join(ort_lib),
         ];
         if let Some(path) = candidates.iter().find(|p| p.exists()) {
