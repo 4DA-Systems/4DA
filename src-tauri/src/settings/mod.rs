@@ -68,6 +68,41 @@ mod tests {
     }
 
     // ========================================================================
+    // SettingsManager -- reverse trial auto-starts on first launch
+    // ========================================================================
+
+    #[test]
+    fn test_reverse_trial_auto_starts_on_first_launch() {
+        // Genuine first run via the real constructor (hydrate=true) into an empty
+        // temp dir: the 14-day Signal trial must auto-start and be active. A second
+        // load of the same dir must NOT re-trigger — the timestamp stays put.
+        let tmp = std::env::temp_dir().join("4da_test_reverse_trial");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("create temp dir");
+
+        let manager = SettingsManager::new(&tmp);
+        let started_at = manager.get().license.trial_started_at.clone();
+        assert!(
+            started_at.is_some(),
+            "First launch should auto-start the trial (trial_started_at set)"
+        );
+        assert!(
+            crate::settings::is_trial_active(&manager.get().license),
+            "Freshly auto-started trial should be active"
+        );
+
+        // Idempotency: re-loading the same data dir must keep the original timestamp.
+        let reloaded = SettingsManager::new(&tmp);
+        assert_eq!(
+            reloaded.get().license.trial_started_at,
+            started_at,
+            "Trial start must not re-trigger on subsequent launches"
+        );
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ========================================================================
     // SettingsManager -- malformed JSON settings file
     // ========================================================================
 

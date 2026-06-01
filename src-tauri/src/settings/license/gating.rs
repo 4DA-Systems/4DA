@@ -99,7 +99,35 @@ pub fn require_signal_feature(feature: &str) -> Result<()> {
     if is_signal_feature_available(feature, license) {
         Ok(())
     } else {
-        Err(format!("{feature} requires 4DA Signal — upgrade or start a free trial").into())
+        Err(format!(
+            "{} requires 4DA Signal — start your free trial or upgrade to unlock it.",
+            signal_feature_label(feature)
+        )
+        .into())
+    }
+}
+
+/// Human-readable label for a Signal-gated feature, so error messages never
+/// leak raw backend command names (e.g. "get_preemption_alerts") to the UI.
+fn signal_feature_label(feature: &str) -> &'static str {
+    match feature {
+        "get_preemption_alerts" => "Preemption Radar",
+        "get_blind_spots" => "Blind Spots",
+        "get_knowledge_gaps" => "Knowledge Gaps",
+        "get_signal_chains" | "get_signal_chains_predicted" | "resolve_signal_chain" => {
+            "Signal Chains"
+        }
+        "get_attention_report" => "Attention Report",
+        "synthesize_search" => "Search Synthesis",
+        "standing_queries" => "Standing Queries",
+        "get_semantic_shifts" => "Semantic Shifts",
+        "get_project_health" | "get_project_health_comparison" => "Project Health",
+        "get_decision_health_report" => "Decision Health",
+        "get_tech_convergence" => "Tech Convergence",
+        "get_cross_project_dependencies" => "Cross-Project Dependencies",
+        "get_accuracy_report" | "get_intelligence_report" => "Intelligence Report",
+        "get_domain_precision_report" | "get_false_positive_analysis" => "Trust Ledger",
+        _ => "This feature",
     }
 }
 

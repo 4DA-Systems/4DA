@@ -226,6 +226,33 @@ impl SettingsManager {
             }
         }
 
+        // --- Reverse trial: auto-start the 14-day Signal trial on first launch ---
+        // Every brand-new install experiences the full product (Preemption, Blind
+        // Spots, Signal Chains, …) for 14 days, then converts or drops to Free.
+        // Fires exactly once: once `trial_started_at` is set it never re-triggers,
+        // and a real license (paid tier or key) opts out. Gated on `hydrate_keychain`
+        // so the test constructor (`new_without_keychain`) never silently grants a trial.
+        if hydrate_keychain
+            && settings.license.trial_started_at.is_none()
+            && settings.license.license_key.is_empty()
+            && settings.license.tier == "free"
+        {
+            let now = chrono::Utc::now().to_rfc3339();
+            info!(target: "4da::license", "First launch — auto-starting 14-day Signal trial");
+            settings.license.trial_started_at = Some(now);
+            // Persist immediately so the trial window is stable across restarts
+            // (mirrors the tier-migration persist pattern above).
+            if let Some(parent) = settings_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                let tmp_path = settings_path.with_extension("json.tmp");
+                if fs::write(&tmp_path, &json).is_ok() {
+                    let _ = atomic_replace(&tmp_path, &settings_path);
+                }
+            }
+        }
+
         Self {
             settings,
             usage,
