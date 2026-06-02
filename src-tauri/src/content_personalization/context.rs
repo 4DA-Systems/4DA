@@ -584,6 +584,23 @@ mod tests {
     }
 
     #[test]
+    fn test_compute_has_llm_cloud_and_unknown_providers_need_a_key() {
+        // openai-compatible is a cloud-shaped provider: usable only with a key.
+        assert!(compute_has_llm("openai-compatible", "endpoint-token"));
+        assert!(!compute_has_llm("openai-compatible", ""));
+        // An unrecognised provider value falls through to the cloud arm — it must
+        // require a key, never read as configured on its own. This keeps the helper
+        // fail-safe against a future provider string nobody added a branch for.
+        assert!(compute_has_llm("some-future-provider", "k"));
+        assert!(!compute_has_llm("some-future-provider", ""));
+        // Whitespace-only key for a cloud provider is still a non-empty string — the
+        // is_empty() check is intentionally byte-level; the *frontend* trims before
+        // persisting (validateApiKey / saveLlmProvider), so a trimmed-empty key never
+        // reaches here as the provider value "anthropic".
+        assert!(compute_has_llm("anthropic", " "));
+    }
+
+    #[test]
     fn test_compute_derived_llm_tiers() {
         let profile = ProfileData::default();
 
