@@ -47,6 +47,27 @@ export function validateApiKey(provider: ProviderType, key: string): boolean {
   return trimmed.length > 10;
 }
 
+/**
+ * Persist the built-in local model as the active provider — but ONLY if a model is
+ * actually downloaded (so it can run). Selecting "Built-in" without a downloaded model
+ * is not a configured provider, so we persist `none` and let semantic search carry it,
+ * rather than claiming a provider the system can't use (a false-ready state).
+ */
+export async function saveBuiltinProvider(): Promise<void> {
+  const noProvider = { provider: 'none', apiKey: '', model: '', baseUrl: null, openaiApiKey: null };
+  try {
+    const list = await cmd('list_builtin_models');
+    const ready = list.models?.find((m) => m.downloaded);
+    if (ready) {
+      await cmd('set_llm_provider', {
+        provider: 'builtin', apiKey: '', model: ready.id, baseUrl: null, openaiApiKey: null,
+      });
+      return;
+    }
+  } catch { /* fall through to no-provider */ }
+  await cmd('set_llm_provider', noProvider);
+}
+
 /** Persist the chosen LLM provider + key to the backend. */
 export async function saveLlmProvider(
   provider: ProviderType,

@@ -34,6 +34,8 @@ interface SetupAIProviderProps {
   onProviderChange: (provider: ProviderType) => void;
   onApiKeyChange: (key: string) => void;
   onDownloadModels?: () => void;
+  builtinSelected: boolean;
+  onSelectBuiltin: () => void;
 }
 
 export function SetupAIProvider({
@@ -45,15 +47,16 @@ export function SetupAIProvider({
   onProviderChange,
   onApiKeyChange,
   onDownloadModels,
+  builtinSelected,
+  onSelectBuiltin,
 }: SetupAIProviderProps) {
   const { t } = useTranslation();
   const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
   const [importing, setImporting] = useState(false);
   const [localServers, setLocalServers] = useState<LocalServer[]>([]);
-  // The built-in model runs as its own sidecar (start_builtin_llm) independent
-  // of the BYOK/Ollama provider selection, so we track its expansion locally
-  // rather than routing through onProviderChange.
-  const [builtinSelected, setBuiltinSelected] = useState(false);
+  // The built-in model runs as its own sidecar (start_builtin_llm) independent of the
+  // BYOK/Ollama provider union. Its selection is owned by the parent hook so that
+  // choosing Built-in actually persists provider="builtin" on save (not just expands UI).
 
   useEffect(() => {
     cmd('detect_environment').then(setEnvDetection).catch((e) => {
@@ -206,7 +209,7 @@ export function SetupAIProvider({
               {(['anthropic', 'openai', 'openai-compatible'] as const).map((p) => (
                 <button
                   key={p}
-                  onClick={() => { setBuiltinSelected(false); onProviderChange(p); }}
+                  onClick={() => onProviderChange(p)}
                   className={`p-3 rounded-lg text-center transition-all ${
                     provider === p && !builtinSelected
                       ? 'bg-green-500/15 border-2 border-green-500/50'
@@ -234,7 +237,7 @@ export function SetupAIProvider({
             <div className="grid grid-cols-2 gap-2">
               {/* Built-in local model — no account, downloads + runs in-process */}
               <button
-                onClick={() => setBuiltinSelected(true)}
+                onClick={onSelectBuiltin}
                 className={`p-3 rounded-lg text-start transition-all ${
                   builtinSelected
                     ? 'bg-orange-500/20 border-2 border-orange-500'
@@ -248,7 +251,7 @@ export function SetupAIProvider({
                 <div className="text-[10px] text-text-muted mt-0.5">{t('onboarding.setupAi.builtinDesc')}</div>
               </button>
               <button
-                onClick={() => { setBuiltinSelected(false); onProviderChange('ollama'); }}
+                onClick={() => onProviderChange('ollama')}
                 className={`p-3 rounded-lg text-start transition-all ${
                   provider === 'ollama' && !builtinSelected
                     ? 'bg-orange-500/20 border-2 border-orange-500'
@@ -263,7 +266,6 @@ export function SetupAIProvider({
                 <button
                   key={server.name}
                   onClick={() => {
-                    setBuiltinSelected(false);
                     onProviderChange('openai-compatible');
                     onApiKeyChange('');
                   }}

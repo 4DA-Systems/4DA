@@ -33,6 +33,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     pullingModels,
     pullProgress,
     aiConfigured,
+    builtinSelected,
+    selectBuiltin,
     detectedTech,
     discoveryDone,
     suggestions,
@@ -145,6 +147,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                 onProviderChange={handleProviderChange}
                 onApiKeyChange={handleApiKeyChange}
                 onDownloadModels={downloadLocalModels}
+                builtinSelected={builtinSelected}
+                onSelectBuiltin={selectBuiltin}
               />
               {apiKeyHint && (
                 <p className="mt-1 px-4 text-xs text-amber-400">{apiKeyHint}</p>

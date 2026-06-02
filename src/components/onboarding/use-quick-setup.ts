@@ -12,7 +12,7 @@ import type { ExperienceLevel } from './setup-experience';
 import type { UseQuickSetupProps, ProviderType } from './quick-setup-utils';
 import {
   buildInitialPullProgress, refreshOllamaAfterPull,
-  validateApiKey, saveLlmProvider,
+  validateApiKey, saveLlmProvider, saveBuiltinProvider,
 } from './quick-setup-utils';
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
@@ -33,6 +33,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [provider, setProvider] = useState<ProviderType>('ollama');
+  // The built-in local model runs as its own sidecar, independent of the BYOK/Ollama
+  // provider union — tracked separately so its selection actually persists on save.
+  const [builtinSelected, setBuiltinSelected] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
@@ -212,9 +215,15 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   }, [ollamaStatus, pullMissingModels]);
 
   const handleProviderChange = (p: ProviderType) => {
+    setBuiltinSelected(false); // choosing a BYOK/Ollama provider deselects built-in
     setProvider(p);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
     if (p !== 'ollama') setProjectsOpen(true);
+  };
+
+  const selectBuiltin = () => {
+    setBuiltinSelected(true);
+    setProjectsOpen(true);
   };
 
   const handleApiKeyChange = (key: string) => {
@@ -234,7 +243,13 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     setError(null);
     setIsSaving(true);
     try {
-      await saveLlmProvider(provider, apiKey, ollamaStatus);
+      // Built-in is its own provider outside the BYOK/Ollama union — persist it
+      // explicitly (only if a model is downloaded) so the choice actually sticks.
+      if (builtinSelected) {
+        await saveBuiltinProvider();
+      } else {
+        await saveLlmProvider(provider, apiKey, ollamaStatus);
+      }
 
       // Auto-trigger embedding engine preparation (fire-and-forget)
       // This ensures semantic search is ready by the time the user finishes onboarding
@@ -278,6 +293,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     experienceOpen, setExperienceOpen, experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured,
+    builtinSelected, selectBuiltin,
     detectedTech, discoveryDone,
     suggestions, interests, newInterest, setNewInterest, role, setRole,
     error, setError, isSaving, apiKeyHint, skippedDownload,
