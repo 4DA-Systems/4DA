@@ -21,10 +21,10 @@
 use tauri::Emitter;
 use tracing::{info, warn};
 
-use crate::analysis_narration::{emit_narration, NarrationEvent};
+use crate::analysis_narration::NarrationEvent;
 use crate::error::Result;
 use crate::scoring;
-use crate::{emit_progress, get_analysis_state, get_database, monitoring, SourceRelevance};
+use crate::{get_analysis_state, get_database, monitoring, SourceRelevance};
 
 // ============================================================================
 // Full Scoring Pipeline
@@ -35,8 +35,29 @@ pub(crate) async fn score_items_full(
     app: &tauri::AppHandle,
     db: &crate::db::Database,
     cached_items: &[crate::db::StoredSourceItem],
+    silent: bool,
 ) -> Result<Vec<SourceRelevance>> {
     use std::sync::atomic::Ordering;
+
+    // Gated emitters: when `silent` (background/scheduled run), suppress
+    // user-facing progress/narration so a background refresh doesn't move the
+    // foreground progress bar. Call sites below are unchanged; these shadow the
+    // free functions (reached via fully qualified paths inside the closures).
+    let emit_progress = |app: &tauri::AppHandle,
+                         stage: &str,
+                         progress: f32,
+                         message: &str,
+                         processed: usize,
+                         total: usize| {
+        if !silent {
+            crate::emit_progress(app, stage, progress, message, processed, total);
+        }
+    };
+    let emit_narration = |app: &tauri::AppHandle, ev: NarrationEvent| {
+        if !silent {
+            crate::analysis_narration::emit_narration(app, ev);
+        }
+    };
 
     // Deduplicate before scoring to avoid wasting compute on duplicates
     let keep_indices = crate::analysis_rerank::dedup_stored_items(cached_items);
@@ -110,8 +131,8 @@ pub(crate) async fn score_items_full(
                 total_cached,
             );
 
-            // Emit partial results for progressive rendering
-            if !results.is_empty() {
+            // Emit partial results for progressive rendering (foreground only)
+            if !silent && !results.is_empty() {
                 let batch_end = results.len();
                 let batch_start = batch_end.saturating_sub(50);
                 if let Err(e) = app.emit("partial-results", &results[batch_start..batch_end]) {

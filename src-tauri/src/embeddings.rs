@@ -38,12 +38,45 @@ static EMBEDDING_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 // Embeddings - supports OpenAI and Ollama
 // ============================================================================
 
+/// Bounded wait for the fastembed engine on any single embed call.
+///
+/// The first fastembed call lazily constructs the ONNX runtime + model
+/// (`get_or_init_fastembed`). With the model bundled this is usually ~1s, but a
+/// slow disk / large model could stall the first call. We cap the wait so
+/// first-run analysis never hangs: if the engine isn't ready within this budget,
+/// the call returns the graceful zero-vector fallback (analysis completes in
+/// keyword mode) while the `spawn_blocking` init task keeps running in the
+/// background — so subsequent calls hit the now-initialized engine.
+#[cfg(feature = "fastembed-local")]
+const FASTEMBED_CALL_TIMEOUT_SECS: u64 = 10;
+
 /// Attempt in-process fastembed (ONNX Runtime) — zero network, privacy preserved.
-/// Returns `Some(embeddings)` on success, `None` on failure.
+/// Returns `Some(embeddings)` on success, `None` on failure or timeout.
 #[cfg(feature = "fastembed-local")]
 async fn try_fastembed_fallback(texts: &[String]) -> Option<Vec<Vec<f32>>> {
     let texts_for_fe = texts.to_vec();
-    match tokio::task::spawn_blocking(move || embed_texts_fastembed_sync(&texts_for_fe)).await {
+    // Run init+embed on a blocking thread. A `spawn_blocking` task is NOT
+    // cancelled when the JoinHandle is dropped, so on timeout the lazy engine
+    // init continues to completion in the background and populates the shared
+    // OnceCell for later calls.
+    let handle = tokio::task::spawn_blocking(move || embed_texts_fastembed_sync(&texts_for_fe));
+    let joined = tokio::time::timeout(
+        std::time::Duration::from_secs(FASTEMBED_CALL_TIMEOUT_SECS),
+        handle,
+    )
+    .await;
+    let joined = match joined {
+        Ok(joined) => joined,
+        Err(_) => {
+            tracing::warn!(
+                target: "4da::embeddings",
+                timeout_s = FASTEMBED_CALL_TIMEOUT_SECS,
+                "fastembed not ready within budget — zero-vector fallback for this call; engine continues initializing in background"
+            );
+            return None;
+        }
+    };
+    match joined {
         Ok(Ok(embeddings)) => {
             tracing::info!(
                 target: "4da::embeddings",

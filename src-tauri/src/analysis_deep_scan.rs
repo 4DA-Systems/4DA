@@ -4,13 +4,13 @@
 use tauri::AppHandle;
 use tracing::{info, warn};
 
-use crate::analysis_narration::{emit_narration, NarrationEvent};
+use crate::analysis_narration::NarrationEvent;
 use crate::error::Result;
 use crate::scoring;
 
 use crate::{
-    analysis_rerank, emit_progress, get_database, open_db_connection, source_fetching,
-    truncate_utf8, SourceRelevance,
+    analysis_rerank, get_database, open_db_connection, source_fetching, truncate_utf8,
+    SourceRelevance,
 };
 
 use super::{is_aborted, SIGNAL_CLASSIFIER};
@@ -18,8 +18,29 @@ use super::{is_aborted, SIGNAL_CLASSIFIER};
 /// Multi-source analysis implementation
 pub(crate) async fn run_multi_source_analysis_impl(
     app: &AppHandle,
+    silent: bool,
 ) -> Result<Vec<SourceRelevance>> {
-    info!(target: "4da::analysis", "=== MULTI-SOURCE ANALYSIS STARTED ===");
+    info!(target: "4da::analysis", silent, "=== MULTI-SOURCE ANALYSIS STARTED ===");
+
+    // Gated emitters: when `silent` (background/scheduled run), suppress
+    // user-facing progress/narration so a background refresh doesn't move the
+    // foreground progress bar. Call sites below are unchanged; these shadow the
+    // free functions (reached via fully qualified paths inside the closures).
+    let emit_progress = |app: &AppHandle,
+                         stage: &str,
+                         progress: f32,
+                         message: &str,
+                         processed: usize,
+                         total: usize| {
+        if !silent {
+            crate::emit_progress(app, stage, progress, message, processed, total);
+        }
+    };
+    let emit_narration = |app: &AppHandle, ev: NarrationEvent| {
+        if !silent {
+            crate::analysis_narration::emit_narration(app, ev);
+        }
+    };
 
     // Narration: analysis start
     emit_narration(
