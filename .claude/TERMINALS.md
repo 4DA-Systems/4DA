@@ -9,19 +9,33 @@
 
 ## Active Terminals
 
-### Terminal: opus-gate-and-builtin (started 2026-06-02, continues opus-p2-polish)
-Working on: (1) enforcement gate for the proxy-derived-state antibody — refactor the 2 remaining
-guarded sites (channel_render.rs, settings/manager.rs) through compute_has_llm, add
-scripts/check-llm-gate-honesty.cjs wired into pre-commit (with // llm-gate-ok: escape hatch);
-(2) onboarding Built-in persistence — saveLlmProvider never handles 'builtin', so selecting Built-in
-never sets provider=builtin; persist it (with downloaded model) when chosen + a model is downloaded.
+### Terminal: opus-vanity-gate-and-header (started 2026-06-02)
+Working on: (1) vanity-metrics pre-commit gate enforcing intelligence-doctrine rule 3 —
+scripts/check-vanity-metrics.cjs flags the banned counter phrases (Items monitored / Sources
+producing / Validated principles / Decisions tracked) ONLY when adjacent to a count/number
+(not prose like WaitlistSignup's "decisions tracked with evidence"); vanity-ok: escape hatch.
+(2) onboarding AI-provider section header reflects Built-in readiness (aiConfigured true when a
+builtin model is downloaded; honest "Built-in model ready" / "download a model" subtitle).
 **Claims:**
-- src-tauri/src/channel_render.rs, src-tauri/src/settings/manager.rs (route through compute_has_llm)
-- scripts/check-llm-gate-honesty.cjs (NEW) + .husky/pre-commit (wire it)
-- src/components/onboarding/use-quick-setup.ts, setup-ai-provider.tsx, QuickSetupStep.tsx,
-  quick-setup-utils.ts (builtin persistence)
-**Commit Lock**: HELD (opus-gate-and-builtin) — two atomic commits (gate enforcement;
-builtin persistence), one push. Both live-verified. Staging explicit paths only.
+- scripts/check-vanity-metrics.cjs (NEW) + .husky/pre-commit (wire it)
+- src/components/onboarding/use-quick-setup.ts, QuickSetupStep.tsx
+- src/locales/*/ui.json (2 builtin header keys ×13) + src/types/i18n-resources.d.ts (regen)
+**Commit Lock**: HELD (opus-vanity-gate-and-header) — two atomic commits (vanity gate;
+builtin header), one push. Both verified (gate script-tested 4 ways; header live-verified
+"Built-in model ready" + green check). Staging explicit paths only.
+
+<!-- opus-gate-and-builtin (2026-06-02): DONE — committed + PUSHED (origin/main @ 1f65229c,
+     851fa416..1f65229c, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     • bbed75de — antibody ENFORCEMENT: last 2 guarded sites (channel_render, settings/manager
+       is_rerank_enabled) routed through compute_has_llm (tree now single-source-of-truth, fixes
+       their builtin false-negative). New scripts/check-llm-gate-honesty.cjs wired into .husky/pre-commit
+       (// llm-gate-ok: escape hatch) — tested clean/catch/marker.
+     • 1f65229c — onboarding Built-in PERSISTENCE: builtinSelected lifted to the hook; on continue,
+       saveBuiltinProvider persists provider="builtin"+downloaded model (or honest "none" if no model).
+       Live-verified: Built-in → Enter 4DA → provider="builtin"/model="qwen3-14b-q4km", has_llm:true/local.
+     immuneScanPending cleared (no new class — covered by antibody 2026-06-02-proxy-derived-state.md;
+     the new gate now prevents recurrence). All gates green; full pre-push suite passed. -->
+
 
 <!-- opus-p2-polish (2026-06-02): DONE — committed + PUSHED (origin/main @ 851fa416,
      36f82fbb..851fa416, rev-list 0/0). Commit Lock RELEASED, claims cleared.
