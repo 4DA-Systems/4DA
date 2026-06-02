@@ -45,6 +45,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:scripts": "node --test scripts/check-vanity-metrics.test.cjs scripts/check-llm-gate-honesty.test.cjs",
     "validate:sizes": "node scripts/check-file-sizes.cjs",
     "validate:coverage": "node scripts/coverage-map.cjs",
     "validate:coverage-gate": "node scripts/coverage-gate.cjs",

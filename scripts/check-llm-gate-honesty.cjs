@@ -62,27 +62,27 @@ function collapse(s) {
   return s.replace(/\s+/g, ' ');
 }
 
-const violations = [];
+/**
+ * Core matcher (exported for tests). Given the already-whitespace-collapsed text of a
+ * scan window, return the offending RegExp if a forbidden proxy construct is present,
+ * else null. This is the pure decision the gate makes — `scanFile`/`main` only add the
+ * git-ls-files plumbing, the escape-hatch handling, and the exit codes around it.
+ */
+function matchProxyConstruct(windowText) {
+  return PATTERNS.find((re) => re.test(windowText)) || null;
+}
 
-for (const rel of trackedSourceFiles()) {
-  const abs = path.join(ROOT, rel);
-  let text;
-  try {
-    text = fs.readFileSync(abs, 'utf8');
-  } catch {
-    continue;
-  }
+/** Scan a single file's text → array of {line, snippet} violations (escape hatch honoured). */
+function scanText(text) {
+  const out = [];
   const lines = text.split('\n');
   for (let i = 0; i < lines.length; i++) {
     // 3-line window catches rustfmt/prettier line-splits of one expression.
-    const windowRaw = lines.slice(i, i + 3).join(' ');
-    const windowText = collapse(windowRaw);
-    const hit = PATTERNS.find((re) => re.test(windowText));
-    if (!hit) continue;
+    const windowText = collapse(lines.slice(i, i + 3).join(' '));
+    if (!matchProxyConstruct(windowText)) continue;
     // Escape hatch: marker anywhere in the window or the line directly above it.
-    const marker = /llm-gate-ok:/;
     const markerScope = lines.slice(Math.max(0, i - 1), i + 3).join('\n');
-    if (marker.test(markerScope)) {
+    if (/llm-gate-ok:/.test(markerScope)) {
       i += 2;
       continue;
     }
@@ -90,30 +90,51 @@ for (const rel of trackedSourceFiles()) {
     // the window's first line.
     const offset = lines.slice(i, i + 3).findIndex((l) => /api_key|has_api_key/.test(l));
     const at = i + (offset >= 0 ? offset : 0);
-    violations.push({ file: rel, line: at + 1, snippet: collapse(lines[at].trim()).slice(0, 100) });
+    out.push({ line: at + 1, snippet: collapse(lines[at].trim()).slice(0, 100) });
     // Skip the rest of this window so a split match isn't reported 3×.
     i += 2;
   }
+  return out;
 }
 
-if (violations.length === 0) {
-  console.log('LLM-gate honesty: clean — all availability checks route through compute_has_llm.');
-  process.exit(0);
+function main() {
+  const violations = [];
+  for (const rel of trackedSourceFiles()) {
+    const abs = path.join(ROOT, rel);
+    let text;
+    try {
+      text = fs.readFileSync(abs, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const v of scanText(text)) violations.push({ file: rel, ...v });
+  }
+
+  if (violations.length === 0) {
+    console.log('LLM-gate honesty: clean — all availability checks route through compute_has_llm.');
+    process.exit(0);
+  }
+
+  console.error('\nLLM-GATE HONESTY VIOLATION (antibody 2026-06-02-proxy-derived-state)\n');
+  console.error(
+    'An LLM "configured/available" check is derived from key-presence or a single-provider',
+  );
+  console.error('OR-shortcut. A stray/env key with provider "none" makes it falsely true, and the');
+  console.error('shortcut drops "builtin". Route through the single source of truth instead:\n');
+  console.error('    crate::content_personalization::context::compute_has_llm(&provider, &api_key)\n');
+  for (const v of violations) {
+    console.error(`  ${v.file}:${v.line}`);
+    console.error(`    ${v.snippet}`);
+  }
+  console.error(
+    '\nIf this is a genuine, justified exception, add `llm-gate-ok: <reason>` in a comment',
+  );
+  console.error('on that line or the line above. Do not bypass the gate without a reason.\n');
+  process.exit(1);
 }
 
-console.error('\nLLM-GATE HONESTY VIOLATION (antibody 2026-06-02-proxy-derived-state)\n');
-console.error(
-  'An LLM "configured/available" check is derived from key-presence or a single-provider',
-);
-console.error('OR-shortcut. A stray/env key with provider "none" makes it falsely true, and the');
-console.error('shortcut drops "builtin". Route through the single source of truth instead:\n');
-console.error('    crate::content_personalization::context::compute_has_llm(&provider, &api_key)\n');
-for (const v of violations) {
-  console.error(`  ${v.file}:${v.line}`);
-  console.error(`    ${v.snippet}`);
+module.exports = { PATTERNS, EXCLUDE, collapse, matchProxyConstruct, scanText };
+
+if (require.main === module) {
+  main();
 }
-console.error(
-  '\nIf this is a genuine, justified exception, add `llm-gate-ok: <reason>` in a comment',
-);
-console.error('on that line or the line above. Do not bypass the gate without a reason.\n');
-process.exit(1);
