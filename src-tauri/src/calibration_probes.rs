@@ -13,8 +13,7 @@ use crate::scoring::ScoringContext;
 // Re-export items used by calibration_commands.rs at runtime
 pub(crate) use crate::probes_corpus::domain_name;
 pub(crate) use crate::probes_engine::{
-    audit_signal_axes, detect_user_domain, run_probe_calibration, select_probes_for_user,
-    ProbeResults, SignalAudit, AUDIT_PROBE_CONTENT, AUDIT_PROBE_TITLE,
+    detect_user_domain, run_probe_calibration, select_probes_for_user, ProbeResults,
 };
 
 // ============================================================================
@@ -65,24 +64,11 @@ pub(crate) fn compute_context_score(ctx: &ScoringContext) -> u32 {
     (score as u32).min(25)
 }
 
-pub(crate) fn compute_signal_score(audit: &SignalAudit) -> u32 {
-    let mut score = 0u32;
-    if audit.context_fires {
-        score += 5;
-    }
-    if audit.interest_fires {
-        score += 5;
-    }
-    if audit.ace_fires {
-        score += 5;
-    }
-    if audit.learned_fires {
-        score += 5;
-    }
-    if audit.dependency_fires {
-        score += 5;
-    }
-    score.min(25)
+/// 5 points per signal axis that actually contributed to the probe battery.
+/// `fired_axes` comes straight from [`ProbeResults`] — measured contribution,
+/// never a data-existence proxy.
+pub(crate) fn compute_signal_score(fired_axes: &[String]) -> u32 {
+    ((fired_axes.len() as u32) * 5).min(25)
 }
 
 pub(crate) fn compute_discrimination_score(probes: &ProbeResults) -> u32 {

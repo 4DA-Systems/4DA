@@ -116,22 +116,17 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
     let mut rig = check_rig_requirements().await;
 
     // Select the user's domain-aware probes, then embed them with the REAL embedding
-    // pipeline (the same provider the scorer uses). Discrimination and signal-axis
+    // pipeline (the same provider the scorer uses). Discrimination AND signal-axis
     // coverage MUST be measured with the engine's actual semantic layer — not zero
-    // vectors — or they understate a rig whose embeddings are working. The first text
-    // is the signal-audit probe; the rest are the discrimination probes, aligned 1:1.
+    // vectors — or they understate a rig whose embeddings are working. One probe
+    // battery now feeds both dimensions; embeddings are aligned 1:1 with the probes.
     // The non-zero result also gives us a provider-agnostic ground truth for
     // `embedding_available` that credits built-in fastembed and cloud, not just Ollama.
     let (probes, _probe_domain) = calibration_probes::select_probes_for_user(&ctx);
-    let mut probe_texts = Vec::with_capacity(probes.len() + 1);
-    probe_texts.push(format!(
-        "{}\n{}",
-        calibration_probes::AUDIT_PROBE_TITLE,
-        calibration_probes::AUDIT_PROBE_CONTENT
-    ));
-    for p in &probes {
-        probe_texts.push(format!("{}\n{}", p.title, p.content));
-    }
+    let probe_texts: Vec<String> = probes
+        .iter()
+        .map(|p| format!("{}\n{}", p.title, p.content))
+        .collect();
     let embeddings = crate::embeddings::embed_texts(&probe_texts)
         .await
         .unwrap_or_default();
@@ -152,11 +147,10 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
             .retain(|r| !r.contains("Ollama") && !r.starts_with("Embedding ready"));
     }
 
-    let audit_embedding = embeddings.first().map(Vec::as_slice);
-    let probe_embeddings: Option<&[Vec<f32>]> = if embeddings.len() > 1 {
-        Some(&embeddings[1..])
-    } else {
+    let probe_embeddings: Option<&[Vec<f32>]> = if embeddings.is_empty() {
         None
+    } else {
+        Some(embeddings.as_slice())
     };
 
     // === 4-Dimension Scoring ===
@@ -167,13 +161,11 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
     // Dimension 2: Context Richness
     let context_score = calibration_probes::compute_context_score(&ctx);
 
-    // Dimension 3: Signal Coverage (audit which axes fire — with real embedding)
-    let audit = calibration_probes::audit_signal_axes(&ctx, db, audit_embedding);
-    let signal_score = calibration_probes::compute_signal_score(&audit);
-
-    // Dimension 4: Discrimination (domain-aware probes, scored with real embeddings)
+    // Dimensions 3 & 4 share one probe run: Discrimination from the confusion
+    // matrix, Signal Coverage from the axes that actually fired on the battery.
     let probe_results =
         calibration_probes::run_probe_calibration(&ctx, db, &probes, probe_embeddings);
+    let signal_score = calibration_probes::compute_signal_score(&probe_results.fired_axes);
     let disc_score = calibration_probes::compute_discrimination_score(&probe_results);
 
     // Compute grade from 4 dimensions
@@ -260,7 +252,8 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
         });
     }
 
-    // Build per-persona metrics from probe data
+    // Build per-persona metrics from the REAL confusion matrix the probe run
+    // produced — not hardcoded fp:0/fn:0 with tp/tn derived from passed/total.
     let per_persona = vec![PersonaMetrics {
         name: "your_profile".into(),
         display_name: "Your Profile".into(),
@@ -268,10 +261,10 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
         precision: probe_results.precision,
         recall: probe_results.recall,
         separation_gap: probe_results.separation_gap,
-        tp: probe_results.passed,
-        fp: 0,
-        tn: probe_results.total.saturating_sub(probe_results.passed),
-        r#fn: 0,
+        tp: probe_results.true_pos,
+        fp: probe_results.false_pos,
+        tn: probe_results.true_neg,
+        r#fn: probe_results.false_neg,
     }];
 
     let result = CalibrationResult {
@@ -292,7 +285,7 @@ pub async fn run_calibration() -> Result<CalibrationResult> {
         context_richness_score: context_score,
         signal_coverage_score: signal_score,
         discrimination_score: disc_score,
-        active_signal_axes: audit.axes,
+        active_signal_axes: probe_results.fired_axes,
         nearest_persona,
     };
 

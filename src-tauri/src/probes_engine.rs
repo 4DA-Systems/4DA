@@ -251,9 +251,19 @@ pub(crate) struct ProbeResults {
     pub precision: f64,
     pub recall: f64,
     pub separation_gap: f64,
-    pub passed: u32,
     pub total: u32,
     pub failures: Vec<String>,
+    /// Real confusion-matrix counts from the probe run (not derived from
+    /// passed/total — the persona metrics surface these directly).
+    pub true_pos: u32,
+    pub false_pos: u32,
+    pub true_neg: u32,
+    pub false_neg: u32,
+    /// Signal axes that ACTUALLY contributed to ≥1 relevant probe's score
+    /// breakdown during this run — canonical order: context, interest, ace,
+    /// learned, dependency. This replaces the old single-probe audit whose
+    /// `|| data_exists` fallbacks credited coverage the engine never demonstrated.
+    pub fired_axes: Vec<String>,
 }
 
 /// Run the domain-aware probe battery.
@@ -279,13 +289,22 @@ pub(crate) fn run_probe_calibration(
 
     let mut tp = 0u32;
     let mut fp = 0u32;
-    let mut _tn = 0u32;
+    let mut tn = 0u32;
     let mut fn_ = 0u32;
     let mut relevant_scores: Vec<f64> = Vec::new();
     let mut noise_scores: Vec<f64> = Vec::new();
-    let mut passed = 0u32;
     let mut total = 0u32;
     let mut failures = Vec::new();
+
+    // Signal-axis coverage, audited across the relevant probes' real score
+    // breakdowns. An axis "fires" only when it actually moved a relevant
+    // probe's score above its contribution threshold — never because the
+    // underlying data merely exists in the DB.
+    let mut ax_context = false;
+    let mut ax_interest = false;
+    let mut ax_ace = false;
+    let mut ax_learned = false;
+    let mut ax_dependency = false;
 
     for (i, probe) in probes.iter().enumerate() {
         let embedding: &[f32] = embeddings
@@ -312,11 +331,32 @@ pub(crate) fn run_probe_calibration(
             probe.expected == ProbeExpected::Strong || probe.expected == ProbeExpected::Weak;
         let is_noise = probe.expected == ProbeExpected::Noise;
 
+        // Audit which signal axes contributed — only on relevant probes, where
+        // a healthy engine's signals are supposed to fire.
+        if expected_relevant {
+            if let Some(b) = result.score_breakdown.as_ref() {
+                if b.context_score >= 0.45 {
+                    ax_context = true;
+                }
+                if b.interest_score >= 0.50 || b.keyword_score >= 0.60 {
+                    ax_interest = true;
+                }
+                if b.ace_boost >= 0.12 {
+                    ax_ace = true;
+                }
+                if b.feedback_boost > 0.05 || b.affinity_mult >= 1.15 {
+                    ax_learned = true;
+                }
+                if b.dep_match_score >= 0.20 {
+                    ax_dependency = true;
+                }
+            }
+        }
+
         if expected_relevant {
             relevant_scores.push(result.top_score as f64);
             if result.relevant {
                 tp += 1;
-                passed += 1;
             } else {
                 fn_ += 1;
                 failures.push(format!(
@@ -333,10 +373,26 @@ pub(crate) fn run_probe_calibration(
                     probe.title, result.top_score
                 ));
             } else {
-                _tn += 1;
-                passed += 1;
+                tn += 1;
             }
         }
+    }
+
+    let mut fired_axes = Vec::new();
+    if ax_context {
+        fired_axes.push("context".to_string());
+    }
+    if ax_interest {
+        fired_axes.push("interest".to_string());
+    }
+    if ax_ace {
+        fired_axes.push("ace".to_string());
+    }
+    if ax_learned {
+        fired_axes.push("learned".to_string());
+    }
+    if ax_dependency {
+        fired_axes.push("dependency".to_string());
     }
 
     let precision = if tp + fp > 0 {
@@ -372,96 +428,13 @@ pub(crate) fn run_probe_calibration(
         precision,
         recall,
         separation_gap,
-        passed,
         total,
         failures,
-    }
-}
-
-// ============================================================================
-// Signal Axis Audit
-// ============================================================================
-
-pub(crate) struct SignalAudit {
-    pub axes: Vec<String>,
-    pub context_fires: bool,
-    pub interest_fires: bool,
-    pub ace_fires: bool,
-    pub learned_fires: bool,
-    pub dependency_fires: bool,
-}
-
-/// The single generic dev probe used to audit which signal axes fire. Lifted to
-/// constants so the calibration command can embed it with the real pipeline and
-/// pass the vector back in via `audit_embedding`.
-pub(crate) const AUDIT_PROBE_TITLE: &str = "Critical CVE in widely-used open source library";
-pub(crate) const AUDIT_PROBE_CONTENT: &str = "A critical remote code execution vulnerability has been discovered in a popular dependency. All developers should update immediately.";
-
-pub(crate) fn audit_signal_axes(
-    ctx: &ScoringContext,
-    db: &crate::db::Database,
-    audit_embedding: Option<&[f32]>,
-) -> SignalAudit {
-    // Score a single domain-relevant probe and inspect the breakdown. Use the
-    // real embedding when available so the `context`/`interest`/`ace` axes are
-    // judged against the engine's semantic layer, not zero vectors.
-    let zero_emb = vec![0.0_f32; crate::EMBEDDING_DIMS];
-    let embedding = audit_embedding.unwrap_or(zero_emb.as_slice());
-    let opts = ScoringOptions {
-        apply_freshness: false,
-        apply_signals: false,
-        trend_topics: vec![],
-    };
-
-    // Use a generic dev probe that should score for most contexts
-    let input = ScoringInput {
-        id: 99999,
-        title: AUDIT_PROBE_TITLE,
-        content: AUDIT_PROBE_CONTENT,
-        source_type: "hackernews",
-        url: Some("https://probe.test"),
-        embedding,
-        created_at: None,
-        detected_lang: "en",
-        source_tags: &[],
-        tags_json: None,
-        feed_origin: None,
-    };
-
-    let result = score_item(&input, ctx, db, &opts, None);
-    let bd = result.score_breakdown.as_ref();
-
-    let context_fires = bd.is_some_and(|b| b.context_score >= 0.45) || ctx.cached_context_count > 0;
-    let interest_fires = bd.is_some_and(|b| b.interest_score >= 0.50 || b.keyword_score >= 0.60);
-    let ace_fires =
-        bd.is_some_and(|b| b.ace_boost >= 0.12) || !ctx.ace_ctx.active_topics.is_empty();
-    let learned_fires = bd.is_some_and(|b| b.feedback_boost > 0.05 || b.affinity_mult >= 1.15);
-    let dependency_fires = bd.is_some_and(|b| b.dep_match_score >= 0.20);
-
-    let mut axes = Vec::new();
-    if context_fires {
-        axes.push("context".to_string());
-    }
-    if interest_fires {
-        axes.push("interest".to_string());
-    }
-    if ace_fires {
-        axes.push("ace".to_string());
-    }
-    if learned_fires {
-        axes.push("learned".to_string());
-    }
-    if dependency_fires {
-        axes.push("dependency".to_string());
-    }
-
-    SignalAudit {
-        axes,
-        context_fires,
-        interest_fires,
-        ace_fires,
-        learned_fires,
-        dependency_fires,
+        true_pos: tp,
+        false_pos: fp,
+        true_neg: tn,
+        false_neg: fn_,
+        fired_axes,
     }
 }
 
@@ -544,12 +517,28 @@ mod tests {
     }
 
     #[test]
-    fn signal_audit_empty_context() {
+    fn signal_axes_empty_context_no_phantom_coverage() {
+        // An empty profile must NOT report signal-axis coverage. The old
+        // single-probe audit credited `context`/`ace` whenever DB rows merely
+        // existed; the battery audit only fires an axis when it actually moved a
+        // relevant probe's score, so an empty context yields no fired axes.
         let db = crate::test_utils::test_db();
         let ctx = crate::test_utils::empty_scoring_context();
-        let audit = audit_signal_axes(&ctx, &db, None);
-        // Empty context might still fire interest axis via keyword matching
-        assert!(audit.axes.len() <= 5);
+        let (probes, _) = select_probes_for_user(&ctx);
+        let results = run_probe_calibration(&ctx, &db, &probes, None);
+        assert!(results.fired_axes.len() <= 5);
+        assert!(
+            results.fired_axes.iter().all(|a| [
+                "context",
+                "interest",
+                "ace",
+                "learned",
+                "dependency"
+            ]
+            .contains(&a.as_str())),
+            "unexpected axis label in {:?}",
+            results.fired_axes
+        );
     }
 
     /// Regression guard for the calibration-honesty fix: discrimination/audit
