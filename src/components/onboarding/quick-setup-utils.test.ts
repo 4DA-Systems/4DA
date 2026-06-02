@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //
-// Tests for the onboarding LLM-provider persistence helpers — the path that was
-// shipped (commits 1f65229c "persist the built-in model as the provider" +
-// ce67a49e) with only live click-through verification and no unit coverage.
+// Tests for the onboarding LLM-provider persistence helpers.
 //
 // The contract under test is the *honest-state* guarantee from the proxy-derived-state
 // antibody (.ai/FAILURE_MODES.md → "Proxy-derived state claims"): the onboarding flow
-// must never persist a provider the system can't actually run. In particular, picking
-// "Built-in" with no downloaded model must persist `none`, NOT a false-ready `builtin`.
+// must never persist a provider the system can't actually run. In particular, a cloud
+// provider with no key, or Ollama when not running, must persist `none`.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -17,7 +15,6 @@ vi.mock('../../lib/commands', () => ({
 }));
 
 import {
-  saveBuiltinProvider,
   saveLlmProvider,
   validateApiKey,
   buildInitialPullProgress,
@@ -44,95 +41,6 @@ function ollama(overrides: Partial<OllamaStatus> = {}): OllamaStatus {
     ...overrides,
   };
 }
-
-describe('saveBuiltinProvider', () => {
-  beforeEach(() => cmdMock.mockReset());
-
-  it('persists provider=builtin + the downloaded model id when a model is available', async () => {
-    cmdMock.mockImplementation((command: string) =>
-      command === 'list_builtin_models'
-        ? Promise.resolve({ models: [{ id: 'qwen3-14b-q4km', downloaded: true }] })
-        : Promise.resolve(),
-    );
-
-    await saveBuiltinProvider();
-
-    expect(cmdMock).toHaveBeenCalledWith(SET, {
-      provider: 'builtin',
-      apiKey: '',
-      model: 'qwen3-14b-q4km',
-      baseUrl: null,
-      openaiApiKey: null,
-    });
-  });
-
-  it('picks the FIRST downloaded model when several exist', async () => {
-    cmdMock.mockImplementation((command: string) =>
-      command === 'list_builtin_models'
-        ? Promise.resolve({
-            models: [
-              { id: 'not-yet', downloaded: false },
-              { id: 'ready-a', downloaded: true },
-              { id: 'ready-b', downloaded: true },
-            ],
-          })
-        : Promise.resolve(),
-    );
-
-    await saveBuiltinProvider();
-
-    expect(persistedProvider()).toMatchObject({ provider: 'builtin', model: 'ready-a' });
-  });
-
-  it('persists honest `none` when a model exists but is NOT downloaded (false-ready guard)', async () => {
-    cmdMock.mockImplementation((command: string) =>
-      command === 'list_builtin_models'
-        ? Promise.resolve({ models: [{ id: 'qwen3-14b-q4km', downloaded: false }] })
-        : Promise.resolve(),
-    );
-
-    await saveBuiltinProvider();
-
-    expect(persistedProvider()).toEqual(NONE);
-    // The core invariant: it must NEVER claim builtin without a runnable model.
-    const claimedBuiltin = cmdMock.mock.calls.some(
-      (c) => c[0] === SET && (c[1] as { provider?: string })?.provider === 'builtin',
-    );
-    expect(claimedBuiltin).toBe(false);
-  });
-
-  it('persists `none` when the builtin model list is empty', async () => {
-    cmdMock.mockImplementation((command: string) =>
-      command === 'list_builtin_models' ? Promise.resolve({ models: [] }) : Promise.resolve(),
-    );
-
-    await saveBuiltinProvider();
-
-    expect(persistedProvider()).toEqual(NONE);
-  });
-
-  it('persists `none` when list_builtin_models returns no models field', async () => {
-    cmdMock.mockImplementation((command: string) =>
-      command === 'list_builtin_models' ? Promise.resolve({}) : Promise.resolve(),
-    );
-
-    await saveBuiltinProvider();
-
-    expect(persistedProvider()).toEqual(NONE);
-  });
-
-  it('falls back to `none` when the sidecar query throws (graceful, never panics)', async () => {
-    cmdMock.mockImplementation((command: string) =>
-      command === 'list_builtin_models'
-        ? Promise.reject(new Error('sidecar unavailable'))
-        : Promise.resolve(),
-    );
-
-    await saveBuiltinProvider();
-
-    expect(persistedProvider()).toEqual(NONE);
-  });
-});
 
 describe('saveLlmProvider', () => {
   beforeEach(() => cmdMock.mockReset());

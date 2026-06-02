@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-import { BuiltinModelSection } from '../settings/BuiltinModelSection';
 import type { OllamaStatus, PullProgress } from './types';
 
 type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
@@ -34,8 +33,6 @@ interface SetupAIProviderProps {
   onProviderChange: (provider: ProviderType) => void;
   onApiKeyChange: (key: string) => void;
   onDownloadModels?: () => void;
-  builtinSelected: boolean;
-  onSelectBuiltin: () => void;
 }
 
 export function SetupAIProvider({
@@ -47,16 +44,11 @@ export function SetupAIProvider({
   onProviderChange,
   onApiKeyChange,
   onDownloadModels,
-  builtinSelected,
-  onSelectBuiltin,
 }: SetupAIProviderProps) {
   const { t } = useTranslation();
   const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
   const [importing, setImporting] = useState(false);
   const [localServers, setLocalServers] = useState<LocalServer[]>([]);
-  // The built-in model runs as its own sidecar (start_builtin_llm) independent of the
-  // BYOK/Ollama provider union. Its selection is owned by the parent hook so that
-  // choosing Built-in actually persists provider="builtin" on save (not just expands UI).
 
   useEffect(() => {
     cmd('detect_environment').then(setEnvDetection).catch((e) => {
@@ -211,7 +203,7 @@ export function SetupAIProvider({
                   key={p}
                   onClick={() => onProviderChange(p)}
                   className={`p-3 rounded-lg text-center transition-all ${
-                    provider === p && !builtinSelected
+                    provider === p
                       ? 'bg-green-500/15 border-2 border-green-500/50'
                       : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                   }`}
@@ -235,25 +227,10 @@ export function SetupAIProvider({
             </div>
             <p className="text-[10px] text-text-muted mb-2">{t('onboarding.setupAi.localTradeoff')}</p>
             <div className="grid grid-cols-2 gap-2">
-              {/* Built-in local model — no account, downloads + runs in-process */}
-              <button
-                onClick={onSelectBuiltin}
-                className={`p-3 rounded-lg text-start transition-all ${
-                  builtinSelected
-                    ? 'bg-orange-500/20 border-2 border-orange-500'
-                    : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
-                }`}
-              >
-                <div className="text-sm font-medium text-white flex items-center gap-1.5">
-                  {t('onboarding.setupAi.builtinLabel')}
-                  <span className="text-[9px] px-1.5 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('onboarding.setupAi.builtinBadge')}</span>
-                </div>
-                <div className="text-[10px] text-text-muted mt-0.5">{t('onboarding.setupAi.builtinDesc')}</div>
-              </button>
               <button
                 onClick={() => onProviderChange('ollama')}
                 className={`p-3 rounded-lg text-start transition-all ${
-                  provider === 'ollama' && !builtinSelected
+                  provider === 'ollama'
                     ? 'bg-orange-500/20 border-2 border-orange-500'
                     : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
                 }`}
@@ -283,17 +260,8 @@ export function SetupAIProvider({
             </div>
           </div>
 
-          {/* Built-in local model — reuses the polished Settings component so
-              users can download + start the recommended model right here */}
-          {builtinSelected && (
-            <div className="pt-1">
-              <p className="text-[10px] text-text-muted mb-2">{t('onboarding.setupAi.builtinIntro')}</p>
-              <BuiltinModelSection />
-            </div>
-          )}
-
           {/* API key input for cloud providers */}
-          {(provider === 'anthropic' || provider === 'openai') && !builtinSelected && (
+          {(provider === 'anthropic' || provider === 'openai') && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs text-text-muted">
@@ -321,7 +289,7 @@ export function SetupAIProvider({
           )}
 
           {/* OpenAI-compatible provider input */}
-          {provider === 'openai-compatible' && !builtinSelected && (
+          {provider === 'openai-compatible' && (
             <div className="space-y-2">
               <label className="text-xs text-text-muted">{t('onboarding.setupAi.otherProviderHint')}</label>
               <input
@@ -355,7 +323,7 @@ export function SetupAIProvider({
           )}
 
           {/* Cloud provider without key — basic mode hint */}
-          {(provider === 'anthropic' || provider === 'openai') && !apiKey.trim() && !builtinSelected && (
+          {(provider === 'anthropic' || provider === 'openai') && !apiKey.trim() && (
             <div className="text-xs text-text-muted p-3 bg-bg-tertiary rounded-lg border border-border">
               {t('onboarding.setupAi.noKeyHint')}
             </div>
@@ -363,7 +331,7 @@ export function SetupAIProvider({
 
           {/* Ollama running but missing models — explicit, consented download
               (never auto-pulled; downloading GBs unprompted is a false-state surprise) */}
-          {provider === 'ollama' && ollamaStatus?.running && !ollamaReady && !builtinSelected && (
+          {provider === 'ollama' && ollamaStatus?.running && !ollamaReady && (
             <div className="text-text-secondary text-sm p-3 bg-bg-tertiary rounded-lg border border-border space-y-2">
               <p className="text-xs text-text-muted">{t('onboarding.setupAi.modelsNeeded')}</p>
               <button

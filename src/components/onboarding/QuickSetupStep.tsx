@@ -33,9 +33,6 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     pullingModels,
     pullProgress,
     aiConfigured,
-    builtinSelected,
-    builtinReady,
-    selectBuiltin,
     detectedTech,
     discoveryDone,
     suggestions,
@@ -127,17 +124,15 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div>
           <SectionHeader
             title={t('onboarding.setup.aiProvider')}
-            subtitle={builtinSelected
-              ? (builtinReady ? t('onboarding.setup.builtinReady') : t('onboarding.setup.builtinNeedsModel'))
-              : aiConfigured
-                ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
-                : ollamaStatus !== null
-                  ? t('onboarding.setup.basicModeAvailable')
-                  : t('onboarding.setup.autoDetecting')}
+            subtitle={aiConfigured
+              ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
+              : ollamaStatus !== null
+                ? t('onboarding.setup.basicModeAvailable')
+                : t('onboarding.setup.autoDetecting')}
             isOpen={aiOpen}
             onToggle={() => setAiOpen(!aiOpen)}
-            done={builtinSelected ? builtinReady : aiConfigured}
-            warning={builtinSelected ? !builtinReady : (!aiConfigured && ollamaStatus !== null)}
+            done={aiConfigured}
+            warning={!aiConfigured && ollamaStatus !== null}
           />
           {aiOpen && (
             <>
@@ -150,8 +145,6 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                 onProviderChange={handleProviderChange}
                 onApiKeyChange={handleApiKeyChange}
                 onDownloadModels={downloadLocalModels}
-                builtinSelected={builtinSelected}
-                onSelectBuiltin={selectBuiltin}
               />
               {apiKeyHint && (
                 <p className="mt-1 px-4 text-xs text-amber-400">{apiKeyHint}</p>

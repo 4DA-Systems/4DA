@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //
-// Tests for the useQuickSetup hook — specifically the built-in-model selection /
-// readiness / persistence wiring that shipped with only live click-through coverage
-// (commits 1f65229c + ce67a49e). These lock in:
-//   • selectBuiltin / handleProviderChange mutual exclusivity (builtin vs BYOK/Ollama),
-//   • the builtinReady effect (header "ready" signal driven by a *downloaded* model),
-//   • handleContinue routing to the right persistence helper for the chosen provider.
+// Tests for the useQuickSetup hook — provider selection and handleContinue routing
+// to the correct persistence helper for the chosen provider.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 
 const cmdMock = vi.fn();
 vi.mock('../../lib/commands', () => ({
@@ -75,103 +71,28 @@ function setLlmCalls() {
   return cmdMock.mock.calls.filter((c) => c[0] === SET);
 }
 
-describe('useQuickSetup — built-in selection & mutual exclusivity', () => {
+describe('useQuickSetup — provider selection', () => {
   beforeEach(() => {
     cmdMock.mockReset();
     installDefaultBackend();
   });
 
-  it('selectBuiltin() marks built-in selected', async () => {
+  it('handleProviderChange switches the selected provider', async () => {
     const { result } = renderHook(() => useQuickSetup(props));
     await act(async () => {});
-
-    expect(result.current.builtinSelected).toBe(false);
-    act(() => result.current.selectBuiltin());
-    expect(result.current.builtinSelected).toBe(true);
-  });
-
-  it('choosing a BYOK/Ollama provider deselects built-in', async () => {
-    const { result } = renderHook(() => useQuickSetup(props));
-    await act(async () => {});
-
-    act(() => result.current.selectBuiltin());
-    expect(result.current.builtinSelected).toBe(true);
 
     act(() => result.current.handleProviderChange('anthropic'));
-    expect(result.current.builtinSelected).toBe(false);
     expect(result.current.provider).toBe('anthropic');
-  });
-});
-
-describe('useQuickSetup — builtinReady reflects a DOWNLOADED model, not just selection', () => {
-  beforeEach(() => cmdMock.mockReset());
-
-  it('stays false while built-in is not selected', async () => {
-    installDefaultBackend({ list_builtin_models: { models: [{ id: 'qwen3-14b-q4km', downloaded: true }] } });
-    const { result } = renderHook(() => useQuickSetup(props));
-    await act(async () => {});
-    expect(result.current.builtinReady).toBe(false);
-  });
-
-  it('becomes true once built-in is selected AND a model is downloaded', async () => {
-    installDefaultBackend({ list_builtin_models: { models: [{ id: 'qwen3-14b-q4km', downloaded: true }] } });
-    const { result } = renderHook(() => useQuickSetup(props));
-    await act(async () => {});
-
-    act(() => result.current.selectBuiltin());
-    await waitFor(() => expect(result.current.builtinReady).toBe(true));
-  });
-
-  it('stays false when built-in is selected but NO model is downloaded', async () => {
-    installDefaultBackend({ list_builtin_models: { models: [{ id: 'qwen3-14b-q4km', downloaded: false }] } });
-    const { result } = renderHook(() => useQuickSetup(props));
-    await act(async () => {});
-
-    act(() => result.current.selectBuiltin());
-    // Allow the readiness effect to resolve, then assert it remained honest.
-    await act(async () => {});
-    expect(result.current.builtinReady).toBe(false);
   });
 });
 
 describe('useQuickSetup — handleContinue routes to the correct persistence helper', () => {
   beforeEach(() => cmdMock.mockReset());
 
-  it('built-in selected + model downloaded → persists provider=builtin', async () => {
-    installDefaultBackend({ list_builtin_models: { models: [{ id: 'qwen3-14b-q4km', downloaded: true }] } });
+  it('BYOK provider with a key → persists that cloud provider', async () => {
+    installDefaultBackend();
     const onComplete = vi.fn();
     const { result } = renderHook(() => useQuickSetup({ ...props, onComplete }));
-    await act(async () => {});
-
-    act(() => result.current.selectBuiltin());
-    await waitFor(() => expect(result.current.builtinReady).toBe(true));
-    await act(async () => {
-      await result.current.handleContinue();
-    });
-
-    const persisted = setLlmCalls().map((c) => c[1] as { provider?: string });
-    expect(persisted.some((p) => p.provider === 'builtin')).toBe(true);
-    expect(onComplete).toHaveBeenCalled();
-  });
-
-  it('built-in selected but NO model → persists honest `none` (never a false-ready builtin)', async () => {
-    installDefaultBackend({ list_builtin_models: { models: [] } });
-    const { result } = renderHook(() => useQuickSetup(props));
-    await act(async () => {});
-
-    act(() => result.current.selectBuiltin());
-    await act(async () => {
-      await result.current.handleContinue();
-    });
-
-    const persisted = setLlmCalls().map((c) => c[1] as { provider?: string });
-    expect(persisted.some((p) => p.provider === 'builtin')).toBe(false);
-    expect(persisted.some((p) => p.provider === 'none')).toBe(true);
-  });
-
-  it('BYOK provider with a key → persists that cloud provider, not builtin', async () => {
-    installDefaultBackend();
-    const { result } = renderHook(() => useQuickSetup(props));
     await act(async () => {});
 
     act(() => result.current.handleProviderChange('anthropic'));
@@ -182,6 +103,6 @@ describe('useQuickSetup — handleContinue routes to the correct persistence hel
 
     const persisted = setLlmCalls().map((c) => c[1] as { provider?: string });
     expect(persisted.some((p) => p.provider === 'anthropic')).toBe(true);
-    expect(persisted.some((p) => p.provider === 'builtin')).toBe(false);
+    expect(onComplete).toHaveBeenCalled();
   });
 });

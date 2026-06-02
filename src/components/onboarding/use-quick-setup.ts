@@ -12,7 +12,7 @@ import type { ExperienceLevel } from './setup-experience';
 import type { UseQuickSetupProps, ProviderType } from './quick-setup-utils';
 import {
   buildInitialPullProgress, refreshOllamaAfterPull,
-  validateApiKey, saveLlmProvider, saveBuiltinProvider,
+  validateApiKey, saveLlmProvider,
 } from './quick-setup-utils';
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
@@ -33,12 +33,6 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [provider, setProvider] = useState<ProviderType>('ollama');
-  // The built-in local model runs as its own sidecar, independent of the BYOK/Ollama
-  // provider union — tracked separately so its selection actually persists on save.
-  const [builtinSelected, setBuiltinSelected] = useState(false);
-  // Whether a built-in model is actually downloaded (so the section header reflects
-  // genuine readiness, not just that the Built-in card was clicked).
-  const [builtinReady, setBuiltinReady] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
@@ -181,22 +175,6 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     return () => { cancelled = true; };
   }, [discoveryDone]);
 
-  // Track built-in model readiness while Built-in is selected: check once, then
-  // update when a download completes (the user may download a model in-section).
-  useEffect(() => {
-    if (!builtinSelected) { setBuiltinReady(false); return; }
-    let cancelled = false;
-    const check = () => cmd('list_builtin_models')
-      .then((r) => { if (!cancelled) setBuiltinReady(r.models?.some(m => m.downloaded) ?? false); })
-      .catch(() => { if (!cancelled) setBuiltinReady(false); });
-    void check();
-    let unlisten: (() => void) | undefined;
-    void listen<{ status: string }>('model-download-progress', (e) => {
-      if (e.payload.status === 'complete') void check();
-    }).then(fn => { unlisten = fn; });
-    return () => { cancelled = true; unlisten?.(); };
-  }, [builtinSelected]);
-
   // Auto-expand next section on completion
   useEffect(() => { if (aiConfigured) setProjectsOpen(true); }, [aiConfigured]);
   useEffect(() => { if (discoveryDone) setStacksOpen(true); }, [discoveryDone]);
@@ -234,15 +212,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   }, [ollamaStatus, pullMissingModels]);
 
   const handleProviderChange = (p: ProviderType) => {
-    setBuiltinSelected(false); // choosing a BYOK/Ollama provider deselects built-in
     setProvider(p);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
     if (p !== 'ollama') setProjectsOpen(true);
-  };
-
-  const selectBuiltin = () => {
-    setBuiltinSelected(true);
-    setProjectsOpen(true);
   };
 
   const handleApiKeyChange = (key: string) => {
@@ -262,13 +234,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     setError(null);
     setIsSaving(true);
     try {
-      // Built-in is its own provider outside the BYOK/Ollama union — persist it
-      // explicitly (only if a model is downloaded) so the choice actually sticks.
-      if (builtinSelected) {
-        await saveBuiltinProvider();
-      } else {
-        await saveLlmProvider(provider, apiKey, ollamaStatus);
-      }
+      await saveLlmProvider(provider, apiKey, ollamaStatus);
 
       // Auto-trigger embedding engine preparation (fire-and-forget)
       // This ensures semantic search is ready by the time the user finishes onboarding
@@ -312,7 +278,6 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     experienceOpen, setExperienceOpen, experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured,
-    builtinSelected, builtinReady, selectBuiltin,
     detectedTech, discoveryDone,
     suggestions, interests, newInterest, setNewInterest, role, setRole,
     error, setError, isSaving, apiKeyHint, skippedDownload,
