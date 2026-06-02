@@ -31,7 +31,10 @@ function WhyThisMatters({ explanation }: { explanation: string | undefined }) {
 
   if (!explanation || explanation.includes('No judgment provided by LLM')) return null;
 
-  const isLocalModel = provider === 'ollama';
+  // Both Ollama and the built-in sidecar are local models — the badge + BYOK hint
+  // must reflect that. Dropping `builtin` here is the proxy-derived-state false-negative
+  // (see .ai/FAILURE_MODES.md → "Proxy-derived state claims").
+  const isLocalModel = provider === 'ollama' || provider === 'builtin';
   const cleanText = explanation.replace(/^Filtered:\s*/i, '');
 
   return (
