@@ -123,6 +123,31 @@ Living document of fragile areas, previous regressions, and "never again" lesson
 
 ---
 
+## Intelligence & onboarding honesty
+
+### Proxy-derived state claims (the "AI provider configured" lie)
+**Symptom.** A first-run user with **no provider** sees the app claim a capability it doesn't have: "AI provider configured", `has_llm:true` / `llm_tier:"cloud"`, fabricated tech/interest counts, and background LLM jobs (briefings, digests, translation, summaries) that fire against a non-provider and fail silently. The inverse also occurs — a user who selected the **built-in** local model is told the system is *not* configured (false-negative), or a builtin-generated result is not labelled "local".
+
+**Root cause.** A boolean/string asserting a capability is computed from a **proxy** that is true even when the real state is false:
+- `!api_key.is_empty()` / `has_api_key` **without** confirming a real selected provider — a stale keychain/ENV key with `provider == "none"` flips it true.
+- a single-provider OR-shortcut (`provider == "ollama" || !api_key.is_empty()`) that silently **drops `builtin`**.
+- `embeddingMode !== 'keyword-only'` used to claim an **LLM** is configured — built-in fastembed embeddings are *always* on, conflating semantic search with an LLM provider.
+- a user-facing **count read from the optimistic frontend store** instead of the authoritative backend command.
+
+**The cure — one provider-driven source of truth.** `content_personalization::context::compute_has_llm(provider, api_key)` (`src-tauri/src/content_personalization/context.rs`, `pub(crate)`) is the single gate: `none`/`""` → false, `ollama`/`builtin` → true, cloud → needs a key. Every gate that decides whether to attempt an LLM call routes through it; the frontend mirrors the same provider-driven logic (`src/components/Onboarding.tsx`). Onboarding never persists a provider it can't run — picking Built-in with no downloaded model persists honest `none` (`src/components/onboarding/quick-setup-utils.ts` `saveBuiltinProvider`).
+
+**Guards in place (2026-06-02).**
+- `scripts/check-llm-gate-honesty.cjs` (pre-commit) — fails the commit on a new `api_key.is_empty() || provider=="ollama"|"builtin"` / `has_api_key || provider==='ollama'` / `!matches!(provider,…) && api_key.is_empty()` construct. Escape hatch: `llm-gate-ok: <reason>`.
+- `scripts/check-vanity-metrics.cjs` (pre-commit) — doctrine rule 3, fails on banned counters rendered as a number/`{{count}}`. Escape hatch: `vanity-ok: <reason>`.
+- Both gates are pinned by `scripts/*.test.cjs` (`pnpm run test:scripts`) which also enumerate the gates' **known blind spots** (variable-indirection, alternate key-presence spellings, renamed flags, tag-separated counters, semantic vanity). These syntactic gates are not proofs — capability-claim correctness is still a PR-review responsibility.
+- `compute_has_llm` unit test in `context.rs`; builtin-persistence unit tests in `src/components/onboarding/quick-setup-utils.test.ts` + `use-quick-setup.test.ts`.
+
+**Prevention rule (enforce in review).** Never derive a capability claim (`has_llm`, `enabled`, "configured", "ready", "available", "local") from `!api_key.is_empty()` or a single-provider OR-shortcut. Capability is a property of the **selected provider**, not of key presence or embedding mode. Any new construct missing an explicit `"none"`/`""` branch is a regression.
+
+**Full antibody (this machine, gitignored ops memory).** `.claude/wisdom/antibodies/2026-06-02-proxy-derived-state.md` — the per-site lurking-scan table and verified-clean list.
+
+---
+
 ## Release & CI
 
 ### SSL.com CodeSignTool download can return a landing HTML page instead of a ZIP
