@@ -46,6 +46,12 @@ node scripts/check-file-sizes.cjs || {
 echo "Checking doc locations..."
 node scripts/check-doc-location.cjs || exit 1
 
+# LLM-gate honesty (fast check, <1s) — always runs
+# Blocks new "configured/available" checks derived from key-presence or a
+# single-provider OR-shortcut. See antibody 2026-06-02-proxy-derived-state.md.
+echo "Checking LLM-gate honesty..."
+node scripts/check-llm-gate-honesty.cjs || exit 1
+
 # Dead code expiry enforcement — #[allow(dead_code)] must have a REMOVE BY date
 # Ghost command detection — commands in Rust with no frontend caller
 STAGED_RS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.rs$' || true)
