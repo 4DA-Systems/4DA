@@ -9,24 +9,36 @@
 
 ## Active Terminals
 
-### Terminal: opus-p2-polish (started 2026-06-02, continues opus-p1-false-state)
-Working on: the 3 P2 polish items from the first-run cold-start review + the pending AOS immune scan.
-(1) stray "AI Provider" status chip on the choice gate → hide when no provider configured;
-(2) calibrate leaks internal IDs — map active_signal_axes (context/interest/ace/learned/dependency)
-to friendly labels + drop the raw P0/P1 priority-code badge; (3) stack match-% badges "only 2/12" is
-HONEST (only detected stacks get a %) — leaving as-is, NOT fabricating. Then run the immune pass on 36f82fbb.
+### Terminal: opus-gate-and-builtin (started 2026-06-02, continues opus-p2-polish)
+Working on: (1) enforcement gate for the proxy-derived-state antibody — refactor the 2 remaining
+guarded sites (channel_render.rs, settings/manager.rs) through compute_has_llm, add
+scripts/check-llm-gate-honesty.cjs wired into pre-commit (with // llm-gate-ok: escape hatch);
+(2) onboarding Built-in persistence — saveLlmProvider never handles 'builtin', so selecting Built-in
+never sets provider=builtin; persist it (with downloaded model) when chosen + a model is downloaded.
 **Claims:**
-- src/components/onboarding/OnboardingChoiceGate.tsx (+test) (gate status chip)
-- src/components/onboarding/CalibrationStep.tsx (axis labels + remove priority code)
-- src/components/Onboarding.tsx (BONUS: hasProviderConfigured was has_api_key||ollama — same
-  stale-key false-positive as P1 #3; now provider-driven. Caught by live verify.)
-- src/locales/*/ui.json (5 axis-label keys ×13) + src/types/i18n-resources.d.ts (regen)
-**Commit Lock**: HELD (opus-p2-polish) — Wave 3: immune-pass backend fixes. The AOS immune
-scan (antibody 2026-06-02-proxy-derived-state.md, gitignored ops memory) found 4 more lurking
-instances of the false-state class; all routed through the now-pub(crate) compute_has_llm:
-content_translation_commands.rs (HIGH, user-facing `enabled`), monitoring_jobs.rs, digest_commands.rs,
-content_commands.rs. immuneScanPending cleared. Committing the 5 Rust files (antibody/ops-state are
-gitignored, stay local). NOT touching pre-existing Cargo.lock / untracked .gitignore.
+- src-tauri/src/channel_render.rs, src-tauri/src/settings/manager.rs (route through compute_has_llm)
+- scripts/check-llm-gate-honesty.cjs (NEW) + .husky/pre-commit (wire it)
+- src/components/onboarding/use-quick-setup.ts, setup-ai-provider.tsx, QuickSetupStep.tsx,
+  quick-setup-utils.ts (builtin persistence)
+**Commit Lock**: HELD (opus-gate-and-builtin) — two atomic commits (gate enforcement;
+builtin persistence), one push. Both live-verified. Staging explicit paths only.
+
+<!-- opus-p2-polish (2026-06-02): DONE — committed + PUSHED (origin/main @ 851fa416,
+     36f82fbb..851fa416, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     P2 polish (aed3ee7e) + AOS immune pass (851fa416), all cold-start verified:
+     • Choice-gate stray "AI Provider" chip → shown only when genuinely configured. BONUS: caught +
+       fixed Onboarding.tsx hasProviderConfigured (has_api_key||ollama → provider-driven) — same
+       stale-key false-positive class as P1 #3, surfaced by live verify.
+     • Calibrate: active_signal_axes mapped to friendly labels ×13 (no raw context/ace IDs); P0/P1
+       priority code → colored urgency dot. Stack %-badges left honest (only detected stacks get a %).
+     • IMMUNE PASS: antibody 2026-06-02-proxy-derived-state.md (gitignored ops memory). Scan found the
+       proxy-derived-state class in 4 MORE backend gates — all routed through the now-pub(crate)
+       compute_has_llm (the single source of truth): content_translation_commands.rs (HIGH user-facing),
+       monitoring_jobs.rs, digest_commands.rs, content_commands.rs. Also fixed inverse builtin
+       false-negative. immuneScanPending cleared. cargo test + 36 onboarding tests + tsc/eslint green.
+     Open follow-up (lower priority): picking Built-in doesn't persist provider="builtin" unless the
+     user downloads+starts the model — see memory project_first_run_signal_trial.md. -->
+
 
 <!-- opus-p1-false-state (2026-06-02): DONE — committed + PUSHED (origin/main @ 36f82fbb,
      0f46a3d9..36f82fbb, rev-list 0/0). Commit Lock RELEASED, claims cleared.
