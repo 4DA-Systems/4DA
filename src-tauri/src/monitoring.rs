@@ -266,6 +266,21 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
     );
 
     tauri::async_runtime::spawn(async move {
+        // Seed `last_check` to "now" so the first *regular interval* analysis
+        // waits a full interval instead of firing almost immediately. The field
+        // defaults to 0, which would make the very first tick after the
+        // cold-boot grace satisfy `now - last >= interval` and auto-fire a
+        // background analysis ~90s into the session. This only affects the
+        // regular interval cadence; the morning-briefing force-trigger path
+        // (which sets `last_check` itself) is unchanged.
+        {
+            let seed_now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            state.last_check.store(seed_now, Ordering::Relaxed);
+        }
+
         let mut interval = tokio::time::interval(Duration::from_secs(60)); // Check every minute
         let mut last_wake_time = std::time::Instant::now();
         let scheduler_started_at = std::time::Instant::now();

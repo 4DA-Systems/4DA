@@ -8,13 +8,13 @@ use futures::FutureExt;
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::Ordering;
 
-use crate::analysis_narration::{emit_narration, NarrationEvent};
+use crate::analysis_narration::NarrationEvent;
 use crate::error::Result;
 use crate::scoring;
 use crate::stacks;
 use crate::{
-    achievement_engine, analysis_rerank, emit_progress, get_analysis_abort, get_analysis_state,
-    get_database, monitoring, open_db_connection, void_signal_analysis_complete, void_signal_error,
+    achievement_engine, analysis_rerank, get_analysis_abort, get_analysis_state, get_database,
+    monitoring, open_db_connection, void_signal_analysis_complete, void_signal_error,
     AnalysisState, SourceRelevance, ANALYSIS_TIMEOUT_SECS,
 };
 
@@ -265,7 +265,45 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
 /// The actual cache-first analysis implementation
 /// Uses differential analysis when previous results exist (only scores new items)
 pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
-    info!(target: "4da::analysis", "=== CACHE-FIRST ANALYSIS STARTED ===");
+    analyze_cached_content_inner(app, false).await
+}
+
+/// Cache-first analysis with control over user-facing progress emission.
+///
+/// `silent = true` is used by the background/scheduled scheduler so a background
+/// refresh does not hijack the user's visible progress bar. The work (fetch,
+/// score, persist) and terminal events (`analysis-complete`/`background-results`)
+/// still run — only the intermediate `emit_progress`/`emit_narration` surface
+/// events are suppressed.
+pub(crate) async fn analyze_cached_content_silent(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
+    analyze_cached_content_inner(app, true).await
+}
+
+async fn analyze_cached_content_inner(
+    app: &AppHandle,
+    silent: bool,
+) -> Result<Vec<SourceRelevance>> {
+    info!(target: "4da::analysis", silent, "=== CACHE-FIRST ANALYSIS STARTED ===");
+
+    // Gated emitters: when `silent`, suppress user-facing progress/narration so a
+    // background refresh doesn't move the foreground progress bar. Call sites stay
+    // unchanged; these shadow the free functions (which are reached via fully
+    // qualified paths inside the closures).
+    let emit_progress = |app: &AppHandle,
+                         stage: &str,
+                         progress: f32,
+                         message: &str,
+                         processed: usize,
+                         total: usize| {
+        if !silent {
+            crate::emit_progress(app, stage, progress, message, processed, total);
+        }
+    };
+    let emit_narration = |app: &AppHandle, ev: NarrationEvent| {
+        if !silent {
+            crate::analysis_narration::emit_narration(app, ev);
+        }
+    };
 
     emit_progress(app, "init", 0.0, "Loading cached items...", 0, 0);
 
@@ -442,10 +480,10 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
                     0,
                     0,
                 );
-                return run_multi_source_analysis_impl(app).await;
+                return run_multi_source_analysis_impl(app, silent).await;
             }
 
-            return scoring::score_items_full(app, db, &all_items).await;
+            return scoring::score_items_full(app, db, &all_items, silent).await;
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");
@@ -602,10 +640,10 @@ pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<S
             0,
             0,
         );
-        return run_multi_source_analysis_impl(app).await;
+        return run_multi_source_analysis_impl(app, silent).await;
     }
 
-    scoring::score_items_full(app, db, &cached_items).await
+    scoring::score_items_full(app, db, &cached_items, silent).await
 }
 
 /// Cancel a running analysis

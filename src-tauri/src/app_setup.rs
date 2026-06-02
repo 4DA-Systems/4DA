@@ -1833,9 +1833,13 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
         warn!(target: "4da::monitor", error = %e, "Cache fill failed, continuing with existing cache");
     }
 
-    // Step 2: Analyze cached content (INSTANT)
-    info!(target: "4da::monitor", "Step 2: Analyzing cached content...");
-    match analysis::analyze_cached_content_impl(&handle).await {
+    // Step 2: Analyze cached content (INSTANT).
+    // Use the SILENT variant so a background/scheduled refresh does not hijack
+    // the user's visible progress bar — the work and the terminal
+    // `analysis-complete`/`background-results` events still fire, only the
+    // intermediate `emit_progress`/`emit_narration` surface events are suppressed.
+    info!(target: "4da::monitor", "Step 2: Analyzing cached content (silent)...");
+    match analysis::analyze_cached_content_silent(&handle).await {
         Ok(results) => {
             let relevant_count = results.iter().filter(|r| r.relevant).count();
 
