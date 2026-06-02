@@ -14,6 +14,8 @@ export const SUPPORTED_LANGUAGES: ReadonlyArray<{ code: string; native: string }
   { code: 'de', native: 'Deutsch' },
   { code: 'es', native: 'Español' },
   { code: 'fr', native: 'Français' },
+  { code: 'hi', native: 'हिन्दी' },
+  { code: 'it', native: 'Italiano' },
   { code: 'ja', native: '日本語' },
   { code: 'ko', native: '한국어' },
   { code: 'pt-BR', native: 'Português' },
