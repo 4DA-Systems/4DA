@@ -104,10 +104,17 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
                   : 'bg-bg-secondary border-2 border-transparent hover:border-border'
               }`}
             >
-              {/* Detection badge */}
-              {detection && (
+              {/* Detection badge — match % when detected, muted no-match indicator otherwise */}
+              {detection ? (
                 <span className="absolute top-1.5 end-1.5 px-1.5 py-0.5 text-[10px] font-mono bg-green-500/20 text-green-400 rounded">
                   {Math.round(detection.confidence * 100)}%
+                </span>
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="absolute top-1.5 end-1.5 px-1.5 py-0.5 text-[10px] font-mono bg-bg-tertiary text-text-muted rounded"
+                >
+                  —
                 </span>
               )}
 

@@ -142,6 +142,24 @@ pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.
 
 ---
 
+## System Requirements
+
+4DA runs on modest hardware. Private semantic search is built in — no GPU, no API key, and no first-run download required.
+
+| | Baseline (free) | + Cloud AI (BYOK) | + Local AI (offline) |
+|---|---|---|---|
+| RAM | 4 GB | 4 GB | 16 GB (8B model); 32 GB for 12–14B |
+| CPU | any 64-bit | any 64-bit | 6–8 cores |
+| GPU | not needed | not needed | optional (recommended for speed) |
+| Disk | ~500 MB | ~500 MB | + 5–9 GB per model |
+| Network | install only | install + your AI provider | install + one model download (or none with Ollama) |
+
+- OS: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1).
+- One installer (~110 MB). The local embedding model ships inside it — no separate download, works fully offline on first run.
+- Baseline = private on-device semantic search. Cloud AI adds AI-written briefings + deeper reranking via your own API key. Local AI runs everything offline (Ollama or a downloaded model).
+
+---
+
 ## Architecture
 
 ```

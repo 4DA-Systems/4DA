@@ -871,7 +871,7 @@
   "onboarding.setupAi.builtInSemanticBody": "すべてお使いのデバイス上で動作し、ダウンロードも送信も一切ありません。AI プロバイダーは任意で、AI による要約とより深い再ランク付けを追加するだけです。",
   "onboarding.setupAi.basicModeHint": "心配いりません — 4DAはAIなしでもキーワードマッチングで動作します。後から設定でOllamaのセットアップやAPI keyの追加ができます。",
   "onboarding.setupAi.byokExplainer": "あなたのキー、あなたのアカウント、プロバイダーに直接接続。4DAがキーを保存・中継することはありません。一般的なコスト：月額1ドル未満。",
-  "onboarding.setupAi.localTradeoff": "完全オフライン。正確な分析には高性能GPUと14B以上のモデルが必要です。小さいモデルでは品質が低下します。",
+  "onboarding.setupAi.localTradeoff": "完全オフライン。CPU で動作します — GPU は高速化するだけです。8B モデルは 16 GB RAM で快適に動作し、14B+ で最高の品質が得られます。",
   "onboarding.setupAi.privacyMessage": "あなたのデータはマシンから出ることはありません。API keyなし、クラウドアカウントなし、使用追跡なし。",
   "onboarding.setupAi.ollamaExplainer": "Ollamaはコンピュータ上でAIモデルを直接実行します — 完全にプライベート、完全に無料。",
   "onboarding.setupAi.noKeyHint": "API keyがなくても問題ありません。4DAはデフォルトでキーワードマッチングを使用します。いつでも設定でキーを追加して結果を向上できます。",

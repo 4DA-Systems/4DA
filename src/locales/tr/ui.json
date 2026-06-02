@@ -1626,7 +1626,7 @@
   "onboarding.setupAi.downloadModels": "Gerekli modelleri indir",
   "onboarding.setupAi.modelsNeeded": "Ollama çalışıyor ancak modelleri henüz yüklü değil — yerel yapay zekanın önce bunlara ihtiyacı var.",
   "onboarding.setupAi.localLabel": "Yerel",
-  "onboarding.setupAi.localTradeoff": "Tamamen çevrimdışı. Doğru analiz için güçlü GPU ve 14B+ model gerektirir. Küçük modeller daha düşük kalitede sonuç üretir.",
+  "onboarding.setupAi.localTradeoff": "Tamamen çevrimdışı. CPU'nuzda çalışır — GPU yalnızca hızlandırır. 8B model 16 GB RAM ile rahat çalışır; 14B+ en iyi kaliteyi sunar.",
   "onboarding.setupAi.modelCount": "{{count}} model",
   "onboarding.setupAi.modelCount_other": "{{count}} model",
   "onboarding.calib.title": "Akışınız kalibre edildi",

@@ -1586,7 +1586,7 @@
   "onboarding.setupAi.downloadModels": "필요한 모델 다운로드",
   "onboarding.setupAi.modelsNeeded": "Ollama가 실행 중이지만 모델이 아직 설치되지 않았습니다 — 로컬 AI에는 먼저 모델이 필요합니다.",
   "onboarding.setupAi.localLabel": "로컬",
-  "onboarding.setupAi.localTradeoff": "완전 오프라인. 정확한 분석을 위해 성능 좋은 GPU와 14B+ 모델 필요. 작은 모델은 낮은 품질의 결과를 냅니다.",
+  "onboarding.setupAi.localTradeoff": "완전 오프라인. CPU에서 실행됩니다 — GPU는 속도만 높여줍니다. 8B 모델은 16 GB RAM에서 무난하게 작동하며, 14B+는 최고 품질을 제공합니다.",
   "onboarding.setupAi.noKeyHint": "API key가 없어도 괜찮습니다. 4DA는 기본적으로 키워드 매칭을 사용합니다. 언제든 설정에서 키를 추가하여 결과를 향상시킬 수 있습니다.",
   "onboarding.setupAi.ollamaDesc": "무료, 프라이빗, 로컬 AI",
   "onboarding.setupAi.builtinLabel": "내장형 — 계정 불필요",

@@ -1642,7 +1642,7 @@
   "onboarding.setupAi.downloadModels": "आवश्यक मॉडल डाउनलोड करें",
   "onboarding.setupAi.modelsNeeded": "Ollama चल रहा है लेकिन उसके मॉडल अभी इंस्टॉल नहीं हैं — स्थानीय AI को पहले इनकी ज़रूरत है।",
   "onboarding.setupAi.localLabel": "स्थानीय",
-  "onboarding.setupAi.localTradeoff": "पूर्ण ऑफ़लाइन। सटीक विश्लेषण के लिए सक्षम GPU और 14B+ मॉडल आवश्यक। छोटे मॉडल कम गुणवत्ता के परिणाम देते हैं।",
+  "onboarding.setupAi.localTradeoff": "पूर्ण ऑफ़लाइन। आपके CPU पर चलता है — GPU इसे केवल तेज़ बनाता है। 8B मॉडल 16 GB RAM पर आराम से चलता है; 14B+ सर्वोत्तम गुणवत्ता देता है।",
   "onboarding.setupAi.noKeyHint": "कोई API कुंजी नहीं? कोई बात नहीं। 4DA डिफ़ॉल्ट रूप से कीवर्ड मिलान का उपयोग करता है। बेहतर परिणामों के लिए सेटिंग्स में कभी भी कुंजी जोड़ें।",
   "onboarding.setupAi.ollamaDesc": "मुफ़्त, निजी, स्थानीय AI",
   "onboarding.setupAi.builtinLabel": "अंतर्निहित — कोई खाता नहीं",

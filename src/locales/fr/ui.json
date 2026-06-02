@@ -876,7 +876,7 @@
   "onboarding.setupAi.builtInSemanticBody": "Elle fonctionne entièrement sur votre appareil — rien n'est téléchargé ni envoyé. Un fournisseur AI est facultatif et ajoute seulement des briefings rédigés par AI et un reclassement plus poussé.",
   "onboarding.setupAi.basicModeHint": "Pas d'inquiétude — 4DA fonctionne sans IA grâce à la correspondance par mots-clés. Vous pouvez configurer Ollama ou ajouter une clé API plus tard dans les Paramètres.",
   "onboarding.setupAi.byokExplainer": "Votre clé, votre compte, directement au fournisseur. 4DA ne stocke ni ne transmet jamais votre clé. Coût habituel : moins de 1 $/mois.",
-  "onboarding.setupAi.localTradeoff": "Entièrement hors ligne. Nécessite un GPU performant et un modèle 14B+ pour des analyses précises. Les modèles plus petits produisent des résultats de moindre qualité.",
+  "onboarding.setupAi.localTradeoff": "Entièrement hors ligne. Fonctionne sur votre CPU — un GPU ne fait que l'accélérer. Un modèle 8B est confortable avec 16 Go de RAM ; 14B+ offre la meilleure qualité.",
   "onboarding.setupAi.privacyMessage": "Vos données ne quittent jamais votre machine. Pas de clés API, pas de comptes cloud, pas de suivi d'utilisation.",
   "onboarding.setupAi.ollamaExplainer": "Ollama exécute les modèles IA directement sur votre ordinateur — totalement privé, totalement gratuit.",
   "onboarding.setupAi.noKeyHint": "Pas de clé API ? Pas de problème. 4DA utilise la correspondance par mots-clés par défaut. Ajoutez une clé à tout moment dans les Paramètres pour des résultats améliorés.",

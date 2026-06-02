@@ -871,7 +871,7 @@
   "onboarding.setupAi.builtInSemanticBody": "它完全在您的设备上运行——不下载也不发送任何内容。AI 提供商是可选的，仅用于添加由 AI 撰写的简报和更深入的重新排序。",
   "onboarding.setupAi.basicModeHint": "别担心 — 4DA 无需 AI 也可使用关键词匹配工作。您可以稍后在设置中设置 Ollama 或添加 API key。",
   "onboarding.setupAi.byokExplainer": "您的密钥，您的账户，直连提供商。4DA不会存储或中转您的密钥。一般费用：每月不到1美元。",
-  "onboarding.setupAi.localTradeoff": "完全离线。精确分析需要高性能GPU和14B以上模型。较小的模型会降低结果质量。",
+  "onboarding.setupAi.localTradeoff": "完全离线。在你的 CPU 上运行——GPU 只是让它更快。8B 模型在 16 GB RAM 下运行流畅；14B+ 提供最佳质量。",
   "onboarding.setupAi.privacyMessage": "您的数据不会离开设备。无 API key、无云账户、无使用追踪。",
   "onboarding.setupAi.ollamaExplainer": "Ollama 直接在您的电脑上运行 AI 模型 — 完全私密，完全免费。",
   "onboarding.setupAi.noKeyHint": "没有 API key？没问题。4DA 默认使用关键词匹配。随时可在设置中添加密钥以增强结果。",

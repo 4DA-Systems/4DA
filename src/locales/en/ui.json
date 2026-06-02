@@ -877,7 +877,7 @@
   "onboarding.setupAi.builtInSemanticBody": "It runs entirely on your device — nothing is downloaded or sent. An AI provider is optional and only adds AI-written briefings and deeper reranking.",
   "onboarding.setupAi.basicModeHint": "No worries — 4DA runs private on-device semantic search with no AI provider at all. Add Ollama or an API key later for AI briefings and deeper reranking.",
   "onboarding.setupAi.byokExplainer": "Your key, your account, direct to the provider. 4DA never stores or proxies your key. Typical cost: under $1/month.",
-  "onboarding.setupAi.localTradeoff": "Fully offline. Requires a capable GPU and 14B+ model for accurate analysis. Smaller models produce lower quality results.",
+  "onboarding.setupAi.localTradeoff": "Fully offline. Runs on your CPU — a GPU just makes it faster. An 8B model is comfortable on 16 GB RAM; 14B+ gives the best quality.",
   "onboarding.setupAi.privacyMessage": "Your data never leaves your machine. No API keys, no cloud accounts, no usage tracking.",
   "onboarding.setupAi.ollamaExplainer": "Ollama runs AI models directly on your computer — completely private, completely free.",
   "onboarding.setupAi.noKeyHint": "No API key? No problem. 4DA runs private on-device semantic search by default. Add a key anytime for AI briefings and deeper reranking.",

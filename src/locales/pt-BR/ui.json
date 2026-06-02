@@ -1658,7 +1658,7 @@
   "onboarding.setupAi.downloadModels": "Baixar modelos necessários",
   "onboarding.setupAi.modelsNeeded": "O Ollama está em execução, mas seus modelos ainda não estão instalados — a IA local precisa deles primeiro.",
   "onboarding.setupAi.localLabel": "Local",
-  "onboarding.setupAi.localTradeoff": "Totalmente offline. Requer uma GPU capaz e modelo 14B+ para análise precisa. Modelos menores produzem resultados de menor qualidade.",
+  "onboarding.setupAi.localTradeoff": "Totalmente offline. Roda na sua CPU — uma GPU apenas deixa mais rápido. Um modelo 8B fica confortável com 16 GB de RAM; 14B+ oferece a melhor qualidade.",
   "onboarding.setupAi.modelCount": "{{count}} modelo",
   "onboarding.setupAi.modelCount_other": "{{count}} modelos",
   "onboarding.calib.title": "Seu feed está calibrado",
