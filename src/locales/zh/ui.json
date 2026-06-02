@@ -805,6 +805,8 @@
   "onboarding.setup.subtitle": "配置 AI 和兴趣。一切都在本地和私密的环境中。",
   "onboarding.setup.aiProvider": "AI 提供商",
   "onboarding.setup.localAiReady": "本地 AI 已就绪",
+  "onboarding.setup.builtinReady": "内置模型已就绪",
+  "onboarding.setup.builtinNeedsModel": "下载模型以启用",
   "onboarding.setup.configured": "已配置",
   "onboarding.setup.autoDetecting": "自动检测中...",
   "onboarding.setup.basicModeAvailable": "可选 — 没有 AI 也可使用关键词匹配",

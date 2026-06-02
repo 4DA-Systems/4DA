@@ -810,6 +810,8 @@
   "onboarding.setup.subtitle": "Configurez votre IA et vos intérêts. Tout reste local et privé.",
   "onboarding.setup.aiProvider": "Fournisseur d'IA",
   "onboarding.setup.localAiReady": "IA locale prête",
+  "onboarding.setup.builtinReady": "Modèle intégré prêt",
+  "onboarding.setup.builtinNeedsModel": "Téléchargez un modèle pour activer",
   "onboarding.setup.configured": "Configuré",
   "onboarding.setup.autoDetecting": "Détection automatique...",
   "onboarding.setup.basicModeAvailable": "Facultatif — la correspondance par mots-clés fonctionne sans IA",

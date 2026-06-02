@@ -1616,6 +1616,8 @@
   "onboarding.setup.keyFormatHint": "تنسيق المفتاح لا يبدو صحيحاً",
   "onboarding.setup.keyFormatHintSoft": "تنسيق المفتاح قد لا يكون صحيحاً - لا يزال بإمكانك المتابعة",
   "onboarding.setup.localAiReady": "الذكاء الاصطناعي المحلي جاهز",
+  "onboarding.setup.builtinReady": "النموذج المدمج جاهز",
+  "onboarding.setup.builtinNeedsModel": "نزّل نموذجًا للتفعيل",
   "onboarding.setup.profilesSelected": "تم اختيار {{count}} ملف شخصي",
   "onboarding.setup.profilesSelected_few": "تم اختيار {{count}} ملفات شخصية",
   "onboarding.setup.profilesSelected_many": "تم اختيار {{count}} ملفًا شخصيًا",

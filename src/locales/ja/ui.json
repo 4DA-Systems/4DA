@@ -805,6 +805,8 @@
   "onboarding.setup.subtitle": "AIと興味を設定。すべてローカルでプライベート。",
   "onboarding.setup.aiProvider": "AIプロバイダー",
   "onboarding.setup.localAiReady": "ローカルAI準備完了",
+  "onboarding.setup.builtinReady": "内蔵モデルの準備完了",
+  "onboarding.setup.builtinNeedsModel": "有効にするにはモデルをダウンロード",
   "onboarding.setup.configured": "設定済み",
   "onboarding.setup.autoDetecting": "自動検出中...",
   "onboarding.setup.basicModeAvailable": "オプション — AIなしでもキーワードマッチングが動作",

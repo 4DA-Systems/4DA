@@ -1591,6 +1591,8 @@
   "onboarding.setup.keyFormatHint": "Anahtar formatı doğru görünmüyor",
   "onboarding.setup.keyFormatHintSoft": "Anahtar formatı doğru olmayabilir - yine de devam edebilirsiniz",
   "onboarding.setup.localAiReady": "Yerel AI Hazır",
+  "onboarding.setup.builtinReady": "Yerleşik model hazır",
+  "onboarding.setup.builtinNeedsModel": "Etkinleştirmek için bir model indirin",
   "onboarding.setup.profilesSelected": "{{count}} profil seçildi",
   "onboarding.setup.profilesSelected_other": "{{count}} profil seçildi",
   "onboarding.setup.savingSettings": "Kaydediliyor...",

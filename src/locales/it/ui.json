@@ -805,6 +805,8 @@
   "onboarding.setup.subtitle": "Configura la tua IA e interessi. Tutto rimane locale e privato.",
   "onboarding.setup.aiProvider": "Provider IA",
   "onboarding.setup.localAiReady": "IA locale pronta",
+  "onboarding.setup.builtinReady": "Modello integrato pronto",
+  "onboarding.setup.builtinNeedsModel": "Scarica un modello per attivarlo",
   "onboarding.setup.configured": "Configurato",
   "onboarding.setup.autoDetecting": "Rilevamento automatico...",
   "onboarding.setup.basicModeAvailable": "Opzionale — la corrispondenza per parole chiave funziona senza IA",

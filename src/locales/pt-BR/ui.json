@@ -1623,6 +1623,8 @@
   "onboarding.setup.keyFormatHint": "O formato da chave não parece correto",
   "onboarding.setup.keyFormatHintSoft": "O formato da chave pode não estar correto — você ainda pode continuar",
   "onboarding.setup.localAiReady": "IA local pronta",
+  "onboarding.setup.builtinReady": "Modelo integrado pronto",
+  "onboarding.setup.builtinNeedsModel": "Baixe um modelo para ativar",
   "onboarding.setup.profilesSelected": "{{count}} perfil selecionado",
   "onboarding.setup.profilesSelected_other": "{{count}} perfis selecionados",
   "onboarding.setup.savingSettings": "Salvando...",

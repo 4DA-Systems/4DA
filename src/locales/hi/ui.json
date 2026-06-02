@@ -1608,6 +1608,8 @@
   "onboarding.setup.keyFormatHint": "कुंजी प्रारूप सही नहीं लग रहा",
   "onboarding.setup.keyFormatHintSoft": "कुंजी प्रारूप सही नहीं हो सकता - आप अभी भी जारी रख सकते हैं",
   "onboarding.setup.localAiReady": "स्थानीय AI तैयार",
+  "onboarding.setup.builtinReady": "अंतर्निहित मॉडल तैयार",
+  "onboarding.setup.builtinNeedsModel": "सक्षम करने के लिए एक मॉडल डाउनलोड करें",
   "onboarding.setup.profilesSelected": "{{count}} प्रोफ़ाइल चुनी गई",
   "onboarding.setup.profilesSelected_other": "{{count}} प्रोफ़ाइलें चुनी गईं",
   "onboarding.setup.savingSettings": "सहेज रहा है...",

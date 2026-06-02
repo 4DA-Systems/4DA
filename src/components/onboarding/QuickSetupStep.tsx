@@ -34,6 +34,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     pullProgress,
     aiConfigured,
     builtinSelected,
+    builtinReady,
     selectBuiltin,
     detectedTech,
     discoveryDone,
@@ -126,15 +127,17 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div>
           <SectionHeader
             title={t('onboarding.setup.aiProvider')}
-            subtitle={aiConfigured
-              ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
-              : ollamaStatus !== null
-                ? t('onboarding.setup.basicModeAvailable')
-                : t('onboarding.setup.autoDetecting')}
+            subtitle={builtinSelected
+              ? (builtinReady ? t('onboarding.setup.builtinReady') : t('onboarding.setup.builtinNeedsModel'))
+              : aiConfigured
+                ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
+                : ollamaStatus !== null
+                  ? t('onboarding.setup.basicModeAvailable')
+                  : t('onboarding.setup.autoDetecting')}
             isOpen={aiOpen}
             onToggle={() => setAiOpen(!aiOpen)}
-            done={aiConfigured}
-            warning={!aiConfigured && ollamaStatus !== null}
+            done={builtinSelected ? builtinReady : aiConfigured}
+            warning={builtinSelected ? !builtinReady : (!aiConfigured && ollamaStatus !== null)}
           />
           {aiOpen && (
             <>

@@ -810,6 +810,8 @@
   "onboarding.setup.subtitle": "KI und Interessen konfigurieren. Alles bleibt lokal und privat.",
   "onboarding.setup.aiProvider": "KI-Anbieter",
   "onboarding.setup.localAiReady": "Lokale KI bereit",
+  "onboarding.setup.builtinReady": "Integriertes Modell bereit",
+  "onboarding.setup.builtinNeedsModel": "Modell herunterladen zum Aktivieren",
   "onboarding.setup.configured": "Konfiguriert",
   "onboarding.setup.autoDetecting": "Automatische Erkennung...",
   "onboarding.setup.basicModeAvailable": "Optional – Stichwortabgleich funktioniert ohne KI",

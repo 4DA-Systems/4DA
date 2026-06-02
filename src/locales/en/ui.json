@@ -811,6 +811,8 @@
   "onboarding.setup.subtitle": "Configure your AI and interests. Everything stays local and private.",
   "onboarding.setup.aiProvider": "AI Provider",
   "onboarding.setup.localAiReady": "Local AI Ready",
+  "onboarding.setup.builtinReady": "Built-in model ready",
+  "onboarding.setup.builtinNeedsModel": "Download a model to enable",
   "onboarding.setup.configured": "Configured",
   "onboarding.setup.autoDetecting": "Auto-detecting...",
   "onboarding.setup.basicModeAvailable": "Optional - keyword matching works without AI",

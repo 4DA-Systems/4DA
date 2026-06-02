@@ -36,6 +36,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // The built-in local model runs as its own sidecar, independent of the BYOK/Ollama
   // provider union — tracked separately so its selection actually persists on save.
   const [builtinSelected, setBuiltinSelected] = useState(false);
+  // Whether a built-in model is actually downloaded (so the section header reflects
+  // genuine readiness, not just that the Built-in card was clicked).
+  const [builtinReady, setBuiltinReady] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
@@ -178,6 +181,22 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     return () => { cancelled = true; };
   }, [discoveryDone]);
 
+  // Track built-in model readiness while Built-in is selected: check once, then
+  // update when a download completes (the user may download a model in-section).
+  useEffect(() => {
+    if (!builtinSelected) { setBuiltinReady(false); return; }
+    let cancelled = false;
+    const check = () => cmd('list_builtin_models')
+      .then((r) => { if (!cancelled) setBuiltinReady(r.models?.some(m => m.downloaded) ?? false); })
+      .catch(() => { if (!cancelled) setBuiltinReady(false); });
+    void check();
+    let unlisten: (() => void) | undefined;
+    void listen<{ status: string }>('model-download-progress', (e) => {
+      if (e.payload.status === 'complete') void check();
+    }).then(fn => { unlisten = fn; });
+    return () => { cancelled = true; unlisten?.(); };
+  }, [builtinSelected]);
+
   // Auto-expand next section on completion
   useEffect(() => { if (aiConfigured) setProjectsOpen(true); }, [aiConfigured]);
   useEffect(() => { if (discoveryDone) setStacksOpen(true); }, [discoveryDone]);
@@ -293,7 +312,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     experienceOpen, setExperienceOpen, experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured,
-    builtinSelected, selectBuiltin,
+    builtinSelected, builtinReady, selectBuiltin,
     detectedTech, discoveryDone,
     suggestions, interests, newInterest, setNewInterest, role, setRole,
     error, setError, isSaving, apiKeyHint, skippedDownload,

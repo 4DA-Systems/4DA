@@ -803,6 +803,8 @@
   "onboarding.setup.subtitle": "Настройте ИИ и интересы. Всё остаётся локально и конфиденциально.",
   "onboarding.setup.aiProvider": "ИИ-провайдер",
   "onboarding.setup.localAiReady": "Локальный ИИ готов",
+  "onboarding.setup.builtinReady": "Встроенная модель готова",
+  "onboarding.setup.builtinNeedsModel": "Загрузите модель для активации",
   "onboarding.setup.configured": "Настроено",
   "onboarding.setup.autoDetecting": "Автоопределение...",
   "onboarding.setup.basicModeAvailable": "Необязательно — поиск по ключевым словам работает без ИИ",
