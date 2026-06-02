@@ -9,20 +9,39 @@
 
 ## Active Terminals
 
-### Terminal: opus-vanity-gate-and-header (started 2026-06-02)
-Working on: (1) vanity-metrics pre-commit gate enforcing intelligence-doctrine rule 3 —
-scripts/check-vanity-metrics.cjs flags the banned counter phrases (Items monitored / Sources
-producing / Validated principles / Decisions tracked) ONLY when adjacent to a count/number
-(not prose like WaitlistSignup's "decisions tracked with evidence"); vanity-ok: escape hatch.
-(2) onboarding AI-provider section header reflects Built-in readiness (aiConfigured true when a
-builtin model is downloaded; honest "Built-in model ready" / "download a model" subtitle).
-**Claims:**
-- scripts/check-vanity-metrics.cjs (NEW) + .husky/pre-commit (wire it)
-- src/components/onboarding/use-quick-setup.ts, QuickSetupStep.tsx
-- src/locales/*/ui.json (2 builtin header keys ×13) + src/types/i18n-resources.d.ts (regen)
-**Commit Lock**: HELD (opus-vanity-gate-and-header) — two atomic commits (vanity gate;
-builtin header), one push. Both verified (gate script-tested 4 ways; header live-verified
-"Built-in model ready" + green check). Staging explicit paths only.
+<!-- opus-debt-paydown (2026-06-02): DONE — committed (40205500..f1de614b, 5 commits).
+     Commit Lock RELEASED, claims cleared. Paid down the documented debt from the
+     vanity-gate/header + p1-false-state sessions (screenshots 2852/2853):
+     • test(onboarding) 40205500 — builtin persistence path: quick-setup-utils.test.ts (21) +
+       use-quick-setup.test.ts (8). Locks the false-ready guard (Built-in, no model → honest none).
+     • test(doctrine) b607d6f6 — both gate scripts refactored to export their matcher (CLI/.husky
+       behaviour unchanged, both still exit 0) + node:test suites (27) that pin catches AND known
+       blind spots. New `pnpm run test:scripts`.
+     • fix(intelligence) 4aa57ad4 — frontend sweep found 1 more proxy-state instance:
+       ResultItemExpanded isLocalModel dropped builtin → fixed.
+     • test(personalization) 1e44ec73 — compute_has_llm cloud + unknown-provider arms.
+     • docs(failure-modes) f1de614b — proxy-derived-state class now recorded in tracked
+       .ai/FAILURE_MODES.md (was gitignored-only).
+     Verified: 1272 frontend tests, 27 script tests, 2 compute_has_llm Rust tests, tsc 0,
+     validate:translations 0 errors, both gates exit 0. immuneScanPending CLEARED (ce67a49e +
+     1f65229c added to scannedBugFixCommits — no new class, covered by the existing antibody;
+     immune-pass note appended to 2026-06-02-proxy-derived-state.md).
+     Did NOT touch the pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore.
+     Orphaned worktree agent-a1d6dc2d1e211087e left in place — it has uncommitted changes
+     (M specs/ARCHITECTURE.md); the cleanup script correctly refuses to remove it. -->
+     <!-- Commit Lock RELEASED (opus-debt-paydown) -->
+
+<!-- opus-vanity-gate-and-header (2026-06-02): DONE — committed + PUSHED (origin/main @ ce67a49e,
+     1f65229c..ce67a49e, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     • 33fb9bbd — vanity-metrics gate: scripts/check-vanity-metrics.cjs (wired into .husky/pre-commit)
+       enforces intelligence-doctrine rule 3, flagging banned counters only when adjacent to a
+       number/{{count}} (prose-safe). Tested 4 ways (clean/catch/prose-ignored/marker). Second
+       doctrine rule now enforced at commit-time alongside the LLM-gate.
+     • ce67a49e — onboarding AI-provider header reflects Built-in readiness (new builtinReady signal,
+       updates on model-download-progress; "Built-in model ready"/"Download a model to enable" ×13).
+       Live-verified: green check + "Built-in model ready" with qwen3-14b-q4km downloaded.
+     All gates green; full pre-push suite passed. -->
+
 
 <!-- opus-gate-and-builtin (2026-06-02): DONE — committed + PUSHED (origin/main @ 1f65229c,
      851fa416..1f65229c, rev-list 0/0). Commit Lock RELEASED, claims cleared.
