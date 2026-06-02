@@ -90,7 +90,10 @@ pub fn get_content_translation_settings() -> Result<content_translation::Content
     guard.ensure_keys_hydrated();
     let settings = guard.get();
 
-    let has_llm = !settings.llm.api_key.is_empty() || settings.llm.provider == "ollama";
+    let has_llm = crate::content_personalization::context::compute_has_llm(
+        &settings.llm.provider,
+        &settings.llm.api_key,
+    );
     let enabled = target_lang != "en" && has_llm;
 
     Ok(content_translation::ContentTranslationSettings {

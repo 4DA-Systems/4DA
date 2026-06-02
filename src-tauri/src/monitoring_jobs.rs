@@ -32,7 +32,7 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
         let mut guard = crate::get_settings_manager().lock();
         guard.ensure_keys_hydrated();
         let llm = &guard.get().llm;
-        llm.provider == "ollama" || !llm.api_key.is_empty()
+        crate::content_personalization::context::compute_has_llm(&llm.provider, &llm.api_key)
     };
     if !has_llm {
         info!(target: "4da::jobs", "No LLM configured, skipping auto-briefing");

@@ -21,8 +21,12 @@ HONEST (only detected stacks get a %) — leaving as-is, NOT fabricating. Then r
 - src/components/Onboarding.tsx (BONUS: hasProviderConfigured was has_api_key||ollama — same
   stale-key false-positive as P1 #3; now provider-driven. Caught by live verify.)
 - src/locales/*/ui.json (5 axis-label keys ×13) + src/types/i18n-resources.d.ts (regen)
-**Commit Lock**: HELD (opus-p2-polish) — committing P2 polish + the bonus gate-state fix.
-Staging explicit paths only; NOT touching pre-existing Cargo.lock / untracked .gitignore.
+**Commit Lock**: HELD (opus-p2-polish) — Wave 3: immune-pass backend fixes. The AOS immune
+scan (antibody 2026-06-02-proxy-derived-state.md, gitignored ops memory) found 4 more lurking
+instances of the false-state class; all routed through the now-pub(crate) compute_has_llm:
+content_translation_commands.rs (HIGH, user-facing `enabled`), monitoring_jobs.rs, digest_commands.rs,
+content_commands.rs. immuneScanPending cleared. Committing the 5 Rust files (antibody/ops-state are
+gitignored, stay local). NOT touching pre-existing Cargo.lock / untracked .gitignore.
 
 <!-- opus-p1-false-state (2026-06-02): DONE — committed + PUSHED (origin/main @ 36f82fbb,
      0f46a3d9..36f82fbb, rev-list 0/0). Commit Lock RELEASED, claims cleared.

@@ -108,10 +108,10 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
         guard.get().llm.clone()
     };
 
-    if llm_config.provider.is_empty()
-        || (llm_config.api_key.is_empty()
-            && !matches!(llm_config.provider.as_str(), "ollama" | "builtin"))
-    {
+    if !crate::content_personalization::context::compute_has_llm(
+        &llm_config.provider,
+        &llm_config.api_key,
+    ) {
         return Err(FourDaError::Llm(
             "No LLM configured. Set up a provider in Settings to generate summaries.".to_string(),
         ));

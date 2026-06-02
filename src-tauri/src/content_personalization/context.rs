@@ -433,7 +433,13 @@ fn assemble_settings() -> SettingsData {
 /// A stale/leftover api_key with provider "none" must NOT read as has_llm — that
 /// produced the first-run lie `has_llm:true` / `llm_tier:"cloud"` with no provider.
 /// Local providers (ollama/builtin) need no key; cloud providers need one.
-fn compute_has_llm(provider: &str, api_key: &str) -> bool {
+///
+/// This is the single source of truth for "is an LLM provider configured?" — every
+/// gate that decides whether to attempt an LLM call (briefings, digests, content
+/// translation, summaries) must route through it rather than re-deriving the check
+/// from `!api_key.is_empty()` (which a stray/env key flips true) or a single-provider
+/// OR-shortcut (which silently drops `builtin`). See antibody 2026-06-02-proxy-derived-state.
+pub(crate) fn compute_has_llm(provider: &str, api_key: &str) -> bool {
     match provider {
         "none" | "" => false,
         "ollama" | "builtin" => true,

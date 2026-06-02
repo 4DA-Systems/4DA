@@ -67,9 +67,10 @@ pub(crate) async fn generate_briefing_internal(
         guard.get().llm.clone()
     };
 
-    if !matches!(llm_settings.provider.as_str(), "ollama" | "builtin")
-        && llm_settings.api_key.is_empty()
-    {
+    if !crate::content_personalization::context::compute_has_llm(
+        &llm_settings.provider,
+        &llm_settings.api_key,
+    ) {
         return Ok(serde_json::json!({
             "success": false,
             "error": "No LLM configured. Set up Ollama or add an API key in Settings.",
