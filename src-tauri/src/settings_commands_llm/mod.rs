@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! LLM provider commands: test connection, Ollama status, model pulling,
-//! built-in sidecar management, and model evaluation.
+//! and model evaluation.
 //!
 //! Submodules hold the implementation logic; this file owns the
 //! `#[tauri::command]` wrappers so the Tauri macro-generated items
 //! live at the correct module depth for `pub use *` re-export.
 
-mod builtin;
 mod eval;
 mod ollama;
 
@@ -37,8 +36,7 @@ pub async fn test_llm_connection() -> Result<serde_json::Value> {
     };
 
     if settings.llm.provider == "none"
-        || (!matches!(settings.llm.provider.as_str(), "ollama" | "builtin")
-            && settings.llm.api_key.is_empty())
+        || (settings.llm.provider != "ollama" && settings.llm.api_key.is_empty())
     {
         return Err("No LLM provider configured".into());
     }
@@ -48,13 +46,6 @@ pub async fn test_llm_connection() -> Result<serde_json::Value> {
     // Ollama: use dedicated lightweight test (not the heavy judge_batch)
     if settings.llm.provider == "ollama" {
         return ollama::test_ollama_connection_impl(&settings.llm).await;
-    }
-
-    // Builtin: check sidecar status then use the standard cloud-style test path
-    if settings.llm.provider == "builtin" {
-        if crate::llm_engine::sidecar_status() != crate::llm_engine::SidecarStatus::Ready {
-            return Err("Built-in LLM sidecar is not running — start it from settings".into());
-        }
     }
 
     // Cloud providers: use a lightweight direct LLM call
@@ -159,31 +150,6 @@ pub async fn list_provider_models(
                 Ok(serde_json::json!({ "models": models }))
             }
         }
-        "builtin" => {
-            // Query the sidecar's /v1/models endpoint if running
-            if let Some(base) = crate::llm_engine::sidecar_base_url() {
-                let models_url = format!("{base}/models");
-                match client.get(&models_url).send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        let data: serde_json::Value = resp.json().await.unwrap_or_default();
-                        let models: Vec<String> = data["data"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|m| {
-                                        m["id"].as_str().map(std::string::ToString::to_string)
-                                    })
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        Ok(serde_json::json!({ "models": models }))
-                    }
-                    _ => Ok(serde_json::json!({ "models": [] })),
-                }
-            } else {
-                Ok(serde_json::json!({ "models": [], "error": "Sidecar not running" }))
-            }
-        }
         _ => Ok(serde_json::json!({ "models": [] })),
     }
 }
@@ -255,55 +221,6 @@ pub async fn pull_ollama_model(
 #[tauri::command]
 pub async fn cancel_ollama_pull() -> Result<String> {
     ollama::cancel_ollama_pull_impl()
-}
-
-// ============================================================================
-// Built-in LLM commands (delegated to builtin submodule)
-// ============================================================================
-
-/// Start the built-in LLM sidecar by model ID (resolved from catalog).
-#[tauri::command]
-pub async fn start_builtin_llm(model_id: String) -> Result<serde_json::Value> {
-    builtin::start_builtin_llm_impl(model_id).await
-}
-
-/// Stop the built-in LLM sidecar.
-#[tauri::command]
-pub fn stop_builtin_llm() -> Result<serde_json::Value> {
-    builtin::stop_builtin_llm_impl()
-}
-
-/// Get the current status of the built-in LLM sidecar.
-#[tauri::command]
-pub fn get_builtin_llm_status() -> Result<serde_json::Value> {
-    builtin::get_builtin_llm_status_impl()
-}
-
-/// List available models from the built-in catalog with download status.
-#[tauri::command]
-pub fn list_builtin_models() -> Result<serde_json::Value> {
-    builtin::list_builtin_models_impl()
-}
-
-/// Download a model from the built-in catalog.
-#[tauri::command]
-pub async fn download_builtin_model(
-    app_handle: tauri::AppHandle,
-    model_id: String,
-) -> Result<serde_json::Value> {
-    builtin::download_builtin_model_impl(app_handle, model_id).await
-}
-
-/// Cancel an in-progress model download.
-#[tauri::command]
-pub fn cancel_builtin_model_download() -> Result<String> {
-    builtin::cancel_builtin_model_download_impl()
-}
-
-/// Delete a downloaded model from disk.
-#[tauri::command]
-pub fn delete_builtin_model(model_id: String) -> Result<serde_json::Value> {
-    builtin::delete_builtin_model_impl(model_id)
 }
 
 // ============================================================================

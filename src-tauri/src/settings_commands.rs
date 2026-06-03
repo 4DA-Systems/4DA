@@ -123,7 +123,7 @@ pub async fn set_llm_provider(
         }
         // SSRF prevention: block private/internal IPs for non-Ollama providers.
         // Ollama is expected to run on localhost, so skip this check for it.
-        if !url.is_empty() && !matches!(provider.as_str(), "ollama" | "builtin") {
+        if !url.is_empty() && provider.as_str() != "ollama" {
             crate::url_validation::validate_not_internal(url)?;
         }
     }
@@ -134,14 +134,7 @@ pub async fn set_llm_provider(
     }
 
     // Validate provider
-    let valid_providers = [
-        "anthropic",
-        "openai",
-        "openai-compatible",
-        "ollama",
-        "builtin",
-        "none",
-    ];
+    let valid_providers = ["anthropic", "openai", "openai-compatible", "ollama", "none"];
     if !valid_providers.contains(&provider.as_str()) {
         return Err(format!(
             "Invalid provider '{}'. Must be one of: {}",

@@ -92,21 +92,12 @@ pub(crate) async fn deliberate(
         guard.get().llm.clone()
     };
 
-    if !matches!(provider.provider.as_str(), "ollama" | "builtin") && provider.api_key.is_empty() {
+    if provider.provider != "ollama" && provider.api_key.is_empty() {
         debug!(
             target: "4da::adversarial",
             item_id = %item.id,
             provider = %provider.provider,
             "Skipping deliberation -- no API key configured"
-        );
-        return Ok(None);
-    }
-
-    if provider.provider == "builtin" && !crate::llm_engine::is_builtin_available() {
-        debug!(
-            target: "4da::adversarial",
-            item_id = %item.id,
-            "Skipping deliberation -- builtin sidecar not running"
         );
         return Ok(None);
     }

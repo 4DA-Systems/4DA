@@ -57,7 +57,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           // gate shows a false "AI Provider configured" with no provider selected).
           const configured =
             llm.provider === 'ollama' ||
-            llm.provider === 'builtin' ||
             (llm.has_api_key && llm.provider !== 'none' && llm.provider !== '');
           setHasProviderConfigured(configured);
         })

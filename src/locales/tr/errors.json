@@ -35,7 +35,6 @@
   "errorMsg.ipc": "Uygulama iletişim hatası. Lütfen uygulamayı yeniden başlatın.",
   "errorMsg.limitAdjust": "Ayarlar > Zeka bölümünden ayarlayın veya gece yarısı sıfırlanmasını bekleyin.",
   "errorMsg.network": "Ağ isteği başarısız. İnternet bağlantınızı kontrol edin.",
-  "errorMsg.sidecarNotRunning": "Yerleşik model çalışmıyor. Ayarlar'dan başlatın veya bir bulut API anahtarı yapılandırın.",
   "errorMsg.ollamaNotRunning": "Ollama çalışmıyor. Ollama'yı başlatın veya Ayarlar'da API anahtarı girin.",
   "errorMsg.parse": "Veri biçimi hatası. Tekrar deneyin veya uygulamayı yeniden başlatın.",
   "errorMsg.permission": "İzin reddedildi. Dosya izinlerini kontrol edin.",

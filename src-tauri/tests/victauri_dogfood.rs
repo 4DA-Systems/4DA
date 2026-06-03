@@ -4209,112 +4209,11 @@ async fn channel_content_returns_render_for_first_channel() {
     );
 }
 
-// ── Phase 22: LLM Infrastructure — Sidecar, Models, Synthesis ────────────────
+// ── Phase 22: LLM Infrastructure — Synthesis capability & model eval ─────────
 //
-// Tests the llama-server sidecar lifecycle, model catalog, synthesis capability
-// checking, structured output from briefing synthesis, and the model eval harness.
-// These tests exercise the full local inference pipeline without cloud API keys.
-
-#[tokio::test]
-async fn builtin_model_catalog_has_entries() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-    let result = client
-        .invoke_command("list_builtin_models", None)
-        .await
-        .unwrap();
-
-    let models = result
-        .get("models")
-        .and_then(|m| m.as_array())
-        .expect("list_builtin_models must return 'models' array");
-
-    assert!(
-        models.len() >= 3,
-        "catalog should have at least 3 models (primary + 2 fallbacks), got {}",
-        models.len()
-    );
-
-    for (i, model) in models.iter().enumerate() {
-        assert!(
-            model.get("id").and_then(|v| v.as_str()).is_some(),
-            "model[{i}] must have 'id'"
-        );
-        assert!(
-            model.get("display_name").and_then(|v| v.as_str()).is_some(),
-            "model[{i}] must have 'display_name'"
-        );
-        assert!(
-            model.get("size_bytes").and_then(|v| v.as_u64()).is_some(),
-            "model[{i}] must have numeric 'size_bytes'"
-        );
-        assert!(
-            model.get("min_ram_gb").and_then(|v| v.as_f64()).is_some(),
-            "model[{i}] must have 'min_ram_gb'"
-        );
-        assert!(
-            model.get("downloaded").and_then(|v| v.as_bool()).is_some(),
-            "model[{i}] must report 'downloaded' status"
-        );
-    }
-
-    assert!(
-        result
-            .get("ram_total_gb")
-            .and_then(|v| v.as_f64())
-            .is_some(),
-        "response must include 'ram_total_gb'"
-    );
-    assert!(
-        result
-            .get("ram_available_gb")
-            .and_then(|v| v.as_f64())
-            .is_some(),
-        "response must include 'ram_available_gb'"
-    );
-}
-
-#[tokio::test]
-async fn builtin_model_catalog_recommends_based_on_ram() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-    let result = client
-        .invoke_command("list_builtin_models", None)
-        .await
-        .unwrap();
-
-    let ram_total = result
-        .get("ram_total_gb")
-        .and_then(|v| v.as_f64())
-        .unwrap_or(0.0);
-
-    if ram_total >= 7.0 {
-        assert!(
-            result.get("recommended_id").is_some()
-                && !result.get("recommended_id").unwrap().is_null(),
-            "systems with ≥7 GB RAM should get a model recommendation"
-        );
-    }
-
-    let models = result["models"].as_array().unwrap();
-    for model in models {
-        let fits = model["fits_ram"].as_bool().unwrap_or(false);
-        let min_ram = model["min_ram_gb"].as_f64().unwrap_or(f64::MAX);
-        if min_ram <= ram_total {
-            assert!(
-                fits,
-                "model {} should fit in {:.0} GB RAM",
-                model["id"], ram_total
-            );
-        }
-    }
-}
+// Tests synthesis capability checking, structured output from briefing synthesis,
+// and the model eval harness. (The built-in llama-server sidecar + model catalog
+// were removed — local AI is Ollama, cloud AI is BYOK.)
 
 #[tokio::test]
 async fn synthesis_capability_returns_hardware_info() {
@@ -4403,135 +4302,8 @@ async fn synthesis_capability_flags_unverified_providers() {
                 "openai-compatible must be flagged as unverified"
             );
         }
-        _ => {} // builtin, ollama — no assertion needed
+        _ => {} // ollama — no assertion needed
     }
-}
-
-#[tokio::test]
-async fn builtin_llm_status_is_queryable() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-    let result = client
-        .invoke_command("get_builtin_llm_status", None)
-        .await
-        .unwrap();
-
-    assert!(
-        result.get("status").and_then(|v| v.as_str()).is_some(),
-        "status must be a string (stopped/starting/ready/error)"
-    );
-
-    let status = result["status"].as_str().unwrap();
-    assert!(
-        ["stopped", "starting", "ready", "error"].contains(&status),
-        "status must be one of stopped/starting/ready/error, got: {status}"
-    );
-}
-
-#[tokio::test]
-async fn sidecar_starts_with_downloaded_model() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-
-    // Find a downloaded model from the catalog
-    let catalog = client
-        .invoke_command("list_builtin_models", None)
-        .await
-        .unwrap();
-    let models = catalog["models"].as_array().expect("models array");
-    let downloaded = models.iter().find(|m| {
-        m.get("downloaded")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-    });
-
-    let model = match downloaded {
-        Some(m) => m,
-        None => {
-            eprintln!("Skipping sidecar_starts_with_downloaded_model: no model downloaded");
-            return;
-        }
-    };
-
-    let model_id = model["id"].as_str().expect("model must have id");
-
-    let result = client
-        .invoke_command(
-            "start_builtin_llm",
-            Some(serde_json::json!({"model_id": model_id})),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-        result["status"].as_str().unwrap_or(""),
-        "ready",
-        "sidecar must reach 'ready' status"
-    );
-    assert!(
-        result["port"].as_u64().unwrap_or(0) > 0,
-        "sidecar must return a valid port number"
-    );
-
-    // Verify status reflects running state
-    let status = client
-        .invoke_command("get_builtin_llm_status", None)
-        .await
-        .unwrap();
-    assert_eq!(
-        status["status"].as_str().unwrap_or(""),
-        "ready",
-        "status must reflect running sidecar"
-    );
-
-    // Clean up
-    let _ = client.invoke_command("stop_builtin_llm", None).await;
-}
-
-#[tokio::test]
-async fn sidecar_rejects_unknown_model_id() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-
-    let result = client
-        .invoke_command(
-            "start_builtin_llm",
-            Some(serde_json::json!({"model_id": "nonexistent-model-xyz"})),
-        )
-        .await;
-
-    assert!(
-        result.is_err() || result.as_ref().ok().and_then(|v| v.get("error")).is_some(),
-        "starting with an unknown model ID must fail gracefully"
-    );
-}
-
-#[tokio::test]
-async fn sidecar_stop_returns_stopped() {
-    if skip_unless_e2e() {
-        return;
-    }
-
-    let mut client = VictauriClient::discover().await.unwrap();
-    let result = client
-        .invoke_command("stop_builtin_llm", None)
-        .await
-        .unwrap();
-
-    assert_eq!(
-        result["status"].as_str().unwrap_or(""),
-        "stopped",
-        "stop command must return 'stopped' status"
-    );
 }
 
 #[tokio::test]
@@ -4550,7 +4322,8 @@ async fn model_eval_returns_structured_verdict() {
     let can_synth = cap["can_synthesize"].as_bool().unwrap_or(false);
     let provider = cap["provider"].as_str().unwrap_or("");
 
-    if !can_synth && provider != "builtin" {
+    let _ = provider;
+    if !can_synth {
         eprintln!("Skipping model_eval: no synthesis-capable provider configured");
         return;
     }
@@ -4602,7 +4375,6 @@ async fn model_eval_returns_structured_verdict() {
             assert!(
                 err_str.contains("API")
                     || err_str.contains("connection")
-                    || err_str.contains("sidecar")
                     || err_str.contains("provider"),
                 "eval failure must be a connection/provider issue, not a crash: {err_str}"
             );
@@ -4702,13 +4474,6 @@ async fn ipc_commands_include_llm_infrastructure() {
 
     let required_commands = [
         "check_synthesis_capability",
-        "list_builtin_models",
-        "start_builtin_llm",
-        "stop_builtin_llm",
-        "get_builtin_llm_status",
-        "download_builtin_model",
-        "cancel_builtin_model_download",
-        "delete_builtin_model",
         "run_model_eval",
         "trigger_morning_briefing",
     ];

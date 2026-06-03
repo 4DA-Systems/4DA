@@ -1119,60 +1119,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     }
 
-    // Auto-start the built-in llama-server sidecar on launch when the user has
-    // selected the built-in provider and a suitable model is already downloaded.
-    // Mirrors the Ollama auto-warm above: fire-and-forget, never blocks startup,
-    // never auto-downloads (a multi-GB pull stays user-consented in Settings).
-    {
-        let selected_model = {
-            let settings = get_settings_manager().lock();
-            let llm = &settings.get().llm;
-            (llm.provider == "builtin").then(|| llm.model.clone())
-        };
-
-        if let Some(selected_model) = selected_model {
-            // Resolve which model to start: prefer the explicitly selected catalog
-            // model if it's downloaded, otherwise fall back to the RAM-based
-            // recommendation — but only if that model is already on disk.
-            let resolved = crate::model_manager::find_model(&selected_model)
-                .filter(|e| crate::model_manager::is_model_downloaded(e))
-                .or_else(|| {
-                    let hw = crate::hardware_detect::detect_hardware();
-                    crate::model_manager::recommend_model(hw.ram_available_gb)
-                        .filter(|e| crate::model_manager::is_model_downloaded(e))
-                });
-
-            match resolved {
-                Some(entry) => {
-                    // Don't double-start: skip if the sidecar is already up or coming up.
-                    let status = crate::llm_engine::sidecar_status();
-                    if matches!(
-                        status,
-                        crate::llm_engine::SidecarStatus::Ready
-                            | crate::llm_engine::SidecarStatus::Starting
-                    ) {
-                        debug!(target: "4da::llm", model = entry.id, "Built-in sidecar already running — skipping auto-start");
-                    } else if let Some(path) = crate::model_manager::model_path(entry) {
-                        let model_id = entry.id;
-                        tauri::async_runtime::spawn(async move {
-                            match crate::llm_engine::start_sidecar(&path).await {
-                                Ok(port) => {
-                                    info!(target: "4da::llm", model = model_id, port, "Built-in sidecar auto-started on launch")
-                                }
-                                Err(e) => {
-                                    warn!(target: "4da::llm", model = model_id, error = %e, "Built-in sidecar auto-start failed")
-                                }
-                            }
-                        });
-                    }
-                }
-                None => {
-                    debug!(target: "4da::llm", "Built-in provider selected but no downloaded model available — skipping auto-start");
-                }
-            }
-        }
-    }
-
     // Validate license key against Keygen API (fire-and-forget, non-blocking)
     {
         let license_key = {
@@ -1718,8 +1664,6 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
     }
     if let tauri::RunEvent::Exit = event {
         info!(target: "4da::shutdown", "Application shutting down - cleaning up...");
-        // Stop the built-in LLM sidecar if running
-        crate::llm_engine::stop_sidecar();
         // Disable monitoring to stop scheduler
         let state = get_monitoring_state();
         state.set_enabled(false);

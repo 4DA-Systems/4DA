@@ -81,7 +81,7 @@ pub(crate) fn parse_param_size(s: &str) -> Option<f64> {
 ///
 /// Ollama models must have ≥7B parameters. Below that, free-form
 /// Briefing synthesis is BYOK-only: Anthropic, OpenAI, or OpenAI-compatible
-/// with a valid API key. Local models (builtin sidecar, Ollama) are excluded
+/// with a valid API key. Local models (Ollama) are excluded
 /// — testing showed they produce hallucinated narratives, contradictory
 /// clusters, and confidently wrong advice regardless of model size.
 pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> bool {
@@ -94,7 +94,7 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
             );
             !provider.api_key.is_empty()
         }
-        "ollama" | "builtin" => {
+        "ollama" => {
             info!(
                 target: "4da::ollama",
                 provider = %provider.provider,
@@ -108,7 +108,7 @@ pub(crate) async fn can_synthesize(provider: &crate::settings::LLMProvider) -> b
 
 /// Resolve cloud LLM providers for briefing synthesis (BYOK only).
 /// Only Anthropic, OpenAI, and OpenAI-compatible providers with valid
-/// API keys qualify. Local models (builtin, Ollama) are never used.
+/// API keys qualify. Local models (Ollama) are never used.
 pub(crate) async fn resolve_synthesis_providers(
     configured: &crate::settings::LLMProvider,
 ) -> Vec<crate::settings::LLMProvider> {
@@ -160,7 +160,6 @@ pub(crate) async fn can_explain(provider: &crate::settings::LLMProvider) -> bool
                 None => false,
             }
         }
-        "builtin" => crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready,
         _ => false,
     }
 }

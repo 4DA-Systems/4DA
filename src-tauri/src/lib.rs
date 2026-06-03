@@ -276,7 +276,6 @@ mod knowledge_decay;
 pub(crate) mod language_detect;
 mod llm;
 pub(crate) mod llm_capability;
-mod llm_engine;
 mod llm_judge;
 mod llm_judgments;
 mod llm_stream;
@@ -284,7 +283,6 @@ mod local_audit;
 mod log_retention;
 mod model_allowlist;
 mod model_eval;
-mod model_manager;
 pub mod model_registry;
 mod monitoring;
 mod monitoring_briefing;
@@ -715,13 +713,6 @@ pub fn run() {
             settings_commands::check_synthesis_capability,
             settings_commands::list_provider_models,
             settings_commands::detect_local_servers,
-            settings_commands::start_builtin_llm,
-            settings_commands::stop_builtin_llm,
-            settings_commands::get_builtin_llm_status,
-            settings_commands::list_builtin_models,
-            settings_commands::download_builtin_model,
-            settings_commands::cancel_builtin_model_download,
-            settings_commands::delete_builtin_model,
             settings_commands::run_model_eval,
             settings_commands::get_llm_key_for_mcp,
             settings_commands::detect_environment,

@@ -432,17 +432,17 @@ fn assemble_settings() -> SettingsData {
 /// Honest LLM availability: a provider must actually be selected AND usable.
 /// A stale/leftover api_key with provider "none" must NOT read as has_llm — that
 /// produced the first-run lie `has_llm:true` / `llm_tier:"cloud"` with no provider.
-/// Local providers (ollama/builtin) need no key; cloud providers need one.
+/// Ollama (the only fully-local provider) needs no key; cloud providers need one.
 ///
 /// This is the single source of truth for "is an LLM provider configured?" — every
 /// gate that decides whether to attempt an LLM call (briefings, digests, content
 /// translation, summaries) must route through it rather than re-deriving the check
 /// from `!api_key.is_empty()` (which a stray/env key flips true) or a single-provider
-/// OR-shortcut (which silently drops `builtin`). See antibody 2026-06-02-proxy-derived-state.
+/// OR-shortcut. See antibody 2026-06-02-proxy-derived-state.
 pub(crate) fn compute_has_llm(provider: &str, api_key: &str) -> bool {
     match provider {
         "none" | "" => false,
-        "ollama" | "builtin" => true,
+        "ollama" => true,
         _ => !api_key.is_empty(),
     }
 }
@@ -478,7 +478,7 @@ fn compute_derived(profile: &ProfileData, settings: &SettingsData) -> ComputedFi
     // LLM tier
     let llm_tier = if !settings.has_llm {
         "none"
-    } else if matches!(settings.llm_provider.as_str(), "ollama" | "builtin") {
+    } else if settings.llm_provider == "ollama" {
         "local"
     } else {
         "cloud"
@@ -574,13 +574,22 @@ mod tests {
         assert!(!compute_has_llm("none", "sk-ant-leftover-key"));
         assert!(!compute_has_llm("", "sk-ant-leftover-key"));
         assert!(!compute_has_llm("none", ""));
-        // Local providers need no key.
+        // Ollama is the only fully-local provider and needs no key.
         assert!(compute_has_llm("ollama", ""));
-        assert!(compute_has_llm("builtin", ""));
         // Cloud providers require a key.
         assert!(!compute_has_llm("anthropic", ""));
         assert!(compute_has_llm("anthropic", "sk-ant-real"));
         assert!(compute_has_llm("openai", "sk-real"));
+    }
+
+    #[test]
+    fn test_compute_has_llm_builtin_no_longer_a_keyless_provider() {
+        // The built-in local LLM was removed (Phase 2). "builtin" must no longer read
+        // as an always-available keyless provider — it now falls through the cloud arm,
+        // so without a key it is NOT configured. The launch migration resets any
+        // persisted provider=="builtin" to "none", so this value should not occur in
+        // practice; this guards against it ever silently reading as has_llm again.
+        assert!(!compute_has_llm("builtin", ""));
     }
 
     #[test]

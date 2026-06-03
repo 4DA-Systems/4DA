@@ -35,7 +35,6 @@
   "errorMsg.ipc": "Erreur de communication de l'application. Veuillez redémarrer l'application.",
   "errorMsg.limitAdjust": "Ajustez dans Paramètres > Intelligence, ou attendez la réinitialisation à minuit.",
   "errorMsg.network": "La requête réseau a échoué. Vérifiez votre connexion internet.",
-  "errorMsg.sidecarNotRunning": "Le modèle intégré n'est pas en cours d'exécution. Démarrez-le depuis les Paramètres ou configurez une clé API cloud.",
   "errorMsg.ollamaNotRunning": "Ollama n'est pas en cours d'exécution. Démarrez Ollama ou configurez une clé API dans les Paramètres.",
   "errorMsg.parse": "Erreur de format de données. Réessayez ou redémarrez l'application.",
   "errorMsg.permission": "Permission refusée. Vérifiez les permissions des fichiers.",

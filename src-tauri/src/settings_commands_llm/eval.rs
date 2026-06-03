@@ -21,8 +21,6 @@ pub(super) async fn check_synthesis_capability_impl() -> Result<serde_json::Valu
         let model = llm_settings.model.clone();
         let params = crate::ollama::get_model_params_billions(&model, base_url).await;
         (model, params, "ollama".to_string())
-    } else if llm_settings.provider == "builtin" {
-        (llm_settings.model.clone(), None, "builtin".to_string())
     } else {
         (
             llm_settings.model.clone(),
@@ -43,13 +41,7 @@ pub(super) async fn check_synthesis_capability_impl() -> Result<serde_json::Valu
     let recommended = crate::model_allowlist::recommend_models(hw.ram_total_gb);
     let top_recommendation = recommended.first().map(|e| e.family);
 
-    let guidance = if provider == "builtin" {
-        if crate::llm_engine::sidecar_status() == crate::llm_engine::SidecarStatus::Ready {
-            "Built-in LLM is running and ready for synthesis.".to_string()
-        } else {
-            "Built-in LLM sidecar is not running — start it from settings.".to_string()
-        }
-    } else if capable {
+    let guidance = if capable {
         "Your model supports AI-powered briefing synthesis.".to_string()
     } else if model_name.is_empty() {
         match top_recommendation {

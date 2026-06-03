@@ -156,6 +156,25 @@ impl SettingsManager {
             }
         }
 
+        // Migrate the retired built-in local LLM: any persisted provider == "builtin"
+        // (from a pre-removal version) can no longer run — reset it to "none" so the app
+        // degrades honestly to BYOK/Ollama instead of pointing at a deleted sidecar.
+        if settings.llm.provider == "builtin" {
+            info!(target: "4da::settings", "Migrated retired provider 'builtin' -> 'none' (built-in LLM was removed)");
+            settings.llm.provider = "none".to_string();
+            settings.llm.model = String::new();
+            // Persist the migration so it only logs once (atomic write)
+            if let Some(parent) = settings_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(json) = serde_json::to_string_pretty(&settings) {
+                let tmp_path = settings_path.with_extension("json.tmp");
+                if fs::write(&tmp_path, &json).is_ok() {
+                    let _ = atomic_replace(&tmp_path, &settings_path);
+                }
+            }
+        }
+
         // --- Mirror keys to platform keychain (secondary store) ---
         // Keys always stay on disk (the authoritative source). The keychain
         // is a best-effort mirror for OS-level credential integration.

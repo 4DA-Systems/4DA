@@ -59,14 +59,7 @@ pub(crate) fn sanitize_api_error(text: &str) -> String {
 pub(crate) enum StructuredOutputMode {
     /// OpenAI/Ollama: `response_format: { type: "json_object" }` / `format: "json"`.
     /// Anthropic: schema instruction appended to system prompt.
-    #[allow(dead_code)] // REMOVE BY 2026-07-01
     JsonSchema { schema: &'static str },
-    /// llama-server only: GBNF grammar for constrained decoding.
-    /// Falls back to `JsonSchema` for non-llama providers.
-    Grammar {
-        grammar: &'static str,
-        schema: &'static str,
-    },
 }
 
 /// A message in a conversation
@@ -171,7 +164,7 @@ impl LLMClient {
 
         // Privacy gate: auto-heal disclosure flag for BYOK users.
         // Providing an API key IS consent — no separate acceptance needed.
-        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
+        if self.provider.provider != "ollama" {
             if let Some(mut g) = crate::get_settings_manager().try_lock() {
                 if !g.get().privacy.cloud_llm_disclosure_accepted
                     && !self.provider.api_key.is_empty()
@@ -184,9 +177,7 @@ impl LLMClient {
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" | "openai-compatible" | "builtin" => {
-                self.complete_openai(system, messages.clone()).await
-            }
+            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(self.provider_error_message().into()),
         };
@@ -236,7 +227,7 @@ impl LLMClient {
     ///
     /// Identical to `complete()` but instructs the LLM to produce JSON
     /// conforming to the given schema/grammar. Provider-specific:
-    /// - OpenAI/builtin: `response_format` + optional grammar
+    /// - OpenAI: `response_format`
     /// - Anthropic: schema instruction appended to system prompt
     /// - Ollama: `format: "json"` parameter
     pub(crate) async fn complete_structured(
@@ -258,7 +249,7 @@ impl LLMClient {
             );
         }
 
-        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
+        if self.provider.provider != "ollama" {
             if let Some(mut g) = crate::get_settings_manager().try_lock() {
                 if !g.get().privacy.cloud_llm_disclosure_accepted
                     && !self.provider.api_key.is_empty()
@@ -274,7 +265,7 @@ impl LLMClient {
                 self.complete_anthropic_structured(system, messages.clone(), mode)
                     .await
             }
-            "openai" | "openai-compatible" | "builtin" => {
+            "openai" | "openai-compatible" => {
                 self.complete_openai_structured(system, messages.clone(), mode)
                     .await
             }
@@ -337,9 +328,7 @@ impl LLMClient {
         // First attempt — NO limit check (translation is infrastructure)
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" | "openai-compatible" | "builtin" => {
-                self.complete_openai(system, messages.clone()).await
-            }
+            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(self.provider_error_message().into()),
         };
@@ -351,7 +340,7 @@ impl LLMClient {
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 match self.provider.provider.as_str() {
                     "anthropic" => self.complete_anthropic(system, messages).await?,
-                    "openai" | "openai-compatible" | "builtin" => {
+                    "openai" | "openai-compatible" => {
                         self.complete_openai(system, messages).await?
                     }
                     "ollama" => self.complete_ollama(system, messages).await?,
@@ -461,14 +450,9 @@ impl LLMClient {
         })
     }
 
-    /// OpenAI API (also used for openai-compatible and builtin providers)
+    /// OpenAI API (also used for openai-compatible providers)
     async fn complete_openai(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
-        let url = if self.provider.provider == "builtin" {
-            let base = crate::llm_engine::sidecar_base_url().ok_or_else(|| {
-                crate::error::FourDaError::Llm("Built-in LLM sidecar is not running".into())
-            })?;
-            format!("{base}/chat/completions")
-        } else if self.provider.provider == "openai-compatible" {
+        let url = if self.provider.provider == "openai-compatible" {
             // OpenAI-compatible: base_url is the API base (e.g. https://api.groq.com/openai/v1)
             let base = self
                 .provider
@@ -490,17 +474,11 @@ impl LLMClient {
         };
 
         // Re-validate URL at use-time to prevent SSRF from tampered settings
-        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
+        if self.provider.provider != "ollama" {
             crate::url_validation::validate_not_internal(&url)?;
         }
 
-        // Qwen3 defaults to "thinking mode" which wastes tokens on reasoning_content
-        // and leaves content empty. /no_think forces direct response.
-        let system_content = if self.provider.provider == "builtin" {
-            format!("/no_think\n{system}")
-        } else {
-            system.to_string()
-        };
+        let system_content = system.to_string();
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
@@ -669,10 +647,7 @@ impl LLMClient {
         messages: Vec<Message>,
         mode: &StructuredOutputMode,
     ) -> Result<LLMResponse> {
-        let schema = match mode {
-            StructuredOutputMode::JsonSchema { schema } => schema,
-            StructuredOutputMode::Grammar { schema, .. } => schema,
-        };
+        let StructuredOutputMode::JsonSchema { schema } = mode;
         let structured_system = format!(
             "{system}\n\nYou MUST respond with valid JSON matching this schema:\n{schema}\n\nRespond ONLY with the JSON object. No markdown, no explanation, no wrapping."
         );
@@ -685,12 +660,7 @@ impl LLMClient {
         messages: Vec<Message>,
         mode: &StructuredOutputMode,
     ) -> Result<LLMResponse> {
-        let url = if self.provider.provider == "builtin" {
-            let base = crate::llm_engine::sidecar_base_url().ok_or_else(|| {
-                crate::error::FourDaError::Llm("Built-in LLM sidecar is not running".into())
-            })?;
-            format!("{base}/chat/completions")
-        } else if self.provider.provider == "openai-compatible" {
+        let url = if self.provider.provider == "openai-compatible" {
             let base = self
                 .provider
                 .base_url
@@ -710,23 +680,14 @@ impl LLMClient {
                 .to_string()
         };
 
-        if !matches!(self.provider.provider.as_str(), "ollama" | "builtin") {
+        if self.provider.provider != "ollama" {
             crate::url_validation::validate_not_internal(&url)?;
         }
 
-        let schema = match mode {
-            StructuredOutputMode::JsonSchema { schema } => schema,
-            StructuredOutputMode::Grammar { schema, .. } => schema,
-        };
+        let StructuredOutputMode::JsonSchema { schema } = mode;
 
-        let no_think_prefix = if self.provider.provider == "builtin" {
-            "/no_think\n"
-        } else {
-            ""
-        };
-        let structured_system = format!(
-            "{no_think_prefix}{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}"
-        );
+        let structured_system =
+            format!("{system}\n\nRespond ONLY with valid JSON matching this schema:\n{schema}");
 
         let mut all_messages = vec![serde_json::json!({
             "role": "system",
@@ -739,19 +700,12 @@ impl LLMClient {
             }));
         }
 
-        let mut body = serde_json::json!({
+        let body = serde_json::json!({
             "model": self.provider.model,
             "max_tokens": 4096,
             "messages": all_messages,
             "response_format": { "type": "json_object" }
         });
-
-        // llama-server supports GBNF grammar for hard-constrained decoding
-        if self.provider.provider == "builtin" {
-            if let StructuredOutputMode::Grammar { grammar, .. } = mode {
-                body["grammar"] = serde_json::Value::String(grammar.to_string());
-            }
-        }
 
         let response = self
             .client
@@ -807,10 +761,7 @@ impl LLMClient {
             .unwrap_or("http://localhost:11434");
         let url = format!("{base_url}/api/chat");
 
-        let schema = match mode {
-            StructuredOutputMode::JsonSchema { schema } => schema,
-            StructuredOutputMode::Grammar { schema, .. } => schema,
-        };
+        let StructuredOutputMode::JsonSchema { schema } = mode;
 
         let is_qwen3 = self.provider.model.to_lowercase().contains("qwen3");
         let no_think_prefix = if is_qwen3 { "/no_think\n" } else { "" };
@@ -920,7 +871,7 @@ impl LLMClient {
                 )
                 .await
             }
-            "openai" | "openai-compatible" | "builtin" => {
+            "openai" | "openai-compatible" => {
                 crate::llm_stream::stream_openai(
                     &self.client,
                     &self.provider,

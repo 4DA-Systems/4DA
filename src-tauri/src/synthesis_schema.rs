@@ -114,24 +114,6 @@ pub(crate) const SYNTHESIS_JSON_SCHEMA: &str = r#"{
   "additionalProperties": false
 }"#;
 
-/// GBNF grammar for llama-server grammar-constrained decoding.
-/// Matches the JSON schema above — forces the model to output valid JSON.
-pub(crate) const SYNTHESIS_GBNF_GRAMMAR: &str = r#"root ::= "{" ws "\"clusters\"" ws ":" ws clusters ws "}"
-clusters ::= "[" ws cluster (ws "," ws cluster)* ws "]"
-cluster ::= "{" ws insight ws "," ws evidence ws "," ws action ws "," ws confidence ws "}"
-insight ::= "\"insight\"" ws ":" ws string
-evidence ::= "\"evidence_ids\"" ws ":" ws "[" ws number (ws "," ws number)* ws "]"
-action ::= "\"action\"" ws ":" ws string
-confidence ::= "\"confidence\"" ws ":" ws decimal
-string ::= "\"" chars "\""
-chars ::= char*
-char ::= [^"\\] | "\\" escape
-escape ::= ["\\nrt/]
-number ::= [1-9] [0-9]*
-decimal ::= "0" "." [0-9]+ | "1" "." "0"+  | "1" | "0"
-ws ::= [ \t\n\r]*
-"#;
-
 #[cfg(test)]
 mod tests {
     use super::*;

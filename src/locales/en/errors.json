@@ -28,12 +28,10 @@
   "module.fileNotFound": "Module file not found: {{path}}",
   "translation.noLlm": "LLM not configured — set up your API key in Settings to enable content translation",
   "translation.sourceIsEnglish": "English is the source language — no translation needed",
-
   "errorMsg.network": "Network request failed. Check your internet connection.",
   "errorMsg.timeout": "Request timed out. Try again in a moment.",
   "errorMsg.auth": "Authentication failed. Check your API key in Settings.",
   "errorMsg.rateLimit": "Rate limit reached. Please wait a moment and try again.",
-  "errorMsg.sidecarNotRunning": "Built-in model is not running. Start it from Settings or configure a cloud API key.",
   "errorMsg.ollamaNotRunning": "Ollama is not running. Start Ollama or set an API key in Settings.",
   "errorMsg.embedding": "Embedding service unavailable. Check that Ollama is running.",
   "errorMsg.connectionRefused": "Network request failed. Check your internet connection.",

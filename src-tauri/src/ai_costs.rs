@@ -104,7 +104,7 @@ pub(crate) fn estimate_cost(provider: &str, model: &str, tokens_in: u32, tokens_
         ("anthropic", m) if m.contains("sonnet") => (3.00, 15.00),
         ("anthropic", m) if m.contains("opus") => (15.00, 75.00),
         // Local models (free)
-        ("ollama" | "builtin", _) => (0.0, 0.0),
+        ("ollama", _) => (0.0, 0.0),
         // Conservative fallback
         _ => (1.00, 3.00),
     };
@@ -191,7 +191,7 @@ pub(crate) fn generate_recommendation(usage: &[AiUsageRecord]) -> Option<ModelRe
 
     let mut candidates: Vec<_> = costs
         .iter()
-        .filter(|((provider, _), _)| !matches!(provider.as_str(), "ollama" | "builtin"))
+        .filter(|((provider, _), _)| provider.as_str() != "ollama")
         .collect();
     candidates.sort_by(|a, b| {
         b.1 .0

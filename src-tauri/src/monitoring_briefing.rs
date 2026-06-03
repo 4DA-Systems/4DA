@@ -2280,8 +2280,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         // Try JSON mode first. If the provider supports it and the output validates,
         // we skip the entire 200+ line post-processing gauntlet. On parse/validation
         // failure, fall back transparently to the free-text path.
-        let structured_mode = crate::llm::StructuredOutputMode::Grammar {
-            grammar: crate::synthesis_schema::SYNTHESIS_GBNF_GRAMMAR,
+        let structured_mode = crate::llm::StructuredOutputMode::JsonSchema {
             schema: crate::synthesis_schema::SYNTHESIS_JSON_SCHEMA,
         };
 
