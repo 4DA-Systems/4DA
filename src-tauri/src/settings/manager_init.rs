@@ -156,13 +156,9 @@ impl SettingsManager {
             }
         }
 
-        // Migrate the retired built-in local LLM: any persisted provider == "builtin"
-        // (from a pre-removal version) can no longer run — reset it to "none" so the app
-        // degrades honestly to BYOK/Ollama instead of pointing at a deleted sidecar.
-        if settings.llm.provider == "builtin" {
+        // Migrate the retired built-in local LLM (see migrate_retired_llm_provider).
+        if migrate_retired_llm_provider(&mut settings) {
             info!(target: "4da::settings", "Migrated retired provider 'builtin' -> 'none' (built-in LLM was removed)");
-            settings.llm.provider = "none".to_string();
-            settings.llm.model = String::new();
             // Persist the migration so it only logs once (atomic write)
             if let Some(parent) = settings_path.parent() {
                 let _ = fs::create_dir_all(parent);
@@ -332,5 +328,57 @@ impl SettingsManager {
             "Keychain hydration complete"
         );
         count
+    }
+}
+
+/// Migrate a retired LLM provider value to a usable state.
+///
+/// The built-in local LLM (provider `"builtin"`) was removed; any value persisted by a
+/// pre-removal build can no longer run, so it resets to `"none"` (clearing the model) —
+/// the app then degrades honestly to BYOK/Ollama rather than pointing at a deleted
+/// sidecar. Returns `true` when it changed the settings (the caller persists on `true`).
+fn migrate_retired_llm_provider(settings: &mut Settings) -> bool {
+    if settings.llm.provider == "builtin" {
+        settings.llm.provider = "none".to_string();
+        settings.llm.model = String::new();
+        true
+    } else {
+        false
+    }
+}
+
+#[cfg(test)]
+mod retired_provider_migration_tests {
+    use super::*;
+
+    fn settings_with(provider: &str, model: &str) -> Settings {
+        let mut s = Settings::default();
+        s.llm.provider = provider.to_string();
+        s.llm.model = model.to_string();
+        s
+    }
+
+    #[test]
+    fn builtin_migrates_to_none_and_clears_model() {
+        let mut s = settings_with("builtin", "qwen3-14b-q4km");
+        assert!(
+            migrate_retired_llm_provider(&mut s),
+            "a persisted 'builtin' provider must be migrated"
+        );
+        assert_eq!(s.llm.provider, "none");
+        assert_eq!(s.llm.model, "");
+    }
+
+    #[test]
+    fn live_providers_are_left_untouched() {
+        for provider in ["none", "ollama", "anthropic", "openai", "openai-compatible"] {
+            let mut s = settings_with(provider, "some-model");
+            assert!(
+                !migrate_retired_llm_provider(&mut s),
+                "provider '{provider}' must not be migrated"
+            );
+            assert_eq!(s.llm.provider, provider);
+            assert_eq!(s.llm.model, "some-model");
+        }
     }
 }
