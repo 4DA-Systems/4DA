@@ -52,6 +52,9 @@ export const BriefingView = memo(function BriefingView() {
   // First-run personalization nudge
   const isFirstRun = useAppStore(s => s.isFirstRun);
   const userContext = useAppStore(s => s.userContext);
+  const runAutoDiscovery = useAppStore(s => s.runAutoDiscovery);
+  const isScanning = useAppStore(s => s.isScanning);
+  const loadUserContext = useAppStore(s => s.loadUserContext);
   const [personalizeCardDismissed, setPersonalizeCardDismissed] = useState(false);
   const showPersonalizeNudge = isFirstRun
     && !personalizeCardDismissed
@@ -62,6 +65,15 @@ export const BriefingView = memo(function BriefingView() {
   const handleSave = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'save', it); }, [recordInteraction]);
   const handleDismiss = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'dismiss', it); }, [recordInteraction]);
   const handleRecordClick = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'click', it); }, [recordInteraction]);
+
+  // One-click recovery for users who skipped the onboarding scan: run the same
+  // fully-local ace_auto_discover, then refresh context (the nudge auto-hides once
+  // interests populate) and re-score the feed against the freshly-discovered profile.
+  const handleScanProjects = useCallback(async () => {
+    await runAutoDiscovery();
+    await loadUserContext();
+    void startAnalysis();
+  }, [runAutoDiscovery, loadUserContext, startAnalysis]);
 
   // Listen for standing query matches
   useEffect(() => {
@@ -114,6 +126,8 @@ export const BriefingView = memo(function BriefingView() {
           morningBriefSynthesis={morningBriefSynthesis}
           morningBriefClusters={morningBriefClusters}
           showPersonalizeNudge={showPersonalizeNudge}
+          onScanProjects={() => { void handleScanProjects(); }}
+          isScanningProjects={isScanning}
           onOpenSettings={() => setShowSettings(true)}
           onDismissPersonalize={() => setPersonalizeCardDismissed(true)}
           onGenerateBriefing={() => { void generateBriefing(); }}
@@ -146,6 +160,8 @@ export const BriefingView = memo(function BriefingView() {
       <h2 className="sr-only">{t('briefing.intelligenceBriefing')}</h2>
       {showPersonalizeNudge && (
         <PersonalizeNudge
+          onScanProjects={() => { void handleScanProjects(); }}
+          isScanning={isScanning}
           onOpenSettings={() => setShowSettings(true)}
           onDismiss={() => setPersonalizeCardDismissed(true)}
         />
