@@ -14,6 +14,8 @@ interface FreeBriefingPanelProps {
   morningBriefSynthesis: string | null;
   morningBriefClusters: SynthesisCluster[] | null;
   showPersonalizeNudge: boolean;
+  onScanProjects: () => void;
+  isScanningProjects: boolean;
   onOpenSettings: () => void;
   onDismissPersonalize: () => void;
   onGenerateBriefing: () => void;
@@ -24,6 +26,8 @@ export const FreeBriefingPanel = memo(function FreeBriefingPanel({
   morningBriefSynthesis,
   morningBriefClusters,
   showPersonalizeNudge,
+  onScanProjects,
+  isScanningProjects,
   onOpenSettings,
   onDismissPersonalize,
   onGenerateBriefing,
@@ -35,6 +39,8 @@ export const FreeBriefingPanel = memo(function FreeBriefingPanel({
     <section aria-label={t('briefing.dailyOverview')} className="bg-bg-primary rounded-lg space-y-4">
       {showPersonalizeNudge && (
         <PersonalizeNudge
+          onScanProjects={onScanProjects}
+          isScanning={isScanningProjects}
           onOpenSettings={onOpenSettings}
           onDismiss={onDismissPersonalize}
         />
