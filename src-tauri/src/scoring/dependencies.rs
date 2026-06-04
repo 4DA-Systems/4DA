@@ -972,6 +972,34 @@ mod tests {
     }
 
     #[test]
+    fn test_match_dependencies_crates_io_release_title() {
+        // Decisive check: a registry release item ("crates.io: axum v0.8.9") MUST
+        // match the user's direct `axum` dependency. If this fails, stack releases
+        // can never reach the stack-update necessity path.
+        let mut ace_ctx = ACEContext::default();
+        ace_ctx.dependency_info.insert(
+            "axum".to_string(),
+            DepInfo {
+                package_name: "axum".to_string(),
+                version: Some("0.8.0".to_string()),
+                is_dev: false,
+                is_direct: true,
+                search_terms: vec!["axum".to_string()],
+                ecosystem: "rust".to_string(),
+            },
+        );
+        let (matches, score) = match_dependencies("crates.io: axum v0.8.9", "", &[], &ace_ctx);
+        assert!(
+            !matches.is_empty(),
+            "crates.io release title must match the axum dep (score={score})"
+        );
+        assert!(
+            score > 0.0,
+            "dep-match score should be positive, got {score}"
+        );
+    }
+
+    #[test]
     fn test_match_dependencies_no_false_positive_react() {
         // "React to market changes" should NOT match the react package
         // without language-context words nearby
