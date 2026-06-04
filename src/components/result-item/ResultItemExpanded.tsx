@@ -100,6 +100,7 @@ export function ResultItemExpanded({
               : item.score_breakdown.necessity_category === 'breaking_change' ? t('category.breaking', 'Breaking Change')
               : item.score_breakdown.necessity_category === 'deprecation_notice' ? t('category.deprecation', 'Deprecation')
               : item.score_breakdown.necessity_category === 'blind_spot' ? t('category.blindSpot', 'Blind Spot')
+              : item.score_breakdown.necessity_category === 'ecosystem_shift' ? t('category.stackUpdate', 'Stack Update')
               : t('category.decision', 'Decision Relevant')}
             </span>
           )}

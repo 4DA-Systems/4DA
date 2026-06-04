@@ -75,9 +75,7 @@ pub(crate) enum NecessityCategory {
     BlindSpot,
     /// Affects an active architectural decision
     DecisionRelevant,
-    /// Major shift in your primary stack (reserved for ecosystem_shift_mult integration)
-    // REMOVE BY 2026-08-01
-    #[allow(dead_code)] // Enum variant — part of match-exhaustive contract
+    /// A new release / update of something in your stack (see try_stack_update_path)
     EcosystemShift,
     /// Not a necessity item
     None,
@@ -169,6 +167,8 @@ pub(crate) fn compute_necessity(inputs: &NecessityInputs) -> NecessityResult {
         } else if let Some(result) = try_breaking_change_path(inputs, has_dep_match, &dep_names) {
             result
         } else if let Some(result) = try_deprecation_path(inputs, has_dep_match, &dep_names) {
+            result
+        } else if let Some(result) = try_stack_update_path(inputs, has_dep_match, &dep_names) {
             result
         } else if let Some(result) = try_contradiction_path(inputs) {
             result
@@ -350,6 +350,41 @@ fn try_deprecation_path(
         format!("Deprecation notice affects {dep_names}"),
         NecessityCategory::DeprecationNotice,
         Urgency::ThisWeek,
+    ))
+}
+
+/// Stack-update path — a new release / platform update of something in the user's
+/// actual dependency graph. This is genuinely actionable ("what you NEED"): review
+/// the changelog, check for breaking changes, decide whether to upgrade. Before this
+/// path existed, a release of your own dependency (e.g. `crates.io: axum v0.8.9`) fell
+/// through to the generic blind-spot path and was recency-decayed into invisibility,
+/// so a dev's own stack updates never surfaced above unrelated security/blind-spot noise.
+///
+/// Gated on a real dependency match, so it only fires for YOUR stack — never generic
+/// topical content (that stays low, preserving the necessity-over-want doctrine).
+fn try_stack_update_path(
+    inputs: &NecessityInputs,
+    has_dep_match: bool,
+    dep_names: &str,
+) -> Option<(f32, String, NecessityCategory, Urgency)> {
+    let is_update = inputs
+        .content_type
+        .as_deref()
+        .is_some_and(|ct| ct == "release_notes" || ct == "platform_update");
+
+    if !is_update || !has_dep_match {
+        return None;
+    }
+
+    // Scaled by match strength: a strong direct-dep match scores higher. Bounded
+    // below the security/breaking tiers (a release is awareness-actionable, not urgent)
+    // but well above a recency-decayed blind-spot, so your stack's releases surface.
+    let score = (0.45 + inputs.dep_match_score * 0.20).min(0.65);
+    Some((
+        score,
+        format!("New release in your stack: {dep_names}"),
+        NecessityCategory::EcosystemShift,
+        Urgency::Awareness,
     ))
 }
 

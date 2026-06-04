@@ -22,6 +22,40 @@ fn default_inputs() -> NecessityInputs {
 }
 
 #[test]
+fn test_stack_update_release_of_a_dependency_surfaces() {
+    // A new release of something in the user's stack (e.g. "crates.io: axum v0.8.9")
+    // must surface as an actionable stack update — NOT decay into a 0.17 blind-spot.
+    let inputs = NecessityInputs {
+        dep_match_score: 0.6,
+        matched_deps: vec!["axum".to_string()],
+        content_type: Some("release_notes".to_string()),
+        age_hours: 24.0,
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_eq!(result.category, NecessityCategory::EcosystemShift);
+    assert!(
+        result.score >= 0.40,
+        "A fresh release of a stack dependency should score >= 0.40, got {}",
+        result.score
+    );
+    assert!(result.reason.contains("axum"));
+}
+
+#[test]
+fn test_release_without_dep_match_does_not_fire_stack_update() {
+    // A release of something the user does NOT depend on must not hijack the
+    // stack-update path (preserves the necessity-over-want doctrine).
+    let inputs = NecessityInputs {
+        dep_match_score: 0.0,
+        content_type: Some("release_notes".to_string()),
+        ..default_inputs()
+    };
+    let result = compute_necessity(&inputs);
+    assert_ne!(result.category, NecessityCategory::EcosystemShift);
+}
+
+#[test]
 fn test_critical_cve_with_dep_match() {
     let inputs = NecessityInputs {
         dep_match_score: 0.7,
