@@ -229,6 +229,7 @@ interface CommandMap {
   run_cached_analysis: { params: Record<string, never>; result: void };
   cancel_analysis: { params: Record<string, never>; result: void };
   get_scoring_stats: { params: Record<string, never>; result: ScoringStats };
+  measure_triage_recall: { params: { relevantThreshold: number; sampleLimit: number; tasteMin?: number; topicMin?: number }; result: unknown };
   score_tuning_snapshot: { params: Record<string, never>; result: unknown };
   get_context_files: { params: Record<string, never>; result: ContextFile[] };
   clear_context: { params: Record<string, never>; result: string };

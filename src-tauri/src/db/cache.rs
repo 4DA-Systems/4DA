@@ -35,6 +35,19 @@ pub struct DigestSourceItem {
     pub content_type: Option<String>,
 }
 
+/// Row for the relevance-triage recall audit (Phase 0 of the scoring funnel).
+/// Carries exactly what the cheap gate reads plus the stored relevance_score.
+#[derive(Debug, Clone)]
+pub struct TriageAuditRow {
+    pub id: i64,
+    pub title: String,
+    pub content: String,
+    pub embedding: Vec<f32>,
+    pub content_type: Option<String>,
+    pub cve_ids: Option<String>,
+    pub relevance_score: Option<f64>,
+}
+
 // ============================================================================
 // LLM Content Retrieval
 // ============================================================================
@@ -287,6 +300,53 @@ impl Database {
                     .unwrap_or_else(|_| "en".to_string()),
                 feed_origin: row.get(11).ok().flatten(),
                 tags: row.get(12).ok().flatten(),
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Rows for the relevance-triage recall audit (Phase 0 of the scoring funnel).
+    /// Returns the exact fields the cheap gate reads (embedding + title/content +
+    /// content_type + cve_ids) PLUS the stored `relevance_score`, so the audit can
+    /// define the "currently relevant" set and measure whether the gate would ever
+    /// drop one of them (a false negative). Read-only.
+    ///
+    /// `min_relevance = Some(t)`: only items with `relevance_score >= t`, ordered by
+    /// score DESC (the relevant set). `None`: a uniform RANDOM sample of the whole
+    /// corpus (for the overall keep-rate). Only items with a non-NULL embedding blob
+    /// of the expected size are returned.
+    pub fn get_triage_audit_rows(
+        &self,
+        min_relevance: Option<f64>,
+        limit: usize,
+    ) -> SqliteResult<Vec<TriageAuditRow>> {
+        let conn = self.conn.lock();
+        let sql = if min_relevance.is_some() {
+            "SELECT id, title, content, embedding, content_type, cve_ids, relevance_score
+             FROM source_items
+             WHERE embedding IS NOT NULL AND relevance_score >= ?1
+             ORDER BY relevance_score DESC
+             LIMIT ?2"
+        } else {
+            "SELECT id, title, content, embedding, content_type, cve_ids, relevance_score
+             FROM source_items
+             WHERE embedding IS NOT NULL
+             ORDER BY RANDOM()
+             LIMIT ?2"
+        };
+        let mut stmt = conn.prepare(sql)?;
+        // Bind ?1 even in the random branch (ignored) so the param set is uniform.
+        let min = min_relevance.unwrap_or(0.0);
+        let rows = stmt.query_map(params![min, limit as i64], |row| {
+            let embedding_blob: Vec<u8> = row.get(3)?;
+            Ok(TriageAuditRow {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                embedding: blob_to_embedding(&embedding_blob),
+                content_type: row.get(4).ok().flatten(),
+                cve_ids: row.get(5).ok().flatten(),
+                relevance_score: row.get(6).ok().flatten(),
             })
         })?;
         rows.collect()
