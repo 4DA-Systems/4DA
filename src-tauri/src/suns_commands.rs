@@ -115,7 +115,16 @@ pub async fn get_street_health() -> Result<crate::suns::StreetHealthScore> {
         0.0
     };
 
-    // Determine trend from recent sun runs
+    // Determine trend from recent sun runs. With zero runs in the window there is no
+    // trend to report — default to "stable" (neutral) rather than "declining", which
+    // falsely told a user who had only ever improved that they were regressing.
+    let recent_runs: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sun_runs WHERE run_at > datetime('now', '-7 days')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
     let recent_success: f32 = conn
         .query_row(
             "SELECT COALESCE(AVG(CASE WHEN success = 1 THEN 1.0 ELSE 0.0 END), 0.0)
@@ -125,7 +134,9 @@ pub async fn get_street_health() -> Result<crate::suns::StreetHealthScore> {
         )
         .unwrap_or(0.0);
 
-    let trend = if recent_success > 0.7 {
+    let trend = if recent_runs == 0 {
+        "stable"
+    } else if recent_success > 0.7 {
         "improving"
     } else if recent_success > 0.3 {
         "stable"

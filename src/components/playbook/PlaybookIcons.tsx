@@ -27,9 +27,11 @@ export function ProgressRing({ percentage }: { percentage: number }) {
         transform="rotate(-90 18 18)"
         className="transition-all duration-500"
       />
-      <text x="18" y="19" textAnchor="middle" dominantBaseline="middle" fill="#A0A0A0" fontSize="8" fontFamily="Inter">
-        {Math.round(percentage)}%
-      </text>
+      {percentage > 0 && (
+        <text x="18" y="19" textAnchor="middle" dominantBaseline="middle" fill="#A0A0A0" fontSize="8" fontFamily="Inter">
+          {Math.round(percentage)}%
+        </text>
+      )}
     </svg>
   );
 }
