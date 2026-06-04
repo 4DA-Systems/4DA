@@ -2,14 +2,22 @@
 //! Topic decay analysis — computes per-topic engagement half-lives.
 //!
 //! By bucketing engagement by content age, we discover how quickly each
-//! source type's content loses value. Security content stays relevant longer
-//! (168h half-life); trending/hype decays faster (24h).
+//! topic's content loses value. Security/research topics stay relevant longer
+//! (168h half-life); trending/hype topics decay faster (24h).
+//!
+//! Keys are produced by [`crate::utils::topics::extract_topics`] — the SAME
+//! controlled-vocabulary extractor the scoring pipeline uses when it looks the
+//! half-lives back up (`scoring::pipeline`/`pipeline_v2`). Keying by anything
+//! else (e.g. `source_type`) silently breaks the lookup: the calibrated
+//! exponential-freshness branch never matches and the scorer falls back to the
+//! crude global staircase. Both sides MUST share this vocabulary.
 
 use rusqlite::{params, Connection};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 use crate::error::{Result, ResultExt};
+use crate::extract_topics;
 
 /// Default half-life in hours when insufficient data exists.
 const DEFAULT_HALF_LIFE_HOURS: f32 = 72.0;
@@ -21,17 +29,26 @@ const BUCKET_YOUNG: f32 = 24.0; // 0-24h
 const BUCKET_MID: f32 = 72.0; // 24-72h
                               // 72h+ = old
 
-/// Analyze topic decay: compute per-source_type half-lives based on engagement patterns.
+/// Minimum engagement events for a topic before we estimate its decay curve.
+/// Below this the bucket distribution is too noisy to trust, and storing a
+/// profile would just pollute `digested_intelligence` with one-off proper nouns
+/// that `extract_topics` Phase-3 (capitalized title words) inevitably produces.
+const MIN_SAMPLES_PER_TOPIC: i64 = 3;
+
+/// Analyze topic decay: compute per-topic half-lives based on engagement patterns.
 ///
-/// Joins source_items with feedback, buckets engagement by content age at the time
-/// of feedback, and derives decay characteristics per source_type.
+/// Joins source_items with feedback, extracts each engaged item's topics with
+/// [`extract_topics`] (the SAME vocabulary the scoring pipeline looks up with),
+/// buckets engagement by content age at the time of feedback, and derives decay
+/// characteristics per topic. One engagement event contributes to every topic it
+/// carries (an item about "rust async" feeds both the `rust` and `async` curves).
 pub(crate) fn analyze_topic_decay(conn: &Connection) -> Vec<super::TopicDecayProfile> {
-    // Query: for each feedback event, compute the age of the content at feedback time.
-    // Group by source_type and age bucket.
+    // Query: for each positive-feedback event, fetch the item text + the age of the
+    // content at feedback time. Topics are derived per-row from title+content so the
+    // keys match the pipeline's extract_topics() lookup exactly.
     let mut stmt = match conn.prepare(
-        "SELECT si.source_type,
-                CAST((julianday(f.created_at) - julianday(si.created_at)) * 24 AS REAL) AS age_hours,
-                f.relevant
+        "SELECT si.title, si.content,
+                CAST((julianday(f.created_at) - julianday(si.created_at)) * 24 AS REAL) AS age_hours
          FROM feedback f
          JOIN source_items si ON f.source_item_id = si.id
          WHERE f.relevant = 1
@@ -45,15 +62,14 @@ pub(crate) fn analyze_topic_decay(conn: &Connection) -> Vec<super::TopicDecayPro
         }
     };
 
-    // Per source_type: count engagement in each age bucket
-    // (young_count, mid_count, old_count)
+    // Per topic: count engagement in each age bucket (young_count, mid_count, old_count).
     let mut buckets: HashMap<String, (i64, i64, i64)> = HashMap::new();
 
     let rows = match stmt.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
-            row.get::<_, f64>(1)?,
-            row.get::<_, i64>(2)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, f64>(2)?,
         ))
     }) {
         Ok(r) => r,
@@ -64,14 +80,18 @@ pub(crate) fn analyze_topic_decay(conn: &Connection) -> Vec<super::TopicDecayPro
     };
 
     for row in rows.flatten() {
-        let (source_type, age_hours, _relevant) = row;
-        let entry = buckets.entry(source_type).or_insert((0, 0, 0));
-        if age_hours < BUCKET_YOUNG as f64 {
-            entry.0 += 1;
-        } else if age_hours < BUCKET_MID as f64 {
-            entry.1 += 1;
-        } else {
-            entry.2 += 1;
+        let (title, content, age_hours) = row;
+        // source_tags aren't persisted on source_items; title+content extraction
+        // covers Phases 2-3 of extract_topics, which is what the pipeline relies on.
+        for topic in extract_topics(&title, &content, &[]) {
+            let entry = buckets.entry(topic).or_insert((0, 0, 0));
+            if age_hours < BUCKET_YOUNG as f64 {
+                entry.0 += 1;
+            } else if age_hours < BUCKET_MID as f64 {
+                entry.1 += 1;
+            } else {
+                entry.2 += 1;
+            }
         }
     }
 
@@ -82,16 +102,17 @@ pub(crate) fn analyze_topic_decay(conn: &Connection) -> Vec<super::TopicDecayPro
 
     let mut profiles = Vec::new();
 
-    for (source_type, (young, mid, old)) in &buckets {
+    for (topic, (young, mid, old)) in &buckets {
         let total = young + mid + old;
-        if total == 0 {
+        if total < MIN_SAMPLES_PER_TOPIC {
+            // Too little signal to estimate a curve — skip rather than store noise.
             continue;
         }
 
         let (half_life_hours, peak_hours) = compute_decay_params(*young, *mid, *old);
 
         profiles.push(super::TopicDecayProfile {
-            topic: source_type.clone(),
+            topic: topic.clone(),
             half_life_hours,
             peak_relevance_age_hours: peak_hours,
         });
@@ -330,5 +351,75 @@ mod tests {
         let (half_life, peak) = compute_decay_params(0, 0, 0);
         assert_eq!(half_life, DEFAULT_HALF_LIFE_HOURS);
         assert_eq!(peak, DEFAULT_PEAK_HOURS);
+    }
+
+    /// Helper: insert an engaged (relevant=1) item `count` times, all aged
+    /// `age_hours` before their feedback, sharing the given title.
+    fn insert_engaged(conn: &Connection, title: &str, count: i64, age_hours: i64) {
+        for i in 0..count {
+            conn.execute(
+                "INSERT INTO source_items (source_type, source_id, title, content, content_hash, created_at)
+                 VALUES ('hackernews', ?1, ?2, '', ?3, datetime('now', ?4))",
+                rusqlite::params![
+                    format!("hn-{title}-{i}"),
+                    title,
+                    format!("hash-{title}-{i}"),
+                    format!("-{age_hours} hours"),
+                ],
+            )
+            .expect("insert item");
+            let item_id = conn.last_insert_rowid();
+            conn.execute(
+                "INSERT INTO feedback (source_item_id, relevant, created_at) VALUES (?1, 1, datetime('now'))",
+                rusqlite::params![item_id],
+            )
+            .expect("insert feedback");
+        }
+    }
+
+    #[test]
+    fn test_analyze_topic_decay_keys_by_topic_not_source_type() {
+        // The core Phase-0 fix: decay profiles must be keyed by the SAME
+        // extract_topics() vocabulary the scoring pipeline looks them up with —
+        // NOT by source_type, which never matches a topic token.
+        let conn = setup_test_db();
+        insert_engaged(&conn, "Rust async runtime performance", 3, 10);
+
+        let profiles = analyze_topic_decay(&conn);
+        assert!(!profiles.is_empty(), "expected at least one topic profile");
+
+        let keys: std::collections::HashSet<&str> =
+            profiles.iter().map(|p| p.topic.as_str()).collect();
+
+        // Vocab sanity: the pipeline's extractor yields "rust" for this title.
+        let expected = extract_topics("Rust async runtime performance", "", &[]);
+        assert!(
+            expected.contains(&"rust".to_string()),
+            "extract_topics should yield 'rust'; got {expected:?}"
+        );
+        assert!(
+            keys.contains("rust"),
+            "decay keys must include the topic 'rust'; got {keys:?}"
+        );
+        // Regression guard: the OLD code keyed by source_type — that must be gone.
+        assert!(
+            !keys.contains("hackernews"),
+            "source_type must NOT be used as a decay key; got {keys:?}"
+        );
+    }
+
+    #[test]
+    fn test_analyze_topic_decay_skips_low_sample_topics() {
+        // A topic seen in only 1 engaged item is below MIN_SAMPLES_PER_TOPIC and
+        // must be skipped, so one-off proper nouns don't pollute the profile store.
+        let conn = setup_test_db();
+        insert_engaged(&conn, "Rust async runtime performance", 1, 10);
+
+        let profiles = analyze_topic_decay(&conn);
+        assert!(
+            profiles.is_empty(),
+            "topics below MIN_SAMPLES_PER_TOPIC must be skipped, got {} profiles",
+            profiles.len()
+        );
     }
 }
