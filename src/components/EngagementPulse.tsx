@@ -7,8 +7,10 @@ interface EngagementData {
   today_interactions: number;
   streak_days: number;
   heatmap: Array<{ date: string; day: string; count: number }>;
-  accuracy_trend: 'improving' | 'declining' | 'stable';
-  recent_positive_rate: string;
+  accuracy_trend: 'improving' | 'declining' | 'stable' | 'none';
+  // null when there is no recent feedback to compute a rate from (first-week users) —
+  // the trend is hidden rather than showing a fabricated figure.
+  recent_positive_rate: string | null;
 }
 
 export const EngagementPulse = memo(function EngagementPulse() {
@@ -72,11 +74,13 @@ export const EngagementPulse = memo(function EngagementPulse() {
         <span className="text-[10px] text-text-muted">{t('engagement.streak')}</span>
       </div>
 
-      {/* Trend */}
-      <div className="flex items-center gap-1" title={`Learning trend: ${data.accuracy_trend} (${data.recent_positive_rate} positive)`}>
-        <span className={`text-sm font-medium ${trendColor}`}>{trendIcon}</span>
-        <span className="text-[10px] text-text-muted">{data.recent_positive_rate}</span>
-      </div>
+      {/* Trend — only when there's real feedback history; never a fabricated rate. */}
+      {data.recent_positive_rate != null && (
+        <div className="flex items-center gap-1" title={`Learning trend: ${data.accuracy_trend} (${data.recent_positive_rate} positive)`}>
+          <span className={`text-sm font-medium ${trendColor}`}>{trendIcon}</span>
+          <span className="text-[10px] text-text-muted">{data.recent_positive_rate}</span>
+        </div>
+      )}
     </div>
   );
 });

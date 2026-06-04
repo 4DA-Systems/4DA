@@ -346,32 +346,36 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
         }));
     }
 
-    // Accuracy trend: average feedback positivity over last 7 vs previous 7 days
-    let recent_positive: f64 = conn
+    // Accuracy trend: average feedback positivity over last 7 vs previous 7 days.
+    // AVG over zero rows is SQL NULL -> Option::None, so a first-week user with no
+    // feedback gets an honest null/"none" instead of a fabricated 50% / "stable".
+    let recent_positive: Option<f64> = conn
         .query_row(
-            "SELECT COALESCE(AVG(CASE WHEN signal_strength > 0 THEN 1.0 ELSE 0.0 END), 0.5)
+            "SELECT AVG(CASE WHEN signal_strength > 0 THEN 1.0 ELSE 0.0 END)
              FROM interactions WHERE timestamp >= datetime('now', '-7 days')",
             [],
-            |row| row.get(0),
+            |row| row.get::<_, Option<f64>>(0),
         )
-        .unwrap_or(0.5);
+        .ok()
+        .flatten();
 
-    let prev_positive: f64 = conn
+    let prev_positive: Option<f64> = conn
         .query_row(
-            "SELECT COALESCE(AVG(CASE WHEN signal_strength > 0 THEN 1.0 ELSE 0.0 END), 0.5)
+            "SELECT AVG(CASE WHEN signal_strength > 0 THEN 1.0 ELSE 0.0 END)
              FROM interactions WHERE timestamp >= datetime('now', '-14 days')
              AND timestamp < datetime('now', '-7 days')",
             [],
-            |row| row.get(0),
+            |row| row.get::<_, Option<f64>>(0),
         )
-        .unwrap_or(0.5);
+        .ok()
+        .flatten();
 
-    let trend = if recent_positive > prev_positive + 0.05 {
-        "improving"
-    } else if recent_positive < prev_positive - 0.05 {
-        "declining"
-    } else {
-        "stable"
+    // A trend is only real when both windows have data to compare.
+    let trend = match (recent_positive, prev_positive) {
+        (Some(r), Some(p)) if r > p + 0.05 => "improving",
+        (Some(r), Some(p)) if r < p - 0.05 => "declining",
+        (Some(_), Some(_)) => "stable",
+        _ => "none",
     };
 
     Ok(serde_json::json!({
@@ -379,7 +383,7 @@ pub async fn get_engagement_summary() -> Result<serde_json::Value> {
         "streak_days": streak,
         "heatmap": heatmap,
         "accuracy_trend": trend,
-        "recent_positive_rate": format!("{:.0}%", recent_positive * 100.0),
+        "recent_positive_rate": recent_positive.map(|r| format!("{:.0}%", r * 100.0)),
     }))
 }
 
@@ -511,18 +515,27 @@ mod tests {
 
     #[test]
     fn test_engagement_summary_shape() {
-        // Verify the JSON shape returned by ace_get_engagement_summary
+        // Populated shape: a user with recent feedback.
         let summary = serde_json::json!({
             "today_interactions": 5,
             "streak_days": 3,
             "heatmap": [],
-            "accuracy_trend": [],
+            "accuracy_trend": "improving",
             "recent_positive_rate": "80%",
         });
         assert!(summary["today_interactions"].is_number());
         assert!(summary["streak_days"].is_number());
         assert!(summary["heatmap"].is_array());
-        assert!(summary["accuracy_trend"].is_array());
+        assert!(summary["accuracy_trend"].is_string());
         assert!(summary["recent_positive_rate"].is_string());
+
+        // No-data shape (first-week user): rate is null and trend is "none" — never a
+        // fabricated 50% / "stable".
+        let cold = serde_json::json!({
+            "accuracy_trend": "none",
+            "recent_positive_rate": serde_json::Value::Null,
+        });
+        assert!(cold["recent_positive_rate"].is_null());
+        assert_eq!(cold["accuracy_trend"], "none");
     }
 }
