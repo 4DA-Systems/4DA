@@ -9,6 +9,213 @@
 
 ## Active Terminals
 
+<!-- opus-stale-drain-ordering (2026-06-05): DONE — committed locally (push held for user).
+     Completed the refinements opus-rescore-pipeline deferred. While verifying, found a THIRD,
+     BIGGER root cause that subsumes "the drain doesn't fire" / "ecosystem_shift never surfaces":
+     ★ ROOT CAUSE (the real one): get_stale_scored_items passed effective_hours=i64::MAX for SIGNAL
+       users into `datetime('now','-'||?||' hours')`. SQLite OVERFLOWS that to NULL, so
+       `created_at >= NULL` is never true → the query returned ZERO stale items for every Signal user.
+       The live app is tier=signal, so the deep backlog (3828 stale items) was UNREACHABLE — the drain
+       wasn't slow, it was empty. v5 only grew because the completion handler stamps recent items via
+       normal scoring; the stale-drain itself never reached the backlog. LIVE-PROVEN via Victauri
+       query_db: old signal predicate → 0 rows; new predicate → 3828 rows.
+       Fix: for Signal (unlimited history) DROP the recency clause entirely (don't compute a giant
+       offset). Free tier keeps the 30-day bound. Constant embedded (compile-time i64, no injection).
+     • Fix 2 (ordering): drain was ORDER BY relevance DESC, but a version bump RESCUES items the old
+       pipeline buried as noise (necessity try_stack_update_path: your own crates.io/npm release decayed
+       to ~0). So relevance-DESC drained already-relevant items first, buried releases LAST. Now
+       ORDER BY (content_type IN release_notes/platform_update) first, then relevance DESC. 583 stale
+       releases (563 of them <0.3) now drain in the first 1-2 batches (500/run) instead of cycles 4-8.
+       LIVE-PROVEN: first 12 of the new drain are all release_notes.
+     • Fix 3 (fire on demand): extracted merge_stale_drain_batch() and ALSO call it on the full
+       (non-differential) analysis path — previously the drain only ran in differential mode, so
+       first-run-after-restart / manual run_cached_analysis never drained.
+     Tests: 2 new in db::cache (release-first ordering; Signal no-overflow regression guard, returns
+     1 not 0 for a 400-day-old item). Full lib compiles; clippy adds 0 new warnings; db::cache suite
+     green. (analysis_status::abort_flag_resets_at_start is a pre-existing parallel-global-state flake —
+     passes in isolation.) Files: src-tauri/src/db/cache.rs, src-tauri/src/analysis_status.rs.
+     Did NOT touch pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore. Left fourda.exe
+     (PID 52180, OLD binary) running — end-to-end drain needs a rebuild+restart (not done; bug+fix
+     proven on live data + unit tests). Push + rebuild-restart live-verify offered to user. -->
+     <!-- Commit Lock RELEASED (opus-stale-drain-ordering) -->
+
+<!-- opus-rescore-pipeline (2026-06-04→05): DONE — committed + PUSHED (origin/main @ b0cf5a85).
+     Two shipped fixes to make this session's scoring improvements reach the 35k backlog:
+     • 168d41fc: bump PIPELINE_VERSION 4→5 (the stale-drain mechanism existed but my scoring
+       changes never bumped the version → nothing was flagged stale).
+     • b0cf5a85: NEW Database::mark_items_scored_version — stamp version for EVERY scored item.
+       LIVE-FOUND via Victauri: drain stalled because persist filters top_score>0, so zero-score
+       (noise) items were never stamped, stayed stale, and the relevance-ordered drain re-picked
+       them forever.
+     LIVE-VERIFIED via Victauri query_db: v5 bucket grew 0→437→467→524 across runs (drain works +
+     progresses; stall fixed). NOT yet reached: ecosystem_shift items — the drain is relevance-DESC
+     so low-relevance stack releases (axum @ 0.17) sit deep in the queue, AND per-run drain slowed
+     after the initial 437 because the differential 500-batch stale-drain branch isn't firing in
+     practice (diff=0 in logs across runs — last_completed_at/previous_results not establishing
+     differential mode on manual invokes; the scheduler drains over time). That's the next refinement.
+     Left dev server running (PID 1313). Did NOT touch topic-decay's files / Cargo.lock / .gitignore. -->
+
+<!-- (stale claim block retained below for history) -->
+### Terminal: opus-rescore-pipeline (started 2026-06-04)
+Working on: make this session's scoring improvements (necessity stack-update path, curated>synthesized
+domain detection, ACE topic-noise filter, dep generic-word filter) reach the existing 35k-item backlog.
+ROOT CAUSE: the stale-drain re-score mechanism already exists (get_stale_scored_items by
+scored_pipeline_version < PIPELINE_VERSION, 500/run, ORDER BY relevance DESC) but my scoring changes
+never bumped PIPELINE_VERSION (still 4) → nothing flagged stale → backlog never re-scored. Fix: bump 4→5.
+**Claims:**
+- src-tauri/src/scoring/mod.rs (PIPELINE_VERSION 4→5) — DONE/pushed (168d41fc)
+- src-tauri/src/db/cache.rs (NEW mark_items_scored_version — stamp ALL scored items)
+- src-tauri/src/analysis_status.rs (stamp version for every scored item, not just top_score>0)
+LIVE-FOUND BUG (via Victauri): drain stalled — zero-score items were never version-stamped
+(persist filters top_score>0) so the relevance-ordered drain re-picked the same zero-scorers
+forever; backlog could never fully drain past a band of zero-scorers. Fix stamps every scored item.
+**Commit Lock**: not yet held.
+
+<!-- opus-topic-decay-rekey (2026-06-04→05): DONE — committed + PUSHED (origin/main @ 06fe4df5,
+     168d41fc..06fe4df5, rev-list 0/0). Commit Lock RELEASED, claim cleared.
+     Phase 0 of the MARS-inspired decay work: the per-topic calibrated-freshness path
+     (scoring::pipeline.rs:199) was DEAD in prod — autophagy::analyze_topic_decay keyed half-lives by
+     source_type (hackernews/reddit) but the pipeline looks them up by extract_topics() tokens
+     (rust/react) → keyspaces never intersect → every item fell back to the crude global staircase.
+     Re-keyed the producer to bucket by the SAME crate::extract_topics() vocab (title+content;
+     source_tags not persisted) + MIN_SAMPLES_PER_TOPIC=3 guard vs Phase-3 proper-noun noise.
+     1 file (topic_decay.rs, +116/-25), 2 new tests (topic-keyed not source-keyed; low-sample skip).
+     autophagy 76 + scoring 618 green; calibration golden baselines unmoved (consumer untouched);
+     full pre-push gate passed. context.rs claim DROPPED (its :162 comment correctly describes the
+     source_autopsy load below it; topic_half_lives is an accurate name after the rename).
+     Live 4da.db = 0 feedback → 0 profiles, so the path was dormant HERE regardless; activates once
+     engagement accrues. Phases 1-3 (unify kernel → closed-form multi-rate → per-user) STAGED, gated by
+     intelligence-doctrine rule 10 (7-day dogfood). Strategy in memory project_decay_strategy_mars.md.
+     Did NOT touch pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore. -->
+     <!-- Commit Lock RELEASED (opus-topic-decay-rekey) -->
+
+<!-- opus-ace-quality-domain (2026-06-04): DONE — committed + PUSHED (origin/main @ 0af6e2d6, rev-list 0/0).
+     Two domain-detection refinements on top of 7aea65e4, both forced by LIVE dogfood:
+     • c96e22bf: weight ACE-inferred interests (cold-start users' interests are ACE-seeded source=Inferred).
+     • 0af6e2d6: weight CURATED interests (explicit_interests, id=Some) > ACE-SYNTHESIZED (id=None). The repo's
+       React frontend was synthesized into 5 web interests (react/typescript/javascript/next.js/express) that
+       outvoted the 3 curated systems interests. id-based weighting fixes it.
+     LIVE-VERIFIED on a guaranteed-fresh build: np flips web→systems (curated rust/tauri/axum win).
+     ⚠ STALE-BINARY GOTCHA (cost ~40min): cargo kept NOT rebuilding after edits — running fourda.exe was
+       OLDER than the commit, so warm reads showed the OLD web behavior. Fix: `touch src/probes_engine.rs &&
+       cargo build` forces a real recompile (24s vs a bogus 1.5s up-to-date). Recipe saved.
+     KEY FINDING (reported to user, NOT yet fixed — deeper than this scope): with honest systems targeting the
+     calibration shows disc:1/recall:0 — the engine scores genuinely-relevant systems probes as noise
+     ("Rust 2026 Edition" @ 0.257). PARTLY a probe-mode artifact (run_probe_calibration uses apply_signals:false,
+     stricter than the real feed) — real feed DOES surface rust (Cargo advisory 0.6, Slumber TUI 0.535) but
+     leans web (top item React/Next DoS 0.78). Candidate follow-ups: probe apply_signals:true to mirror feed;
+     down-weight synthesized frontend interests in REAL feed scoring (not just domain detection).
+     Left ONE clean dev server running (PID 452). Did NOT touch Cargo.lock / fourda-infer-proto/.gitignore. -->
+
+
+<!-- opus-ace-quality (2026-06-04): DONE — committed + PUSHED (origin/main @ 7aea65e4,
+     ef2d57cf..7aea65e4, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     3 dogfood-found upstream quality fixes (the calibration numbers were honest, but the
+     INPUTS were noisy and that noise degraded the live feed):
+     (1) ACE topic noise → git.rs no longer emits commit-* topics + new high-precision
+         is_low_quality_topic() gate (commit metadata, numeric/symbol fragments, camelCase
+         code identifiers, <3 chars) applied at the interest-synthesis boundary AND auto-seed.
+     (2) dep subterm false matches (winston-daily-rotate-file "matched" an AI paper via
+         daily/rotate/file) → added generic words to COMMON_ENGLISH_WORDS; full name still matches.
+     (3) domain mis-targeting (Rust/Tauri/Axum dev classified "web" → probe battery tested wrong
+         domain) → detect_user_domain now lets explicit interests/onboarding tech dominate, weights
+         auto-stacks low, caps ACE-topic breadth, recognises tauri/axum/wasm as systems.
+     Tests: low_quality_topic matrix, winston sub-term exclusion, explicit-interests-beat-web-breadth.
+     Affected suites green (probes 11, deps 37, git, context); full pre-push passed.
+     Did NOT touch pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore. -->
+
+
+
+<!-- opus-tab-fixes (2026-06-04): DONE — committed + PUSHED (origin/main @ ef2d57cf, rev-list 0/0).
+     Commit Lock RELEASED, claims cleared. @opus-ace-quality: lock is FREE — proceed.
+     5-tab doctrine audit (read-only agents) + clippy -D debt + 2 fix waves shipped:
+     • clippy debt 61d50799 — removed dead DomainProfile.domains/infer_domains + u32::midpoint + sort_by_key.
+     • Wave 1 (71aee94c/eaa1bf0c/b2fba069): Brief abstention-detection drift (rendered junk under a silent
+       brief; now matches both Rust shapes + guard test), Preemption dismissal-count mismatch (count from
+       post-dismissal visible items), Signal fabricated time-saved (removed 8s/article vanity metric).
+     • Wave 2 (b71df73c/ef2d57cf): Brief EngagementPulse stopped fabricating 50%/stable on zero feedback
+       (Option-based null + hide trend); Playbook honest cold-start (zero sun-runs → "stable" not "declining";
+       ProgressRing hides "0%" on first run).
+     Verified per wave: tsc 0, eslint 0, targeted vitest green, clippy --lib green, full pre-push gates passed.
+     REMAINING (Wave 3, not started): the systemic backend-English i18n class (item titles/explanations/actions
+     emitted in English from Rust across Blind Spots/Preemption/Playbook/Signal → render verbatim; proper fix =
+     reason_code + frontend translation) + bounded fixes (Preemption paywall-as-error→upsell, missing
+     explanation.expand/collapse locale keys, Blind Spots ScoreBar fill-vs-label, Signal ConfidenceIndicator ±%).
+     Did NOT touch the 6 in-flight src-tauri/src files (opus-ace-quality's) / pre-existing Cargo.lock / .gitignore. -->
+     <!-- Commit Lock RELEASED (opus-tab-fixes) -->
+
+<!-- opus-coldstart-nudge (2026-06-04): DONE — committed + PUSHED (origin/main @ 3ef4d4c9,
+     a7304418..3ef4d4c9, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     Skipper-recovery cold-start fix: the first-run PersonalizeNudge (shown when a user finished
+     onboarding with no interests — typically a skipper) now offers a ONE-CLICK fully-local
+     "Scan my projects" instead of only bouncing to Settings. Reuses the store's runAutoDiscovery
+     (ace_auto_discover — the same proven path the onboarding choice gate uses), then loadUserContext
+     (nudge auto-resolves once interests populate) + startAnalysis (re-scores the feed). Settings kept
+     as secondary; card stays dismissible; dismiss disabled mid-scan. Explicit click = consent (INV-004).
+     NOTE: the bigger lever (in-session scan during onboarding) was ALREADY shipped by opus-provider-side
+     Wave 3 (cf5dcc79/3468c4ce) — verified via an Explore agent before building, so this is the genuine
+     remaining gap (skipper recovery), not a duplicate.
+     Frontend-only: PersonalizeNudge.tsx + BriefingView.tsx + FreeBriefingPanel.tsx + new
+     PersonalizeNudge.test.tsx (5 tests). Reused onboarding.choice.* locale keys (no new strings).
+     Verified: tsc 0, 5 nudge tests, 57 briefing/first-run tests, eslint 0, clean HMR (0 warnings),
+     full pre-push gate passed. Did NOT touch pre-existing Cargo.lock / fourda-infer-proto/.gitignore. -->
+     <!-- Commit Lock RELEASED (opus-coldstart-nudge) -->
+
+<!-- opus-builtin-removal-verify (2026-06-03→04): DONE — committed + PUSHED (origin/main @ a7304418,
+     49d754a0..a7304418, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     Post-Phase-2 verification of the built-in LLM removal:
+     • LIVE (running app, Victauri :7373): detect_ghost_commands → 0 builtin ghosts; check_ipc_integrity →
+       healthy, 0 errors/106 calls; test_llm_connection (anthropic) → real round-trip OK through the edited
+       llm.rs; get_diagnostics → 0 warnings, 0 builtin/sidecar/llama mentions. App recompiled + restarted
+       clean after the merge (PID 44332).
+     • GBNF concern resolved by CODE PROOF: complete_ollama_structured uses Ollama-native format:json (never
+       GBNF — that was builtin-only); my edit only swapped a match→irrefutable-let returning the same schema.
+       Zero Ollama regression. Ollama confirmed available (llama3.2/qwen2.5:14b).
+     • Migration UNIT-TESTED (a7304418): single-instance guard blocks a clean cold-start, so extracted
+       migrate_retired_llm_provider() + 2 tests (builtin→none+model-cleared; none/ollama/anthropic/openai/
+       openai-compatible untouched). Settings::validate() confirmed not to pre-empt provider.
+     NOTE: immuneScanPending is for e3d557f6 + 91f53b0b (other sessions' fix commits) — NOT mine; left for
+     the owning session. Did NOT touch pre-existing Cargo.lock / fourda-infer-proto/.gitignore. -->
+     <!-- Commit Lock RELEASED (opus-builtin-removal-verify) -->
+<!-- opus-builtin-removal-phase2 (2026-06-03): DONE — committed + PUSHED (origin/main @ 49d754a0,
+     e3d557f6..49d754a0, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     Phase 2 of the built-in LLM removal (backend) deferred by 25f0d945. ONE commit, built + validated
+     in an isolated git worktree (dev server was live, would hot-reload mid-edit), then fast-forward merged.
+     • Deleted llm_engine.rs (sidecar), model_manager.rs (GGUF catalog), settings_commands_llm/builtin.rs
+       + the 7 builtin commands + lib.rs registrations + commands.ts contract.
+     • Removed the `builtin` provider arm across the generation/capability stack (llm.rs, llm_stream.rs,
+       llm_judgments.rs, ollama_capability.rs, ai_costs.rs, sovereign_developer_profile.rs,
+       settings_commands.rs, health_checks.rs, 6 is_builtin_available guards, compute_has_llm) + the
+       app_setup sidecar auto-start/shutdown. Dropped the llama-server-only StructuredOutputMode::Grammar
+       variant + GBNF grammar — synthesis is JsonSchema for every provider now.
+     • Migration: settings load resets persisted provider=="builtin" → "none" (manager_init.rs).
+     • Frontend/locale: vestigial provider==='builtin' branches, 7 orphaned builtin-LLM locale keys ×13
+       (built-in *embeddings* keys KEPT), sidecar error mapping. Removed 6 builtin victauri_dogfood tests
+       + the builtin IPC-command assertions. .ai/FAILURE_MODES.md updated.
+     • LANDMINES AVOIDED: blind_spots.rs/knowledge_decay.rs (Node.js builtin MODULES), calibration_*.rs/
+       probes_engine.rs (fastembed embeddings, owned by opus-calibration-honesty-2), builtInSemantic* keys.
+     Verified: cargo test --no-run (all compile), clippy adds 0 new warnings (4 remaining are pre-existing:
+     domains/midpoint/sort_by), 3 compute_has_llm tests, tsc 0, 1260 frontend tests, validate:translations 0,
+     27 script tests. Worktree + branch cleaned up. Did NOT touch pre-existing Cargo.lock / fourda-infer-proto/.gitignore. -->
+     <!-- Commit Lock RELEASED (opus-builtin-removal-phase2) -->
+
+<!-- opus-calibration-honesty-2 (2026-06-03): DONE — committed + PUSHED (origin/main @ f67db536,
+     68a47f67..f67db536, rev-list 0/0). Immune-pass follow-up to the calibration honesty work.
+     • HIGH fixed: signal-coverage axes fired from a DATA-EXISTENCE proxy (cached_context_count>0,
+       active_topics non-empty) → replaced single-CVE audit_signal_axes with a BATTERY audit folded
+       into run_probe_calibration (axis fires only when it crossed threshold on ≥1 of the 12
+       real-embedding relevant probes). Removed proxy + one-probe volatility; unified two passes.
+     • MEDIUM fixed: PersonaMetrics hardcoded fp:0/fn:0 → ProbeResults now carries real
+       true_pos/false_pos/true_neg/false_neg; PersonaMetrics surfaces them.
+     LIVE-VERIFIED (real profile, :7373): axes [context,interest,ace] → [context,interest,dependency]
+     — phantom 'ace' (proxy) dropped, genuine 'dependency' surfaced; persona tp:4/fp:2/tn:4/fn:2
+     (was fp:0/fn:0); disc 14, grade B/77. 10 probes_engine tests + full pre-push suite green.
+     Immune pass recorded in antibody 2026-06-02-proxy-derived-state.md; c57ca5b9+8c88032e marked
+     scanned. Restarted the dev server (it had exited during the pre-commit cache sweep) — UP on :7373.
+     Did NOT touch pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore. -->
+
+
+
 <!-- opus-debt-paydown (2026-06-02): DONE — committed (40205500..f1de614b, 5 commits).
      Commit Lock RELEASED, claims cleared. Paid down the documented debt from the
      vanity-gate/header + p1-false-state sessions (screenshots 2852/2853):
@@ -217,17 +424,12 @@ Working on: ACE in-session auto-discovery on skip (the PROFILE side of cold-star
 card + overlap fix) + 3468c4ce (single-flight ACE guard + unique ticker keys). All gates green.
 Doing final live verify (layout overlap + stall-free single scan), then push. NOT pushed yet.
 
-### Terminal: opus-onboarding-scrollbar (2026-06-01)
-Working on: kill the dead document scrollbar behind the full-screen first-run overlays (splash +
-onboarding). The overlap (sun/4 over the step circles) is ALREADY fixed by @opus-provider-side
-(cf5dcc79) — verified live, not duplicating. Only remaining issue from the user's screenshot is the
-second, non-functional scrollbar (documentElement overflows ~80px past the viewport while the
-`fixed inset-0` overlay also scrolls). Fixing at the App level to AVOID the claimed Onboarding.tsx.
-**Claims:**
-- src/App.tsx (scroll-lock effect: lock documentElement overflow while splash/onboarding overlay open)
-- NOT touching src/components/Onboarding.tsx (claimed by @opus-provider-side) or any onboarding/* file.
-**Status:** DONE in working tree (uncommitted). typecheck 0, eslint(App.tsx) 0. Mechanism live-verified
-via CDP: documentElement overflow:hidden removes the dead 8px doc scrollbar (docScrollbarPx 8→0→8),
-overlay's own overflow-y-auto scroll untouched. Holding commit until @opus-provider-side pushes their
-unpushed cf5dcc79/3468c4ce so my App.tsx commit doesn't entangle with their in-flight onboarding push.
-**Commit Lock**: not held.
+<!-- opus-onboarding-scrollbar (2026-06-01): DONE — committed + PUSHED (origin/main @ bf04e3b4).
+     Dead root scrollbar behind the first-run overlays (splash + onboarding): documentElement
+     (#root min-height) overflowed the viewport while the `fixed inset-0` overlay also scrolled →
+     second, non-functional scrollbar. Fix landed as an isolated 1-file commit in src/App.tsx
+     (lock documentElement overflow while splash/onboarding open, restore on close) — deliberately
+     NOT in the claimed Onboarding.tsx; complements @opus-provider-side's in-flow overlap fix cf5dcc79.
+     Mechanism live-verified via CDP (docScrollbarPx 8→0→8, overlay's own overflow-y-auto untouched);
+     tsc 0, eslint 0. Commit Lock RELEASED, claim cleared. Terminal closing. -->
+     <!-- Commit Lock RELEASED (opus-onboarding-scrollbar) -->

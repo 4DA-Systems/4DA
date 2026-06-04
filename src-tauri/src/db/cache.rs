@@ -221,51 +221,74 @@ impl Database {
 
     /// Get items whose scores were computed under an older pipeline version.
     /// These need re-scoring to reflect current pipeline logic.
+    ///
+    /// Ordering is deliberately NOT pure `relevance_score DESC`. A pipeline-version
+    /// bump happens precisely because scoring CHANGED, and the change that matters
+    /// most — the necessity stack-update path (try_stack_update_path) — RESCUES items
+    /// that the old pipeline buried as noise: a release of your own dependency
+    /// (`crates.io: axum v0.8.9`) used to be recency-decayed to a near-zero score.
+    /// Ordering by old relevance DESC therefore drains the already-relevant items
+    /// first and the buried releases LAST, so a dev's own stack updates only surface
+    /// after the entire backlog drains (many scheduler cycles). We front-load
+    /// `release_notes` / `platform_update` items (the stack-update candidates, an
+    /// indexed `content_type`) so they re-score in the first drain batches and
+    /// EcosystemShift items surface promptly; everything else keeps relevance DESC.
     pub fn get_stale_scored_items(
         &self,
         current_version: i32,
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
-        let effective_hours = if crate::settings::is_signal() {
-            i64::MAX
+        // Signal users have unlimited history, so the recency bound is dropped ENTIRELY
+        // for them. A "very large hours" sentinel does NOT work: passing i64::MAX (the
+        // previous behaviour) to SQLite's datetime() overflows to NULL, and
+        // `created_at >= NULL` is never true — so the drain silently returned ZERO stale
+        // items for every Signal user. That was the real reason the version-bump drain
+        // never reached the deep backlog (and stack releases never surfaced) on the
+        // live, Signal-tier app: it wasn't slow, it was empty. Free users keep the
+        // 30-day recency bound (their history is gated anyway). The constant is embedded
+        // directly (it is a compile-time i64, never user input — no injection risk).
+        let time_clause = if crate::settings::is_signal() {
+            String::new()
         } else {
-            super::sources::FREE_HISTORY_LIMIT_HOURS
+            format!(
+                " AND created_at >= datetime('now', '-{} hours')",
+                super::sources::FREE_HISTORY_LIMIT_HOURS
+            )
         };
-        let mut stmt = conn.prepare_cached(
+        let sql = format!(
             "SELECT id, source_type, source_id, url, title, content, content_hash,
                     embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
                     feed_origin, tags
              FROM source_items
              WHERE scored_pipeline_version < ?1
-               AND relevance_score IS NOT NULL
-               AND created_at >= datetime('now', '-' || ?2 || ' hours')
-             ORDER BY relevance_score DESC
-             LIMIT ?3",
-        )?;
-        let rows = stmt.query_map(
-            params![current_version, effective_hours, limit as i64],
-            |row| {
-                let embedding_blob: Vec<u8> = row.get(7)?;
-                Ok(StoredSourceItem {
-                    id: row.get(0)?,
-                    source_type: row.get(1)?,
-                    source_id: row.get(2)?,
-                    url: row.get(3)?,
-                    title: row.get(4)?,
-                    content: row.get(5)?,
-                    content_hash: row.get(6)?,
-                    embedding: blob_to_embedding(&embedding_blob),
-                    created_at: parse_datetime(row.get::<_, String>(8)?),
-                    last_seen: parse_datetime(row.get::<_, String>(9)?),
-                    detected_lang: row
-                        .get::<_, String>(10)
-                        .unwrap_or_else(|_| "en".to_string()),
-                    feed_origin: row.get(11).ok().flatten(),
-                    tags: row.get(12).ok().flatten(),
-                })
-            },
-        )?;
+               AND relevance_score IS NOT NULL{time_clause}
+             ORDER BY
+                 CASE WHEN content_type IN ('release_notes', 'platform_update') THEN 0 ELSE 1 END,
+                 relevance_score DESC
+             LIMIT ?2"
+        );
+        let mut stmt = conn.prepare_cached(&sql)?;
+        let rows = stmt.query_map(params![current_version, limit as i64], |row| {
+            let embedding_blob: Vec<u8> = row.get(7)?;
+            Ok(StoredSourceItem {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                url: row.get(3)?,
+                title: row.get(4)?,
+                content: row.get(5)?,
+                content_hash: row.get(6)?,
+                embedding: blob_to_embedding(&embedding_blob),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
+            })
+        })?;
         rows.collect()
     }
 
@@ -677,5 +700,98 @@ mod tests {
         // Query a non-existent item id
         let result = db.get_item_content_snippet(99999, 100);
         assert!(result.is_err(), "Missing item should return an error");
+    }
+
+    /// The stale-drain must surface stack-release items FIRST, not last. A pipeline
+    /// bump rescues releases the old pipeline buried as near-zero noise; ordering the
+    /// drain purely by old relevance would re-score them only after the whole backlog
+    /// drained. Releases (`release_notes`/`platform_update`) jump the queue ahead of
+    /// higher-relevance non-release items so EcosystemShift items surface promptly.
+    #[test]
+    fn test_stale_drain_prioritizes_stack_releases() {
+        use crate::scoring::PIPELINE_VERSION;
+        let db = test_db();
+
+        // A high-relevance non-release, plus two LOW-relevance stack releases — all
+        // stale (version 1, well below current PIPELINE_VERSION).
+        let high_discussion = insert_test_item(&db, "hackernews", "hn1", "Hot thread", "x");
+        let low_release_a = insert_test_item(&db, "crates_io", "axum", "axum 0.8.9", "release");
+        let low_release_b = insert_test_item(&db, "npm", "vite", "vite 7.0.0", "release");
+
+        {
+            let conn = db.conn.lock();
+            // created_at set to now so the items fall inside the drain's recency window.
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.92, content_type='discussion', scored_pipeline_version=1, created_at=datetime('now') WHERE id=?1",
+                rusqlite::params![high_discussion],
+            ).unwrap();
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.05, content_type='release_notes', scored_pipeline_version=1, created_at=datetime('now') WHERE id=?1",
+                rusqlite::params![low_release_a],
+            ).unwrap();
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.03, content_type='release_notes', scored_pipeline_version=1, created_at=datetime('now') WHERE id=?1",
+                rusqlite::params![low_release_b],
+            ).unwrap();
+        }
+
+        let stale = db.get_stale_scored_items(PIPELINE_VERSION, 10).unwrap();
+        assert_eq!(stale.len(), 3, "all three stale items are returned");
+        // Releases come first despite far lower relevance; relevance DESC breaks ties
+        // within the release group, then non-release items follow.
+        assert_eq!(stale[0].id, low_release_a, "higher-relevance release first");
+        assert_eq!(
+            stale[1].id, low_release_b,
+            "second release still before the discussion"
+        );
+        assert_eq!(
+            stale[2].id, high_discussion,
+            "high-relevance non-release drains only after the releases"
+        );
+    }
+
+    /// Regression guard: a Signal user's stale-drain must reach items older than the
+    /// free-tier window. The old code passed `i64::MAX` hours to `datetime('now', ...)`,
+    /// which SQLite overflows to NULL — so `created_at >= NULL` was never true and the
+    /// drain silently returned ZERO items for every Signal user, meaning the version-bump
+    /// backlog (and stack releases) never drained on the live, Signal-tier app.
+    #[test]
+    fn test_stale_drain_no_overflow_for_unlimited_history() {
+        use crate::scoring::PIPELINE_VERSION;
+        let db = test_db();
+
+        let old = insert_test_item(
+            &db,
+            "crates_io",
+            "old_axum",
+            "axum 0.1.0",
+            "ancient release",
+        );
+        {
+            let conn = db.conn.lock();
+            // 400 days old — well beyond the 30-day free-tier window.
+            conn.execute(
+                "UPDATE source_items SET relevance_score=0.2, content_type='release_notes', scored_pipeline_version=1, created_at=datetime('now','-400 days') WHERE id=?1",
+                rusqlite::params![old],
+            ).unwrap();
+        }
+
+        let stale = db.get_stale_scored_items(PIPELINE_VERSION, 10).unwrap();
+        if crate::settings::is_signal() {
+            // Unlimited history: the recency bound is dropped entirely. If this returns
+            // 0 again, the i64::MAX -> NULL overflow has regressed.
+            assert_eq!(
+                stale.len(),
+                1,
+                "Signal drain must reach items older than the free window"
+            );
+            assert_eq!(stale[0].id, old);
+        } else {
+            // Free tier: the 30-day recency bound correctly excludes a 400-day-old item.
+            assert!(
+                stale.is_empty(),
+                "free-tier drain stays bounded to recent history"
+            );
+        }
     }
 }

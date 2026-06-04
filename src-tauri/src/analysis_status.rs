@@ -274,6 +274,36 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
 }
 
 /// The actual cache-first analysis implementation
+/// Merge a batch of items still scored under an older `PIPELINE_VERSION` into
+/// `items` (skipping any already present), so a version bump drains the backlog
+/// a bounded batch per analysis run. Returns the number of items added.
+///
+/// Runs on BOTH the differential and full-analysis paths. Gating it behind
+/// differential mode (the previous behaviour) meant a version bump only drained
+/// via the scheduler's differential runs and never on first-run-after-restart or
+/// manual `run_cached_analysis` invokes, so the backlog re-scored far slower than
+/// intended. The 500-item cap and the stack-release-first ordering both live in
+/// `get_stale_scored_items`.
+fn merge_stale_drain_batch(
+    db: &crate::db::Database,
+    items: &mut Vec<crate::db::StoredSourceItem>,
+) -> usize {
+    let stale = db
+        .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
+        .unwrap_or_default();
+    if stale.is_empty() {
+        return 0;
+    }
+    let existing: std::collections::HashSet<i64> = items.iter().map(|i| i.id).collect();
+    let added: Vec<_> = stale
+        .into_iter()
+        .filter(|s| !existing.contains(&s.id))
+        .collect();
+    let count = added.len();
+    items.extend(added);
+    count
+}
+
 /// Uses differential analysis when previous results exist (only scores new items)
 pub(crate) async fn analyze_cached_content_impl(app: &AppHandle) -> Result<Vec<SourceRelevance>> {
     analyze_cached_content_inner(app, false).await
@@ -437,29 +467,19 @@ async fn analyze_cached_content_inner(
         // NO new items existed, so a continuously-updating feed meant pipeline-version
         // bumps never caught up and stale scores lingered indefinitely. Merging the
         // stale batch into `new_items` makes version bumps drain on every run, bounded
-        // by the 500-item cap.
-        let stale_items = db
-            .get_stale_scored_items(scoring::PIPELINE_VERSION, 500)
-            .unwrap_or_default();
-        if !stale_items.is_empty() {
-            let existing: std::collections::HashSet<i64> = new_items.iter().map(|i| i.id).collect();
-            let added: Vec<_> = stale_items
-                .into_iter()
-                .filter(|s| !existing.contains(&s.id))
-                .collect();
-            if !added.is_empty() {
-                info!(target: "4da::analysis", stale = added.len(),
-                    "Re-scoring stale items from an older pipeline version (merged with new items)");
-                emit_progress(
-                    app,
-                    "cache",
-                    0.5,
-                    &format!("Re-scoring {} items (pipeline updated)...", added.len()),
-                    0,
-                    added.len(),
-                );
-                new_items.extend(added);
-            }
+        // by the 500-item cap. (See merge_stale_drain_batch.)
+        let drained = merge_stale_drain_batch(db, &mut new_items);
+        if drained > 0 {
+            info!(target: "4da::analysis", stale = drained,
+                "Re-scoring stale items from an older pipeline version (merged with new items)");
+            emit_progress(
+                app,
+                "cache",
+                0.5,
+                &format!("Re-scoring {drained} items (pipeline updated)..."),
+                0,
+                drained,
+            );
         }
 
         if new_items.is_empty() {
@@ -634,7 +654,7 @@ async fn analyze_cached_content_inner(
     // Full analysis path (no previous results or first run)
     // Use 7-day window to include items from recent fetches
     // Respects free-tier 30-day history gate via get_items_tiered
-    let cached_items = db
+    let mut cached_items = db
         .get_items_tiered(168, 1000)
         .map_err(|e| format!("Failed to load cached items: {e}"))?;
 
@@ -652,6 +672,17 @@ async fn analyze_cached_content_inner(
             0,
         );
         return run_multi_source_analysis_impl(app, silent).await;
+    }
+
+    // Drain a batch of backlog items scored under an older pipeline version on the
+    // full (non-differential) path too. Without this the version-bump drain only
+    // ran on the scheduler's differential runs — never on first-run-after-restart
+    // or a manual run_cached_analysis — so the deep backlog re-scored far slower
+    // than intended. Bounded by the 500-item cap; score_items_full dedups internally.
+    let drained = merge_stale_drain_batch(db, &mut cached_items);
+    if drained > 0 {
+        info!(target: "4da::analysis", stale = drained,
+            "Re-scoring stale backlog items from an older pipeline version (full path)");
     }
 
     scoring::score_items_full(app, db, &cached_items, silent).await
