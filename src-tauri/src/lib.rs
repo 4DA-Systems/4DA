@@ -226,6 +226,7 @@ mod digest_email;
 mod domain_profile;
 mod domain_profile_data;
 mod entity_extraction;
+mod triage_audit_commands;
 // Silent-Failure Defense Layer 1 — typed wrappers for external boundaries.
 // See docs/strategy/SILENT-FAILURE-DEFENSE.md. Skeleton only in this commit.
 #[cfg(feature = "experimental")]
@@ -698,6 +699,7 @@ pub fn run() {
             analysis::get_analysis_status,
             analysis::get_scoring_stats,
             analysis::cancel_analysis,
+            triage_audit_commands::measure_triage_recall,
             // Settings
             settings_commands::get_settings,
             settings_commands::get_llm_usage,

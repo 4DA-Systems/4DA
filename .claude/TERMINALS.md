@@ -9,6 +9,38 @@
 
 ## Active Terminals
 
+### Terminal: opus-relevance-funnel (started 2026-06-05)
+Working on: scoring relevance funnel — Phase 0 (measure before build). New cheap relevance-triage gate
++ coverage/recall-audit harness, validated against the live 36k corpus BEFORE any pipeline wiring.
+Goal reframe: not "score everything" but "never miss what's relevant, score cheaply, full-score the few".
+**Claims:**
+- src-tauri/src/scoring/triage.rs (NEW — cheap gate + coverage metrics + unit tests)
+- src-tauri/src/scoring/mod.rs (register triage module + re-exports ONLY — append-only)
+- src-tauri/src/triage_audit_commands.rs (NEW — dev measurement/recall-audit command, crate root)
+- src-tauri/src/lib.rs (register the one new command — append-only)
+- src-tauri/src/db/cache.rs (NEW read-only get_triage_audit_rows for the recall audit)
+NO overlap with opus-score-orb-redesign (all frontend). NOT touching Cargo.lock / fourda-infer-proto.
+**Commit Lock**: not held.
+
+<!-- opus-score-orb-redesign (2026-06-05): DONE — committed locally (push held for user), Commit Lock RELEASED.
+     Full GAME web-component purge in 4 waves (frontend only; ZERO overlap with opus-relevance-funnel's backend):
+     • Wave 1 d5311628 — the ugly WebGPU "score fingerprint" CORE orb → native SVG RelevanceRing
+       (arc=relevance, core opacity=confidence, currentColor=tier). LIVE-VERIFIED via Victauri: 5 gold
+       rings rendered in AttentionCards, 0 fourda-score-fingerprint elements. Screenshots in D:\lightshot\.
+     • Wave 2 ff131a9b — fourda-tetrahedron / fourda-simplex-unfold → native components/geometry/
+       (PlatonicSVG, SimplexUnfoldSVG) in LoadingOrEmptyState, BriefingNoDataState, first-run/LoadingState.
+     • Wave 3 39da0182 — last 4 non-Platonic effects → native: status-orb→pulse dot (OllamaStatus),
+       celebration-burst→ping rings (MilestoneOverlay), playbook-pathway→native node track (PlaybookView),
+       turing-fire→AmbientGlow gradient (Briefing No-Data + Warmup).
+     • Wave 4 be664e86 — deleted the whole apparatus: src/lib/fourda-components/ (69 files: .js/.frag/.wgsl/
+       .d.ts), the registry, use-fourda-component hook, vite-env JSX decls, dead public/ notif-card+runtime
+       assets, and 8 test suites' vi.mock stubs. 78 files, 22,383 deletions.
+     Platonic visual language survives 100% as native SVG in components/geometry/. No WebGPU/WebGL anywhere.
+     Verified: tsc 0, eslint 0, 126 tests across the 8 touched suites green. Waves 2-4 live-visual pending
+     (app was down — opus-relevance-funnel rebuilding the Rust backend). Did NOT touch their in-flight
+     src-tauri files / Cargo.lock / fourda-infer-proto. NOT pushed (per user's commit-now / push-later). -->
+     <!-- Commit Lock RELEASED (opus-score-orb-redesign) -->
+
 <!-- opus-stale-drain-ordering (2026-06-05): DONE — committed locally (push held for user).
      Completed the refinements opus-rescore-pipeline deferred. While verifying, found a THIRD,
      BIGGER root cause that subsumes "the drain doesn't fire" / "ecosystem_shift never surfaces":
@@ -34,9 +66,17 @@
      1 not 0 for a 400-day-old item). Full lib compiles; clippy adds 0 new warnings; db::cache suite
      green. (analysis_status::abort_flag_resets_at_start is a pre-existing parallel-global-state flake —
      passes in isolation.) Files: src-tauri/src/db/cache.rs, src-tauri/src/analysis_status.rs.
-     Did NOT touch pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore. Left fourda.exe
-     (PID 52180, OLD binary) running — end-to-end drain needs a rebuild+restart (not done; bug+fix
-     proven on live data + unit tests). Push + rebuild-restart live-verify offered to user. -->
+     Did NOT touch pre-existing Cargo.lock / untracked fourda-infer-proto/.gitignore.
+     PUSHED: origin/main b0cf5a85..e9931ce9 (rev-list 0/0; pre-push full suite passed).
+     END-TO-END LIVE-VERIFIED on a fresh rebuild+restart (killed old PID 52180, pnpm tauri dev):
+     one run_cached_analysis (FULL path, last_completed_at=null → proves Fix 3 drains the full path):
+       • v5: 524 → 931 (+407 backlog items drained in ONE run — was structurally 0 on Signal before).
+       • stale release_notes: 583 → 259 (324 releases re-scored this run = 80% of the drained items,
+         though releases are only ~15% of the backlog → release-first ordering working).
+       • crates.io: axum v0.8.9 (opus-rescore-pipeline's exact buried example, was 0.17) → 0.644.
+         npm react v19.2.7 → 0.909, crates.io tokio v1.52.3 → 0.893 — all rescued from noise.
+       • necessity_category in actionable results: ecosystem_shift = 100 items (the category that
+         "hadn't appeared yet" now surfaces). Left the new dev binary running. -->
      <!-- Commit Lock RELEASED (opus-stale-drain-ordering) -->
 
 <!-- opus-rescore-pipeline (2026-06-04→05): DONE — committed + PUSHED (origin/main @ b0cf5a85).

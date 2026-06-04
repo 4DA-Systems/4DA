@@ -31,6 +31,7 @@ mod simulation;
 pub(crate) mod stemming;
 mod telemetry;
 mod temporal_cluster;
+pub(crate) mod triage;
 mod utils;
 pub(crate) mod validation;
 
@@ -56,6 +57,7 @@ pub(crate) use pipeline::{ScoringInput, ScoringOptions};
 pub(crate) use pipeline_v2::finalize_scores;
 pub(crate) use telemetry::ScoringTelemetry;
 pub(crate) use temporal_cluster::temporal_cluster_results;
+pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};
 /// Bump this whenever the scoring pipeline changes to invalidate stale scores.
 /// Items scored under an older version will be re-scored on the next analysis run.
 ///
