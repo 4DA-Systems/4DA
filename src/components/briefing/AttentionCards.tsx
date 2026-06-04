@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
 import { isSafeUrl } from '../../utils/sanitize-html';
-import { useFourdaComponent } from '../../hooks/use-fourda-component';
 import { useTranslatedContent } from '../ContentTranslationProvider';
+import { RelevanceRing } from './RelevanceRing';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
 interface AttentionCardsProps {
@@ -117,18 +117,6 @@ const AttentionCard = memo(function AttentionCard({
   const source = item.source_type || 'hackernews';
   const relevance = getRelevancePresentation(item.top_score);
 
-  // GAME score fingerprint — unique visual identity per item
-  const { containerRef: fpRef, elementRef: fpElRef } = useFourdaComponent('fourda-score-fingerprint');
-
-  useEffect(() => {
-    const el = fpElRef.current;
-    if (!el) return;
-    el.setParam?.('relevance', item.score_breakdown?.context_score ?? 0);
-    el.setParam?.('freshness', item.score_breakdown?.freshness_mult ?? 0.5);
-    el.setParam?.('depth', item.score_breakdown?.content_quality_mult ?? 0.5);
-    el.setParam?.('confidence', item.confidence ?? 0.5);
-  }, [item, fpElRef]);
-
   const handleOpen = useCallback(() => {
     onRecordClick(item);
     if (item.url && isSafeUrl(item.url)) {
@@ -158,9 +146,11 @@ const AttentionCard = memo(function AttentionCard({
         <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getSourceColorClass(source)}`}>
           {getSourceLabel(source)}
         </span>
-        <div ref={fpRef} className="w-6 h-6 rounded flex-shrink-0 ms-auto" aria-hidden="true" />
-        <span className={`text-[10px] font-medium uppercase tracking-wider ${relevance.colorClass}`}>
-          {t(relevance.labelKey)}
+        <span className={`flex items-center gap-1.5 ms-auto ${relevance.colorClass}`}>
+          <RelevanceRing relevance={item.top_score ?? 0} confidence={item.confidence ?? 0.5} />
+          <span className="text-[10px] font-medium uppercase tracking-wider">
+            {t(relevance.labelKey)}
+          </span>
         </span>
       </div>
 

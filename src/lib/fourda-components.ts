@@ -13,7 +13,6 @@ const COMPONENTS = {
   'fourda-celebration-burst': () => import('./fourda-components/celebration-burst.js'),
   'fourda-status-orb': () => import('./fourda-components/status-orb.js'),
   'fourda-ambient-intelligence': () => import('./fourda-components/ambient-intelligence.js'),
-  'fourda-score-fingerprint': () => import('./fourda-components/score-fingerprint.js'),
   'fourda-decision-countdown': () => import('./fourda-components/decision-countdown.js'),
   'fourda-source-vitals': () => import('./fourda-components/source-vitals.js'),
   'fourda-briefing-atmosphere': () => import('./fourda-components/briefing-atmosphere.js'),
