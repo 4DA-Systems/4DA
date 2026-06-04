@@ -212,10 +212,6 @@ vi.mock('../../config/content-types', () => ({
   getContentTypeBadge: () => null,
 }));
 
-// Mock fourda-components (used by AchievementsPanel, etc.)
-vi.mock('../../lib/fourda-components', () => ({
-  registerFourdaComponent: vi.fn(() => Promise.resolve()),
-}));
 
 // ---------------------------------------------------------------------------
 // Component imports

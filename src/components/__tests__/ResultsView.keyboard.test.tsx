@@ -90,9 +90,6 @@ vi.mock('../ContentTranslationProvider', () => ({
   }),
 }));
 
-vi.mock('../../lib/fourda-components', () => ({
-  registerFourdaComponent: vi.fn(),
-}));
 
 vi.mock('../../hooks', () => ({
   useResultFilters: () => ({

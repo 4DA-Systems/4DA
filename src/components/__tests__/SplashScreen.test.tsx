@@ -24,10 +24,6 @@ vi.mock('../../utils/error-messages', () => ({
   translateError: (e: unknown) => String(e),
 }));
 
-// Mock game components
-vi.mock('../../lib/fourda-components', () => ({
-  registerFourdaComponent: vi.fn(() => Promise.resolve()),
-}));
 
 // ---------------------------------------------------------------------------
 // Component under test

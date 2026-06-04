@@ -30,13 +30,6 @@ vi.mock('../../lib/commands', () => ({
   cmd: vi.fn(() => Promise.resolve(null)),
 }));
 
-// Stub the fourda-component hook so WebGPU isn't required
-vi.mock('../../hooks/use-fourda-component', () => ({
-  useFourdaComponent: () => ({
-    containerRef: { current: null },
-    elementRef: { current: null },
-  }),
-}));
 
 // Every view that ViewRouter can render
 const VIEWS = [

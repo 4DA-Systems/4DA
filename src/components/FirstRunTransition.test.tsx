@@ -41,9 +41,6 @@ vi.mock('./void-engine/BrandMark', () => ({
 // ---------------------------------------------------------------------------
 // GAME components mock — custom elements use ResizeObserver (unsupported in jsdom)
 // ---------------------------------------------------------------------------
-vi.mock('../lib/fourda-components', () => ({
-  registerFourdaComponent: vi.fn(),
-}));
 
 // ---------------------------------------------------------------------------
 // Store mock

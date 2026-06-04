@@ -122,9 +122,6 @@ vi.mock('./ContentTranslationProvider', () => ({
   }),
 }));
 
-vi.mock('../lib/fourda-components', () => ({
-  registerFourdaComponent: vi.fn(),
-}));
 
 // ---------------------------------------------------------------------------
 // Mock hooks and utils

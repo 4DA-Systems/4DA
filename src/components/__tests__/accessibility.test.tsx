@@ -99,7 +99,6 @@ vi.mock('../../config/sources', () => ({
   getSourceFullName: (s: string) => s,
 }));
 vi.mock('../../config/content-types', () => ({ getContentTypeBadge: () => null }));
-vi.mock('../../lib/fourda-components', () => ({ registerFourdaComponent: vi.fn(() => Promise.resolve()) }));
 
 // --- Import components ---
 import { ConfidenceIndicator } from '../ConfidenceIndicator';
