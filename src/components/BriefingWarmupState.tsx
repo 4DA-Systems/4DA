@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
-import { useFourdaComponent } from '../hooks/use-fourda-component';
+import { AmbientGlow } from './AmbientGlow';
 
 interface SourceInfo {
   type: string;
@@ -18,7 +18,6 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
   const fired = useRef(false);
   const [enabledSources, setEnabledSources] = useState<string[]>([]);
   const [autoStartPending, setAutoStartPending] = useState(!isBrowserMode);
-  const { containerRef: turingRef } = useFourdaComponent('fourda-turing-fire');
 
   // Load actual configured sources from the backend
   useEffect(() => {
@@ -62,7 +61,7 @@ export function BriefingWarmupState({ onAnalyze }: { onAnalyze: () => void }) {
 
   return (
     <div className="relative text-center py-12 px-6">
-      <div ref={turingRef} className="absolute inset-0 opacity-[0.15] rounded-lg overflow-hidden pointer-events-none" aria-hidden="true" />
+      <AmbientGlow />
       <div className="relative max-w-md mx-auto">
         <h2 className="text-xl font-semibold text-white mb-2">
           {t('briefing.warmup.title', 'Your Intelligence System')}

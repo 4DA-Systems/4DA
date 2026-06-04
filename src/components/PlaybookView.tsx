@@ -8,19 +8,45 @@ import type { InsightContent } from '../types/personalization';
 import { SovereignProfile } from './playbook/SovereignProfile';
 import { StreetHealthBadge } from './playbook/StreetHealthBadge';
 import { PlaybookSidebar } from './playbook/PlaybookSidebar';
-import { useFourdaComponent } from '../hooks/use-fourda-component';
 import PlaybookLessonList from './playbook/PlaybookLessonList';
 
+const PATHWAY_NODES = 7;
+
+/**
+ * Native progress pathway — a row of milestone nodes joined by a track that fills
+ * gold up to the current progress. Replaces the old `fourda-playbook-pathway` GAME
+ * shader. Decorative (aria-hidden); a live streak makes the leading node pulse.
+ */
 function PlaybookPathway({ progress, streak }: { progress: number; streak: number }) {
-  const { containerRef, elementRef } = useFourdaComponent('fourda-playbook-pathway');
+  const pct = Math.max(0, Math.min(1, progress));
+  const filledNodes = Math.round(pct * (PATHWAY_NODES - 1));
 
-  useEffect(() => {
-    elementRef.current?.setParam?.('progress', progress);
-    elementRef.current?.setParam?.('streak', streak);
-    elementRef.current?.setParam?.('momentum', Math.max(0.3, progress));
-  }, [progress, streak, elementRef]);
-
-  return <div ref={containerRef} className="w-full h-10 rounded-lg overflow-hidden opacity-50" aria-hidden="true" />;
+  return (
+    <div className="relative w-full h-10 opacity-60 flex items-center" aria-hidden="true">
+      {/* Baseline track */}
+      <div className="absolute inset-x-1 top-1/2 -translate-y-1/2 h-px bg-border" />
+      {/* Filled track */}
+      <div
+        className="absolute start-1 top-1/2 -translate-y-1/2 h-px bg-accent-gold/70 transition-[width] duration-700 ease-out"
+        style={{ width: `calc(${pct} * (100% - 0.5rem))` }}
+      />
+      {/* Milestone nodes */}
+      <div className="relative flex justify-between w-full px-1">
+        {Array.from({ length: PATHWAY_NODES }).map((_, i) => {
+          const filled = i <= filledNodes;
+          const isLeading = i === filledNodes;
+          return (
+            <span
+              key={i}
+              className={`w-1.5 h-1.5 rounded-full ${filled ? 'bg-accent-gold' : 'bg-border'}${
+                isLeading && streak > 0 ? ' animate-pulse' : ''
+              }`}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export const PlaybookView = memo(function PlaybookView() {

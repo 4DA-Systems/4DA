@@ -3,7 +3,6 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { listen } from '@tauri-apps/api/event';
 import { cmd } from '../lib/commands';
-import { registerFourdaComponent } from '../lib/fourda-components';
 
 // ============================================================================
 // Types
@@ -93,8 +92,6 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
   const [showHint, setShowHint] = useState(false);
   const hintRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { void registerFourdaComponent('fourda-status-orb'); }, []);
-
   // Close hint on outside click
   useEffect(() => {
     if (!showHint) return;
@@ -154,19 +151,10 @@ export function OllamaStatus({ provider }: OllamaStatusProps) {
         `}
         title={errorMsg ?? label}
       >
-        {config.animate ? (
-          <fourda-status-orb
-            style={{ width: '10px', height: '10px', flexShrink: 0 }}
-            aria-hidden="true"
-            ref={(el: HTMLElement | null) => {
-              if (el && 'health' in el) (el as HTMLElement & { health: number }).health = 1.0;
-            }}
-          />
-        ) : (
-          <span
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotClass}`}
-          />
-        )}
+        <span
+          className={`w-2 h-2 rounded-full flex-shrink-0 ${config.dotClass}${config.animate ? ' animate-pulse' : ''}`}
+          aria-hidden="true"
+        />
         <span className={config.textClass}>
           {label}
         </span>

@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks/use-license';
-import { useFourdaComponent } from '../hooks/use-fourda-component';
 import { SimplexUnfoldSVG } from './geometry/SimplexUnfoldSVG';
+import { AmbientGlow } from './AmbientGlow';
 
 /** Analysis in progress — spinner + live progress */
 export function BriefingLoadingState() {
@@ -165,11 +165,10 @@ export function BriefingNoDataState() {
   const startAnalysis = useAppStore(s => s.startAnalysis);
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const embeddingMode = useAppStore(s => s.embeddingMode);
-  const { containerRef: turingRef } = useFourdaComponent('fourda-turing-fire');
 
   return (
     <div className="relative bg-bg-primary rounded-lg">
-      <div ref={turingRef} className="absolute inset-0 opacity-[0.18] rounded-lg overflow-hidden pointer-events-none" aria-hidden="true" />
+      <AmbientGlow />
       <div className="relative flex flex-col items-center justify-center py-20 px-8">
         <div className="w-[120px] h-[120px] mb-6 rounded-2xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
           <SimplexUnfoldSVG size={120} />
