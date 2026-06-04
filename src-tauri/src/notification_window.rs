@@ -35,8 +35,8 @@ const WINDOW_HEIGHT: u32 = CARD_HEIGHT + SHADOW_PAD * 2;
 /// Distance from the window origin to the centered card's far edge
 /// (= half the window plus half the card). Used to anchor the card's
 /// bottom-right corner to the screen corner regardless of shadow padding.
-const CARD_EDGE_X: u32 = (WINDOW_WIDTH + CARD_WIDTH) / 2;
-const CARD_EDGE_Y: u32 = (WINDOW_HEIGHT + CARD_HEIGHT) / 2;
+const CARD_EDGE_X: u32 = u32::midpoint(WINDOW_WIDTH, CARD_WIDTH);
+const CARD_EDGE_Y: u32 = u32::midpoint(WINDOW_HEIGHT, CARD_HEIGHT);
 
 /// Margin from screen edges to the visible card (pixels).
 const MARGIN_RIGHT: i32 = 16;

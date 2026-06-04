@@ -191,7 +191,7 @@ pub fn discover_dev_directories() -> Vec<String> {
     // filesystems (Linux/macOS), where casing distinguishes real directories.
     #[cfg(windows)]
     {
-        discovered.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        discovered.sort_by_key(|a| a.to_lowercase());
         discovered.dedup_by(|a, b| a.to_lowercase() == b.to_lowercase());
     }
     #[cfg(not(windows))]

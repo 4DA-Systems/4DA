@@ -101,7 +101,6 @@ pub(super) fn rust_ctx_with_boosts(
             .collect(),
         domain_concerns: std::collections::HashSet::new(),
         ace_promoted_tech: std::collections::HashSet::new(),
-        domains: std::collections::HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["rust_systems".to_string()]);
@@ -192,7 +191,6 @@ pub(super) fn python_ctx_with_boosts(
             .collect(),
         domain_concerns: std::collections::HashSet::new(),
         ace_promoted_tech: std::collections::HashSet::new(),
-        domains: std::collections::HashSet::new(),
     };
 
     let stack = crate::stacks::compose_profiles(&["python_ml".to_string()]);

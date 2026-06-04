@@ -66,7 +66,6 @@ pub(super) fn make_domain(
         interest_topics: interest_topics.iter().map(|s| s.to_string()).collect(),
         domain_concerns: HashSet::new(),
         ace_promoted_tech: HashSet::new(),
-        domains: HashSet::new(),
     }
 }
 
