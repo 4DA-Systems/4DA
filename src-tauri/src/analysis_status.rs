@@ -93,6 +93,17 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                         }
                     }
 
+                    // Stamp the pipeline version for EVERY item scored this run —
+                    // including noise items (top_score == 0) that persist_analysis_scores
+                    // skips. Without this, zero-scoring stale items never leave the
+                    // stale set and the version-bump drain stalls on them forever.
+                    let scored_ids: Vec<i64> = results.iter().map(|r| r.id as i64).collect();
+                    if let Err(e) =
+                        db.mark_items_scored_version(&scored_ids, crate::scoring::PIPELINE_VERSION)
+                    {
+                        tracing::warn!(target: "4da::scoring", error = %e, "Failed to stamp scored pipeline version");
+                    }
+
                     // Scoring event log — audit trail for debugging + recalibration
                     let total_scored = results.len();
                     let relevant_items: Vec<&SourceRelevance> =

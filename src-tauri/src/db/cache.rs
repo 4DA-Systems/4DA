@@ -192,6 +192,33 @@ impl Database {
         Ok(count)
     }
 
+    /// Stamp `scored_pipeline_version` for every item that was scored this run,
+    /// regardless of its relevance. This is load-bearing for the stale-drain:
+    /// `persist_analysis_scores` only writes items with `top_score > 0`, so items
+    /// that re-score to 0 (noise) would never be stamped, stay "stale" forever, and
+    /// the relevance-ordered drain would re-pick the same zero-scorers every run —
+    /// the backlog could never fully drain past a band of zero-scoring items. An
+    /// item we scored IS scored at the current version even if the verdict is "noise".
+    pub fn mark_items_scored_version(&self, ids: &[i64], version: i32) -> SqliteResult<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items SET scored_pipeline_version = ?1 WHERE id = ?2",
+            )?;
+            for id in ids {
+                stmt.execute(params![version, id])?;
+                count += 1;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
     /// Get items whose scores were computed under an older pipeline version.
     /// These need re-scoring to reflect current pipeline logic.
     pub fn get_stale_scored_items(
