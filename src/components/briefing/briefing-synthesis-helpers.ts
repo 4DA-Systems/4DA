@@ -24,9 +24,9 @@
  * `briefing-synthesis-helpers.test.ts` documents the contract.
  */
 
-/// The exact abstention marker the Rust synthesizer emits when input
-/// items are incoherent or too low-signal to synthesize. Must stay in
-/// sync with the string in `monitoring_briefing.rs:synthesize_morning_briefing`.
+/// A canonical, human-facing abstention marker (em-dash form). Detection does NOT rely
+/// on this exact string — `isAbstentionSynthesis` tolerates both Rust shapes and any
+/// dash normalization — it remains for display/snapshot use and as a representative example.
 export const ABSTENTION_MARKER = 'Low signal — no noteworthy intelligence overnight.';
 
 /**
@@ -43,11 +43,16 @@ export function isAbstentionSynthesis(synthesis: string | null | undefined): boo
   if (trimmed.length === 0) return false;
   // Normalize all dash-like characters to a plain hyphen for the check
   // so "—" "–" "-" all match equivalently.
+  // Collapse every dash-like char \u2014 Unicode dashes AND the ASCII hyphen (incl. the
+  // prompt's literal "--") \u2014 to a single hyphen, then accept both Rust shapes:
+  //   "Low signal -- no noteworthy intelligence overnight." (monitoring_briefing.rs:2176/2323/2621)
+  //   "Low signal \u2014 no new intelligence overnight."         (monitoring_briefing.rs:731)
   const normalizedFirstLine = trimmed
     .split('\n')[0]!
-    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[\u2010-\u2015\u2212-]+/g, '-')
+    .replace(/\s+/g, ' ')
     .toLowerCase();
-  return normalizedFirstLine.startsWith('low signal - no noteworthy intelligence');
+  return /^low signal\s*-\s*no (noteworthy|new) intelligence/.test(normalizedFirstLine);
 }
 
 /**

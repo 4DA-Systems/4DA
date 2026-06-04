@@ -32,6 +32,27 @@ describe('isAbstentionSynthesis', () => {
     expect(isAbstentionSynthesis('Low signal \u2013 no noteworthy intelligence overnight.')).toBe(true);
   });
 
+  // --- Rust contract guard: the EXACT literals monitoring_briefing.rs emits. ---
+  // The prior detector matched NEITHER of these (it only handled single-hyphen
+  // "noteworthy"), so a genuinely low-signal brief rendered a junk item list under
+  // a "nothing to report" verdict. These pin the contract against future drift.
+  it('matches the prompt literal with an ASCII double-hyphen (monitoring_briefing.rs:2176/2323/2621)', () => {
+    expect(isAbstentionSynthesis('Low signal -- no noteworthy intelligence overnight.')).toBe(true);
+  });
+
+  it('matches the "no new intelligence" variant (monitoring_briefing.rs:731)', () => {
+    expect(isAbstentionSynthesis('Low signal \u2014 no new intelligence overnight.')).toBe(true);
+  });
+
+  it('matches the double-hyphen variant with a telemetry tail', () => {
+    const input = 'Low signal -- no noteworthy intelligence overnight.\n\n(25 items scanned, synthesis skipped)';
+    expect(isAbstentionSynthesis(input)).toBe(true);
+  });
+
+  it('still rejects an unrelated "low signal" sentence', () => {
+    expect(isAbstentionSynthesis('Low signal strength on the wifi today, but plenty to report.')).toBe(false);
+  });
+
   it('rejects a normal three-section briefing', () => {
     const normal = `SITUATION
 Tokio released a security advisory [3].
