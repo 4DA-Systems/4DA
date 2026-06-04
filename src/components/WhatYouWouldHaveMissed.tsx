@@ -64,14 +64,6 @@ function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | nul
     : null;
 }
 
-function formatTimeSaved(totalScanned: number): string {
-  // Average 8 seconds per article to scan/evaluate manually
-  const minutes = Math.round((totalScanned * 8) / 60);
-  if (minutes < 60) return `${minutes} min`;
-  const hours = (minutes / 60).toFixed(1);
-  return `${hours} hr`;
-}
-
 function getSignalLabel(item: SourceRelevance): string | null {
   const type = item.score_breakdown?.content_type || item.signal_type;
   switch (type) {
@@ -121,7 +113,6 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
   if (!insight || insight.totalScanned < 5) return null;
 
   const { relevant, totalScanned, rejected, rejectionRate, criticalSave } = insight;
-  const timeSaved = formatTimeSaved(rejected);
   const signalLabel = criticalSave ? getSignalLabel(criticalSave) : null;
   const signalColor = criticalSave ? getSignalColor(criticalSave) : '#D4AF37';
 
@@ -189,13 +180,6 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
               <div className="text-2xl font-bold font-mono text-success">{relevant.length}</div>
               <div className="text-[10px] text-text-muted">
                 {t('missed.signalSurfaced')}
-              </div>
-            </div>
-            <div className="w-px h-8 bg-border/50" />
-            <div>
-              <div className="text-2xl font-bold font-mono text-text-secondary">{timeSaved}</div>
-              <div className="text-[10px] text-text-muted">
-                {t('missed.timeSaved')}
               </div>
             </div>
           </div>
