@@ -7,7 +7,6 @@ declare module '*/boot-ring.js';
 declare module '*/engagement-bars.js';
 declare module '*/achievement-progress.js';
 declare module '*/ambient-intelligence.js';
-declare module '*/score-fingerprint.js';
 declare module '*/decision-countdown.js';
 declare module '*/signal-waveform.js';
 declare module '*/knowledge-depth.js';
