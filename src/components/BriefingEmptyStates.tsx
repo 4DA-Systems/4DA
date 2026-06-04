@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks/use-license';
 import { useFourdaComponent } from '../hooks/use-fourda-component';
-import { registerFourdaComponent } from '../lib/fourda-components';
+import { SimplexUnfoldSVG } from './geometry/SimplexUnfoldSVG';
 
 /** Analysis in progress — spinner + live progress */
 export function BriefingLoadingState() {
@@ -167,14 +167,12 @@ export function BriefingNoDataState() {
   const embeddingMode = useAppStore(s => s.embeddingMode);
   const { containerRef: turingRef } = useFourdaComponent('fourda-turing-fire');
 
-  useEffect(() => { void registerFourdaComponent('fourda-simplex-unfold'); }, []);
-
   return (
     <div className="relative bg-bg-primary rounded-lg">
       <div ref={turingRef} className="absolute inset-0 opacity-[0.18] rounded-lg overflow-hidden pointer-events-none" aria-hidden="true" />
       <div className="relative flex flex-col items-center justify-center py-20 px-8">
         <div className="w-[120px] h-[120px] mb-6 rounded-2xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
-          <fourda-simplex-unfold style={{ width: '120px', height: '120px', display: 'block' }} />
+          <SimplexUnfoldSVG size={120} />
         </div>
         <h2 className="text-xl font-medium text-white mb-2">{t('briefing.noIntelligence')}</h2>
         <p className="text-sm text-text-muted text-center max-w-md mb-6">

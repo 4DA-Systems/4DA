@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { SmartEmptyState } from './SmartEmptyState';
 import { getStageLabel } from '../utils/score';
-import { registerFourdaComponent } from '../lib/fourda-components';
+import { PlatonicSVG } from './geometry/PlatonicSVG';
+import { TETRAHEDRON } from './geometry/geometries';
 
 interface LoadingOrEmptyStateProps {
   loading: boolean;
@@ -24,7 +24,6 @@ export function LoadingOrEmptyState({
   onStartAnalysis,
 }: LoadingOrEmptyStateProps) {
   const { t } = useTranslation();
-  useEffect(() => { void registerFourdaComponent('fourda-tetrahedron'); }, []);
 
   if (loading) {
     return (
@@ -55,7 +54,7 @@ export function LoadingOrEmptyState({
   return (
     <div className="text-center py-16" role="status" aria-busy={false}>
       <div className="w-16 h-16 mx-auto mb-4 rounded-xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
-        <fourda-tetrahedron style={{ width: '64px', height: '64px', display: 'block' }} />
+        <PlatonicSVG {...TETRAHEDRON} size={64} />
       </div>
       <p className="text-lg text-white mb-2">{t('results.noResults')}</p>
       <p className="text-sm text-text-muted mb-3">

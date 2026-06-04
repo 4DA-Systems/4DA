@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import { BrandMark } from '../void-engine/BrandMark';
 import { getStageNarration } from '../../utils/first-run-messages';
-import { registerFourdaComponent } from '../../lib/fourda-components';
+import { SimplexUnfoldSVG } from '../geometry/SimplexUnfoldSVG';
 import type { Phase, ScanSummary } from './utils';
 
 // ============================================================================
@@ -153,8 +153,6 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
-  useEffect(() => { void registerFourdaComponent('fourda-simplex-unfold'); }, []);
-
   // Estimated time remaining — initialized from parent's source-count estimate
   // Uses a ref-based counter to avoid infinite timer chains in test environments
   const initialSeconds = estimatedSecondsProp ?? 240;
@@ -220,7 +218,7 @@ export function LoadingState({
 
       {phase === 'preparing' && (
         <div className="w-[120px] h-[120px] mx-auto mb-3 opacity-80">
-          <fourda-simplex-unfold style={{ width: '120px', height: '120px', display: 'block' }} />
+          <SimplexUnfoldSVG size={120} />
         </div>
       )}
 
