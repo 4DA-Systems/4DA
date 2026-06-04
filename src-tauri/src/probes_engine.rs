@@ -109,17 +109,22 @@ pub(crate) fn detect_user_domain(ctx: &ScoringContext) -> Domain {
     // get low weight and ACE's contribution is capped — they break ties, never
     // outvote what the user actually told us.
 
-    // Explicit onboarding tech stack (high trust).
+    // Onboarding tech stack the user declared (trusted, but for a full-stack dev
+    // it is balanced and shouldn't outvote their followed topics).
     for tech in &ctx.declared_tech {
         let t = tech.to_lowercase();
         for (kws, idx) in &keyword_sets {
             if kws.iter().any(|k| kw_matches(&t, k)) {
-                scores[*idx] += 4;
+                scores[*idx] += 3;
             }
         }
     }
 
-    // Interests: explicit (user-typed) dominate; inferred/imported are weak.
+    // Interests are the strongest identity signal — the topics the user follows.
+    // Explicit (user-typed) edge out inferred, but ACE-inferred interests are
+    // auto-discovered from the user's ACTUAL code, so they're still strong. They
+    // must NOT be near-noise: a cold-start user whose interests are all ACE-seeded
+    // (the common case) would otherwise be mis-targeted by raw stack breadth.
     for interest in &ctx.interests {
         let weight = if matches!(
             interest.source,
@@ -127,7 +132,7 @@ pub(crate) fn detect_user_domain(ctx: &ScoringContext) -> Domain {
         ) {
             5
         } else {
-            1
+            4
         };
         let t = interest.topic.to_lowercase();
         for (kws, idx) in &keyword_sets {
@@ -137,14 +142,20 @@ pub(crate) fn detect_user_domain(ctx: &ScoringContext) -> Domain {
         }
     }
 
-    // Auto-detected composed-stack tech (low weight — breadth-biased).
+    // Auto-detected composed-stack tech is breadth-biased (a full-stack repo
+    // yields far more web tokens than systems ones). Accumulate separately and
+    // cap per-domain so stack breadth can't outvote the user's interests.
+    let mut stack_scores: [u32; 5] = [0; 5];
     for tech in &ctx.composed_stack.all_tech {
         let t = tech.to_lowercase();
         for (kws, idx) in &keyword_sets {
             if kws.iter().any(|k| kw_matches(&t, k)) {
-                scores[*idx] += 1;
+                stack_scores[*idx] += 1;
             }
         }
+    }
+    for (idx, s) in stack_scores.iter().enumerate() {
+        scores[idx] += (*s).min(3);
     }
 
     // ACE active topics: noisy and numerous (thousands). Accumulate separately
@@ -539,6 +550,43 @@ mod tests {
         let ctx = ScoringContext::builder()
             .interest_count(3)
             .interests(interests)
+            .composed_stack(stack)
+            .build();
+        assert_eq!(detect_user_domain(&ctx), Domain::Systems);
+    }
+
+    #[test]
+    fn domain_detection_inferred_interests_beat_fullstack_breadth() {
+        use crate::context_engine::{Interest, InterestSource};
+        // The exact dogfood profile: a cold-start user whose interests were
+        // ACE-seeded (source=Inferred) to rust/tauri/axum, a genuinely full-stack
+        // onboarding tech list, and web-heavy auto-detected stacks. The followed
+        // (inferred) topics are all systems and must still win.
+        let interests = ["rust", "tauri", "axum"]
+            .iter()
+            .map(|t| Interest {
+                id: None,
+                topic: t.to_string(),
+                weight: 0.8,
+                embedding: None,
+                source: InterestSource::Inferred,
+            })
+            .collect();
+        let stack = crate::stacks::compose_profiles(&[
+            "rust_systems".to_string(),
+            "nextjs_fullstack".to_string(),
+            "bootstrap_webdev".to_string(),
+        ]);
+        let ctx = ScoringContext::builder()
+            .interest_count(3)
+            .interests(interests)
+            .declared_tech(vec![
+                "axum".to_string(),
+                "express".to_string(),
+                "react".to_string(),
+                "tauri".to_string(),
+                "typescript".to_string(),
+            ])
             .composed_stack(stack)
             .build();
         assert_eq!(detect_user_domain(&ctx), Domain::Systems);
