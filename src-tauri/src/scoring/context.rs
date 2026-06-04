@@ -418,6 +418,50 @@ pub(crate) async fn build_scoring_context(db: &Database) -> Result<ScoringContex
     Ok(context)
 }
 
+/// Reject low-quality ACE-discovered topics before they become synthesized
+/// scoring interests. Such topics pollute the feed (e.g. a commit-type label or
+/// a raw code identifier "matching" unrelated content) and inflate the
+/// calibration context dimension. High-precision filter — it only rejects things
+/// that are clearly NOT semantic topics, so legitimate technical topics pass.
+pub(crate) fn is_low_quality_topic(topic: &str) -> bool {
+    let t = topic.trim();
+    // Too short to be a meaningful topic.
+    if t.chars().count() < 3 {
+        return true;
+    }
+    // Conventional-commit metadata: "commit-feat", or a bare commit type.
+    if t.starts_with("commit-") || t.starts_with("commit_") {
+        return true;
+    }
+    let lower = t.to_lowercase();
+    const COMMIT_TYPES: &[&str] = &[
+        "feat", "fix", "docs", "style", "refactor", "test", "chore", "perf", "ci", "build",
+        "revert",
+    ];
+    if COMMIT_TYPES.contains(&lower.as_str()) {
+        return true;
+    }
+    // No letters at all — pure numbers / versions / symbols ("020", "1.2.3").
+    if !t.chars().any(|c| c.is_alphabetic()) {
+        return true;
+    }
+    // Starts with a symbol — code fragments like "$name", "#struct_ident".
+    if !t.chars().next().is_some_and(char::is_alphanumeric) {
+        return true;
+    }
+    // camelCase / PascalCase code identifier (GetSystemTimes, audioExtractor):
+    // a lowercase letter immediately followed by an uppercase one. Acronyms
+    // (API, REST, UI) and ordinary words (rust, database) are unaffected.
+    let chars: Vec<char> = t.chars().collect();
+    if chars
+        .windows(2)
+        .any(|w| w[0].is_ascii_lowercase() && w[1].is_ascii_uppercase())
+    {
+        return true;
+    }
+    false
+}
+
 /// Synthesize ACE-discovered context into keyword interests.
 ///
 /// Bridges ACE intelligence into keyword scoring: detected tech, active topics,
@@ -471,7 +515,10 @@ pub(crate) fn synthesize_ace_interests(
             .get(topic_name)
             .copied()
             .unwrap_or(0.0);
-        if conf >= 0.65 && !existing.contains(&topic_name.to_lowercase()) {
+        if conf >= 0.65
+            && !is_low_quality_topic(topic_name)
+            && !existing.contains(&topic_name.to_lowercase())
+        {
             let embedding = topic_embeddings.get(topic_name).cloned();
             interests.push(crate::context_engine::Interest {
                 id: None,
@@ -569,6 +616,48 @@ mod tests {
             is_direct: direct,
             search_terms: vec![],
             ecosystem: "rust".to_string(),
+        }
+    }
+
+    #[test]
+    fn low_quality_topic_filters_noise_keeps_real_topics() {
+        // Noise that must be rejected.
+        for bad in [
+            "commit-feat",
+            "commit-fix",
+            "feat",
+            "fix",
+            "chore",
+            "ci",
+            "020",
+            "1976",
+            "1.2.3",
+            "$name",
+            "#struct_ident",
+            "ab",
+            "GetSystemTimes",
+            "audioExtractor",
+        ] {
+            assert!(
+                is_low_quality_topic(bad),
+                "{bad:?} should be rejected as low-quality"
+            );
+        }
+        // Real topics that must pass.
+        for good in [
+            "rust",
+            "tauri",
+            "database",
+            "kubernetes",
+            "embeddings",
+            "api",
+            " rest", // trims to "rest"
+            "machine-learning",
+        ] {
+            assert!(
+                !is_low_quality_topic(good),
+                "{good:?} should be kept as a valid topic"
+            );
         }
     }
 

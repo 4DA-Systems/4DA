@@ -213,6 +213,31 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "services",
     "provider",
     "providers",
+    // Generic descriptive words that appear as sub-terms of compound package
+    // names (e.g. "winston-daily-rotate-file" → "daily"/"rotate") and would
+    // otherwise match unrelated content. The full normalized package name still
+    // matches; only these bare sub-terms are filtered.
+    "daily",
+    "weekly",
+    "monthly",
+    "hourly",
+    "yearly",
+    "rotate",
+    "simple",
+    "easy",
+    "quick",
+    "fast",
+    "tiny",
+    "mini",
+    "basic",
+    "pretty",
+    "modern",
+    "native",
+    "smart",
+    "plus",
+    "extra",
+    "super",
+    "auto",
 ];
 
 /// Language-context words that disambiguate package names from English
@@ -775,6 +800,22 @@ mod tests {
         assert!(terms.contains(&"http-common".to_string()));
         assert!(!terms.contains(&"http".to_string()));
         assert!(!terms.contains(&"common".to_string()));
+    }
+
+    #[test]
+    fn test_extract_search_terms_winston_no_generic_subterms() {
+        // The dogfood smoking gun: a logging library was "matching" an AI paper
+        // via its generic sub-tokens "daily"/"rotate"/"file". Only the full name
+        // and the distinctive "winston" should be searchable now.
+        let terms = extract_search_terms("winston-daily-rotate-file");
+        assert!(terms.contains(&"winston-daily-rotate-file".to_string()));
+        assert!(terms.contains(&"winston".to_string()));
+        for generic in ["daily", "rotate", "file"] {
+            assert!(
+                !terms.contains(&generic.to_string()),
+                "'{generic}' is a generic word and must not be a search term"
+            );
+        }
     }
 
     #[test]

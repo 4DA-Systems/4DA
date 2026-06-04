@@ -163,11 +163,11 @@ pub(crate) async fn auto_seed_interests_from_ace() -> Result<()> {
     for topic in &ace_ctx.active_topics {
         let confidence = ace_ctx.topic_confidence.get(topic).copied().unwrap_or(0.5);
         // Only add topics with good confidence that aren't already in tech
-        if confidence >= 0.7 && !ace_ctx.detected_tech.contains(topic) {
-            // Skip commit-type patterns and generic terms
-            if !topic.starts_with("commit-") && topic.len() > 2 {
-                topics_to_seed.push((topic.clone(), 0.7));
-            }
+        if confidence >= 0.7
+            && !ace_ctx.detected_tech.contains(topic)
+            && !crate::scoring::is_low_quality_topic(topic)
+        {
+            topics_to_seed.push((topic.clone(), 0.7));
         }
     }
 

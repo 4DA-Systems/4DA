@@ -18,6 +18,7 @@ pub(crate) fn detect_user_domain(ctx: &ScoringContext) -> Domain {
 
     let systems_kw = [
         "rust", "c++", "clang", "kernel", "embedded", "systems", "llvm", "zig", "assembly",
+        "tauri", "axum", "wasm",
     ];
     let web_kw = [
         "react",
@@ -101,44 +102,64 @@ pub(crate) fn detect_user_domain(ctx: &ScoringContext) -> Domain {
             .any(|word| word == kw)
     }
 
-    // Check declared tech
+    // Weighting reflects trust in the signal. The user's EXPLICIT identity —
+    // onboarding tech stack + interests they typed — dominates. Auto-detected
+    // stacks and ACE-discovered topics are breadth-biased (a Rust dev with a
+    // React frontend has far more web tech tokens than systems ones), so they
+    // get low weight and ACE's contribution is capped — they break ties, never
+    // outvote what the user actually told us.
+
+    // Explicit onboarding tech stack (high trust).
     for tech in &ctx.declared_tech {
         let t = tech.to_lowercase();
         for (kws, idx) in &keyword_sets {
             if kws.iter().any(|k| kw_matches(&t, k)) {
-                scores[*idx] += 3;
+                scores[*idx] += 4;
             }
         }
     }
 
-    // Check interests
+    // Interests: explicit (user-typed) dominate; inferred/imported are weak.
     for interest in &ctx.interests {
+        let weight = if matches!(
+            interest.source,
+            crate::context_engine::InterestSource::Explicit
+        ) {
+            5
+        } else {
+            1
+        };
         let t = interest.topic.to_lowercase();
         for (kws, idx) in &keyword_sets {
             if kws.iter().any(|k| kw_matches(&t, k)) {
-                scores[*idx] += 2;
+                scores[*idx] += weight;
             }
         }
     }
 
-    // Check composed stack tech keywords
+    // Auto-detected composed-stack tech (low weight — breadth-biased).
     for tech in &ctx.composed_stack.all_tech {
         let t = tech.to_lowercase();
-        for (kws, idx) in &keyword_sets {
-            if kws.iter().any(|k| kw_matches(&t, k)) {
-                scores[*idx] += 2;
-            }
-        }
-    }
-
-    // Check ACE active topics
-    for topic in &ctx.ace_ctx.active_topics {
-        let t = topic.to_lowercase();
         for (kws, idx) in &keyword_sets {
             if kws.iter().any(|k| kw_matches(&t, k)) {
                 scores[*idx] += 1;
             }
         }
+    }
+
+    // ACE active topics: noisy and numerous (thousands). Accumulate separately
+    // and cap each domain's contribution so topic breadth can't dominate.
+    let mut ace_scores: [u32; 5] = [0; 5];
+    for topic in &ctx.ace_ctx.active_topics {
+        let t = topic.to_lowercase();
+        for (kws, idx) in &keyword_sets {
+            if kws.iter().any(|k| kw_matches(&t, k)) {
+                ace_scores[*idx] += 1;
+            }
+        }
+    }
+    for (idx, ace) in ace_scores.iter().enumerate() {
+        scores[idx] += (*ace).min(3);
     }
 
     let max_score = *scores.iter().max().unwrap_or(&0);
@@ -492,6 +513,35 @@ mod tests {
     fn domain_detection_empty_defaults_to_web() {
         let ctx = ScoringContext::builder().build();
         assert_eq!(detect_user_domain(&ctx), Domain::Web);
+    }
+
+    #[test]
+    fn domain_detection_explicit_interests_beat_web_stack_breadth() {
+        use crate::context_engine::{Interest, InterestSource};
+        // The dogfood bug: a Rust/Tauri/Axum dev whose repo also has a large
+        // React/Next frontend was classified "web" because the web stack has far
+        // more tech tokens. The user's EXPLICIT interests are all systems and
+        // must win over auto-detected web-stack breadth.
+        let interests = ["rust", "tauri", "axum"]
+            .iter()
+            .map(|t| Interest {
+                id: None,
+                topic: t.to_string(),
+                weight: 1.0,
+                embedding: None,
+                source: InterestSource::Explicit,
+            })
+            .collect();
+        let stack = crate::stacks::compose_profiles(&[
+            "nextjs_fullstack".to_string(),
+            "bootstrap_webdev".to_string(),
+        ]);
+        let ctx = ScoringContext::builder()
+            .interest_count(3)
+            .interests(interests)
+            .composed_stack(stack)
+            .build();
+        assert_eq!(detect_user_domain(&ctx), Domain::Systems);
     }
 
     #[test]

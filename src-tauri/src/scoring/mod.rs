@@ -42,7 +42,7 @@ pub(crate) use affinity::{
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::{calibrate_score, compute_interest_score};
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
-pub(crate) use context::build_scoring_context;
+pub(crate) use context::{build_scoring_context, is_low_quality_topic};
 pub(crate) use dedup::{
     apply_domain_diversity, apply_source_topic_diversity, compute_serendipity_candidates,
     dedup_results, fuzzy_dedup_results, sort_results, topic_dedup_results,

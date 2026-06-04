@@ -441,15 +441,11 @@ fn extract_topics_from_commit_message(message: &str) -> Vec<String> {
     let mut topics = HashSet::new();
     let message_lower = message.to_lowercase();
 
-    // Conventional commit prefixes
-    let prefixes = [
-        "feat", "fix", "docs", "style", "refactor", "test", "chore", "perf", "ci",
-    ];
-    for prefix in prefixes {
-        if message_lower.starts_with(prefix) {
-            topics.insert(format!("commit-{prefix}"));
-        }
-    }
+    // NOTE: conventional-commit prefixes (feat/fix/chore/…) are intentionally NOT
+    // emitted as topics. They are commit *metadata*, not semantic interests — every
+    // downstream consumer filtered them out, yet they accumulated in active_topics at
+    // high confidence and leaked into synthesized scoring interests. Keeping only the
+    // technology keywords below.
 
     // Technology keywords
     let tech_keywords = [
@@ -522,12 +518,13 @@ mod tests {
     #[test]
     fn test_extract_topics_from_commit_message() {
         let topics = extract_topics_from_commit_message("feat: add authentication API");
-        assert!(topics.contains(&"commit-feat".to_string()));
+        // commit-type prefixes are NOT topics (commit metadata, not interests)
+        assert!(!topics.contains(&"commit-feat".to_string()));
         assert!(topics.contains(&"auth".to_string()));
         assert!(topics.contains(&"api".to_string()));
 
         let topics = extract_topics_from_commit_message("fix: resolve database migration issue");
-        assert!(topics.contains(&"commit-fix".to_string()));
+        assert!(!topics.contains(&"commit-fix".to_string()));
         assert!(topics.contains(&"database".to_string()));
         assert!(topics.contains(&"migration".to_string()));
     }
