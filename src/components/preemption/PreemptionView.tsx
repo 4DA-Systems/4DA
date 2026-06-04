@@ -87,7 +87,7 @@ const PreemptionView = memo(function PreemptionView() {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, [lastDismissed]);
 
-  const { verifiedItems, assessedItems, developingItems } = useMemo(() => {
+  const { verifiedItems, assessedItems, developingItems, criticalCount, highCount } = useMemo(() => {
     const visible = (feed?.items ?? [])
       .filter(item => !dismissedIds.has(item.id))
       .slice()
@@ -98,7 +98,14 @@ const PreemptionView = memo(function PreemptionView() {
     const verified: EvidenceItem[] = [];
     const assessed: EvidenceItem[] = [];
     const developing: EvidenceItem[] = [];
+    // Count urgencies from the VISIBLE (post-dismissal) set, not feed.*_count from the
+    // backend — otherwise dismissing the only critical leaves the bar reading "1 critical"
+    // over an empty list (the count must match the cards beneath it).
+    let critical = 0;
+    let high = 0;
     for (const item of visible) {
+      if (item.urgency === 'critical') critical += 1;
+      else if (item.urgency === 'high') high += 1;
       if (item.confidence.provenance === 'osv_verified') {
         verified.push(item);
       } else if (item.confidence.provenance === 'llm_assessed') {
@@ -107,7 +114,13 @@ const PreemptionView = memo(function PreemptionView() {
         developing.push(item);
       }
     }
-    return { verifiedItems: verified, assessedItems: assessed, developingItems: developing };
+    return {
+      verifiedItems: verified,
+      assessedItems: assessed,
+      developingItems: developing,
+      criticalCount: critical,
+      highCount: high,
+    };
   }, [feed, dismissedIds]);
 
   const totalVisible = verifiedItems.length + assessedItems.length + developingItems.length;
@@ -152,16 +165,16 @@ const PreemptionView = memo(function PreemptionView() {
                   {verifiedItems.length} {t('preemption.badge.verified').toLowerCase()}
                 </span>
               )}
-              {feed.critical_count > 0 && (
+              {criticalCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                  {feed.critical_count} {t('preemption.urgency.critical').toLowerCase()}
+                  {criticalCount} {t('preemption.urgency.critical').toLowerCase()}
                 </span>
               )}
-              {feed.high_count > 0 && (
+              {highCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-orange-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-                  {feed.high_count} {t('preemption.urgency.high').toLowerCase()}
+                  {highCount} {t('preemption.urgency.high').toLowerCase()}
                 </span>
               )}
             </div>
