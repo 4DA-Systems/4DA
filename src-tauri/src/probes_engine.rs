@@ -121,19 +121,14 @@ pub(crate) fn detect_user_domain(ctx: &ScoringContext) -> Domain {
     }
 
     // Interests are the strongest identity signal — the topics the user follows.
-    // Explicit (user-typed) edge out inferred, but ACE-inferred interests are
-    // auto-discovered from the user's ACTUAL code, so they're still strong. They
-    // must NOT be near-noise: a cold-start user whose interests are all ACE-seeded
-    // (the common case) would otherwise be mis-targeted by raw stack breadth.
+    // CURATED interests (persisted in explicit_interests, id=Some — whether the
+    // user typed them or accepted an ACE seed) are their chosen identity and
+    // dominate. ACE-SYNTHESIZED interests (id=None — auto-derived at scoring time
+    // from detected tech / dependencies) are weaker: a full-stack repo synthesizes
+    // its entire frontend (react, typescript, next.js…) into interests, and that
+    // breadth must NOT outvote the handful of topics the user actually curated.
     for interest in &ctx.interests {
-        let weight = if matches!(
-            interest.source,
-            crate::context_engine::InterestSource::Explicit
-        ) {
-            5
-        } else {
-            4
-        };
+        let weight = if interest.id.is_some() { 5 } else { 2 };
         let t = interest.topic.to_lowercase();
         for (kws, idx) in &keyword_sets {
             if kws.iter().any(|k| kw_matches(&t, k)) {
@@ -527,16 +522,16 @@ mod tests {
     }
 
     #[test]
-    fn domain_detection_explicit_interests_beat_web_stack_breadth() {
+    fn domain_detection_curated_interests_beat_web_stack_breadth() {
         use crate::context_engine::{Interest, InterestSource};
-        // The dogfood bug: a Rust/Tauri/Axum dev whose repo also has a large
-        // React/Next frontend was classified "web" because the web stack has far
-        // more tech tokens. The user's EXPLICIT interests are all systems and
-        // must win over auto-detected web-stack breadth.
+        // A Rust/Tauri/Axum dev whose repo also has a large React/Next frontend.
+        // Their CURATED interests (id=Some — persisted in explicit_interests) are
+        // all systems and must win over auto-detected web-stack breadth.
         let interests = ["rust", "tauri", "axum"]
             .iter()
-            .map(|t| Interest {
-                id: None,
+            .enumerate()
+            .map(|(i, t)| Interest {
+                id: Some(i as i64 + 1),
                 topic: t.to_string(),
                 weight: 1.0,
                 embedding: None,
@@ -556,29 +551,40 @@ mod tests {
     }
 
     #[test]
-    fn domain_detection_inferred_interests_beat_fullstack_breadth() {
+    fn domain_detection_curated_beats_synthesized_frontend() {
         use crate::context_engine::{Interest, InterestSource};
-        // The exact dogfood profile: a cold-start user whose interests were
-        // ACE-seeded (source=Inferred) to rust/tauri/axum, a genuinely full-stack
-        // onboarding tech list, and web-heavy auto-detected stacks. The followed
-        // (inferred) topics are all systems and must still win.
-        let interests = ["rust", "tauri", "axum"]
+        // The exact dogfood profile: 3 CURATED systems interests (id=Some,
+        // rust/tauri/axum) plus ACE-SYNTHESIZED frontend interests (id=None,
+        // react/typescript/javascript/next.js/express from a detected React
+        // frontend), a full-stack onboarding tech list, and web-heavy auto-stacks.
+        // The curated topics the user chose must beat the synthesized frontend.
+        let mut interests: Vec<Interest> = ["rust", "tauri", "axum"]
             .iter()
-            .map(|t| Interest {
-                id: None,
+            .enumerate()
+            .map(|(i, t)| Interest {
+                id: Some(i as i64 + 1),
                 topic: t.to_string(),
                 weight: 0.8,
                 embedding: None,
                 source: InterestSource::Inferred,
             })
             .collect();
+        for t in ["react", "typescript", "javascript", "next.js", "express"] {
+            interests.push(Interest {
+                id: None, // ACE-synthesized at scoring time
+                topic: t.to_string(),
+                weight: 0.4,
+                embedding: None,
+                source: InterestSource::Inferred,
+            });
+        }
         let stack = crate::stacks::compose_profiles(&[
             "rust_systems".to_string(),
             "nextjs_fullstack".to_string(),
             "bootstrap_webdev".to_string(),
         ]);
         let ctx = ScoringContext::builder()
-            .interest_count(3)
+            .interest_count(8)
             .interests(interests)
             .declared_tech(vec![
                 "axum".to_string(),
