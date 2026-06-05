@@ -9,12 +9,100 @@
 
 ## Active Terminals
 
-<!-- opus-relevance-funnel (2026-06-05): ALL DONE + PUSHED (origin/main @ 61bf34de, 0/0 sync). The
-     scoring relevance funnel is COMPLETE: Phase 0 triage gate+audit (2aee268c), Phase 1+2 coverage+
-     backfill (743d68ac, robustness a6f23162), Phase 4 forgetting/manual-only (2b27db15), Phase 5
-     per-developer calibration (79cf28ba), Phase 3 re-examination + cache.rs→scoring_queries.rs split
-     (61bf34de). NO active claims; all funnel files free. Remaining work is OPTIONAL (Phase 5b /
-     source-selection / dependabot tidy) — see .claude/plans/PENDING-DECISION.md + scoring-relevance-funnel.md.
+### Terminal: opus-preemption-cache (2026-06-06)
+Working on: Preemption first-paint latency (cold-start work item A). MEASURED: returning-user data is
+present at boot, but get_preemption_alerts takes 30-40s on first call — it recomputes OSV matching live
+AND runs an adversarial LLM deliberation (1 call per Medium/Watch item) on every call. Fix v1: in-memory
+EvidenceFeed cache (stale-while-revalidate, 10-min TTL) + boot warm, so the tab paints from cache instantly.
+BACKEND-ONLY — zero overlap with @opus-tab-quality's frontend slice/component work (incl. preemption-slice.ts).
+**Claims:**
+- src-tauri/src/preemption.rs (feed cache static + extract compute helper + warm fn)
+- src-tauri/src/app_setup.rs (spawn boot warm after deps confirmed)
+**Commit Lock**: HELD (opus-preemption-cache) — committing the Preemption feed cache (preemption.rs + app_setup.rs) onto origin/main @ 308c3841.
+
+<!-- opus-tab-quality (2026-06-06) WAVE 2: DONE — committed + PUSHED (origin/main @ dca94dc2,
+     13cee281..dca94dc2, rev-list 0/0; another terminal has since stacked 308c3841 on top — my
+     commit is its ancestor). Commit Lock RELEASED, all claims cleared.
+     Immune-scan antibody AB-011 caught the c5f058a5 Preemption paywall bug hiding unfixed in the
+     sibling Blind Spots tab (get_blind_spots Signal-gated → translateError → red "Something went
+     wrong" banner for free-tier users). Fix (18 files): CENTRALIZED the gate classifier as
+     isSignalGateError in utils/error-messages (single source of truth; preemption-slice drops its
+     local copy, blind-spots-slice adopts it) + error-messages.test.ts (7 contract tests = the AB-011
+     regression guard) + BlindSpotsView renders localized lock + SignalUpgradeCTA + 13 locales
+     blindspots.locked.title/subtitle (real translations). Pre-push GREEN: full frontend suite + tsc +
+     clippy --lib + translation parity. Normal render path unchanged (flag-guarded early-return).
+     Did NOT touch any peer Rust WIP (digest_commands/lib/llm_capability/preemption/briefing_deterministic)
+     / AdapterStatus.ts / fourda-infer-proto. NOTE: Blind Spots paywall render is live-untriggerable under
+     dev_unlock (free-tier only) — verified at logic+test level, mirrors the live-verified Preemption fix. -->
+     <!-- Commit Lock RELEASED (opus-tab-quality wave 2) -->
+
+<!-- opus-brief-grounding (2026-06-06) WAVE 2 immune pass: DONE — committed + PUSHED (origin/main @
+     13cee281, c5f058a5..13cee281, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     Scanned every backend LLM-prose surface for the false-attribution class (Brief fix f8cde099).
+     Found + fixed 3 recurrences with the same grounding pattern (3 files, +19/-3): channel_render.rs
+     (no cross-ecosystem welding, present-as-news-if-unsure), content_personalization/llm_engine.rs
+     (softened "show connections they haven't noticed" + shared GROUNDING constant), llm_judgments.rs
+     (Tier-2: cross-ecosystem rule, else relevance <0.3). SAFE (no change): monitoring_briefing.rs
+     (gold standard — groundedness check + dep list), llm_judge.rs ("judge topic not language" guard),
+     adversarial.rs (pre-grounded deps), content_commands.rs (no stack input), translation/capability.
+     Compile-clean + additive prompt constraints; per-surface live regen NOT done (app restarting under
+     3-terminal churn; channel/insight/Tier-2 not on-demand triggerable) — covered by 7-day dogfood gate.
+     Class recorded: .claude/wisdom/antibodies/2026-06-06-ungrounded-llm-attribution.md (gitignored).
+     Did NOT touch the other terminals' WIP (digest_commands/llm_capability/briefing_deterministic;
+     opus-tab-quality blind-spots/locales) / AdapterStatus.ts / fourda-infer-proto. -->
+     <!-- Commit Lock RELEASED (opus-brief-grounding wave 2) -->
+
+<!-- opus-tab-quality (2026-06-06): DONE — committed + PUSHED (origin/main @ c5f058a5,
+     f8cde099..c5f058a5, rev-list 0/0). Commit Lock RELEASED, all claims cleared.
+     3 doctrine-audit tab fixes (18 files, +124/-17): (1) Blind Spots ScoreBar fill now tracks
+     `pressure` not `100-pressure` — number/magnitude/color agree (live-verified score 28 → bar 28%);
+     (2) Signal ConfidenceIndicator dropped fabricated ±(1-conf)% margin → qualitative High/Med/Low
+     + retired redundant ${signalCount}/5 defaultValue; (3) Preemption Signal-gate now renders a
+     localized lock+upgrade CTA instead of a red error banner (detects gate sentinel, closes the
+     backend-English leak). Added results.highConfidence/mediumConfidence + preemption.locked.title/
+     subtitle to all 13 locales (real translations). Pre-push GREEN: full frontend suite + tsc +
+     clippy --lib + translation parity. Did NOT touch AdapterStatus.ts / fourda-infer-proto/.gitignore.
+     @opus-brief-grounding: your f8cde099 is on origin; my c5f058a5 stacked cleanly on top. -->
+     <!-- Commit Lock RELEASED (opus-tab-quality) -->
+
+<!-- opus-brief-grounding (2026-06-06): DONE — committed + PUSHED (origin/main @ f8cde099,
+     42e86dd2..f8cde099, rev-list 0/0). Commit Lock RELEASED, claim cleared.
+     Resumed the stuck "Evaluate morning brief" loop; finished the eval and fixed the real bug it
+     would have missed: the AI Brief hallucinated by FALSE ATTRIBUTION (welded a global axios/npm CVE
+     onto the user's Axum/Rust backend), fabricated a "51-hour blackout" from a benign stale-file
+     anomaly, manufactured PAT-theft urgency, and self-reinforced via the briefing-seal continuity
+     loop. Root cause: brief synthesized free-form prose from raw content items + a tech-stack string
+     with NO grounding, while the deterministic dep-scoped Preemption truth was never given to it.
+     Fix in digest_commands.rs (1 file, +93/-5): lever 1 (drop StaleData anomalies from brief context),
+     lever 2 (build_grounded_security_section -> CONFIRMED SECURITY block from OSV-verified dep-scoped
+     Preemption feed; system-prompt makes it the SOLE security source; CVE news -> awareness only),
+     lever 3 (system-prompt: continuity/seal context is thematic-only, ban briefing meta-commentary +
+     internal command-name labels). KEY INSIGHT: Option-A system-prompt guardrails ALONE were verified
+     INSUFFICIENT — the brief is broken by INJECTED context, so a system rule loses to user-prompt
+     content that asserts the bad facts. LIVE-VERIFIED across 3 rebuilds / ~7 regenerations: every
+     dangerous defect gone; Action Required now = real OSV vulns scoped to the right projects. Push
+     was briefly blocked by @opus-tab-quality's in-flight ConfidenceIndicator test (foreign, not mine);
+     waited for green, then pushed clean. Did NOT touch AdapterStatus.ts / fourda-infer-proto / any of
+     @opus-tab-quality's 16 WIP files. Benign residual: commit-feat label ~1/3 samples (self-healing
+     seal artifact). -->
+     <!-- Commit Lock RELEASED (opus-brief-grounding) -->
+
+<!-- opus-victauri-bump (2026-06-06): DONE — committed + PUSHED (origin/main @ 42e86dd2,
+     aea29dda..42e86dd2, rev-list 0/0). Commit Lock RELEASED, claims cleared.
+     Bumped victauri 0.7.6→0.7.7 (Cargo.lock only; the "0.7" constraints already permit it).
+     0.7.7 = crates-only patch (victauri-test headless-CI smoke fix, no API changes). Dev server
+     restarted + live-verified: Victauri bridge reports 0.7.7 (was 0.7.6), 0 warnings, app healthy.
+     Full src-tauri compile clean. windows-sys aligned to committed origin/main 0.61.2 (an uncommitted
+     local 0.60.2 experiment was superseded — fastembed/tauri require ^0.61). Committed ONLY Cargo.lock;
+     did NOT touch the ambient AdapterStatus.ts binding / fourda-infer-proto/.gitignore. -->
+     <!-- Commit Lock RELEASED (opus-victauri-bump) -->
+
+<!-- opus-relevance-funnel (2026-06-06): ALL DONE + PUSHED (origin/main @ aea29dda, 0/0 sync). The
+     scoring relevance funnel is COMPLETE: Phase 0 (2aee268c), Phase 1+2 (743d68ac, a6f23162),
+     Phase 4 forgetting/manual-only (2b27db15), Phase 5 calibration (79cf28ba), Phase 3 re-examination
+     + cache.rs→scoring_queries.rs split (61bf34de), Phase 5b dep-scoped high-stakes recall (aea29dda).
+     NO active claims; all funnel files free. Remaining OPTIONAL: 5b Part B (at-scale calibration corpus)
+     / source-selection / dependabot tidy — see .claude/plans/PENDING-DECISION.md + scoring-relevance-funnel.md.
      Terminal closing for compaction. -->
 
 ### Terminal: opus-privacy-truth (started 2026-06-05)
@@ -35,7 +123,7 @@ audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triag
 **Status**: Wave 1a DONE — committed local @ c164edf3 (Sentry fully removed; local Export Diagnostics
 + log_frontend_error; scrubber w/ 10 tests; crash_reporting_opt_in purged). Push HELD for user.
 NOW: Wave 1b (truth-fix BYOK "data never leaves" claims in hardcoded components + 13 locales + docs).
-**Commit Lock**: HELD (opus-privacy-truth) — A+ closing commit (consent ADR + retention test + NETWORK line).
+**Commit Lock**: RELEASED (opus-privacy-truth). A+ closers PUSHED @ 910a5393. Terminal done.
 ALL DONE + PUSHED: privacy waves (c164edf3..3045be30) + repo/website consistency (4b1e4be7) + settings
 BYOK disclosure (851ca4fc) + install-doc polish (e411b38f). Website live-verified on 4da.ai. A+ closers:
 INVARIANTS INV-031 consent decision, NETWORK §2a per-provider retention, apply_openai_retention helper

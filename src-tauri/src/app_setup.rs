@@ -1041,6 +1041,21 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     });
 
+    // Warm the Preemption feed cache off the boot path. get_preemption_alerts
+    // recomputes live OSV matching + an adversarial LLM deliberation (one call per
+    // Medium/Watch item) on every invocation — 30-40s on a cold call — so without
+    // this the tab, our strongest surface, paints blank when a returning user opens
+    // it. The data is already persisted at boot; this pays the recompute in the
+    // background so the first tab-open is served from cache. Best-effort; gated
+    // internally to skip non-entitled tiers. (v1: a >6h-stale boot that triggers a
+    // fresh OSV sync may serve pre-sync advisories until the 10-min TTL elapses.)
+    tauri::async_runtime::spawn(async {
+        // Brief delay so the dependency/advisory tables are fully ready and we
+        // don't contend with heavier startup work.
+        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        crate::preemption::warm_preemption_cache().await;
+    });
+
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");
