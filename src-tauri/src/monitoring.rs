@@ -69,6 +69,8 @@ pub struct MonitoringState {
     pub last_dep_health_check: AtomicU64,
     /// Last scoring-backfill cycle timestamp (unix seconds)
     pub last_backfill: AtomicU64,
+    /// Last per-developer calibration-monitor timestamp (unix seconds)
+    pub last_calibration_check: AtomicU64,
     /// When true, the briefing is waiting for a fresh analysis before firing.
     /// Set by the briefing-due check; cleared after the briefing fires.
     pub briefing_needs_fresh_data: AtomicBool,
@@ -94,6 +96,7 @@ impl Default for MonitoringState {
             last_cve_scan: AtomicU64::new(0),
             last_dep_health_check: AtomicU64::new(0),
             last_backfill: AtomicU64::new(0),
+            last_calibration_check: AtomicU64::new(0),
             briefing_needs_fresh_data: AtomicBool::new(false),
             briefing_wait_ticks: AtomicU64::new(0),
         }
@@ -236,6 +239,9 @@ const DEP_HEALTH_INTERVAL: u64 = 21600; // 6 hours — dependency health check (
                                         // each cycle scores a bounded chunk via the cheap pipeline (no LLM), so it converges the
                                         // ~88%-unscored corpus over a few hours, then idles (cycles become no-ops once drained).
 const BACKFILL_INTERVAL: u64 = 120; // 2 minutes
+                                    // Per-developer calibration monitor — measures whether scoring is calibrated for THIS
+                                    // developer from their own feedback. Drift is slow; 6h is ample and cheap (pure reads).
+const CALIBRATION_CHECK_INTERVAL: u64 = 21600; // 6 hours
 
 /// Sovereign Cold Boot — adaptive grace period (default).
 ///
@@ -552,6 +558,62 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     }
                     Err(e) => {
                         warn!(target: "4da::monitor", error = %e, "Scoring backfill cycle failed");
+                    }
+                }
+            }
+
+            // Per-developer calibration monitor — every 6h, LOW priority. Measures whether
+            // scoring is calibrated for THIS developer from their own feedback (precision/
+            // recall miss rates, discrimination) and logs drift. Cold-start-silent: does
+            // nothing useful until the developer has enough feedback. Pure reads, cheap.
+            let last_cal = state.last_calibration_check.load(Ordering::Relaxed);
+            if now - last_cal
+                >= crate::scheduler_gate::effective_interval(CALIBRATION_CHECK_INTERVAL)
+                && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+            {
+                mark_job_complete(
+                    &state.last_calibration_check,
+                    now,
+                    crate::scheduler_state::jobs::CALIBRATION_MONITOR,
+                );
+                if let Ok(db) = crate::get_database() {
+                    let threshold = crate::get_relevance_threshold();
+                    match crate::scoring::calibration_monitor::compute_calibration_snapshot(
+                        db, threshold,
+                    ) {
+                        Ok(snap) if snap.has_sufficient_feedback => {
+                            let health = snap.health().unwrap_or(1.0);
+                            info!(
+                                target: "4da::calibration",
+                                feedback = snap.feedback_count,
+                                precision_miss = snap.precision_miss_rate,
+                                recall_miss = snap.recall_miss_rate,
+                                discrimination = snap.discrimination,
+                                health,
+                                "Per-developer calibration snapshot"
+                            );
+                            // Recall misses (relevant items buried) are the worst failure —
+                            // surface drift loudly so it can't degrade silently.
+                            if health < 0.7 {
+                                warn!(
+                                    target: "4da::calibration",
+                                    health,
+                                    recall_miss = snap.recall_miss_rate,
+                                    precision_miss = snap.precision_miss_rate,
+                                    "Calibration drift detected for this developer — scoring may need recalibration"
+                                );
+                            }
+                        }
+                        Ok(snap) => {
+                            tracing::debug!(
+                                target: "4da::calibration",
+                                feedback = snap.feedback_count,
+                                "Calibration: insufficient feedback yet (cold start) — staying silent"
+                            );
+                        }
+                        Err(e) => {
+                            tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
+                        }
                     }
                 }
             }

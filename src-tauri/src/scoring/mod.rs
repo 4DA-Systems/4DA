@@ -12,6 +12,7 @@ pub(crate) mod benchmark_calibration;
 #[cfg(test)]
 pub(crate) mod benchmark_scenarios;
 mod calibration;
+pub(crate) mod calibration_monitor;
 mod composition;
 mod context;
 mod dedup;
@@ -42,6 +43,7 @@ pub(crate) use affinity::{
 };
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::{calibrate_score, compute_interest_score};
+pub(crate) use calibration_monitor::{compute_calibration_snapshot, CalibrationSnapshot};
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::{build_scoring_context, is_low_quality_topic};
 pub(crate) use dedup::{

@@ -57,6 +57,22 @@ pub(crate) struct DroppedSample {
     pub similarity: f32,
 }
 
+/// Per-developer calibration snapshot (Phase 5 observability). Computes, from THIS
+/// developer's own feedback, whether scoring is calibrated for them: precision/recall
+/// miss rates + discrimination. Cold-start-silent (insufficient_feedback until enough
+/// engagement). The scheduler logs this every 6h; this command surfaces it on demand
+/// (for a calibration-health UI or a live check). Read-only.
+#[tauri::command]
+pub(crate) async fn get_calibration_snapshot(
+    threshold: Option<f32>,
+) -> Result<crate::scoring::CalibrationSnapshot> {
+    let db = get_database()?;
+    let t = threshold.unwrap_or_else(crate::get_relevance_threshold);
+    let snap = crate::scoring::compute_calibration_snapshot(db, t)
+        .map_err(|e| format!("Failed to compute calibration snapshot: {e}"))?;
+    Ok(snap)
+}
+
 /// Lightweight scoring-coverage snapshot (Phase 1 observability). Cheap COUNT queries
 /// only — no scoring-context build — so it can be called frequently / by the UI as the
 /// safety net that makes silent coverage collapse (the class of bug behind the i64::MAX
