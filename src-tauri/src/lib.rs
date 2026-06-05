@@ -156,6 +156,7 @@ mod agent_memory;
 mod ai_costs;
 mod alert_triage;
 mod analysis;
+mod analysis_backfill;
 mod analysis_narration;
 mod analysis_rerank;
 mod anomaly;
@@ -700,6 +701,8 @@ pub fn run() {
             analysis::get_scoring_stats,
             analysis::cancel_analysis,
             triage_audit_commands::measure_triage_recall,
+            triage_audit_commands::get_scoring_coverage,
+            analysis_backfill::run_backfill_cycle,
             // Settings
             settings_commands::get_settings,
             settings_commands::get_llm_usage,

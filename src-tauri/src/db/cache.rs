@@ -352,6 +352,81 @@ impl Database {
         rows.collect()
     }
 
+    /// Count items that have NEVER been scored (`relevance_score IS NULL`), respecting
+    /// the tier history window (Signal = unlimited, Free = 30 days). This is the
+    /// backlog the Phase-2 backfill worker drains — distinct from the stale-VERSION
+    /// drain (which only touches already-scored items).
+    pub fn count_unscored_backlog(&self) -> SqliteResult<i64> {
+        let conn = self.conn.lock();
+        let time_clause = if crate::settings::is_signal() {
+            String::new()
+        } else {
+            format!(
+                " AND created_at >= datetime('now', '-{} hours')",
+                super::sources::FREE_HISTORY_LIMIT_HOURS
+            )
+        };
+        let sql =
+            format!("SELECT COUNT(*) FROM source_items WHERE relevance_score IS NULL{time_clause}");
+        conn.query_row(&sql, [], |r| r.get(0))
+    }
+
+    /// A chunk of NEVER-scored items for the backfill worker, in PRIORITY order:
+    /// high-stakes first (security/breaking/CVE — error-cost asymmetry), then stack
+    /// releases, then most-recent. This realises the "prioritize, don't discard"
+    /// design: everything is scored eventually, the highest-value items first.
+    /// Mirrors the tier window logic of `get_stale_scored_items` (Signal drops the
+    /// recency bound entirely — never an i64::MAX overflow).
+    pub fn get_unscored_backlog_chunk(&self, limit: usize) -> SqliteResult<Vec<StoredSourceItem>> {
+        let conn = self.conn.lock();
+        let time_clause = if crate::settings::is_signal() {
+            String::new()
+        } else {
+            format!(
+                " AND created_at >= datetime('now', '-{} hours')",
+                super::sources::FREE_HISTORY_LIMIT_HOURS
+            )
+        };
+        let sql = format!(
+            "SELECT id, source_type, source_id, url, title, content, content_hash,
+                    embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
+                    feed_origin, tags
+             FROM source_items
+             WHERE relevance_score IS NULL{time_clause}
+             ORDER BY
+                 CASE
+                     WHEN cve_ids IS NOT NULL
+                          OR content_type IN ('security_advisory', 'breaking_change') THEN 0
+                     WHEN content_type IN ('release_notes', 'platform_update') THEN 1
+                     ELSE 2
+                 END,
+                 created_at DESC
+             LIMIT ?1"
+        );
+        let mut stmt = conn.prepare_cached(&sql)?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            let embedding_blob: Vec<u8> = row.get(7)?;
+            Ok(StoredSourceItem {
+                id: row.get(0)?,
+                source_type: row.get(1)?,
+                source_id: row.get(2)?,
+                url: row.get(3)?,
+                title: row.get(4)?,
+                content: row.get(5)?,
+                content_hash: row.get(6)?,
+                embedding: blob_to_embedding(&embedding_blob),
+                created_at: parse_datetime(row.get::<_, String>(8)?),
+                last_seen: parse_datetime(row.get::<_, String>(9)?),
+                detected_lang: row
+                    .get::<_, String>(10)
+                    .unwrap_or_else(|_| "en".to_string()),
+                feed_origin: row.get(11).ok().flatten(),
+                tags: row.get(12).ok().flatten(),
+            })
+        })?;
+        rows.collect()
+    }
+
     /// Record a scoring cycle event for audit trail and recalibration backtesting.
     pub fn record_scoring_event(
         &self,
@@ -853,5 +928,49 @@ mod tests {
                 "free-tier drain stays bounded to recent history"
             );
         }
+    }
+
+    /// The backfill worker must pull NEVER-scored items in PRIORITY order: high-stakes
+    /// (security/breaking/CVE) first, then stack releases, then most-recent. Confirms the
+    /// "prioritize, don't discard" design at the query layer.
+    #[test]
+    fn test_unscored_backlog_priority_ordering() {
+        let db = test_db();
+
+        // All start unscored (insert_test_item leaves relevance_score NULL).
+        let high = insert_test_item(&db, "cve", "cve1", "advisory", "x");
+        let release = insert_test_item(&db, "crates_io", "rel1", "tokio 1.5", "x");
+        let recent_plain = insert_test_item(&db, "hackernews", "hn_new", "newest chatter", "x");
+        let old_plain = insert_test_item(&db, "reddit", "rd_old", "old chatter", "x");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET content_type='security_advisory', created_at=datetime('now','-5 days') WHERE id=?1",
+                rusqlite::params![high],
+            ).unwrap();
+            conn.execute(
+                "UPDATE source_items SET content_type='release_notes', created_at=datetime('now','-3 days') WHERE id=?1",
+                rusqlite::params![release],
+            ).unwrap();
+            conn.execute(
+                "UPDATE source_items SET content_type='discussion', created_at=datetime('now') WHERE id=?1",
+                rusqlite::params![recent_plain],
+            ).unwrap();
+            conn.execute(
+                "UPDATE source_items SET content_type='discussion', created_at=datetime('now','-10 days') WHERE id=?1",
+                rusqlite::params![old_plain],
+            ).unwrap();
+        }
+
+        assert_eq!(db.count_unscored_backlog().unwrap(), 4);
+
+        let chunk = db.get_unscored_backlog_chunk(10).unwrap();
+        let ids: Vec<i64> = chunk.iter().map(|i| i.id).collect();
+        // high-stakes first, then release, then plain by created_at DESC (recent before old).
+        assert_eq!(
+            ids,
+            vec![high, release, recent_plain, old_plain],
+            "backfill must prioritize high-stakes > releases > recency"
+        );
     }
 }

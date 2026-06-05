@@ -48,6 +48,7 @@ pub mod jobs {
     pub const AUTOPHAGY: &str = "autophagy";
     pub const ACCURACY_RECORD: &str = "accuracy_record";
     pub const TEMPORAL_SNAPSHOT: &str = "temporal_snapshot";
+    pub const BACKFILL: &str = "scoring_backfill";
 }
 
 /// Hydrate in-memory monitoring atomics from persisted scheduler_state.
