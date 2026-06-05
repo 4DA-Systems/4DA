@@ -1536,6 +1536,17 @@ fn format_dep_display_name(package_name: &str, ecosystem: &str) -> String {
     format!("{package_name} ({qualifier})")
 }
 
+/// Inverse of `format_dep_display_name`: recover the bare package name from a
+/// display name ("react (npm)" -> "react"). Article titles never contain the
+/// " (ecosystem)" qualifier, so signal/version lookups that match on titles must
+/// use the bare name. A package name with no qualifier passes through unchanged.
+fn bare_package_name(display_name: &str) -> &str {
+    match display_name.rfind(" (") {
+        Some(idx) if display_name.ends_with(')') => &display_name[..idx],
+        _ => display_name,
+    }
+}
+
 /// Classify risk level based on coverage gap severity.
 fn classify_dep_risk(days_since: u32, unseen_signals: u32, project_count: usize) -> String {
     if days_since > scoring_config::BLIND_SPOT_RISK_CRITICAL_DAYS as u32
@@ -2627,18 +2638,44 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         };
         (title, explanation)
     } else {
-        let title = truncate_title(&format!(
-            "{} — {} unseen signal{}",
-            d.name,
-            d.available_signal_count,
-            if d.available_signal_count == 1 {
-                ""
-            } else {
-                "s"
-            }
-        ));
-        let installed_version = lookup_installed_version(&d.name);
-        let (release_count, analysis_count, _) = count_signal_types_for_dep(&d.name);
+        // Consequence-first title: lead with what CHANGED (new releases, then
+        // expert analyses) instead of the raw unread count, which is mostly
+        // noise — "react — 123 unseen signals" reads as FOMO, not insight. The
+        // breakdown is already needed by the explanation, so compute it once and
+        // drive both the title and the explanation from it. d.name is the DISPLAY
+        // name ("react (npm)"); the signal/version lookups match on the bare
+        // package name, so strip the " (ecosystem)" qualifier first — passing the
+        // display name silently returns zero releases/analyses (the reason this
+        // consequence framing never fired before).
+        let bare = bare_package_name(&d.name);
+        let installed_version = lookup_installed_version(bare);
+        let (release_count, analysis_count, _) = count_signal_types_for_dep(bare);
+        let title = truncate_title(&if release_count > 0 {
+            format!(
+                "{} — {} new release{} unreviewed",
+                d.name,
+                release_count,
+                if release_count == 1 { "" } else { "s" }
+            )
+        } else if analysis_count > 0 {
+            format!(
+                "{} — {} expert analysis article{} unread",
+                d.name,
+                analysis_count,
+                if analysis_count == 1 { "" } else { "s" }
+            )
+        } else {
+            format!(
+                "{} — {} update{} to review",
+                d.name,
+                d.available_signal_count,
+                if d.available_signal_count == 1 {
+                    ""
+                } else {
+                    "s"
+                }
+            )
+        });
 
         let mut explanation_parts: Vec<String> = Vec::new();
         if release_count > 0 {
@@ -2711,7 +2748,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         suggested_actions: vec![EvidenceAction {
             action_id: "investigate".to_string(),
             label: "Investigate".to_string(),
-            description: "Review the unseen signals for this dependency.".to_string(),
+            description: "Review what changed for this dependency.".to_string(),
         }],
         precedents: Vec::new(),
         refutation_condition: None,
@@ -2722,46 +2759,57 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
 }
 
 fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
-    let title = if t.missed_signal_count > 0 {
-        truncate_title(&format!(
-            "{} — {} signal{} you haven't seen",
+    // Compute the consequence breakdown once (only when there are missed
+    // signals) and drive BOTH the title and explanation from it, so the title
+    // leads with what changed (new releases / analyses) rather than the raw
+    // unread count. The tuple is Copy, so both matches read it freely.
+    let signal_breakdown =
+        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic));
+    let title = match signal_breakdown {
+        Some((releases, _, _)) if releases > 0 => truncate_title(&format!(
+            "{} — {} release update{} unreviewed",
+            t.topic,
+            releases,
+            if releases == 1 { "" } else { "s" }
+        )),
+        Some((_, analyses, _)) if analyses > 0 => truncate_title(&format!(
+            "{} — {} analysis article{} unread",
+            t.topic,
+            analyses,
+            if analyses == 1 { "" } else { "s" }
+        )),
+        Some(_) => truncate_title(&format!(
+            "{} — {} update{} to review",
             t.topic,
             t.missed_signal_count,
             if t.missed_signal_count == 1 { "" } else { "s" }
-        ))
-    } else {
-        truncate_title(&format!(
+        )),
+        None => truncate_title(&format!(
             "{} — {} dep{}, no recent engagement",
             t.topic,
             t.active_deps_in_topic,
             if t.active_deps_in_topic == 1 { "" } else { "s" }
-        ))
+        )),
     };
-    let explanation = if t.missed_signal_count > 0 {
-        let (releases, analyses, _) = count_signal_types_for_dep(&t.topic);
-        if releases > 0 {
-            format!(
-                "{releases} release update{} for {} ecosystem in the last 30 days.",
-                if releases == 1 { "" } else { "s" },
-                t.topic,
-            )
-        } else if analyses > 0 {
-            format!(
-                "{} unreviewed signal{} including {analyses} analysis article{}.",
-                t.missed_signal_count,
-                if t.missed_signal_count == 1 { "" } else { "s" },
-                if analyses == 1 { "" } else { "s" },
-            )
-        } else {
-            format!(
-                "{} signal{} in the {} ecosystem you haven't reviewed.",
-                t.missed_signal_count,
-                if t.missed_signal_count == 1 { "" } else { "s" },
-                t.topic,
-            )
-        }
-    } else {
-        format!(
+    let explanation = match signal_breakdown {
+        Some((releases, _, _)) if releases > 0 => format!(
+            "{releases} release update{} for {} ecosystem in the last 30 days.",
+            if releases == 1 { "" } else { "s" },
+            t.topic,
+        ),
+        Some((_, analyses, _)) if analyses > 0 => format!(
+            "{} unreviewed signal{} including {analyses} analysis article{}.",
+            t.missed_signal_count,
+            if t.missed_signal_count == 1 { "" } else { "s" },
+            if analyses == 1 { "" } else { "s" },
+        ),
+        Some(_) => format!(
+            "{} signal{} in the {} ecosystem you haven't reviewed.",
+            t.missed_signal_count,
+            if t.missed_signal_count == 1 { "" } else { "s" },
+            t.topic,
+        ),
+        None => format!(
             "{} active {} dependenc{} with no recent signal coverage.",
             t.active_deps_in_topic,
             t.topic,
@@ -2770,7 +2818,7 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
             } else {
                 "ies"
             },
-        )
+        ),
     };
 
     let citation = EvidenceCitation {
@@ -3240,6 +3288,20 @@ pub fn dismiss_blind_spot(
 mod tests {
     use super::*;
     use rusqlite::{params, Connection};
+
+    #[test]
+    fn bare_package_name_strips_ecosystem_qualifier() {
+        // The signal/version lookups match on article titles, which never carry
+        // the " (ecosystem)" qualifier — so the display name must be stripped.
+        // This is the fix that lets consequence framing fire at all.
+        assert_eq!(bare_package_name("react (npm)"), "react");
+        assert_eq!(bare_package_name("axum (crates.io)"), "axum");
+        assert_eq!(bare_package_name("@sentry/node (npm)"), "@sentry/node");
+        // No qualifier → unchanged.
+        assert_eq!(bare_package_name("typescript"), "typescript");
+        // Scoped/parenthetical names without a trailing qualifier are left intact.
+        assert_eq!(bare_package_name("some-pkg"), "some-pkg");
+    }
 
     /// Create an in-memory DB with the EXACT schema from migrations.rs.
     /// This is the single source of truth for what the real DB looks like —

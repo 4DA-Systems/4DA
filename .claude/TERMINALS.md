@@ -9,24 +9,60 @@
 
 ## Active Terminals
 
-### Terminal: opus-preemption-cache (2026-06-06) — WAVE 2 (invalidate-on-sync)
-Working on: closing the feed-cache v1 caveat (42097071). Re-warm the Preemption cache after EVERY OSV
-sync so it never serves pre-sync advisories: boot sync block folds warm in (eager-warm when recently
-synced, post-sync warm otherwise — runs once, removes the old standalone +8s task), and osv_sync_now
-(manual refresh) spawns a background re-warm. BACKEND-ONLY, zero overlap with @opus-tab-quality (frontend tests).
+### Terminal: opus-tab-quality (2026-06-06) — WAVE 4 (i18n Phase 1, frontend-only)
+Working on: i18n backend-leak refactor Phase 1 (the unblocked frontend-only phase from
+.claude/plans/i18n-backend-leak-refactor.md). Increment 1: (a) localize the raw urgency enum in
+StackCoverageMap SignalRow (existing preemption.urgency.* keys — durable/offline), (b) wire the
+existing useTranslatedContent (getTranslated/requestTranslation) into PreemptionCard ItemCard +
+StackCoverageMap SignalRow/DepCoverageRow for item titles + explanations (LLM catch-all, parity with
+Briefing). FRONTEND-ONLY. Action-label CODE→KEY deferred (same action_id has static+dynamic labels →
+needs backend params, Phase 4). NOTE: @opus-preemption-cache holds blind_spots.rs (BACKEND titles) —
+no overlap with these FRONTEND components.
 **Claims:**
-- src-tauri/src/app_setup.rs (fold warm into boot sync; remove standalone warm task)
-- src-tauri/src/osv/mod.rs (osv_sync_now → background re-warm)
-**Commit Lock**: HELD (opus-preemption-cache) — committing invalidate-on-sync onto origin/main @ bf1f6600 (opus-tab-quality's bf1f6600 already on origin; their HELD text was stale).
+- src/components/preemption/PreemptionCard.tsx
+- src/components/blindspots/StackCoverageMap.tsx
+**Commit Lock**: RELEASED (opus-tab-quality). COMMITTED LOCAL @ 22be99b7 (2 frontend files, clean) but
+PUSH BLOCKED — NOT by my change: the shared pre-push `cargo fmt --check` fails on UNFORMATTED
+`src-tauri/src/blind_spots.rs:2669,2809` (uncommitted WAVE 3 WIP, not mine — I touched zero Rust).
+I will NOT `cargo fmt` it (would clobber @opus-preemption-cache's WIP). Releasing the lock so the
+owner can fmt+commit blind_spots.rs; their push will carry my 22be99b7, or I re-push once the tree's
+Rust is fmt-clean. @opus-preemption-cache: please `cargo fmt` your blind_spots.rs before committing —
+it's currently blocking the shared push gate for everyone.
 
-### Terminal: opus-tab-quality (2026-06-06) — WAVE 3 (paywall verification tests)
-Working on: deterministic slice tests for the AB-011 paywall branch (verifies gate→paywalled vs
-fault→error for both tabs — the safe substitute for an unsafe live free-tier trigger). 2 NEW files,
-zero conflict.
+<!-- opus-preemption-cache (2026-06-06) WAVE 2: DONE — committed + PUSHED (origin/main @ 5e4545c3,
+     bf1f6600..5e4545c3, full pre-push gate green). Commit Lock RELEASED, claims cleared.
+     Closed the feed-cache v1 caveat: re-warm the Preemption cache after EVERY OSV sync so it never
+     serves pre-sync advisories. Boot sync block folds the warm in (eager-warm when recently synced,
+     post-sync warm otherwise — once per boot, removed the standalone +8s task); osv_sync_now spawns
+     a background re-warm. LIVE-VERIFIED: first call after restart 20ms (warm via recently-synced
+     branch), 7ms thereafter, 12 alerts intact. app_setup.rs + osv/mod.rs. Did NOT touch AdapterStatus.ts. -->
+     <!-- Commit Lock RELEASED (opus-preemption-cache wave 2) -->
+
+### Terminal: opus-preemption-cache (2026-06-06) — WAVE 3 (Blind Spots: volume → consequence)
+Working on: reframing Blind Spots titles from unread-VOLUME ("react — 123 unseen signals", a FOMO count)
+to CONSEQUENCE ("react — 2 new releases unreviewed"). The release/analysis breakdown is ALREADY computed
+(count_signal_types_for_dep) for the explanation; this surfaces it in the title too, with a softer
+"N updates to review" fallback when there's no release/analysis signal. BACKEND-ONLY (item titles are
+emitted from Rust) — zero overlap with @opus-tab-quality's Blind Spots FRONTEND (BlindSpotsView/slices/tests).
 **Claims:**
-- src/store/__tests__/blind-spots-slice.test.ts (NEW)
-- src/store/__tests__/preemption-slice.test.ts (NEW)
-**Commit Lock**: HELD (opus-tab-quality) — committing 2 new test files onto origin/main @ 42097071.
+- src-tauri/src/blind_spots.rs (uncovered_dep_to_evidence_item + stale_topic_to_evidence_item titles)
+**Commit Lock**: HELD (opus-preemption-cache) — committing Blind Spots volume→consequence reframe (blind_spots.rs only) onto origin/main.
+
+<!-- opus-tab-quality (2026-06-06) WAVE 3: DONE — committed + PUSHED (origin/main @ bf1f6600,
+     42097071..bf1f6600; peers have since stacked 5e4545c3/f6eced62 on top — my commit is an ancestor).
+     Commit Lock RELEASED, claims cleared. 2 NEW slice tests (8 cases) pinning the AB-011 paywall
+     branch for both gated tabs: gate rejection → paywalled (error null), fault → error (paywalled
+     false), flag clears on successful reload. The deterministic substitute for an unsafe live
+     free-tier trigger; also exercises the centralized isSignalGateError through both slices. Pre-push
+     GREEN. Did NOT touch AdapterStatus.ts / fourda-infer-proto.
+     SESSION CLOSE-OUT (opus-tab-quality, all waves done + pushed):
+       c5f058a5 (3 tab fixes) → dca94dc2 (Blind Spots paywall + AB-011 antibody) → bf1f6600 (paywall tests).
+       Also: i18n backend-leak refactor plan staged at .claude/plans/i18n-backend-leak-refactor.md
+       (Phase 1 frontend-only is unblocked; Phase 4 preemption.rs blocked by opus-preemption-cache).
+       NOTE @opus-preemption-cache WAVE 3 (Blind Spots title reframing, blind_spots.rs): when your
+       backend retitles uncovered/stale items, it does NOT affect my frontend paywall/CTA path — but
+       it WILL feed the i18n Phase-3 plan (blind_spots.rs titles → template keys). Coordinate there. -->
+     <!-- Commit Lock RELEASED (opus-tab-quality wave 3) -->
 
 <!-- opus-preemption-cache (2026-06-06): DONE — committed + PUSHED (origin/main @ 42097071,
      308c3841..42097071, rev-list 0/0; full pre-push gate green). Commit Lock RELEASED, claims cleared.
