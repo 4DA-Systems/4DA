@@ -33,6 +33,13 @@ pub struct SignalChain {
     pub confidence: f64,
     pub created_at: String,
     pub updated_at: String,
+    /// The chain's topic IFF it exactly matches one of the user's actually-installed
+    /// dependencies (verified at build via `has_dependency_match`). This is the ONLY
+    /// trustworthy "affected dependency" for the chain — replacing the old heuristic that
+    /// regex-split the chain_name and emitted boilerplate ("signal", "chain") and topic
+    /// words as fake affected dependencies. `None` when the topic isn't a real dep.
+    #[serde(default)]
+    pub verified_dep: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,6 +201,14 @@ pub fn detect_chains(conn: &rusqlite::Connection) -> Result<Vec<SignalChain>> {
             confidence,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
+            // Topic is a real affected dependency only when it exactly matched the user's
+            // installed deps above (dep_match > 0). Otherwise we claim no affected dep
+            // rather than fabricate one from the chain name.
+            verified_dep: if dep_match > 0.0 {
+                Some(topic.to_string())
+            } else {
+                None
+            },
         });
     }
 
@@ -376,17 +391,16 @@ impl SignalChainWithPrediction {
                 .collect()
         };
 
-        // Extract affected deps from the chain_name heuristically: chain
-        // names often include the dep ("tokio — CVE + ripout + patch").
-        // Leave empty when ambiguous.
+        // Affected deps = ONLY the chain's verified dependency (its topic matched the
+        // user's actually-installed deps at build time). Never the old regex-split of the
+        // chain_name, which emitted boilerplate ("signal", "chain") and topic words as
+        // fabricated affected dependencies the user + adversarial LLM would trust.
         let affected_deps: Vec<String> = self
             .chain
-            .chain_name
-            .split(|c: char| !c.is_alphanumeric() && c != '-')
-            .filter(|s| s.len() >= 3 && s.len() <= 40)
-            .take(3)
-            .map(str::to_lowercase)
-            .collect();
+            .verified_dep
+            .clone()
+            .map(|d| vec![d])
+            .unwrap_or_default();
 
         let suggested_actions = if self.chain.suggested_action.is_empty() {
             vec![EvidenceAction {
@@ -524,6 +538,7 @@ mod tests {
                 confidence: 0.78,
                 created_at: "2026-04-15 00:00:00".to_string(),
                 updated_at: "2026-04-17 00:00:00".to_string(),
+                verified_dep: Some("tokio".to_string()),
             },
             prediction: ChainPrediction {
                 phase: ChainPhase::Escalating,
@@ -568,6 +583,27 @@ mod tests {
     fn chain_forecast_is_explanation() {
         let item = sample_chain_with_prediction().to_evidence_item();
         assert!(item.explanation.contains("Escalating"));
+    }
+
+    #[test]
+    fn affected_deps_use_verified_dep_only_not_chain_name_tokens() {
+        // The chain_name is "tokio CVE disclosure + patch sequence" — the OLD regex split
+        // would have emitted ["tokio","cve","disclosure"] (boilerplate/topic words as fake
+        // deps). Now affected_deps is exactly the verified dependency, nothing else.
+        let item = sample_chain_with_prediction().to_evidence_item();
+        assert_eq!(item.affected_deps, vec!["tokio".to_string()]);
+
+        // When the topic was NOT a verified dependency, claim no affected dep at all
+        // (never fabricate one from the chain name).
+        let mut c = sample_chain_with_prediction();
+        c.chain.verified_dep = None;
+        c.chain.chain_name = "security vulnerability updates signal chain (3 events)".to_string();
+        let item = c.to_evidence_item();
+        assert!(
+            item.affected_deps.is_empty(),
+            "no verified dep → no fabricated affected deps, got {:?}",
+            item.affected_deps
+        );
     }
 
     #[test]
@@ -625,12 +661,5 @@ mod tests {
         c.prediction.confidence = 1.5;
         let item = c.to_evidence_item();
         assert!(item.confidence.value >= 0.0 && item.confidence.value <= 1.0);
-    }
-
-    #[test]
-    fn chain_extracts_affected_deps_from_name() {
-        let item = sample_chain_with_prediction().to_evidence_item();
-        // "tokio CVE disclosure + patch sequence" → tokens ≥3 chars
-        assert!(item.affected_deps.iter().any(|d| d == "tokio"));
     }
 }
