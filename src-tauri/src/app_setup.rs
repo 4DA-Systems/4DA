@@ -1004,6 +1004,10 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         });
         if recently_synced {
             info!(target: "4da::osv", "OSV mirror synced recently — skipping startup sync");
+            // Data is already current — warm the Preemption feed cache now so the
+            // tab's first paint is served from cache instead of a 30-40s recompute
+            // (live OSV matching + adversarial LLM deliberation).
+            crate::preemption::warm_preemption_cache().await;
             return;
         }
         info!(target: "4da::osv", deps = deps.len(), "Starting background OSV sync");
@@ -1039,20 +1043,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 warn!(target: "4da::osv::cache", error = %e, "Background cache update failed");
             }
         }
-    });
 
-    // Warm the Preemption feed cache off the boot path. get_preemption_alerts
-    // recomputes live OSV matching + an adversarial LLM deliberation (one call per
-    // Medium/Watch item) on every invocation — 30-40s on a cold call — so without
-    // this the tab, our strongest surface, paints blank when a returning user opens
-    // it. The data is already persisted at boot; this pays the recompute in the
-    // background so the first tab-open is served from cache. Best-effort; gated
-    // internally to skip non-entitled tiers. (v1: a >6h-stale boot that triggers a
-    // fresh OSV sync may serve pre-sync advisories until the 10-min TTL elapses.)
-    tauri::async_runtime::spawn(async {
-        // Brief delay so the dependency/advisory tables are fully ready and we
-        // don't contend with heavier startup work.
-        tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+        // The sync stored fresh advisories + recomputed matches — warm the
+        // Preemption feed cache against the fresh data so the tab paints from
+        // cache (30-40s recompute -> instant) and reflects this sync rather than
+        // a pre-sync snapshot. Runs once per boot, after the data is current (the
+        // recently-synced branch above warms eagerly and returns). get_preemption_alerts
+        // otherwise recomputes live OSV matching + an adversarial LLM deliberation
+        // (one call per Medium/Watch item) on every call, so without this the tab —
+        // our strongest surface — paints blank when a returning user opens it.
         crate::preemption::warm_preemption_cache().await;
     });
 
