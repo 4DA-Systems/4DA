@@ -55,6 +55,9 @@ src-tauri/fourda-macros/Cargo.lock
 # Runtime cache (model downloads, embeddings cache)
 data/cache/
 
+# Local diagnostic report exports (Settings -> Privacy -> Export diagnostics)
+data/diagnostics/
+
 # SQLite database files
 data/*.db
 data/*.db-shm
