@@ -157,7 +157,9 @@ fn build_channel_prompt(
          - Reference the user's tech stack when applicable: {tech}\n\
          - Be specific -- cite versions, benchmarks, dates from the sources\n\
          - If sources conflict, note the disagreement\n\
-         - Do not fabricate information not present in the sources",
+         - Do not fabricate information not present in the sources\n\
+         - Only claim a development affects the user when the technology appears verbatim in their tech stack above. Never weld a package onto a stack it is not part of -- a JavaScript/npm library does not affect a Rust/Cargo backend, and vice-versa. If you cannot tell whether it applies to them, present it as general news, not as personal impact\n\
+         - Do not invent impact, urgency, or implications the sources do not state",
         title = channel.title,
         description = channel.description,
         tech = tech_stack,

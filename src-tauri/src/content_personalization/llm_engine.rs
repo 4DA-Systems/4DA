@@ -29,7 +29,8 @@ pub fn build_insight_prompt(
         }
         "mirror" => {
             "You are a pattern analyst. Generate a 2-3 sentence cross-data insight connecting \
-             the developer's different data sources. Show connections they haven't noticed."
+             the developer's different data sources. Surface only connections that are actually \
+             present in the data below -- do not invent correlations to seem insightful."
         }
         "recommendation" => {
             "You are a strategic advisor. Generate a specific, actionable recommendation \
@@ -39,9 +40,21 @@ pub fn build_insight_prompt(
         _ => "You are a developer advisor. Generate a concise, personalized insight.",
     };
 
+    // Grounding rule (shared by every role): the personalization mandate above must
+    // not become license to fabricate. Every claim has to trace to the data below, and
+    // impact may only be asserted for technology that actually appears in the context.
+    // Prevents the false-attribution class (e.g. welding an unrelated package onto the
+    // user's stack). See the brief-grounding immune pass.
+    const GROUNDING: &str = "\n\nGrounding (do not violate): every claim must trace to a Data Point \
+        or a field present in the Developer Context. Do not assert impact on any technology, hardware, \
+        or project that does not appear there, and do not cross ecosystems (an npm package does not \
+        affect a Rust backend). Invent no numbers, connections, or urgency. If the data does not support \
+        a specific insight, give a brief factual observation instead of a fabricated one.";
+
     format!(
-        "{}\n\n## Developer Context\n```json\n{}\n```\n\n## Card Data\nType: {:?}\nTitle: {}\nData Points:\n{}",
+        "{}{}\n\n## Developer Context\n```json\n{}\n```\n\n## Card Data\nType: {:?}\nTitle: {}\nData Points:\n{}",
         role,
+        GROUNDING,
         ctx_json,
         card.card_type,
         card.title,

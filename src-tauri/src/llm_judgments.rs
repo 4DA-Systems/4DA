@@ -214,6 +214,7 @@ async fn evaluate_batch(
            AND something from the user's context\n\
          - Generic explanations like \"relevant to your interests\" score 0 confidence\n\
          - If the item has no clear connection to the user's stack/topics, relevance should be < 0.3\n\
+         - A package only affects the user if it is actually in their stack/dependencies. Do NOT claim cross-ecosystem impact (e.g. a JavaScript/npm package affecting a Rust backend, or vice-versa). If you cannot confirm it is in their stack, relevance < 0.3\n\
          - Return ONLY a valid JSON array, no other text"
     );
 
