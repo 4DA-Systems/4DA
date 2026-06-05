@@ -45,9 +45,10 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
 /// entry is matched against the user's actually-installed dependency versions and
 /// already carries its exact project scope, so the LLM can no longer weld a global
 /// CVE onto the wrong project or ecosystem (e.g. attributing an axios/npm advisory to
-/// a Rust/Axum backend). Returns an empty string when there are no confirmed issues —
-/// in which case the briefing must NOT manufacture a security emergency. See the
-/// brief-grounding fix (PENDING-DECISION 2026-06-06, lever 2).
+/// a Rust/Axum backend). Always returns a section (Preemption is in EVERY brief): the
+/// confirmed dep-scoped advisories, or an explicit "none" all-clear when there are no
+/// confirmed issues — in which case the briefing must NOT manufacture a security
+/// emergency. See the brief-grounding fix (PENDING-DECISION 2026-06-06, lever 2).
 fn build_grounded_security_section() -> String {
     let feed = match crate::preemption::get_preemption_feed() {
         Ok(f) => f,
@@ -94,7 +95,13 @@ fn build_grounded_security_section() -> String {
     }
 
     if lines.is_empty() {
-        return String::new();
+        // Preemption appears in EVERY brief: an explicit all-clear (not silence) confirms
+        // the check actually ran and forecloses the LLM inventing a vulnerability from
+        // un-scoped CVE news in the day's items.
+        return "\n\nCONFIRMED SECURITY: none — no OSV-verified advisory affects the user's \
+                actually-installed dependencies. There are NO confirmed vulnerabilities for \
+                them today; do NOT report a security action item or infer one from CVE news."
+            .to_string();
     }
 
     format!(
@@ -133,16 +140,15 @@ pub(crate) async fn generate_briefing_internal(
         guard.get().llm.clone()
     };
 
-    if !crate::content_personalization::context::compute_has_llm(
+    // Decide which brief to produce. A genuine NARRATED brief needs a Sonnet-class+ model
+    // (`is_brief_capable`). Without one — no LLM at all, or a model too weak for genuine
+    // synthesis (Haiku / *-mini / consumer-hardware local) — we serve the deterministic,
+    // grounded floor below instead of erroring or faking synthesis with a weak model.
+    let has_llm = crate::content_personalization::context::compute_has_llm(
         &llm_settings.provider,
         &llm_settings.api_key,
-    ) {
-        return Ok(serde_json::json!({
-            "success": false,
-            "error": "No LLM configured. Set up Ollama or add an API key in Settings.",
-            "briefing": null
-        }));
-    }
+    );
+    let brief_capable = has_llm && crate::llm_capability::is_brief_capable(&llm_settings);
 
     // Get items from analysis state or DB
     let (mem_items, explanations): (
@@ -190,12 +196,40 @@ pub(crate) async fn generate_briefing_internal(
         mem_items
     };
 
-    if items.is_empty() {
+    // Deterministic floor: served when there's no Sonnet-class model OR no items to
+    // narrate. Computed from the OSV-verified preemption feed + ranked signals — works
+    // offline, stays private, and cannot hallucinate. Every user gets a real brief; a weak
+    // model never fakes one (it falls here instead).
+    if !brief_capable || items.is_empty() {
+        let briefing =
+            crate::briefing_deterministic::build_deterministic_brief(&items, &explanations);
+        info!(
+            target: "4da::briefing",
+            has_llm,
+            capable = brief_capable,
+            item_count = items.len(),
+            model = %llm_settings.model,
+            "Served deterministic grounded brief (no Sonnet-class model or no items)"
+        );
+        if let Ok(db) = get_database() {
+            if let Err(e) = db.save_briefing(
+                &briefing,
+                Some("deterministic"),
+                items.len(),
+                Some(0),
+                Some(0),
+            ) {
+                error!(target: "4da::briefing", error = %e, "Failed to persist deterministic briefing");
+            }
+        }
+        *crate::digest_config::LATEST_BRIEFING.lock() = Some(briefing.clone());
         return Ok(serde_json::json!({
             "success": true,
-            "briefing": "No items found. Run an analysis first to fetch and score content.",
-            "item_count": 0,
-            "model": llm_settings.model
+            "briefing": briefing,
+            "item_count": items.len(),
+            "model": "deterministic",
+            "deterministic": true,
+            "auto_triggered": auto_triggered,
         }));
     }
 
@@ -571,16 +605,22 @@ mod tests {
     // ========================================================================
 
     #[test]
-    fn briefing_no_llm_response_shape() {
-        // Simulates the response shape when no LLM is configured
+    fn briefing_no_capable_model_serves_deterministic_floor() {
+        // When there's no Sonnet-class model (no LLM, or a model too weak for genuine
+        // synthesis), the brief no longer errors — it serves the deterministic grounded
+        // floor: success=true, a real briefing, model="deterministic", deterministic=true.
         let response = serde_json::json!({
-            "success": false,
-            "error": "No LLM configured. Set up Ollama or add an API key in Settings.",
-            "briefing": null
+            "success": true,
+            "briefing": "## Security\n✓ No confirmed vulnerabilities...\n\n## Top signals today\n1. ...",
+            "item_count": 5,
+            "model": "deterministic",
+            "deterministic": true,
+            "auto_triggered": false,
         });
-        assert_eq!(response["success"], false);
-        assert!(response["error"].as_str().unwrap().contains("No LLM"));
-        assert!(response["briefing"].is_null());
+        assert_eq!(response["success"], true);
+        assert_eq!(response["deterministic"], true);
+        assert_eq!(response["model"], "deterministic");
+        assert!(response["briefing"].as_str().unwrap().contains("Security"));
     }
 
     #[test]

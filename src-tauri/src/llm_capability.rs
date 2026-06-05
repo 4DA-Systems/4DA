@@ -165,6 +165,68 @@ pub(crate) fn get_model_tier(settings: &LLMProvider) -> ModelTier {
     }
 }
 
+/// Stricter than `ModelTier::Full`: is this model genuinely capable of a coherent,
+/// valuable morning-brief NARRATION? The brief is the headline surface and runs once a
+/// day, so it demands a real reasoning/writing model — not a cheap/small variant.
+///
+/// Cloud Sonnet/Opus/GPT-4-class (and equivalents) and large local models (Good/Full
+/// tier, e.g. 70B) qualify. Haiku, `*-mini`, `*-nano`, and small consumer-hardware local
+/// models (7–14B, Basic tier) do NOT — for those the brief falls back to the
+/// deterministic, grounded brief (which needs no LLM and cannot hallucinate) rather than
+/// faking synthesis with a model too weak to do it well. Tested finding: consumer-hardware
+/// local LLMs produce incoherent briefs; the deterministic floor serves them honestly.
+pub(crate) fn is_brief_capable(settings: &LLMProvider) -> bool {
+    let model = settings.model.to_lowercase();
+
+    // Small/cheap variants can't carry a genuine brief — exclude regardless of provider,
+    // even when the name also contains a capable family (e.g. "gpt-4o-mini" → excluded
+    // because "mini" matches first).
+    const SMALL: &[&str] = &[
+        "haiku",
+        "mini",
+        "nano",
+        "flash-lite",
+        "-8b",
+        "-7b",
+        "-3b",
+        "-1b",
+    ];
+    if SMALL.iter().any(|s| model.contains(s)) {
+        return false;
+    }
+
+    let is_cloud = matches!(
+        settings.provider.as_str(),
+        "anthropic" | "openai" | "openai-compatible" | "openrouter"
+    );
+    if is_cloud {
+        // Genuine cloud reasoning/writing models (Sonnet-class and equivalents).
+        const BRIEF_GRADE: &[&str] = &[
+            "sonnet",
+            "opus",
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-4-turbo",
+            "gpt-5",
+            "o1",
+            "o3",
+            "mistral-large",
+            "command-r-plus",
+            "deepseek-chat",
+            "deepseek-r1",
+            "gemini-1.5-pro",
+            "gemini-2.0-pro",
+            "gemini-2.5-pro",
+            "qwen-max",
+        ];
+        BRIEF_GRADE.iter().any(|s| model.contains(s))
+    } else {
+        // Local: only large models clear the bar (Good/Full tier — 70B-class). Consumer
+        // 7–14B (Basic, or unknown Ollama defaulting to Basic) fall back to the floor.
+        matches!(get_model_tier(settings), ModelTier::Full | ModelTier::Good)
+    }
+}
+
 /// Probe the model's capability by sending a test prompt.
 ///
 /// This is expensive (1 API call) so should only be called:
