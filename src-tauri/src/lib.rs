@@ -168,6 +168,7 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod blind_spots;
 mod boot_context;
+mod briefing_deterministic;
 pub(crate) mod briefing_seals;
 mod briefing_snapshot;
 mod briefing_window;
