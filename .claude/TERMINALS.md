@@ -27,7 +27,10 @@ audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triag
 **Status**: Wave 1a DONE — committed local @ c164edf3 (Sentry fully removed; local Export Diagnostics
 + log_frontend_error; scrubber w/ 10 tests; crash_reporting_opt_in purged). Push HELD for user.
 NOW: Wave 1b (truth-fix BYOK "data never leaves" claims in hardcoded components + 13 locales + docs).
-**Commit Lock**: HELD (opus-privacy-truth) — committing Wave 1b (BYOK claim truth-fix).
+**Commit Lock**: HELD (opus-privacy-truth) — committing Wave 4 (NETWORK.md).
+DONE: Wave 1a @ c164edf3, Wave 1b @ daaa7417, Wave 5 positioning doc (gitignored). victauri 0.7.2->0.7.6
+(lock) + dev server restarted clean — app LAUNCHED, victauri serving :7373, export_diagnostics
+LIVE-VERIFIED via bridge. NEXT: Wave 4 commit, then Wave 2 (real consent gate) + Wave 3 (zero-retention).
 
 <!-- opus-relevance-funnel (2026-06-05): Phase 4 (forgetting) DONE — committed + pushed (measure-first;
      actual deletion HELD for user approval per destructive-ops protocol). Also ran the dependabot audit:
