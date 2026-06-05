@@ -303,6 +303,16 @@ export function SetupAIProvider({
             </div>
           )}
 
+          {/* Cloud data disclosure — informed consent at the BYOK moment */}
+          {(provider === 'anthropic' || provider === 'openai' || provider === 'openai-compatible') && (
+            <p className="text-[10px] text-text-muted leading-relaxed border-l-2 border-border/60 pl-2">
+              {t(
+                'onboarding.setupAi.cloudDataDisclosure',
+                'What gets sent: when you use a cloud model, the titles and short snippets 4DA analyzes (capped ~2000 characters) go to your chosen provider under their terms. Your indexed data, files, and API key stay on your machine — 4DA never sees or stores them.',
+              )}
+            </p>
+          )}
+
           {/* Ollama not running hint */}
           {provider === 'ollama' && !ollamaStatus?.running && (
             <div className="text-text-secondary text-sm p-3 bg-bg-tertiary rounded-lg border border-border">

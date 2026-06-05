@@ -240,12 +240,16 @@ where
         }));
     }
 
-    let body = serde_json::json!({
+    let mut body = serde_json::json!({
         "model": provider.model,
         "max_tokens": 4096,
         "stream": true,
         "messages": all_messages
     });
+    // Zero-retention default (first-party OpenAI only — see llm.rs complete_openai).
+    if provider.provider == "openai" {
+        body["store"] = serde_json::Value::Bool(false);
+    }
 
     let response = client
         .post(url)

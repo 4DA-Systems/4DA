@@ -162,18 +162,11 @@ impl LLMClient {
             );
         }
 
-        // Privacy gate: auto-heal disclosure flag for BYOK users.
-        // Providing an API key IS consent — no separate acceptance needed.
-        if self.provider.provider != "ollama" {
-            if let Some(mut g) = crate::get_settings_manager().try_lock() {
-                if !g.get().privacy.cloud_llm_disclosure_accepted
-                    && !self.provider.api_key.is_empty()
-                {
-                    g.get_mut().privacy.cloud_llm_disclosure_accepted = true;
-                    let _ = g.save();
-                }
-            }
-        }
+        // Cloud-LLM consent is recorded at configuration time (see
+        // SettingsManager::set_llm_provider), where the UI shows the disclosure of
+        // what gets sent to the provider. We deliberately do NOT silently flip the
+        // consent flag here at call time — recording consent at the moment data is
+        // sent would defeat its purpose.
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
@@ -249,16 +242,8 @@ impl LLMClient {
             );
         }
 
-        if self.provider.provider != "ollama" {
-            if let Some(mut g) = crate::get_settings_manager().try_lock() {
-                if !g.get().privacy.cloud_llm_disclosure_accepted
-                    && !self.provider.api_key.is_empty()
-                {
-                    g.get_mut().privacy.cloud_llm_disclosure_accepted = true;
-                    let _ = g.save();
-                }
-            }
-        }
+        // Consent is recorded at configuration time, not here — see the note in
+        // complete() above.
 
         let result = match self.provider.provider.as_str() {
             "anthropic" => {
@@ -492,11 +477,17 @@ impl LLMClient {
             }));
         }
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.provider.model,
             "max_tokens": 4096,
             "messages": all_messages
         });
+        // Zero-retention default: opt out of OpenAI storing this completion for
+        // their dashboard/retrieval. First-party OpenAI only — openai-compatible
+        // providers (Groq, Mistral, …) may reject unknown fields.
+        if self.provider.provider == "openai" {
+            body["store"] = serde_json::Value::Bool(false);
+        }
 
         let response = self
             .client
@@ -700,12 +691,16 @@ impl LLMClient {
             }));
         }
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": self.provider.model,
             "max_tokens": 4096,
             "messages": all_messages,
             "response_format": { "type": "json_object" }
         });
+        // Zero-retention default (first-party OpenAI only — see complete_openai).
+        if self.provider.provider == "openai" {
+            body["store"] = serde_json::Value::Bool(false);
+        }
 
         let response = self
             .client

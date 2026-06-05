@@ -292,8 +292,11 @@ impl SettingsManager {
                 tracing::warn!(target: "4da::keystore", "Keychain unavailable for openai_api_key — plaintext fallback");
             }
         }
-        // BYOK = consent. Providing an API key for a cloud provider IS the
-        // privacy disclosure acceptance — no separate gate needed.
+        // BYOK = informed consent, recorded HERE at configuration time. The BYOK
+        // setup UI shows the disclosure of what gets sent to the provider, so
+        // saving a cloud provider with a key records that acceptance. We never
+        // flip this flag silently at call time (see llm.rs) — recording consent at
+        // the moment data is sent would defeat its purpose.
         let is_cloud = !matches!(provider.provider.as_str(), "ollama" | "none" | "local");
         if is_cloud && !provider.api_key.is_empty() {
             self.settings.privacy.cloud_llm_disclosure_accepted = true;
