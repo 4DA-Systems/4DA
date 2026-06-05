@@ -8460,9 +8460,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "victauri-core"
-version = "0.7.0"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd589da27cd055455dcb48ab15297e3d1b3e4e2eec75c3120f67e1cde93ae58"
+checksum = "baede51e817a9c60d23f9980f29ebe859632b426982c7b2102e9cfda5b8f6131"
 dependencies = [
  "axum",
  "chrono",
@@ -8478,9 +8478,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-macros"
-version = "0.7.0"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce33d56d2bff7ac435db9bee6d586caf2d0b5a426bdac21c9f4ee2ff5ad57eea"
+checksum = "1830687318f7f6920d36a84d1057c577651a178c81678f4257aeedd467dd8d81"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8489,9 +8489,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-plugin"
-version = "0.7.0"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc9dc77832fb35f08239219bd01113821943976e8a0b2a09bfafc416970bc9e1"
+checksum = "1ede18ad31bfacccfb9d6c615355eab27abf46d21aca297986f68a5d150a3954"
 dependencies = [
  "anyhow",
  "axum",
@@ -8521,9 +8521,9 @@ dependencies = [
 
 [[package]]
 name = "victauri-test"
-version = "0.7.0"
+version = "0.7.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdb810476a229229f2c26bd3fcd32e3aca9ac2647220346381e5065afaf99535"
+checksum = "ef2ab9f0a5943768c70fdd20771f0fe769af9ff429b61ed475cb72c7f44424cd"
 dependencies = [
  "base64 0.22.1",
  "png 0.17.16",
@@ -8888,7 +8888,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
