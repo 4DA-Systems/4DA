@@ -37,6 +37,8 @@ use rusqlite::Result as SqliteResult;
 
 use crate::db::Database;
 
+use super::{match_dependencies, ScoringContext};
+
 /// Minimum feedback events before the engagement-derived metrics are trustworthy.
 /// Below this the rates are reported but `has_sufficient_feedback` is false.
 const MIN_FEEDBACK_FOR_METRICS: i64 = 10;
@@ -128,6 +130,56 @@ fn ratio(num: i64, denom: i64) -> f32 {
     } else {
         num as f32 / denom as f32
     }
+}
+
+/// Dep-scoped high-stakes recall (Phase 5b) — the cold-start-capable structural signal
+/// that needs the live dependency graph (so it lives here, not in the pure-SQL snapshot).
+///
+/// A security/breaking advisory that affects the developer's OWN stack should never score
+/// as noise; if it does, that's a concrete recall bug. The dep-graph scoping is what makes
+/// this honest: an unscoped "high-stakes scored low" count flagged ~86% on live data
+/// (a CVE in a package you don't use SHOULD score low). Here the denominator is ONLY the
+/// high-stakes items that match a current dependency.
+#[derive(Debug, Clone, serde::Serialize)]
+pub(crate) struct HighStakesRecall {
+    /// High-stakes (security/breaking/CVE) items that match a current dependency.
+    pub dep_matched_total: usize,
+    /// ...of those, how many scored below threshold (a buried advisory for your stack).
+    pub misscored: usize,
+    /// `misscored / dep_matched_total`. Should be ~0; anything above is a real recall bug.
+    pub miss_rate: f32,
+}
+
+/// Compute dep-scoped high-stakes recall from the live corpus + dependency graph.
+/// Bounded scan (most-recent high-stakes items); read-only.
+pub(crate) fn compute_high_stakes_recall(
+    db: &Database,
+    ctx: &ScoringContext,
+    threshold: f32,
+) -> SqliteResult<HighStakesRecall> {
+    let items = db.get_scored_high_stakes_items(2000)?;
+    let t = threshold as f64;
+    let mut dep_matched_total = 0usize;
+    let mut misscored = 0usize;
+    for (_, title, content, relevance) in &items {
+        let (matches, _) = match_dependencies(title, content, &[], &ctx.ace_ctx);
+        if !matches.is_empty() {
+            dep_matched_total += 1;
+            if *relevance < t {
+                misscored += 1;
+            }
+        }
+    }
+    let miss_rate = if dep_matched_total > 0 {
+        misscored as f32 / dep_matched_total as f32
+    } else {
+        0.0
+    };
+    Ok(HighStakesRecall {
+        dep_matched_total,
+        misscored,
+        miss_rate,
+    })
 }
 
 #[cfg(test)]

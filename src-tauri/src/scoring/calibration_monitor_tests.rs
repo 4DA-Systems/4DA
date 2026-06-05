@@ -1,8 +1,27 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for the per-developer calibration monitor.
 
-use super::compute_calibration_snapshot;
+use super::{compute_calibration_snapshot, compute_high_stakes_recall};
+use crate::scoring::ace_context::ACEContext;
+use crate::scoring::dependencies::{extract_search_terms, DepInfo};
+use crate::scoring::ScoringContext;
 use crate::test_utils::{insert_test_item, test_db};
+
+fn ctx_with_dep(name: &str) -> ScoringContext {
+    let mut ace = ACEContext::default();
+    ace.dependency_info.insert(
+        name.to_string(),
+        DepInfo {
+            package_name: name.to_string(),
+            version: None,
+            is_dev: false,
+            is_direct: true,
+            search_terms: extract_search_terms(name),
+            ecosystem: "rust".to_string(),
+        },
+    );
+    ScoringContext::builder().ace_ctx(ace).build()
+}
 
 /// Set a scored item's relevance + optional high-stakes markers.
 fn set_score(
@@ -108,4 +127,56 @@ fn sufficient_feedback_threshold_gates_trust_and_health() {
     // Clean separation → health near 1.0 and now Some(_).
     let health = snap.health().expect("measurable with 12 feedback");
     assert!(health > 0.99, "got {health}");
+}
+
+#[test]
+fn high_stakes_recall_is_dep_scoped() {
+    let db = test_db();
+    let ctx = ctx_with_dep("tokio"); // the developer tracks tokio, not leftpad
+
+    // (1) advisory affecting a tracked dep, scored as noise → a real recall MISS.
+    let miss = insert_test_item(&db, "cve", "c1", "advisory affecting tokio", "details");
+    set_score(
+        &db,
+        miss,
+        0.02,
+        Some("security_advisory"),
+        Some("CVE-2026-1"),
+    );
+    // (2) breaking change affecting a tracked dep, scored high → dep-matched, NOT a miss.
+    let ok = insert_test_item(&db, "github", "c2", "tokio 2.0 breaking change", "x");
+    set_score(&db, ok, 0.80, Some("breaking_change"), None);
+    // (3) advisory for a package the dev does NOT track, scored low → NOT counted
+    //     (this is the 86%-false-flag case the dep scoping exists to exclude).
+    let untracked = insert_test_item(&db, "cve", "c3", "advisory affecting leftpad", "x");
+    set_score(
+        &db,
+        untracked,
+        0.02,
+        Some("security_advisory"),
+        Some("CVE-2026-2"),
+    );
+
+    let hs = compute_high_stakes_recall(&db, &ctx, 0.4).unwrap();
+    assert_eq!(
+        hs.dep_matched_total, 2,
+        "only the two tokio advisories are dep-matched"
+    );
+    assert_eq!(
+        hs.misscored, 1,
+        "only the buried tokio advisory is a recall miss"
+    );
+    assert!((hs.miss_rate - 0.5).abs() < 1e-6);
+}
+
+#[test]
+fn high_stakes_recall_clean_when_no_stack_advisories_buried() {
+    let db = test_db();
+    let ctx = ctx_with_dep("tokio");
+    let ok = insert_test_item(&db, "cve", "c1", "advisory affecting tokio", "x");
+    set_score(&db, ok, 0.9, Some("security_advisory"), Some("CVE-2026-9"));
+    let hs = compute_high_stakes_recall(&db, &ctx, 0.4).unwrap();
+    assert_eq!(hs.dep_matched_total, 1);
+    assert_eq!(hs.misscored, 0);
+    assert_eq!(hs.miss_rate, 0.0);
 }

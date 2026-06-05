@@ -621,6 +621,32 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                             tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
                         }
                     }
+
+                    // Phase 5b: dep-scoped high-stakes recall. Unlike the feedback metrics,
+                    // this works at cold start — it needs the dependency graph, not feedback.
+                    // A security/breaking advisory affecting the developer's OWN stack that
+                    // scored as noise is a concrete recall bug; surface it loudly.
+                    if let Ok(ctx) = crate::scoring::build_scoring_context(db).await {
+                        if let Ok(hs) =
+                            crate::scoring::compute_high_stakes_recall(db, &ctx, threshold)
+                        {
+                            if hs.misscored > 0 {
+                                warn!(
+                                    target: "4da::calibration",
+                                    misscored = hs.misscored,
+                                    dep_matched = hs.dep_matched_total,
+                                    miss_rate = hs.miss_rate,
+                                    "Security/breaking advisories affecting your stack scored as noise — recall bug"
+                                );
+                            } else if hs.dep_matched_total > 0 {
+                                info!(
+                                    target: "4da::calibration",
+                                    dep_matched = hs.dep_matched_total,
+                                    "High-stakes recall clean — all stack advisories surfaced"
+                                );
+                            }
+                        }
+                    }
                 }
             }
 

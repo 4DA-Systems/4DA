@@ -208,4 +208,28 @@ impl Database {
         tx.commit()?;
         Ok(count)
     }
+
+    /// Scored high-stakes items (security/breaking/CVE) for the calibration monitor's
+    /// dep-scoped recall check (Phase 5b). Returns (id, title, content, relevance_score)
+    /// so the caller can run the canonical dep matcher and find advisories that affect
+    /// the user's stack yet scored as noise — a concrete recall bug. Read-only.
+    pub fn get_scored_high_stakes_items(
+        &self,
+        limit: usize,
+    ) -> SqliteResult<Vec<(i64, String, String, f64)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, title, content, relevance_score
+             FROM source_items
+             WHERE relevance_score IS NOT NULL
+               AND (cve_ids IS NOT NULL
+                    OR content_type IN ('security_advisory', 'breaking_change'))
+             ORDER BY created_at DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit as i64], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })?;
+        rows.collect()
+    }
 }

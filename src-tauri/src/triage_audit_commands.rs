@@ -57,20 +57,34 @@ pub(crate) struct DroppedSample {
     pub similarity: f32,
 }
 
-/// Per-developer calibration snapshot (Phase 5 observability). Computes, from THIS
-/// developer's own feedback, whether scoring is calibrated for them: precision/recall
-/// miss rates + discrimination. Cold-start-silent (insufficient_feedback until enough
-/// engagement). The scheduler logs this every 6h; this command surfaces it on demand
-/// (for a calibration-health UI or a live check). Read-only.
+/// Per-developer calibration report (Phase 5/5b observability). Combines the
+/// feedback-derived snapshot (precision/recall/discrimination — cold-start-silent until
+/// enough engagement) with the dep-scoped high-stakes recall (security/breaking items
+/// affecting the developer's stack that scored as noise — works at cold start). The
+/// scheduler logs both every 6h; this command surfaces them on demand. Read-only.
+#[derive(Serialize)]
+pub(crate) struct CalibrationReport {
+    pub snapshot: crate::scoring::CalibrationSnapshot,
+    /// `None` if the scoring context couldn't be built (e.g. no dependency graph yet).
+    pub high_stakes_recall: Option<crate::scoring::HighStakesRecall>,
+}
+
 #[tauri::command]
-pub(crate) async fn get_calibration_snapshot(
-    threshold: Option<f32>,
-) -> Result<crate::scoring::CalibrationSnapshot> {
+pub(crate) async fn get_calibration_snapshot(threshold: Option<f32>) -> Result<CalibrationReport> {
     let db = get_database()?;
     let t = threshold.unwrap_or_else(crate::get_relevance_threshold);
-    let snap = crate::scoring::compute_calibration_snapshot(db, t)
+    let snapshot = crate::scoring::compute_calibration_snapshot(db, t)
         .map_err(|e| format!("Failed to compute calibration snapshot: {e}"))?;
-    Ok(snap)
+    // The dep-scoped high-stakes recall needs the live dependency graph; build the
+    // scoring context best-effort (None if it can't be built / no deps yet).
+    let high_stakes_recall = match crate::scoring::build_scoring_context(db).await {
+        Ok(ctx) => crate::scoring::compute_high_stakes_recall(db, &ctx, t).ok(),
+        Err(_) => None,
+    };
+    Ok(CalibrationReport {
+        snapshot,
+        high_stakes_recall,
+    })
 }
 
 /// Lightweight scoring-coverage snapshot (Phase 1 observability). Cheap COUNT queries
