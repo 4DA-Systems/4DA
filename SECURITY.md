@@ -97,9 +97,9 @@ These are architectural properties, not claims of invulnerability.
   - **BYOK LLM providers** you have explicitly configured (Anthropic, OpenAI, or localhost Ollama).
   - **License validation** (Keygen) if you have activated a paid license.
   - **Update checks** against the signed updater endpoint on GitHub Releases.
-  - **Opt-in crash reports** to Sentry, *off by default*, toggleable in Settings → Privacy. When off, no Sentry connection is ever made.
+  - **No crash reporting or telemetry.** 4DA sends no crash reports to any server. If you hit a bug, **Settings → Privacy → Export diagnostics** builds a scrubbed, local report (usernames and secrets redacted) that you review and choose whether to attach to a bug report. Nothing is transmitted automatically.
 - **No 4DA-operated cloud.** 4DA Systems does not run a data collection backend. Nothing you index, search, or read is ever sent to 4DA servers — because there are no 4DA servers for it to go to.
-- **On-device activity log.** 4DA records UI activity (tab opens, result clicks, feedback) in a local SQLite table to power relevance learning and the compound-intelligence system. This data stays on your machine and is never transmitted. Activity logging is gated by a Privacy → Activity Tracking setting, which we are wiring to respect the same default as crash reporting.
+- **On-device activity log.** 4DA records UI activity (tab opens, result clicks, feedback) in a local SQLite table to power relevance learning and the compound-intelligence system. This data stays on your machine and is never transmitted. Activity logging is gated by a Privacy → Activity Tracking setting and is off by default, opt-in only.
 - **Database encryption.** The default public build uses bundled SQLite without at-rest encryption. The SQLCipher scaffolding exists for self-compiled builds. Opt-in at-rest encryption for the default installer is on the v1.1 roadmap.
 - **No accounts.** There is no user database, authentication system, or session infrastructure to breach.
 

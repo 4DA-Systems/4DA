@@ -25,7 +25,7 @@ Nothing, by default.
 
 The app learns from what you click and save to improve your recommendations — all of that stays on your machine in a local SQLite database.
 
-**One opt-in exception**: crash reporting (Sentry). It is **off by default**. If you turn it on in Settings → Privacy, anonymized crash traces get sent to Sentry with file paths, API keys, and PII scrubbed. You can verify the scrubbing in `src/lib/sentry-init.ts`. With the toggle off, no Sentry connection is ever attempted.
+**No telemetry, no exceptions**: 4DA sends no crash reports and no analytics to any server — there is no toggle that turns that on, because there is nothing to turn on. If something breaks, **Settings → Privacy → Export diagnostics** builds a scrubbed, local report (file paths, API keys, and PII redacted) that you review and choose whether to attach to a bug report. Nothing leaves your machine unless you send it yourself.
 
 Your BYOK LLM calls go direct to the provider *you* chose (Anthropic, OpenAI, or localhost Ollama). Source adapters fetch public content (HN, GitHub, Reddit, CVE feeds, etc.). License validation pings Keygen if you're on a paid tier. Updates check GitHub Releases. That's the full list — documented in [NETWORK.md](../NETWORK.md) with source references.
 

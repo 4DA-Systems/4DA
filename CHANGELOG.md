@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Highlights
 
-4DA (4 Dimensional Autonomy) is a privacy-first desktop app that surfaces developer-relevant content from the internet — scored against your actual codebase, running entirely on your machine. No telemetry, no cloud dependency, no user accounts. First useful results in under 3 minutes after a quick onboarding (pick your stack, add an API key or use Ollama).
+4DA (4 Dimensional Autonomy) is a privacy-first desktop app that surfaces developer-relevant content from the internet — scored against your actual codebase, running on your machine. No telemetry, no 4DA cloud, no user accounts. First useful results in under 3 minutes after a quick onboarding (pick your stack, add an API key or use Ollama).
 
 ### Features
 
@@ -44,9 +44,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - MCP integration: 33 tools for Claude Code, Cursor, and Copilot
 
 **Privacy & Security**
-- Runs 100% locally — zero telemetry, zero data collection
+- Local-first — zero telemetry, zero data collection, no 4DA server
 - BYOK (Bring Your Own Key) — API keys never leave your machine
-- All AI processing happens on-device with Ollama support
+- Local AI via Ollama or the built-in model; optional BYOK cloud models send only what you analyze, to the provider you choose
 - Restrictive CSP blocks unauthorized network requests
 - Keyword-only mode available without any AI provider
 
