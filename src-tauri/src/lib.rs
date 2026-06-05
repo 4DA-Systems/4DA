@@ -977,6 +977,8 @@ pub fn run() {
             autophagy_commands::get_data_health,
             autophagy_commands::run_deep_clean,
             autophagy_commands::set_cleanup_retention,
+            autophagy_commands::measure_noise_prune,
+            autophagy_commands::run_noise_prune,
             // Translation Pipeline
             translation_commands::get_translation_status,
             translation_commands::trigger_translation,
