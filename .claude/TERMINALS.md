@@ -9,16 +9,42 @@
 
 ## Active Terminals
 
-### Terminal: opus-preemption-cache (2026-06-06)
-Working on: Preemption first-paint latency (cold-start work item A). MEASURED: returning-user data is
-present at boot, but get_preemption_alerts takes 30-40s on first call — it recomputes OSV matching live
-AND runs an adversarial LLM deliberation (1 call per Medium/Watch item) on every call. Fix v1: in-memory
-EvidenceFeed cache (stale-while-revalidate, 10-min TTL) + boot warm, so the tab paints from cache instantly.
-BACKEND-ONLY — zero overlap with @opus-tab-quality's frontend slice/component work (incl. preemption-slice.ts).
+### Terminal: opus-preemption-cache (2026-06-06) — WAVE 2 (invalidate-on-sync)
+Working on: closing the feed-cache v1 caveat (42097071). Re-warm the Preemption cache after EVERY OSV
+sync so it never serves pre-sync advisories: boot sync block folds warm in (eager-warm when recently
+synced, post-sync warm otherwise — runs once, removes the old standalone +8s task), and osv_sync_now
+(manual refresh) spawns a background re-warm. BACKEND-ONLY, zero overlap with @opus-tab-quality (frontend tests).
 **Claims:**
-- src-tauri/src/preemption.rs (feed cache static + extract compute helper + warm fn)
-- src-tauri/src/app_setup.rs (spawn boot warm after deps confirmed)
-**Commit Lock**: HELD (opus-preemption-cache) — committing the Preemption feed cache (preemption.rs + app_setup.rs) onto origin/main @ 308c3841.
+- src-tauri/src/app_setup.rs (fold warm into boot sync; remove standalone warm task)
+- src-tauri/src/osv/mod.rs (osv_sync_now → background re-warm)
+**Commit Lock**: HELD (opus-preemption-cache) — committing invalidate-on-sync onto origin/main @ bf1f6600 (opus-tab-quality's bf1f6600 already on origin; their HELD text was stale).
+
+### Terminal: opus-tab-quality (2026-06-06) — WAVE 3 (paywall verification tests)
+Working on: deterministic slice tests for the AB-011 paywall branch (verifies gate→paywalled vs
+fault→error for both tabs — the safe substitute for an unsafe live free-tier trigger). 2 NEW files,
+zero conflict.
+**Claims:**
+- src/store/__tests__/blind-spots-slice.test.ts (NEW)
+- src/store/__tests__/preemption-slice.test.ts (NEW)
+**Commit Lock**: HELD (opus-tab-quality) — committing 2 new test files onto origin/main @ 42097071.
+
+<!-- opus-preemption-cache (2026-06-06): DONE — committed + PUSHED (origin/main @ 42097071,
+     308c3841..42097071, rev-list 0/0; full pre-push gate green). Commit Lock RELEASED, claims cleared.
+     Preemption-tab first-paint latency (cold-start work item A). MEASURED first, fixed second: the
+     returning-user data is PRESENT at boot (matches computed live from persisted advisories + deps),
+     but get_preemption_alerts took 30-40s on every call — live OSV matching + an adversarial LLM
+     deliberation (one call per Medium/Watch item). (The earlier "empty on cold start" reading was a
+     wrong-command artifact: get_preemption_FEED doesn't exist → 51-char error misread as an empty feed.)
+     Fix v1 (preemption.rs + app_setup.rs, +230/-10): in-process EvidenceFeed cache (once_cell Lazy +
+     parking_lot Mutex, 10-min TTL, stale-while-revalidate, lock cloned+dropped before await); extracted
+     compute_preemption_evidence_feed() shared by the command + warm path (Signal gate stays at the
+     serving boundary); warm_preemption_cache() spawned off the boot path (+8s) so the first tab-open is a
+     cache hit. 1 test (feed_cache_stores_and_serves_within_ttl). LIVE-VERIFIED: 30-40s -> 230ms first
+     (warmed) hit, 7-12ms thereafter, 12 OSV alerts intact. NOT a dup of 308c3841 ("always-on Preemption"
+     = the BRIEF's security section; this is the Preemption TAB latency — different files, complementary).
+     v1 caveat in code: a >6h-stale boot that triggers a fresh OSV sync may serve pre-sync advisories until
+     the TTL elapses — next lever = invalidate-on-sync. Did NOT touch AdapterStatus.ts / fourda-infer-proto. -->
+     <!-- Commit Lock RELEASED (opus-preemption-cache) -->
 
 <!-- opus-tab-quality (2026-06-06) WAVE 2: DONE — committed + PUSHED (origin/main @ dca94dc2,
      13cee281..dca94dc2, rev-list 0/0; another terminal has since stacked 308c3841 on top — my

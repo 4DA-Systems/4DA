@@ -21,6 +21,12 @@ use crate::error::{Result, ResultExt};
 pub async fn osv_sync_now() -> Result<serde_json::Value> {
     let db = crate::get_database()?;
     let result = sync::sync(&db).await?;
+    // The sync recomputed matches — refresh the Preemption feed cache in the
+    // background so a manual refresh is reflected on the next tab open without
+    // paying the 30-40s recompute (live matching + adversarial deliberation).
+    tauri::async_runtime::spawn(async {
+        crate::preemption::warm_preemption_cache().await;
+    });
     serde_json::to_value(&result).context("Failed to serialize sync result")
 }
 
