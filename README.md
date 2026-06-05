@@ -92,7 +92,7 @@ No algorithm can be gamed when the scoring signal comes from your local filesyst
 | LLM providers | Anthropic / OpenAI / localhost Ollama | Only if YOU set up BYOK keys |
 | License validation | Keygen | Only if you activated a paid license |
 | Updater | GitHub Releases | Signed via minisign, once per session |
-| Crash reports | Sentry | **Off by default.** Opt-in only. |
+| Crash reports | **None** | 4DA sends no crash reports. Export a scrubbed diagnostic bundle locally, on demand. |
 
 That's the whole list. There is no 4DA telemetry endpoint because there is no 4DA cloud.
 

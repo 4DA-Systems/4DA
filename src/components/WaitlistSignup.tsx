@@ -37,7 +37,7 @@ const TIER_CONFIG = {
     price: 'From $22/seat/mo',
     annual: '25+ seats, annual',
     tagline: 'Same app your developers already love. Now with the trust your security team requires.',
-    value: 'No server to audit. No data to breach. No cloud to secure. Privacy by architecture.',
+    value: 'No 4DA server to audit. No 4DA cloud to breach. Your data stays on your machines. Privacy by architecture.',
     icon: (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
         <rect x="3" y="3" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/>

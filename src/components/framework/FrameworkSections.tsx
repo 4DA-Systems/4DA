@@ -50,7 +50,8 @@ export function OverviewSection() {
       <Paragraph>
         4DA is a framework for <Highlight>sovereign developer intelligence</Highlight> — a system
         where content is scored, filtered, and surfaced by a machine that works exclusively for its
-        operator, on its operator's hardware, with zero data leaving the machine.
+        operator, on its operator's hardware. There is no 4DA server: your indexed content, scores,
+        and decisions never leave your machine unless you choose to use a cloud model with your own key.
       </Paragraph>
       <Paragraph>
         Three pillars form the foundation: the <Highlight>PASIFA scoring philosophy</Highlight>,
@@ -66,7 +67,7 @@ export function OverviewSection() {
         <Paragraph>
           4DA's thesis: a machine that knows your codebase, your tech stack, your recent work, and
           your declared interests can filter most content and show you only what matters —
-          without ever sending your data anywhere. Tested at 92% rejection across 9 developer personas.
+          all on your own machine, with no 4DA server in the loop. Tested at 92% rejection across 9 developer personas.
         </Paragraph>
       </Card>
       <Card>
@@ -220,8 +221,9 @@ export function PrivacySection() {
     <div className="space-y-3">
       <SectionHeading>Privacy as Architecture</SectionHeading>
       <Paragraph>
-        It is <Highlight>structurally impossible</Highlight> for data to leave the machine
-        without the user's explicit action.
+        Network access is <Highlight>CSP-restricted</Highlight> to a fixed whitelist with no
+        4DA-owned endpoints, so your indexed data leaves only when you explicitly send it — for
+        example, to a cloud model you configured with your own key.
       </Paragraph>
       <Card>
         <p className="text-xs text-text-muted uppercase tracking-wider mb-3 font-medium">Enforcement Layers</p>

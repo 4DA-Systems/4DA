@@ -24,7 +24,10 @@ audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triag
   src-tauri/src/embeddings_providers/openai.rs
 - Wave 4 (network doc): NETWORK.md, docs/NETWORK-TRANSPARENCY.md
 - Wave 5 (positioning): .claude/plans/ (gitignored)
-**Commit Lock**: HELD (opus-privacy-truth) — committing Wave 1a (Sentry removal + local Export Diagnostics).
+**Status**: Wave 1a DONE — committed local @ c164edf3 (Sentry fully removed; local Export Diagnostics
++ log_frontend_error; scrubber w/ 10 tests; crash_reporting_opt_in purged). Push HELD for user.
+NOW: Wave 1b (truth-fix BYOK "data never leaves" claims in hardcoded components + 13 locales + docs).
+**Commit Lock**: HELD (opus-privacy-truth) — committing Wave 1b (BYOK claim truth-fix).
 
 <!-- opus-relevance-funnel (2026-06-05): Phase 4 (forgetting) DONE — committed + pushed (measure-first;
      actual deletion HELD for user approval per destructive-ops protocol). Also ran the dependabot audit:
