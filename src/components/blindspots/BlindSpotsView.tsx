@@ -12,6 +12,8 @@ import { recordTrustEvent } from '../../lib/trust-feedback';
 import { useColdStartGate } from '../../hooks/use-cold-start-gate';
 import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
+import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
+
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import ScoreBar from './ScoreBar';
 import { TierSection, EmergingSignals, CoveredSection } from './StackCoverageMap';
@@ -23,11 +25,12 @@ import { TierSection, EmergingSignals, CoveredSection } from './StackCoverageMap
 const BlindSpotsView = memo(function BlindSpotsView() {
   const { t } = useTranslation();
   const isColdStart = useColdStartGate();
-  const { report, loading, error } = useAppStore(
+  const { report, loading, error, paywalled } = useAppStore(
     useShallow((s) => ({
       report: s.blindSpotReport,
       loading: s.blindSpotsLoading,
       error: s.blindSpotsError,
+      paywalled: s.blindSpotsPaywalled,
     })),
   );
   const loadBlindSpots = useAppStore((s) => s.loadBlindSpots);
@@ -94,6 +97,29 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     return (
       <div className="flex items-center justify-center py-20 text-text-secondary text-sm">
         {t('blindspots.loading')}
+      </div>
+    );
+  }
+  // Tier gate is a paywall, not a fault — show an upgrade path, never the red
+  // error banner below. (Mirrors PreemptionView; the shared isSignalGateError
+  // classifier routes the gate here instead of into blindSpotsError.)
+  if (paywalled) {
+    return (
+      <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
+        <header className="mb-2">
+          <h1 className="text-xl font-semibold text-white tracking-tight">{t('blindspots.title')}</h1>
+          <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
+        </header>
+        <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-1">
+            <span className="text-accent-gold text-lg" aria-hidden="true">&#x1F512;</span>
+          </div>
+          <p className="text-sm font-medium text-white">{t('blindspots.locked.title')}</p>
+          <p className="text-xs text-text-muted max-w-sm">{t('blindspots.locked.subtitle')}</p>
+          <div className="mt-1">
+            <SignalUpgradeCTA />
+          </div>
+        </div>
       </div>
     );
   }

@@ -248,6 +248,8 @@
   "blindspots.stats.weakHidden_one": "({{count}} कमज़ोर मिलान छिपा हुआ)",
   "blindspots.stats.weakHidden_other": "({{count}} कमज़ोर मिलान छिपे हुए)",
   "blindspots.subtitle": "जो आप पर्याप्त रूप से नहीं देख रहे",
+  "blindspots.locked.title": "देखें कि आप किस पर नज़र नहीं रख रहे",
+  "blindspots.locked.subtitle": "उन निर्भरताओं और इकोसिस्टम बदलावों को सामने लाएँ जो आपकी नज़र से छूट रहे हैं। इसे अनलॉक करने के लिए अपना निःशुल्क Signal ट्रायल शुरू करें।",
   "blindspots.tier.drifting": "विचलित",
   "blindspots.tier.ecosystem": "आपका इकोसिस्टम",
   "blindspots.tier.ecosystemEmpty": "कोई इकोसिस्टम विचलन नहीं मिला",

@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
 import { cmd } from '../lib/commands';
+import { isSignalGateError } from '../utils/error-messages';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { Urgency } from '../../src-tauri/bindings/bindings/Urgency';
@@ -38,18 +39,6 @@ export interface PreemptionSlice {
   loadPreemption: () => Promise<void>;
 }
 
-/**
- * Detect the Signal-tier gate rejection. The backend gate
- * (`require_signal_feature`, src-tauri/src/settings/license/gating.rs:102) is the
- * sole producer of this phrase; it is defined in exactly one place and not
- * pinned by any test, so matching the stable token is safe. We detect — never
- * display — the English: a hit swaps in a localized CTA, which also closes the
- * backend-English i18n leak for this surface.
- */
-function isSignalGateError(message: string): boolean {
-  return /requires 4DA Signal/i.test(message);
-}
-
 // ============================================================================
 // Slice Creator
 // ============================================================================
@@ -75,11 +64,10 @@ export const createPreemptionSlice: StateCreator<
         const feed = await cmd('get_preemption_alerts');
         set({ preemptionFeed: feed, preemptionLoading: false });
       } catch (error) {
-        const message = String(error);
-        if (isSignalGateError(message)) {
+        if (isSignalGateError(error)) {
           set({ preemptionPaywalled: true, preemptionLoading: false });
         } else {
-          set({ preemptionError: message, preemptionLoading: false });
+          set({ preemptionError: String(error), preemptionLoading: false });
         }
       } finally {
         preemptionInflight = null;

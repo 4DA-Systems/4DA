@@ -2770,6 +2770,8 @@
   "nav.blindspots.subtitle": "Что вы не отслеживаете",
   "blindspots.title": "Индекс слепых зон",
   "blindspots.subtitle": "Что вы отслеживаете недостаточно",
+  "blindspots.locked.title": "Узнайте, что выпало из поля зрения",
+  "blindspots.locked.subtitle": "Выявляйте зависимости и изменения экосистемы, ускользающие от вашего внимания. Начните бесплатный период Signal, чтобы открыть это.",
   "blindspots.score.excellent": "Отличное покрытие",
   "blindspots.score.good": "Хорошее покрытие",
   "blindspots.score.moderate": "Умеренные пробелы",

@@ -248,6 +248,8 @@
   "blindspots.stats.weakHidden_one": "(약한 일치 {{count}}개 숨김)",
   "blindspots.stats.weakHidden_other": "(약한 일치 {{count}}개 숨김)",
   "blindspots.subtitle": "충분히 주시하지 않는 영역",
+  "blindspots.locked.title": "놓치고 있는 것을 확인하세요",
+  "blindspots.locked.subtitle": "관리 범위를 벗어나는 의존성과 생태계 변화를 표면화하세요. 무료 Signal 체험을 시작하여 잠금을 해제하세요.",
   "blindspots.tier.drifting": "이탈 중",
   "blindspots.tier.ecosystem": "내 에코시스템",
   "blindspots.tier.ecosystemEmpty": "에코시스템 이탈이 감지되지 않았습니다",

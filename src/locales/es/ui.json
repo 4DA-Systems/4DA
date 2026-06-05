@@ -2792,6 +2792,8 @@
   "nav.blindspots.subtitle": "Lo que no estás monitoreando",
   "blindspots.title": "Índice de puntos ciegos",
   "blindspots.subtitle": "Lo que no estás monitoreando bien",
+  "blindspots.locked.title": "Ve lo que no estás vigilando",
+  "blindspots.locked.subtitle": "Detecta las dependencias y los cambios del ecosistema que escapan a tu cobertura. Inicia tu prueba gratuita de Signal para desbloquearlo.",
   "blindspots.score.excellent": "Cobertura excelente",
   "blindspots.score.good": "Buena cobertura",
   "blindspots.score.moderate": "Brechas moderadas",

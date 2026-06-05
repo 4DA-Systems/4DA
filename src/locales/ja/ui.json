@@ -2770,6 +2770,8 @@
   "nav.blindspots.subtitle": "監視していない領域",
   "blindspots.title": "ブラインドスポット指標",
   "blindspots.subtitle": "十分に監視できていない領域",
+  "blindspots.locked.title": "見落としているものを把握する",
+  "blindspots.locked.subtitle": "あなたの把握から漏れている依存関係とエコシステムの変化を可視化します。無料の Signal トライアルを開始してロックを解除しましょう。",
   "blindspots.score.excellent": "優れたカバレッジ",
   "blindspots.score.good": "良好なカバレッジ",
   "blindspots.score.moderate": "中程度のギャップ",

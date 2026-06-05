@@ -250,6 +250,8 @@
   "blindspots.stats.weakHidden_one": "({{count}} correspondência fraca oculta)",
   "blindspots.stats.weakHidden_other": "({{count}} correspondências fracas ocultas)",
   "blindspots.subtitle": "O que você não está monitorando bem o suficiente",
+  "blindspots.locked.title": "Veja o que você não está monitorando",
+  "blindspots.locked.subtitle": "Revele as dependências e mudanças do ecossistema que escapam à sua cobertura. Inicie seu teste gratuito do Signal para desbloqueá-lo.",
   "blindspots.tier.drifting": "Desviando",
   "blindspots.tier.ecosystem": "Seu Ecossistema",
   "blindspots.tier.ecosystemEmpty": "Nenhum desvio de ecossistema detectado",

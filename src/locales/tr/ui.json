@@ -251,6 +251,8 @@
   "blindspots.stats.weakHidden_one": "({{count}} zayıf eşleşme gizlendi)",
   "blindspots.stats.weakHidden_other": "({{count}} zayıf eşleşme gizlendi)",
   "blindspots.subtitle": "Yeterince izlemediğiniz alanlar",
+  "blindspots.locked.title": "İzlemediğiniz şeyleri görün",
+  "blindspots.locked.subtitle": "Kapsamınızdan kaçan bağımlılıkları ve ekosistem değişikliklerini ortaya çıkarın. Kilidini açmak için ücretsiz Signal denemenizi başlatın.",
   "blindspots.tier.drifting": "Sapıyor",
   "blindspots.tier.ecosystem": "Ekosisteminiz",
   "blindspots.tier.ecosystemEmpty": "Ekosistem sapması tespit edilmedi",

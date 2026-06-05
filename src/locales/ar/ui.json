@@ -264,6 +264,8 @@
   "blindspots.stats.weakHidden_one": "({{count}} تطابق ضعيف مخفي)",
   "blindspots.stats.weakHidden_other": "({{count}} تطابقات ضعيفة مخفية)",
   "blindspots.subtitle": "ما لا تراقبه بشكل كافٍ",
+  "blindspots.locked.title": "اطّلع على ما لا تراقبه",
+  "blindspots.locked.subtitle": "اكشف التبعيات وتحوّلات النظام البيئي التي تفلت من تغطيتك. ابدأ تجربة Signal المجانية لفتحها.",
   "blindspots.tier.drifting": "منحرف",
   "blindspots.tier.ecosystem": "نظامك البيئي",
   "blindspots.tier.ecosystemEmpty": "لم يتم اكتشاف انحراف في النظام البيئي",

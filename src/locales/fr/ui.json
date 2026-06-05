@@ -2792,6 +2792,8 @@
   "nav.blindspots.subtitle": "Ce que vous ne surveillez pas",
   "blindspots.title": "Index des angles morts",
   "blindspots.subtitle": "Ce que vous ne surveillez pas assez",
+  "blindspots.locked.title": "Voyez ce que vous ne surveillez pas",
+  "blindspots.locked.subtitle": "Repérez les dépendances et les évolutions de l'écosystème qui échappent à votre couverture. Démarrez votre essai gratuit Signal pour le débloquer.",
   "blindspots.score.excellent": "Couverture excellente",
   "blindspots.score.good": "Bonne couverture",
   "blindspots.score.moderate": "Lacunes modérées",

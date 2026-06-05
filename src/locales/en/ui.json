@@ -2793,6 +2793,8 @@
   "nav.blindspots.subtitle": "What you're not watching",
   "blindspots.title": "Coverage Gaps",
   "blindspots.subtitle": "Dependencies and topics that need your attention",
+  "blindspots.locked.title": "See what you're not watching",
+  "blindspots.locked.subtitle": "Surface the dependencies and ecosystem shifts slipping past your coverage. Start your free Signal trial to unlock it.",
   "blindspots.score.excellent": "Minimal gaps",
   "blindspots.score.good": "Low pressure",
   "blindspots.score.moderate": "Moderate gaps",

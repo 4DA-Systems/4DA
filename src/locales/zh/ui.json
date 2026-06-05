@@ -2770,6 +2770,8 @@
   "nav.blindspots.subtitle": "你的技术栈中未被覆盖的领域",
   "blindspots.title": "Blind Spot Index",
   "blindspots.subtitle": "你的技术栈中未被覆盖的领域",
+  "blindspots.locked.title": "看见你尚未关注的盲区",
+  "blindspots.locked.subtitle": "发现从你的覆盖范围中溜走的依赖项和生态系统变化。开始免费 Signal 试用即可解锁。",
   "blindspots.score.excellent": "覆盖极佳",
   "blindspots.score.good": "Good coverage",
   "blindspots.score.moderate": "Moderate gaps",

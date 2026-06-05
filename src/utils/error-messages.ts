@@ -139,6 +139,26 @@ export function translateError(error: unknown): string {
 }
 
 /**
+ * Detect a Signal-tier paywall rejection.
+ *
+ * The backend gate `require_signal_feature`
+ * (src-tauri/src/settings/license/gating.rs:102) is the SOLE producer of this
+ * phrase — defined in exactly one place and pinned by no test, so the token is
+ * stable. A paywall is NOT a fault: a Signal-gated surface that catches this
+ * must render an upgrade CTA, never a red error banner (which is what
+ * `translateError` would otherwise produce — it has no Signal pattern and falls
+ * through to "Something went wrong"). Centralized here so every gated tab
+ * classifies the gate identically; the next gated surface inherits it for free.
+ *
+ * Antibody AB-011 (display-contradicts-data): the Preemption and Blind Spots
+ * tabs both shipped this bug independently before this helper existed.
+ */
+export function isSignalGateError(error: unknown): boolean {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  return /requires 4DA Signal/i.test(raw);
+}
+
+/**
  * Like translateError but preserves the raw message for console logging
  * while returning the user-friendly version.
  *
