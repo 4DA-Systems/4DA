@@ -396,16 +396,20 @@ fn build_user_message(item: &EvidenceItem, user_context: &str) -> String {
     let urgency_str =
         serde_json::to_string(&item.urgency).unwrap_or_else(|_| "unknown".to_string());
 
+    // title / explanation / deps / projects can derive from untrusted scraped content —
+    // sanitize before sending to the deliberation LLM so a crafted item field can't inject
+    // instructions (defense-only; does not change the deliberation verdict).
+    use crate::prompt_safety::sanitize_untrusted;
     let deps = if item.affected_deps.is_empty() {
         "none".to_string()
     } else {
-        item.affected_deps.join(", ")
+        sanitize_untrusted(&item.affected_deps.join(", "))
     };
 
     let projects = if item.affected_projects.is_empty() {
         "none".to_string()
     } else {
-        item.affected_projects.join(", ")
+        sanitize_untrusted(&item.affected_projects.join(", "))
     };
 
     format!(
@@ -418,13 +422,13 @@ fn build_user_message(item: &EvidenceItem, user_context: &str) -> String {
          Affected projects: {projects}\n\n\
          User's technology context:\n{context}\n\n\
          Should this item be surfaced to the user?",
-        title = item.title,
+        title = sanitize_untrusted(&item.title),
         kind = kind_str.trim_matches('"'),
         urgency = urgency_str.trim_matches('"'),
-        explanation = item.explanation,
+        explanation = sanitize_untrusted(&item.explanation),
         deps = deps,
         projects = projects,
-        context = user_context,
+        context = sanitize_untrusted(user_context),
     )
 }
 
