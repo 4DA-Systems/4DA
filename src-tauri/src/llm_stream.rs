@@ -246,10 +246,7 @@ where
         "stream": true,
         "messages": all_messages
     });
-    // Zero-retention default (first-party OpenAI only — see llm.rs complete_openai).
-    if provider.provider == "openai" {
-        body["store"] = serde_json::Value::Bool(false);
-    }
+    crate::llm::apply_openai_retention(&mut body, &provider.provider);
 
     let response = client
         .post(url)

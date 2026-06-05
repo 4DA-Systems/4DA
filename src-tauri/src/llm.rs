@@ -482,12 +482,7 @@ impl LLMClient {
             "max_tokens": 4096,
             "messages": all_messages
         });
-        // Zero-retention default: opt out of OpenAI storing this completion for
-        // their dashboard/retrieval. First-party OpenAI only — openai-compatible
-        // providers (Groq, Mistral, …) may reject unknown fields.
-        if self.provider.provider == "openai" {
-            body["store"] = serde_json::Value::Bool(false);
-        }
+        apply_openai_retention(&mut body, &self.provider.provider);
 
         let response = self
             .client
@@ -697,10 +692,7 @@ impl LLMClient {
             "messages": all_messages,
             "response_format": { "type": "json_object" }
         });
-        // Zero-retention default (first-party OpenAI only — see complete_openai).
-        if self.provider.provider == "openai" {
-            body["store"] = serde_json::Value::Bool(false);
-        }
+        apply_openai_retention(&mut body, &self.provider.provider);
 
         let response = self
             .client
@@ -968,6 +960,23 @@ impl LLMClient {
     }
 }
 
+/// Apply 4DA's zero-retention default to an OpenAI-family request body.
+///
+/// First-party OpenAI gets `store: false` — opting out of OpenAI storing the
+/// completion for their dashboard/retrieval. openai-compatible providers
+/// (Groq, Mistral, OpenRouter, …) are left untouched: `store` is OpenAI-specific,
+/// has no effect on them, and a strict server could reject the unknown field.
+/// Anthropic has no per-request retention control (account-level ZDR only).
+///
+/// Extracted as a free function so the rule is unit-testable without a network
+/// call, and shared by `complete_openai`, `complete_openai_structured`, and the
+/// streaming path (`llm_stream.rs`).
+pub(crate) fn apply_openai_retention(body: &mut serde_json::Value, provider: &str) {
+    if provider == "openai" {
+        body["store"] = serde_json::Value::Bool(false);
+    }
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -975,6 +984,39 @@ impl LLMClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retention_sets_store_false_for_first_party_openai() {
+        let mut body = serde_json::json!({ "model": "gpt-4o", "messages": [] });
+        apply_openai_retention(&mut body, "openai");
+        assert_eq!(
+            body["store"],
+            serde_json::Value::Bool(false),
+            "first-party OpenAI must send store:false"
+        );
+    }
+
+    #[test]
+    fn retention_omits_store_for_openai_compatible() {
+        let mut body = serde_json::json!({ "model": "llama-3.1-70b", "messages": [] });
+        apply_openai_retention(&mut body, "openai-compatible");
+        assert!(
+            body.get("store").is_none(),
+            "store is OpenAI-specific and must NOT be sent to openai-compatible providers (Groq/Mistral/…)"
+        );
+    }
+
+    #[test]
+    fn retention_omits_store_for_anthropic_and_ollama() {
+        for provider in ["anthropic", "ollama", "none"] {
+            let mut body = serde_json::json!({ "model": "m", "messages": [] });
+            apply_openai_retention(&mut body, provider);
+            assert!(
+                body.get("store").is_none(),
+                "store must not be set for provider '{provider}'"
+            );
+        }
+    }
 
     #[test]
     fn test_cost_estimation_haiku() {
