@@ -8,8 +8,12 @@
 //! project health, knowledge gaps, and attention analysis into ranked
 //! preemptive alerts. Tells the user what matters BEFORE it becomes painful.
 
+use std::time::{Duration, Instant};
+
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use ts_rs::TS;
 
 use crate::error::Result;
@@ -19,6 +23,73 @@ use crate::evidence::{
 };
 use crate::scoring_config;
 use crate::signal_chains::ChainResolution;
+
+// ============================================================================
+// Feed cache (first-paint latency fix)
+// ============================================================================
+//
+// `get_preemption_alerts` recomputes live OSV matching AND runs an adversarial
+// LLM deliberation (one call per Medium/Watch item) on every invocation, so the
+// first call after boot takes 30-40s — the Preemption tab, our strongest surface,
+// paints blank exactly when a returning user opens it. The underlying data is
+// already present at boot (matches are computed from persisted advisories +
+// dependencies), so the cost is pure recompute, not missing data.
+//
+// Fix: cache the fully-deliberated `EvidenceFeed` in-process (stale-while-
+// revalidate). The tab serves the cached feed instantly; `warm_preemption_cache`
+// populates it in the background at boot so even the first paint is cache-served.
+// TTL bounds staleness; a TTL miss costs exactly one recompute, then fast again.
+
+struct CachedPreemptionFeed {
+    computed_at: Instant,
+    feed: EvidenceFeed,
+}
+
+static PREEMPTION_FEED_CACHE: Lazy<Mutex<Option<CachedPreemptionFeed>>> =
+    Lazy::new(|| Mutex::new(None));
+
+/// How long a computed feed stays fresh before the next call recomputes.
+const PREEMPTION_CACHE_TTL: Duration = Duration::from_secs(600);
+
+/// Return the cached feed if it exists and is within TTL. Clones under the lock
+/// and drops the guard before returning — never held across an await point.
+fn cached_preemption_feed() -> Option<EvidenceFeed> {
+    let guard = PREEMPTION_FEED_CACHE.lock();
+    guard.as_ref().and_then(|c| {
+        if c.computed_at.elapsed() < PREEMPTION_CACHE_TTL {
+            Some(c.feed.clone())
+        } else {
+            None
+        }
+    })
+}
+
+/// Store a freshly computed feed, stamping it with the current instant.
+fn store_preemption_feed(feed: &EvidenceFeed) {
+    *PREEMPTION_FEED_CACHE.lock() = Some(CachedPreemptionFeed {
+        computed_at: Instant::now(),
+        feed: feed.clone(),
+    });
+}
+
+/// Pre-compute and cache the Preemption feed off the boot path so the first
+/// tab-open is served from cache rather than paying the 30-40s recompute.
+/// Best-effort: gating and compute errors are logged, never propagated.
+pub async fn warm_preemption_cache() {
+    if crate::settings::require_signal_feature("warm_preemption_cache").is_err() {
+        return; // not entitled — don't spend LLM deliberating a feed we won't serve
+    }
+    match compute_preemption_evidence_feed().await {
+        Ok(feed) => {
+            let n = feed.items.len();
+            store_preemption_feed(&feed);
+            info!(target: "4da::preemption", items = n, "Preemption feed cache warmed");
+        }
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Preemption cache warm failed (will compute on demand)");
+        }
+    }
+}
 
 // ============================================================================
 // Types
@@ -1361,8 +1432,25 @@ impl PreemptionAlert {
 #[tauri::command]
 pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_preemption_alerts").map_err(|e| e.to_string())?;
+    // Serve the cached feed when fresh so the tab paints instantly instead of
+    // paying the 30-40s recompute (live OSV matching + adversarial deliberation).
+    // The cache is warmed off the boot path; a TTL miss costs one recompute.
+    if let Some(feed) = cached_preemption_feed() {
+        return Ok(feed);
+    }
+    let feed = compute_preemption_evidence_feed().await?;
+    store_preemption_feed(&feed);
+    Ok(feed)
+}
+
+/// Compute the fully-deliberated Preemption `EvidenceFeed`: live OSV matching,
+/// schema validation, then adversarial signal/noise filtering. Expensive — the
+/// adversarial pass makes one LLM call per Medium/Watch item — so callers should
+/// prefer the cached path in `get_preemption_alerts`. Not tier-gated: the gate
+/// lives at the serving boundary; this is the shared compute for command + warm.
+async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed, String> {
     let feed = get_preemption_feed().map_err(|e| e.to_string())?;
-    let mut items: Vec<EvidenceItem> = feed
+    let items: Vec<EvidenceItem> = feed
         .alerts
         .iter()
         .map(|a| a.to_evidence_item())
@@ -1383,7 +1471,7 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
     // validation. Critical/High items bypass; Medium/Watch get deliberated.
     // Gracefully degrades when LLM is unavailable (items pass through unchanged).
     let user_context = crate::adversarial::build_user_context_summary();
-    items = crate::adversarial::filter_batch(items, &user_context).await;
+    let items = crate::adversarial::filter_batch(items, &user_context).await;
 
     Ok(EvidenceFeed::from_items(items))
 }
@@ -1396,6 +1484,35 @@ pub async fn get_preemption_alerts() -> std::result::Result<EvidenceFeed, String
 mod tests {
     use super::*;
     use rusqlite::Connection;
+
+    // ─── Feed cache (first-paint latency fix) ────────────────────────
+
+    #[test]
+    fn feed_cache_stores_and_serves_within_ttl() {
+        // Sentinel feed with distinctive counts so a cache HIT is unmistakable
+        // from a recompute (which would return the empty default here).
+        let feed = EvidenceFeed {
+            items: vec![],
+            total: 7,
+            critical_count: 1,
+            high_count: 2,
+            score: None,
+            total_tracked: None,
+            weak_match_count: None,
+            data_freshness: None,
+        };
+        store_preemption_feed(&feed);
+        let got =
+            cached_preemption_feed().expect("a freshly stored feed must be served within the TTL");
+        assert_eq!(got.total, 7, "cache must return the exact stored feed");
+        assert_eq!(got.high_count, 2);
+        // Don't leak sentinel state into other code paths sharing the static.
+        *PREEMPTION_FEED_CACHE.lock() = None;
+        assert!(
+            cached_preemption_feed().is_none(),
+            "cleared cache must report a miss"
+        );
+    }
 
     // ─── Compound-prefix detection ───────────────────────────────────
 
