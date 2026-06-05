@@ -73,7 +73,7 @@ The installer performs no network activity. The application itself is local-firs
 
 - All analysis runs on your machine.
 - API keys you configure for AI providers are stored in your macOS Keychain.
-- Telemetry, if you opt in, is anonymous and aggregate-only.
+- No telemetry or crash reporting is sent — ever. If something breaks, Settings → Privacy → Export diagnostics writes a scrubbed local report you choose whether to share.
 
 See the [Privacy Policy](https://4da.ai/privacy) for full detail.
 

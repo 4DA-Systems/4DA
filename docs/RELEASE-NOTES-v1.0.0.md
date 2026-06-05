@@ -58,7 +58,7 @@ The MCP server works standalone — no desktop app required. 14 tools for vulner
 
 ## Privacy
 
-- **100% local.** Zero telemetry. No analytics. No tracking. No accounts.
+- **Local-first, no 4DA server.** Zero telemetry. No analytics. No tracking. No accounts. A local model runs fully offline; cloud models see only what you send, with your own key.
 - **BYOK** — bring your own API key (Anthropic, OpenAI, Google, or Ollama for fully offline use)
 - API keys are stored in local config and never transmitted anywhere
 - All content processing and scoring happens on your machine

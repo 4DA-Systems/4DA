@@ -102,6 +102,6 @@
     "publisher": "4DA Systems Pty Ltd",
     "copyright": "Copyright (c) 2025-2026 4DA Systems Pty Ltd. All rights reserved.",
     "shortDescription": "4DA reads the internet for developers — privately, locally — and gets sharper every day.",
-    "longDescription": "4DA reads the internet for developers — privately, locally — and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal. Runs entirely on your machine. Zero telemetry. BYOK."
+    "longDescription": "4DA reads the internet for developers — privately, locally — and gets sharper every day. It learns from how you engage with what it shows you, so yesterday's noise becomes tomorrow's signal. No 4DA server — runs on your machine; a local model stays fully offline, a cloud model sees only what you send with your own key. Zero telemetry. BYOK."
   }
 }

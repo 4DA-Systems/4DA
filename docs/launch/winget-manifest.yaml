@@ -27,8 +27,9 @@ Description: >-
   4DA scores developer content from 20+ sources (Hacker News, GitHub, Reddit,
   arXiv, CVE databases, package registries, and more) against your actual
   codebase using 5-axis relevance scoring. Zero telemetry. Zero tracking.
-  Runs 100% locally. BYOK for AI providers or use Ollama for fully offline
-  operation. Free tier includes full scoring engine and all sources.
+  No 4DA server — runs on your machine. BYOK for cloud AI (a cloud model sees
+  only what you send it) or use Ollama for fully offline operation. Free tier
+  includes full scoring engine and all sources.
 Tags:
   - developer-tools
   - productivity

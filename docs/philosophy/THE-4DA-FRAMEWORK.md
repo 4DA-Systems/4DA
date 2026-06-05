@@ -9,7 +9,7 @@
 
 ## Abstract
 
-4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence — a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with zero data leaving the machine.
+4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence — a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with no 4DA server in the path — data leaves only to a cloud provider the operator explicitly configures with their own key.
 
 This document formalises the three pillars of the 4DA framework: the **PASIFA scoring philosophy**, the **Authority Stack governance model**, and the **Autonomous Operations System (AOS)**. Together, they form a replicable methodology for building software that compounds knowledge privately.
 

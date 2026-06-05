@@ -1,8 +1,12 @@
 # Network Transparency
 
-**4DA Systems Pty Ltd** | **Version:** 1.0.0 | **Last updated:** 2026-03-30
+**4DA Systems Pty Ltd** | **Version:** 1.0.1 | **Last updated:** 2026-06-05
 
 This document lists every outbound network connection the 4DA application makes. Every claim is backed by a source code reference you can audit yourself. If the application makes a connection not listed here, it is a bug -- report it to security@4da.ai.
+
+> **Canonical manifest:** `NETWORK.md` (repo root) is the fuller, canonical network manifest; this document is the audit-oriented companion.
+>
+> **No crash reporting:** Automated crash reporting (Sentry) was removed entirely. Its replacement is a **local** "Export diagnostics" feature (Settings → Privacy → Export diagnostics) that writes a scrubbed report to disk and is **never transmitted**.
 
 ---
 

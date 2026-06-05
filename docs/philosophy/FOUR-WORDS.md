@@ -117,7 +117,7 @@ pnpm run tauri dev
       Developer sees: a window. Content appearing. Relevance emerging.
 ```
 
-Four words. Four phases. Two compilers. Two runtimes. 324 typed IPC commands. One application. Zero data leaving the machine.
+Four words. Four phases. Two compilers. Two runtimes. 324 typed IPC commands. One application. No 4DA server in the path.
 
 ---
 

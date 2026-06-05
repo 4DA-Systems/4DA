@@ -32,7 +32,7 @@ Adds [4DA](https://4da.ai) to the Applications section.
 - Local embeddings via Ollama
 - MCP server with 36 tools (MIT, on npm)
 
-**Privacy-first:** All data stays on the user's machine. No cloud dependencies, no telemetry.
+**Privacy-first:** No 4DA server — indexed data, scores, and learning stay in a local SQLite database. The only outbound call is vulnerability_scan (package names + versions to OSV.dev). No code leaves your machine. No accounts, no telemetry.
 
 - Website: https://4da.ai
 - MCP Server: https://www.npmjs.com/package/@4da/mcp-server

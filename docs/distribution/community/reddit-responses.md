@@ -12,7 +12,7 @@ I've been using @4da/mcp-server — it has 36 tools that give Claude awareness o
 
 ## 2. Reply to "Best privacy-first dev tools?" (r/selfhosted, r/LocalLLaMA)
 
-4DA might be worth a look — it's a desktop app that scores developer content (HN, arXiv, Reddit, GitHub, RSS) against your local codebase. Everything runs on your machine: SQLite + sqlite-vec for vector search, optional Ollama for embeddings, no data leaves the box. The MCP server component (@4da/mcp-server) is MIT licensed and has zero network dependencies — it reads from a local SQLite database only. No accounts, no telemetry, no cloud.
+4DA might be worth a look — it's a desktop app that scores developer content (HN, arXiv, Reddit, GitHub, RSS) against your local codebase. Everything runs on your machine — no 4DA server; cloud AI, if you configure it, is contacted directly with your own key. SQLite + sqlite-vec for vector search, optional Ollama for embeddings. The MCP server component (@4da/mcp-server) is MIT licensed and reads from a local SQLite database; its only outbound call is vulnerability_scan (package names + versions to OSV.dev). No accounts, no telemetry.
 
 ---
 

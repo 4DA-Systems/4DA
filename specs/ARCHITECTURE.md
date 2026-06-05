@@ -391,7 +391,7 @@ Stage 3: Human Feedback Loop
 - [ ] Email digests
 - [ ] Onboarding flow
 - [ ] Auto-update mechanism
-- [ ] Crash reporting (opt-in)
+- [x] Local diagnostics export (Settings → Privacy → Export diagnostics; never transmitted)
 - [ ] Documentation
 
 **Success Criteria:**

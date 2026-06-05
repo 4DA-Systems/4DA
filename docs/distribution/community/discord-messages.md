@@ -4,7 +4,7 @@
 
 **4DA — Developer intelligence desktop app built on Tauri 2.0**
 
-4DA is a local-first desktop app that scores content from Hacker News, arXiv, Reddit, GitHub, and RSS feeds against your actual codebase to surface what's relevant. Built with a Rust backend, React/TypeScript frontend, and SQLite with sqlite-vec for local vector search — no data leaves your machine. The Rust side has 1,600+ tests covering source adapters, scoring, embeddings, and the full content pipeline. Tauri 2.0 made the IPC layer clean enough that the entire app runs as a single binary with zero external dependencies. More at 4da.ai.
+4DA is a local-first desktop app that scores content from Hacker News, arXiv, Reddit, GitHub, and RSS feeds against your actual codebase to surface what's relevant. Built with a Rust backend, React/TypeScript frontend, and SQLite with sqlite-vec for local vector search. No 4DA server; content sources and any cloud AI you enable are contacted directly from your machine. The Rust side has 1,600+ tests covering source adapters, scoring, embeddings, and the full content pipeline. Tauri 2.0 made the IPC layer clean enough that the entire app runs as a single binary with zero external dependencies. More at 4da.ai.
 
 ---
 

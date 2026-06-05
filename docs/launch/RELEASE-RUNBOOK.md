@@ -128,7 +128,7 @@ Within 1 hour of the release going live:
 
 Within 24 hours:
 
-- No anomalous crash reports from users (if Sentry is on, check the dashboard).
+- No anomalous error reports from users (no automated crash reporting exists; watch GitHub issues / support email for user-submitted scrubbed diagnostic bundles).
 - No social-media complaints about a broken installer or antivirus false positive.
 
 If any of these fail, consider a silent re-cut — yanking a release is worse than shipping two releases an hour apart.

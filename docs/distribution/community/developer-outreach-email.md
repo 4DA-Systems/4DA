@@ -15,7 +15,7 @@ I've been building something for the last [X] months and you're one of the first
 
 It's called **4DA** — a desktop app that watches Hacker News, arXiv, Reddit, GitHub, RSS, Product Hunt, and YouTube, then scores everything against your actual codebase. It reads your `Cargo.toml`, `package.json`, `go.mod`, whatever you use — and surfaces only what's relevant to what you're building right now. Security advisories in your deps, trending discussions about your stack, papers that solve problems you're working on.
 
-Everything runs locally. No cloud. No account. No telemetry. Your code never leaves your machine.
+Everything runs on your machine. No 4DA cloud (bring your own key for cloud AI). No account. No telemetry. Your code never leaves your machine.
 
 The part I'm most proud of: it ships with an MCP server (36 tools) that plugs into Claude Code, Cursor, or Copilot. So your AI assistant stops being generic and starts knowing your stack, your decisions, and what happened in your ecosystem while you were sleeping. You ask "anything I should know today?" and it actually has a real answer.
 

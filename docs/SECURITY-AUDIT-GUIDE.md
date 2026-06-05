@@ -324,6 +324,8 @@ grep -rn "open_db_connection\|rusqlite::Connection::open" src-tauri/src/ --inclu
 
 The telemetry module records usage events (search queries, view navigation, feature adoption) into the local `user_events` SQLite table. It also tracks application errors in `error_telemetry`.
 
+**Local diagnostics export:** Settings → Privacy → Export diagnostics writes a scrubbed report to disk for the user to inspect or share manually. It is never transmitted — there is no automated crash reporter.
+
 **Critical claim: This module makes zero outbound network calls.**
 
 The file imports:

@@ -2,7 +2,7 @@
 
 **Why 4DA is built so that trust is unnecessary.**
 
-Most software asks you to trust that the company won't misuse your data. 4DA is architectured so that trust is unnecessary -- your data never leaves your machine. This is not a policy promise. It is a technical fact, verifiable in the source code.
+Most software asks you to trust that the company won't misuse your data. 4DA is architectured so that trust is unnecessary -- there is no 4DA server, and your indexed content, scores, and learning stay in a local SQLite database. A local model keeps everything on-device; a cloud model sees only what you choose to send it, with your own key, never through 4DA. This is not a policy promise -- it is verifiable in the source.
 
 ---
 
@@ -42,7 +42,7 @@ Layer 1: Philosophy      Privacy-by-design, not privacy-by-policy
 
 ### Layer 2: Architecture
 
-The application is a Tauri 2.0 desktop binary. Rust backend, React frontend, SQLite database. Everything runs on your machine. There is no cloud component. There is no sync service. There is no "optional" data sharing. The architecture makes data exfiltration structurally impossible without the user explicitly configuring an external API and providing their own key.
+The application is a Tauri 2.0 desktop binary. Rust backend, React frontend, SQLite database. Everything runs on your machine. There is no 4DA-operated cloud component and no 4DA sync service. Data only leaves your machine if you explicitly configure an external API with your own key — and then only to that provider.
 
 ### Layer 3: Technical Controls
 
@@ -72,7 +72,7 @@ This layer belongs to users, not to us. When people who use 4DA begin vouching f
 
 Each claim below includes the mechanism that enforces it and the method you can use to verify it independently.
 
-### a) Your data stays local
+### a) There is no 4DA server
 
 **Mechanism:** All user data is stored in a SQLite database at `data/4da.db` on your local filesystem. There is no remote database, no sync endpoint, no backup service, and no cloud storage integration. The application has no server-side component that could receive data even if the client attempted to send it.
 

@@ -88,7 +88,7 @@ Initial public release.
 
 - 11 content sources: Hacker News, Reddit, Twitter/X, GitHub, RSS, YouTube, arXiv, Dev.to, Lobsters, Product Hunt, custom feeds
 - PASIFA scoring algorithm — 5-axis codebase-aware relevance with confidence calibration
-- Privacy-first — all data stays local, zero telemetry
+- Privacy-first — local SQLite reads; the only outbound call is vulnerability_scan (package names + versions to OSV.dev), zero telemetry
 - BYOK — bring your own API keys, never stored remotely
 - Works offline with Ollama fallback for embeddings
 - Dual transport: stdio (default) and Streamable HTTP

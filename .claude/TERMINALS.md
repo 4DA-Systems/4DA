@@ -27,11 +27,16 @@ audit-proof NETWORK.md, positioning doc. NONE of these overlap the scoring/triag
 **Status**: Wave 1a DONE — committed local @ c164edf3 (Sentry fully removed; local Export Diagnostics
 + log_frontend_error; scrubber w/ 10 tests; crash_reporting_opt_in purged). Push HELD for user.
 NOW: Wave 1b (truth-fix BYOK "data never leaves" claims in hardcoded components + 13 locales + docs).
-**Commit Lock**: HELD (opus-privacy-truth) — committing Wave 2+3 (consent honesty + zero-retention).
-DONE: Wave 1a @ c164edf3, Wave 1b @ daaa7417, Wave 4 @ e12656c8, Wave 5 positioning (gitignored).
-victauri 0.7.2->0.7.6 LIVE (app running 0.7.6, Cargo.toml ^0.7 self-resolves) — Cargo.lock NOT committed
-(entangled with another terminal's pre-existing windows-sys/windows-core downgrade; left untouched).
-export_diagnostics LIVE-VERIFIED via :7373 bridge.
+**Commit Lock**: HELD (opus-privacy-truth) — committing repo+website claim-consistency pass.
+ALL WAVES DONE + PUSHED (origin/main @ 3045be30). Consistency pass: site/src/*.njk (8) + ~22 docs +
+tauri.conf.json listing. NEXT: commit, then A+ Tier-1 (settings disclosure, zero-retention completeness).
+--- prior ---
+ALL WAVES DONE (local, push held for user):
+Wave 1a @ c164edf3 (Sentry->local diagnostics), Wave 1b @ daaa7417 (BYOK claim truth-fix, 13 locales),
+Wave 4 @ e12656c8 (NETWORK.md audit-proof), Wave 2+3 @ 5d163182 (consent honesty + OpenAI zero-retention),
+Wave 5 positioning doc (gitignored). victauri 0.7.6 live. export_diagnostics live-verified.
+NOTE: running dev binary predates Wave 2/3 Rust edits (frontend disclosure live via HMR; Rust live on next rebuild).
+Cargo.lock left uncommitted (not mine — windows-sys downgrade).
 
 <!-- opus-relevance-funnel (2026-06-05): Phase 4 (forgetting) DONE — committed + pushed (measure-first;
      actual deletion HELD for user approval per destructive-ops protocol). Also ran the dependabot audit:

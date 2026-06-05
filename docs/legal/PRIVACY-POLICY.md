@@ -6,7 +6,7 @@
 
 ## The Short Version
 
-4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
+4DA is a desktop application that runs on your computer. Your data stays on your computer unless you choose to use a cloud AI provider with your own key — and even then it goes directly to that provider, never to us. We do not collect it, transmit it to our servers, or sell it. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
 
 ---
 

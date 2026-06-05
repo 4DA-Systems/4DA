@@ -32,7 +32,7 @@ Section: "Project/Tooling Updates"
 https://weeklyrust.substack.com/
 
 **Pitch:**
-4DA is a Tauri 2.0 desktop app written in Rust (~54 modules, 1,600+ tests) that scores internet content against a developer's actual codebase. It uses sqlite-vec for vector search, ocrs for PDF text extraction, and ships with an MIT-licensed MCP server (36 tools) on npm. The Rust backend handles content ingestion from 7 source types, local embeddings via Ollama, and a confidence-calibrated scoring algorithm. Privacy-first: no data leaves the machine.
+4DA is a Tauri 2.0 desktop app written in Rust (~54 modules, 1,600+ tests) that scores internet content against a developer's actual codebase. It uses sqlite-vec for vector search, ocrs for PDF text extraction, and ships with an MIT-licensed MCP server (36 tools) on npm. The Rust backend handles content ingestion from 7 source types, local embeddings via Ollama, and a confidence-calibrated scoring algorithm. Privacy-first: no 4DA server; your indexed data stays local. Content sources and any cloud AI you configure are contacted directly from your machine.
 
 ---
 

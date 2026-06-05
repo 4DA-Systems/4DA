@@ -33,7 +33,7 @@ Adds [@4da/mcp-server](https://www.npmjs.com/package/@4da/mcp-server) to the Dev
 - **Decision memory** — Records, checks, and replays architectural decisions across sessions
 - **Agent integration** — Session briefs, context packets, delegation scoring, and cross-agent persistent memory
 
-**Privacy-first:** All data stays on the user's machine. No telemetry, no cloud dependencies. Works with local Ollama models.
+**Privacy-first:** Local SQLite reads; the only outbound call is vulnerability_scan (package names + versions to OSV.dev). No code leaves your machine. No accounts, no telemetry. Works with local Ollama models.
 
 **Install:** `npx @4da/mcp-server`
 
