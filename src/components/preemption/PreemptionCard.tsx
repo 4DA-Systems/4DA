@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { recordTrustEvent } from '../../lib/trust-feedback';
+import { useTranslatedContent } from '../ContentTranslationProvider';
 
 export const URGENCY_CONFIG: Record<
   Urgency,
@@ -248,6 +249,7 @@ export const ItemCard = memo(function ItemCard({
   onDismiss: (id: string) => void;
 }) {
   const { t } = useTranslation();
+  const { getTranslated, requestTranslation } = useTranslatedContent();
   const [explanationExpanded, setExplanationExpanded] = useState(false);
   const cfg = URGENCY_CONFIG[item.urgency] ?? URGENCY_CONFIG.watch;
   const tier = getTierStyle(item.confidence.provenance);
@@ -265,10 +267,18 @@ export const ItemCard = memo(function ItemCard({
     }
   }, [item.id, sourceType, item.title, surfacedRef]);
 
-  const needsTruncation = item.explanation.length > EXPLANATION_MAX_LENGTH;
+  useEffect(() => {
+    const reqs = [{ id: item.id, text: item.title }];
+    if (item.explanation) reqs.push({ id: `${item.id}:expl`, text: item.explanation });
+    requestTranslation(reqs);
+  }, [item.id, item.title, item.explanation, requestTranslation]);
+
+  const displayTitle = getTranslated(item.id, item.title);
+  const explanationText = getTranslated(`${item.id}:expl`, item.explanation);
+  const needsTruncation = explanationText.length > EXPLANATION_MAX_LENGTH;
   const displayedExplanation = needsTruncation && !explanationExpanded
-    ? truncateAt(item.explanation, EXPLANATION_MAX_LENGTH)
-    : item.explanation;
+    ? truncateAt(explanationText, EXPLANATION_MAX_LENGTH)
+    : explanationText;
 
   return (
     <article className={`rounded-lg border ${cfg.border} ${cfg.bg} overflow-hidden ${tier.borderClass}`}>
@@ -286,7 +296,7 @@ export const ItemCard = memo(function ItemCard({
             </span>
           )}
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-white leading-snug">
-            {item.title}
+            {displayTitle}
           </h3>
           <span
             className="shrink-0 text-[10px] font-mono tabular-nums text-text-muted"
