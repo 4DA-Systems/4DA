@@ -9,26 +9,32 @@ describe('ConfidenceIndicator', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('displays high confidence (0.8+) with green styling', () => {
+  it('displays high confidence (0.8+) with a qualitative label, not a fabricated ±%', () => {
     render(<ConfidenceIndicator confidence={0.9} />);
-    const indicator = screen.getByText(/±\d+%/);
+    const indicator = screen.getByText('results.highConfidence');
     expect(indicator).toHaveClass('confidence-high');
   });
 
-  it('displays medium confidence (0.5-0.8) with gray styling', () => {
+  it('displays medium confidence (0.5-0.8) with a qualitative label', () => {
     render(<ConfidenceIndicator confidence={0.6} />);
-    const indicator = screen.getByText(/±\d+%/);
+    const indicator = screen.getByText('results.mediumConfidence');
     expect(indicator).toHaveClass('confidence-medium');
   });
 
-  it('displays low confidence (<0.5) with warning', () => {
+  it('displays low confidence (<0.5) with a qualitative label', () => {
     render(<ConfidenceIndicator confidence={0.3} />);
     expect(screen.getByText('results.lowConfidence')).toHaveClass('confidence-low');
   });
 
-  it('calculates margin of error correctly', () => {
-    render(<ConfidenceIndicator confidence={0.85} />);
-    expect(screen.getByText(/±15%/)).toBeInTheDocument();
+  it('never renders a fabricated "±N%" margin of error for any confidence', () => {
+    // The model emits a single confidence scalar; presenting `±(1-conf)%` dressed
+    // it up as a statistical interval the system never computed (banned fabricated
+    // precision). Guard the contract: no ± at any confidence level.
+    for (const c of [0.3, 0.6, 0.85, 0.92, 0.99]) {
+      const { container, unmount } = render(<ConfidenceIndicator confidence={c} />);
+      expect(container.textContent).not.toMatch(/±/);
+      unmount();
+    }
   });
 
   it('shows signal concordance when signalCount provided', () => {

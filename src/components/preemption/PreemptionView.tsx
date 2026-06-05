@@ -10,6 +10,7 @@ import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/Evidence
 import { useColdStartGate } from '../../hooks/use-cold-start-gate';
 import { URGENCY_ORDER } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
+import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 
 const DISMISS_STORAGE_KEY = 'preemption_dismissed';
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -54,11 +55,12 @@ const PreemptionView = memo(function PreemptionView() {
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { feed, loading, error } = useAppStore(
+  const { feed, loading, error, paywalled } = useAppStore(
     useShallow(s => ({
       feed: s.preemptionFeed,
       loading: s.preemptionLoading,
       error: s.preemptionError,
+      paywalled: s.preemptionPaywalled,
     })),
   );
   const loadPreemption = useAppStore(s => s.loadPreemption);
@@ -131,6 +133,22 @@ const PreemptionView = memo(function PreemptionView() {
         <h1 className="text-xl font-semibold text-white tracking-tight">{t('preemption.title')}</h1>
         <p className="text-sm text-text-muted mt-1">{t('preemption.subtitle')}</p>
       </header>
+
+      {/* Tier gate is a paywall, not a fault — show an upgrade path, never a red
+          error banner. (loading/error/feed are all falsy in this state, so the
+          blocks below naturally yield to it.) */}
+      {paywalled && (
+        <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-1">
+            <span className="text-accent-gold text-lg" aria-hidden="true">&#x1F512;</span>
+          </div>
+          <p className="text-sm font-medium text-white">{t('preemption.locked.title')}</p>
+          <p className="text-xs text-text-muted max-w-sm">{t('preemption.locked.subtitle')}</p>
+          <div className="mt-1">
+            <SignalUpgradeCTA />
+          </div>
+        </div>
+      )}
 
       {loading && !feed && (
         <div className="flex items-center justify-center py-16">

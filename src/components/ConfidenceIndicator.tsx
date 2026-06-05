@@ -32,7 +32,6 @@ export const ConfidenceIndicator = ({
         {t('score.signalConcordance', {
           count: signalCount,
           total: 5,
-          defaultValue: `${signalCount}/5`,
         })}
       </span>
     );
@@ -40,14 +39,17 @@ export const ConfidenceIndicator = ({
 
   if (!confidence) return null;
 
+  // A qualitative tier, not a fabricated "±N%" margin of error. The model emits
+  // a single self-reported confidence scalar — rendering `±(1-conf)%` dressed it
+  // up as a statistical interval the system never computed (banned fabricated
+  // precision). High / Medium / Low is what the scalar actually supports, and it
+  // localizes cleanly.
   const formatConfidence = (conf: number) => {
     if (conf >= 0.8) {
-      const margin = ((1 - conf) * 100).toFixed(0);
-      return { text: `±${margin}%`, className: 'confidence-high' };
+      return { text: t('results.highConfidence'), className: 'confidence-high' };
     }
     if (conf >= 0.5) {
-      const margin = ((1 - conf) * 100).toFixed(0);
-      return { text: `±${margin}%`, className: 'confidence-medium' };
+      return { text: t('results.mediumConfidence'), className: 'confidence-medium' };
     }
     return { text: t('results.lowConfidence'), className: 'confidence-low' };
   };
