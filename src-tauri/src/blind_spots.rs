@@ -2575,36 +2575,69 @@ fn lookup_installed_version(dep_name: &str) -> Option<String> {
 
 /// Count signal types available for a dep in the last 30 days.
 /// Returns (release_count, analysis_count, other_count).
-fn count_signal_types_for_dep(dep_name: &str) -> (u32, u32, u32) {
+/// Breakdown of a dependency's unseen signals by CONSEQUENCE, so Blind Spots can
+/// rank and frame by what changed rather than by unread volume. The tuple is Copy.
+#[derive(Clone, Copy, Default)]
+struct DepSignalBreakdown {
+    /// New versions shipped (release_notes / platform_update).
+    releases: u32,
+    /// Expert analysis / deep-dives.
+    analyses: u32,
+    /// Highest consequence: security advisories and breaking changes. Previously
+    /// these fell into `other` and were invisible to ranking — the whole point of
+    /// #2b is to surface them.
+    security: u32,
+    /// Everything else — general discussion. Pure volume, low consequence.
+    other: u32,
+}
+
+fn count_signal_types_for_dep(dep_name: &str) -> DepSignalBreakdown {
+    let mut b = DepSignalBreakdown::default();
     let db = match crate::get_database() {
         Ok(db) => db,
-        Err(_) => return (0, 0, 0),
+        Err(_) => return b,
     };
     let conn = db.conn.lock();
     let sql = "SELECT content_type, COUNT(*) FROM source_items
                WHERE title LIKE '%' || ?1 || '%'
                  AND created_at >= datetime('now', '-30 days')
                GROUP BY content_type";
-    let mut releases = 0u32;
-    let mut analyses = 0u32;
-    let mut other = 0u32;
     if let Ok(mut stmt) = conn.prepare(sql) {
         if let Ok(rows) = stmt.query_map(params![dep_name], |row| {
             Ok((row.get::<_, Option<String>>(0)?, row.get::<_, u32>(1)?))
         }) {
             for row in rows.flatten() {
                 match row.0.as_deref() {
-                    Some("release_notes") | Some("platform_update") => releases += row.1,
-                    Some("expert_analysis") | Some("deep_dive") => analyses += row.1,
-                    _ => other += row.1,
+                    Some("release_notes") | Some("platform_update") => b.releases += row.1,
+                    Some("expert_analysis") | Some("deep_dive") => b.analyses += row.1,
+                    Some("security_advisory") | Some("breaking_change") => b.security += row.1,
+                    _ => b.other += row.1,
                 }
             }
         }
     }
-    (releases, analyses, other)
+    b
+}
+
+/// Lower a risk-derived urgency to at most Medium. Used for deps whose only
+/// unseen signals are general discussion ("other") — pure unread volume must not
+/// masquerade as a high-urgency blind spot.
+fn cap_urgency_at_medium(u: Urgency) -> Urgency {
+    match u {
+        Urgency::Critical | Urgency::High => Urgency::Medium,
+        other => other,
+    }
 }
 
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
+    // d.name is the DISPLAY name ("react (npm)"); signal/version lookups match
+    // article titles via LIKE, which never carry the " (ecosystem)" qualifier, so
+    // strip it first. Compute the consequence breakdown once (only when there are
+    // unseen signals) — it drives the title, the explanation, AND the consequence-
+    // weighted confidence/urgency below (#2b: rank by what changed, not by volume).
+    let bare = bare_package_name(&d.name);
+    let breakdown = (d.available_signal_count > 0).then(|| count_signal_types_for_dep(bare));
+
     // Zero-signal deps get a distinct title and explanation — they have
     // NO coverage at all, which is qualitatively different from "has signals
     // you haven't seen".
@@ -2638,31 +2671,33 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         };
         (title, explanation)
     } else {
-        // Consequence-first title: lead with what CHANGED (new releases, then
-        // expert analyses) instead of the raw unread count, which is mostly
-        // noise — "react — 123 unseen signals" reads as FOMO, not insight. The
-        // breakdown is already needed by the explanation, so compute it once and
-        // drive both the title and the explanation from it. d.name is the DISPLAY
-        // name ("react (npm)"); the signal/version lookups match on the bare
-        // package name, so strip the " (ecosystem)" qualifier first — passing the
-        // display name silently returns zero releases/analyses (the reason this
-        // consequence framing never fired before).
-        let bare = bare_package_name(&d.name);
+        // Consequence-first title: lead with the highest-consequence signal —
+        // security/breaking, then new releases, then analyses — instead of the
+        // raw unread count, which is mostly noise ("react — 123 unseen signals"
+        // reads as FOMO, not insight). Fall back to a soft "N updates to review"
+        // only when there is no consequence signal at all.
+        let b = breakdown.unwrap_or_default();
         let installed_version = lookup_installed_version(bare);
-        let (release_count, analysis_count, _) = count_signal_types_for_dep(bare);
-        let title = truncate_title(&if release_count > 0 {
+        let title = truncate_title(&if b.security > 0 {
+            format!(
+                "{} — {} security/breaking-change signal{} unreviewed",
+                d.name,
+                b.security,
+                if b.security == 1 { "" } else { "s" }
+            )
+        } else if b.releases > 0 {
             format!(
                 "{} — {} new release{} unreviewed",
                 d.name,
-                release_count,
-                if release_count == 1 { "" } else { "s" }
+                b.releases,
+                if b.releases == 1 { "" } else { "s" }
             )
-        } else if analysis_count > 0 {
+        } else if b.analyses > 0 {
             format!(
                 "{} — {} expert analysis article{} unread",
                 d.name,
-                analysis_count,
-                if analysis_count == 1 { "" } else { "s" }
+                b.analyses,
+                if b.analyses == 1 { "" } else { "s" }
             )
         } else {
             format!(
@@ -2678,20 +2713,29 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         });
 
         let mut explanation_parts: Vec<String> = Vec::new();
-        if release_count > 0 {
+        if b.security > 0 {
+            explanation_parts.push(format!(
+                "{} security advisory / breaking-change signal{} you haven't reviewed.",
+                b.security,
+                if b.security == 1 { "" } else { "s" }
+            ));
+        }
+        if b.releases > 0 {
             let ver_note = installed_version
                 .as_ref()
                 .map(|v| format!(" (you're on {v})"))
                 .unwrap_or_default();
             explanation_parts.push(format!(
-                "{release_count} new release{}{ver_note} in the last 30 days.",
-                if release_count == 1 { "" } else { "s" }
+                "{} new release{}{ver_note} in the last 30 days.",
+                b.releases,
+                if b.releases == 1 { "" } else { "s" }
             ));
         }
-        if analysis_count > 0 {
+        if b.analyses > 0 {
             explanation_parts.push(format!(
-                "{analysis_count} expert analysis article{} available.",
-                if analysis_count == 1 { "" } else { "s" }
+                "{} expert analysis article{} available.",
+                b.analyses,
+                if b.analyses == 1 { "" } else { "s" }
             ));
         }
         if explanation_parts.is_empty() {
@@ -2735,12 +2779,31 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
                 "medium" => 0.30,
                 _ => 0.20,
             };
-            // Scale up based on evidence strength: more projects + more unseen signals = higher confidence
             let project_boost = (d.projects_using.len() as f32 * 0.05).min(0.15);
-            let signal_boost = (d.available_signal_count as f32 * 0.02).min(0.15);
-            (base + project_boost + signal_boost).min(0.80)
+            // Consequence-weighted (replaces the old volume-based signal_boost):
+            // confidence tracks what CHANGED, not how many unread items piled up,
+            // so a noisy topic can't out-rank a dep with a real release/advisory.
+            let consequence_boost = match breakdown {
+                Some(b) if b.security > 0 => 0.20,
+                Some(b) if b.releases > 0 => 0.12,
+                Some(b) if b.analyses > 0 => 0.06,
+                _ => 0.0,
+            };
+            (base + project_boost + consequence_boost).min(0.80)
         }),
-        urgency: risk_level_to_urgency(&d.risk_level),
+        // Consequence-adjusted urgency: security/breaking elevates regardless of
+        // volume; real release/analysis activity keeps the risk-based urgency;
+        // deps whose only unseen signals are general discussion are capped at
+        // Medium. Unmonitored deps (no breakdown) keep their risk-based urgency.
+        urgency: match breakdown {
+            // Urgency ordinals: Critical < High < Medium < Watch, so the MORE
+            // urgent of two is the smaller one — use min() to mean "at least High"
+            // (keeps Critical if the risk is already critical).
+            Some(b) if b.security > 0 => Urgency::High.min(risk_level_to_urgency(&d.risk_level)),
+            Some(b) if b.releases > 0 || b.analyses > 0 => risk_level_to_urgency(&d.risk_level),
+            Some(_) => cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level)),
+            None => risk_level_to_urgency(&d.risk_level),
+        },
         reversibility: None,
         evidence: vec![citation],
         affected_projects: d.projects_using.clone(),
@@ -2761,22 +2824,29 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
 fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
     // Compute the consequence breakdown once (only when there are missed
     // signals) and drive BOTH the title and explanation from it, so the title
-    // leads with what changed (new releases / analyses) rather than the raw
-    // unread count. The tuple is Copy, so both matches read it freely.
+    // leads with the highest-consequence signal (security/breaking, then
+    // releases, then analyses) rather than the raw unread count.
+    // DepSignalBreakdown is Copy, so both matches read it freely.
     let signal_breakdown =
         (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic));
     let title = match signal_breakdown {
-        Some((releases, _, _)) if releases > 0 => truncate_title(&format!(
+        Some(b) if b.security > 0 => truncate_title(&format!(
+            "{} — {} security/breaking-change signal{} unreviewed",
+            t.topic,
+            b.security,
+            if b.security == 1 { "" } else { "s" }
+        )),
+        Some(b) if b.releases > 0 => truncate_title(&format!(
             "{} — {} release update{} unreviewed",
             t.topic,
-            releases,
-            if releases == 1 { "" } else { "s" }
+            b.releases,
+            if b.releases == 1 { "" } else { "s" }
         )),
-        Some((_, analyses, _)) if analyses > 0 => truncate_title(&format!(
+        Some(b) if b.analyses > 0 => truncate_title(&format!(
             "{} — {} analysis article{} unread",
             t.topic,
-            analyses,
-            if analyses == 1 { "" } else { "s" }
+            b.analyses,
+            if b.analyses == 1 { "" } else { "s" }
         )),
         Some(_) => truncate_title(&format!(
             "{} — {} update{} to review",
@@ -2792,16 +2862,24 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
         )),
     };
     let explanation = match signal_breakdown {
-        Some((releases, _, _)) if releases > 0 => format!(
-            "{releases} release update{} for {} ecosystem in the last 30 days.",
-            if releases == 1 { "" } else { "s" },
+        Some(b) if b.security > 0 => format!(
+            "{} security/breaking-change signal{} in the {} ecosystem you haven't reviewed.",
+            b.security,
+            if b.security == 1 { "" } else { "s" },
             t.topic,
         ),
-        Some((_, analyses, _)) if analyses > 0 => format!(
-            "{} unreviewed signal{} including {analyses} analysis article{}.",
+        Some(b) if b.releases > 0 => format!(
+            "{} release update{} for {} ecosystem in the last 30 days.",
+            b.releases,
+            if b.releases == 1 { "" } else { "s" },
+            t.topic,
+        ),
+        Some(b) if b.analyses > 0 => format!(
+            "{} unreviewed signal{} including {} analysis article{}.",
             t.missed_signal_count,
             if t.missed_signal_count == 1 { "" } else { "s" },
-            if analyses == 1 { "" } else { "s" },
+            b.analyses,
+            if b.analyses == 1 { "" } else { "s" },
         ),
         Some(_) => format!(
             "{} signal{} in the {} ecosystem you haven't reviewed.",
@@ -3288,6 +3366,25 @@ pub fn dismiss_blind_spot(
 mod tests {
     use super::*;
     use rusqlite::{params, Connection};
+
+    #[test]
+    fn cap_urgency_at_medium_lowers_only_above_medium() {
+        // Pure unread volume must not present as high/critical urgency.
+        assert_eq!(cap_urgency_at_medium(Urgency::Critical), Urgency::Medium);
+        assert_eq!(cap_urgency_at_medium(Urgency::High), Urgency::Medium);
+        // Medium and below pass through unchanged.
+        assert_eq!(cap_urgency_at_medium(Urgency::Medium), Urgency::Medium);
+        assert_eq!(cap_urgency_at_medium(Urgency::Watch), Urgency::Watch);
+    }
+
+    #[test]
+    fn urgency_min_means_at_least_high() {
+        // Ordinals are Critical < High < Medium < Watch, so the more-urgent of two
+        // is min(). "At least High" keeps Critical but raises Medium/Watch to High.
+        assert_eq!(Urgency::High.min(Urgency::Critical), Urgency::Critical);
+        assert_eq!(Urgency::High.min(Urgency::Medium), Urgency::High);
+        assert_eq!(Urgency::High.min(Urgency::Watch), Urgency::High);
+    }
 
     #[test]
     fn bare_package_name_strips_ecosystem_qualifier() {
