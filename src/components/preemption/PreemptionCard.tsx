@@ -270,8 +270,10 @@ export const ItemCard = memo(function ItemCard({
   useEffect(() => {
     const reqs = [{ id: item.id, text: item.title }];
     if (item.explanation) reqs.push({ id: `${item.id}:expl`, text: item.explanation });
+    const vc = item.evidence.find(e => e.source === 'version_context');
+    if (vc) reqs.push({ id: `${item.id}:vc`, text: vc.title });
     requestTranslation(reqs);
-  }, [item.id, item.title, item.explanation, requestTranslation]);
+  }, [item.id, item.title, item.explanation, item.evidence, requestTranslation]);
 
   const displayTitle = getTranslated(item.id, item.title);
   const explanationText = getTranslated(`${item.id}:expl`, item.explanation);
@@ -315,7 +317,7 @@ export const ItemCard = memo(function ItemCard({
           if (!versionCite) return null;
           return (
             <div className="flex items-center gap-2 mt-1 mb-2 px-2.5 py-1.5 rounded bg-black/20 border border-border text-[11px] font-mono text-text-secondary">
-              {versionCite.title}
+              {getTranslated(`${item.id}:vc`, versionCite.title)}
             </div>
           );
         })()}

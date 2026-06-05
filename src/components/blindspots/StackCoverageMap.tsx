@@ -22,8 +22,10 @@ const SignalRow = memo(function SignalRow({
   const cite = item.evidence[0];
   const numericId = extractItemId(item.id);
   useEffect(() => {
-    requestTranslation([{ id: item.id, text: item.title }]);
-  }, [item.id, item.title, requestTranslation]);
+    const reqs = [{ id: item.id, text: item.title }];
+    if (cite?.relevance_note) reqs.push({ id: `${item.id}:rel`, text: cite.relevance_note });
+    requestTranslation(reqs);
+  }, [item.id, item.title, cite, requestTranslation]);
   const displayTitle = getTranslated(item.id, item.title);
   const freshness = (() => {
     if (!cite || cite.freshness_days <= 0) return t('preemption.freshness.today');
@@ -71,7 +73,7 @@ const SignalRow = memo(function SignalRow({
             })()}
             {cite?.relevance_note && (
               <span className="text-[10px] text-amber-400/70 px-1.5 py-0.5 bg-amber-400/5 rounded">
-                {cite.relevance_note}
+                {getTranslated(`${item.id}:rel`, cite.relevance_note)}
               </span>
             )}
           </div>
@@ -111,7 +113,11 @@ const DepCoverageRow = memo(function DepCoverageRow({
   const cfg = STATUS_CONFIG[dep.status];
   const hasContent = dep.signals.length > 0 || dep.gap !== null;
   useEffect(() => {
-    if (dep.gap) requestTranslation([{ id: `${dep.gap.id}:expl`, text: dep.gap.explanation }]);
+    if (!dep.gap) return;
+    const reqs = [{ id: `${dep.gap.id}:expl`, text: dep.gap.explanation }];
+    const rel = dep.gap.evidence[0]?.relevance_note;
+    if (rel) reqs.push({ id: `${dep.gap.id}:rel`, text: rel });
+    requestTranslation(reqs);
   }, [dep.gap, requestTranslation]);
   const gapExplanation = dep.gap ? getTranslated(`${dep.gap.id}:expl`, dep.gap.explanation) : '';
 
@@ -193,7 +199,7 @@ const DepCoverageRow = memo(function DepCoverageRow({
                 {/* eslint-enable i18next/no-literal-string */}
               </div>
               {dep.gap.evidence[0]?.relevance_note && (
-                <p className="text-[10px] text-text-muted/70 mt-1">{dep.gap.evidence[0].relevance_note}</p>
+                <p className="text-[10px] text-text-muted/70 mt-1">{getTranslated(`${dep.gap.id}:rel`, dep.gap.evidence[0].relevance_note)}</p>
               )}
             </div>
           )}
