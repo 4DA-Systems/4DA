@@ -352,10 +352,17 @@ impl Database {
         rows.collect()
     }
 
-    /// Count items that have NEVER been scored (`relevance_score IS NULL`), respecting
-    /// the tier history window (Signal = unlimited, Free = 30 days). This is the
-    /// backlog the Phase-2 backfill worker drains — distinct from the stale-VERSION
-    /// drain (which only touches already-scored items).
+    /// Count items that have NEVER been through a scoring run, respecting the tier
+    /// history window (Signal = unlimited, Free = 30 days). This is the backlog the
+    /// Phase-2 backfill worker drains.
+    ///
+    /// The predicate is `scored_pipeline_version = 0` (the column's default before any
+    /// scoring run), NOT `relevance_score IS NULL`. This matters: a noise item that
+    /// scores exactly 0.0 gets version-stamped but no relevance_score written (the
+    /// version stamp is the canonical "has been scored" marker — same as the analysis
+    /// path). Keying on the version stamp guarantees scored items leave the backlog and
+    /// can never be re-picked forever. Distinct from the stale-VERSION drain, which
+    /// handles already-scored items at versions 1..<current.
     pub fn count_unscored_backlog(&self) -> SqliteResult<i64> {
         let conn = self.conn.lock();
         let time_clause = if crate::settings::is_signal() {
@@ -366,8 +373,9 @@ impl Database {
                 super::sources::FREE_HISTORY_LIMIT_HOURS
             )
         };
-        let sql =
-            format!("SELECT COUNT(*) FROM source_items WHERE relevance_score IS NULL{time_clause}");
+        let sql = format!(
+            "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = 0{time_clause}"
+        );
         conn.query_row(&sql, [], |r| r.get(0))
     }
 
@@ -375,6 +383,10 @@ impl Database {
     /// high-stakes first (security/breaking/CVE — error-cost asymmetry), then stack
     /// releases, then most-recent. This realises the "prioritize, don't discard"
     /// design: everything is scored eventually, the highest-value items first.
+    ///
+    /// "Never scored" = `scored_pipeline_version = 0` (the default before any scoring
+    /// run), NOT `relevance_score IS NULL` — so an item that scores 0.0 (relevance left
+    /// unwritten, version stamped) leaves the backlog instead of being re-picked forever.
     /// Mirrors the tier window logic of `get_stale_scored_items` (Signal drops the
     /// recency bound entirely — never an i64::MAX overflow).
     pub fn get_unscored_backlog_chunk(&self, limit: usize) -> SqliteResult<Vec<StoredSourceItem>> {
@@ -392,7 +404,7 @@ impl Database {
                     embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
                     feed_origin, tags
              FROM source_items
-             WHERE relevance_score IS NULL{time_clause}
+             WHERE scored_pipeline_version = 0{time_clause}
              ORDER BY
                  CASE
                      WHEN cve_ids IS NOT NULL
