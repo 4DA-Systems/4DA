@@ -702,6 +702,7 @@ pub fn run() {
             analysis::cancel_analysis,
             triage_audit_commands::measure_triage_recall,
             triage_audit_commands::get_scoring_coverage,
+            triage_audit_commands::get_calibration_snapshot,
             analysis_backfill::run_backfill_cycle,
             // Settings
             settings_commands::get_settings,

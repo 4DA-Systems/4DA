@@ -49,6 +49,7 @@ pub mod jobs {
     pub const ACCURACY_RECORD: &str = "accuracy_record";
     pub const TEMPORAL_SNAPSHOT: &str = "temporal_snapshot";
     pub const BACKFILL: &str = "scoring_backfill";
+    pub const CALIBRATION_MONITOR: &str = "calibration_monitor";
 }
 
 /// Hydrate in-memory monitoring atomics from persisted scheduler_state.
